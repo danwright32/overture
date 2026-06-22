@@ -37,11 +37,13 @@ Two pain points drive everything:
 
 - **Mode: draft and approve.** Agents discover, rank, find the contact, and draft in Dan's voice, then queue. Dan reviews and sends. Nothing sends autonomously. This protects his voice and his sender reputation.
 - **Platform: a custom app on Dan's own stack** (Next.js, Supabase, Vercel). Dan writes code, so he owns and maintains it. Hosting is effectively free on the tiers he is on.
-- **Sending and replies: the Gmail API**, from dan@danwrightphotography.com (Google Workspace). The app sends as genuine individual emails and watches that inbox to detect replies and auto-pause follow-ups. This requires authorizing that specific account; the account currently connected in tooling is Dan's Pennie work address, not the photography one.
-- **Cost constraint: Claude API calls only, nothing else paid.** Web access uses Claude's built-in server-side web search and web fetch tools, billed as normal API tokens, no separate subscription. For JavaScript-heavy venue calendars that web fetch cannot render, a self-hosted Playwright browser (open source, free) renders the page inside a cloud job (not on Dan's laptop) and Claude parses it. No scraping subscription.
-- **Execution: the agents run in the cloud on a schedule, fully independent of Dan's computer.** The scouts, contact finder, ranker, drafter, and sequencer run as scheduled background jobs on cloud infrastructure, writing results to Supabase. The Next.js app is only the dashboard Dan opens to review and send; it does not need to be open, and his machine does not need to be on, for the agents to work. One nuance: long-running browser scraping can exceed serverless time limits and the free Vercel cron cadence is coarse (roughly once a day on the free tier), so the heavier scheduled jobs likely run on a free GitHub Actions cron or a Supabase scheduled function rather than a Vercel serverless cron. All free; no paid hosting tier required.
+- **Sending and replies: the Gmail API**, from dan@danwrightphotography.com (Google Workspace). Overture sends as genuine individual emails and detects replies (checked during the morning run) to auto-pause follow-ups. This requires authorizing that specific account; the account currently connected in tooling is Dan's Pennie work address, not the photography one.
+- **Engine: Claude Code on Dan's Claude Max plan, not the paid API.** The agents run as a Claude Code workflow Dan launches, authenticated by his existing Max subscription, so there is no Anthropic API key and no per-use API cost. Web access uses Claude Code's own tools: web fetch and web search for most pages, and a headless browser (the free Playwright integration) for JavaScript-heavy, bot-protected venue calendars like Carnegie's. The Phase 0 probe confirmed this path works. No scraping subscription and no extra paid services; the only ongoing services are free-tier Supabase and Vercel for the dashboard.
+- **Execution: Dan launches the run each morning; it is not unattended.** This is a deliberate trade Dan chose so the engine can ride his Max plan instead of a paid API. He opens the Overture command in the morning, it scouts, finds contacts, ranks, and drafts, and writes everything to Supabase; he then reviews and sends from the dashboard whenever he likes. Consequence, and a reversal of an earlier assumption: it runs only when Dan runs it, and his computer must be on while it works. It does not run overnight or while his machine is off. If full hands-off autonomy ever becomes worth a small monthly cost, the upgrade path is to switch the engine to the paid API on a cloud cron; nothing else in the system changes.
 
 ### The agents
+
+These are not separately deployed services. They are stages of the single Claude Code workflow Dan runs each morning, in this order. The dashboard reads what they write.
 
 - **Venue scout:** finds venues and calendars Dan does not already watch, so the funnel is not capped by his current mental list. (Phase 2.)
 - **Event scout:** watches known venue calendars for upcoming performances. This is the one-off pipeline and the first agent built.
@@ -148,8 +150,8 @@ This follows from the decisions above and is open to revision during the build.
 
 ## 10. Build phasing
 
-- **Phase 0, spike (one sitting, go or no-go):** prove the event scout can pull structured performances from Carnegie's live calendar, and the contact finder can get emails off a few artist pages, all under Claude-API-only. This is the riskiest assumption in the whole plan.
-- **Phase 1, MVP (the daily-usable core loop):** Supabase plus import the 156-row history; event scout, then contact finder, then ranker, then drafter (A/B-ready), then the approval queue, then throttled Gmail send, then reply detection, then a light follow-up sequencer. Event scout only.
+- **Phase 0, spike: DONE.** Probed live during planning and came back GO (issue #7). A headless browser pulls clean structured events from Carnegie's bot-protected calendar, and web search finds contacts. This is now Claude Code's job, which is exactly what ran the probe.
+- **Phase 1, MVP (the daily-usable core loop):** the Claude Code morning workflow Dan launches (event scout, then contact finder, then ranker, then drafter, A/B-ready), writing to Supabase; import the 156-row history for dedup and prior-relationship flags; the Next.js approval queue dashboard; Gmail send (throttled) and reply detection; a light follow-up sequencer that runs as part of the morning workflow. Event scout only. Needs the Supabase project and, at the send step, the Gmail authorization. No API key.
 - **Phase 2:** org scout plus venue scout plus the Claude travel and routing estimate plus discipline gallery links.
 - **Phase 3:** the six filed issues.
 
@@ -168,6 +170,7 @@ This follows from the decisions above and is open to revision during the build.
 
 ## 12. Key risks
 
-- **Calendar extraction under Claude-API-only is unproven.** This is why Phase 0 exists. If it is flaky, the contact finder is the safer first thing to prove, since it directly kills Dan's number-one pain.
+- **Calendar extraction: resolved.** Phase 0 proved the headless-browser path works on Carnegie's bot-protected calendar. The remaining soft spot is contact-finding accuracy for ambiguously-named groups, which the confidence rating and the form/DM manual fallback are designed to absorb.
+- **The engine rides the Max plan.** Two consequences. First, it runs only when Dan launches it and only while his machine is on, not overnight or hands-off (his deliberate choice to avoid API cost). Second, if Anthropic restricts subscription use for this kind of automation, or Max usage limits bite on a heavy morning, the fallback is the paid API on a cloud cron, which also restores hands-off operation. The rest of the system is unaffected by that switch.
 - **No send cap plus ad hoc review** could mean rubber-stamping a large pile. The send throttle protects deliverability; reading the drafts is on Dan.
 - **The MVP fishes mostly in the lower-converting calendar pond.** The org scout (Phase 2) is where the 79 percent lives, so the value step-change comes when it lands.

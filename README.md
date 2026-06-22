@@ -6,11 +6,15 @@ See [PLAN.md](./PLAN.md) for the full plan, decisions, and build phasing.
 
 ## Status
 
-Planning. Nothing built yet. Next step is the Phase 0 spike: prove the event scout can pull structured performances from Carnegie's live calendar and the contact finder can get emails off artist pages, all under the Claude-API-only constraint.
+Planning complete and de-risked. Nothing built yet. Phase 0 (feasibility) is proven (issue #7): a headless browser extracts Carnegie's bot-protected calendar and web search finds contacts. Next is the Phase 1 build, once the Supabase project exists.
+
+## How it runs
+
+Dan launches a Claude Code workflow each morning on his Claude Max plan. It scouts venue calendars, finds contacts, ranks, and drafts emails in his voice, writing everything to Supabase. Dan reviews the queue in a Next.js dashboard and sends. It runs only when Dan runs it (his choice, to avoid a paid API); his machine must be on while it works. Hands-off overnight operation is a later upgrade (switch the engine to the paid API on a cloud cron).
 
 ## Stack (planned)
 
-Next.js, Supabase, Vercel. Sends and reply detection via the Gmail API from dan@danwrightphotography.com. Web access via Claude's built-in web search and web fetch, plus self-hosted Playwright for JavaScript-heavy calendar pages. No paid services beyond the Claude API.
+Engine: Claude Code on the Max plan (no API key, no per-use cost). Dashboard: Next.js on Vercel. Data: Supabase. Sending and reply detection: the Gmail API from dan@danwrightphotography.com. Web access: Claude Code's web fetch and web search, plus the Playwright headless browser for JavaScript-heavy calendar pages. Only free-tier services beyond the existing Max plan.
 
 ## Open enhancements
 
