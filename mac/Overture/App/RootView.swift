@@ -3,46 +3,74 @@ import SwiftData
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
-    @State private var lastIngest: ResultsImporter.Outcome?
-    @State private var ingestError: String?
+    @State private var isScanning = false
+    @State private var statusMessage: String?
+    @State private var errorMessage: String?
 
     var body: some View {
         QueueView()
             .toolbar {
+                ToolbarItem(placement: .status) {
+                    if let statusMessage {
+                        Text(statusMessage)
+                            .font(.system(size: 11))
+                            .foregroundStyle(OVColor.inkFaint)
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        ingest()
+                        runScout()
                     } label: {
-                        Label("Fetch latest scout", systemImage: "arrow.clockwise")
+                        if isScanning {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Scouting…")
+                            }
+                        } else {
+                            Label("Run scout", systemImage: "binoculars")
+                        }
                     }
-                    .help("Re-read the latest scout results (⌘R)")
+                    .disabled(isScanning)
+                    .help("Scout the venue calendars for new performances (⌘R)")
                     .keyboardShortcut("r", modifiers: .command)
                 }
             }
             .task { ingestIfEmpty() }
-            .alert("Could not read scout results", isPresented: errorBinding) {
-                Button("OK", role: .cancel) { ingestError = nil }
+            .alert("Scout failed", isPresented: errorBinding) {
+                Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
-                Text(ingestError ?? "")
+                Text(errorMessage ?? "")
             }
     }
 
     private var errorBinding: Binding<Bool> {
-        Binding(get: { ingestError != nil }, set: { if !$0 { ingestError = nil } })
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
+    private func runScout() {
+        isScanning = true
+        statusMessage = nil
+        Task {
+            do {
+                let outcome = try await ScoutService.runScout(into: context)
+                var parts = ["\(outcome.found) found"]
+                if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
+                if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
+                statusMessage = parts.joined(separator: " · ")
+            } catch {
+                errorMessage = String(describing: error)
+            }
+            isScanning = false
+        }
+    }
+
+    // First launch with an empty store: ingest a results file if one is present, so
+    // there is something to see before the first live scout.
     private func ingestIfEmpty() {
         let count = (try? context.fetchCount(FetchDescriptor<Prospect>())) ?? 0
-        if count == 0 { ingest() }
-    }
-
-    private func ingest() {
+        guard count == 0 else { return }
         let url = ResultsImporter.defaultResultsURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
-        do {
-            lastIngest = try ResultsImporter.ingestFile(at: url, into: context)
-        } catch {
-            ingestError = String(describing: error)
-        }
+        _ = try? ResultsImporter.ingestFile(at: url, into: context)
     }
 }
