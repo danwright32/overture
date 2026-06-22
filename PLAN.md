@@ -60,6 +60,7 @@ Strongest signal to weakest:
 2. **Self-produced (positive) vs agency or management routed (negative).** Agency-managed almost never converts.
 3. **Profile match (positive):** choir, music school or academy, youth or community ensemble, small opera or theater company. **Competition-winner showcase rental (negative).**
 4. **Likely uncovered (positive) vs likely already covered (negative):** a Weill recital or small self-produced show vs a Stern mainstage or a prestige touring act that travels with its own shooter.
+5. **Discipline preference (Dan's standing rule):** music is the baseline to keep steady (Dan already gets music work). Every other discipline is preferred and gets a positive boost. **Dance ranks highest,** because Dan's dance portfolio is nearly empty (about four shoots) and he wants to grow it; opera and theater are also boosted above music.
 
 **Geography is a gate, not a penalty.** Only performances at venues Dan can reasonably reach are surfaced at all. A touring or international group performing in NYC is fine, often good, because they want photos of that NYC performance. There is no local-versus-touring downvote. Reachability and travel are handled in section 8.
 
@@ -117,7 +118,7 @@ The `dan-wright-brand-voice` rules are ported into Overture as the drafter's sys
 
 **Portfolio links** map a performance's discipline to the closest of the five site galleries: Music, Performing Arts, Bands, Comedy, Dance. There is no dedicated opera, theater, or choral gallery, so a choir or classical recital points to Music, a staged opera or play to Performing Arts, a dance company to Dance, and so on.
 
-**Pricing in the email:** Dan charges a flat 250 dollars per hour plus tax (waived for tax-exempt clients with documentation), one hour minimum, charging only for time at the performance. The gallery is delivered within two weeks. He does not discount. Whether the email states the rate or links the contract page is the first A/B test. The drafter never promises freebies; concessions are Dan's to make later.
+**Pricing in the email:** Dan charges a flat 250 dollars per hour plus tax (waived for tax-exempt clients with documentation), one hour minimum, charging only for time at the performance. The gallery is delivered within two weeks. He does not discount, with one deliberate exception: he will compromise on rate for dance shoots, to build his nearly-empty dance portfolio. The cold email does not lead with that flexibility, but dance prospects are flagged as rate-flexible so Dan can offer it in negotiation. Whether the email states the rate or links the contract page is the first A/B test. The drafter never promises freebies; concessions are Dan's to make later.
 
 ---
 
