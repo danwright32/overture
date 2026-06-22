@@ -35,6 +35,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftEditedByDan: Bool = false
+    var outcome: Outcome = .noResponse
 
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved }

@@ -23,6 +23,35 @@ enum ContactConfidence: String, CaseIterable, Sendable {
     case high, medium, low
 }
 
+// What ultimately happened after Dan reached out. Defaults to `.noResponse` (like
+// Dan's booking sheet) so the majority need no touch. `.replied` can be set
+// automatically from Gmail reply detection; `.booked` from Downbeat (the canonical
+// booking record); `.passed` is the one Dan marks (or an AI reads from a reply).
+// Only meaningful once a prospect was actually sent; feeds the future fit-score
+// feedback loop (#4).
+enum Outcome: String, CaseIterable, Sendable {
+    case noResponse = "no_response"
+    case replied
+    case booked
+    case passed
+
+    var label: String {
+        switch self {
+        case .noResponse: return "No response"
+        case .replied: return "Replied"
+        case .booked: return "Booked"
+        case .passed: return "Passed"
+        }
+    }
+}
+
+// Where an outcome came from, so an automatic signal (Gmail/Downbeat) never
+// overwrites a decision Dan made by hand.
+enum OutcomeSource: String, CaseIterable, Sendable {
+    case auto      // gmail reply / downbeat booking
+    case manual    // Dan marked it
+}
+
 // The reasons Dan can give when dismissing, mirroring the engine's dismiss_reason set.
 enum DismissReason: String, CaseIterable, Sendable {
     case dateConflict = "date_conflict"

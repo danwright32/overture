@@ -125,7 +125,8 @@ extension QueueItem {
             contactFormURL: p.contactFormURL,
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
-            draftEditedByDan: p.draftEditedByDan
+            draftEditedByDan: p.draftEditedByDan,
+            outcome: p.outcome
         )
     }
 }

@@ -47,6 +47,14 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // Outcome of the outreach. Defaults to no-response (like Dan's sheet), so most
+    // prospects need no touch. Set manually by Dan, or automatically later from
+    // Gmail (replied) / Downbeat (booked). Only meaningful once sent.
+    var outcomeRaw: String = Outcome.noResponse.rawValue
+    var outcomeSourceRaw: String? = nil
+    var outcomeAt: Date? = nil
+    var sentAt: Date? = nil
+
     init(
         naturalKey: String,
         groupName: String,
@@ -107,6 +115,15 @@ final class Prospect {
     }
 
     var hasDraft: Bool { draftBody != nil }
+
+    var outcome: Outcome {
+        get { Outcome(rawValue: outcomeRaw) ?? .noResponse }
+        set { outcomeRaw = newValue.rawValue }
+    }
+
+    // True once the email was actually sent (approved-and-sent). Outcomes only count
+    // for these in the stats.
+    var wasContacted: Bool { sentAt != nil || status == .approved }
 
     // The content key two results files agree on for "the same performance".
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {

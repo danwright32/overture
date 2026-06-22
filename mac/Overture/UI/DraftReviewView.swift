@@ -10,6 +10,7 @@ struct DraftReviewView: View {
     let onUnapprove: () -> Void
     let onSkip: () -> Void
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
+    var onSetOutcome: (Outcome) -> Void = { _ in }
 
     @State private var editing = false
     @State private var draftSubject = ""
@@ -100,6 +101,8 @@ struct DraftReviewView: View {
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Button("Unapprove") { onUnapprove() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                Spacer()
+                outcomePicker
             } else {
                 Button { onApprove() } label: {
                     Text("Approve").font(OVType.meta).foregroundStyle(OVColor.onForest)
@@ -117,7 +120,39 @@ struct DraftReviewView: View {
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
-            Spacer()
+            if !isApproved { Spacer() }
+        }
+    }
+
+    // Shown once sent: defaults to No response (most prospects), Dan marks exceptions.
+    // Replied/Booked also arrive automatically later (Gmail/Downbeat); see Outcome.
+    private var outcomePicker: some View {
+        Menu {
+            ForEach(Outcome.allCases, id: \.self) { o in
+                Button {
+                    onSetOutcome(o)
+                } label: {
+                    if item.outcome == o { Label(o.label, systemImage: "checkmark") }
+                    else { Text(o.label) }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Circle().fill(outcomeColor).frame(width: 6, height: 6)
+                Text(item.outcome.label).font(OVType.meta)
+            }
+            .foregroundStyle(OVColor.inkSoft)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var outcomeColor: Color {
+        switch item.outcome {
+        case .booked: return OVColor.forest
+        case .replied: return OVColor.gold
+        case .passed: return OVColor.rust
+        case .noResponse: return OVColor.inkFaint
         }
     }
 }
