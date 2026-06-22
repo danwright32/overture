@@ -35,7 +35,7 @@ struct RootView: View {
                     .keyboardShortcut("r", modifiers: .command)
                 }
             }
-            .task { ingestIfEmpty() }
+            .task { ingestIfEmpty(); ingestPrep() }
             .alert("Scout failed", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -72,5 +72,13 @@ struct RootView: View {
         let url = ResultsImporter.defaultResultsURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         _ = try? ResultsImporter.ingestFile(at: url, into: context)
+    }
+
+    // Ingest a Prep results file (found contacts + drafts) if one is present, filling
+    // kept prospects and moving them to .drafted for review.
+    private func ingestPrep() {
+        let url = PrepImporter.defaultURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        _ = try? PrepImporter.ingestFile(at: url, into: context)
     }
 }

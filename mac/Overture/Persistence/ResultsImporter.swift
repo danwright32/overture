@@ -116,7 +116,16 @@ extension QueueItem {
             matchedClientName: p.matchedClientName,
             possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
-            status: p.status
+            status: p.status,
+            contactName: p.contactName,
+            contactRole: p.contactRole,
+            contactEmail: p.contactEmail,
+            contactConfidence: p.contactConfidence,
+            contactMethod: p.contactMethod,
+            contactFormURL: p.contactFormURL,
+            draftSubject: p.draftSubject,
+            draftBody: p.draftBody,
+            draftEditedByDan: p.draftEditedByDan
         )
     }
 }

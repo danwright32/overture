@@ -7,27 +7,43 @@ struct ProspectRowView: View {
     let today: String
     let onKeep: () -> Void
     let onDismiss: (DismissReason) -> Void
+    var onApprove: () -> Void = {}
+    var onUnapprove: () -> Void = {}
+    var onSkipDraft: () -> Void = {}
+    var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
 
     private var timing: QueueModel.Timing {
         QueueModel.outreachTiming(performanceDate: item.performanceDate, today: today)
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: OVSpacing.md) {
-            fitSeal
-            VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                header
-                if !item.fitReason.isEmpty {
-                    Text(item.fitReason)
-                        .font(OVType.reason)
-                        .foregroundStyle(OVColor.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            HStack(alignment: .top, spacing: OVSpacing.md) {
+                fitSeal
+                VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                    header
+                    if !item.fitReason.isEmpty {
+                        Text(item.fitReason)
+                            .font(OVType.reason)
+                            .foregroundStyle(OVColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    tags
+                    links
                 }
-                tags
-                links
+                Spacer(minLength: OVSpacing.sm)
+                actions
             }
-            Spacer(minLength: OVSpacing.sm)
-            actions
+            if item.hasDraft {
+                DraftReviewView(
+                    item: item,
+                    onApprove: onApprove,
+                    onUnapprove: onUnapprove,
+                    onSkip: onSkipDraft,
+                    onSaveDraft: onSaveDraft
+                )
+                .padding(.leading, 64 + OVSpacing.md)
+            }
         }
         .padding(OVSpacing.md)
         .background(
@@ -92,7 +108,10 @@ struct ProspectRowView: View {
             if let w = item.websiteURL, let url = URL(string: w) {
                 Link("Group website", destination: url)
             }
-            Text("Contact: pending Prep run").foregroundStyle(OVColor.inkFaint)
+            if !item.hasDraft {
+                Text(item.isKept ? "Contact: pending Prep run" : "Contact: keep to prep")
+                    .foregroundStyle(OVColor.inkFaint)
+            }
         }
         .font(.system(size: 12))
         .tint(OVColor.forest)

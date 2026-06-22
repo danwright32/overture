@@ -105,7 +105,11 @@ struct QueueView: View {
                     item: item,
                     today: today,
                     onKeep: { setStatus(item, .queued, nil) },
-                    onDismiss: { reason in setStatus(item, .dismissed, reason) }
+                    onDismiss: { reason in setStatus(item, .dismissed, reason) },
+                    onApprove: { setStatus(item, .approved, nil) },
+                    onUnapprove: { setStatus(item, .drafted, nil) },
+                    onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
+                    onSaveDraft: { subject, body in saveDraft(item, subject, body) }
                 )
             }
         }
@@ -133,6 +137,14 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.status = status
         model.dismissReasonRaw = reason?.rawValue
+        try? context.save()
+    }
+
+    private func saveDraft(_ item: QueueItem, _ subject: String, _ body: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.draftSubject = subject
+        model.draftBody = body
+        model.draftEditedByDan = true
         try? context.save()
     }
 }

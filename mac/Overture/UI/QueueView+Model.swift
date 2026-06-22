@@ -25,8 +25,20 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let possibleMatchName: String?
     let status: ReviewStatus
 
+    // Trigger 2: the found contact and drafted email, when present.
+    var contactName: String? = nil
+    var contactRole: String? = nil
+    var contactEmail: String? = nil
+    var contactConfidence: ContactConfidence? = nil
+    var contactMethod: ContactMethod? = nil
+    var contactFormURL: String? = nil
+    var draftSubject: String? = nil
+    var draftBody: String? = nil
+    var draftEditedByDan: Bool = false
+
     var isHighFit: Bool { tier == "high" }
-    var isKept: Bool { status == .queued }
+    var isKept: Bool { status == .queued || status == .drafted || status == .approved }
+    var hasDraft: Bool { draftBody != nil }
 }
 
 enum QueueModel {
