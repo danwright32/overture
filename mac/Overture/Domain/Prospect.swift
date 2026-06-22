@@ -34,6 +34,19 @@ final class Prospect {
     var dismissReasonRaw: String?
     var ingestedAt: Date
 
+    // Filled by the Prep run (Trigger 2). Defaulted so the scout's inserts are unaffected.
+    var contactName: String? = nil
+    var contactRole: String? = nil
+    var contactEmail: String? = nil
+    var contactMethodRaw: String? = nil
+    var contactConfidenceRaw: String? = nil
+    var contactFormURL: String? = nil
+
+    var draftSubject: String? = nil
+    var draftBody: String? = nil
+    var draftVariant: String? = nil
+    var draftEditedByDan: Bool = false
+
     init(
         naturalKey: String,
         groupName: String,
@@ -82,6 +95,18 @@ final class Prospect {
         get { ReviewStatus(rawValue: statusRaw) ?? .new }
         set { statusRaw = newValue.rawValue }
     }
+
+    var contactMethod: ContactMethod? {
+        get { contactMethodRaw.flatMap(ContactMethod.init) }
+        set { contactMethodRaw = newValue?.rawValue }
+    }
+
+    var contactConfidence: ContactConfidence? {
+        get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
+        set { contactConfidenceRaw = newValue?.rawValue }
+    }
+
+    var hasDraft: Bool { draftBody != nil }
 
     // The content key two results files agree on for "the same performance".
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {
