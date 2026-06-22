@@ -1,0 +1,175 @@
+import SwiftUI
+import SwiftData
+
+// The window Dan lives in: ranked performances, grouped by date, kept or dismissed.
+struct QueueView: View {
+    @Environment(\.modelContext) private var context
+
+    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc.
+    @Query(
+        filter: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
+        sort: [SortDescriptor(\Prospect.performanceDate, order: .forward),
+               SortDescriptor(\Prospect.fitScore, order: .reverse)]
+    )
+    private var prospects: [Prospect]
+
+    @State private var disciplineFilter: String?
+    @State private var highOnly = false
+
+    private var items: [QueueItem] { prospects.map(QueueItem.init) }
+
+    private var filtered: [QueueItem] {
+        items.filter { item in
+            if let d = disciplineFilter, item.discipline != d { return false }
+            if highOnly, !item.isHighFit { return false }
+            return true
+        }
+    }
+
+    private var disciplines: [String] {
+        Array(Set(items.map(\.discipline))).sorted()
+    }
+
+    private var today: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: OVSpacing.xl) {
+                masthead
+                QueueFilterBar(
+                    disciplines: disciplines,
+                    activeDiscipline: $disciplineFilter,
+                    highOnly: $highOnly
+                )
+                let groups = QueueModel.groupByDate(filtered)
+                if groups.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(groups) { group in
+                        dateSection(group)
+                    }
+                }
+            }
+            .padding(.horizontal, OVSpacing.xl)
+            .padding(.vertical, OVSpacing.xl)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .background(OVColor.canvas)
+    }
+
+    private var masthead: some View {
+        let summary = QueueModel.summary(filtered)
+        return VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
+                Circle().fill(OVColor.gold).frame(width: 7, height: 7)
+            }
+            Rectangle().fill(OVColor.gold.opacity(0.5)).frame(height: 1).frame(maxWidth: .infinity)
+            Text("Performances worth pitching, ranked by fit. Keep the ones worth pursuing and dismiss the rest.")
+                .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: OVSpacing.xs) {
+                Text("\(summary.total)").fontWeight(.semibold).foregroundStyle(OVColor.ink)
+                Text("in the queue").foregroundStyle(OVColor.inkFaint)
+                Text("/").foregroundStyle(OVColor.lineStrong)
+                Text("\(summary.high)").fontWeight(.semibold).foregroundStyle(OVColor.gold)
+                Text("high-fit").foregroundStyle(OVColor.inkFaint)
+            }
+            .font(.system(size: 12))
+        }
+    }
+
+    private func dateSection(_ group: QueueModel.DateGroup) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
+                if !group.weekday.isEmpty {
+                    Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
+                        .tracking(1.4).foregroundStyle(OVColor.inkFaint)
+                }
+                Text(group.monthDay).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                if !group.year.isEmpty {
+                    Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                }
+            }
+            .padding(.bottom, OVSpacing.xxs)
+            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+
+            ForEach(group.items) { item in
+                ProspectRowView(
+                    item: item,
+                    today: today,
+                    onKeep: { setStatus(item, .queued, nil) },
+                    onDismiss: { reason in setStatus(item, .dismissed, reason) }
+                )
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: OVSpacing.xs) {
+            Text(items.isEmpty ? "Nothing scouted yet" : "Nothing matches this filter")
+                .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            Text(items.isEmpty
+                 ? "Run the scout to comb the venue calendars. Ranked candidates land here for review."
+                 : "Try a different discipline, or clear the high-fit filter.")
+                .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, OVSpacing.hero)
+        .padding(.horizontal, OVSpacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(OVColor.lineStrong, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
+    }
+
+    private func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.status = status
+        model.dismissReasonRaw = reason?.rawValue
+        try? context.save()
+    }
+}
+
+private struct QueueFilterBar: View {
+    let disciplines: [String]
+    @Binding var activeDiscipline: String?
+    @Binding var highOnly: Bool
+
+    var body: some View {
+        WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
+            chip("All disciplines", active: activeDiscipline == nil) { activeDiscipline = nil }
+            ForEach(disciplines, id: \.self) { d in
+                chip(QueueModel.disciplineLabel(d), active: activeDiscipline == d) {
+                    activeDiscipline = activeDiscipline == d ? nil : d
+                }
+            }
+            Button { highOnly.toggle() } label: {
+                HStack(spacing: 5) {
+                    Circle().fill(highOnly ? OVColor.gold : OVColor.inkFaint).frame(width: 6, height: 6)
+                    Text("High-fit only").font(OVType.tag)
+                }
+                .foregroundStyle(highOnly ? OVColor.gold : OVColor.inkSoft)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
+                .background(Capsule().fill(highOnly ? OVColor.gold.opacity(0.15) : .clear))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func chip(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(OVType.tag)
+                .foregroundStyle(active ? OVColor.onForest : OVColor.inkSoft)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
+                .background(Capsule().fill(active ? OVColor.forest : Color.clear))
+        }
+        .buttonStyle(.plain)
+    }
+}
