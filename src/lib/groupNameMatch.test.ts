@@ -30,6 +30,12 @@ describe("isConfidentMatch", () => {
   it("does not match on a single shared token", () => {
     expect(isConfidentMatch("Music Academy", "Larchmont Music")).toBe(false);
   });
+  it("does not confidently match a short name that is only a prefix of a larger name", () => {
+    expect(isConfidentMatch("New York", "New York Theatre Ballet")).toBe(false);
+  });
+  it("only matches whole-token runs, not mid-token substrings", () => {
+    expect(isConfidentMatch("art state", "smart statement")).toBe(false);
+  });
 });
 
 describe("isPossibleMatch", () => {

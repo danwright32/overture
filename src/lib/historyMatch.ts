@@ -42,6 +42,9 @@ export function matchRelationship(
     isConfidentMatch(name, h.group_name),
   );
 
+  // DNC suppression is intentionally confident-match-only: a fuzzy name match is
+  // never authoritative enough to silently drop a performance (precision over
+  // recall). A DNC group whose name drifted could leak through; that is accepted.
   if (confidentHistory.some((h) => isDnc(h.status))) {
     return {
       relationship: "none",

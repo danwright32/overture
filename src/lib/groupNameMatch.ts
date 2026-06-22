@@ -17,15 +17,37 @@ function tokens(name: string): string[] {
   return normalizeGroupName(name).split(" ").filter(Boolean);
 }
 
-export function isConfidentMatch(a: string, b: string): boolean {
-  const na = normalizeGroupName(a);
-  const nb = normalizeGroupName(b);
-  if (na === "" || nb === "") return false;
-  if (na === nb) return true;
-  const shorter = na.length <= nb.length ? na : nb;
-  const longer = shorter === na ? nb : na;
-  if (longer.includes(shorter) && shorter.split(" ").length >= 2) return true;
+// True when `short` appears as a contiguous run of whole tokens inside `long`.
+function containsTokenRun(long: string[], short: string[]): boolean {
+  for (let i = 0; i + short.length <= long.length; i += 1) {
+    let matched = true;
+    for (let j = 0; j < short.length; j += 1) {
+      if (long[i + j] !== short[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
   return false;
+}
+
+// A confident match is exact, or one name's whole-token sequence sits contiguously
+// inside the other AND makes up a meaningful fraction of it. The fraction guard
+// stops a short name (e.g. "New York") confidently matching an unrelated larger
+// one ("New York Theatre Ballet") — the false positive we must avoid.
+const MIN_CONTAINMENT_FRACTION = 0.6;
+
+export function isConfidentMatch(a: string, b: string): boolean {
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+  if (ta.join(" ") === tb.join(" ")) return true;
+
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  if (short.length < 2) return false;
+  if (short.length / long.length < MIN_CONTAINMENT_FRACTION) return false;
+  return containsTokenRun(long, short);
 }
 
 export function isPossibleMatch(a: string, b: string): boolean {

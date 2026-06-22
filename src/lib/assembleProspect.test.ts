@@ -108,4 +108,17 @@ describe("decideProspect", () => {
     expect(d.row.possible_match_name).toBe("Royal Music");
     expect(d.row.prior_relationship).toBe("none");
   });
+
+  it("emits a null ref for a history possible match (history rows have no id)", () => {
+    const d = decideProspect(
+      event(),
+      classification(),
+      verdict({ possible: { source: "history", ref: "", name: "Old Lead" } }),
+      new Set(),
+    );
+    if (d.kind !== "prospect") throw new Error("expected prospect");
+    expect(d.row.possible_match_source).toBe("history");
+    expect(d.row.possible_match_ref).toBeNull();
+    expect(d.row.possible_match_name).toBe("Old Lead");
+  });
 });

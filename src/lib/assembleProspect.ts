@@ -97,7 +97,10 @@ export function decideProspect(
       downbeat_client_id: verdict.downbeatClientId,
       matched_client_name: verdict.matchedClientName,
       possible_match_source: verdict.possible ? verdict.possible.source : null,
-      possible_match_ref: verdict.possible ? verdict.possible.ref : null,
+      // History rows have no id, so their ref is empty; emit null (the column is a
+      // uuid and would reject ""). Downbeat client refs are real uuids.
+      possible_match_ref:
+        verdict.possible && verdict.possible.ref ? verdict.possible.ref : null,
       possible_match_name: verdict.possible ? verdict.possible.name : null,
       status: "new",
     },
