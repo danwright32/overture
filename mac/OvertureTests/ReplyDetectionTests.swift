@@ -23,6 +23,17 @@ struct ReplyDetectionTests {
         #expect(ReplyDetection.hasReply(fromAddresses: ["DAN@DanWrightPhotography.com"], selfEmail: me) == false)
     }
 
+    @Test func bouncesAndAutomatedSendersAreNotReplies() {
+        // A delivery bounce means the opposite of a reply.
+        #expect(ReplyDetection.hasReply(fromAddresses: ["Mail Delivery Subsystem <mailer-daemon@googlemail.com>"], selfEmail: me) == false)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["postmaster@icchoir.org"], selfEmail: me) == false)
+        // No-reply autoresponders don't count.
+        #expect(ReplyDetection.hasReply(fromAddresses: ["no-reply@org.org"], selfEmail: me) == false)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["DoNotReply@org.org"], selfEmail: me) == false)
+        // A real human reply alongside an autoresponder still counts.
+        #expect(ReplyDetection.hasReply(fromAddresses: ["no-reply@org.org", "Emma <emma@icchoir.org>"], selfEmail: me) == true)
+    }
+
     @Test func parsesFromHeadersOutOfAGmailThreadResponse() {
         let json = #"""
         {"messages":[
