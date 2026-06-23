@@ -128,7 +128,9 @@ extension QueueItem {
             draftEditedByDan: p.draftEditedByDan,
             outcome: p.outcome,
             sentAt: p.sentAt,
-            sendError: p.sendError
+            sendError: p.sendError,
+            classificationConfidence: p.classificationConfidence,
+            confidenceReviewedByDan: p.confidenceReviewedByDan
         )
     }
 }

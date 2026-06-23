@@ -13,6 +13,7 @@ struct ProspectRowView: View {
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetOutcome: (Outcome) -> Void = { _ in }
     var onSend: () -> Void = {}
+    var onMarkConfidenceReviewed: () -> Void = {}
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
@@ -32,6 +33,7 @@ struct ProspectRowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     tags
+                    confidenceFlag
                     links
                 }
                 Spacer(minLength: OVSpacing.sm)
@@ -104,6 +106,26 @@ struct ProspectRowView: View {
             history.map { Tag(text: $0, tone: .history) },
         ].compactMap { $0 })
         .padding(.top, 2)
+    }
+
+    // A rules-guessed classification Dan hasn't reviewed: a tappable amber flag so he
+    // can double-check the type/fit, then clear it once it looks right (#32).
+    @ViewBuilder private var confidenceFlag: some View {
+        if item.isClassificationUncertain {
+            Button(action: onMarkConfidenceReviewed) {
+                HStack(spacing: 5) {
+                    Image(systemName: "questionmark.diamond.fill")
+                    Text("Unsure call — tap if this looks right")
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.rust)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+            .help("The scout's rules weren't sure how to classify this one. Check the type and fit, then tap to clear the flag.")
+            .padding(.top, 2)
+        }
     }
 
     @ViewBuilder private var links: some View {

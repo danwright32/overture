@@ -151,6 +151,7 @@ struct QueueView: View {
                     onSaveDraft: { subject, body in saveDraft(item, subject, body) },
                     onSetOutcome: { outcome in setOutcome(item, outcome) },
                     onSend: { requestSend(item) },
+                    onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -187,6 +188,14 @@ struct QueueView: View {
         model.draftSubject = subject
         model.draftBody = body
         model.draftEditedByDan = true
+        try? context.save()
+    }
+
+    // Dan eyeballed a rules-uncertain classification and it's fine: clear the flag so it
+    // stays cleared even across re-scouts (#32). Scout-owned confidence is untouched.
+    private func markConfidenceReviewed(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.confidenceReviewedByDan = true
         try? context.save()
     }
 
