@@ -83,10 +83,14 @@ enum PrepQueueService {
         // Detached: do not wait. The run writes the results file when done.
     }
 
-    // The runner script lives in the Overture project's mac/scripts dir. Looked up via
-    // a saved bookmark/default; falls back to a conventional path under the project.
+    // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once
+    // via a string default so it is not hardcoded into the binary:
+    //   defaults write com.danwright.overture prepRunnerScriptPath "/abs/path/to/mac/scripts/prep-run.sh"
+    // Returns nil when unset, so startPrep fails gracefully with "runner unavailable".
     static func runnerScriptURL() -> URL? {
-        if let saved = UserDefaults.standard.url(forKey: "prepRunnerScriptURL") { return saved }
-        return nil
+        guard let path = UserDefaults.standard.string(forKey: "prepRunnerScriptPath"), !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path)
     }
 }
