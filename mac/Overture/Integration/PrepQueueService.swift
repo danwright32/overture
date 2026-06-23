@@ -59,7 +59,14 @@ enum PrepQueueService {
         try data.write(to: queueURL, options: .atomic)
 
         try launchRunner()
+        UserDefaults.standard.set(now, forKey: lastRunKey)
         return queue.items.count
+    }
+
+    static let lastRunKey = "prepLastRunStartedAt"
+
+    static var lastRunStartedAt: Date? {
+        UserDefaults.standard.object(forKey: lastRunKey) as? Date
     }
 
     // Launches the Prep runner script detached. The script (docs/prep-runbook) drives
