@@ -4,6 +4,7 @@ import SwiftData
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @State private var isScanning = false
+    @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
@@ -98,8 +99,9 @@ struct RootView: View {
                     .help(gmailConnected ? "Gmail is connected for sending" : "Authorize your photography Gmail so you can send approved emails")
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        runScout()
+                    Menu {
+                        Button("Run scout now") { runScout() }
+                        Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                     } label: {
                         if isScanning {
                             HStack(spacing: 6) {
@@ -109,9 +111,11 @@ struct RootView: View {
                         } else {
                             Label("Run scout", systemImage: "binoculars")
                         }
+                    } primaryAction: {
+                        runScout()
                     }
                     .disabled(isScanning)
-                    .help("Scout the venue calendars for new performances (⌘R)")
+                    .help("Scout the venue calendars for new performances (⌘R). Auto-runs about daily.")
                     .keyboardShortcut("r", modifiers: .command)
                 }
             }
@@ -128,6 +132,14 @@ struct RootView: View {
                     await watchPrepRun()
                 } else {
                     ingestPrep()
+                }
+                autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
+            }
+            .task {
+                // Keep the daily scout schedule honored while the app stays open (#33).
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)  // hourly
+                    autoScoutIfDue()
                 }
             }
             .alert("Something went wrong", isPresented: errorBinding) {
@@ -200,6 +212,14 @@ struct RootView: View {
 
     private var warningBinding: Binding<Bool> {
         Binding(get: { warningMessage != nil }, set: { if !$0 { warningMessage = nil } })
+    }
+
+    // Run a scout automatically when the daily schedule says one is due and auto-scout is
+    // on (#33). Safe to trigger unattended: the scout only reads/extracts, never sends.
+    private func autoScoutIfDue() {
+        guard ScoutSchedule.shouldAutoScout(enabled: autoScoutEnabled, isScanning: isScanning,
+                                            lastScoutedAt: ScoutService.lastScoutedAt(), now: Date()) else { return }
+        runScout()
     }
 
     private func runScout() {
