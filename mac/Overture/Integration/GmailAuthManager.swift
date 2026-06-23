@@ -43,7 +43,7 @@ final class GmailAuthManager {
         // (avoids stale listeners on dead ports that leave old browser tabs hanging).
         cancelInFlight()
 
-        let port = try startListener()
+        let port = try await startListener()
         let redirect = "http://127.0.0.1:\(port)"
         let pkce = GoogleOAuth.makePKCE(verifierBytes: Self.randomBytes(32))
         let state = Self.randomURLSafe(16)
@@ -115,27 +115,18 @@ final class GmailAuthManager {
 
     // MARK: - loopback listener
 
-    private func startListener() throws -> Int {
-        // Bind specifically to IPv4 loopback (127.0.0.1) so it matches the redirect
-        // URI we hand Google. Without this, NWListener defaults to IPv6 and the
-        // IPv4 redirect never reaches it (the browser hangs).
-        let params = NWParameters.tcp
-        params.allowLocalEndpointReuse = true
-        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
-        let listener = try NWListener(using: params)
-        self.listener = listener
-        listener.newConnectionHandler = { [weak self] conn in
+    private func startListener() async throws -> Int {
+        // The port is only real once the listener is bound and .ready; reading it
+        // earlier returned 0, which made redirect_uri=http://127.0.0.1:0 and hung
+        // Google's consent page (#51). LoopbackListener waits for .ready and forces IPv4.
+        let (listener, port) = try await LoopbackListener.start(queue: .main) { [weak self] conn in
             conn.start(queue: .main)
             conn.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, _ in
                 let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 Task { @MainActor in self?.handleRedirect(request: request, conn: conn) }
             }
         }
-        listener.start(queue: .main)
-        // Wait briefly for the OS to assign a port.
-        var tries = 0
-        while listener.port == nil && tries < 50 { Thread.sleep(forTimeInterval: 0.01); tries += 1 }
-        guard let port = listener.port?.rawValue else { throw AuthError.listenerFailed }
+        self.listener = listener
         return Int(port)
     }
 
