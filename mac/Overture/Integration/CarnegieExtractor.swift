@@ -8,6 +8,16 @@ import WebKit
 
 enum CarnegieExtractorError: Error { case timedOut, badResult }
 
+// What the in-page JS returns per event. The venue is resolved from `context` in Swift
+// (VenueParser), not in the page, so the venue logic stays testable (#34).
+private struct RawCarnegieEvent: Codable {
+    var title: String
+    var presenter: String?
+    var context: String?
+    var performanceDate: String?
+    var sourceUrl: String?
+}
+
 @MainActor
 final class CarnegieExtractor: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
@@ -47,8 +57,15 @@ final class CarnegieExtractor: NSObject, WKNavigationDelegate {
             guard let self else { return }
             if let json = result as? String,
                let data = json.data(using: .utf8),
-               let events = try? JSONDecoder().decode([ExtractedEvent].self, from: data),
-               !events.isEmpty {
+               let raws = try? JSONDecoder().decode([RawCarnegieEvent].self, from: data),
+               !raws.isEmpty {
+                // Resolve the venue from the listing context in Swift (testable), broadened
+                // beyond Carnegie's named halls (#34).
+                let events = raws.map { r in
+                    ExtractedEvent(title: r.title, presenter: r.presenter,
+                                   venue: r.context.flatMap { VenueParser.parse(context: $0) },
+                                   performanceDate: r.performanceDate, sourceUrl: r.sourceUrl)
+                }
                 self.finish(.success(events))
                 return
             }
@@ -76,7 +93,6 @@ final class CarnegieExtractor: NSObject, WKNavigationDelegate {
       const anchors = Array.from(document.querySelectorAll('a[href*="/calendar/"]'));
       const seen = new Set();
       const events = [];
-      const VENUES = ['Stern Auditorium / Perelman Stage', 'Zankel Hall', 'Weill Recital Hall', 'Resnick Education Wing'];
       for (const a of anchors) {
         const href = a.getAttribute('href') || '';
         const m = href.match(/\/calendar\/(\d{4})\/(\d{2})\/(\d{2})\//);
@@ -90,12 +106,10 @@ final class CarnegieExtractor: NSObject, WKNavigationDelegate {
         for (let i = 0; i < 4 && ctx.parentElement; i++) ctx = ctx.parentElement;
         const context = (ctx.textContent || '').replace(/\s+/g, ' ').trim();
         const pm = context.match(/Presented by (.+?)(?= [A-Z][a-z]|$)/);
-        let venue = null;
-        for (const v of VENUES) { if (context.includes(v)) { venue = v; break; } }
         events.push({
           title: title,
           presenter: pm ? pm[1].trim() : null,
-          venue: venue,
+          context: context,
           performanceDate: m[1] + '-' + m[2] + '-' + m[3],
           sourceUrl: key.indexOf('http') === 0 ? key : 'https://www.carnegiehall.org' + key
         });
