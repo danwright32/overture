@@ -12,6 +12,8 @@ struct ProspectRowView: View {
     var onSkipDraft: () -> Void = {}
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetOutcome: (Outcome) -> Void = { _ in }
+    var onSend: () -> Void = {}
+    var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
         QueueModel.outreachTiming(performanceDate: item.performanceDate, today: today)
@@ -42,7 +44,9 @@ struct ProspectRowView: View {
                     onUnapprove: onUnapprove,
                     onSkip: onSkipDraft,
                     onSaveDraft: onSaveDraft,
-                    onSetOutcome: onSetOutcome
+                    onSetOutcome: onSetOutcome,
+                    onSend: onSend,
+                    gmailConnected: gmailConnected
                 )
                 .padding(.leading, 64 + OVSpacing.md)
             }

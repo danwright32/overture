@@ -123,7 +123,9 @@ struct QueueView: View {
                     onUnapprove: { setStatus(item, .drafted, nil) },
                     onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
                     onSaveDraft: { subject, body in saveDraft(item, subject, body) },
-                    onSetOutcome: { outcome in setOutcome(item, outcome) }
+                    onSetOutcome: { outcome in setOutcome(item, outcome) },
+                    onSend: { sendOne(item) },
+                    gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
         }
@@ -167,6 +169,15 @@ struct QueueView: View {
         model.outcome = outcome
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
+        try? context.save()
+    }
+
+    // Explicit per-draft send: Dan clicked Send on this one approved email. One click,
+    // one email, via Gmail. Never autonomous.
+    private func sendOne(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
+        _ = SendService.sendOne(model, now: Date(), sender: sender)
         try? context.save()
     }
 }

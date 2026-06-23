@@ -23,6 +23,26 @@ enum SendService {
             .sorted { $0.ingestedAt < $1.ingestedAt }
     }
 
+    // Sends ONE specific prospect immediately, bypassing the throttle. This is the
+    // manual per-draft "Send" Dan clicks (one click = one email); manual approval is
+    // its own pacing, so no drip needed. Records the receipt or the error for retry.
+    @discardableResult
+    static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) -> Bool {
+        guard prospect.status == .approved, prospect.sentAt == nil,
+              let email = prospect.contactEmail, let body = prospect.draftBody else { return false }
+        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "", body: body)
+        do {
+            let receipt = try sender.send(mail)
+            prospect.sentAt = now
+            prospect.gmailThreadId = receipt.threadId
+            prospect.sendError = nil
+            return true
+        } catch {
+            prospect.sendError = error.localizedDescription
+            return false
+        }
+    }
+
     static func recentSendDates(in context: ModelContext) -> [Date] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         return all.compactMap { $0.sentAt }

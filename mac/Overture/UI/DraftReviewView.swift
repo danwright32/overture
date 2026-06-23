@@ -11,6 +11,8 @@ struct DraftReviewView: View {
     let onSkip: () -> Void
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
     var onSetOutcome: (Outcome) -> Void = { _ in }
+    var onSend: () -> Void = {}
+    var gmailConnected: Bool = false
 
     @State private var editing = false
     @State private var draftSubject = ""
@@ -96,13 +98,27 @@ struct DraftReviewView: View {
 
     private var actionRow: some View {
         HStack(spacing: OVSpacing.xs) {
-            if isApproved {
-                Label("Approved to send", systemImage: "checkmark.seal.fill")
+            if item.isSent {
+                Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
-                Button("Unapprove") { onUnapprove() }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Spacer()
                 outcomePicker
+            } else if isApproved {
+                Button { onSend() } label: {
+                    Label("Send", systemImage: "paperplane")
+                        .font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                .disabled(!gmailConnected || item.contactEmail == nil)
+                .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
+                Button("Unapprove") { onUnapprove() }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                if let err = item.sendError {
+                    Text(err).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                }
+                Spacer()
             } else {
                 Button { onApprove() } label: {
                     Text("Approve").font(OVType.meta).foregroundStyle(OVColor.onForest)

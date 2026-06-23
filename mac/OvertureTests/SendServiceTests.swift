@@ -81,6 +81,30 @@ struct SendServiceTests {
         #expect(third.sent == 1)
     }
 
+    @Test func sendOneSendsThatSpecificProspectImmediately() throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        approved(ctx, group: "B", ingested: Date(timeIntervalSince1970: 2))
+        let b = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.groupName == "B" }!
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        #expect(SendService.sendOne(b, now: now, sender: FakeSender()) == true)
+        #expect(b.sentAt == now)
+        #expect(b.gmailThreadId == "t-123")
+        // A is untouched (manual send targets exactly one).
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.groupName == "A" }!
+        #expect(a.sentAt == nil)
+    }
+
+    @Test func sendOneRecordsErrorOnFailure() throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        #expect(SendService.sendOne(a, now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(a.sentAt == nil)
+        #expect(a.sendError != nil)
+    }
+
     @Test func recordsSendErrorAndKeepsItPending() throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))

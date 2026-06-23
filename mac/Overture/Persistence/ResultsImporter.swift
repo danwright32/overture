@@ -126,7 +126,9 @@ extension QueueItem {
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
-            outcome: p.outcome
+            outcome: p.outcome,
+            sentAt: p.sentAt,
+            sendError: p.sendError
         )
     }
 }

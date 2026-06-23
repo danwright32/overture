@@ -6,6 +6,8 @@ struct RootView: View {
     @State private var isScanning = false
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var gmailConnected = GmailAuthManager.shared.isConnected
+    @State private var isConnectingGmail = false
 
     // Kept prospects with no draft yet — what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
@@ -44,6 +46,21 @@ struct RootView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        connectGmail()
+                    } label: {
+                        if gmailConnected {
+                            Label("Gmail connected", systemImage: "checkmark.circle.fill")
+                        } else if isConnectingGmail {
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Connecting…") }
+                        } else {
+                            Label("Connect Gmail", systemImage: "link")
+                        }
+                    }
+                    .disabled(gmailConnected || isConnectingGmail)
+                    .help(gmailConnected ? "Gmail is connected for sending" : "Authorize your photography Gmail so you can send approved emails")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
                         runScout()
                     } label: {
                         if isScanning {
@@ -61,11 +78,26 @@ struct RootView: View {
                 }
             }
             .task { ingestIfEmpty(); ingestPrep() }
-            .alert("Couldn't start Prep", isPresented: errorBinding) {
+            .alert("Something went wrong", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
             }
+    }
+
+    private func connectGmail() {
+        isConnectingGmail = true
+        statusMessage = nil
+        Task {
+            do {
+                try await GmailAuthManager.shared.connect()
+                gmailConnected = true
+                statusMessage = "Gmail connected. You can now send approved emails."
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isConnectingGmail = false
+        }
     }
 
     private func startPrep() {
