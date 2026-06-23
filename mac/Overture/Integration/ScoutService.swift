@@ -13,13 +13,18 @@ enum ScoutService {
         var updated: Int
         var skipped: Int
         var uncertain: Int
+        // Set when the Downbeat past-client export was missing, unreadable, or stale, so
+        // warm/repeat matching ran degraded and Dan should be told (#22/#23).
+        var clientListWarning: String? = nil
     }
 
     static func runScout(into context: ModelContext) async throws -> Outcome {
         let events = try await CarnegieExtractor().extract()
-        let clients = (try? DownbeatBridge.load())?.clients ?? []
-        return apply(events: events, clients: clients, history: loadLocalHistory(),
-                     blocked: loadBlockedDates(), into: context)
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        var outcome = apply(events: events, clients: loaded.clients, history: loadLocalHistory(),
+                            blocked: loadBlockedDates(), into: context)
+        outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+        return outcome
     }
 
     // Application of already-extracted events with injected data, so the full

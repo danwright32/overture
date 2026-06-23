@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var errorMessage: String?
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
+    @State private var warningMessage: String?
 
     // Kept prospects with no draft yet — what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
@@ -93,6 +94,11 @@ struct RootView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+            .alert("Past-client list", isPresented: warningBinding) {
+                Button("OK", role: .cancel) { warningMessage = nil }
+            } message: {
+                Text(warningMessage ?? "")
+            }
     }
 
     private func connectGmail() {
@@ -148,6 +154,10 @@ struct RootView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
+    private var warningBinding: Binding<Bool> {
+        Binding(get: { warningMessage != nil }, set: { if !$0 { warningMessage = nil } })
+    }
+
     private func runScout() {
         isScanning = true
         statusMessage = nil
@@ -158,6 +168,9 @@ struct RootView: View {
                 if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
                 if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
                 statusMessage = parts.joined(separator: " · ")
+                // Past-client export was missing/stale/unreadable: warm matching ran
+                // degraded, so tell Dan rather than letting it pass silently (#22/#23).
+                warningMessage = outcome.clientListWarning
             } catch {
                 errorMessage = String(describing: error)
             }

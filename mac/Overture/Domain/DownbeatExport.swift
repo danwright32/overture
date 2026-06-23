@@ -59,4 +59,54 @@ enum DownbeatBridge {
     static func load(from url: URL = defaultURL) throws -> DownbeatExport {
         try decode(try Data(contentsOf: url))
     }
+
+    // How healthy the past-client export is, so the scout can warn instead of silently
+    // treating every prospect as a cold lead (#22/#23).
+    static let defaultStaleAfter: TimeInterval = 30 * 86_400  // 30 days
+
+    enum Health: Equatable, Sendable {
+        case ok
+        case missing            // no export file at all
+        case unreadable         // present but couldn't decode / wrong shape / bad version
+        case stale(ageDays: Int)
+    }
+
+    // Pure verdict from the facts the IO wrapper gathers.
+    static func health(fileExists: Bool, decodeFailed: Bool, modifiedAt: Date?,
+                       now: Date, staleAfter: TimeInterval) -> Health {
+        if !fileExists { return .missing }
+        if decodeFailed { return .unreadable }
+        if let modifiedAt, now.timeIntervalSince(modifiedAt) > staleAfter {
+            return .stale(ageDays: Int(now.timeIntervalSince(modifiedAt) / 86_400))
+        }
+        return .ok
+    }
+
+    static func warningText(for health: Health) -> String? {
+        switch health {
+        case .ok:
+            return nil
+        case .missing:
+            return "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
+        case .unreadable:
+            return "The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
+        case .stale(let days):
+            return "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
+        }
+    }
+
+    // Reads whatever clients it can, plus a health verdict. Never throws: a missing or
+    // bad export yields empty clients so the scout still runs, with the warning surfaced.
+    static func loadWithHealth(from url: URL = defaultURL, now: Date,
+                               staleAfter: TimeInterval = defaultStaleAfter)
+        -> (clients: [DownbeatClient], health: Health) {
+        guard let data = try? Data(contentsOf: url) else {
+            return ([], .missing)
+        }
+        let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        guard let export = try? decode(data) else {
+            return ([], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+        }
+        return (export.clients, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+    }
 }
