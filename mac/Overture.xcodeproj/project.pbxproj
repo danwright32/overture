@@ -17,9 +17,11 @@
 		18316584EF8D9A33C1A80166 /* PrepQueueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECEC0B6BC82DF1F399A090B /* PrepQueueService.swift */; };
 		18700AD6424BB82913D7E382 /* DownbeatExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829EE2F8C8D00FB6BD62E196 /* DownbeatExport.swift */; };
 		19D8357A742F93A6B2EC8CA5 /* PrepStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612B38A4015CC81015D5D0B9 /* PrepStatusTests.swift */; };
+		296BF3F101572A9ED142164B /* PrepRunOutcomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1417C41A53BFC9C1A9ED6D5 /* PrepRunOutcomeTests.swift */; };
 		2ABBB3241344B53212BD04D3 /* EventClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A845FED20A605560CC21DB4A /* EventClassifier.swift */; };
 		2C1A6A90642532237C113230 /* GmailCredentialsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD2C520DA2246AB9E1973559 /* GmailCredentialsTests.swift */; };
 		34B4D59778B45482B07FEE79 /* QueueView+Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715B637F291B723A32F86486 /* QueueView+Model.swift */; };
+		3F5371F399F0A712055BD033 /* PrepRunOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B3BC9042D19E2C6199429 /* PrepRunOutcome.swift */; };
 		4A125A73DBC9E95E9B806451 /* PrepStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */; };
 		4A9031E5AE33243B77A5A3E3 /* ScoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637CE6DCB47850272BCB073A /* ScoutService.swift */; };
 		4B822A1013C867F99F2E5314 /* MailSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E6FD194E3EAEC89C465A64 /* MailSender.swift */; };
@@ -121,6 +123,7 @@
 		AF936B56EA75558296D03EFE /* RefreshResponseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefreshResponseTests.swift; sourceTree = "<group>"; };
 		AFE4D30240BCE6CB07CD1713 /* ResultsImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsImporter.swift; sourceTree = "<group>"; };
 		B075FC1DB65AFA2E46FD21A3 /* HistoryMatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMatch.swift; sourceTree = "<group>"; };
+		B1417C41A53BFC9C1A9ED6D5 /* PrepRunOutcomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepRunOutcomeTests.swift; sourceTree = "<group>"; };
 		B1F488479D4DEA383519C548 /* QueueModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueModelTests.swift; sourceTree = "<group>"; };
 		B30D320FEBBA85BDF8EC7A4F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B36D082430691342F0343826 /* NaturalKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalKeyTests.swift; sourceTree = "<group>"; };
@@ -135,6 +138,7 @@
 		E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatus.swift; sourceTree = "<group>"; };
 		E507C0A339C96A42C60B567F /* SendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendService.swift; sourceTree = "<group>"; };
 		E7401013CA3A714300090BE7 /* SendConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendConfirmationTests.swift; sourceTree = "<group>"; };
+		E94B3BC9042D19E2C6199429 /* PrepRunOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepRunOutcome.swift; sourceTree = "<group>"; };
 		FD2C520DA2246AB9E1973559 /* GmailCredentialsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailCredentialsTests.swift; sourceTree = "<group>"; };
 		FD487981CBBF8C44D61938BB /* RankerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -171,6 +175,7 @@
 				AA9397FDF7E49A3E34623AD3 /* OutcomeStatsTests.swift */,
 				00E563EC137DDC54063B7980 /* PrepImporterTests.swift */,
 				54DBE94855F8556BD54A8820 /* PrepQueueTests.swift */,
+				B1417C41A53BFC9C1A9ED6D5 /* PrepRunOutcomeTests.swift */,
 				612B38A4015CC81015D5D0B9 /* PrepStatusTests.swift */,
 				55D2CD6E3596C49C463321EA /* ProspectAssemblerTests.swift */,
 				B1F488479D4DEA383519C548 /* QueueModelTests.swift */,
@@ -231,6 +236,7 @@
 				946729B6E11E8A1EDB184CF4 /* OutcomeStats.swift */,
 				97E9DA8F6EFABE1B82CE4BE8 /* PrepQueue.swift */,
 				A994B8F944AA55C7BF692874 /* PrepResults.swift */,
+				E94B3BC9042D19E2C6199429 /* PrepRunOutcome.swift */,
 				E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */,
 				6C22E2042542477FF4D916B3 /* Prospect.swift */,
 				39078CF3F9C3902769283CB8 /* ProspectAssembler.swift */,
@@ -382,6 +388,7 @@
 				CFD4386F273F2151A04916FC /* PrepQueue.swift in Sources */,
 				18316584EF8D9A33C1A80166 /* PrepQueueService.swift in Sources */,
 				DA4AC8C2D48649D2D8EE6C0B /* PrepResults.swift in Sources */,
+				3F5371F399F0A712055BD033 /* PrepRunOutcome.swift in Sources */,
 				4A125A73DBC9E95E9B806451 /* PrepStatus.swift in Sources */,
 				73679705D41DA095CC9189DC /* Prospect.swift in Sources */,
 				E887FF57AD484D520F4726D9 /* ProspectAssembler.swift in Sources */,
@@ -415,6 +422,7 @@
 				55ADB22C6520C4D9771237A4 /* OutcomeStatsTests.swift in Sources */,
 				0C90443179FCBB3A84CDA21C /* PrepImporterTests.swift in Sources */,
 				70E410EE901D702377FF76E1 /* PrepQueueTests.swift in Sources */,
+				296BF3F101572A9ED142164B /* PrepRunOutcomeTests.swift in Sources */,
 				19D8357A742F93A6B2EC8CA5 /* PrepStatusTests.swift in Sources */,
 				D1DA16CE093E998F279DC660 /* ProspectAssemblerTests.swift in Sources */,
 				D3D1FD57D74D4440175FCB03 /* QueueModelTests.swift in Sources */,

@@ -77,7 +77,17 @@ struct RootView: View {
                     .keyboardShortcut("r", modifiers: .command)
                 }
             }
-            .task { ingestIfEmpty(); ingestPrep() }
+            .task {
+                ingestIfEmpty()
+                // If a run is in flight at launch, watch it to completion; otherwise just
+                // ingest any results already on disk (a past success), without nagging
+                // about an old failed run (#48).
+                if PrepQueueService.isRunning(now: Date()) {
+                    await watchPrepRun()
+                } else {
+                    ingestPrep()
+                }
+            }
             .alert("Something went wrong", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -104,8 +114,33 @@ struct RootView: View {
         do {
             let count = try PrepQueueService.startPrep(from: context, now: Date())
             statusMessage = "Prep started for \(count) prospect\(count == 1 ? "" : "s")…"
+            // Watch this run so Dan sees the outcome (drafts ingested, or a clear notice
+            // that it finished without producing anything) rather than silent waiting (#48).
+            Task { await watchPrepRun() }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // Wait for the in-flight run to finish, then report what it produced. Tied to a run
+    // we know is live (just launched, or in flight at launch), so an old failed run
+    // never re-nags on a normal open.
+    private func watchPrepRun() async {
+        while PrepQueueService.isRunning(now: Date()) {
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+        }
+        let started = PrepQueueService.lastRunStartedAt
+        let resultsMod = try? PrepImporter.defaultURL
+            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        switch PrepRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
+        case .producedResults:
+            ingestPrep()
+        case .finishedEmpty:
+            let tail = PrepLog.tail(8)
+            errorMessage = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
+                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+        case .idle, .running:
+            break
         }
     }
 
