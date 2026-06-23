@@ -84,13 +84,15 @@ enum ScoutService {
     }
 
     private static func make(_ p: AssembledProspect, key: String) -> Prospect {
-        Prospect(
+        let prospect = Prospect(
             naturalKey: key, groupName: p.groupName, discipline: p.discipline, venue: p.venue,
             performanceDate: p.performanceDate, sourceListingURL: p.sourceListingURL, websiteURL: p.websiteURL,
             priorRelationship: p.priorRelationship, production: p.production, profile: p.profile,
             coverage: p.coverage, fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName)
+        prospect.classificationConfidence = p.confidence
+        return prospect
     }
 
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
@@ -110,6 +112,8 @@ enum ScoutService {
         existing.matchedClientName = p.matchedClientName
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
+        existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
+        // NOTE: never touch confidenceReviewedByDan here — Dan owns that acknowledgement.
         existing.ingestedAt = Date()
     }
 

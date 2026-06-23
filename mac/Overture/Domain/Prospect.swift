@@ -34,6 +34,13 @@ final class Prospect {
     var dismissReasonRaw: String?
     var ingestedAt: Date
 
+    // The rules classifier's confidence ("confident"/"uncertain"). Scout-owned: refreshed
+    // every run. confidenceReviewedByDan is Dan-owned: once he has eyeballed a guess, the
+    // "unsure" mark stays cleared even across re-scouts (#32). Defaulted so existing
+    // records and the scout's inserts are unaffected.
+    var classificationConfidence: String = Confidence.confident.rawValue
+    var confidenceReviewedByDan: Bool = false
+
     // Filled by the Prep run (Trigger 2). Defaulted so the scout's inserts are unaffected.
     var contactName: String? = nil
     var contactRole: String? = nil

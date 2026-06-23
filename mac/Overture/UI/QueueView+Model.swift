@@ -38,6 +38,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var outcome: Outcome = .noResponse
     var sentAt: Date? = nil
     var sendError: String? = nil
+    var classificationConfidence: String = Confidence.confident.rawValue
+    var confidenceReviewedByDan: Bool = false
+
+    // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
+    var isClassificationUncertain: Bool {
+        classificationConfidence == Confidence.uncertain.rawValue && !confidenceReviewedByDan
+    }
 
     var isSent: Bool { sentAt != nil }
     var isHighFit: Bool { tier == "high" }
