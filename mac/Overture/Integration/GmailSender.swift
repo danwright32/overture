@@ -24,7 +24,14 @@ struct GmailSender: MailSender {
             req.httpBody = try JSONSerialization.data(withJSONObject: ["raw": raw])
 
             let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let http = resp as? HTTPURLResponse
+            if http?.statusCode == 401 || http?.statusCode == 403 {
+                // Token revoked since it was issued. Clear it so the app shows as
+                // disconnected and prompts a reconnect, not a stream of opaque failures.
+                await GmailAuthManager.shared.signalAuthExpired()
+                throw GmailSendError.authExpired
+            }
+            guard let http, (200..<300).contains(http.statusCode) else {
                 let detail = String(data: data, encoding: .utf8) ?? "send failed"
                 throw GmailSendError.api(detail)
             }
@@ -37,7 +44,13 @@ struct GmailSender: MailSender {
 
 enum GmailSendError: LocalizedError {
     case api(String)
-    var errorDescription: String? { if case .api(let m) = self { return m } else { return nil } }
+    case authExpired
+    var errorDescription: String? {
+        switch self {
+        case .api(let m): return m
+        case .authExpired: return "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
+        }
+    }
 }
 
 // Bridges one async send into the synchronous MailSender call. Acceptable because a

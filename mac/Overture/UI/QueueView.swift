@@ -16,6 +16,7 @@ struct QueueView: View {
     @State private var disciplineFilter: String?
     @State private var highOnly = false
     @State private var pendingConfirm: PendingConfirm?
+    @State private var showReconnect = false
 
     // The one email awaiting Dan's explicit confirm before it sends (#49).
     private struct PendingConfirm: Identifiable {
@@ -76,6 +77,11 @@ struct QueueView: View {
             Button("Cancel", role: .cancel) { pendingConfirm = nil }
         } message: { pending in
             Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
+        }
+        .alert("Reconnect Gmail", isPresented: $showReconnect) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
         }
     }
 
@@ -203,8 +209,13 @@ struct QueueView: View {
         pendingConfirm = nil
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
-        _ = SendService.sendOne(model, now: Date(), sender: sender)
+        let sent = SendService.sendOne(model, now: Date(), sender: sender)
         try? context.save()
+        // If the send failed because the token was revoked/expired, sendOne cleared it;
+        // surface a clear reconnect prompt rather than a silent per-row error (#50).
+        if !sent && !GmailAuthManager.shared.isConnected {
+            showReconnect = true
+        }
     }
 }
 

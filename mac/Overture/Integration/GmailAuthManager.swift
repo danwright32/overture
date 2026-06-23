@@ -13,7 +13,7 @@ final class GmailAuthManager {
     static let shared = GmailAuthManager()
 
     enum AuthError: LocalizedError {
-        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String)
+        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired
         var errorDescription: String? {
             switch self {
             case .noClientConfig: return "Gmail client config is missing. Re-run the Google setup."
@@ -21,7 +21,8 @@ final class GmailAuthManager {
             case .listenerFailed: return "Couldn't open the local login listener."
             case .stateMismatch: return "Login response didn't match the request. Try again."
             case .exchangeFailed(let m): return "Login failed: \(m)"
-            case .refreshFailed(let m): return "Gmail session expired and couldn't refresh: \(m)"
+            case .refreshFailed(let m): return "Gmail couldn't refresh right now (temporary): \(m)"
+            case .authExpired: return "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
             }
         }
     }
@@ -89,17 +90,28 @@ final class GmailAuthManager {
                                  redirectURI: "http://127.0.0.1", scopes: OAuthConfig.gmailScopes)
         let req = GoogleOAuth.refreshRequest(config: config, refreshToken: stored.refreshToken)
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200,
-              let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) else {
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        switch GoogleOAuth.interpretRefreshResponse(status: status, data: data) {
+        case .success(let tokens):
+            stored.accessToken = tokens.accessToken
+            stored.accessTokenExpiry = tokens.expiresIn.map { now.addingTimeInterval(TimeInterval($0)) }
+            GmailCredentials.saveTokens(stored)
+            return tokens.accessToken
+        case .failure(.authExpired):
+            // The refresh token is dead (revoked/expired). Clear it so the app shows as
+            // disconnected and Dan is prompted to reconnect, instead of failing opaquely.
+            GmailCredentials.clearTokens()
+            throw AuthError.authExpired
+        case .failure(.transient):
             throw AuthError.refreshFailed(String(data: data, encoding: .utf8) ?? "unknown")
         }
-        stored.accessToken = tokens.accessToken
-        stored.accessTokenExpiry = tokens.expiresIn.map { now.addingTimeInterval(TimeInterval($0)) }
-        GmailCredentials.saveTokens(stored)
-        return tokens.accessToken
     }
 
     func disconnect() { GmailCredentials.clearTokens() }
+
+    // Called when a live API call rejects the token (revoked/expired mid-session): drop
+    // the stored token so the app shows as disconnected and prompts a reconnect (#50).
+    func signalAuthExpired() { GmailCredentials.clearTokens() }
 
     // MARK: - token exchange
 

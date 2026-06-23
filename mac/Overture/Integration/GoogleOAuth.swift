@@ -78,6 +78,23 @@ enum GoogleOAuth {
         ])
     }
 
+    // Why a refresh failed: a dead login Dan must fix vs. a passing blip to retry (#50).
+    enum RefreshFailure: Error, Equatable, Sendable { case authExpired, transient }
+
+    // Reads a token-refresh response. invalid_grant (revoked/expired refresh token) or
+    // 401 means reconnect; any other non-success, or a 200 we can't parse, is transient
+    // so a still-valid saved login is never thrown away over a blip.
+    static func interpretRefreshResponse(status: Int, data: Data) -> Result<OAuthTokens, RefreshFailure> {
+        if status == 200, let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) {
+            return .success(tokens)
+        }
+        let body = String(data: data, encoding: .utf8) ?? ""
+        if status == 401 || (status == 400 && body.contains("invalid_grant")) {
+            return .failure(.authExpired)
+        }
+        return .failure(.transient)
+    }
+
     // MARK: - helpers
 
     static func base64url(_ data: Data) -> String {
