@@ -10,17 +10,19 @@ import Network
 //      browser can't connect to, so the consent page never redirects back.
 enum LoopbackListener {
     enum LoopbackError: LocalizedError {
-        case noPort, failed(String)
+        case noPort, failed(String), timedOut
         var errorDescription: String? {
             switch self {
             case .noPort: return "Local login listener never reported a port."
             case .failed(let m): return "Local login listener failed: \(m)"
+            case .timedOut: return "Couldn't open the local login listener (timed out)."
             }
         }
     }
 
     static func start(
         queue: DispatchQueue,
+        timeout: TimeInterval = 10,
         onConnection: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> (listener: NWListener, port: UInt16) {
         let params = NWParameters.tcp
@@ -35,15 +37,24 @@ enum LoopbackListener {
 
         return try await withCheckedThrowingContinuation { cont in
             let box = ContinuationBox(cont)
+            // Give up if the listener never reaches .ready, so Connect Gmail can't hang on a
+            // wedged bind (#54). The box resumes once, so whichever fires first wins.
+            let timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                box.resume(throwing: LoopbackError.timedOut)
+                listener.cancel()
+            }
             listener.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
+                    timeoutTask.cancel()
                     if let port = listener.port?.rawValue, port != 0 {
                         box.resume(returning: (listener, port))
                     } else {
                         box.resume(throwing: LoopbackError.noPort)
                     }
                 case .failed(let error):
+                    timeoutTask.cancel()
                     box.resume(throwing: LoopbackError.failed("\(error)"))
                 default:
                     break
