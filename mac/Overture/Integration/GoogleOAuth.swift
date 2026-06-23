@@ -36,9 +36,9 @@ enum GoogleOAuth {
 
     // The consent URL the app opens in the browser. `access_type=offline` +
     // `prompt=consent` so Google returns a refresh token.
-    static func authorizationURL(config: OAuthConfig, pkce: PKCE, state: String) -> URL {
+    static func authorizationURL(config: OAuthConfig, pkce: PKCE, state: String, loginHint: String? = nil) -> URL {
         var c = URLComponents(string: authEndpoint)!
-        c.queryItems = [
+        var items: [URLQueryItem] = [
             .init(name: "client_id", value: config.clientId),
             .init(name: "redirect_uri", value: config.redirectURI),
             .init(name: "response_type", value: "code"),
@@ -49,6 +49,10 @@ enum GoogleOAuth {
             .init(name: "access_type", value: "offline"),
             .init(name: "prompt", value: "consent"),
         ]
+        // Pin the account so a browser signed into multiple Google accounts doesn't
+        // stall the consent (the authuser=N confusion).
+        if let loginHint { items.append(.init(name: "login_hint", value: loginHint)) }
+        c.queryItems = items
         return c.url!
     }
 

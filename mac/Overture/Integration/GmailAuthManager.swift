@@ -30,6 +30,7 @@ final class GmailAuthManager {
     private var pendingState: String?
     private var pendingPKCE: PKCE?
     private var codeContinuation: CheckedContinuation<String, Error>?
+    private var timeoutTask: Task<Void, Never>?
 
     var isConnected: Bool { GmailCredentials.isConnected }
 
@@ -37,6 +38,10 @@ final class GmailAuthManager {
     // the code, and store tokens. Throws on any failure; sends nothing.
     func connect() async throws {
         guard let client = GmailCredentials.loadClient() else { throw AuthError.noClientConfig }
+
+        // Cancel any half-finished prior attempt so a fresh click always starts clean
+        // (avoids stale listeners on dead ports that leave old browser tabs hanging).
+        cancelInFlight()
 
         let port = try startListener()
         let redirect = "http://127.0.0.1:\(port)"
@@ -47,12 +52,22 @@ final class GmailAuthManager {
 
         let config = OAuthConfig(clientId: client.clientId, clientSecret: client.clientSecret,
                                  redirectURI: redirect, scopes: OAuthConfig.gmailScopes)
-        let authURL = GoogleOAuth.authorizationURL(config: config, pkce: pkce, state: state)
+        let authURL = GoogleOAuth.authorizationURL(config: config, pkce: pkce, state: state,
+                                                   loginHint: "dan@danwrightphotography.com")
         NSWorkspace.shared.open(authURL)
+
+        // Auto-give-up so the UI can never deadlock on "Connecting…" if the redirect
+        // never arrives (stale tab, Google-side hang, etc.).
+        timeoutTask?.cancel()
+        timeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+            await MainActor.run { self?.failTimeout() }
+        }
 
         let code = try await withCheckedThrowingContinuation { (c: CheckedContinuation<String, Error>) in
             codeContinuation = c
         }
+        timeoutTask?.cancel()
         stopListener()
 
         let tokens = try await exchange(config: config, code: code, pkce: pkce)
@@ -101,7 +116,13 @@ final class GmailAuthManager {
     // MARK: - loopback listener
 
     private func startListener() throws -> Int {
-        let listener = try NWListener(using: .tcp, on: .any)
+        // Bind specifically to IPv4 loopback (127.0.0.1) so it matches the redirect
+        // URI we hand Google. Without this, NWListener defaults to IPv6 and the
+        // IPv4 redirect never reaches it (the browser hangs).
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: params)
         self.listener = listener
         listener.newConnectionHandler = { [weak self] conn in
             conn.start(queue: .main)
@@ -138,6 +159,27 @@ final class GmailAuthManager {
     }
 
     private func stopListener() { listener?.cancel(); listener = nil }
+
+    // Tears down any in-flight flow: cancels the listener and fails a pending wait.
+    private func cancelInFlight() {
+        timeoutTask?.cancel(); timeoutTask = nil
+        stopListener()
+        let cont = codeContinuation
+        codeContinuation = nil
+        pendingState = nil
+        pendingPKCE = nil
+        cont?.resume(throwing: CancellationError())
+    }
+
+    private func failTimeout() {
+        guard codeContinuation != nil else { return }
+        stopListener()
+        let cont = codeContinuation
+        codeContinuation = nil
+        pendingState = nil
+        pendingPKCE = nil
+        cont?.resume(throwing: AuthError.exchangeFailed("Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."))
+    }
 
     // MARK: - randomness
 
