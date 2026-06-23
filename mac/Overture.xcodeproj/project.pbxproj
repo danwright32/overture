@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		03BD933CCB910DF9DDAE98CF /* GoogleOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */; };
 		03EB45B1FFE5868B0653E16F /* ResultsFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952C8BA810BF5FDC67DF259D /* ResultsFile.swift */; };
 		04FA610FA66C8446BAD3F238 /* SendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E507C0A339C96A42C60B567F /* SendService.swift */; };
 		04FB0C39B9A60E2B62710976 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B30D320FEBBA85BDF8EC7A4F /* Assets.xcassets */; };
@@ -28,6 +29,7 @@
 		5ED4B798A43C3E9F7B28EDCC /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A545056FEEAA77E0FFA0D2E6 /* DesignTokens.swift */; };
 		6E193C64F2947CB03E7A7F42 /* ScoutServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75EF1A94243625631CFBC6E7 /* ScoutServiceTests.swift */; };
 		70E410EE901D702377FF76E1 /* PrepQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54DBE94855F8556BD54A8820 /* PrepQueueTests.swift */; };
+		7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */; };
 		73679705D41DA095CC9189DC /* Prospect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C22E2042542477FF4D916B3 /* Prospect.swift */; };
 		7E190456B52B9E5C862DBDE5 /* GroupNameMatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE40D9C39DD8B70A715F0F2 /* GroupNameMatch.swift */; };
 		84F2B198166270B48CFCCBCF /* ProspectRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D9834539BA47D783475B28C /* ProspectRowView.swift */; };
@@ -75,6 +77,7 @@
 		39E6FD194E3EAEC89C465A64 /* MailSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailSender.swift; sourceTree = "<group>"; };
 		3ECEC0B6BC82DF1F399A090B /* PrepQueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepQueueService.swift; sourceTree = "<group>"; };
 		48833E92062362801EA65D62 /* OvertureTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OvertureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthTests.swift; sourceTree = "<group>"; };
 		50569449C10E9C4F6B69BD48 /* MatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchingTests.swift; sourceTree = "<group>"; };
 		54DBE94855F8556BD54A8820 /* PrepQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepQueueTests.swift; sourceTree = "<group>"; };
 		55D2CD6E3596C49C463321EA /* ProspectAssemblerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectAssemblerTests.swift; sourceTree = "<group>"; };
@@ -83,6 +86,7 @@
 		612B38A4015CC81015D5D0B9 /* PrepStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatusTests.swift; sourceTree = "<group>"; };
 		637CE6DCB47850272BCB073A /* ScoutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutService.swift; sourceTree = "<group>"; };
 		63F8BDF3177782E6E83DD846 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuth.swift; sourceTree = "<group>"; };
 		6908EFE958F78F7313DBEAF3 /* GmailMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailMessage.swift; sourceTree = "<group>"; };
 		6C22E2042542477FF4D916B3 /* Prospect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Prospect.swift; sourceTree = "<group>"; };
 		6D782E08C651DE5D0AA3A899 /* DraftReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewView.swift; sourceTree = "<group>"; };
@@ -141,6 +145,7 @@
 			children = (
 				DBC08DD66544C1916398438E /* EventClassifierTests.swift */,
 				5D6A768536BCBD7F7BBA2452 /* GmailMessageTests.swift */,
+				50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */,
 				50569449C10E9C4F6B69BD48 /* MatchingTests.swift */,
 				B36D082430691342F0343826 /* NaturalKeyTests.swift */,
 				AA9397FDF7E49A3E34623AD3 /* OutcomeStatsTests.swift */,
@@ -181,6 +186,7 @@
 			children = (
 				1277AABACF169CD59F453422 /* CarnegieExtractor.swift */,
 				6908EFE958F78F7313DBEAF3 /* GmailMessage.swift */,
+				670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */,
 				39E6FD194E3EAEC89C465A64 /* MailSender.swift */,
 				3ECEC0B6BC82DF1F399A090B /* PrepQueueService.swift */,
 				637CE6DCB47850272BCB073A /* ScoutService.swift */,
@@ -335,6 +341,7 @@
 				90CA73A27C4A3C68277252B5 /* DraftReviewView.swift in Sources */,
 				2ABBB3241344B53212BD04D3 /* EventClassifier.swift in Sources */,
 				FB3A213BC2DB7F321180556B /* GmailMessage.swift in Sources */,
+				03BD933CCB910DF9DDAE98CF /* GoogleOAuth.swift in Sources */,
 				7E190456B52B9E5C862DBDE5 /* GroupNameMatch.swift in Sources */,
 				92549E91C36C3AFFCA9118F6 /* HistoryMatch.swift in Sources */,
 				4B822A1013C867F99F2E5314 /* MailSender.swift in Sources */,
@@ -368,6 +375,7 @@
 			files = (
 				E2FCB5236D9D9C6A83D80373 /* EventClassifierTests.swift in Sources */,
 				DBEAF2D810698FF79222656D /* GmailMessageTests.swift in Sources */,
+				7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */,
 				EAC2553E7EBE5ECE02E367FD /* MatchingTests.swift in Sources */,
 				B59A9FC6B274B0F898E07406 /* NaturalKeyTests.swift in Sources */,
 				55ADB22C6520C4D9771237A4 /* OutcomeStatsTests.swift in Sources */,
