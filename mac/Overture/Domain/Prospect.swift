@@ -54,6 +54,8 @@ final class Prospect {
     var outcomeSourceRaw: String? = nil
     var outcomeAt: Date? = nil
     var sentAt: Date? = nil
+    var gmailThreadId: String? = nil   // set on send; used for reply detection
+    var sendError: String? = nil       // last send failure, surfaced for retry
 
     init(
         naturalKey: String,

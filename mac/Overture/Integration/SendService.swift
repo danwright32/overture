@@ -1,0 +1,61 @@
+import Foundation
+import SwiftData
+
+// Releases approved emails one at a time, respecting the throttle, via an injected
+// MailSender. The app calls releaseDueSends on a timer / on approve; each call sends
+// at most one email so a big approved batch drips out. Records sentAt + threadId on
+// success, or sendError on failure (surfaced for retry, never silently lost).
+
+@MainActor
+enum SendService {
+    struct Outcome: Equatable, Sendable {
+        var sent: Int
+        var failed: Int
+        var throttled: Bool   // there were pending sends but the throttle held them
+    }
+
+    // The send queue: approved prospects with a draft and a contact email, not yet
+    // sent, oldest-approved first (FIFO by ingestedAt as a stand-in for approval order).
+    static func pending(in context: ModelContext) -> [Prospect] {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all
+            .filter { $0.status == .approved && $0.sentAt == nil && $0.draftBody != nil && $0.contactEmail != nil }
+            .sorted { $0.ingestedAt < $1.ingestedAt }
+    }
+
+    static func recentSendDates(in context: ModelContext) -> [Date] {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all.compactMap { $0.sentAt }
+    }
+
+    // Sends the next due email if the throttle allows. At most one per call.
+    @discardableResult
+    static func releaseDueSends(in context: ModelContext, now: Date, sender: MailSender,
+                                config: SendThrottleConfig = .default) -> Outcome {
+        let queue = pending(in: context)
+        guard let next = queue.first else { return Outcome(sent: 0, failed: 0, throttled: false) }
+
+        let recent = recentSendDates(in: context)
+        guard SendThrottle.canSendNow(recentSends: recent, now: now, config: config) else {
+            return Outcome(sent: 0, failed: 0, throttled: true)
+        }
+
+        let mail = OutgoingMail(
+            to: next.contactEmail ?? "",
+            subject: next.draftSubject ?? "",
+            body: next.draftBody ?? ""
+        )
+        do {
+            let receipt = try sender.send(mail)
+            next.sentAt = now
+            next.gmailThreadId = receipt.threadId
+            next.sendError = nil
+            try? context.save()
+            return Outcome(sent: 1, failed: 0, throttled: queue.count > 1)
+        } catch {
+            next.sendError = error.localizedDescription
+            try? context.save()
+            return Outcome(sent: 0, failed: 1, throttled: false)
+        }
+    }
+}
