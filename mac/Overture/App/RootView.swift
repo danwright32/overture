@@ -19,6 +19,15 @@ struct RootView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        startPrep()
+                    } label: {
+                        Label("Prep kept", systemImage: "envelope.badge")
+                    }
+                    .help("Find contacts and draft emails for the prospects you've kept")
+                    .keyboardShortcut("p", modifiers: .command)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
                         runScout()
                     } label: {
                         if isScanning {
@@ -36,11 +45,20 @@ struct RootView: View {
                 }
             }
             .task { ingestIfEmpty(); ingestPrep() }
-            .alert("Scout failed", isPresented: errorBinding) {
+            .alert("Couldn't start Prep", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
             }
+    }
+
+    private func startPrep() {
+        do {
+            let count = try PrepQueueService.startPrep(from: context, now: Date())
+            statusMessage = "Prep started for \(count) prospect\(count == 1 ? "" : "s")…"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private var errorBinding: Binding<Bool> {
