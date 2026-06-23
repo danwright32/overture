@@ -6,7 +6,22 @@ import Foundation
 enum ReplyDetection {
     static func hasReply(fromAddresses: [String], selfEmail: String) -> Bool {
         let me = email(from: selfEmail)
-        return fromAddresses.contains { let e = email(from: $0); return !e.isEmpty && e != me }
+        return fromAddresses.contains { raw in
+            let e = email(from: raw)
+            return !e.isEmpty && e != me && !isAutomated(e)
+        }
+    }
+
+    // Bounces, postmasters, and no-reply autoresponders aren't real replies; a delivery
+    // bounce is the opposite of one. Matched on the local part so a real person isn't
+    // excluded by a coincidental domain.
+    private static let automatedLocalParts = [
+        "mailer-daemon", "postmaster", "no-reply", "noreply",
+        "do-not-reply", "donotreply", "auto-reply", "autoreply", "bounce",
+    ]
+    static func isAutomated(_ email: String) -> Bool {
+        let local = email.split(separator: "@").first.map(String.init) ?? email
+        return automatedLocalParts.contains { local.contains($0) }
     }
 
     // The bare email out of a From header ("Name <a@b.com>" or "a@b.com"), lowercased.
