@@ -17,6 +17,13 @@ struct LoopbackListenerTests {
         #expect(port != 0)
     }
 
+    @Test func bindsSuccessfullyWithinAnExplicitTimeout() async throws {
+        // The bind timeout (#54) must not interfere with the normal, fast happy path.
+        let (listener, port) = try await LoopbackListener.start(queue: .global(), timeout: 5) { $0.cancel() }
+        defer { listener.cancel() }
+        #expect(port != 0)
+    }
+
     @Test func theReportedPortAcceptsAnIPv4LoopbackConnection() async throws {
         let (listener, port) = try await LoopbackListener.start(queue: .global()) { conn in
             conn.cancel()
