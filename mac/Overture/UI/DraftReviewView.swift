@@ -92,6 +92,28 @@ struct DraftReviewView: View {
                 if item.draftEditedByDan {
                     Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
                 }
+                draftCheckFlags
+            }
+        }
+    }
+
+    // Self-check findings (#11): voice / AI-tells / stance issues in the draft, surfaced so
+    // Dan's review is judgment, not cleanup. Only on an unedited draft from the run — once
+    // Dan edits it, it's his.
+    @ViewBuilder private var draftCheckFlags: some View {
+        if !item.draftEditedByDan, let body = item.draftBody {
+            let findings = DraftCheck.findings(in: body)
+            if !findings.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(findings, id: \.self) { f in
+                        HStack(spacing: 5) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(f.label)
+                        }
+                        .font(OVType.tag).foregroundStyle(OVColor.rust)
+                    }
+                }
+                .padding(.top, 2)
             }
         }
     }
