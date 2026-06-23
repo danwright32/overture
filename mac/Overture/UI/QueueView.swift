@@ -111,6 +111,60 @@ struct QueueView: View {
             }
             .font(.system(size: 11))
             .foregroundStyle(OVColor.inkFaint)
+            agentStrip
+        }
+    }
+
+    // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus
+    // a label (never colour alone), with a roll-up so needs-attention is unmissable.
+    private var agentInputs: AgentInputs {
+        AgentInputs(
+            keptToPrep: prospects.filter { $0.status == .queued && !$0.hasDraft }.count,
+            prepRunning: PrepQueueService.isRunning(now: Date()),
+            toReview: prospects.filter { $0.status == .drafted }.count,
+            readyToSend: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
+            gmailConnected: GmailAuthManager.shared.isConnected,
+            sendErrors: prospects.filter { $0.sendError != nil }.count,
+            followUpsDue: FollowUp.due(from: prospects, now: Date()).count
+        )
+    }
+
+    private var agentStrip: some View {
+        let statuses = AgentRoster.statuses(agentInputs)
+        let needs = AgentRoster.needsYouCount(statuses)
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            if needs > 0 {
+                Text("\(needs) need\(needs == 1 ? "s" : "") you")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(OVColor.rust)
+            }
+            WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
+                ForEach(statuses) { agentChip($0) }
+            }
+        }
+        .padding(.top, OVSpacing.xxs)
+    }
+
+    private func agentChip(_ s: AgentStatus) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(agentColor(s.state)).frame(width: 6, height: 6)
+            Text(s.name).font(OVType.tag)
+                .foregroundStyle(s.state == .idle ? OVColor.inkFaint : OVColor.ink)
+            if s.state != .idle {
+                Text(s.detail).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
+            }
+        }
+        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+        .background(Capsule().fill(s.state == .idle ? Color.clear : agentColor(s.state).opacity(0.12)))
+        .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: s.state == .idle ? 1 : 0))
+        .help(s.detail)
+    }
+
+    private func agentColor(_ state: AgentState) -> Color {
+        switch state {
+        case .idle: return OVColor.inkFaint
+        case .working: return OVColor.forest
+        case .needsAttention: return OVColor.gold
+        case .error: return OVColor.rust
         }
     }
 
