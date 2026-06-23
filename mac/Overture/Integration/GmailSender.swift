@@ -25,9 +25,11 @@ struct GmailSender: MailSender {
 
             let (data, resp) = try await URLSession.shared.data(for: req)
             let http = resp as? HTTPURLResponse
-            if http?.statusCode == 401 || http?.statusCode == 403 {
-                // Token revoked since it was issued. Clear it so the app shows as
-                // disconnected and prompts a reconnect, not a stream of opaque failures.
+            if http?.statusCode == 401 {
+                // 401 = the token was revoked/expired since it was issued. Clear it so the
+                // app shows as disconnected and prompts a reconnect. NOT 403: Gmail uses
+                // 403 for rate limits and permission issues, which a reconnect won't fix
+                // and which must not log Dan out mid-batch.
                 await GmailAuthManager.shared.signalAuthExpired()
                 throw GmailSendError.authExpired
             }
