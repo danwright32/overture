@@ -56,10 +56,14 @@ struct PrepQueueTests {
             .appendingPathComponent("prep-queue-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        // No runner script is configured, so launch throws — but the work-list must
-        // already be written (the run is launched separately).
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
+
+        // Launch throws (runner unavailable) — but the work-list must already be written.
         #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0), queueURL: tmp)
+            try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                           queueURL: tmp, markerURL: marker,
+                                           launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
         }
         let written = try Data(contentsOf: tmp)
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: written)
@@ -70,8 +74,36 @@ struct PrepQueueTests {
     @Test func startPrepThrowsWhenNothingToPrep() throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Not Kept", status: .new)
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
         #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
-            try PrepQueueService.startPrep(from: ctx, now: Date())
+            try PrepQueueService.startPrep(from: ctx, now: Date(), markerURL: marker, launch: {})
+        }
+    }
+
+    @Test func isRunningReflectsAFreshMarkerButIgnoresAStaleOne() throws {
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prep-running-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
+
+        #expect(PrepQueueService.isRunning(markerURL: marker, now: Date()) == false)  // absent
+
+        try Data().write(to: marker)
+        let written = (try marker.resourceValues(forKeys: [.contentModificationDateKey])).contentModificationDate!
+        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(60)) == true)   // fresh
+        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(3600)) == false) // stale (>30m)
+    }
+
+    @Test func startPrepRefusesWhileARunIsInFlight() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Kept Choir", status: .queued)
+        let tmpQueue = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmpQueue); try? FileManager.default.removeItem(at: marker) }
+
+        try Data().write(to: marker) // a run is already in flight
+        #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
+            try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: tmpQueue, markerURL: marker)
         }
     }
 

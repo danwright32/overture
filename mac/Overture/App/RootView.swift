@@ -7,6 +7,14 @@ struct RootView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
 
+    // Kept prospects with no draft yet — what a Prep run would work on.
+    @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
+    private var toPrep: [Prospect]
+
+    private var canStartPrep: Bool {
+        !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
+    }
+
     var body: some View {
         QueueView()
             .toolbar {
@@ -21,9 +29,17 @@ struct RootView: View {
                     Button {
                         startPrep()
                     } label: {
-                        Label("Prep kept", systemImage: "envelope.badge")
+                        if PrepQueueService.isRunning(now: Date()) {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Prepping…")
+                            }
+                        } else {
+                            Label("Prep kept", systemImage: "envelope.badge")
+                        }
                     }
-                    .help("Find contacts and draft emails for the prospects you've kept")
+                    .disabled(!canStartPrep)
+                    .help(toPrep.isEmpty ? "Keep some prospects first" : "Find contacts and draft emails for the prospects you've kept")
                     .keyboardShortcut("p", modifiers: .command)
                 }
                 ToolbarItem(placement: .primaryAction) {

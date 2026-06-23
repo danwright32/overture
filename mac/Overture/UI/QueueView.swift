@@ -94,7 +94,7 @@ struct QueueView: View {
             drafted: prospects.filter { $0.status == .drafted }.count,
             approved: prospects.filter { $0.status == .approved }.count,
             lastRunStartedAt: PrepQueueService.lastRunStartedAt,
-            running: false
+            running: PrepQueueService.isRunning(now: Date())
         )
     }
 

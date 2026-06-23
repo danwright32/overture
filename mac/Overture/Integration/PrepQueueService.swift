@@ -34,6 +34,7 @@ enum PrepQueueService {
     enum PrepLaunchError: LocalizedError {
         case nothingToPrep
         case runnerUnavailable
+        case alreadyRunning
 
         var errorDescription: String? {
             switch self {
@@ -41,15 +42,39 @@ enum PrepQueueService {
                 return "No kept prospects need prepping. Keep some prospects first."
             case .runnerUnavailable:
                 return "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
+            case .alreadyRunning:
+                return "A Prep run is already in progress. Wait for it to finish."
             }
         }
     }
 
+    // The in-flight marker the runner script drops on start and removes on exit. The
+    // app also writes it on launch so the double-run guard is immediate (no race with
+    // the detached script). A marker older than the timeout is treated as stale (a
+    // crashed run), so the app can never get permanently stuck "running".
+    static let markerStaleAfter: TimeInterval = 30 * 60
+
+    static var defaultMarkerURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Overture", isDirectory: true)
+            .appendingPathComponent("prep-running")
+    }
+
+    static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
+        guard let mod = try? markerURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        else { return false }
+        return now.timeIntervalSince(mod) < markerStaleAfter
+    }
+
     // Writes the work-list and launches the detached run. Returns the count queued.
-    // The queue URL is injectable for testing; production uses the default location.
+    // URLs are injectable for testing; production uses the default locations.
     @discardableResult
     static func startPrep(from context: ModelContext, now: Date,
-                          queueURL: URL = PrepQueueBuilder.defaultURL) throws -> Int {
+                          queueURL: URL = PrepQueueBuilder.defaultURL,
+                          markerURL: URL = defaultMarkerURL,
+                          launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+        guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
+
         let stamp = ISO8601DateFormatter().string(from: now)
         let queue = buildQueue(from: context, generatedAt: stamp)
         guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
@@ -58,7 +83,10 @@ enum PrepQueueService {
         try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: queueURL, options: .atomic)
 
-        try launchRunner()
+        try launch()
+        // Mark in-flight immediately (the script also drops its own marker and clears
+        // it on exit); guards an instant second press before the script starts.
+        try? Data().write(to: markerURL)
         UserDefaults.standard.set(now, forKey: lastRunKey)
         return queue.items.count
     }
