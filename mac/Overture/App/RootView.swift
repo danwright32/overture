@@ -168,9 +168,10 @@ struct RootView: View {
                 if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
                 if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
                 statusMessage = parts.joined(separator: " · ")
-                // Past-client export was missing/stale/unreadable: warm matching ran
-                // degraded, so tell Dan rather than letting it pass silently (#22/#23).
-                warningMessage = outcome.clientListWarning
+                // Surface a scout warning if any: zero events extracted (#27) or a
+                // missing/stale past-client export (#22/#23). Silent degradation is the
+                // thing we are avoiding.
+                warningMessage = outcome.warning
             } catch {
                 errorMessage = String(describing: error)
             }

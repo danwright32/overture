@@ -16,6 +16,16 @@ enum ScoutService {
         // Set when the Downbeat past-client export was missing, unreadable, or stale, so
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
+
+        // The single warning to show after a run, if any. Zero extracted events almost
+        // always means the venue page changed or was unreachable, so it takes precedence
+        // over a client-list warning (with no events there is nothing to match) (#27).
+        var warning: String? {
+            if found == 0 {
+                return "The scout found no events. The venue calendar may have changed or be temporarily unavailable — try running the scout again shortly."
+            }
+            return clientListWarning
+        }
     }
 
     static func runScout(into context: ModelContext) async throws -> Outcome {
