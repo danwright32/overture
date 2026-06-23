@@ -73,6 +73,13 @@ enum ScoutService {
                 if let existing = (try? context.fetch(descriptor))?.first {
                     apply(p, to: existing)
                     updated += 1
+                } else if let drifted = matchByStableSource(url: p.sourceListingURL, date: p.performanceDate, in: context) {
+                    // No exact key match, but the same source listing + date already exists:
+                    // the venue tweaked the title between runs. Re-key to the new title and
+                    // update in place so Dan's keep/dismiss decision survives (#29).
+                    drifted.naturalKey = key
+                    apply(p, to: drifted)
+                    updated += 1
                 } else {
                     context.insert(make(p, key: key))
                     inserted += 1
@@ -81,6 +88,15 @@ enum ScoutService {
         }
         try? context.save()
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)
+    }
+
+    // A prospect identified by its stable source listing (URL + date), used to recognize
+    // the same event when its display title has drifted (#29). Fetch-all + filter is fine
+    // for the local store's size and avoids optional-predicate gymnastics.
+    private static func matchByStableSource(url: String?, date: String?, in context: ModelContext) -> Prospect? {
+        guard let url, !url.isEmpty else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all.first { $0.sourceListingURL == url && $0.performanceDate == date }
     }
 
     private static func make(_ p: AssembledProspect, key: String) -> Prospect {
