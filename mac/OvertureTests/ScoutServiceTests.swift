@@ -80,4 +80,29 @@ struct ScoutServiceTests {
         #expect(refreshed?.confidenceReviewedByDan == true)                          // Dan-owned, preserved
         #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
     }
+
+    @Test func titleDriftWithSameSourceURLCarriesTheDecisionForward() throws {
+        let ctx = ModelContext(try container())
+        let url = "https://www.carnegiehall.org/event/abc-123"
+        let first = ExtractedEvent(title: "Acme Festival Chorus", presenter: "Acme Festival Chorus",
+                                   venue: "Weill Recital Hall", performanceDate: "2026-07-01", sourceUrl: url)
+        _ = ScoutService.apply(events: [first], clients: [], history: [], blocked: [], into: ctx)
+
+        // Dan dismisses it.
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.status != .dismissed }
+        p?.status = .dismissed
+        try ctx.save()
+
+        // Re-scout: the venue tweaked the listing title, but the source URL is unchanged.
+        let drifted = ExtractedEvent(title: "Acme Festival Chorus — Summer Concert", presenter: "Acme Festival Chorus",
+                                     venue: "Weill Recital Hall", performanceDate: "2026-07-01", sourceUrl: url)
+        let outcome = ScoutService.apply(events: [drifted], clients: [], history: [], blocked: [], into: ctx)
+
+        #expect(outcome.inserted == 0)                                    // no orphaned duplicate
+        #expect(outcome.updated == 1)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(all.count == 1)                                          // still one record
+        #expect(all.first?.status == .dismissed)                         // Dan's decision carried forward
+        #expect(all.first?.groupName == "Acme Festival Chorus — Summer Concert") // refreshed to new title
+    }
 }
