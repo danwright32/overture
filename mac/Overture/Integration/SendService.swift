@@ -43,6 +43,31 @@ enum SendService {
         }
     }
 
+    // Sends ONE follow-up nudge for a prospect Dan explicitly chose to re-touch (#45):
+    // a short templated message to the same contact. Records the follow-up (count +
+    // timestamp) on success so the sequencer paces and caps it. Never resets sentAt or
+    // the original outcome; one click = one nudge, never autonomous.
+    @discardableResult
+    static func sendFollowUp(_ prospect: Prospect, now: Date, sender: MailSender,
+                             config: FollowUpConfig = .init()) -> Bool {
+        guard let email = prospect.contactEmail, prospect.sentAt != nil,
+              prospect.outcome == .noResponse, prospect.followUpCount < config.maxFollowUps else { return false }
+        let mail = OutgoingMail(
+            to: email,
+            subject: FollowUp.nudgeSubject(groupName: prospect.groupName),
+            body: FollowUp.nudgeBody(contactName: prospect.contactName, groupName: prospect.groupName, venue: prospect.venue))
+        do {
+            _ = try sender.send(mail)
+            prospect.followUpCount += 1
+            prospect.lastFollowUpAt = now
+            prospect.sendError = nil
+            return true
+        } catch {
+            prospect.sendError = error.localizedDescription
+            return false
+        }
+    }
+
     static func recentSendDates(in context: ModelContext) -> [Date] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         return all.compactMap { $0.sentAt }

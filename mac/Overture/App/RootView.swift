@@ -17,8 +17,13 @@ struct RootView: View {
     // Dismissed prospects, for the restore-from-dismissed view (#28).
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "dismissed" })
     private var dismissed: [Prospect]
+    // All prospects, for the time-based follow-up due count (#45).
+    @Query private var allProspects: [Prospect]
     @State private var showDismissed = false
     @State private var showPatterns = false
+    @State private var showFollowUps = false
+
+    private var followUpsDue: Int { FollowUp.due(from: allProspects, now: Date()).count }
 
     private var canStartPrep: Bool {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
@@ -59,6 +64,15 @@ struct RootView: View {
                               systemImage: "archivebox")
                     }
                     .help("See dismissed prospects and restore any you cut by mistake")
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showFollowUps = true
+                    } label: {
+                        Label(followUpsDue == 0 ? "Follow-ups" : "Follow-ups (\(followUpsDue))",
+                              systemImage: "arrow.uturn.right")
+                    }
+                    .help("Prospects due for a gentle follow-up nudge")
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
@@ -128,6 +142,7 @@ struct RootView: View {
             }
             .sheet(isPresented: $showDismissed) { DismissedView() }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
+            .sheet(isPresented: $showFollowUps) { FollowUpsView() }
     }
 
     private func connectGmail() {

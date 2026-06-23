@@ -64,6 +64,10 @@ final class Prospect {
     var gmailThreadId: String? = nil   // set on send; used for reply detection
     var sendError: String? = nil       // last send failure, surfaced for retry
 
+    // Follow-up sequencer state (#45). Defaulted so existing records migrate cleanly.
+    var followUpCount: Int = 0
+    var lastFollowUpAt: Date? = nil
+
     init(
         naturalKey: String,
         groupName: String,
