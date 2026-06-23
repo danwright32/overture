@@ -34,7 +34,19 @@ enum ScoutService {
         var outcome = apply(events: events, clients: loaded.clients, history: loadLocalHistory(),
                             blocked: loadBlockedDates(), into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+        // Record that a scout completed, so the masthead can show freshness (#35).
+        recordScout(at: Date())
         return outcome
+    }
+
+    static let lastScoutKey = "scoutLastRunAt"
+    // Store/read injectable so the persistence is testable without polluting the global
+    // defaults (test side effects stay in a transient suite).
+    static func recordScout(at date: Date, in defaults: UserDefaults = .standard) {
+        defaults.set(date, forKey: lastScoutKey)
+    }
+    static func lastScoutedAt(in defaults: UserDefaults = .standard) -> Date? {
+        defaults.object(forKey: lastScoutKey) as? Date
     }
 
     // Application of already-extracted events with injected data, so the full
