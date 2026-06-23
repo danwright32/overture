@@ -104,6 +104,9 @@ struct RootView: View {
             .task {
                 ingestIfEmpty()
                 reconcileBookings()
+                // Detect replies on sent threads and auto-mark .replied (#40). Read-only;
+                // skips silently if Gmail isn't connected.
+                await GmailReplyChecker().checkReplies(in: context)
                 // If a run is in flight at launch, watch it to completion; otherwise just
                 // ingest any results already on disk (a past success), without nagging
                 // about an old failed run (#48).
