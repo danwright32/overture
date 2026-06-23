@@ -21,7 +21,14 @@ MARKER="$SUPPORT/prep-running"
 
 # In-flight marker the app can watch (issue #44); removed on exit no matter what.
 : > "$MARKER"
-trap 'rm -f "$MARKER"' EXIT
+
+# Heartbeat: keep the marker fresh while genuinely working so a long multi-prospect
+# batch is never mistaken for a crashed run (#47). The app treats a marker untouched
+# for a few minutes as dead; touching it every 60s keeps a real run alive without
+# pinning the timeout to a guess at total run length.
+( while :; do sleep 60; touch "$MARKER" 2>/dev/null || exit; done ) &
+HEARTBEAT_PID=$!
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
 PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. Read the work-list at
 $QUEUE, and for every item find the contact (waterfall, strict verification) and draft

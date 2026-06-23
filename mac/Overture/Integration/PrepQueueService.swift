@@ -50,9 +50,13 @@ enum PrepQueueService {
 
     // The in-flight marker the runner script drops on start and removes on exit. The
     // app also writes it on launch so the double-run guard is immediate (no race with
-    // the detached script). A marker older than the timeout is treated as stale (a
-    // crashed run), so the app can never get permanently stuck "running".
-    static let markerStaleAfter: TimeInterval = 30 * 60
+    // the detached script). While genuinely working the runner HEARTBEATS the marker
+    // (touches it ~every 60s, see prep-run.sh), so a long multi-prospect batch never
+    // looks stale (#47). The window is therefore a few-missed-beats crash detector, not
+    // a guess at total run time: a marker untouched past it means the run died, so the
+    // app can never get permanently stuck "running" yet also never falsely frees the
+    // double-run guard mid-batch.
+    static let markerStaleAfter: TimeInterval = 3 * 60
 
     static var defaultMarkerURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

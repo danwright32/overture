@@ -90,8 +90,11 @@ struct PrepQueueTests {
 
         try Data().write(to: marker)
         let written = (try marker.resourceValues(forKeys: [.contentModificationDateKey])).contentModificationDate!
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(60)) == true)   // fresh
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(3600)) == false) // stale (>30m)
+        // The runner heartbeats the marker (#47), so "fresh" means touched within the
+        // staleness window; only a marker untouched past the window reads as crashed.
+        let window = PrepQueueService.markerStaleAfter
+        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window - 1)) == true)
+        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)
     }
 
     @Test func startPrepRefusesWhileARunIsInFlight() throws {
