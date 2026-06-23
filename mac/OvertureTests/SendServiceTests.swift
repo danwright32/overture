@@ -96,6 +96,34 @@ struct SendServiceTests {
         #expect(a.sentAt == nil)
     }
 
+    @Test func sendFollowUpRecordsTheNudgeAndCapsAtTheMax() throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        a.sentAt = Date(timeIntervalSince1970: 100)   // already sent
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
+        #expect(a.followUpCount == 1)
+        #expect(a.lastFollowUpAt == now)
+        #expect(a.sentAt == Date(timeIntervalSince1970: 100))   // original send untouched
+
+        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
+        #expect(a.followUpCount == 2)
+        // Capped at 2: a third nudge is refused.
+        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == false)
+        #expect(a.followUpCount == 2)
+    }
+
+    @Test func sendFollowUpStopsOnceReplied() throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        a.sentAt = Date(); a.outcome = .replied
+        #expect(SendService.sendFollowUp(a, now: Date(), sender: FakeSender()) == false)
+        #expect(a.followUpCount == 0)
+    }
+
     @Test func sendOneRecordsErrorOnFailure() throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
