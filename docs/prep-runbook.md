@@ -59,6 +59,12 @@ Hard rules: no em dashes; contractions throughout; NO fabrication (only what's r
 from the listing — never invent performer states); never volunteer the dance
 rate-flexibility in a cold email.
 
+**No performative enthusiasm (Dan).** Keep it level and professional, not eager.
+Avoid "I'd love to", "exactly the kind of work I love", "thrilled", "so excited",
+"can't wait", exclamation points, and similar warmth-signaling. State the genuine
+reason for reaching out plainly and let the work carry it. "I'd be glad to photograph
+it" or "I think my coverage would suit this" over "I'd love to photograph it".
+
 **Venue rule (Dan):** use the recognizable VENUE, not the internal hall. Carnegie's
 `Stern Auditorium / Perelman Stage`, `Zankel Hall`, and `Weill Recital Hall` all
 become "Carnegie Hall" in the email. Non-Carnegie venues (e.g. Thalia Spanish
@@ -76,7 +82,9 @@ Theatre) stay as printed.
 Reject or fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);
-- states a rate that is not the canonical "$250 an hour plus tax, one-hour minimum".
+- states a rate that is not the canonical "$250 an hour plus tax, one-hour minimum";
+- contains performative enthusiasm: "love to", "thrilled", "excited", "can't wait",
+  "delighted", or any exclamation point. Rephrase level before writing.
 
 ## One-time setup
 
