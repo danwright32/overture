@@ -7,12 +7,25 @@ import Foundation
 
 enum GroupNameMatch {
     static func normalize(_ name: String) -> String {
-        let firstLine = name.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-        var s = firstLine.lowercased()
+        var s = orgLine(name).lowercased()
         s = s.replacingOccurrences(of: #"^\s*presented by\s+"#, with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespaces)
+    }
+
+    // Isolate the org/presenter line from a messy, often multi-line history entry. A
+    // "Presented by X" line names the org and can sit on any line (program title first or
+    // presenter first), so prefer it; otherwise fall back to the first line (#18).
+    private static func orgLine(_ name: String) -> String {
+        let lines = name.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+        if let presenter = lines.first(where: {
+            $0.range(of: #"^(?i)presented by\s+"#, options: .regularExpression) != nil
+        }) {
+            return presenter
+        }
+        return lines.first ?? ""
     }
 
     static func tokens(_ name: String) -> [String] {
