@@ -18,6 +18,7 @@ struct RootView: View {
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "dismissed" })
     private var dismissed: [Prospect]
     @State private var showDismissed = false
+    @State private var showPatterns = false
 
     private var canStartPrep: Bool {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
@@ -58,6 +59,14 @@ struct RootView: View {
                               systemImage: "archivebox")
                     }
                     .help("See dismissed prospects and restore any you cut by mistake")
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showPatterns = true
+                    } label: {
+                        Label("What converts", systemImage: "chart.bar")
+                    }
+                    .help("Booking and response rates by production, discipline, and fit tier")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -114,6 +123,7 @@ struct RootView: View {
                 Text(warningMessage ?? "")
             }
             .sheet(isPresented: $showDismissed) { DismissedView() }
+            .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
     }
 
     private func connectGmail() {
