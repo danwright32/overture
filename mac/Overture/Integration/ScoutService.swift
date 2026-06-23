@@ -31,7 +31,11 @@ enum ScoutService {
     static func runScout(into context: ModelContext) async throws -> Outcome {
         let events = try await CarnegieExtractor().extract()
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        var outcome = apply(events: events, clients: loaded.clients, history: loadLocalHistory(),
+        // History the matcher sees = any one-time legacy import + Overture's own activity,
+        // so repeat-client recognition stays current as Dan sends and books (#19).
+        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let history = loadLocalHistory() + LocalHistory.records(from: existing)
+        var outcome = apply(events: events, clients: loaded.clients, history: history,
                             blocked: loadBlockedDates(), into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
