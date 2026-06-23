@@ -46,7 +46,7 @@ struct PrepImporterTests {
         #expect(p?.status == .drafted)
     }
 
-    @Test func skipsResultsWithNoMatchingProspect() throws {
+    @Test func reportsUnmatchedKeysInsteadOfSilentlyDropping() throws {
         let ctx = ModelContext(try container())
         let results = PrepResults(version: 1, generatedAt: "now", results: [
             PrepResult(naturalKey: "ghost|2026-01-01|nowhere", contact: nil,
@@ -54,7 +54,34 @@ struct PrepImporterTests {
         ])
         let outcome = PrepImporter.ingest(results, into: ctx)
         #expect(outcome.matched == 0)
+        #expect(outcome.unmatchedKeys == ["ghost|2026-01-01|nowhere"])
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
+    }
+
+    @Test func reIngestDoesNotClobberAHandEditedDraft() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Indianapolis Children's Choir", date: "2026-06-24", venue: "Stern Auditorium / Perelman Stage")
+
+        // First Prep run drafts it; Dan edits the draft.
+        let firstRun = PrepResults(version: 1, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contact: nil, draft: PrepDraft(subject: "S1", body: "B1", variant: "A"))
+        ])
+        _ = PrepImporter.ingest(firstRun, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        p?.draftBody = "Dan's hand-tuned version"
+        p?.draftEditedByDan = true
+        try ctx.save()
+
+        // A second Prep run must NOT overwrite Dan's edit.
+        let secondRun = PrepResults(version: 1, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contact: nil, draft: PrepDraft(subject: "S2", body: "B2 regenerated", variant: "B"))
+        ])
+        let outcome = PrepImporter.ingest(secondRun, into: ctx)
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(after?.draftBody == "Dan's hand-tuned version")
+        #expect(after?.draftEditedByDan == true)
+        #expect(outcome.skippedEdited == 1)
     }
 
     @Test func decodesAndVersionGates() throws {

@@ -125,11 +125,62 @@ final class Prospect {
     // for these in the stats.
     var wasContacted: Bool { sentAt != nil || status == .approved }
 
-    // The content key two results files agree on for "the same performance".
+    // The content key two results files agree on for "the same performance". Each
+    // part is CANONICALIZED so a scraped name and the same name fetched/decoded
+    // elsewhere produce one key (the silent-mismatch root): HTML entities decoded,
+    // unicode normalized (NFC), exotic whitespace folded, lowercased, trimmed.
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {
-        let parts = [groupName, performanceDate ?? "", venue ?? ""]
-        return parts
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        [groupName, performanceDate ?? "", venue ?? ""]
+            .map(canonicalize)
             .joined(separator: "|")
+    }
+
+    static func canonicalize(_ raw: String) -> String {
+        var s = decodeHTMLEntities(raw)
+        // Fold non-breaking and other unicode spaces to a normal space.
+        s = s.replacingOccurrences(of: #"[\u{00A0}\u{2007}\u{202F}\u{2009}\u{200A}\u{2002}\u{2003}]"#,
+                                   with: " ", options: .regularExpression)
+        s = s.precomposedStringWithCanonicalMapping // NFC
+        s = s.lowercased()
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Decodes the HTML entities realistically seen in venue calendar text: the named
+    // basics plus decimal/hex numeric refs. Not a full HTML parser (none needed).
+    static func decodeHTMLEntities(_ input: String) -> String {
+        var result = ""
+        result.reserveCapacity(input.count)
+        var i = input.startIndex
+        let named: [String: String] = [
+            "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'",
+            "nbsp": " ", "mdash": "—", "ndash": "–", "hellip": "…", "rsquo": "’",
+            "lsquo": "‘", "ldquo": "“", "rdquo": "”", "eacute": "é", "egrave": "è",
+        ]
+        while i < input.endIndex {
+            if input[i] == "&", let semi = input[i...].firstIndex(of: ";") {
+                let body = String(input[input.index(after: i)..<semi])
+                var decoded: String? = nil
+                if body.hasPrefix("#x") || body.hasPrefix("#X") {
+                    if let code = UInt32(body.dropFirst(2), radix: 16), let scalar = Unicode.Scalar(code) {
+                        decoded = String(scalar)
+                    }
+                } else if body.hasPrefix("#") {
+                    if let code = UInt32(body.dropFirst()), let scalar = Unicode.Scalar(code) {
+                        decoded = String(scalar)
+                    }
+                } else {
+                    decoded = named[body]
+                }
+                if let decoded {
+                    result += decoded
+                    i = input.index(after: semi)
+                    continue
+                }
+            }
+            result.append(input[i])
+            i = input.index(after: i)
+        }
+        return result
     }
 }

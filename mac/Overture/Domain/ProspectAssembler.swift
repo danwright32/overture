@@ -60,7 +60,9 @@ enum ProspectAssembler {
         if fit.excluded { return .skip(.unreachable) }
 
         return .prospect(AssembledProspect(
-            groupName: event.title,
+            // Decode entities for the displayed name (issue #25); the key canonicalizes
+            // independently, so matching is unaffected either way.
+            groupName: Prospect.decodeHTMLEntities(event.title),
             discipline: c.discipline.rawValue,
             venue: event.venue,
             performanceDate: event.performanceDate,

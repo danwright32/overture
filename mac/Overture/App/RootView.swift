@@ -75,10 +75,16 @@ struct RootView: View {
     }
 
     // Ingest a Prep results file (found contacts + drafts) if one is present, filling
-    // kept prospects and moving them to .drafted for review.
+    // kept prospects and moving them to .drafted for review. Surfaces results that
+    // matched no prospect instead of letting them vanish (a separate fallible run).
     private func ingestPrep() {
         let url = PrepImporter.defaultURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
-        _ = try? PrepImporter.ingestFile(at: url, into: context)
+        guard let outcome = try? PrepImporter.ingestFile(at: url, into: context) else { return }
+        var notes: [String] = []
+        if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
+        if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
+        if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
+        if !notes.isEmpty { statusMessage = "Prep: " + notes.joined(separator: " · ") }
     }
 }
