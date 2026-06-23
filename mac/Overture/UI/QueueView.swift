@@ -15,6 +15,13 @@ struct QueueView: View {
 
     @State private var disciplineFilter: String?
     @State private var highOnly = false
+    @State private var pendingConfirm: PendingConfirm?
+
+    // The one email awaiting Dan's explicit confirm before it sends (#49).
+    private struct PendingConfirm: Identifiable {
+        let id: String   // prospect naturalKey
+        let confirmation: SendConfirmation
+    }
 
     private var items: [QueueItem] { prospects.map(QueueItem.init) }
 
@@ -61,6 +68,15 @@ struct QueueView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(OVColor.canvas)
+        .alert("Send this email now?",
+               isPresented: Binding(get: { pendingConfirm != nil },
+                                    set: { if !$0 { pendingConfirm = nil } }),
+               presenting: pendingConfirm) { pending in
+            Button("Send") { performSend(pending.id) }
+            Button("Cancel", role: .cancel) { pendingConfirm = nil }
+        } message: { pending in
+            Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
+        }
     }
 
     private var masthead: some View {
@@ -124,7 +140,7 @@ struct QueueView: View {
                     onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
                     onSaveDraft: { subject, body in saveDraft(item, subject, body) },
                     onSetOutcome: { outcome in setOutcome(item, outcome) },
-                    onSend: { sendOne(item) },
+                    onSend: { requestSend(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -172,10 +188,20 @@ struct QueueView: View {
         try? context.save()
     }
 
-    // Explicit per-draft send: Dan clicked Send on this one approved email. One click,
-    // one email, via Gmail. Never autonomous.
-    private func sendOne(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+    // Step 1 of an explicit send: show Dan exactly what will go out and wait for his
+    // confirm (#49). Building the confirmation also re-checks sendability, so the dialog
+    // only appears for an email that would actually send.
+    private func requestSend(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let confirmation = SendConfirmation(prospect: model) else { return }
+        pendingConfirm = PendingConfirm(id: item.id, confirmation: confirmation)
+    }
+
+    // Step 2: Dan confirmed. Send this one approved email via Gmail. One confirm,
+    // one email. Never autonomous.
+    private func performSend(_ naturalKey: String) {
+        pendingConfirm = nil
+        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
         _ = SendService.sendOne(model, now: Date(), sender: sender)
         try? context.save()
