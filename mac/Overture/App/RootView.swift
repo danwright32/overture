@@ -14,6 +14,11 @@ struct RootView: View {
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
     private var toPrep: [Prospect]
 
+    // Dismissed prospects, for the restore-from-dismissed view (#28).
+    @Query(filter: #Predicate<Prospect> { $0.statusRaw == "dismissed" })
+    private var dismissed: [Prospect]
+    @State private var showDismissed = false
+
     private var canStartPrep: Bool {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
     }
@@ -44,6 +49,15 @@ struct RootView: View {
                     .disabled(!canStartPrep)
                     .help(toPrep.isEmpty ? "Keep some prospects first" : "Find contacts and draft emails for the prospects you've kept")
                     .keyboardShortcut("p", modifiers: .command)
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showDismissed = true
+                    } label: {
+                        Label(dismissed.isEmpty ? "Dismissed" : "Dismissed (\(dismissed.count))",
+                              systemImage: "archivebox")
+                    }
+                    .help("See dismissed prospects and restore any you cut by mistake")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -99,6 +113,7 @@ struct RootView: View {
             } message: {
                 Text(warningMessage ?? "")
             }
+            .sheet(isPresented: $showDismissed) { DismissedView() }
     }
 
     private func connectGmail() {
