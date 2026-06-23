@@ -25,9 +25,11 @@ enum LoopbackListener {
     ) async throws -> (listener: NWListener, port: UInt16) {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
-        if let ip = params.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
-            ip.version = .v4
-        }
+        // Bind to the IPv4 loopback only (#53): the OAuth redirect always comes from this
+        // machine's browser to http://127.0.0.1, so there's no reason to accept connections
+        // on any other interface. Pinning 127.0.0.1 also forces IPv4. The real port is read
+        // after .ready below, so this no longer races to a 0 port (the #51 bug).
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
         let listener = try NWListener(using: params)
         listener.newConnectionHandler = onConnection
 
