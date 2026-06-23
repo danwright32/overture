@@ -34,6 +34,12 @@ enum ScoutService {
         var outcome = apply(events: events, clients: loaded.clients, history: loadLocalHistory(),
                             blocked: loadBlockedDates(), into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+        // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
+        // client gets outcome booked automatically (#41).
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, now: Date()) > 0 {
+            try? context.save()
+        }
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date())
         return outcome

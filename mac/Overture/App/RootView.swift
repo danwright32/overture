@@ -103,6 +103,7 @@ struct RootView: View {
             }
             .task {
                 ingestIfEmpty()
+                reconcileBookings()
                 // If a run is in flight at launch, watch it to completion; otherwise just
                 // ingest any results already on disk (a past success), without nagging
                 // about an old failed run (#48).
@@ -201,6 +202,17 @@ struct RootView: View {
                 errorMessage = String(describing: error)
             }
             isScanning = false
+        }
+    }
+
+    // Mark contacted prospects that have become Downbeat clients as booked (#41), so a
+    // booking made in Downbeat shows up without needing to run a scout first.
+    private func reconcileBookings() {
+        let clients = DownbeatBridge.loadWithHealth(now: Date()).clients
+        guard !clients.isEmpty else { return }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        if DownbeatBooking.reconcileBooked(prospects: all, clients: clients, now: Date()) > 0 {
+            try? context.save()
         }
     }
 
