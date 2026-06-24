@@ -94,6 +94,7 @@ struct QueueView: View {
 
     private var masthead: some View {
         let summary = QueueModel.summary(filtered)
+        let priority = QueuePriorityBreakdown.summarize(filtered)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
@@ -111,6 +112,12 @@ struct QueueView: View {
                 Text("high-fit").foregroundStyle(OVColor.inkFaint)
             }
             .font(.system(size: 12))
+            // #92: shows whether high-fit is mostly warm orgs (relationship) or genuinely strong
+            // cold events (merit), so an over-filled high tier is visible before recalibrating.
+            if priority.high > 0 {
+                Text("\(priority.relationshipDriven) from a prior relationship · \(priority.meritDriven) on event merit")
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+            }
             HStack(spacing: OVSpacing.xs) {
                 Text(prepStatus.summary(now: Date()))
                 Text("·").foregroundStyle(OVColor.lineStrong)
