@@ -219,10 +219,10 @@ struct RootView: View {
     private func autoScoutIfDue() {
         guard ScoutSchedule.shouldAutoScout(enabled: autoScoutEnabled, isScanning: isScanning,
                                             lastScoutedAt: ScoutService.lastScoutedAt(), now: Date()) else { return }
-        runScout()
+        runScout(auto: true)
     }
 
-    private func runScout() {
+    private func runScout(auto: Bool = false) {
         isScanning = true
         statusMessage = nil
         Task {
@@ -237,7 +237,11 @@ struct RootView: View {
                 // thing we are avoiding.
                 warningMessage = outcome.warning
             } catch {
-                errorMessage = String(describing: error)
+                // A scheduled run failing stays quiet (a status line); a manual run shows
+                // the modal Dan expects after clicking (#77).
+                let p = ScoutFailure.presentation(auto: auto, message: String(describing: error))
+                errorMessage = p.alert
+                if let status = p.status { statusMessage = status }
             }
             isScanning = false
         }
