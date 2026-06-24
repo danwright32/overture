@@ -16,13 +16,14 @@ struct LocalHistoryTests {
 
     @discardableResult
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
-                      sentAt: Date? = nil, outcome: Outcome = .noResponse) -> Prospect {
+                      sentAt: Date? = nil, outcome: Outcome = .noResponse,
+                      dismissReason: DismissReason? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
-                         status: status)
+                         status: status, dismissReason: dismissReason)
         p.sentAt = sentAt
         p.outcome = outcome
         ctx.insert(p)
@@ -44,6 +45,38 @@ struct LocalHistoryTests {
         make(ctx, group: "Booked Band", status: .approved, sentAt: Date(), outcome: .booked)
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "booked")
+    }
+
+    @Test func repliedOutcomeBecomesWarmHistory() throws {
+        // They wrote back with interest: a real warm relationship, not a cold send.
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Interested Ensemble", status: .approved, sentAt: Date(), outcome: .replied)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "warm")
+    }
+
+    @Test func dateConflictDismissalBecomesDeclined() throws {
+        // 1.2: Dan skipped it only because he was already booked that day — a hot future lead,
+        // not a dead end.
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Clash Chorale", status: .dismissed, dismissReason: .dateConflict)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "declined")
+    }
+
+    @Test func alreadyBookedDismissalBecomesDeclined() throws {
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Busy Day Opera", status: .dismissed, dismissReason: .alreadyBooked)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "declined")
+    }
+
+    @Test func notAFitDismissalIsNotDeclined() throws {
+        // A "not a fit" dismissal is Dan's judgment, not a scheduling miss: it stays neutral.
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Wrong Fit Quartet", status: .dismissed, sentAt: Date(), dismissReason: .notInterested)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "contacted")
     }
 
     @Test func recognitionStaysCurrentAcrossScouts() throws {

@@ -22,6 +22,40 @@ struct RankerTests {
         #expect(r.tier == .high)
     }
 
+    @Test func declinedByYouIsNearlyAsHotAsBooked() {
+        // Dan turned them down, almost always a date conflict: a strong shot next time.
+        let r = Ranker.scoreFit(candidate(prior: .declinedByYou))
+        #expect(r.score == 18)
+        #expect(r.tier == .high)
+    }
+
+    @Test func warmIsAStrongBoost() {
+        // A referral or expressed interest, no booking yet.
+        let r = Ranker.scoreFit(candidate(prior: .warm))
+        #expect(r.score == 10)
+        #expect(r.tier == .high)
+    }
+
+    @Test func lostSoftRanksJustAboveAStranger() {
+        // "Keep us in mind" — the door is open, a small nudge above a fresh org.
+        #expect(Ranker.priorPoints(.lostSoft) == 3)
+        #expect(Ranker.priorPoints(.lostSoft) > Ranker.priorPoints(.none))
+    }
+
+    @Test func coldContactIsNeutralNotWarm() {
+        // #70: a bare send that got silence is not a warm prior relationship — it scores
+        // the same as a never-contacted org, not a boost.
+        #expect(Ranker.priorPoints(.contacted) == 0)
+        #expect(Ranker.priorPoints(.contacted) == Ranker.priorPoints(.none))
+    }
+
+    @Test func lostHardIsHeavilyPenalizedButVisible() {
+        // They said never: buried far below a stranger, but still scored (not removed).
+        let r = Ranker.scoreFit(candidate(prior: .lostHard))
+        #expect(r.score == -20)
+        #expect(r.tier == .longshot)
+    }
+
     @Test func deadZoneScoresNegativeAndStaysLongshot() {
         // Agency + weak + likely-covered: the dead zone.
         let r = Ranker.scoreFit(candidate(production: .agency, profile: .weak, coverage: .likelyCovered))

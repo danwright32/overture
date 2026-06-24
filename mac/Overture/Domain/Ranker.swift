@@ -7,7 +7,15 @@ import Foundation
 enum Production: String, Sendable { case selfProduced = "self", agency, unknown }
 enum Profile: String, Sendable { case strong, neutral, weak }
 enum Coverage: String, Sendable { case likelyUncovered = "likely_uncovered", unknown, likelyCovered = "likely_covered" }
-enum PriorRelationship: String, Sendable { case booked, contacted, none }
+enum PriorRelationship: String, Sendable {
+    case booked
+    case declinedByYou = "declined_by_you"
+    case warm
+    case lostSoft = "lost_soft"
+    case contacted
+    case lostHard = "lost_hard"
+    case none
+}
 enum Discipline: String, Sendable {
     case dance, opera, theater, choral, music, band, comedy, other
 }
@@ -35,7 +43,15 @@ enum Ranker {
     // Prior warm relationship is the top weight: a prior booking dominates every
     // other signal combined. A prior cold contact is only a mild nudge.
     static func priorPoints(_ r: PriorRelationship) -> Int {
-        switch r { case .booked: return 20; case .contacted: return 3; case .none: return 0 }
+        switch r {
+        case .booked: return 20
+        case .declinedByYou: return 18
+        case .warm: return 10
+        case .lostSoft: return 3
+        case .contacted: return 0   // #70: a bare send that got silence is not warm
+        case .lostHard: return -20
+        case .none: return 0
+        }
     }
     static func productionPoints(_ p: Production) -> Int {
         switch p { case .selfProduced: return 2; case .unknown: return 0; case .agency: return -2 }
