@@ -13,8 +13,17 @@ Claude Code's own browser tools; nothing here is a standalone server.
    bot-protected, so a plain fetch will not work; it must run in a real browser.
    Output: events with `date`, `title`, `venue` (in `context`), `presenter`, `sourceUrl`.
 
-2. **Classify (the Claude step).** For each event, assign the ranker's inputs using
-   the fit rules in `PLAN.md` section 4:
+2. **Classify (rules first, then refine the unsure slice).** `run-scout.ts` rule-classifies
+   every event for free (`classifyEvent`), assigning the ranker's inputs from the fit rules in
+   `PLAN.md` section 4 (summarized below). It flags genuinely ambiguous events `uncertain` and
+   writes just those to `~/Library/Application Support/Overture/overture-uncertain.json`, each
+   with the rules' best guess. **You (the Claude step) re-judge only that uncertain slice (#30)**
+   — read the file, decide `production` / `profile` / `coverage` / `discipline` for each using
+   the same rules plus your judgment (e.g. a self-presented orchestra that is actually already
+   covered), and write the results as `overture-refined.json` (an array of
+   `{title, production, profile, coverage, discipline, fit_reason?}`). Re-run `run-scout.ts`; it
+   merges the refinements over the rules output and marks those events confident. Refining only
+   the unsure slice keeps cost near zero. The rules summary you also apply when refining:
    - `production`: `agency` when presenter is a tour operator / management / a
      "International Competition Winners" or "Rising Stars" showcase rental; `self`
      when the presenter is the performing group itself (a choir, school, ensemble,
