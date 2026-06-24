@@ -58,10 +58,15 @@ struct OutcomePatternsView: View {
             Text(label(for: name)).font(OVType.groupName).foregroundStyle(OVColor.ink)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(tally.booked) booked of \(tally.contacted)\(percent(tally.bookingRate))")
+                let lowSample = OutcomePatterns.isLowSample(tally)
+                Text("\(tally.booked) booked of \(tally.contacted)\(lowSample ? "" : percent(tally.bookingRate))")
                     .foregroundStyle(OVColor.ink)
-                Text("\(tally.replied + tally.booked) replied\(percent(tally.responseRate))")
-                    .foregroundStyle(OVColor.inkSoft)
+                if lowSample {
+                    Text("too few to tell").foregroundStyle(OVColor.inkFaint)
+                } else {
+                    Text("\(tally.replied + tally.booked) replied\(percent(tally.responseRate))")
+                        .foregroundStyle(OVColor.inkSoft)
+                }
             }
             .font(OVType.meta)
         }

@@ -25,6 +25,11 @@ enum OutcomePatterns {
             .map { (name: $0.key, tally: $0.value) }
     }
 
+    // Below this many contacted prospects a rate is noise (1 of 1 = 100% reads as a strong
+    // signal but isn't), so the view marks the group "too few to tell" instead (#64).
+    static let lowSampleThreshold = 4
+    static func isLowSample(_ tally: OutcomeTally) -> Bool { tally.contacted < lowSampleThreshold }
+
     static func samples(from prospects: [Prospect], by dimension: Dimension) -> [OutcomeSample] {
         prospects.map { p in
             let dim: String
