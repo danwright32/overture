@@ -55,7 +55,8 @@ enum SendService {
         let mail = OutgoingMail(
             to: email,
             subject: FollowUp.nudgeSubject(groupName: prospect.groupName),
-            body: FollowUp.nudgeBody(contactName: prospect.contactName, groupName: prospect.groupName, venue: prospect.venue))
+            body: FollowUp.nudgeBody(contactName: prospect.contactName, groupName: prospect.groupName,
+                                     venue: prospect.venue, attempt: prospect.followUpCount + 1))
         do {
             _ = try sender.send(mail)
             prospect.followUpCount += 1

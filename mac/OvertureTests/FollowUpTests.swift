@@ -51,6 +51,16 @@ struct FollowUpTests {
         }
     }
 
+    @Test func theFinalNudgeReadsDifferentlyAndSofter() {
+        let first = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 1)
+        let final = FollowUp.nudgeBody(contactName: "Emma", groupName: "Acme Choir", venue: nil, attempt: 2)
+        #expect(first != final)                                   // not a verbatim repeat
+        #expect(final.contains("One last note"))                  // signals it's the last touch
+        #expect(final.lowercased().contains("no need to reply"))  // soft, low-pressure close
+        #expect(final.contains("—") == false)                     // still in voice
+        for banned in ["love to", "thrilled", "excited", "!"] { #expect(final.lowercased().contains(banned) == false) }
+    }
+
     @Test func nudgeGreetsGenericallyWhenNoContactName() {
         #expect(FollowUp.nudgeBody(contactName: nil, groupName: "The Dessoff Choirs", venue: nil).contains("Hi there"))
     }
