@@ -73,6 +73,10 @@ final class Prospect {
     var followUpCount: Int = 0
     var lastFollowUpAt: Date? = nil
 
+    // Downbeat client id from the relationship match, used for per-event booking
+    // detection (#99). Defaulted so existing records migrate cleanly.
+    var downbeatClientId: String? = nil
+
     init(
         naturalKey: String,
         groupName: String,

@@ -118,6 +118,7 @@ enum ScoutService {
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName)
         prospect.classificationConfidence = p.confidence
+        prospect.downbeatClientId = p.downbeatClientId
         return prospect
     }
 
@@ -136,6 +137,7 @@ enum ScoutService {
         existing.tier = p.tier
         existing.fitReason = p.fitReason
         existing.matchedClientName = p.matchedClientName
+        existing.downbeatClientId = p.downbeatClientId
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
