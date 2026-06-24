@@ -13,34 +13,50 @@ struct GmailSender: MailSender {
     func send(_ mail: OutgoingMail) throws -> SentReceipt {
         try runBlocking {
             let token = try await GmailAuthManager.shared.validAccessToken()
-            let raw = GmailMessage.rawField(
-                fromName: fromName, fromEmail: fromEmail,
-                to: mail.to, subject: mail.subject, body: mail.body)
-
-            var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
-            req.httpMethod = "POST"
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: ["raw": raw])
-
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            let http = resp as? HTTPURLResponse
-            if http?.statusCode == 401 {
-                // 401 = the token was revoked/expired since it was issued. Clear it so the
-                // app shows as disconnected and prompts a reconnect. NOT 403: Gmail uses
-                // 403 for rate limits and permission issues, which a reconnect won't fix
-                // and which must not log Dan out mid-batch.
-                await GmailAuthManager.shared.signalAuthExpired()
-                throw GmailSendError.authExpired
-            }
-            guard let http, (200..<300).contains(http.statusCode) else {
-                let detail = String(data: data, encoding: .utf8) ?? "send failed"
-                throw GmailSendError.api(detail)
-            }
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String) ?? ""
-            return SentReceipt(threadId: threadId)
+            return try await GmailSender.performSend(
+                mail: mail, fromName: fromName, fromEmail: fromEmail, token: token)
         }
+    }
+
+    // The testable core: encode the message, POST it, and interpret the response (success,
+    // api-error, or auth-expired). The HTTP fetch and the auth-expired hook are injected so a
+    // fake response can drive each path without the network or the live token (#84, seam #55).
+    @MainActor
+    static func performSend(
+        mail: OutgoingMail,
+        fromName: String,
+        fromEmail: String,
+        token: String,
+        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) },
+        onAuthExpired: () async -> Void = { await GmailAuthManager.shared.signalAuthExpired() }
+    ) async throws -> SentReceipt {
+        let raw = GmailMessage.rawField(
+            fromName: fromName, fromEmail: fromEmail,
+            to: mail.to, subject: mail.subject, body: mail.body)
+
+        var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["raw": raw])
+
+        let (data, resp) = try await fetch(req)
+        let http = resp as? HTTPURLResponse
+        if http?.statusCode == 401 {
+            // 401 = the token was revoked/expired since it was issued. Clear it so the
+            // app shows as disconnected and prompts a reconnect. NOT 403: Gmail uses
+            // 403 for rate limits and permission issues, which a reconnect won't fix
+            // and which must not log Dan out mid-batch.
+            await onAuthExpired()
+            throw GmailSendError.authExpired
+        }
+        guard let http, (200..<300).contains(http.statusCode) else {
+            let detail = String(data: data, encoding: .utf8) ?? "send failed"
+            throw GmailSendError.api(detail)
+        }
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String) ?? ""
+        return SentReceipt(threadId: threadId)
     }
 }
 
