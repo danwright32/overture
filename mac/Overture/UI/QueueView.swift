@@ -45,7 +45,28 @@ struct QueueView: View {
         return f.string(from: Date())
     }
 
+    // The big scroll tree is lifted into a typed sub-view so the main body stays small and
+    // the editor type-checks it quickly (#56); the real compiler was always fine.
     var body: some View {
+        queueScroll
+            .background(OVColor.canvas)
+            .alert("Send this email now?",
+                   isPresented: Binding(get: { pendingConfirm != nil },
+                                        set: { if !$0 { pendingConfirm = nil } }),
+                   presenting: pendingConfirm) { pending in
+                Button("Send") { performSend(pending.id) }
+                Button("Cancel", role: .cancel) { pendingConfirm = nil }
+            } message: { pending in
+                Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
+            }
+            .alert("Reconnect Gmail", isPresented: $showReconnect) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
+            }
+    }
+
+    private var queueScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: OVSpacing.xl) {
                 masthead
@@ -68,22 +89,8 @@ struct QueueView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(OVColor.canvas)
-        .alert("Send this email now?",
-               isPresented: Binding(get: { pendingConfirm != nil },
-                                    set: { if !$0 { pendingConfirm = nil } }),
-               presenting: pendingConfirm) { pending in
-            Button("Send") { performSend(pending.id) }
-            Button("Cancel", role: .cancel) { pendingConfirm = nil }
-        } message: { pending in
-            Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
-        }
-        .alert("Reconnect Gmail", isPresented: $showReconnect) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
-        }
     }
+
 
     private var masthead: some View {
         let summary = QueueModel.summary(filtered)
