@@ -9,14 +9,19 @@
 // The live extractor (scripts/scout/extract-carnegie.js) produces this same shape
 // from the bot-protected calendar via a headless browser.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { loadDownbeatExport } from "../../src/lib/downbeatBridge";
 import { matchRelationship } from "../../src/lib/historyMatch";
 import { decideProspect, type DiscoveredEvent, type Classification } from "../../src/lib/assembleProspect";
-import { classifyEvent, type ExtractedEvent } from "../../src/lib/classifyEvent";
+import { classifyEvent, type EventClassification, type ExtractedEvent } from "../../src/lib/classifyEvent";
+import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
 import { createRepo } from "../../src/lib/prospectsRepo";
+
+function appSupport(name: string): string {
+  return join(homedir(), "Library", "Application Support", "Overture", name);
+}
 
 const RESULTS_VERSION = 1;
 
@@ -48,13 +53,45 @@ async function main() {
   const repo = createRepo(url, serviceKey);
   const [history, blocked] = await Promise.all([repo.loadHistory(), repo.loadBlockedDates()]);
 
+  // Pass 1: rule-classify every event (free, instant), keyed by title.
+  const byTitle = new Map<string, EventClassification>();
+  for (const e of events) byTitle.set(e.title, classifyEvent(e));
+
+  // Hand the uncertain slice to the AI refine pass — the Claude Code scout agent (#30), on
+  // Dan's Max plan, not a paid API. It reads this file, re-judges each event, and writes
+  // overture-refined.json; the next run merges those in. Refining only the uncertain slice
+  // keeps cost near zero.
+  const uncertainEvents = events.filter((e) => byTitle.get(e.title)?.confidence === "uncertain");
+  writeFileSync(
+    appSupport("overture-uncertain.json"),
+    JSON.stringify(
+      uncertainEvents.map((e) => {
+        const c = byTitle.get(e.title)!;
+        return {
+          title: e.title, presenter: e.presenter, venue: e.venue,
+          performanceDate: e.performanceDate, sourceUrl: e.sourceUrl,
+          rulesGuess: { production: c.production, profile: c.profile, coverage: c.coverage, discipline: c.discipline },
+        };
+      }),
+      null, 2,
+    ) + "\n",
+    "utf8",
+  );
+
+  // Merge any refinements the agent produced on a prior pass, then classify from the result.
+  const refinedPath = appSupport("overture-refined.json");
+  const refinements: EventRefinement[] = existsSync(refinedPath)
+    ? (JSON.parse(readFileSync(refinedPath, "utf8")) as EventRefinement[])
+    : [];
+  const classifications = applyRefinements(byTitle, refinements);
+  if (refinements.length) console.log(`Applied ${refinements.length} AI refinements to uncertain events.`);
+
   const prospects: Record<string, unknown>[] = [];
-  const uncertain: string[] = [];
+  const uncertain = uncertainEvents.map((e) => e.title);
   const skipped: Record<string, number> = {};
 
   for (const e of events) {
-    const c = classifyEvent(e);
-    if (c.confidence === "uncertain") uncertain.push(e.title);
+    const c = classifications.get(e.title)!;
 
     const discovered: DiscoveredEvent = {
       group_name: e.title,
@@ -117,7 +154,15 @@ async function main() {
   console.log(`Wrote ${prospects.length} prospects to ${outPath}`);
   if (Object.keys(skipped).length) console.log(`Skipped: ${JSON.stringify(skipped)}`);
   if (uncertain.length) {
-    console.log(`\n${uncertain.length} events the rules were unsure about (candidates for AI refine):`);
+    const refined = refinements.length;
+    console.log(
+      `\n${uncertain.length} events the rules were unsure about, written to ${appSupport("overture-uncertain.json")}`,
+    );
+    console.log(
+      refined
+        ? `(${refined} already refined this run; re-run after refining the rest to merge them)`
+        : `Refine them (Claude Code scout agent), write overture-refined.json, and re-run to merge.`,
+    );
     for (const t of uncertain) console.log(`  ? ${t}`);
   }
 }
