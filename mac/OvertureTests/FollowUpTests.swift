@@ -22,7 +22,7 @@ struct FollowUpTests {
         let now = sent.addingTimeInterval(30 * day)
         #expect(FollowUp.isDue(sentAt: sent, lastFollowUpAt: nil, followUpCount: 0, outcome: .replied, now: now) == false)
         #expect(FollowUp.isDue(sentAt: sent, lastFollowUpAt: nil, followUpCount: 0, outcome: .booked, now: now) == false)
-        #expect(FollowUp.isDue(sentAt: sent, lastFollowUpAt: nil, followUpCount: 0, outcome: .passed, now: now) == false)
+        #expect(FollowUp.isDue(sentAt: sent, lastFollowUpAt: nil, followUpCount: 0, outcome: .lostSoft, now: now) == false)
     }
 
     @Test func stopsAfterTwoNudges() {

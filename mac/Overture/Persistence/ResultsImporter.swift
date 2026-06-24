@@ -129,6 +129,7 @@ extension QueueItem {
             outcome: p.outcome,
             sentAt: p.sentAt,
             sendError: p.sendError,
+            lostReason: p.lostReason,
             classificationConfidence: p.classificationConfidence,
             confidenceReviewedByDan: p.confidenceReviewedByDan
         )

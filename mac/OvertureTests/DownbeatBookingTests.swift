@@ -58,10 +58,10 @@ struct DownbeatBookingTests {
 
     @Test func manualOutcomeIsNeverOverwritten() throws {
         let ctx = ModelContext(try container())
-        let p = make(ctx, group: "Acme Festival Chorus", status: .approved, outcome: .passed, source: .manual)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved, outcome: .lostSoft, source: .manual)
         let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")], now: Date())
         #expect(count == 0)
-        #expect(p.outcome == .passed)   // Dan's call stands
+        #expect(p.outcome == .lostSoft)   // Dan's call stands
     }
 
     @Test func noClientMatchLeavesItAlone() throws {

@@ -13,7 +13,7 @@ enum FollowUp {
     static func isDue(sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
                       outcome: Outcome, now: Date, config: FollowUpConfig = .init()) -> Bool {
         guard let sentAt else { return false }              // must have been sent first
-        guard outcome == .noResponse else { return false }  // auto-stop on reply/booked/passed
+        guard outcome == .noResponse else { return false }  // auto-stop on reply/booked/lost
         guard followUpCount < config.maxFollowUps else { return false } // stop after the max
         let lastTouch = lastFollowUpAt ?? sentAt
         return now.timeIntervalSince(lastTouch) >= TimeInterval(config.gapDays) * 86_400

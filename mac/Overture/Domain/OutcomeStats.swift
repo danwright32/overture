@@ -9,7 +9,7 @@ struct OutcomeTally: Equatable, Sendable {
     var contacted = 0
     var replied = 0
     var booked = 0
-    var passed = 0
+    var lost = 0
     var noResponse = 0
 
     // Booked over contacted. Nil when nothing has been contacted (avoid 0/0 lies).
@@ -38,7 +38,7 @@ enum OutcomeStats {
             switch s.outcome {
             case .replied: t.replied += 1
             case .booked: t.booked += 1
-            case .passed: t.passed += 1
+            case .lostSoft, .lostHard: t.lost += 1
             case .noResponse: t.noResponse += 1
             }
         }

@@ -13,12 +13,12 @@ struct OutcomeStatsTests {
             sample(true, .noResponse),
             sample(false, .noResponse),   // never contacted: ignored
             sample(true, .replied),
-            sample(true, .passed),
+            sample(true, .lostSoft),
         ])
         #expect(t.contacted == 4)
         #expect(t.booked == 1)
         #expect(t.replied == 1)
-        #expect(t.passed == 1)
+        #expect(t.lost == 1)
         #expect(t.noResponse == 1)
     }
 

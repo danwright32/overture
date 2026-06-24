@@ -89,7 +89,7 @@ struct ReplyServiceTests {
         let ctx = ModelContext(try container())
         let noReply = make(ctx, group: "A", threadId: "t1", sentAt: Date())
         let notSent = make(ctx, group: "B", threadId: nil, sentAt: nil)
-        let manual = make(ctx, group: "C", threadId: "t3", sentAt: Date(), outcome: .passed, source: .manual)
+        let manual = make(ctx, group: "C", threadId: "t3", sentAt: Date(), outcome: .lostSoft, source: .manual)
 
         let n = ReplyService.detectReplies(in: [noReply, notSent, manual],
                                            selfEmail: "dan@danwrightphotography.com", now: Date()) { id in
@@ -97,6 +97,6 @@ struct ReplyServiceTests {
         }
         #expect(n == 0)
         #expect(noReply.outcome == .noResponse)
-        #expect(manual.outcome == .passed)   // manual is never overwritten
+        #expect(manual.outcome == .lostSoft)   // manual is never overwritten
     }
 }

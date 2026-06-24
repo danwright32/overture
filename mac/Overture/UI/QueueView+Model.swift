@@ -38,6 +38,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var outcome: Outcome = .noResponse
     var sentAt: Date? = nil
     var sendError: String? = nil
+    var lostReason: String? = nil
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
 
@@ -50,6 +51,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved }
     var hasDraft: Bool { draftBody != nil }
+    // Dan marked this lead lost (soft or hard); the row shows an editable reason note.
+    var isLost: Bool { outcome == .lostSoft || outcome == .lostHard }
 }
 
 enum QueueModel {
@@ -172,6 +175,13 @@ enum QueueModel {
             }
             return DateGroup(id: key, weekday: "", monthDay: "Date to be confirmed", year: "", items: bucket)
         }
+    }
+
+    // A blank or whitespace-only lost reason clears the note (stored as nil) rather than
+    // persisting an empty string, so "has a reason" stays meaningful.
+    static func normalizedLostReason(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     static func summary(_ items: [QueueItem]) -> (total: Int, high: Int) {

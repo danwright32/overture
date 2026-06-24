@@ -13,6 +13,7 @@ export type HistoryRecord = {
   first_contact: string | null;
   contact_type: string | null;
   status: string | null;
+  lost_reason?: string | null;
   raw_row: Record<string, string>;
 };
 
@@ -62,6 +63,7 @@ export function mapBookingRow(row: Record<string, string>): HistoryRecord {
     first_contact: clean(row["First Contact"]),
     contact_type: clean(row["Type of Contact"]),
     status: clean(row["Status"]),
+    lost_reason: clean(row["Lost reason"]),
     raw_row: row,
   };
 }
@@ -82,8 +84,15 @@ export function appStatus(record: HistoryRecord): string | null {
   if (status === "booked") return "booked";
   if (status === "i declined") return "declined";
   if (isWarm) return "warm";
-  if (status === "lost") return "lost_soft";
+  if (status === "lost") return isHardLost(record.lost_reason) ? "lost_hard" : "lost_soft";
   return null;
+}
+
+// A "Lost reason" cell marks a hard no when it reads as one; otherwise a Lost row stays soft.
+// The column is optional and absent from the current sheet, so a blank/missing reason is soft.
+function isHardLost(reason: string | null | undefined): boolean {
+  const r = (reason ?? "").trim().toLowerCase();
+  return r.startsWith("hard") || r.includes("never") || r.includes("not interested");
 }
 
 // Reduces parsed booking rows to the records the app ranks, dropping neutral cold pitches.
