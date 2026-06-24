@@ -64,6 +64,9 @@ final class Prospect {
     var gmailThreadId: String? = nil   // set on send; used for reply detection
     var sendError: String? = nil       // last send failure, surfaced for retry
     var lostReason: String? = nil      // Dan's free-text note when he marks a lead lost (#90/#91)
+    // The prior relationship captured the moment Dan sent, immune to later scout refreshes, so a
+    // Downbeat match can tell a genuine new booking from a pre-existing client (#66).
+    var priorRelationshipAtSend: String? = nil
 
     // Follow-up sequencer state (#45). Defaulted so existing records migrate cleanly.
     var followUpCount: Int = 0

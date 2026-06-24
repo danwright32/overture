@@ -35,6 +35,7 @@ enum SendService {
             let receipt = try sender.send(mail)
             prospect.sentAt = now
             prospect.gmailThreadId = receipt.threadId
+            prospect.priorRelationshipAtSend = prospect.priorRelationship
             prospect.sendError = nil
             return true
         } catch {
@@ -95,6 +96,7 @@ enum SendService {
             let receipt = try sender.send(mail)
             next.sentAt = now
             next.gmailThreadId = receipt.threadId
+            next.priorRelationshipAtSend = next.priorRelationship
             next.sendError = nil
             try? context.save()
             return Outcome(sent: 1, failed: 0, throttled: queue.count > 1)

@@ -46,6 +46,23 @@ struct SendServiceTests {
         #expect(SendService.pending(in: ctx).map(\.groupName) == ["Ready"])
     }
 
+    @Test func sendingSnapshotsTheRelationshipAtContact() throws {
+        // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
+        // match can tell a genuine new booking from a pre-existing client.
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: "Repeat Client", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "booked", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
+        p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
+        ctx.insert(p)
+
+        let sent = SendService.sendOne(p, now: Date(), sender: FakeSender())
+        #expect(sent)
+        #expect(p.priorRelationshipAtSend == "booked")
+    }
+
     @Test func sendsOneAndRecordsReceipt() throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))

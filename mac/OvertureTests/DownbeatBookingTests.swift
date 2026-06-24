@@ -48,6 +48,29 @@ struct DownbeatBookingTests {
         #expect(p.outcomeAt == now)
     }
 
+    @Test func alreadyAClientWhenPitchedIsNotReBooked() throws {
+        // #66: the org was already a booked client when Dan pitched this event, so a client-list
+        // match is just the pre-existing relationship, not a new conversion. Don't auto-book it.
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved)
+        p.priorRelationshipAtSend = "booked"
+
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")], now: Date())
+        #expect(count == 0)
+        #expect(p.outcome == .noResponse)
+    }
+
+    @Test func coldWhenPitchedThatBecomesAClientIsBooked() throws {
+        // The attributable case: cold at contact, now a Downbeat client — a genuine new booking.
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved)
+        p.priorRelationshipAtSend = "none"
+
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")], now: Date())
+        #expect(count == 1)
+        #expect(p.outcome == .booked)
+    }
+
     @Test func uncontactedMatchIsLeftAlone() throws {
         let ctx = ModelContext(try container())
         let p = make(ctx, group: "Acme Festival Chorus", status: .queued)   // kept but never sent/approved
