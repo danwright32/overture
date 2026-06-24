@@ -1,66 +1,47 @@
-// One-shot importer: loads Dan's booking-log CSV into the `history` table.
-// Idempotent — clears the table first, so re-running gives a clean reload.
+// One-shot importer: parses Dan's booking-log CSV into the local history file the native
+// Mac app reads, ~/Library/Application Support/Overture/overture-history.json (sibling to
+// overture-results.json, the same fire-and-forget file boundary the rest of the app uses).
+// Idempotent — overwrites the file, so re-running gives a clean reload. The app merges this
+// one-time legacy history with its own live activity at scout time (#19, #69).
 //
-//   pnpm tsx scripts/import-history.ts "/path/to/Lead Booking sources - 2026 Bookings.csv"
+//   pnpm import-history "/path/to/Lead Booking sources - 2026 Bookings.csv"
 //
-// Reads Supabase credentials from .env.local (service-role key, which bypasses RLS).
+// Each row maps to a ranking status (booked / declined / warm / lost_soft / dnc); cold pitches
+// that got silence are dropped as neutral. See src/lib/bookingImport.ts for the mapping.
 
-import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
-import { parseBookingCsv } from "../src/lib/bookingImport";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, dirname } from "node:path";
+import { parseBookingCsv, appHistoryRecords } from "../src/lib/bookingImport";
 
-function loadEnv(path = ".env.local"): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const s = line.replace(/\r$/, "");
-    if (s.trimStart().startsWith("#") || !s.includes("=")) continue;
-    const i = s.indexOf("=");
-    env[s.slice(0, i).trim()] = s.slice(i + 1).trim();
-  }
-  return env;
-}
-
-async function main() {
+function main() {
   const csvPath = process.argv[2];
   if (!csvPath) {
-    console.error("Usage: tsx scripts/import-history.ts <csv-path>");
+    console.error("Usage: pnpm import-history <csv-path>");
     process.exit(1);
   }
 
-  const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
-    process.exit(1);
-  }
+  const parsed = parseBookingCsv(readFileSync(csvPath, "utf8"));
+  const records = appHistoryRecords(parsed);
 
-  const records = parseBookingCsv(readFileSync(csvPath, "utf8"));
-  console.log(`Parsed ${records.length} history records from ${csvPath}`);
+  const outPath = join(
+    homedir(),
+    "Library",
+    "Application Support",
+    "Overture",
+    "overture-history.json",
+  );
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, JSON.stringify(records, null, 2) + "\n", "utf8");
 
-  const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  // Clear existing rows for a clean reload (filter matches every row).
-  const del = await supabase.from("history").delete().not("id", "is", null);
-  if (del.error) throw del.error;
-
-  let inserted = 0;
-  for (let i = 0; i < records.length; i += 100) {
-    const chunk = records.slice(i, i + 100);
-    const { error } = await supabase.from("history").insert(chunk);
-    if (error) throw error;
-    inserted += chunk.length;
-  }
-
-  const { count, error: countErr } = await supabase
-    .from("history")
-    .select("*", { count: "exact", head: true });
-  if (countErr) throw countErr;
-
-  console.log(`Inserted ${inserted} records. history now has ${count} rows.`);
+  const byStatus = records.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(
+    `Parsed ${parsed.length} rows; wrote ${records.length} history records to ${outPath}`,
+  );
+  console.log(`By status: ${JSON.stringify(byStatus)} (cold no-response rows dropped as neutral)`);
 }
 
-main().catch((e) => {
-  console.error("Import failed:", e.message ?? e);
-  process.exit(1);
-});
+main();

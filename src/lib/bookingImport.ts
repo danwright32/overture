@@ -66,6 +66,34 @@ export function mapBookingRow(row: Record<string, string>): HistoryRecord {
   };
 }
 
+// One row the app reads from overture-history.json: a group name and a ranking status.
+export type AppHistoryRecord = { groupName: string; status: string };
+
+// Maps a booking row's outcome (Status) and relationship (First Contact) onto the app's
+// ranking vocabulary, or null for a cold pitch that got silence (neutral — no record kept).
+// Precedence: DNC suppresses; then a booking; then a Dan-declined (date conflict); then a
+// warm relationship, which beats a lost outcome (relationship wins); then lost — all lost
+// rows are treated soft for now, until a "Lost reason" column distinguishes hard nos (#90).
+export function appStatus(record: HistoryRecord): string | null {
+  const status = (record.status ?? "").trim().toLowerCase();
+  const isWarm = (record.first_contact ?? "").trim().toLowerCase().startsWith("warm");
+
+  if (status === "dnc") return "dnc";
+  if (status === "booked") return "booked";
+  if (status === "i declined") return "declined";
+  if (isWarm) return "warm";
+  if (status === "lost") return "lost_soft";
+  return null;
+}
+
+// Reduces parsed booking rows to the records the app ranks, dropping neutral cold pitches.
+export function appHistoryRecords(records: HistoryRecord[]): AppHistoryRecord[] {
+  return records.flatMap((r) => {
+    const status = appStatus(r);
+    return status ? [{ groupName: r.group_name, status }] : [];
+  });
+}
+
 // Parses the full CSV text into history records, handling quoted multi-line cells
 // and embedded commas. Rows with no group name are dropped (trailing blank lines,
 // stray separators).
