@@ -32,22 +32,31 @@ export type DownbeatVenue = {
 export type DownbeatExport = {
   clients: DownbeatClient[];
   venues: DownbeatVenue[];
+  // Calendar days (ISO yyyy-MM-dd) Dan is already booked; the scout suppresses
+  // performances on these. Added in export version 2 (downbeat#52); a version-1
+  // file has none, so the set is empty and the scout runs without date-blocking.
+  blockedDates: Set<string>;
 };
 
-const SUPPORTED_VERSION = 1;
+const SUPPORTED_VERSIONS = new Set([1, 2]);
 
 export function parseDownbeatExport(json: string): DownbeatExport {
   const data = JSON.parse(json) as {
     version?: number;
     clients?: DownbeatClient[];
     venues?: DownbeatVenue[];
+    blockedDates?: string[];
   };
-  if (data.version !== SUPPORTED_VERSION) {
+  if (data.version === undefined || !SUPPORTED_VERSIONS.has(data.version)) {
     throw new Error(
       `Unsupported Downbeat export version: ${String(data.version)}`,
     );
   }
-  return { clients: data.clients ?? [], venues: data.venues ?? [] };
+  return {
+    clients: data.clients ?? [],
+    venues: data.venues ?? [],
+    blockedDates: new Set(data.blockedDates ?? []),
+  };
 }
 
 const DEFAULT_EXPORT_PATH = join(

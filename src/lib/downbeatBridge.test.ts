@@ -46,8 +46,32 @@ describe("parseDownbeatExport", () => {
     expect(out.venues).toEqual([]);
   });
 
+  it("treats a version-1 envelope as having no blocked dates", () => {
+    const out = parseDownbeatExport(sample);
+    expect(out.blockedDates).toEqual(new Set());
+  });
+
+  it("parses blockedDates from a version-2 envelope", () => {
+    const out = parseDownbeatExport(
+      JSON.stringify({
+        version: 2,
+        clients: [],
+        venues: [],
+        blockedDates: ["2026-07-04", "2026-07-05"],
+      }),
+    );
+    expect(out.blockedDates).toEqual(new Set(["2026-07-04", "2026-07-05"]));
+  });
+
+  it("defaults a version-2 envelope with no blockedDates to an empty set", () => {
+    const out = parseDownbeatExport(
+      JSON.stringify({ version: 2, clients: [], venues: [] }),
+    );
+    expect(out.blockedDates).toEqual(new Set());
+  });
+
   it("throws on an unsupported version", () => {
-    expect(() => parseDownbeatExport(JSON.stringify({ version: 2 }))).toThrow(
+    expect(() => parseDownbeatExport(JSON.stringify({ version: 3 }))).toThrow(
       /unsupported downbeat export version/i,
     );
   });

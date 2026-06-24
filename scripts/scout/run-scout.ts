@@ -13,11 +13,11 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { loadDownbeatExport } from "../../src/lib/downbeatBridge";
+import { loadLocalHistory } from "../../src/lib/localHistory";
 import { matchRelationship } from "../../src/lib/historyMatch";
 import { decideProspect, type DiscoveredEvent, type Classification } from "../../src/lib/assembleProspect";
 import { classifyEvent, type EventClassification, type ExtractedEvent } from "../../src/lib/classifyEvent";
 import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
-import { createRepo } from "../../src/lib/prospectsRepo";
 
 function appSupport(name: string): string {
   return join(homedir(), "Library", "Application Support", "Overture", name);
@@ -25,33 +25,26 @@ function appSupport(name: string): string {
 
 const RESULTS_VERSION = 1;
 
-function loadEnv(path = ".env.local"): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const s = line.replace(/\r$/, "");
-    if (s.trimStart().startsWith("#") || !s.includes("=")) continue;
-    const i = s.indexOf("=");
-    env[s.slice(0, i).trim()] = s.slice(i + 1).trim();
-  }
-  return env;
-}
-
 async function main() {
   const inputPath = process.argv[2] ?? "scripts/scout/events.sample.json";
   const events = JSON.parse(readFileSync(inputPath, "utf8")) as ExtractedEvent[];
   console.log(`Read ${events.length} extracted events from ${inputPath}`);
 
-  const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    console.error("Missing Supabase env in .env.local");
-    process.exit(1);
+  // History and blocked dates come from the same local files the Mac app reads:
+  // booked/contacted/DNC history from the importer's overture-history.json, and
+  // blocked dates from the Downbeat export (version 2; downbeat#52). A version-1
+  // export or a missing history file leaves the scout running without that signal.
+  const { clients, venues, blockedDates: blocked } = loadDownbeatExport();
+  const history = loadLocalHistory();
+  console.log(
+    `Loaded ${history.length} history records and ${blocked.size} blocked dates.`,
+  );
+  if (history.length === 0) {
+    console.warn("No local history found — repeat-client matching and DNC suppression are inactive.");
   }
-
-  const { clients, venues } = loadDownbeatExport();
-  const repo = createRepo(url, serviceKey);
-  const [history, blocked] = await Promise.all([repo.loadHistory(), repo.loadBlockedDates()]);
+  if (blocked.size === 0) {
+    console.warn("No blocked dates in the Downbeat export — date-blocking is inactive (needs downbeat#52).");
+  }
 
   // Pass 1: rule-classify every event (free, instant), keyed by title.
   const byTitle = new Map<string, EventClassification>();
