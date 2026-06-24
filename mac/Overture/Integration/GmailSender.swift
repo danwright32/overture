@@ -30,15 +30,23 @@ struct GmailSender: MailSender {
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) },
         onAuthExpired: () async -> Void = { await GmailAuthManager.shared.signalAuthExpired() }
     ) async throws -> SentReceipt {
+        // Always stamp a Message-ID (use a caller-supplied one, else mint one) so the receipt can
+        // hand it back for a future follow-up to thread against (#74).
+        let messageID = mail.messageID ?? GmailMessage.newMessageID(senderEmail: fromEmail)
         let raw = GmailMessage.rawField(
             fromName: fromName, fromEmail: fromEmail,
-            to: mail.to, subject: mail.subject, body: mail.body)
+            to: mail.to, subject: mail.subject, body: mail.body,
+            messageID: messageID, inReplyTo: mail.inReplyTo)
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
         req.httpMethod = "POST"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["raw": raw])
+        // Including the original threadId tells Gmail to append this message to that conversation
+        // (#74), so a follow-up nudge and any reply to it stay on the thread reply detection watches.
+        var payload: [String: Any] = ["raw": raw]
+        if let threadId = mail.threadId { payload["threadId"] = threadId }
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, resp) = try await fetch(req)
         let http = resp as? HTTPURLResponse
@@ -56,7 +64,7 @@ struct GmailSender: MailSender {
         }
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String) ?? ""
-        return SentReceipt(threadId: threadId)
+        return SentReceipt(threadId: threadId, messageID: messageID)
     }
 }
 

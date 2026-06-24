@@ -9,10 +9,16 @@ struct OutgoingMail: Equatable, Sendable {
     var to: String
     var subject: String
     var body: String
+    // Threading (#74): on the first send, `messageID` stamps the message so a follow-up can
+    // reference it. On a follow-up, `inReplyTo` + `threadId` reply onto the original thread.
+    var messageID: String? = nil
+    var inReplyTo: String? = nil
+    var threadId: String? = nil
 }
 
 struct SentReceipt: Equatable, Sendable {
     var threadId: String
+    var messageID: String? = nil   // the Message-ID stamped on the sent message, for threading (#74)
 }
 
 protocol MailSender: Sendable {
