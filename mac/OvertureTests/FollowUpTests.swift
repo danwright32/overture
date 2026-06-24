@@ -64,4 +64,14 @@ struct FollowUpTests {
     @Test func nudgeGreetsGenericallyWhenNoContactName() {
         #expect(FollowUp.nudgeBody(contactName: nil, groupName: "The Dessoff Choirs", venue: nil).contains("Hi there"))
     }
+
+    @Test func replySubjectPrefixesReExactlyOnceWithAFallback() {
+        // #74: thread under the original subject; never stack "Re: Re:"; fall back if missing.
+        #expect(FollowUp.replySubject(originalSubject: "Photographing your recital", groupName: "X")
+                == "Re: Photographing your recital")
+        #expect(FollowUp.replySubject(originalSubject: "Re: Already a reply", groupName: "X")
+                == "Re: Already a reply")
+        #expect(FollowUp.replySubject(originalSubject: nil, groupName: "Dessoff Choirs")
+                == "Re: Following up: photographs for Dessoff Choirs")
+    }
 }

@@ -4,11 +4,20 @@ import SwiftData
 @testable import Overture
 
 private struct FakeSender: MailSender {
-    var receipt = SentReceipt(threadId: "t-123")
+    var receipt = SentReceipt(threadId: "t-123", messageID: "<mid-1@x.org>")
     var error: Error? = nil
     func send(_ mail: OutgoingMail) throws -> SentReceipt {
         if let error { throw error }
         return receipt
+    }
+}
+
+// Records the last mail it was handed, so a test can assert how a follow-up was addressed (#74).
+private final class CapturingSender: MailSender, @unchecked Sendable {
+    var last: OutgoingMail?
+    func send(_ mail: OutgoingMail) throws -> SentReceipt {
+        last = mail
+        return SentReceipt(threadId: "t", messageID: "<m>")
     }
 }
 
@@ -158,5 +167,29 @@ struct SendServiceTests {
         let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
         #expect(p?.sentAt == nil)            // not marked sent
         #expect(p?.sendError != nil)         // failure recorded for retry
+    }
+
+    @Test func firstSendStoresTheMessageIDForThreading() throws {
+        // #74: the first send's Message-ID is kept so a later follow-up can reply to it.
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        _ = SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: FakeSender())
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(p?.gmailMessageId == "<mid-1@x.org>")
+    }
+
+    @Test func followUpRepliesOnTheOriginalThread() throws {
+        // #74: the nudge goes out In-Reply-To the original Message-ID, on the same thread, as a Re:.
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        a.sentAt = Date(); a.gmailThreadId = "th-9"; a.gmailMessageId = "<orig@x.org>"
+        a.draftSubject = "Photographs for A"
+
+        let sender = CapturingSender()
+        #expect(SendService.sendFollowUp(a, now: Date(), sender: sender) == true)
+        #expect(sender.last?.threadId == "th-9")
+        #expect(sender.last?.inReplyTo == "<orig@x.org>")
+        #expect(sender.last?.subject == "Re: Photographs for A")
     }
 }

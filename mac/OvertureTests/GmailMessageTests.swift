@@ -42,4 +42,34 @@ struct GmailMessageTests {
         #expect(decoded.contains("Subject: Hello"))
         #expect(decoded.contains("Body text"))
     }
+
+    @Test func messageIDHeaderIsIncludedWhenProvided() {
+        // #74: the first send stamps a Message-ID so a later follow-up can reference it.
+        let msg = GmailMessage.rfc822(
+            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            subject: "Hello", body: "b", messageID: "<abc@x.com>")
+        #expect(msg.contains("Message-ID: <abc@x.com>"))
+    }
+
+    @Test func replyHeadersThreadTheFollowUp() {
+        // A follow-up sets In-Reply-To and References to the original so it reads as a Re:.
+        let msg = GmailMessage.rfc822(
+            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            subject: "Re: Hello", body: "b", inReplyTo: "<orig@x.com>")
+        #expect(msg.contains("In-Reply-To: <orig@x.com>"))
+        #expect(msg.contains("References: <orig@x.com>"))
+    }
+
+    @Test func omitsThreadingHeadersWhenNotProvided() {
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+                                      subject: "Hello", body: "b")
+        #expect(!msg.contains("Message-ID:"))
+        #expect(!msg.contains("In-Reply-To:"))
+    }
+
+    @Test func newMessageIDIsBracketedAndUsesTheSenderDomain() {
+        let id = GmailMessage.newMessageID(senderEmail: "dan@danwrightphotography.com")
+        #expect(id.hasPrefix("<"))
+        #expect(id.hasSuffix("@danwrightphotography.com>"))
+    }
 }

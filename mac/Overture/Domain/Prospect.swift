@@ -62,6 +62,7 @@ final class Prospect {
     var outcomeAt: Date? = nil
     var sentAt: Date? = nil
     var gmailThreadId: String? = nil   // set on send; used for reply detection
+    var gmailMessageId: String? = nil  // the first send's Message-ID, so a follow-up threads (#74)
     var sendError: String? = nil       // last send failure, surfaced for retry
     var lostReason: String? = nil      // Dan's free-text note when he marks a lead lost (#90/#91)
     // The prior relationship captured the moment Dan sent, immune to later scout refreshes, so a

@@ -30,6 +30,14 @@ enum FollowUp {
         "Following up: photographs for \(groupName)"
     }
 
+    // A follow-up replies on the original thread, so its subject is the original with a single
+    // "Re:" prefix (Gmail wants a matching subject to thread). Falls back to the nudge subject
+    // if the original is missing (#74).
+    static func replySubject(originalSubject: String?, groupName: String) -> String {
+        let base = (originalSubject?.isEmpty == false) ? originalSubject! : nudgeSubject(groupName: groupName)
+        return base.lowercased().hasPrefix("re:") ? base : "Re: \(base)"
+    }
+
     // A short, low-key nudge in Dan's voice: no performative enthusiasm, no em dashes. The
     // final nudge (attempt == maxFollowUps) reads as a softer last note so the second touch
     // isn't a verbatim repeat of the first (#75).

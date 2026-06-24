@@ -35,6 +35,7 @@ enum SendService {
             let receipt = try sender.send(mail)
             prospect.sentAt = now
             prospect.gmailThreadId = receipt.threadId
+            prospect.gmailMessageId = receipt.messageID
             prospect.priorRelationshipAtSend = prospect.priorRelationship
             prospect.sendError = nil
             return true
@@ -53,11 +54,16 @@ enum SendService {
                              config: FollowUpConfig = .init()) -> Bool {
         guard let email = prospect.contactEmail, prospect.sentAt != nil,
               prospect.outcome == .noResponse, prospect.followUpCount < config.maxFollowUps else { return false }
+        // Reply on the original conversation (#74): same threadId, In-Reply-To the first send's
+        // Message-ID, and a "Re:" subject. A reply to the nudge then lands on the thread the
+        // reply checker already watches, so that engagement isn't silently missed.
         let mail = OutgoingMail(
             to: email,
-            subject: FollowUp.nudgeSubject(groupName: prospect.groupName),
+            subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
             body: FollowUp.nudgeBody(contactName: prospect.contactName, groupName: prospect.groupName,
-                                     venue: prospect.venue, attempt: prospect.followUpCount + 1))
+                                     venue: prospect.venue, attempt: prospect.followUpCount + 1),
+            inReplyTo: prospect.gmailMessageId,
+            threadId: prospect.gmailThreadId)
         do {
             _ = try sender.send(mail)
             prospect.followUpCount += 1
@@ -96,6 +102,7 @@ enum SendService {
             let receipt = try sender.send(mail)
             next.sentAt = now
             next.gmailThreadId = receipt.threadId
+            next.gmailMessageId = receipt.messageID
             next.priorRelationshipAtSend = next.priorRelationship
             next.sendError = nil
             try? context.save()
