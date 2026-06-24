@@ -90,6 +90,18 @@ enum QueueModel {
             }
             return "Worked together before"
         }
+        if item.priorRelationship == "declined_by_you" {
+            return "You declined before (usually a date conflict)"
+        }
+        if item.priorRelationship == "warm" {
+            return "Warm lead from a prior relationship"
+        }
+        if item.priorRelationship == "lost_soft" {
+            return "Lost before, open to the future"
+        }
+        if item.priorRelationship == "lost_hard" {
+            return "Lost before, not interested"
+        }
         if item.priorRelationship == "contacted" {
             return "Cold-contacted before, no booking"
         }

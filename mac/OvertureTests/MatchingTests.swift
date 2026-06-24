@@ -75,6 +75,38 @@ struct HistoryMatchTests {
         #expect(v.relationship == .none)
         #expect(v.possible == nil)
     }
+
+    @Test func warmHistoryIsWarm() {
+        let v = HistoryMatch.matchRelationship(name: "Referral Choir", clients: [],
+                                               history: [HistoryRecord(groupName: "Referral Choir", status: "warm")])
+        #expect(v.relationship == .warm)
+    }
+
+    @Test func declinedHistoryIsDeclinedByYou() {
+        let v = HistoryMatch.matchRelationship(name: "Date Clash Opera", clients: [],
+                                               history: [HistoryRecord(groupName: "Date Clash Opera", status: "declined")])
+        #expect(v.relationship == .declinedByYou)
+    }
+
+    @Test func lostSoftHistoryIsLostSoft() {
+        let v = HistoryMatch.matchRelationship(name: "Keep In Mind Band", clients: [],
+                                               history: [HistoryRecord(groupName: "Keep In Mind Band", status: "lost_soft")])
+        #expect(v.relationship == .lostSoft)
+    }
+
+    @Test func lostHardHistoryIsLostHard() {
+        let v = HistoryMatch.matchRelationship(name: "Never Again Quartet", clients: [],
+                                               history: [HistoryRecord(groupName: "Never Again Quartet", status: "lost_hard")])
+        #expect(v.relationship == .lostHard)
+    }
+
+    @Test func relationshipBeatsOutcomeWhenBothPresent() {
+        // A warm relationship plus a lost record on the same org reads warm: relationship wins.
+        let history = [HistoryRecord(groupName: "Mixed Signals Ensemble", status: "warm"),
+                       HistoryRecord(groupName: "Mixed Signals Ensemble", status: "lost_soft")]
+        let v = HistoryMatch.matchRelationship(name: "Mixed Signals Ensemble", clients: [], history: history)
+        #expect(v.relationship == .warm)
+    }
 }
 
 @Suite("Downbeat export decoding")

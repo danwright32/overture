@@ -57,6 +57,22 @@ struct HistoryFlagTests {
         #expect(QueueModel.historyFlag(item(priorRelationship: "contacted")) == "Cold-contacted before, no booking")
     }
 
+    @Test func declinedByYouNoted() {
+        #expect(QueueModel.historyFlag(item(priorRelationship: "declined_by_you")) == "You declined before (usually a date conflict)")
+    }
+
+    @Test func warmNoted() {
+        #expect(QueueModel.historyFlag(item(priorRelationship: "warm")) == "Warm lead from a prior relationship")
+    }
+
+    @Test func lostSoftNoted() {
+        #expect(QueueModel.historyFlag(item(priorRelationship: "lost_soft")) == "Lost before, open to the future")
+    }
+
+    @Test func lostHardNoted() {
+        #expect(QueueModel.historyFlag(item(priorRelationship: "lost_hard")) == "Lost before, not interested")
+    }
+
     @Test func possibleMatchPhrasedAsQuestion() {
         let flag = QueueModel.historyFlag(item(possibleMatchSource: "downbeat_client", possibleMatchName: "Alaria Ensemble"))
         #expect(flag == "Possible match to a past client: Alaria Ensemble?")
