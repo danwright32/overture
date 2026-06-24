@@ -65,6 +65,16 @@ struct DownbeatExportHealthTests {
         #expect(loaded.health == .ok)
     }
 
+    @Test func decodesV2Bookings() throws {
+        let json = #"{"version":2,"clients":[],"venues":[],"bookings":[{"id":"B1","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Spring Gala","startDate":"2026-03-10","endDate":"2026-03-12","venueId":"V1","venueName":"Carnegie Hall"},{"id":"B2","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Loft Set","startDate":"2026-04-02","endDate":"2026-04-02","venueName":"Pop-up Loft"}],"blockedDates":[]}"#
+        let export = try DownbeatBridge.decode(Data(json.utf8))
+        #expect(export.bookings.count == 2)
+        #expect(export.bookings[0].clientId == "C1")
+        #expect(export.bookings[0].endDate == "2026-03-12")
+        #expect(export.bookings[1].venueId == nil)        // ad-hoc venue: key omitted
+        #expect(export.bookings[1].venueName == "Pop-up Loft")
+    }
+
     // The IO wrapper: returns the clients it could read plus the health verdict.
     @Test func loadWithHealthReadsClientsAndFlagsState() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

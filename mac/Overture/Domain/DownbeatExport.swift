@@ -28,10 +28,30 @@ struct DownbeatVenue: Codable, Equatable, Sendable {
     var notes: String?
 }
 
+struct OvertureBooking: Codable, Equatable, Sendable {
+    var id: String
+    var clientId: String
+    var clientDisplayName: String
+    var shootName: String
+    var startDate: String
+    var endDate: String
+    var venueId: String?      // OMITTED for ad-hoc venues; match on venueName then
+    var venueName: String
+}
+
 struct DownbeatExport: Codable, Equatable, Sendable {
     var version: Int
     var clients: [DownbeatClient]
     var venues: [DownbeatVenue]
+    var bookings: [OvertureBooking]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        clients = try c.decode([DownbeatClient].self, forKey: .clients)
+        venues = try c.decode([DownbeatVenue].self, forKey: .venues)
+        bookings = try c.decodeIfPresent([OvertureBooking].self, forKey: .bookings) ?? []
+    }
 }
 
 enum DownbeatExportError: Error, Equatable {
