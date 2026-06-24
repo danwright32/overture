@@ -39,11 +39,14 @@ enum DownbeatExportError: Error, Equatable {
 }
 
 enum DownbeatBridge {
-    static let supportedVersion = 1
+    // v1 = clients/venues; v2 adds bookings/blockedDates (downbeat#52). Swift Codable
+    // ignores keys this struct doesn't declare, so accepting v2 reads clients/venues
+    // without consuming the new keys yet (that's #99). Keep v1 working.
+    static let supportedVersions: Set<Int> = [1, 2]
 
     static func decode(_ data: Data) throws -> DownbeatExport {
         let export = try JSONDecoder().decode(DownbeatExport.self, from: data)
-        guard export.version == supportedVersion else {
+        guard supportedVersions.contains(export.version) else {
             throw DownbeatExportError.unsupportedVersion(export.version)
         }
         return export
