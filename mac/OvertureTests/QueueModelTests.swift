@@ -83,6 +83,26 @@ struct HistoryFlagTests {
     }
 }
 
+@Suite("Lost outcome")
+struct LostOutcomeTests {
+    @Test func isLostOnlyForLostOutcomes() {
+        var soft = item(); soft.outcome = .lostSoft
+        var hard = item(); hard.outcome = .lostHard
+        var booked = item(); booked.outcome = .booked
+        let none = item()
+        #expect(soft.isLost)
+        #expect(hard.isLost)
+        #expect(booked.isLost == false)
+        #expect(none.isLost == false)
+    }
+
+    @Test func blankLostReasonClearsToNil() {
+        #expect(QueueModel.normalizedLostReason("") == nil)
+        #expect(QueueModel.normalizedLostReason("   \n ") == nil)
+        #expect(QueueModel.normalizedLostReason("  went with staff photographer ") == "went with staff photographer")
+    }
+}
+
 @Suite("Timing")
 struct TimingTests {
     @Test func countsLocalCalendarDays() {

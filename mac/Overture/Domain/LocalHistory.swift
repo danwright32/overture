@@ -1,10 +1,11 @@
 import Foundation
 
 // Keeps repeat-client recognition current without a stale CSV re-import (#19). The
-// matching history is derived live from Overture's own activity: an org it has emailed
-// is "contacted", a booked outcome is "booked". Merged with Downbeat (canonical booked,
-// passed separately) and any one-time legacy import, so every send Dan makes feeds the
-// next scout's prior-relationship signal automatically.
+// matching history is derived live from Overture's own activity: a booked outcome is
+// "booked", a reply is "warm", a scheduling dismissal is "declined", a lost outcome is
+// "lost_soft"/"lost_hard", and a plain send is a neutral "contacted". Merged with
+// Downbeat and any one-time legacy import, so every action Dan takes feeds the next
+// scout's prior-relationship signal automatically.
 enum LocalHistory {
     // Reasons Dan skips a prospect because HE couldn't take it (a scheduling miss), not because
     // they're a bad fit — these stay hot future leads (1.2 / #70).
@@ -14,6 +15,12 @@ enum LocalHistory {
         prospects.compactMap { p in
             if p.outcome == .booked {
                 return HistoryRecord(groupName: p.groupName, status: "booked")
+            }
+            if p.outcome == .lostHard {
+                return HistoryRecord(groupName: p.groupName, status: "lost_hard")
+            }
+            if p.outcome == .lostSoft {
+                return HistoryRecord(groupName: p.groupName, status: "lost_soft")
             }
             if p.status == .dismissed,
                let reason = DismissReason(rawValue: p.dismissReasonRaw ?? ""),

@@ -26,22 +26,33 @@ enum ContactConfidence: String, CaseIterable, Sendable {
 // What ultimately happened after Dan reached out. Defaults to `.noResponse` (like
 // Dan's booking sheet) so the majority need no touch. `.replied` can be set
 // automatically from Gmail reply detection; `.booked` from Downbeat (the canonical
-// booking record); `.passed` is the one Dan marks (or an AI reads from a reply).
-// Only meaningful once a prospect was actually sent; feeds the future fit-score
-// feedback loop (#4).
+// booking record). The two lost cases are Dan's call: `.lostSoft` (the door is open
+// for the future) and `.lostHard` (not interested), which carry through to the
+// prior-relationship ranking. Only meaningful once a prospect was sent; feeds the
+// fit-score feedback loop (#4).
 enum Outcome: String, CaseIterable, Sendable {
     case noResponse = "no_response"
     case replied
     case booked
-    case passed
+    case lostSoft = "lost_soft"
+    case lostHard = "lost_hard"
 
     var label: String {
         switch self {
         case .noResponse: return "No response"
         case .replied: return "Replied"
         case .booked: return "Booked"
-        case .passed: return "Passed"
+        case .lostSoft: return "Lost (keep in mind)"
+        case .lostHard: return "Lost (not interested)"
         }
+    }
+
+    // Legacy booking rows recorded a single ambiguous "passed"; treat those as the soft
+    // lost case (the door stays open) so old data keeps a sensible meaning.
+    static func fromStored(_ raw: String) -> Outcome {
+        if let o = Outcome(rawValue: raw) { return o }
+        if raw == "passed" { return .lostSoft }
+        return .noResponse
     }
 }
 

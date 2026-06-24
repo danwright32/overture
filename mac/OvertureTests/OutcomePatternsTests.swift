@@ -50,9 +50,9 @@ struct OutcomePatternsTests {
 
     @Test func flagsLowSampleGroupsSoEarlyNoiseIsntReadAsAPattern() {
         // Under the threshold of meaningful contacts, a rate is noise (e.g. 1 of 1 = 100%).
-        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 1, replied: 0, booked: 1, passed: 0, noResponse: 0)))
-        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 3, replied: 1, booked: 0, passed: 0, noResponse: 2)))
-        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 6, replied: 1, booked: 1, passed: 0, noResponse: 4)) == false)
+        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 1, replied: 0, booked: 1, lost: 0, noResponse: 0)))
+        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 3, replied: 1, booked: 0, lost: 0, noResponse: 2)))
+        #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 6, replied: 1, booked: 1, lost: 0, noResponse: 4)) == false)
     }
 
     @Test func rankedTalliesDropUncontactedGroupsAndSortByBookings() throws {

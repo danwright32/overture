@@ -27,9 +27,12 @@ Each row becomes one history record, scored by the relationship ladder. The mapp
 | `Status = Booked` | `booked` | Strong boost (past client) |
 | `Status = I Declined` | `declined` | Hot lead (Dan passed, usually a date conflict) |
 | `First Contact = Warm Email (…)` | `warm` | Boost (referral / prior interest); beats a Lost outcome |
-| `Status = Lost` | `lost_soft` | Small boost (door open). All Lost rows are treated soft for now |
+| `Status = Lost` (soft / blank reason) | `lost_soft` | Small boost (door open) |
+| `Status = Lost` + hard reason | `lost_hard` | Heavy penalty, stays visible |
 | `Status = DNC` | `dnc` | Removed from results |
-| Cold pitch + `No Response` | (dropped) | Neutral — no record kept |
+| Cold pitch + `No Response` | (dropped) | Neutral, no record kept |
 
-Distinguishing a hard "never" Lost from a soft "keep us in mind" Lost needs a new `Lost reason`
-column in the sheet; that work is tracked in #90.
+A `Lost` row is soft by default. To mark one a hard "never", add an optional **`Lost reason`**
+column to the sheet and write a reason that reads as a hard no (it counts as hard when the cell
+starts with "hard" or contains "never" or "not interested"). The column is optional; with no such
+column every `Lost` row imports as soft.

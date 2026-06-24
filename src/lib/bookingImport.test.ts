@@ -138,8 +138,26 @@ describe("appStatus (booking row -> app ranking vocabulary)", () => {
     expect(statusFor({ Status: "I Declined" })).toBe("declined");
   });
 
-  it("maps Lost to lost_soft (all lost treated soft until a Lost-reason column exists)", () => {
+  it("maps a Lost row with no reason to lost_soft (the open-door default)", () => {
     expect(statusFor({ Status: "Lost" })).toBe("lost_soft");
+  });
+
+  it("imports a Lost row whose reason says hard as lost_hard", () => {
+    expect(statusFor({ Status: "Lost", "Lost reason": "Hard no, won't book us" })).toBe("lost_hard");
+  });
+
+  it("imports a Lost row whose reason says never as lost_hard", () => {
+    expect(statusFor({ Status: "Lost", "Lost reason": "they said never again" })).toBe("lost_hard");
+  });
+
+  it("imports a Lost row with a blank reason as lost_soft", () => {
+    expect(statusFor({ Status: "Lost", "Lost reason": "" })).toBe("lost_soft");
+  });
+
+  it("keeps a warm first contact above a hard-lost reason", () => {
+    expect(
+      statusFor({ "First Contact": "Warm Email (Me to Them)", Status: "Lost", "Lost reason": "hard" }),
+    ).toBe("warm");
   });
 
   it("treats a warm first contact as warm even when that thread got no response", () => {

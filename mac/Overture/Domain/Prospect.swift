@@ -63,6 +63,7 @@ final class Prospect {
     var sentAt: Date? = nil
     var gmailThreadId: String? = nil   // set on send; used for reply detection
     var sendError: String? = nil       // last send failure, surfaced for retry
+    var lostReason: String? = nil      // Dan's free-text note when he marks a lead lost (#90/#91)
 
     // Follow-up sequencer state (#45). Defaulted so existing records migrate cleanly.
     var followUpCount: Int = 0
@@ -130,7 +131,7 @@ final class Prospect {
     var hasDraft: Bool { draftBody != nil }
 
     var outcome: Outcome {
-        get { Outcome(rawValue: outcomeRaw) ?? .noResponse }
+        get { Outcome.fromStored(outcomeRaw) }
         set { outcomeRaw = newValue.rawValue }
     }
 

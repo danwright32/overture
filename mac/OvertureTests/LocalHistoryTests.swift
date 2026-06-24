@@ -79,6 +79,30 @@ struct LocalHistoryTests {
         #expect(records.first?.status == "contacted")
     }
 
+    @Test func lostSoftOutcomeBecomesLostSoftHistory() throws {
+        // Dan marked it lost but open to the future: a small positive, above a cold stranger.
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Maybe Later Choir", status: .approved, sentAt: Date(), outcome: .lostSoft)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "lost_soft")
+    }
+
+    @Test func lostHardOutcomeBecomesLostHardHistory() throws {
+        // Dan marked it a hard no: a heavy penalty that still stays visible.
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Never Again Opera", status: .approved, sentAt: Date(), outcome: .lostHard)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "lost_hard")
+    }
+
+    @Test func legacyPassedOutcomeMigratesToLostSoft() throws {
+        // Old booking rows stored a single ambiguous "passed"; it now reads as soft lost.
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Old Passed Org", status: .approved, sentAt: Date())
+        p.outcomeRaw = "passed"
+        #expect(p.outcome == .lostSoft)
+    }
+
     @Test func recognitionStaysCurrentAcrossScouts() throws {
         // An org Overture emailed last cycle is recognized as contacted when it reappears.
         let ctx = ModelContext(try container())

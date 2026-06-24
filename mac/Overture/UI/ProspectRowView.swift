@@ -12,6 +12,7 @@ struct ProspectRowView: View {
     var onSkipDraft: () -> Void = {}
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetOutcome: (Outcome) -> Void = { _ in }
+    var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onMarkConfidenceReviewed: () -> Void = {}
     var gmailConnected: Bool = false
@@ -47,6 +48,7 @@ struct ProspectRowView: View {
                     onSkip: onSkipDraft,
                     onSaveDraft: onSaveDraft,
                     onSetOutcome: onSetOutcome,
+                    onSetLostReason: onSetLostReason,
                     onSend: onSend,
                     gmailConnected: gmailConnected
                 )

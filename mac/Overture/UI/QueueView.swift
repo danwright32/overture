@@ -211,6 +211,7 @@ struct QueueView: View {
                     onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
                     onSaveDraft: { subject, body in saveDraft(item, subject, body) },
                     onSetOutcome: { outcome in setOutcome(item, outcome) },
+                    onSetLostReason: { reason in setLostReason(item, reason) },
                     onSend: { requestSend(item) },
                     onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
@@ -265,6 +266,12 @@ struct QueueView: View {
         model.outcome = outcome
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
+        try? context.save()
+    }
+
+    private func setLostReason(_ item: QueueItem, _ reason: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.lostReason = QueueModel.normalizedLostReason(reason)
         try? context.save()
     }
 

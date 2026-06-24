@@ -11,12 +11,15 @@ struct DraftReviewView: View {
     let onSkip: () -> Void
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
     var onSetOutcome: (Outcome) -> Void = { _ in }
+    var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var gmailConnected: Bool = false
 
     @State private var editing = false
     @State private var draftSubject = ""
     @State private var draftBody = ""
+    @State private var lostReason = ""
+    @State private var lostReasonSeeded = false
 
     private var isApproved: Bool { item.status == .approved }
 
@@ -25,6 +28,7 @@ struct DraftReviewView: View {
             contactLine
             draftBlock
             actionRow
+            if item.isLost { lostReasonField }
         }
         .padding(OVSpacing.sm)
         .background(
@@ -185,11 +189,33 @@ struct DraftReviewView: View {
         .fixedSize()
     }
 
+    // Always visible once Dan marks a lead lost: an optional note for his own reference
+    // (it doesn't change the ranking, which is driven by the soft/hard choice).
+    private var lostReasonField: some View {
+        HStack(spacing: OVSpacing.xs) {
+            Image(systemName: "text.bubble")
+                .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+            TextField("Why lost? (optional note)", text: $lostReason)
+                .textFieldStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.ink)
+                .onSubmit { onSetLostReason(lostReason) }
+                .onChange(of: lostReason) { _, newValue in
+                    if lostReasonSeeded { onSetLostReason(newValue) }
+                }
+        }
+        .padding(.horizontal, OVSpacing.xs).padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.5)))
+        .onAppear {
+            lostReason = item.lostReason ?? ""
+            lostReasonSeeded = true
+        }
+    }
+
     private var outcomeColor: Color {
         switch item.outcome {
         case .booked: return OVColor.forest
         case .replied: return OVColor.gold
-        case .passed: return OVColor.rust
+        case .lostSoft: return OVColor.inkSoft
+        case .lostHard: return OVColor.rust
         case .noResponse: return OVColor.inkFaint
         }
     }
