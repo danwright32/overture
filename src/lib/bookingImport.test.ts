@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseShootDate, mapBookingRow, parseBookingCsv } from "./bookingImport";
+import {
+  parseShootDate,
+  mapBookingRow,
+  parseBookingCsv,
+  appStatus,
+  appHistoryRecords,
+} from "./bookingImport";
 
 describe("parseShootDate", () => {
   it("converts M/D/YYYY to ISO YYYY-MM-DD, zero-padding month and day", () => {
@@ -104,5 +110,76 @@ describe("parseBookingCsv", () => {
     const records = parseBookingCsv(csv);
     expect(records).toHaveLength(1);
     expect(records[0].group_name).toBe("Real Group");
+  });
+});
+
+describe("appStatus (booking row -> app ranking vocabulary)", () => {
+  const base = {
+    "Name of Group": "Some Group",
+    "Date of shoot": "",
+    Email: "",
+    Venue: "",
+    "First Contact": "Cold Email (Me to Them)",
+    "Type of Contact": "Direct Email",
+    Status: "No Response",
+  };
+  const statusFor = (over: Record<string, string>) =>
+    appStatus(mapBookingRow({ ...base, ...over }));
+
+  it("maps Booked to booked", () => {
+    expect(statusFor({ Status: "Booked" })).toBe("booked");
+  });
+
+  it("maps DNC to dnc", () => {
+    expect(statusFor({ Status: "DNC" })).toBe("dnc");
+  });
+
+  it("maps 'I Declined' to declined", () => {
+    expect(statusFor({ Status: "I Declined" })).toBe("declined");
+  });
+
+  it("maps Lost to lost_soft (all lost treated soft until a Lost-reason column exists)", () => {
+    expect(statusFor({ Status: "Lost" })).toBe("lost_soft");
+  });
+
+  it("treats a warm first contact as warm even when that thread got no response", () => {
+    expect(statusFor({ "First Contact": "Warm Email (Me to Them)", Status: "No Response" })).toBe(
+      "warm",
+    );
+  });
+
+  it("lets a warm relationship beat a lost outcome", () => {
+    expect(statusFor({ "First Contact": "Warm Email (Them to Me)", Status: "Lost" })).toBe("warm");
+  });
+
+  it("keeps Booked above a warm first contact", () => {
+    expect(statusFor({ "First Contact": "Warm Email (Them to Me)", Status: "Booked" })).toBe(
+      "booked",
+    );
+  });
+
+  it("drops a cold pitch that got silence (neutral, no record)", () => {
+    expect(statusFor({ "First Contact": "Cold Email (Me to Them)", Status: "No Response" })).toBeNull();
+  });
+
+  it("does not treat a mislabeled cold 'them to me' as warm", () => {
+    expect(statusFor({ "First Contact": "Cold Email (Them to Me)", Status: "Lost" })).toBe(
+      "lost_soft",
+    );
+  });
+});
+
+describe("appHistoryRecords", () => {
+  it("maps rows to {groupName, status} and drops neutral cold ones", () => {
+    const csv =
+      "Name of Group,Date of shoot,Email,Venue,First Contact,Type of Contact,Status\n" +
+      "Booked Choir,,,,Cold Email (Me to Them),Direct Email,Booked\n" +
+      "Silent Org,,,,Cold Email (Me to Them),Direct Email,No Response\n" +
+      "Warm Lead,,,,Warm Email (Them to Me),Direct Email,No Response\n";
+    const records = appHistoryRecords(parseBookingCsv(csv));
+    expect(records).toEqual([
+      { groupName: "Booked Choir", status: "booked" },
+      { groupName: "Warm Lead", status: "warm" },
+    ]);
   });
 });
