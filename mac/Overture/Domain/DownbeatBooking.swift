@@ -16,6 +16,10 @@ enum DownbeatBooking {
         for p in prospects where p.wasContacted {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue } // Dan's call is sticky
             if p.outcome == .booked { continue }                                 // already recorded
+            // The org was already a booked client when Dan pitched this event, so a client-list
+            // match is the pre-existing relationship, not a conversion of this pitch. Leave it for
+            // Dan to mark by hand; auto-booking it would over-count the repeat-booking rate (#66).
+            if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
             let matches = clients.contains { client in
                 GroupNameMatch.isConfident(client.displayName, p.groupName)
                     || (client.shortName.map { GroupNameMatch.isConfident($0, p.groupName) } ?? false)
