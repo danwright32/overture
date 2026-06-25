@@ -58,6 +58,14 @@ struct FeedReconcileTests {
         #expect(p.missedScoutCount == 1)
     }
 
+    @Test func queueItemCarriesTheDisappearedFlag() {
+        // The queue reads disappearedFromFeed off the QueueItem, so the Prospect->QueueItem
+        // mapping must carry it through (drives the hide/strike-through behavior).
+        let p = prospect(key: "gone", date: "2026-08-01", source: carnegie, missed: 2)
+        #expect(p.disappearedFromFeed == true)
+        #expect(QueueItem(p).disappearedFromFeed == true)
+    }
+
     @Test func prospectFromAnotherSourceIsNotReconciled() {
         // A Carnegie scout must not flag a future prospect that came from a different venue.
         let p = prospect(key: "other", date: "2026-08-01", source: "https://example.com/show")
