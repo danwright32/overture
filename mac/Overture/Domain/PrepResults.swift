@@ -36,11 +36,16 @@ enum PrepResultsError: Error, Equatable {
 }
 
 enum PrepResultsDecoder {
+    // Tolerant version gate (min...supported), mirroring ResultsFileDecoder. An exact-match
+    // gate was the brittle pattern that broke the results reader when its version bumped (#132):
+    // bumping the contract leaves a closed range that still accepts older files, so a format
+    // change can't silently make the reader reject the new (or old) shape (#140).
     static let supportedVersion = 1
+    static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {
         let results = try JSONDecoder().decode(PrepResults.self, from: data)
-        guard results.version == supportedVersion else {
+        guard (minimumVersion...supportedVersion).contains(results.version) else {
             throw PrepResultsError.unsupportedVersion(results.version)
         }
         return results

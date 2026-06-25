@@ -95,5 +95,9 @@ struct PrepImporterTests {
         #expect(throws: PrepResultsError.unsupportedVersion(5)) {
             try PrepResultsDecoder.decode(Data(#"{"version":5,"generatedAt":"x","results":[]}"#.utf8))
         }
+        // Below the minimum is rejected too — the gate is a closed range, not an exact match (#140).
+        #expect(throws: PrepResultsError.unsupportedVersion(0)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":0,"generatedAt":"x","results":[]}"#.utf8))
+        }
     }
 }
