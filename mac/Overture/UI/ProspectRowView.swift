@@ -63,11 +63,15 @@ struct ProspectRowView: View {
         .padding(OVSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(OVColor.surface)
+                .fill(item.bookingSuggested ? OVColor.forest.opacity(0.12) : OVColor.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(item.isHighFit ? OVColor.gold.opacity(0.45) : OVColor.line, lineWidth: 1)
+                .strokeBorder(
+                    item.bookingSuggested ? OVColor.forest.opacity(0.9)
+                        : item.isHighFit ? OVColor.gold.opacity(0.45)
+                        : OVColor.line,
+                    lineWidth: item.bookingSuggested ? 2 : 1)
         )
     }
 

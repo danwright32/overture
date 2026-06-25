@@ -110,6 +110,7 @@ struct QueueView: View {
     private var masthead: some View {
         let summary = QueueModel.summary(filtered)
         let priority = QueuePriorityBreakdown.summarize(filtered)
+        let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
@@ -125,6 +126,11 @@ struct QueueView: View {
                 Text("/").foregroundStyle(OVColor.lineStrong)
                 Text("\(summary.high)").fontWeight(.semibold).foregroundStyle(OVColor.gold)
                 Text("high-fit").foregroundStyle(OVColor.inkFaint)
+                if pendingBookings > 0 {
+                    Text("/").foregroundStyle(OVColor.lineStrong)
+                    Text("\(pendingBookings)").fontWeight(.semibold).foregroundStyle(OVColor.forest)
+                    Text("to confirm").foregroundStyle(OVColor.inkFaint)
+                }
             }
             .font(.system(size: 12))
             // #92: shows whether high-fit is mostly warm orgs (relationship) or genuinely strong
