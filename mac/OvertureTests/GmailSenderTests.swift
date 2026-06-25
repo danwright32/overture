@@ -8,7 +8,7 @@ import Foundation
 struct GmailSenderTests {
     private let mail = OutgoingMail(to: "presenter@example.org", subject: "Hello", body: "Body")
 
-    private func fetch(_ status: Int, _ body: String) -> (URLRequest) async throws -> (Data, URLResponse) {
+    private func fetch(_ status: Int, _ body: String) -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
         { _ in
             (Data(body.utf8),
              HTTPURLResponse(url: URL(string: "https://gmail.googleapis.com")!,
@@ -66,6 +66,30 @@ struct GmailSenderTests {
         var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         while b.count % 4 != 0 { b += "=" }
         return String(data: Data(base64Encoded: b) ?? Data(), encoding: .utf8) ?? ""
+    }
+
+    // #145: the Send button calls GmailSender.send ON THE MAIN ACTOR. With the async send path
+    // this completes; the old synchronous semaphore bridge would have hung the main thread right
+    // here (the deadlock). Token + fetch are injected so there's no network or live auth. If this
+    // test ever hangs instead of completing, the blocking bridge has regressed.
+    @MainActor
+    @Test func sendOnTheMainActorCompletesWithInjectedTokenAndFetch() async throws {
+        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
+        let receipt = try await sender.send(
+            mail, token: { "tok" }, fetch: fetch(200, #"{"threadId":"t-main","id":"m1"}"#))
+        #expect(receipt.threadId == "t-main")
+        #expect(receipt.messageID?.hasSuffix("@danwrightphotography.com>") == true)
+    }
+
+    @MainActor
+    @Test func sendOnTheMainActorSurfacesAuthExpired() async {
+        // The token is valid but Gmail rejects it (401): send must surface authExpired without
+        // hanging, so the app can prompt a reconnect.
+        let sender = GmailSender(fromEmail: "dan@x.org")
+        await #expect(throws: GmailSendError.self) {
+            _ = try await sender.send(
+                mail, token: { "stale" }, fetch: fetch(401, #"{"error":"invalid"}"#), onAuthExpired: {})
+        }
     }
 
     @Test func aFollowUpThreadsViaBodyThreadIdAndReplyHeaders() async throws {
