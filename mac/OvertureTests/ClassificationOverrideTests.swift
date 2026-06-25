@@ -29,4 +29,22 @@ struct ClassificationOverrideTests {
             production: .selfProduced, profile: .strong, coverage: .likelyUncovered, discipline: .dance))
         #expect(r == direct)
     }
+
+    @Test func correctingDisciplineSetsFlagsAndRerank() {
+        let p = prospect(discipline: "music", production: "self")
+        let before = p.fitScore
+        ClassificationOverride.correct(p, discipline: .dance, production: nil, now: Date())
+        #expect(p.discipline == "dance")
+        #expect(p.classificationOverriddenByDan == true)
+        #expect(p.confidenceReviewedByDan == true)
+        #expect(p.fitScore > before)
+    }
+
+    @Test func correctingProductionOnlyLeavesDisciplineAlone() {
+        let p = prospect(discipline: "dance", production: "self")
+        ClassificationOverride.correct(p, discipline: nil, production: .agency, now: Date())
+        #expect(p.discipline == "dance")
+        #expect(p.production == "agency")
+        #expect(p.classificationOverriddenByDan == true)
+    }
 }

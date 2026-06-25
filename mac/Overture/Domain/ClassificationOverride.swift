@@ -33,4 +33,18 @@ enum ClassificationOverride {
     static func rescored(_ p: Prospect, discipline: Discipline?, production: Production?) -> FitResult {
         Ranker.scoreFit(candidate(from: p, discipline: discipline, production: production))
     }
+
+    // Applies Dan's classification correction to a prospect in place.
+    // Non-nil discipline/production replace the stored raw value; nil leaves it unchanged.
+    // Sets both override flags (classificationOverriddenByDan and confidenceReviewedByDan),
+    // then recomputes fitScore and tier. Does NOT save the context — caller owns that.
+    static func correct(_ p: Prospect, discipline: Discipline?, production: Production?, now: Date) {
+        if let d = discipline { p.discipline = d.rawValue }
+        if let pr = production { p.production = pr.rawValue }
+        p.classificationOverriddenByDan = true
+        p.confidenceReviewedByDan = true
+        let result = rescored(p, discipline: nil, production: nil)
+        p.fitScore = result.score
+        p.tier = result.tier.rawValue
+    }
 }
