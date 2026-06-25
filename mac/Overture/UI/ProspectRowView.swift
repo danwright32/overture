@@ -30,6 +30,7 @@ struct ProspectRowView: View {
                 fitSeal
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
+                    feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
                         Text(item.fitReason)
                             .font(OVType.reason)
@@ -98,7 +99,8 @@ struct ProspectRowView: View {
                 .foregroundStyle(OVColor.gold)
             Text(item.groupName)
                 .font(OVType.groupName)
-                .foregroundStyle(OVColor.ink)
+                .foregroundStyle(item.disappearedFromFeed ? OVColor.inkFaint : OVColor.ink)
+                .strikethrough(item.disappearedFromFeed, color: OVColor.rust)
             HStack(spacing: 6) {
                 Text(item.venue ?? "Venue TBD")
                 Text("·").foregroundStyle(OVColor.inkFaint)
@@ -109,6 +111,24 @@ struct ProspectRowView: View {
             }
             .font(OVType.body)
             .foregroundStyle(OVColor.inkSoft)
+        }
+    }
+
+    // Shown only on a prospect Dan was pursuing that has since vanished from the feed (#133):
+    // a struck-through title plus this note, so a cancelled/pulled show he kept isn't mistaken
+    // for still happening. Untouched ones are filtered out of the queue entirely.
+    @ViewBuilder private var feedStatusFlag: some View {
+        if item.disappearedFromFeed {
+            HStack(spacing: 5) {
+                Image(systemName: "calendar.badge.exclamationmark")
+                Text("No longer in the feed — may be cancelled")
+            }
+            .font(OVType.tag)
+            .foregroundStyle(OVColor.rust)
+            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+            .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+            .padding(.top, 2)
+            .help("This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved.")
         }
     }
 

@@ -242,3 +242,28 @@ struct RunDisplayTests {
         #expect(QueueModel.relatedRunNote(item(performanceDate: "2026-06-25")) == nil)
     }
 }
+
+@Suite("Disappeared-from-feed queue filtering (#133)")
+struct DisappearedFeedQueueTests {
+    private func gone(id: String, status: ReviewStatus) -> QueueItem {
+        var q = QueueItem(
+            id: id, groupName: id, discipline: "music", venue: "Weill Recital Hall",
+            performanceDate: "2026-07-25", sourceListingURL: nil, websiteURL: nil,
+            priorRelationship: "none", production: "self", profile: "strong",
+            coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+            matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
+        q.disappearedFromFeed = true
+        return q
+    }
+
+    @Test func hidesUntouchedGoneButKeepsPursuedGone() {
+        // An untouched (.new) vanished show is noise and drops out; one Dan kept stays so the
+        // cancellation is visible (struck-through in the row).
+        let order = QueueModel.queueOrder(
+            [gone(id: "untouched", status: .new), gone(id: "kept", status: .queued)],
+            today: "2026-06-25")
+        let ids = order.map(\.id)
+        #expect(!ids.contains("untouched"))
+        #expect(ids.contains("kept"))
+    }
+}

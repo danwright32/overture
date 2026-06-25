@@ -72,6 +72,9 @@ enum ScoutService {
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0
+        // Natural keys actually present in this run's feed, so the post-upsert reconcile can
+        // tell which stored prospects dropped out (#133).
+        var seenKeys = Set<String>()
 
         // Phase 1: classify each event and collect prospect decisions (no upserts yet).
         var prospects: [AssembledProspect] = []
@@ -125,6 +128,7 @@ enum ScoutService {
             enriched.runSourceURLs = gr.runSourceURLs
 
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
+            seenKeys.insert(key)
             let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
             if let existing = (try? context.fetch(descriptor))?.first {
                 // Exact natural-key match: update in place.
@@ -153,6 +157,7 @@ enum ScoutService {
         // Handle the rare case of a prospect with no source URL (cannot be grouped).
         for p in prospectsWithoutURL {
             let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: p.performanceDate, venue: p.venue)
+            seenKeys.insert(key)
             let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
             if let existing = (try? context.fetch(descriptor))?.first {
                 apply(p, to: existing)
@@ -161,6 +166,13 @@ enum ScoutService {
                 context.insert(make(p, key: key))
                 inserted += 1
             }
+        }
+        // Reconcile stored prospects against this run's feed: mark ones that dropped out (#133).
+        // Only when the feed actually returned events — an empty feed is a broken/glitching feed,
+        // not "every show cancelled", so it must never accrue misses.
+        if !events.isEmpty {
+            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+            FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys, today: QueueModel.easternToday())
         }
         try? context.save()
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)

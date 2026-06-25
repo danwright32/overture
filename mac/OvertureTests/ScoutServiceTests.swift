@@ -124,6 +124,36 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationOverriddenByDan == true)
     }
 
+    // #133: a kept Carnegie prospect that drops out of the feed accrues misses and, after two
+    // consecutive ones, reads as gone — while one that's still present stays at zero.
+    @Test func disappearedCarnegieProspectAccruesMissesAcrossScouts() throws {
+        let ctx = ModelContext(try container())
+        let future = "2026-12-01"
+        let x = ExtractedEvent(title: "Future Choir X", presenter: "Future Choir X",
+                               venue: "Weill Recital Hall", performanceDate: future,
+                               sourceUrl: "https://www.carnegiehall.org/event/x")
+        let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
+                               venue: "Weill Recital Hall", performanceDate: future,
+                               sourceUrl: "https://www.carnegiehall.org/event/y")
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], into: ctx)
+        let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
+        func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
+        #expect(try xRow().missedScoutCount == 0)
+
+        // X is absent from a healthy (non-empty) feed: one miss, not yet gone.
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], into: ctx)
+        #expect(try xRow().missedScoutCount == 1)
+        #expect(try xRow().disappearedFromFeed == false)
+
+        // Absent again: two misses, now gone.
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], into: ctx)
+        #expect(try xRow().disappearedFromFeed == true)
+
+        // X reappears: counter resets.
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], into: ctx)
+        #expect(try xRow().missedScoutCount == 0)
+    }
+
     @Test func collapsesAConsecutiveRunIntoOneProspect() throws {
         let ctx = ModelContext(try container())
         let events = [

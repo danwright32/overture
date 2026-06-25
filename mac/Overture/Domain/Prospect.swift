@@ -97,6 +97,11 @@ final class Prospect {
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
 
+    // Consecutive scouts where this prospect's source was scouted but it was absent from the
+    // feed (#133). Reset to 0 whenever it reappears. Past performances are never counted.
+    // Defaulted so existing records migrate cleanly.
+    var missedScoutCount: Int = 0
+
     init(
         naturalKey: String,
         groupName: String,
@@ -151,6 +156,10 @@ final class Prospect {
         get { ReviewStatus(rawValue: statusRaw) ?? .new }
         set { statusRaw = newValue.rawValue }
     }
+
+    // Gone from the feed: absent across enough consecutive scouts to rule out a transient
+    // partial feed (#133). Cancelled or pulled, not merely a one-off glitch.
+    var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
 
     var contactMethod: ContactMethod? {
         get { contactMethodRaw.flatMap(ContactMethod.init) }

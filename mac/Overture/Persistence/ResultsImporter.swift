@@ -142,7 +142,8 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             outcomeSourceRaw: p.outcomeSourceRaw,
             runEndDate: p.runEndDate,
-            partOfRelatedRun: p.partOfRelatedRun
+            partOfRelatedRun: p.partOfRelatedRun,
+            disappearedFromFeed: p.disappearedFromFeed
         )
     }
 }

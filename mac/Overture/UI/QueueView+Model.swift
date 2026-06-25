@@ -46,6 +46,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var outcomeSourceRaw: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
+    // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
+    var disappearedFromFeed: Bool = false
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
@@ -176,6 +178,10 @@ enum QueueModel {
     // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).
     // Computed live against `today` so it stays correct as days pass between scout runs.
     static func queueOrder(_ items: [QueueItem], today: String) -> [QueueItem] {
+        // Hide shows that vanished from the feed and Dan never acted on (#133): pure noise. Ones
+        // he kept/drafted/approved stay (shown struck-through) so a cancellation he was pursuing
+        // stays visible.
+        let items = items.filter { !($0.status == .new && $0.disappearedFromFeed) }
         var bookable: [QueueItem] = []
         var tooSoon: [(item: QueueItem, days: Int, index: Int)] = []
         for (index, item) in items.enumerated() {
