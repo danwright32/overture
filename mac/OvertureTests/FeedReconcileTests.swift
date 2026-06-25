@@ -66,6 +66,32 @@ struct FeedReconcileTests {
         #expect(QueueItem(p).disappearedFromFeed == true)
     }
 
+    @Test func feedTrustworthinessGatesOnBaseline() {
+        // No baseline yet (first scout): trust whatever came back.
+        #expect(FeedReconcile.feedIsTrustworthy(currentCount: 3, baseline: 0) == true)
+        // A near-full feed is trusted.
+        #expect(FeedReconcile.feedIsTrustworthy(currentCount: 78, baseline: 80) == true)
+        // A feed far below the last healthy run is NOT trusted (likely a partial/degraded fetch).
+        #expect(FeedReconcile.feedIsTrustworthy(currentCount: 5, baseline: 80) == false)
+    }
+
+    @Test func degradedFeedDoesNotAccrueMisses() {
+        // The show is absent from a tiny feed, but the feed itself is suspiciously small versus the
+        // last healthy run, so its absences can't be trusted — no miss accrues (#150).
+        let p = prospect(key: "real-show", date: "2026-08-01", source: carnegie)
+        FeedReconcile.reconcile(stored: [p], seenKeys: [], seenSourceURLs: [],
+                                currentFeedCount: 4, baselineFeedCount: 80, today: today)
+        #expect(p.missedScoutCount == 0)
+    }
+
+    @Test func healthyFeedStillAccruesAMissForATrueAbsence() {
+        // Same absence, but the feed is full-sized, so the absence is real and counts.
+        let p = prospect(key: "real-show", date: "2026-08-01", source: carnegie)
+        FeedReconcile.reconcile(stored: [p], seenKeys: [], seenSourceURLs: [],
+                                currentFeedCount: 79, baselineFeedCount: 80, today: today)
+        #expect(p.missedScoutCount == 1)
+    }
+
     @Test func prospectFromAnotherSourceIsNotReconciled() {
         // A Carnegie scout must not flag a future prospect that came from a different venue.
         let p = prospect(key: "other", date: "2026-08-01", source: "https://example.com/show")

@@ -154,6 +154,32 @@ struct ScoutServiceTests {
         #expect(try xRow().missedScoutCount == 0)
     }
 
+    // #150: a degraded (suspiciously small vs baseline) feed must not accrue misses through apply.
+    @Test func applyWithDegradedFeedDoesNotAccrueMisses() throws {
+        let ctx = ModelContext(try container())
+        let future = "2026-12-01"
+        let x = ExtractedEvent(title: "Future Choir X", presenter: "Future Choir X",
+                               venue: "Weill Recital Hall", performanceDate: future,
+                               sourceUrl: "https://www.carnegiehall.org/event/x")
+        let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
+                               venue: "Weill Recital Hall", performanceDate: future,
+                               sourceUrl: "https://www.carnegiehall.org/event/y")
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], into: ctx)
+        let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
+        func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
+
+        // Tiny feed (only y) but a large healthy baseline → feed looks degraded → X is NOT a miss.
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], baselineFeedCount: 80, into: ctx)
+        #expect(try xRow().missedScoutCount == 0)
+    }
+
+    @Test func healthyFeedCountPersistenceRoundTrips() {
+        let defaults = UserDefaults(suiteName: "feedcount-\(UUID().uuidString)")!
+        #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 0)   // unset = no baseline
+        ScoutService.recordHealthyFeedCount(42, in: defaults)
+        #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 42)
+    }
+
     @Test func collapsesAConsecutiveRunIntoOneProspect() throws {
         let ctx = ModelContext(try container())
         let events = [
