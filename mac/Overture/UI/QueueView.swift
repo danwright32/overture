@@ -82,9 +82,16 @@ struct QueueView: View {
                 Button {
                     showPendingBookingsOnly.toggle()
                 } label: {
-                    Label("Confirm bookings (\(pendingBookings))", systemImage: "checkmark.seal")
+                    // Active state (#118): filled seal + forest tint when the filter is engaged,
+                    // mirroring the high-fit chip's active treatment, so it's clear why rows are
+                    // hidden instead of "where did my rows go?".
+                    Label("Confirm bookings (\(pendingBookings))",
+                          systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
                 }
-                .help("Prospects where Downbeat detected a booking — confirm or dismiss each one")
+                .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
+                .help(showPendingBookingsOnly
+                      ? "Showing only the \(pendingBookings) pending booking\(pendingBookings == 1 ? "" : "s"). Click to show the whole queue again."
+                      : "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one")
             }
         }
     }
