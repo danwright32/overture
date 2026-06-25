@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Overture
 
 // #32: rules-uncertain classifications should show an "unsure" mark so Dan can double
@@ -27,5 +28,28 @@ struct ClassificationConfidenceTests {
 
     @Test func dansReviewClearsTheMark() {
         #expect(item(confidence: "uncertain", reviewed: true).isClassificationUncertain == false)
+    }
+}
+
+// #60: classificationOverriddenByDan is mapped through from the Prospect into QueueItem
+// so the row can hide the stale fit-reason line once Dan has corrected the classification.
+@Suite("QueueItem override flag mapping")
+struct QueueItemOverrideFlagTests {
+    private func makeProspect(overridden: Bool = false) -> Prospect {
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.classificationOverriddenByDan = overridden
+        return p
+    }
+
+    @Test func flagFalseByDefault() {
+        #expect(QueueItem(makeProspect()).classificationOverriddenByDan == false)
+    }
+
+    @Test func flagTrueWhenProspectIsOverridden() {
+        #expect(QueueItem(makeProspect(overridden: true)).classificationOverriddenByDan == true)
     }
 }

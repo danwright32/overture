@@ -41,6 +41,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var lostReason: String? = nil
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
+    var classificationOverriddenByDan: Bool = false
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {

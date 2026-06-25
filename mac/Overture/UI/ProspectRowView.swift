@@ -15,6 +15,7 @@ struct ProspectRowView: View {
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onMarkConfidenceReviewed: () -> Void = {}
+    var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
@@ -27,7 +28,7 @@ struct ProspectRowView: View {
                 fitSeal
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
-                    if !item.fitReason.isEmpty {
+                    if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
                         Text(item.fitReason)
                             .font(OVType.reason)
                             .foregroundStyle(OVColor.inkSoft)
@@ -110,22 +111,35 @@ struct ProspectRowView: View {
         .padding(.top, 2)
     }
 
-    // A rules-guessed classification Dan hasn't reviewed: a tappable amber flag so he
-    // can double-check the type/fit, then clear it once it looks right (#32).
+    // A rules-guessed classification Dan hasn't reviewed: a menu so he can confirm it
+    // looks right or correct the discipline/production (#60). Clears automatically once
+    // he picks an action (confidenceReviewedByDan or classificationOverriddenByDan).
     @ViewBuilder private var confidenceFlag: some View {
         if item.isClassificationUncertain {
-            Button(action: onMarkConfidenceReviewed) {
+            Menu {
+                Button("This looks right") { onMarkConfidenceReviewed() }
+                Divider()
+                ForEach(Discipline.allCases, id: \.self) { discipline in
+                    Button(QueueModel.disciplineLabel(discipline.rawValue)) {
+                        onCorrectClassification(discipline, nil)
+                    }
+                }
+                Divider()
+                Button("Self-produced") { onCorrectClassification(nil, .selfProduced) }
+                Button("Agency/presented") { onCorrectClassification(nil, .agency) }
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "questionmark.diamond.fill")
-                    Text("Unsure call — tap if this looks right")
+                    Text("Unsure call — tap to confirm or fix")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.rust)
                 .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
                 .background(Capsule().fill(OVColor.rust.opacity(0.12)))
             }
-            .buttonStyle(.plain)
-            .help("The scout's rules weren't sure how to classify this one. Check the type and fit, then tap to clear the flag.")
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type.")
             .padding(.top, 2)
         }
     }
