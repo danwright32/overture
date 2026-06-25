@@ -37,6 +37,10 @@ struct DownbeatExportContractTests {
         // Ad-hoc venue: venueId omitted -> nil; match on venueName.
         #expect(export.bookings[1].venueId == nil)
         #expect(export.bookings[1].venueName == "Pop-up Loft")
+
+        // #156: the Swift reader must decode blockedDates (the TS side already does), so the
+        // scout can suppress already-booked days. Same set the TS contract test asserts.
+        #expect(export.blockedDates == ["2026-03-10", "2026-03-11", "2026-03-12", "2026-04-02"])
     }
 
     @Test func decodesTheV1FixtureToTheAgreedLogicalShape() throws {
@@ -45,5 +49,6 @@ struct DownbeatExportContractTests {
         #expect(export.clients.count == 1)
         #expect(export.venues.count == 1)
         #expect(export.bookings.isEmpty)   // no bookings key in a v1 file
+        #expect(export.blockedDates.isEmpty)   // v1 predates blockedDates
     }
 }

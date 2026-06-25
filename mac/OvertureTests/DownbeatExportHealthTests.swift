@@ -65,6 +65,20 @@ struct DownbeatExportHealthTests {
         #expect(loaded.health == .ok)
     }
 
+    // #156: loadWithHealth must surface the export's blockedDates so the live scout can suppress
+    // already-booked days (it previously read a separate file that nothing writes).
+    @Test func loadWithHealthSurfacesBlockedDates() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("downbeat-export.json")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let json = #"{"version":2,"clients":[],"venues":[],"bookings":[],"blockedDates":["2026-03-10","2026-03-11"]}"#
+        try Data(json.utf8).write(to: url)
+        let loaded = DownbeatBridge.loadWithHealth(from: url, now: Date(), staleAfter: staleAfter)
+        #expect(loaded.blockedDates == ["2026-03-10", "2026-03-11"])
+    }
+
     @Test func decodesV2Bookings() throws {
         let json = #"{"version":2,"clients":[],"venues":[],"bookings":[{"id":"B1","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Spring Gala","startDate":"2026-03-10","endDate":"2026-03-12","venueId":"V1","venueName":"Carnegie Hall"},{"id":"B2","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Loft Set","startDate":"2026-04-02","endDate":"2026-04-02","venueName":"Pop-up Loft"}],"blockedDates":[]}"#
         let export = try DownbeatBridge.decode(Data(json.utf8))

@@ -173,6 +173,15 @@ struct ScoutServiceTests {
         #expect(try xRow().missedScoutCount == 0)
     }
 
+    // #156: the scout's blocked set is Downbeat's exported blockedDates unioned with the local
+    // override file, deduplicated.
+    @Test func mergedBlockedDatesUnionsExportAndLocalOverride() {
+        let merged = ScoutService.mergedBlockedDates(
+            exportBlocked: ["2026-03-10", "2026-03-11"],
+            localOverride: ["2026-03-11", "2026-04-01"])
+        #expect(merged == ["2026-03-10", "2026-03-11", "2026-04-01"])
+    }
+
     @Test func healthyFeedCountPersistenceRoundTrips() {
         let defaults = UserDefaults(suiteName: "feedcount-\(UUID().uuidString)")!
         #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 0)   // unset = no baseline

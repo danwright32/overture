@@ -38,8 +38,9 @@ enum ScoutService {
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = loadLocalHistory() + LocalHistory.records(from: existing)
         let baseline = lastHealthyFeedCount()
+        let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
         var outcome = apply(events: events, clients: loaded.clients, history: history,
-                            blocked: loadBlockedDates(), baselineFeedCount: baseline, into: context)
+                            blocked: blocked, baselineFeedCount: baseline, into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
         // Update the health baseline only after a trustworthy (full-sized) feed, so a degraded
         // run can't lower the bar for the next one (#150).
@@ -282,6 +283,12 @@ enum ScoutService {
         guard let data = try? Data(contentsOf: url),
               let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else { return [] }
         return history
+    }
+
+    // The days the scout suppresses: Downbeat's exported blockedDates (the canonical source,
+    // #156) unioned with the optional local override file, deduplicated. Pure for testing.
+    static func mergedBlockedDates(exportBlocked: [String], localOverride: Set<String>) -> Set<String> {
+        Set(exportBlocked).union(localOverride)
     }
 
     private static func loadBlockedDates() -> Set<String> {

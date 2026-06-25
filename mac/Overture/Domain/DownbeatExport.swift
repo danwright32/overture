@@ -44,6 +44,9 @@ struct DownbeatExport: Codable, Equatable, Sendable {
     var clients: [DownbeatClient]
     var venues: [DownbeatVenue]
     var bookings: [OvertureBooking]
+    // Calendar days (yyyy-MM-dd) Dan is already shooting, added in export v2. The scout
+    // suppresses performances on these; absent in a v1 file (#156). May include past days.
+    var blockedDates: [String]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -51,6 +54,7 @@ struct DownbeatExport: Codable, Equatable, Sendable {
         clients = try c.decode([DownbeatClient].self, forKey: .clients)
         venues = try c.decode([DownbeatVenue].self, forKey: .venues)
         bookings = try c.decodeIfPresent([OvertureBooking].self, forKey: .bookings) ?? []
+        blockedDates = try c.decodeIfPresent([String].self, forKey: .blockedDates) ?? []
     }
 }
 
@@ -122,14 +126,15 @@ enum DownbeatBridge {
     // bad export yields empty clients so the scout still runs, with the warning surfaced.
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
-        -> (clients: [DownbeatClient], bookings: [OvertureBooking], health: Health) {
+        -> (clients: [DownbeatClient], bookings: [OvertureBooking], blockedDates: [String], health: Health) {
         guard let data = try? Data(contentsOf: url) else {
-            return ([], [], .missing)
+            return ([], [], [], .missing)
         }
         let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         guard let export = try? decode(data) else {
-            return ([], [], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+            return ([], [], [], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
         }
-        return (export.clients, export.bookings, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+        return (export.clients, export.bookings, export.blockedDates,
+                health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
     }
 }
