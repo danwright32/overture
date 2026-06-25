@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseHits, windowBoundsMs, params } from "./algoliaCalendar";
+import { parseHits, windowBoundsMs, params, fetchCalendar } from "./algoliaCalendar";
 
 const sample = JSON.stringify({
   results: [
@@ -69,5 +69,27 @@ describe("algolia date window", () => {
     expect(p).toContain("hitsPerPage=1000");
     expect(p).toContain("startdate");
     expect(p).toContain("page=0");
+  });
+});
+
+describe("fetchCalendar", () => {
+  function page(title: string, url: string, nbPages: number): string {
+    return JSON.stringify({ results: [{ nbPages, hits: [{ title, url }] }] });
+  }
+
+  it("concatenates every page until the index is exhausted", async () => {
+    let call = 0;
+    const fake = (async () => {
+      const p = call++;
+      return { ok: true, text: async () => page(`Event ${p}`, `/calendar/2026/07/0${p + 1}/e`, 2) } as Response;
+    }) as unknown as typeof fetch;
+    const events = await fetchCalendar(new Date("2026-06-25T03:00:00Z"), fake);
+    expect(events.map((e) => e.title)).toEqual(["Event 0", "Event 1"]);
+    expect(call).toBe(2);
+  });
+
+  it("throws when the query fails", async () => {
+    const fake = (async () => ({ ok: false, status: 500, text: async () => "" })) as unknown as typeof fetch;
+    await expect(fetchCalendar(new Date(), fake)).rejects.toThrow(/500/);
   });
 });
