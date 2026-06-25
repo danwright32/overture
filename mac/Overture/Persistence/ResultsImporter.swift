@@ -140,7 +140,9 @@ extension QueueItem {
             confidenceReviewedByDan: p.confidenceReviewedByDan,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
-            outcomeSourceRaw: p.outcomeSourceRaw
+            outcomeSourceRaw: p.outcomeSourceRaw,
+            runEndDate: p.runEndDate,
+            partOfRelatedRun: p.partOfRelatedRun
         )
     }
 }

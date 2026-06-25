@@ -44,6 +44,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
     var outcomeSourceRaw: String? = nil
+    var runEndDate: String? = nil
+    var partOfRelatedRun: Bool = false
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
@@ -246,6 +248,24 @@ enum QueueModel {
 
     static func pendingBookingCount(_ items: [QueueItem]) -> Int {
         items.filter(\.bookingSuggested).count
+    }
+
+    // "Jun 25" for a single date (end nil or same as start), "Jun 25–28" for a same-month
+    // range, "Jun 28–Jul 2" for a cross-month range, "Date to be confirmed" for a bad start.
+    static func runDateLabel(start: String?, end: String?) -> String {
+        guard let start, let d = day(start) else { return "Date to be confirmed" }
+        let cal = easternCalendar
+        let startLabel = "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d))"
+        guard let end, end != start, let e = day(end) else { return startLabel }
+        let sameMonth = cal.component(.month, from: d) == cal.component(.month, from: e)
+        let endLabel = sameMonth
+            ? "\(cal.component(.day, from: e))"
+            : "\(shortMonth(cal.component(.month, from: e))) \(cal.component(.day, from: e))"
+        return "\(startLabel)\u{2013}\(endLabel)"
+    }
+
+    static func relatedRunNote(_ item: QueueItem) -> String? {
+        item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
     }
 
     // MARK: - Date helpers
