@@ -23,10 +23,14 @@ A new pure step runs **after** classify+match+`decideProspect` produces per-even
 Lives as a shared-shape pure function in both `src/lib/` (TS) and `mac/Overture/Domain/` (Swift), kept in parity and unit-tested independently of the network/SwiftData. Undated rows are never merged (each stays its own prospect).
 
 ### 2. Schema (`Prospect`, SwiftData)
-Add two optional fields: `runEndDate: String?` and `partOfRelatedRun: Bool` (default false). Optional/defaulted, so this is a lightweight automatic migration. Mirror the two fields through the results-file contract (`ResultsFile.swift` / the TS writer) and `QueueItem`.
+Add: `runEndDate: String?`, `partOfRelatedRun: Bool` (default false), and `runSourceURLs: [String]` (the member nights' source-listing URLs, for re-recognition per §3; empty for a legacy single-night). Optional/defaulted, so this is a lightweight automatic migration. Mirror the new fields through the results-file contract (`ResultsFile.swift` / the TS writer) and `QueueItem`.
 
-### 3. Natural key
-Unchanged shape — `group | openingDate | venue` — which already uniquely separates two non-consecutive runs of the same group+venue (different opening dates). The existing source-listing-drift re-key path (#29) still recovers a run whose title or opening night shifts between scouts.
+### 3. Natural key and run identity (re-recognition across scouts)
+Key shape is unchanged — `group | openingDate | venue` — which uniquely separates two non-consecutive runs of the same group+venue (different opening dates).
+
+**Critical:** the opening night is NOT a stable identity. The feed is windowed to today..+90, so as days pass a run's earliest night drops out and the run's opening date advances. Keying re-recognition on the opening night alone would make an in-progress run look brand new on the next scout, orphaning Dan's keep/dismiss/draft/outcome.
+
+Requirement: a run must be re-recognized by **any of its member performance nights**, not just the opening one. Store the run's member source-listing URLs on the prospect (new `runSourceURLs: [String]`, or reuse the existing per-night source URL set). On upsert, before creating a new prospect, match an assembled run to an existing prospect that shares **any** member source-listing URL; if found, update that record in place (re-keying it to the new opening date) so Dan's decision survives the opening night passing. The existing single-night drift path (#29, `matchByStableSource`) is generalized to this any-night-overlap match.
 
 ### 4. Booking match (`BookingMatch`)
 `classify` already tests a single `performanceDate` inside the booking's `[startDate, endDate]`. Generalize to **range overlap**: the run `[performanceDate, runEndDate ?? performanceDate]` overlaps the booking range. No change to the causation/timezone logic (those are #115/#116, out of scope here).
@@ -41,6 +45,7 @@ extract → classify → match → `decideProspect` (per event) → **group into
 
 ## Testing
 - Run-grouping unit tests (TS + Swift parity): consecutive nights merge; a >3-day gap splits; two separate runs of the same group+venue both set `partOfRelatedRun`; different venues never merge; undated rows never merge; a single night yields `runEndDate == nil`.
+- Run re-recognition (upsert): a run whose opening night has dropped out of the window re-attaches to the existing record (via shared member source URL) and preserves Dan's keep/dismiss, rather than creating a duplicate.
 - Booking-match: a booking overlapping any night of a run matches; a booking outside the run's range does not.
 - Display: range label formatting; related-run note shows only when flagged.
 - Full existing Swift + TS suites stay green.
