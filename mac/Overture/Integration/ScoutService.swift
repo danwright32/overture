@@ -37,9 +37,15 @@ enum ScoutService {
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = loadLocalHistory() + LocalHistory.records(from: existing)
+        let baseline = lastHealthyFeedCount()
         var outcome = apply(events: events, clients: loaded.clients, history: history,
-                            blocked: loadBlockedDates(), into: context)
+                            blocked: loadBlockedDates(), baselineFeedCount: baseline, into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+        // Update the health baseline only after a trustworthy (full-sized) feed, so a degraded
+        // run can't lower the bar for the next one (#150).
+        if FeedReconcile.feedIsTrustworthy(currentCount: events.count, baseline: baseline) {
+            recordHealthyFeedCount(events.count)
+        }
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -61,6 +67,17 @@ enum ScoutService {
         defaults.object(forKey: lastScoutKey) as? Date
     }
 
+    // The size of the last HEALTHY (trustworthy) feed, the baseline a later run is judged against
+    // to spot a degraded/partial feed (#150). Only updated after a trustworthy run, so one bad
+    // fetch can't ratchet the baseline down. Injectable defaults keep test side effects contained.
+    static let lastHealthyFeedCountKey = "scoutLastHealthyFeedCount"
+    static func recordHealthyFeedCount(_ count: Int, in defaults: UserDefaults = .standard) {
+        defaults.set(count, forKey: lastHealthyFeedCountKey)
+    }
+    static func lastHealthyFeedCount(in defaults: UserDefaults = .standard) -> Int {
+        defaults.integer(forKey: lastHealthyFeedCountKey)   // 0 when unset = no baseline yet
+    }
+
     // Application of already-extracted events with injected data, so the full
     // classify -> match -> assemble -> upsert chain is testable without network/WebKit.
     @discardableResult
@@ -69,6 +86,7 @@ enum ScoutService {
         clients: [DownbeatClient],
         history: [HistoryRecord],
         blocked: Set<String>,
+        baselineFeedCount: Int = 0,
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0
@@ -177,7 +195,9 @@ enum ScoutService {
             // one the venue cancelled (#133).
             let seenSourceURLs = Set(events.compactMap { $0.sourceUrl })
             FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys,
-                                    seenSourceURLs: seenSourceURLs, today: QueueModel.easternToday())
+                                    seenSourceURLs: seenSourceURLs,
+                                    currentFeedCount: events.count, baselineFeedCount: baselineFeedCount,
+                                    today: QueueModel.easternToday())
         }
         try? context.save()
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)

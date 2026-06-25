@@ -18,13 +18,32 @@ enum FeedReconcile {
     // reconciled, so a Carnegie scout never flags a future prospect sourced elsewhere.
     static let scoutedHosts: Set<String> = ["carnegiehall.org"]
 
+    // A run's feed must be at least this fraction of the last healthy run's size for its absences
+    // to be trusted. Below it, the feed looks partial/degraded (a truncated page, a flaky fetch
+    // that still returned 200), and trusting its absences would wrongly cancel real shows (#150).
+    static let minHealthyFraction = 0.5
+
+    // Whether this run's feed is large enough, relative to the last healthy run, to trust which
+    // shows are MISSING from it. No baseline yet (first scout) trusts the feed.
+    static func feedIsTrustworthy(currentCount: Int, baseline: Int, fraction: Double = minHealthyFraction) -> Bool {
+        guard baseline > 0 else { return true }
+        return Double(currentCount) >= Double(baseline) * fraction
+    }
+
     // `seenSourceURLs` is the set of listing URLs in this run's RAW feed (before our own
     // blocked-date / DNC / unreachable filtering). A prospect is "still listed" if it was
     // upserted (seenKeys) OR any of its listing URLs is in the raw feed — so a show we merely
     // filtered out this run is NOT mistaken for one the venue cancelled.
+    //
+    // `currentFeedCount`/`baselineFeedCount` gate on feed health: a degraded (suspiciously small)
+    // feed is skipped entirely, so its absences never accrue misses (#150). Defaults (0/0) mean
+    // "no baseline" and trust the feed, preserving callers that don't pass them.
     static func reconcile(stored: [Prospect], seenKeys: Set<String>,
-                          seenSourceURLs: Set<String> = [], today: String,
+                          seenSourceURLs: Set<String> = [],
+                          currentFeedCount: Int = 0, baselineFeedCount: Int = 0,
+                          today: String,
                           scoutedHosts: Set<String> = scoutedHosts) {
+        guard feedIsTrustworthy(currentCount: currentFeedCount, baseline: baselineFeedCount) else { return }
         for p in stored {
             if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs) {
                 p.missedScoutCount = 0                       // present this run: definitely live
