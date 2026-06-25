@@ -1,0 +1,93 @@
+import Foundation
+
+// Carnegie's public calendar (/events) is a thin front-end over an Algolia search index
+// (prod_Events). The visible page only renders ~3 days at a time, but the index holds the
+// whole season, so the scout queries Algolia directly for the next 90 days in one call
+// instead of scraping the paginated DOM. These are the same public, search-only credentials
+// the website ships in its own client JS — not secrets — captured from a live request. If
+// Carnegie rotates the key or restructures the index, this is the spot to update.
+enum AlgoliaCalendar {
+    static let appID = "Q0TMLOPF1J"
+    static let apiKey = "d2d2b382f2659c44ef8927aad7a24172"
+    static let index = "prod_Events"
+    static let endpoint = URL(string: "https://Q0TMLOPF1J-dsn.algolia.net/1/indexes/*/queries")!
+
+    // How far ahead the scout looks. Past performances and anything beyond this are not worth
+    // pitching; the queue's display window ([[QueueModel.leadTimeWindowDays]]) mirrors this.
+    static let windowDays = 90
+    static let hitsPerPage = 1000
+    // A safety stop so a surprise in the index can never spin the pager forever.
+    static let maxPages = 5
+
+    private static let eastern = TimeZone(identifier: "America/New_York")!
+    private static let easternCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = eastern
+        return c
+    }()
+
+    // The index stores `startdate` as a millisecond epoch. The window opens at midnight (New
+    // York) of today and runs to midnight of the day after the last included day, so every
+    // performance on day+windowDays is covered. Lower bound inclusive, upper exclusive.
+    static func windowBoundsMs(today: Date, windowDays: Int = windowDays) -> (start: Int, end: Int) {
+        let startOfToday = easternCalendar.startOfDay(for: today)
+        let startDay = easternCalendar.date(byAdding: .day, value: 0, to: startOfToday) ?? startOfToday
+        let endExclusive = easternCalendar.date(byAdding: .day, value: windowDays + 1, to: startOfToday) ?? startOfToday
+        return (Int(startDay.timeIntervalSince1970 * 1000), Int(endExclusive.timeIntervalSince1970 * 1000))
+    }
+
+    // The Algolia `params` query string: empty text query, the startdate window as numeric
+    // filters, sorted by date ascending via the index's default ranking.
+    static func params(startMs: Int, endMs: Int, hitsPerPage: Int = hitsPerPage, page: Int) -> String {
+        let numeric = "[\"startdate>=\(startMs)\",\"startdate<\(endMs)\"]"
+        let encoded = numeric.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? numeric
+        return "query=&hitsPerPage=\(hitsPerPage)&page=\(page)&numericFilters=\(encoded)"
+    }
+
+    static func requestBody(startMs: Int, endMs: Int, page: Int) -> Data {
+        let payload = "{\"requests\":[{\"indexName\":\"\(index)\",\"params\":\"\(params(startMs: startMs, endMs: endMs, page: page))\"}]}"
+        return Data(payload.utf8)
+    }
+
+    private struct Response: Decodable { let results: [ResultPage] }
+    private struct ResultPage: Decodable { let hits: [Hit]; let nbPages: Int? }
+    private struct Hit: Decodable {
+        let title: String
+        let licenseename: String?
+        let facility: String?
+        let url: String?
+    }
+
+    // Maps one page of Algolia hits to the same ExtractedEvent shape the rest of the scout
+    // pipeline already classifies. `licenseename` is the presenter/renter (drives self vs
+    // agency), `facility` is the venue, and the date comes from the /calendar/yyyy/mm/dd url.
+    static func parse(_ data: Data) -> (events: [ExtractedEvent], nbPages: Int) {
+        guard let resp = try? JSONDecoder().decode(Response.self, from: data),
+              let page = resp.results.first else { return ([], 0) }
+        let events = page.hits.map { hit in
+            ExtractedEvent(
+                title: hit.title,
+                presenter: hit.licenseename?.nonBlank,
+                venue: hit.facility?.nonBlank,
+                performanceDate: hit.url.flatMap(dateFromCalendarURL),
+                sourceUrl: hit.url.map { "https://www.carnegiehall.org\($0)" }
+            )
+        }
+        return (events, page.nbPages ?? 1)
+    }
+
+    private static func dateFromCalendarURL(_ url: String) -> String? {
+        guard let m = url.range(of: #"/calendar/(\d{4})/(\d{2})/(\d{2})/"#, options: .regularExpression) else { return nil }
+        let parts = url[m].split(separator: "/")
+        // ["calendar", "yyyy", "mm", "dd"]
+        guard parts.count >= 4 else { return nil }
+        return "\(parts[1])-\(parts[2])-\(parts[3])"
+    }
+}
+
+private extension String {
+    var nonBlank: String? {
+        let t = trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+}

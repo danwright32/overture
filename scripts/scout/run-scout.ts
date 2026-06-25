@@ -5,9 +5,9 @@
 //
 //   pnpm tsx scripts/scout/run-scout.ts [events.json]
 //
-// Default input is scripts/scout/events.sample.json (the real Carnegie extraction).
-// The live extractor (scripts/scout/extract-carnegie.js) produces this same shape
-// from the bot-protected calendar via a headless browser.
+// With no argument it fetches the next 90 days live from Carnegie's Algolia calendar index
+// (src/lib/algoliaCalendar.ts), the same window the native app pulls. Pass a JSON file of
+// ExtractedEvent[] (e.g. scripts/scout/events.sample.json) to replay a fixed set instead.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -17,6 +17,7 @@ import { loadLocalHistory } from "../../src/lib/localHistory";
 import { matchRelationship } from "../../src/lib/historyMatch";
 import { decideProspect, type DiscoveredEvent, type Classification } from "../../src/lib/assembleProspect";
 import { classifyEvent, type EventClassification, type ExtractedEvent } from "../../src/lib/classifyEvent";
+import { fetchCalendar, WINDOW_DAYS } from "../../src/lib/algoliaCalendar";
 import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
 
 function appSupport(name: string): string {
@@ -26,9 +27,15 @@ function appSupport(name: string): string {
 const RESULTS_VERSION = 1;
 
 async function main() {
-  const inputPath = process.argv[2] ?? "scripts/scout/events.sample.json";
-  const events = JSON.parse(readFileSync(inputPath, "utf8")) as ExtractedEvent[];
-  console.log(`Read ${events.length} extracted events from ${inputPath}`);
+  const inputPath = process.argv[2];
+  const events = inputPath
+    ? (JSON.parse(readFileSync(inputPath, "utf8")) as ExtractedEvent[])
+    : await fetchCalendar();
+  console.log(
+    inputPath
+      ? `Read ${events.length} extracted events from ${inputPath}`
+      : `Fetched ${events.length} upcoming events from Carnegie's calendar (next ${WINDOW_DAYS} days)`,
+  );
 
   // History and blocked dates come from the same local files the Mac app reads:
   // booked/contacted/DNC history from the importer's overture-history.json, and

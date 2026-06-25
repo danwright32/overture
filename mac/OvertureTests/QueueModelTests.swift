@@ -114,14 +114,79 @@ struct TimingTests {
         #expect(QueueModel.outreachTiming(performanceDate: "2026-06-20", today: "2026-06-22").urgency == .past)
     }
 
-    @Test func urgesOutreachWithinAWeek() {
-        let t = QueueModel.outreachTiming(performanceDate: "2026-06-25", today: "2026-06-22")
+    // Within 5 days (72-hours-and-then-some) reads as too close to realistically book.
+    @Test func flagsNearTermAsTooClose() {
+        let today = QueueModel.outreachTiming(performanceDate: "2026-06-22", today: "2026-06-22")
+        #expect(today.urgency == .tooSoon)
+        #expect(today.label.contains("today"))
+        let threeDays = QueueModel.outreachTiming(performanceDate: "2026-06-25", today: "2026-06-22")
+        #expect(threeDays.urgency == .tooSoon)
+        #expect(threeDays.label.contains("3 days"))
+        let fiveDays = QueueModel.outreachTiming(performanceDate: "2026-06-27", today: "2026-06-22")
+        #expect(fiveDays.urgency == .tooSoon)
+    }
+
+    @Test func urgesOutreachJustPastTheTooCloseWindow() {
+        let t = QueueModel.outreachTiming(performanceDate: "2026-06-28", today: "2026-06-22")
         #expect(t.urgency == .imminent)
-        #expect(t.label.contains("3 days"))
+        #expect(t.label.contains("6 days"))
     }
 
     @Test func suggestsThreeWeeksOutForDistant() {
         #expect(QueueModel.outreachTiming(performanceDate: "2026-08-01", today: "2026-06-22").urgency == .ahead)
+    }
+}
+
+@Suite("Eastern today")
+struct EasternTodayTests {
+    // 03:00 UTC on the 25th is still 23:00 on the 24th in New York, so "today" is the 24th.
+    @Test func usesNewYorkCalendarDayNotUTC() {
+        let lateNightEastern = Date(timeIntervalSince1970: 1782356400) // 2026-06-25T03:00:00Z
+        #expect(QueueModel.easternToday(lateNightEastern) == "2026-06-24")
+    }
+}
+
+@Suite("Queue date window")
+struct QueueWindowTests {
+    private func dated(_ date: String?) -> QueueItem { item(performanceDate: date) }
+
+    @Test func hidesPastPerformances() {
+        let result = QueueModel.queueOrder([dated("2026-06-22"), dated("2026-07-10")], today: "2026-06-25")
+        #expect(result.map(\.performanceDate) == ["2026-07-10"])
+    }
+
+    @Test func hidesEventsBeyondNinetyDays() {
+        let result = QueueModel.queueOrder([dated("2026-07-10"), dated("2026-12-01")], today: "2026-06-25")
+        #expect(result.map(\.performanceDate) == ["2026-07-10"])
+    }
+
+    @Test func keepsEventExactlyNinetyDaysOut() {
+        let result = QueueModel.queueOrder([dated("2026-09-23")], today: "2026-06-25")
+        #expect(result.count == 1)
+    }
+
+    // 0-5 days out stay visible but sink below everything bookable, closest-to-today lowest.
+    @Test func demotesNearTermToBottomGradedByCloseness() {
+        let result = QueueModel.queueOrder(
+            [dated("2026-06-25"), dated("2026-06-27"), dated("2026-07-10")],
+            today: "2026-06-25"
+        )
+        #expect(result.map(\.performanceDate) == ["2026-07-10", "2026-06-27", "2026-06-25"])
+    }
+
+    @Test func keepsUndatedAmongBookable() {
+        let result = QueueModel.queueOrder([dated(nil), dated("2026-07-10")], today: "2026-06-25")
+        #expect(result.contains { $0.performanceDate == nil })
+        #expect(result.count == 2)
+    }
+
+    // A detected-but-unconfirmed booking is a separate workflow from pitching, so it must
+    // stay visible even once its performance date has passed.
+    @Test func keepsPendingBookingEvenWhenPast() {
+        var pending = dated("2026-06-22"); pending.bookingSuggested = true
+        let result = QueueModel.queueOrder([pending, dated("2026-07-10")], today: "2026-06-25")
+        #expect(result.contains { $0.bookingSuggested })
+        #expect(result.count == 2)
     }
 }
 

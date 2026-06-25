@@ -123,17 +123,31 @@ enum QueueModel {
         return nil
     }
 
-    // Whole days from `today` (a "yyyy-MM-dd" string) to the performance, as local
+    // Today, as a "yyyy-MM-dd" string in New York time — Overture's canonical zone, so
+    // "is this in the past / within the booking window" never drifts a day off UTC or the
+    // Mac's local zone wherever Dan happens to be.
+    static func easternToday(_ now: Date = Date()) -> String {
+        dayFormatter.string(from: now)
+    }
+
+    // The window the queue shows: past performances drop out, and anything more than this
+    // many days out is beyond the planning horizon Dan wants to look at.
+    static let leadTimeWindowDays = 90
+    // Within this many days a booking is unrealistic to land, so the event still shows but
+    // sinks below everything bookable rather than sitting up top with the nearest dates.
+    static let tooCloseDays = 5
+
+    // Whole days from `today` (a "yyyy-MM-dd" string) to the performance, as New York
     // calendar dates so nothing drifts a day across timezones.
     static func daysUntil(performanceDate: String?, today: String) -> Int? {
         guard let performanceDate,
               let from = day(today),
               let to = day(performanceDate) else { return nil }
-        let comps = Calendar.current.dateComponents([.day], from: from, to: to)
+        let comps = easternCalendar.dateComponents([.day], from: from, to: to)
         return comps.day
     }
 
-    enum Urgency { case past, imminent, soon, ahead, unknown }
+    enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown }
     struct Timing: Equatable { let label: String; let urgency: Urgency
         static func == (l: Timing, r: Timing) -> Bool { l.label == r.label && l.urgency == r.urgency } }
 
@@ -142,14 +156,48 @@ enum QueueModel {
             return Timing(label: "Date TBD", urgency: .unknown)
         }
         if days < 0 { return Timing(label: "Performance passed", urgency: .past) }
-        if days == 0 { return Timing(label: "Performs today", urgency: .imminent) }
+        if days == 0 { return Timing(label: "Performs today — too close to book", urgency: .tooSoon) }
+        if days <= tooCloseDays {
+            return Timing(label: "In \(days) day\(days == 1 ? "" : "s") — likely too close to book", urgency: .tooSoon)
+        }
         if days <= 7 {
-            return Timing(label: "In \(days) day\(days == 1 ? "" : "s") — reach out now", urgency: .imminent)
+            return Timing(label: "In \(days) days — reach out now", urgency: .imminent)
         }
         if days <= 21 {
             return Timing(label: "In \(days) days — good to send", urgency: .soon)
         }
         return Timing(label: "In \(days) days — send ~3 weeks out", urgency: .ahead)
+    }
+
+    // Orders the queue for display: hide past performances and anything beyond the lead-time
+    // window, keep everything else, and demote the too-close events to the bottom — graded so
+    // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).
+    // Computed live against `today` so it stays correct as days pass between scout runs.
+    static func queueOrder(_ items: [QueueItem], today: String) -> [QueueItem] {
+        var bookable: [QueueItem] = []
+        var tooSoon: [(item: QueueItem, days: Int, index: Int)] = []
+        for (index, item) in items.enumerated() {
+            // A detected booking awaiting Dan's confirmation is a separate workflow from
+            // pitching, so it stays put regardless of how near or past its date is.
+            if item.bookingSuggested {
+                bookable.append(item)
+                continue
+            }
+            guard let days = daysUntil(performanceDate: item.performanceDate, today: today) else {
+                bookable.append(item)
+                continue
+            }
+            if days < 0 || days > leadTimeWindowDays { continue }
+            if days <= tooCloseDays {
+                tooSoon.append((item, days, index))
+                continue
+            }
+            bookable.append(item)
+        }
+        let demoted = tooSoon
+            .sorted { $0.days != $1.days ? $0.days > $1.days : $0.index < $1.index }
+            .map(\.item)
+        return bookable + demoted
     }
 
     struct DateGroup: Identifiable, Equatable {
@@ -172,7 +220,7 @@ enum QueueModel {
         return order.map { key in
             let bucket = buckets[key] ?? []
             if key != "tbd", let d = day(key) {
-                let cal = Calendar.current
+                let cal = easternCalendar
                 return DateGroup(
                     id: key,
                     weekday: shortWeekday(cal.component(.weekday, from: d)),
@@ -202,11 +250,19 @@ enum QueueModel {
 
     // MARK: - Date helpers
 
+    // Overture is always reckoned in New York time, never UTC or the Mac's local zone.
+    private static let eastern = TimeZone(identifier: "America/New_York")!
+    private static let easternCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = eastern
+        return c
+    }()
+
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone.current
+        f.timeZone = eastern
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
