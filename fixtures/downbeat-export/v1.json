@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "exportedAt": "2026-01-01T00:00:00Z",
+  "clients": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "displayName": "Every Voice Choirs",
+      "shortName": "Every Voice",
+      "email": "a@b.org",
+      "contractEmail": "c@b.org",
+      "phoneNumber": null,
+      "isTaxExempt": false,
+      "hasLeftReview": true,
+      "specialBehaviors": [],
+      "notes": null,
+      "hostingSite": "pixieset"
+    }
+  ],
+  "venues": [
+    {
+      "id": "v1",
+      "name": "Merkin Hall",
+      "address": "129 W 67th St",
+      "editingProfile": "default",
+      "specialBehaviors": [],
+      "staffNotificationEmails": [],
+      "notes": null
+    }
+  ]
+}
