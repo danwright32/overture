@@ -45,7 +45,7 @@ Claude Code's own browser tools; nothing here is a standalone server.
 
 4. **Write the results file.** Emit the surviving, ranked prospects as
    `~/Library/Application Support/Overture/overture-results.json` (the format in
-   `scripts/export-results.ts` and `mac/.../Domain/ResultsFile.swift`). The Mac app
+   `scripts/scout/run-scout.ts` and `mac/.../Domain/ResultsFile.swift`). The Mac app
    ingests it, upserting by natural key so Dan's keep/dismiss decisions are preserved.
 
 ## Status
