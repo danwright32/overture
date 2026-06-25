@@ -25,6 +25,9 @@ struct AssembledProspect: Equatable, Sendable {
     var possibleMatchSource: String?
     var possibleMatchName: String?
     var confidence: String
+    var runEndDate: String? = nil
+    var partOfRelatedRun: Bool = false
+    var runSourceURLs: [String] = []
 }
 
 enum SkipReason: String, Equatable, Sendable { case blocked, suppressed, unreachable }

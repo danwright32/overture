@@ -90,6 +90,13 @@ final class Prospect {
     // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
     var bookingSuggestionDismissed: Bool = false
 
+    // Run-collapse fields (#132). The engine groups overlapping performances into a
+    // collapsed run and emits these on every member. Defaulted so existing records
+    // and older results files migrate cleanly without an explicit migration plan.
+    var runEndDate: String? = nil
+    var partOfRelatedRun: Bool = false
+    var runSourceURLs: [String] = []
+
     init(
         naturalKey: String,
         groupName: String,
@@ -110,7 +117,10 @@ final class Prospect {
         possibleMatchName: String?,
         status: ReviewStatus = .new,
         dismissReason: DismissReason? = nil,
-        ingestedAt: Date = Date()
+        ingestedAt: Date = Date(),
+        runEndDate: String? = nil,
+        partOfRelatedRun: Bool = false,
+        runSourceURLs: [String] = []
     ) {
         self.naturalKey = naturalKey
         self.groupName = groupName
@@ -132,6 +142,9 @@ final class Prospect {
         self.statusRaw = status.rawValue
         self.dismissReasonRaw = dismissReason?.rawValue
         self.ingestedAt = ingestedAt
+        self.runEndDate = runEndDate
+        self.partOfRelatedRun = partOfRelatedRun
+        self.runSourceURLs = runSourceURLs
     }
 
     var status: ReviewStatus {
