@@ -1,34 +1,59 @@
 import Foundation
 
-// Auto-marks outcome from the canonical booking record (#41). Downbeat's client list is
-// ground truth for who Dan has booked; when a prospect he actually contacted matches a
-// Downbeat client, record the booking automatically so it isn't manual data entry.
-//
-// Scoped to CONTACTED prospects so repeat clients we never pitched aren't falsely booked,
-// and manual outcomes are always left untouched. NOTE: the bridge currently exports only
-// the client list (no per-booking dates), so this is an org-level signal Dan can correct;
-// precise per-event booking detection waits on the bridge carrying booking dates.
+// Auto-marks outcome from the canonical booking record (#41, #99). Uses per-event
+// booking dates when available (exact match = auto-book), falls back to org-level
+// client-list match as a suggestion for Dan to confirm. All guards are in place:
+// health gate, manual-outcome sticky, monotonic (never reverts a booking), 1:1
+// booking-to-prospect via consumed-id set.
 enum DownbeatBooking {
     @discardableResult
-    static func reconcileBooked(prospects: [Prospect], clients: [DownbeatClient], now: Date) -> Int {
-        guard !clients.isEmpty else { return 0 }
+    static func reconcileBooked(
+        prospects: [Prospect],
+        clients: [DownbeatClient],
+        bookings: [OvertureBooking],
+        health: DownbeatBridge.Health,
+        now: Date
+    ) -> Int {
+        guard health == .ok else { return 0 }
         var count = 0
-        for p in prospects where p.wasContacted {
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue } // Dan's call is sticky
-            if p.outcome == .booked { continue }                                 // already recorded
-            // The org was already a booked client when Dan pitched this event, so a client-list
-            // match is the pre-existing relationship, not a conversion of this pitch. Leave it for
-            // Dan to mark by hand; auto-booking it would over-count the repeat-booking rate (#66).
-            if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
-            let matches = clients.contains { client in
-                GroupNameMatch.isConfident(client.displayName, p.groupName)
-                    || (client.shortName.map { GroupNameMatch.isConfident($0, p.groupName) } ?? false)
+        var consumed: Set<String> = []
+        // Deterministic order: sort by performanceDate then groupName so 1:1 booking
+        // consumption is stable across runs.
+        let sorted = prospects
+            .filter { $0.wasContacted }
+            .sorted {
+                let d0 = $0.performanceDate ?? ""
+                let d1 = $1.performanceDate ?? ""
+                if d0 != d1 { return d0 < d1 }
+                return $0.groupName < $1.groupName
             }
-            if matches {
-                p.outcome = .booked
-                p.outcomeSourceRaw = OutcomeSource.auto.rawValue
-                p.outcomeAt = now
-                count += 1
+        for p in sorted {
+            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
+            if p.outcome == .booked { continue }
+            if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
+            switch BookingMatch.classify(prospect: p, bookings: bookings) {
+            case .exact(let booking):
+                if !consumed.contains(booking.id) {
+                    p.outcome = .booked
+                    p.outcomeSourceRaw = OutcomeSource.auto.rawValue
+                    p.outcomeAt = now
+                    p.bookingSuggested = false
+                    consumed.insert(booking.id)
+                    count += 1
+                } else {
+                    // Tiebreak loser: suggest only if the prospect hasn't dismissed
+                    if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
+                }
+            case .possible:
+                // Soft signal: don't re-suggest if dismissed
+                if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
+            case .none:
+                // Fall back to old client-list org match — downgraded to suggestion
+                let orgMatch = clients.contains { client in
+                    GroupNameMatch.isConfident(client.displayName, p.groupName)
+                        || (client.shortName.map { GroupNameMatch.isConfident($0, p.groupName) } ?? false)
+                }
+                if orgMatch && !p.bookingSuggestionDismissed { p.bookingSuggested = true }
             }
         }
         return count

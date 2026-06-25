@@ -28,10 +28,30 @@ struct DownbeatVenue: Codable, Equatable, Sendable {
     var notes: String?
 }
 
+struct OvertureBooking: Codable, Equatable, Sendable {
+    var id: String
+    var clientId: String
+    var clientDisplayName: String
+    var shootName: String
+    var startDate: String
+    var endDate: String
+    var venueId: String?      // OMITTED for ad-hoc venues; match on venueName then
+    var venueName: String
+}
+
 struct DownbeatExport: Codable, Equatable, Sendable {
     var version: Int
     var clients: [DownbeatClient]
     var venues: [DownbeatVenue]
+    var bookings: [OvertureBooking]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        clients = try c.decode([DownbeatClient].self, forKey: .clients)
+        venues = try c.decode([DownbeatVenue].self, forKey: .venues)
+        bookings = try c.decodeIfPresent([OvertureBooking].self, forKey: .bookings) ?? []
+    }
 }
 
 enum DownbeatExportError: Error, Equatable {
@@ -39,11 +59,14 @@ enum DownbeatExportError: Error, Equatable {
 }
 
 enum DownbeatBridge {
-    static let supportedVersion = 1
+    // v1 = clients/venues; v2 adds bookings/blockedDates (downbeat#52). Swift Codable
+    // ignores keys this struct doesn't declare, so accepting v2 reads clients/venues
+    // without consuming the new keys yet (that's #99). Keep v1 working.
+    static let supportedVersions: Set<Int> = [1, 2]
 
     static func decode(_ data: Data) throws -> DownbeatExport {
         let export = try JSONDecoder().decode(DownbeatExport.self, from: data)
-        guard export.version == supportedVersion else {
+        guard supportedVersions.contains(export.version) else {
             throw DownbeatExportError.unsupportedVersion(export.version)
         }
         return export
@@ -99,14 +122,14 @@ enum DownbeatBridge {
     // bad export yields empty clients so the scout still runs, with the warning surfaced.
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
-        -> (clients: [DownbeatClient], health: Health) {
+        -> (clients: [DownbeatClient], bookings: [OvertureBooking], health: Health) {
         guard let data = try? Data(contentsOf: url) else {
-            return ([], .missing)
+            return ([], [], .missing)
         }
         let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         guard let export = try? decode(data) else {
-            return ([], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+            return ([], [], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
         }
-        return (export.clients, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+        return (export.clients, export.bookings, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
     }
 }

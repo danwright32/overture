@@ -15,6 +15,9 @@ struct ProspectRowView: View {
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onMarkConfidenceReviewed: () -> Void = {}
+    var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
+    var onConfirmBooking: () -> Void = {}
+    var onDismissBookingSuggestion: () -> Void = {}
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
@@ -27,7 +30,7 @@ struct ProspectRowView: View {
                 fitSeal
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
-                    if !item.fitReason.isEmpty {
+                    if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
                         Text(item.fitReason)
                             .font(OVType.reason)
                             .foregroundStyle(OVColor.inkSoft)
@@ -35,6 +38,8 @@ struct ProspectRowView: View {
                     }
                     tags
                     confidenceFlag
+                    bookingSuggestionFlag
+                    autoBookedTag
                     links
                 }
                 Spacer(minLength: OVSpacing.sm)
@@ -58,11 +63,15 @@ struct ProspectRowView: View {
         .padding(OVSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(OVColor.surface)
+                .fill(item.bookingSuggested ? OVColor.forest.opacity(0.12) : OVColor.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(item.isHighFit ? OVColor.gold.opacity(0.45) : OVColor.line, lineWidth: 1)
+                .strokeBorder(
+                    item.bookingSuggested ? OVColor.forest.opacity(0.9)
+                        : item.isHighFit ? OVColor.gold.opacity(0.45)
+                        : OVColor.line,
+                    lineWidth: item.bookingSuggested ? 2 : 1)
         )
     }
 
@@ -110,23 +119,69 @@ struct ProspectRowView: View {
         .padding(.top, 2)
     }
 
-    // A rules-guessed classification Dan hasn't reviewed: a tappable amber flag so he
-    // can double-check the type/fit, then clear it once it looks right (#32).
+    // A rules-guessed classification Dan hasn't reviewed: a menu so he can confirm it
+    // looks right or correct the discipline/production (#60). Clears automatically once
+    // he picks an action (confidenceReviewedByDan or classificationOverriddenByDan).
     @ViewBuilder private var confidenceFlag: some View {
         if item.isClassificationUncertain {
-            Button(action: onMarkConfidenceReviewed) {
+            Menu {
+                Button("This looks right") { onMarkConfidenceReviewed() }
+                Divider()
+                ForEach(Discipline.allCases, id: \.self) { discipline in
+                    Button(QueueModel.disciplineLabel(discipline.rawValue)) {
+                        onCorrectClassification(discipline, nil)
+                    }
+                }
+                Divider()
+                Button("Self-produced") { onCorrectClassification(nil, .selfProduced) }
+                Button("Agency/presented") { onCorrectClassification(nil, .agency) }
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "questionmark.diamond.fill")
-                    Text("Unsure call — tap if this looks right")
+                    Text("Unsure call — tap to confirm or fix")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.rust)
                 .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
                 .background(Capsule().fill(OVColor.rust.opacity(0.12)))
             }
-            .buttonStyle(.plain)
-            .help("The scout's rules weren't sure how to classify this one. Check the type and fit, then tap to clear the flag.")
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type.")
             .padding(.top, 2)
+        }
+    }
+
+    // A possible booking that needs Dan's explicit sign-off before it locks (#114).
+    // Gold tone — positive, not a warning — mirroring the confidenceFlag capsule idiom.
+    @ViewBuilder private var bookingSuggestionFlag: some View {
+        if item.bookingSuggested {
+            Menu {
+                Button("Confirm booking") { onConfirmBooking() }
+                Button("Not a booking") { onDismissBookingSuggestion() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Possible booking — confirm?")
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.gold)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.gold.opacity(0.12)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("A booking was detected that needs your confirmation. Tap to confirm or dismiss.")
+            .padding(.top, 2)
+        }
+    }
+
+    // A small neutral tag shown only when the booking was auto-detected, so Dan knows
+    // it wasn't manually marked (#114). Hidden for bookings Dan set himself.
+    @ViewBuilder private var autoBookedTag: some View {
+        if item.isAutoBooked {
+            FlowTags(tags: [Tag(text: "auto-detected", tone: .warn)])
+                .padding(.top, 2)
         }
     }
 

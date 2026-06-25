@@ -42,6 +42,39 @@ struct DownbeatExportHealthTests {
         #expect(DownbeatBridge.warningText(for: .stale(ageDays: 40))?.contains("40") == true)
     }
 
+    // The Downbeat side ships export version 2 (adds bookings/blockedDates). The reader
+    // must accept it and read clients/venues, ignoring keys it doesn't consume yet (#109);
+    // throwing would make the live export look unreadable and treat every prospect as cold.
+    @Test func acceptsVersion2AndIgnoresNewKeys() throws {
+        let json = #"{"version":2,"clients":[{"id":"c1","displayName":"A Choir","email":"a@x.org","contractEmail":"a@x.org","hasLeftReview":false,"specialBehaviors":[],"hostingSite":"x.org"}],"venues":[],"bookings":[{"id":"B1","clientId":"c1","clientDisplayName":"A Choir","shootName":"Gala","startDate":"2026-03-10","endDate":"2026-03-10","venueName":"Pop-up Loft"}],"blockedDates":["2026-03-10"]}"#
+        let export = try DownbeatBridge.decode(Data(json.utf8))
+        #expect(export.clients.count == 1)
+    }
+
+    // A version-2 file on disk reads as healthy with its clients, not unreadable.
+    @Test func loadWithHealthAcceptsVersion2() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("downbeat-export.json")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let json = #"{"version":2,"clients":[{"id":"c1","displayName":"A Choir","email":"a@x.org","contractEmail":"a@x.org","hasLeftReview":false,"specialBehaviors":[],"hostingSite":"x.org"}],"venues":[],"bookings":[],"blockedDates":[]}"#
+        try Data(json.utf8).write(to: url)
+        let loaded = DownbeatBridge.loadWithHealth(from: url, now: Date(), staleAfter: staleAfter)
+        #expect(loaded.clients.count == 1)
+        #expect(loaded.health == .ok)
+    }
+
+    @Test func decodesV2Bookings() throws {
+        let json = #"{"version":2,"clients":[],"venues":[],"bookings":[{"id":"B1","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Spring Gala","startDate":"2026-03-10","endDate":"2026-03-12","venueId":"V1","venueName":"Carnegie Hall"},{"id":"B2","clientId":"C1","clientDisplayName":"Every Voice Choirs","shootName":"Loft Set","startDate":"2026-04-02","endDate":"2026-04-02","venueName":"Pop-up Loft"}],"blockedDates":[]}"#
+        let export = try DownbeatBridge.decode(Data(json.utf8))
+        #expect(export.bookings.count == 2)
+        #expect(export.bookings[0].clientId == "C1")
+        #expect(export.bookings[0].endDate == "2026-03-12")
+        #expect(export.bookings[1].venueId == nil)        // ad-hoc venue: key omitted
+        #expect(export.bookings[1].venueName == "Pop-up Loft")
+    }
+
     // The IO wrapper: returns the clients it could read plus the health verdict.
     @Test func loadWithHealthReadsClientsAndFlagsState() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

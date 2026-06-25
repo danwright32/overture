@@ -247,13 +247,14 @@ struct RootView: View {
         }
     }
 
-    // Mark contacted prospects that have become Downbeat clients as booked (#41), so a
-    // booking made in Downbeat shows up without needing to run a scout first.
+    // Reconcile bookings on launch (#41/#99): auto-book on an exact Downbeat booking match,
+    // suggest otherwise, so a booking made in Downbeat shows up without running a scout first.
+    // Not gated on a non-empty client list — bookings are an independent array, so an export
+    // with bookings but no clients must still reconcile; reconcileBooked gates on export health.
     private func reconcileBookings() {
-        let clients = DownbeatBridge.loadWithHealth(now: Date()).clients
-        guard !clients.isEmpty else { return }
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        if DownbeatBooking.reconcileBooked(prospects: all, clients: clients, now: Date()) > 0 {
+        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             try? context.save()
         }
     }

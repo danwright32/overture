@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 @Suite("Group name matching")
@@ -106,6 +107,25 @@ struct HistoryMatchTests {
                        HistoryRecord(groupName: "Mixed Signals Ensemble", status: "lost_soft")]
         let v = HistoryMatch.matchRelationship(name: "Mixed Signals Ensemble", clients: [], history: history)
         #expect(v.relationship == .warm)
+    }
+}
+
+@Suite("Ingest persistence")
+@MainActor
+struct IngestPersistenceTests {
+    @Test func ingestPersistsDownbeatClientId() throws {
+        let context = try ModelContext(ModelContainer(for: Prospect.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)))
+        let client = DownbeatClient(id: "CID-1", displayName: "Every Voice Choirs",
+            shortName: nil, email: "a@x.org", contractEmail: "a@x.org",
+            phoneNumber: nil, isTaxExempt: nil, hasLeftReview: false,
+            specialBehaviors: [], notes: nil, hostingSite: "x.org")
+        let event = ExtractedEvent(title: "Every Voice Choirs", presenter: nil,
+            venue: "Merkin Hall", performanceDate: "2026-03-11", sourceUrl: "https://x")
+        _ = ScoutService.apply(events: [event], clients: [client], history: [],
+                               blocked: [], into: context)
+        let saved = try context.fetch(FetchDescriptor<Prospect>())
+        #expect(saved.first?.downbeatClientId == "CID-1")
     }
 }
 

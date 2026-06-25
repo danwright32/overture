@@ -15,6 +15,7 @@ struct QueueView: View {
 
     @State private var disciplineFilter: String?
     @State private var highOnly = false
+    @State private var showPendingBookingsOnly = false
     @State private var pendingConfirm: PendingConfirm?
     @State private var showReconnect = false
 
@@ -30,6 +31,7 @@ struct QueueView: View {
         items.filter { item in
             if let d = disciplineFilter, item.discipline != d { return false }
             if highOnly, !item.isHighFit { return false }
+            if showPendingBookingsOnly, !item.bookingSuggested { return false }
             return true
         }
     }
@@ -48,8 +50,21 @@ struct QueueView: View {
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
     // the editor type-checks it quickly (#56); the real compiler was always fine.
     var body: some View {
-        queueScroll
+        let pendingBookings = QueueModel.pendingBookingCount(items)
+        return queueScroll
             .background(OVColor.canvas)
+            .toolbar {
+                if pendingBookings > 0 {
+                    ToolbarItem(placement: .secondaryAction) {
+                        Button {
+                            showPendingBookingsOnly.toggle()
+                        } label: {
+                            Label("Confirm bookings (\(pendingBookings))", systemImage: "checkmark.seal")
+                        }
+                        .help("Prospects where Downbeat detected a booking — confirm or dismiss each one")
+                    }
+                }
+            }
             .alert("Send this email now?",
                    isPresented: Binding(get: { pendingConfirm != nil },
                                         set: { if !$0 { pendingConfirm = nil } }),
@@ -95,6 +110,7 @@ struct QueueView: View {
     private var masthead: some View {
         let summary = QueueModel.summary(filtered)
         let priority = QueuePriorityBreakdown.summarize(filtered)
+        let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
                 Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
@@ -110,6 +126,11 @@ struct QueueView: View {
                 Text("/").foregroundStyle(OVColor.lineStrong)
                 Text("\(summary.high)").fontWeight(.semibold).foregroundStyle(OVColor.gold)
                 Text("high-fit").foregroundStyle(OVColor.inkFaint)
+                if pendingBookings > 0 {
+                    Text("/").foregroundStyle(OVColor.lineStrong)
+                    Text("\(pendingBookings)").fontWeight(.semibold).foregroundStyle(OVColor.forest)
+                    Text("to confirm").foregroundStyle(OVColor.inkFaint)
+                }
             }
             .font(.system(size: 12))
             // #92: shows whether high-fit is mostly warm orgs (relationship) or genuinely strong
@@ -221,6 +242,9 @@ struct QueueView: View {
                     onSetLostReason: { reason in setLostReason(item, reason) },
                     onSend: { requestSend(item) },
                     onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
+                    onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
+                    onConfirmBooking: { confirmBooking(item) },
+                    onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -268,11 +292,36 @@ struct QueueView: View {
         try? context.save()
     }
 
+    // Dan corrected a wrong classification. Calls ClassificationOverride.correct which
+    // re-scores the prospect in place; the row's fit-reason line then hides (#60).
+    private func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
+        try? context.save()
+    }
+
     private func setOutcome(_ item: QueueItem, _ outcome: Outcome) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.outcome = outcome
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
+        model.bookingSuggested = false
+        try? context.save()
+    }
+
+    private func confirmBooking(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.outcome = .booked
+        model.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        model.outcomeAt = Date()
+        model.bookingSuggested = false
+        try? context.save()
+    }
+
+    private func dismissBookingSuggestion(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.bookingSuggested = false
+        model.bookingSuggestionDismissed = true
         try? context.save()
     }
 

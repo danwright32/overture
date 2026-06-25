@@ -21,6 +21,7 @@ struct AssembledProspect: Equatable, Sendable {
     var tier: String
     var fitReason: String
     var matchedClientName: String?
+    var downbeatClientId: String?
     var possibleMatchSource: String?
     var possibleMatchName: String?
     var confidence: String
@@ -77,6 +78,7 @@ enum ProspectAssembler {
             tier: fit.tier.rawValue,
             fitReason: c.fitReason,
             matchedClientName: verdict.matchedClientName,
+            downbeatClientId: verdict.downbeatClientId,
             possibleMatchSource: verdict.possible?.source,
             possibleMatchName: verdict.possible?.name,
             confidence: c.confidence.rawValue

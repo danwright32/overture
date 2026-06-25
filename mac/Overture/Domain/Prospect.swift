@@ -40,6 +40,9 @@ final class Prospect {
     // records and the scout's inserts are unaffected.
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
+    // Dan-owned: once he corrects the discipline/production, the scout must not revert
+    // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.
+    var classificationOverriddenByDan: Bool = false
 
     // Filled by the Prep run (Trigger 2). Defaulted so the scout's inserts are unaffected.
     var contactName: String? = nil
@@ -72,6 +75,20 @@ final class Prospect {
     // Follow-up sequencer state (#45). Defaulted so existing records migrate cleanly.
     var followUpCount: Int = 0
     var lastFollowUpAt: Date? = nil
+
+    // Downbeat client id from the relationship match, used for per-event booking
+    // detection (#99). Defaulted so existing records migrate cleanly.
+    var downbeatClientId: String? = nil
+
+    // Set when a booking match is possible but not conclusive enough to auto-book.
+    // Defaulted so existing records migrate cleanly.
+    var bookingSuggested: Bool = false
+
+    // Set when Dan explicitly dismisses a booking suggestion ("Not a booking").
+    // Once set, reconcileBooked suppresses soft re-suggestions (possible/client-list/
+    // tiebreak), but an exact Downbeat booking STILL auto-books — dismissal silences
+    // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
+    var bookingSuggestionDismissed: Bool = false
 
     init(
         naturalKey: String,

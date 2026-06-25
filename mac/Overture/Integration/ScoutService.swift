@@ -41,7 +41,7 @@ enum ScoutService {
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, now: Date()) > 0 {
+        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             try? context.save()
         }
         // Record that a scout completed, so the masthead can show freshness (#35).
@@ -118,28 +118,40 @@ enum ScoutService {
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName)
         prospect.classificationConfidence = p.confidence
+        prospect.downbeatClientId = p.downbeatClientId
         return prospect
     }
 
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
     private static func apply(_ p: AssembledProspect, to existing: Prospect) {
         existing.groupName = p.groupName
-        existing.discipline = p.discipline
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL
         existing.priorRelationship = p.priorRelationship
-        existing.production = p.production
         existing.profile = p.profile
         existing.coverage = p.coverage
-        existing.fitScore = p.fitScore
-        existing.tier = p.tier
         existing.fitReason = p.fitReason
         existing.matchedClientName = p.matchedClientName
+        existing.downbeatClientId = p.downbeatClientId
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
         // NOTE: never touch confidenceReviewedByDan here — Dan owns that acknowledgement.
+        // NOTE: never touch classificationOverriddenByDan here — Dan owns that flag.
+        if existing.classificationOverriddenByDan {
+            // Dan corrected the classification: keep his discipline/production values and
+            // re-score from them (plus the freshly-updated profile/coverage/priorRelationship)
+            // so fit stays meaningful without reverting his correction.
+            let refit = ClassificationOverride.rescored(existing, discipline: nil, production: nil)
+            existing.fitScore = refit.score
+            existing.tier = refit.tier.rawValue
+        } else {
+            existing.discipline = p.discipline
+            existing.production = p.production
+            existing.fitScore = p.fitScore
+            existing.tier = p.tier
+        }
         existing.ingestedAt = Date()
     }
 

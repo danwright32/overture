@@ -16,7 +16,7 @@ enum PriorRelationship: String, Sendable {
     case lostHard = "lost_hard"
     case none
 }
-enum Discipline: String, Sendable {
+enum Discipline: String, Sendable, CaseIterable {
     case dance, opera, theater, choral, music, band, comedy, other
 }
 enum Tier: String, Sendable { case high, longshot }
