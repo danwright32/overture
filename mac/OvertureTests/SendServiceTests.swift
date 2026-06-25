@@ -6,7 +6,7 @@ import SwiftData
 private struct FakeSender: MailSender {
     var receipt = SentReceipt(threadId: "t-123", messageID: "<mid-1@x.org>")
     var error: Error? = nil
-    func send(_ mail: OutgoingMail) throws -> SentReceipt {
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
         if let error { throw error }
         return receipt
     }
@@ -15,14 +15,14 @@ private struct FakeSender: MailSender {
 // Records the last mail it was handed, so a test can assert how a follow-up was addressed (#74).
 private final class CapturingSender: MailSender, @unchecked Sendable {
     var last: OutgoingMail?
-    func send(_ mail: OutgoingMail) throws -> SentReceipt {
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
         last = mail
         return SentReceipt(threadId: "t", messageID: "<m>")
     }
 }
 
 private struct AlwaysFailSender: MailSender {
-    func send(_ mail: OutgoingMail) throws -> SentReceipt { throw MailSenderError.notConfigured }
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt { throw MailSenderError.notConfigured }
 }
 
 @MainActor
@@ -47,7 +47,7 @@ struct SendServiceTests {
         try? ctx.save()
     }
 
-    @Test func pendingExcludesUnsendable() throws {
+    @Test func pendingExcludesUnsendable() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
         approved(ctx, group: "No Email", email: nil, ingested: Date(timeIntervalSince1970: 2))
@@ -55,7 +55,7 @@ struct SendServiceTests {
         #expect(SendService.pending(in: ctx).map(\.groupName) == ["Ready"])
     }
 
-    @Test func sendingSnapshotsTheRelationshipAtContact() throws {
+    @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
         // match can tell a genuine new booking from a pre-existing client.
         let ctx = ModelContext(try container())
@@ -67,17 +67,17 @@ struct SendServiceTests {
         p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
         ctx.insert(p)
 
-        let sent = SendService.sendOne(p, now: Date(), sender: FakeSender())
+        let sent = await SendService.sendOne(p, now: Date(), sender: FakeSender())
         #expect(sent)
         #expect(p.priorRelationshipAtSend == "booked")
     }
 
-    @Test func sendsOneAndRecordsReceipt() throws {
+    @Test func sendsOneAndRecordsReceipt() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
         let now = Date(timeIntervalSince1970: 2_000_000)
 
-        let outcome = SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
+        let outcome = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
         #expect(outcome.sent == 1)
 
         let p = SendService.pending(in: ctx).first
@@ -87,34 +87,34 @@ struct SendServiceTests {
         #expect(all.first?.gmailThreadId == "t-123")
     }
 
-    @Test func dripsOneAtATimeAndThrottlesTheRest() throws {
+    @Test func dripsOneAtATimeAndThrottlesTheRest() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
         approved(ctx, group: "B", ingested: Date(timeIntervalSince1970: 2))
         let now = Date(timeIntervalSince1970: 2_000_000)
 
-        let first = SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
+        let first = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
         #expect(first.sent == 1)
         #expect(first.throttled == true) // B still waiting
 
         // Immediately after, the min-gap holds B back.
-        let second = SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(10), sender: FakeSender())
+        let second = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(10), sender: FakeSender())
         #expect(second.sent == 0)
         #expect(second.throttled == true)
 
         // After the gap, B sends.
-        let third = SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(200), sender: FakeSender())
+        let third = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(200), sender: FakeSender())
         #expect(third.sent == 1)
     }
 
-    @Test func sendOneSendsThatSpecificProspectImmediately() throws {
+    @Test func sendOneSendsThatSpecificProspectImmediately() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
         approved(ctx, group: "B", ingested: Date(timeIntervalSince1970: 2))
         let b = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.groupName == "B" }!
         let now = Date(timeIntervalSince1970: 2_000_000)
 
-        #expect(SendService.sendOne(b, now: now, sender: FakeSender()) == true)
+        #expect(await SendService.sendOne(b, now: now, sender: FakeSender()) == true)
         #expect(b.sentAt == now)
         #expect(b.gmailThreadId == "t-123")
         // A is untouched (manual send targets exactly one).
@@ -122,63 +122,63 @@ struct SendServiceTests {
         #expect(a.sentAt == nil)
     }
 
-    @Test func sendFollowUpRecordsTheNudgeAndCapsAtTheMax() throws {
+    @Test func sendFollowUpRecordsTheNudgeAndCapsAtTheMax() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
         let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         a.sentAt = Date(timeIntervalSince1970: 100)   // already sent
         let now = Date(timeIntervalSince1970: 2_000_000)
 
-        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
+        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
         #expect(a.followUpCount == 1)
         #expect(a.lastFollowUpAt == now)
         #expect(a.sentAt == Date(timeIntervalSince1970: 100))   // original send untouched
 
-        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
+        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
         #expect(a.followUpCount == 2)
         // Capped at 2: a third nudge is refused.
-        #expect(SendService.sendFollowUp(a, now: now, sender: FakeSender()) == false)
+        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == false)
         #expect(a.followUpCount == 2)
     }
 
-    @Test func sendFollowUpStopsOnceReplied() throws {
+    @Test func sendFollowUpStopsOnceReplied() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
         let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         a.sentAt = Date(); a.outcome = .replied
-        #expect(SendService.sendFollowUp(a, now: Date(), sender: FakeSender()) == false)
+        #expect(await SendService.sendFollowUp(a, now: Date(), sender: FakeSender()) == false)
         #expect(a.followUpCount == 0)
     }
 
-    @Test func sendOneRecordsErrorOnFailure() throws {
+    @Test func sendOneRecordsErrorOnFailure() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
         let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
-        #expect(SendService.sendOne(a, now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(await SendService.sendOne(a, now: Date(), sender: AlwaysFailSender()) == false)
         #expect(a.sentAt == nil)
         #expect(a.sendError != nil)
     }
 
-    @Test func recordsSendErrorAndKeepsItPending() throws {
+    @Test func recordsSendErrorAndKeepsItPending() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        let outcome = SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: AlwaysFailSender())
+        let outcome = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: AlwaysFailSender())
         #expect(outcome.failed == 1)
         let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
         #expect(p?.sentAt == nil)            // not marked sent
         #expect(p?.sendError != nil)         // failure recorded for retry
     }
 
-    @Test func firstSendStoresTheMessageIDForThreading() throws {
+    @Test func firstSendStoresTheMessageIDForThreading() async throws {
         // #74: the first send's Message-ID is kept so a later follow-up can reply to it.
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        _ = SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: FakeSender())
+        _ = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: FakeSender())
         let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
         #expect(p?.gmailMessageId == "<mid-1@x.org>")
     }
 
-    @Test func followUpRepliesOnTheOriginalThread() throws {
+    @Test func followUpRepliesOnTheOriginalThread() async throws {
         // #74: the nudge goes out In-Reply-To the original Message-ID, on the same thread, as a Re:.
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
@@ -187,7 +187,7 @@ struct SendServiceTests {
         a.draftSubject = "Photographs for A"
 
         let sender = CapturingSender()
-        #expect(SendService.sendFollowUp(a, now: Date(), sender: sender) == true)
+        #expect(await SendService.sendFollowUp(a, now: Date(), sender: sender) == true)
         #expect(sender.last?.threadId == "th-9")
         #expect(sender.last?.inReplyTo == "<orig@x.org>")
         #expect(sender.last?.subject == "Re: Photographs for A")

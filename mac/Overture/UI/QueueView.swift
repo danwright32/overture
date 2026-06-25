@@ -360,12 +360,16 @@ struct QueueView: View {
         pendingConfirm = nil
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
-        let sent = SendService.sendOne(model, now: Date(), sender: sender)
-        try? context.save()
-        // If the send failed because the token was revoked/expired, sendOne cleared it;
-        // surface a clear reconnect prompt rather than a silent per-row error (#50).
-        if !sent && !GmailAuthManager.shared.isConnected {
-            showReconnect = true
+        // Await the send off the synchronous button action so the main thread is never
+        // blocked waiting on the Gmail token work (the old blocking bridge deadlocked here).
+        Task {
+            let sent = await SendService.sendOne(model, now: Date(), sender: sender)
+            try? context.save()
+            // If the send failed because the token was revoked/expired, sendOne cleared it;
+            // surface a clear reconnect prompt rather than a silent per-row error (#50).
+            if !sent && !GmailAuthManager.shared.isConnected {
+                showReconnect = true
+            }
         }
     }
 }

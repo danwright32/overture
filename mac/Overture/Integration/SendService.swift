@@ -27,12 +27,12 @@ enum SendService {
     // manual per-draft "Send" Dan clicks (one click = one email); manual approval is
     // its own pacing, so no drip needed. Records the receipt or the error for retry.
     @discardableResult
-    static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) -> Bool {
+    static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
         guard prospect.status == .approved, prospect.sentAt == nil,
               let email = prospect.contactEmail, let body = prospect.draftBody else { return false }
         let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "", body: body)
         do {
-            let receipt = try sender.send(mail)
+            let receipt = try await sender.send(mail)
             prospect.sentAt = now
             prospect.gmailThreadId = receipt.threadId
             prospect.gmailMessageId = receipt.messageID
@@ -51,7 +51,7 @@ enum SendService {
     // the original outcome; one click = one nudge, never autonomous.
     @discardableResult
     static func sendFollowUp(_ prospect: Prospect, now: Date, sender: MailSender,
-                             config: FollowUpConfig = .init()) -> Bool {
+                             config: FollowUpConfig = .init()) async -> Bool {
         guard let email = prospect.contactEmail, prospect.sentAt != nil,
               prospect.outcome == .noResponse, prospect.followUpCount < config.maxFollowUps else { return false }
         // Reply on the original conversation (#74): same threadId, In-Reply-To the first send's
@@ -65,7 +65,7 @@ enum SendService {
             inReplyTo: prospect.gmailMessageId,
             threadId: prospect.gmailThreadId)
         do {
-            _ = try sender.send(mail)
+            _ = try await sender.send(mail)
             prospect.followUpCount += 1
             prospect.lastFollowUpAt = now
             prospect.sendError = nil
@@ -84,7 +84,7 @@ enum SendService {
     // Sends the next due email if the throttle allows. At most one per call.
     @discardableResult
     static func releaseDueSends(in context: ModelContext, now: Date, sender: MailSender,
-                                config: SendThrottleConfig = .default) -> Outcome {
+                                config: SendThrottleConfig = .default) async -> Outcome {
         let queue = pending(in: context)
         guard let next = queue.first else { return Outcome(sent: 0, failed: 0, throttled: false) }
 
@@ -99,7 +99,7 @@ enum SendService {
             body: next.draftBody ?? ""
         )
         do {
-            let receipt = try sender.send(mail)
+            let receipt = try await sender.send(mail)
             next.sentAt = now
             next.gmailThreadId = receipt.threadId
             next.gmailMessageId = receipt.messageID

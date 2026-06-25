@@ -22,7 +22,7 @@ struct SentReceipt: Equatable, Sendable {
 }
 
 protocol MailSender: Sendable {
-    func send(_ mail: OutgoingMail) throws -> SentReceipt
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt
 }
 
 enum MailSenderError: LocalizedError {
@@ -38,7 +38,7 @@ enum MailSenderError: LocalizedError {
 
 // Default until Gmail is authorized: refuses to send, so nothing leaves by accident.
 struct NotConfiguredSender: MailSender {
-    func send(_ mail: OutgoingMail) throws -> SentReceipt {
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
         throw MailSenderError.notConfigured
     }
 }
