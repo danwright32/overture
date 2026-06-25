@@ -2,20 +2,19 @@ import Foundation
 
 // The live MailSender: sends an approved draft through the Gmail API as Dan's
 // photography account. Called only from Dan's explicit Send action (never
-// autonomously). Synchronous-throwing to satisfy the MailSender protocol; it drives
-// the async token + send on a blocking bridge since each send is a single user-paced
-// action, not a hot path.
+// autonomously). Fully async: it awaits the access token then the send, so a caller on
+// the main actor (the Send button) never blocks the main thread. An earlier
+// synchronous semaphore bridge deadlocked here — the blocked main thread could not
+// service the @MainActor token work it was waiting on.
 
 struct GmailSender: MailSender {
     var fromName: String = "Dan Wright"
     var fromEmail: String
 
-    func send(_ mail: OutgoingMail) throws -> SentReceipt {
-        try runBlocking {
-            let token = try await GmailAuthManager.shared.validAccessToken()
-            return try await GmailSender.performSend(
-                mail: mail, fromName: fromName, fromEmail: fromEmail, token: token)
-        }
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        let token = try await GmailAuthManager.shared.validAccessToken()
+        return try await GmailSender.performSend(
+            mail: mail, fromName: fromName, fromEmail: fromEmail, token: token)
     }
 
     // The testable core: encode the message, POST it, and interpret the response (success,
@@ -79,21 +78,3 @@ enum GmailSendError: LocalizedError {
     }
 }
 
-// Bridges one async send into the synchronous MailSender call. Acceptable because a
-// send is a discrete, user-initiated action (one click = one email), not a loop.
-private func runBlocking<T: Sendable>(_ work: @escaping @Sendable () async throws -> T) throws -> T {
-    let sem = DispatchSemaphore(value: 0)
-    let box = ResultBox<T>()
-    Task {
-        do { box.value = .success(try await work()) }
-        catch { box.value = .failure(error) }
-        sem.signal()
-    }
-    sem.wait()
-    switch box.value! {
-    case .success(let v): return v
-    case .failure(let e): throw e
-    }
-}
-
-private final class ResultBox<T>: @unchecked Sendable { var value: Result<T, Error>? }

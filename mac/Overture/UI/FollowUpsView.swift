@@ -88,7 +88,11 @@ struct FollowUpsView: View {
     private func performNudge(_ naturalKey: String) {
         pending = nil
         guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
-        _ = SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
-        try? context.save()
+        // Await off the synchronous button action so the main thread never blocks on the
+        // Gmail token work (the old blocking send bridge deadlocked here).
+        Task {
+            _ = await SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            try? context.save()
+        }
     }
 }
