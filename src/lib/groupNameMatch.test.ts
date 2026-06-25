@@ -16,7 +16,28 @@ describe("normalizeGroupName", () => {
   });
 });
 
+describe("normalizeGroupName program subtitle", () => {
+  it("strips a 'presenter - program' subtitle after a separator, keeping the presenter", () => {
+    expect(normalizeGroupName("Every Voice Choirs - Earth Day Jazz")).toBe("every voice choirs");
+    expect(normalizeGroupName("Every Voice Choirs — Earth Day Jazz")).toBe("every voice choirs");
+    expect(normalizeGroupName("Every Voice Choirs: Spring Concert")).toBe("every voice choirs");
+  });
+  it("does not strip when the presenter part is a single generic word", () => {
+    expect(normalizeGroupName("Jazz - Spring Gala")).toBe("jazz spring gala");
+  });
+  it("leaves names without a separator untouched", () => {
+    expect(normalizeGroupName("New York Theatre Ballet")).toBe("new york theatre ballet");
+  });
+});
+
 describe("isConfidentMatch", () => {
+  it("matches a booking-sheet 'presenter - program' against the calendar's shorter presenter (#105)", () => {
+    expect(isConfidentMatch("Every Voice Choirs - Earth Day Jazz", "Every Voice Choirs")).toBe(true);
+    expect(isConfidentMatch("Every Voice Choirs: Earth Day Jazz", "Every Voice Choirs")).toBe(true);
+  });
+  it("does not confidently match two programs sharing only a generic one-word prefix", () => {
+    expect(isConfidentMatch("Jazz - Spring Gala", "Jazz - Winter Gala")).toBe(false);
+  });
   it("matches identical normalized names", () => {
     expect(isConfidentMatch("Every Voice Choirs", "every voice choirs")).toBe(
       true,

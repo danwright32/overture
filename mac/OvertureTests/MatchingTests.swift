@@ -25,6 +25,26 @@ struct GroupNameMatchTests {
         #expect(GroupNameMatch.isConfident("New York", "New York Theatre Ballet") == false)
     }
 
+    // #105: booking-sheet names are "Presenter - Program"; the venue lists just the presenter.
+    @Test func stripsProgramSubtitleAfterSeparator() {
+        #expect(GroupNameMatch.normalize("Every Voice Choirs - Earth Day Jazz") == "every voice choirs")
+        #expect(GroupNameMatch.normalize("Every Voice Choirs — Earth Day Jazz") == "every voice choirs")
+        #expect(GroupNameMatch.normalize("Every Voice Choirs: Spring Concert") == "every voice choirs")
+    }
+
+    @Test func doesNotStripSingleWordGenericPrefix() {
+        #expect(GroupNameMatch.normalize("Jazz - Spring Gala") == "jazz spring gala")
+    }
+
+    @Test func bookingProgramMatchesShorterCalendarPresenter() {
+        #expect(GroupNameMatch.isConfident("Every Voice Choirs - Earth Day Jazz", "Every Voice Choirs") == true)
+        #expect(GroupNameMatch.isConfident("Every Voice Choirs: Earth Day Jazz", "Every Voice Choirs") == true)
+    }
+
+    @Test func twoProgramsSharingOneWordPrefixDoNotConfidentlyMatch() {
+        #expect(GroupNameMatch.isConfident("Jazz - Spring Gala", "Jazz - Winter Gala") == false)
+    }
+
     @Test func sharedTokensMakeAPossibleMatch() {
         #expect(GroupNameMatch.isPossible("Manhattan Chamber Players", "Manhattan Chamber Orchestra") == true)
         #expect(GroupNameMatch.isPossible("Brooklyn Youth Chorus", "Vienna Boys Choir") == false)
