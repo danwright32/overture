@@ -92,6 +92,17 @@ struct BookingMatchTests {
         }
     }
 
+    @Test func dayStringUsesEasternNotUTC() {
+        // 2026-07-01 23:30 America/New_York (EDT, UTC-4) is 2026-07-02 03:30 UTC. The send-day
+        // must be the Eastern day (Dan's timezone, the zone Downbeat authors its dates in), so a
+        // pitch sent late evening ET does not slip onto the next UTC day and shift the causation
+        // cutoff (#116).
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let lateEveningET = utc.date(from: DateComponents(year: 2026, month: 7, day: 2, hour: 3, minute: 30))!
+        #expect(BookingMatch.dayString(from: lateEveningET) == "2026-07-01")
+    }
+
     @Test func bookingOutsideRunRangeDoesNotMatch() {
         // Run spans 2026-03-10 to 2026-03-12; booking is entirely after the run
         let p = prospect(date: "2026-03-10")
