@@ -62,11 +62,12 @@ enum ResultsFileError: Error, Equatable {
 }
 
 enum ResultsFileDecoder {
-    static let supportedVersion = 1
+    static let supportedVersion = 2
+    private static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> ResultsFile {
         let file = try JSONDecoder().decode(ResultsFile.self, from: data)
-        guard file.version == supportedVersion else {
+        guard (minimumVersion...supportedVersion).contains(file.version) else {
             throw ResultsFileError.unsupportedVersion(file.version)
         }
         return file
