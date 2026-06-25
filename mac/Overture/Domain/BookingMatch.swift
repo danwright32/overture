@@ -1,14 +1,15 @@
 import Foundation
 
 enum BookingMatchResult: Equatable {
-    case exact, possible, none
+    case exact(OvertureBooking)
+    case possible
+    case none
 }
 
 enum BookingMatch {
     static func classify(
         prospect: Prospect,
-        bookings: [OvertureBooking],
-        clientDisplayNames: [String: String]
+        bookings: [OvertureBooking]
     ) -> BookingMatchResult {
         guard let perfDate = prospect.performanceDate else { return .none }
         guard let sentAt = prospect.sentAt else { return .none }
@@ -17,7 +18,7 @@ enum BookingMatch {
 
         var best: BookingMatchResult = .none
         for booking in bookings {
-            guard orgMatches(booking: booking, prospect: prospect, clientDisplayNames: clientDisplayNames) else {
+            guard orgMatches(booking: booking, prospect: prospect) else {
                 continue
             }
             guard perfDate >= booking.startDate && perfDate <= booking.endDate else {
@@ -25,7 +26,7 @@ enum BookingMatch {
             }
             let causallyValid = booking.startDate >= sendDay
             if causallyValid {
-                return .exact
+                return .exact(booking)
             } else {
                 best = .possible
             }
@@ -35,8 +36,7 @@ enum BookingMatch {
 
     private static func orgMatches(
         booking: OvertureBooking,
-        prospect: Prospect,
-        clientDisplayNames: [String: String]
+        prospect: Prospect
     ) -> Bool {
         if let clientId = prospect.downbeatClientId {
             return booking.clientId == clientId
