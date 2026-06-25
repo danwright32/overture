@@ -17,6 +17,15 @@ struct ScoutOutcomeWarningTests {
         #expect(outcome(found: 0).warning?.isEmpty == false)
     }
 
+    // The empty-result warning must read as "nothing matched", distinct from a feed
+    // connection failure (which is the thrown-error path, ScoutFailure). #126.
+    @Test func zeroEventsWarnsAboutEmptyResultNotConnection() {
+        let w = outcome(found: 0).warning ?? ""
+        #expect(w.localizedCaseInsensitiveContains("no"))
+        #expect(!w.localizedCaseInsensitiveContains("connection"))
+        #expect(!w.localizedCaseInsensitiveContains("unavailable"))
+    }
+
     @Test func zeroEventsTakesPrecedenceOverClientListWarning() {
         let w = outcome(found: 0, clientListWarning: "stale clients").warning
         #expect(w != "stale clients")
