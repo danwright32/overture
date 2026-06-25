@@ -142,12 +142,11 @@ async function main() {
   );
   prospects.length = 0;
   for (const r of runs as Array<Record<string, unknown>>) {
-    prospects.push({
-      ...r,
-      runEndDate: r.runEndDate,
-      partOfRelatedRun: r.partOfRelatedRun,
-      runSourceUrls: r.runSourceURLs,
-    });
+    // Drop the function's internal `runSourceURLs` (capital) and emit only the lowercase
+    // `runSourceUrls` the results contract / Swift reader expect, so the JSON carries no
+    // stray duplicate key. runEndDate/partOfRelatedRun keep their names.
+    const { runSourceURLs, ...rest } = r;
+    prospects.push({ ...rest, runSourceUrls: runSourceURLs });
   }
 
   prospects.sort((a, b) => {
