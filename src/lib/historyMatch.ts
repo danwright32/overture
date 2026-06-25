@@ -4,8 +4,12 @@
 // match becomes a "possible" flag for Dan to confirm, never scored.
 
 import type { DownbeatClient } from "./downbeatBridge";
-import type { HistoryRecord } from "./bookingImport";
 import { isConfidentMatch, isPossibleMatch } from "./groupNameMatch";
+
+// The two fields the matcher actually reads from a history row. Both the full
+// imported `HistoryRecord` and the app's local history file satisfy this, so the
+// matcher stays decoupled from where history comes from.
+export type HistoryMatch = { group_name: string; status: string | null };
 
 export type PossibleMatch = {
   source: "downbeat_client" | "history";
@@ -36,7 +40,7 @@ function isDnc(status: string | null): boolean {
 export function matchRelationship(
   name: string,
   clients: DownbeatClient[],
-  history: HistoryRecord[],
+  history: HistoryMatch[],
 ): MatchVerdict {
   const confidentHistory = history.filter((h) =>
     isConfidentMatch(name, h.group_name),
