@@ -132,7 +132,9 @@ extension QueueItem {
             lostReason: p.lostReason,
             classificationConfidence: p.classificationConfidence,
             confidenceReviewedByDan: p.confidenceReviewedByDan,
-            classificationOverriddenByDan: p.classificationOverriddenByDan
+            classificationOverriddenByDan: p.classificationOverriddenByDan,
+            bookingSuggested: p.bookingSuggested,
+            outcomeSourceRaw: p.outcomeSourceRaw
         )
     }
 }

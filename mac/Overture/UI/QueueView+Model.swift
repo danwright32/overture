@@ -42,10 +42,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
     var classificationOverriddenByDan: Bool = false
+    var bookingSuggested: Bool = false
+    var outcomeSourceRaw: String? = nil
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
         classificationConfidence == Confidence.uncertain.rawValue && !confidenceReviewedByDan
+    }
+
+    // True when Downbeat or Gmail auto-detected a booking (#114); Dan must confirm before it locks.
+    var isAutoBooked: Bool {
+        outcome == .booked && outcomeSourceRaw == OutcomeSource.auto.rawValue
     }
 
     var isSent: Bool { sentAt != nil }
@@ -187,6 +194,10 @@ enum QueueModel {
 
     static func summary(_ items: [QueueItem]) -> (total: Int, high: Int) {
         (items.count, items.filter { $0.tier == "high" }.count)
+    }
+
+    static func pendingBookingCount(_ items: [QueueItem]) -> Int {
+        items.filter(\.bookingSuggested).count
     }
 
     // MARK: - Date helpers
