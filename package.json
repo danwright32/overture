@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Overture scout engine: discovers and ranks performances, writes the results handoff the native macOS app ingests.",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
