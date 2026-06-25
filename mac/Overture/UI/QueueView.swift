@@ -36,16 +36,16 @@ struct QueueView: View {
         }
     }
 
+    // What the queue actually shows: the filtered set windowed to the bookable date range
+    // (past hidden, beyond-horizon hidden) with too-close events demoted to the bottom,
+    // computed live against today so it stays correct between scout runs.
+    private var visible: [QueueItem] { QueueModel.queueOrder(filtered, today: today) }
+
     private var disciplines: [String] {
         Array(Set(items.map(\.discipline))).sorted()
     }
 
-    private var today: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: Date())
-    }
+    private var today: String { QueueModel.easternToday() }
 
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
     // the editor type-checks it quickly (#56); the real compiler was always fine.
@@ -90,7 +90,7 @@ struct QueueView: View {
                     activeDiscipline: $disciplineFilter,
                     highOnly: $highOnly
                 )
-                let groups = QueueModel.groupByDate(filtered)
+                let groups = QueueModel.groupByDate(visible)
                 if groups.isEmpty {
                     emptyState
                 } else {
@@ -108,8 +108,8 @@ struct QueueView: View {
 
 
     private var masthead: some View {
-        let summary = QueueModel.summary(filtered)
-        let priority = QueuePriorityBreakdown.summarize(filtered)
+        let summary = QueueModel.summary(visible)
+        let priority = QueuePriorityBreakdown.summarize(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
