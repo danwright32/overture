@@ -49,36 +49,50 @@ struct QueueView: View {
 
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
     // the editor type-checks it quickly (#56); the real compiler was always fine.
+    // Kept deliberately small: the toolbar, alerts, and their bindings are extracted so no
+    // single expression sits near the SwiftUI type-checker's complexity threshold (#122).
     var body: some View {
-        let pendingBookings = QueueModel.pendingBookingCount(items)
-        return queueScroll
-            .background(OVColor.canvas)
-            .toolbar {
-                if pendingBookings > 0 {
-                    ToolbarItem(placement: .secondaryAction) {
-                        Button {
-                            showPendingBookingsOnly.toggle()
-                        } label: {
-                            Label("Confirm bookings (\(pendingBookings))", systemImage: "checkmark.seal")
-                        }
-                        .help("Prospects where Downbeat detected a booking — confirm or dismiss each one")
-                    }
-                }
-            }
-            .alert("Send this email now?",
-                   isPresented: Binding(get: { pendingConfirm != nil },
-                                        set: { if !$0 { pendingConfirm = nil } }),
-                   presenting: pendingConfirm) { pending in
+        mainContent
+            .alert("Send this email now?", isPresented: sendConfirmBinding, presenting: pendingConfirm) { pending in
                 Button("Send") { performSend(pending.id) }
                 Button("Cancel", role: .cancel) { pendingConfirm = nil }
             } message: { pending in
-                Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
+                Text(sendConfirmMessage(pending))
             }
             .alert("Reconnect Gmail", isPresented: $showReconnect) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
             }
+    }
+
+    private var mainContent: some View {
+        queueScroll
+            .background(OVColor.canvas)
+            .toolbar { bookingsToolbar }
+    }
+
+    @ToolbarContentBuilder
+    private var bookingsToolbar: some ToolbarContent {
+        let pendingBookings = QueueModel.pendingBookingCount(items)
+        if pendingBookings > 0 {
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showPendingBookingsOnly.toggle()
+                } label: {
+                    Label("Confirm bookings (\(pendingBookings))", systemImage: "checkmark.seal")
+                }
+                .help("Prospects where Downbeat detected a booking — confirm or dismiss each one")
+            }
+        }
+    }
+
+    private var sendConfirmBinding: Binding<Bool> {
+        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
+    }
+
+    private func sendConfirmMessage(_ pending: PendingConfirm) -> String {
+        "To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out."
     }
 
     private var queueScroll: some View {

@@ -14,9 +14,16 @@ function stripProgramSubtitle(s: string): string {
   return presenter.split(/\s+/).filter(Boolean).length >= 2 ? presenter : s;
 }
 
+// Isolate the org/presenter line from a messy, often multi-line entry. A "Presented by X"
+// line names the org and can sit on any line (program title first or presenter first), so
+// prefer it; otherwise fall back to the first line. Mirrors the app's GroupNameMatch.orgLine.
+function orgLine(name: string): string {
+  const lines = name.split("\n").map((l) => l.trim());
+  return lines.find((l) => /^presented by\s+/i.test(l)) ?? lines[0] ?? "";
+}
+
 export function normalizeGroupName(name: string): string {
-  const firstLine = name.split("\n")[0] ?? "";
-  const presenter = stripProgramSubtitle(firstLine.replace(/^\s*presented by\s+/i, ""));
+  const presenter = stripProgramSubtitle(orgLine(name).replace(/^\s*presented by\s+/i, ""));
   return presenter
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
