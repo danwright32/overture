@@ -221,6 +221,7 @@ struct QueueView: View {
                     onSetLostReason: { reason in setLostReason(item, reason) },
                     onSend: { requestSend(item) },
                     onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
+                    onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -265,6 +266,14 @@ struct QueueView: View {
     private func markConfidenceReviewed(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.confidenceReviewedByDan = true
+        try? context.save()
+    }
+
+    // Dan corrected a wrong classification. Calls ClassificationOverride.correct which
+    // re-scores the prospect in place; the row's fit-reason line then hides (#60).
+    private func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
         try? context.save()
     }
 

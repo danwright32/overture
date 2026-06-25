@@ -131,7 +131,8 @@ extension QueueItem {
             sendError: p.sendError,
             lostReason: p.lostReason,
             classificationConfidence: p.classificationConfidence,
-            confidenceReviewedByDan: p.confidenceReviewedByDan
+            confidenceReviewedByDan: p.confidenceReviewedByDan,
+            classificationOverriddenByDan: p.classificationOverriddenByDan
         )
     }
 }
