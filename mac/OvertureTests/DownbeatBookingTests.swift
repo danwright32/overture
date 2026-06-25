@@ -233,4 +233,49 @@ struct DownbeatBookingTests {
         #expect(bookedCount == 1)
         #expect(suggestedCount == 1)
     }
+
+    // ── TASK 4: dismissed suggestion is sticky (#114) ────────────────────────────
+
+    // 8. Dismissed prospect whose org IS in the client list: reconcile must not re-suggest.
+    @Test func dismissedProspectIsNotReSuggested() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: Date(timeIntervalSince1970: 1_000))
+        p.bookingSuggestionDismissed = true
+        let count = DownbeatBooking.reconcileBooked(
+            prospects: [p], clients: [client("Acme Festival Chorus")],
+            bookings: [], health: .ok, now: Date())
+        #expect(count == 0)
+        #expect(p.bookingSuggested == false)
+        #expect(p.outcome == .noResponse)
+    }
+
+    // 9. Dismissed prospect that has an exact matching booking: dismissal wins, no auto-book.
+    @Test func dismissedProspectIsNotAutoBooked() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.bookingSuggestionDismissed = true
+        let b = booking(id: "B-dismissed", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let count = DownbeatBooking.reconcileBooked(
+            prospects: [p], clients: [], bookings: [b], health: .ok, now: Date())
+        #expect(count == 0)
+        #expect(p.outcome == .noResponse)
+        #expect(p.bookingSuggested == false)
+    }
+
+    // 10. Sanity: a non-dismissed prospect still gets suggested/booked as before.
+    @Test func nonDismissedProspectStillAutoBooks() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.bookingSuggestionDismissed = false
+        let b = booking(id: "B-sanity", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let count = DownbeatBooking.reconcileBooked(
+            prospects: [p], clients: [], bookings: [b], health: .ok, now: Date())
+        #expect(count == 1)
+        #expect(p.outcome == .booked)
+    }
 }

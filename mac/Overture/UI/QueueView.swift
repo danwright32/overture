@@ -315,6 +315,7 @@ struct QueueView: View {
     private func dismissBookingSuggestion(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.bookingSuggested = false
+        model.bookingSuggestionDismissed = true
         try? context.save()
     }
 

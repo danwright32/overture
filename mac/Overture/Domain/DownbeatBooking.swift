@@ -31,6 +31,8 @@ enum DownbeatBooking {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
             if p.outcome == .booked { continue }
             if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
+            // NOTE: Dan owns this — a dismissed suggestion is sticky: no re-suggest, no auto-book.
+            if p.bookingSuggestionDismissed { continue }
             switch BookingMatch.classify(prospect: p, bookings: bookings) {
             case .exact(let booking):
                 if !consumed.contains(booking.id) {
