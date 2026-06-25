@@ -16,6 +16,8 @@ struct ProspectRowView: View {
     var onSend: () -> Void = {}
     var onMarkConfidenceReviewed: () -> Void = {}
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
+    var onConfirmBooking: () -> Void = {}
+    var onDismissBookingSuggestion: () -> Void = {}
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
@@ -36,6 +38,8 @@ struct ProspectRowView: View {
                     }
                     tags
                     confidenceFlag
+                    bookingSuggestionFlag
+                    autoBookedTag
                     links
                 }
                 Spacer(minLength: OVSpacing.sm)
@@ -141,6 +145,39 @@ struct ProspectRowView: View {
             .fixedSize()
             .help("The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type.")
             .padding(.top, 2)
+        }
+    }
+
+    // A possible booking that needs Dan's explicit sign-off before it locks (#114).
+    // Gold tone — positive, not a warning — mirroring the confidenceFlag capsule idiom.
+    @ViewBuilder private var bookingSuggestionFlag: some View {
+        if item.bookingSuggested {
+            Menu {
+                Button("Confirm booking") { onConfirmBooking() }
+                Button("Not a booking") { onDismissBookingSuggestion() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Possible booking — confirm?")
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.gold)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.gold.opacity(0.12)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("A booking was detected that needs your confirmation. Tap to confirm or dismiss.")
+            .padding(.top, 2)
+        }
+    }
+
+    // A small neutral tag shown only when the booking was auto-detected, so Dan knows
+    // it wasn't manually marked (#114). Hidden for bookings Dan set himself.
+    @ViewBuilder private var autoBookedTag: some View {
+        if item.isAutoBooked {
+            FlowTags(tags: [Tag(text: "auto-detected", tone: .warn)])
+                .padding(.top, 2)
         }
     }
 
