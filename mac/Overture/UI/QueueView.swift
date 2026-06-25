@@ -15,6 +15,7 @@ struct QueueView: View {
 
     @State private var disciplineFilter: String?
     @State private var highOnly = false
+    @State private var showPendingBookingsOnly = false
     @State private var pendingConfirm: PendingConfirm?
     @State private var showReconnect = false
 
@@ -30,6 +31,7 @@ struct QueueView: View {
         items.filter { item in
             if let d = disciplineFilter, item.discipline != d { return false }
             if highOnly, !item.isHighFit { return false }
+            if showPendingBookingsOnly, !item.bookingSuggested { return false }
             return true
         }
     }
@@ -48,8 +50,21 @@ struct QueueView: View {
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
     // the editor type-checks it quickly (#56); the real compiler was always fine.
     var body: some View {
-        queueScroll
+        let pendingBookings = QueueModel.pendingBookingCount(items)
+        return queueScroll
             .background(OVColor.canvas)
+            .toolbar {
+                if pendingBookings > 0 {
+                    ToolbarItem(placement: .secondaryAction) {
+                        Button {
+                            showPendingBookingsOnly.toggle()
+                        } label: {
+                            Label("Confirm bookings (\(pendingBookings))", systemImage: "checkmark.seal")
+                        }
+                        .help("Prospects where Downbeat detected a booking — confirm or dismiss each one")
+                    }
+                }
+            }
             .alert("Send this email now?",
                    isPresented: Binding(get: { pendingConfirm != nil },
                                         set: { if !$0 { pendingConfirm = nil } }),
@@ -222,6 +237,8 @@ struct QueueView: View {
                     onSend: { requestSend(item) },
                     onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
                     onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
+                    onConfirmBooking: { confirmBooking(item) },
+                    onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -282,6 +299,22 @@ struct QueueView: View {
         model.outcome = outcome
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
+        model.bookingSuggested = false
+        try? context.save()
+    }
+
+    private func confirmBooking(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.outcome = .booked
+        model.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        model.outcomeAt = Date()
+        model.bookingSuggested = false
+        try? context.save()
+    }
+
+    private func dismissBookingSuggestion(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.bookingSuggested = false
         try? context.save()
     }
 
