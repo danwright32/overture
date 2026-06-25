@@ -19,12 +19,13 @@ import { decideProspect, type DiscoveredEvent, type Classification } from "../..
 import { classifyEvent, type EventClassification, type ExtractedEvent } from "../../src/lib/classifyEvent";
 import { fetchCalendar, WINDOW_DAYS } from "../../src/lib/algoliaCalendar";
 import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
+import { groupIntoRuns } from "../../src/lib/runGrouping";
 
 function appSupport(name: string): string {
   return join(homedir(), "Library", "Application Support", "Overture", name);
 }
 
-const RESULTS_VERSION = 1;
+const RESULTS_VERSION = 2;
 
 async function main() {
   const inputPath = process.argv[2];
@@ -134,6 +135,18 @@ async function main() {
       possibleMatchSource: r.possible_match_source,
       possibleMatchName: r.possible_match_name,
     });
+  }
+
+  const runs = groupIntoRuns(
+    prospects as Array<{ groupName: string; venue: string | null; performanceDate: string | null; sourceListingUrl: string | null }>,
+  );
+  prospects.length = 0;
+  for (const r of runs as Array<Record<string, unknown>>) {
+    // Drop the function's internal `runSourceURLs` (capital) and emit only the lowercase
+    // `runSourceUrls` the results contract / Swift reader expect, so the JSON carries no
+    // stray duplicate key. runEndDate/partOfRelatedRun keep their names.
+    const { runSourceURLs, ...rest } = r;
+    prospects.push({ ...rest, runSourceUrls: runSourceURLs });
   }
 
   prospects.sort((a, b) => {

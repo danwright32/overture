@@ -28,6 +28,33 @@ struct ResultProspect: Codable, Equatable, Sendable {
     var matchedClientName: String?
     var possibleMatchSource: String?
     var possibleMatchName: String?
+    // Run-collapse fields (#132). Optional in the JSON (absent in pre-132 results files).
+    var runEndDate: String?
+    var partOfRelatedRun: Bool
+    var runSourceUrls: [String]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        groupName = try c.decode(String.self, forKey: .groupName)
+        discipline = try c.decode(String.self, forKey: .discipline)
+        venue = try c.decodeIfPresent(String.self, forKey: .venue)
+        performanceDate = try c.decodeIfPresent(String.self, forKey: .performanceDate)
+        sourceListingUrl = try c.decodeIfPresent(String.self, forKey: .sourceListingUrl)
+        websiteUrl = try c.decodeIfPresent(String.self, forKey: .websiteUrl)
+        priorRelationship = try c.decode(String.self, forKey: .priorRelationship)
+        production = try c.decode(String.self, forKey: .production)
+        profile = try c.decode(String.self, forKey: .profile)
+        coverage = try c.decode(String.self, forKey: .coverage)
+        fitScore = try c.decode(Int.self, forKey: .fitScore)
+        tier = try c.decode(String.self, forKey: .tier)
+        fitReason = try c.decode(String.self, forKey: .fitReason)
+        matchedClientName = try c.decodeIfPresent(String.self, forKey: .matchedClientName)
+        possibleMatchSource = try c.decodeIfPresent(String.self, forKey: .possibleMatchSource)
+        possibleMatchName = try c.decodeIfPresent(String.self, forKey: .possibleMatchName)
+        runEndDate = try c.decodeIfPresent(String.self, forKey: .runEndDate)
+        partOfRelatedRun = try c.decodeIfPresent(Bool.self, forKey: .partOfRelatedRun) ?? false
+        runSourceUrls = try c.decodeIfPresent([String].self, forKey: .runSourceUrls) ?? []
+    }
 }
 
 enum ResultsFileError: Error, Equatable {
@@ -35,11 +62,12 @@ enum ResultsFileError: Error, Equatable {
 }
 
 enum ResultsFileDecoder {
-    static let supportedVersion = 1
+    static let supportedVersion = 2
+    private static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> ResultsFile {
         let file = try JSONDecoder().decode(ResultsFile.self, from: data)
-        guard file.version == supportedVersion else {
+        guard (minimumVersion...supportedVersion).contains(file.version) else {
             throw ResultsFileError.unsupportedVersion(file.version)
         }
         return file

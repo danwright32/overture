@@ -70,7 +70,10 @@ enum ResultsImporter {
             fitReason: p.fitReason,
             matchedClientName: p.matchedClientName,
             possibleMatchSource: p.possibleMatchSource,
-            possibleMatchName: p.possibleMatchName
+            possibleMatchName: p.possibleMatchName,
+            runEndDate: p.runEndDate,
+            partOfRelatedRun: p.partOfRelatedRun,
+            runSourceURLs: p.runSourceUrls
         )
     }
 
@@ -92,6 +95,9 @@ enum ResultsImporter {
         existing.matchedClientName = p.matchedClientName
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
+        existing.runEndDate = p.runEndDate
+        existing.partOfRelatedRun = p.partOfRelatedRun
+        existing.runSourceURLs = p.runSourceUrls
         existing.ingestedAt = Date()
     }
 }
@@ -134,7 +140,9 @@ extension QueueItem {
             confidenceReviewedByDan: p.confidenceReviewedByDan,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
-            outcomeSourceRaw: p.outcomeSourceRaw
+            outcomeSourceRaw: p.outcomeSourceRaw,
+            runEndDate: p.runEndDate,
+            partOfRelatedRun: p.partOfRelatedRun
         )
     }
 }

@@ -37,6 +37,7 @@ struct ProspectRowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     tags
+                    relatedRunNote
                     confidenceFlag
                     bookingSuggestionFlag
                     autoBookedTag
@@ -103,9 +104,20 @@ struct ProspectRowView: View {
                 Text("·").foregroundStyle(OVColor.inkFaint)
                 Text(timing.label)
                     .foregroundStyle(timing.urgency == .imminent ? OVColor.rust : OVColor.inkSoft)
+                Text("·").foregroundStyle(OVColor.inkFaint)
+                Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
             }
             .font(OVType.body)
             .foregroundStyle(OVColor.inkSoft)
+        }
+    }
+
+    @ViewBuilder private var relatedRunNote: some View {
+        if let note = QueueModel.relatedRunNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
         }
     }
 

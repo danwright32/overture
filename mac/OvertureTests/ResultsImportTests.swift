@@ -62,10 +62,17 @@ struct ResultsImportTests {
         #expect(file.version == 1)
         #expect(file.prospects.count == 2)
 
-        let badVersion = Data(#"{"version":2,"generatedAt":"x","prospects":[]}"#.utf8)
-        #expect(throws: ResultsFileError.unsupportedVersion(2)) {
-            try ResultsFileDecoder.decode(badVersion)
+        let outOfRange = Data(#"{"version":99,"generatedAt":"x","prospects":[]}"#.utf8)
+        #expect(throws: ResultsFileError.unsupportedVersion(99)) {
+            try ResultsFileDecoder.decode(outOfRange)
         }
+    }
+
+    @Test func decodesVersionTwoFile() throws {
+        let v2JSON = Data(#"{"version":2,"generatedAt":"2026-06-25T00:00:00Z","prospects":[]}"#.utf8)
+        let file = try ResultsFileDecoder.decode(v2JSON)
+        #expect(file.version == 2)
+        #expect(file.prospects.isEmpty)
     }
 
     @Test func ingestInsertsAllAsNew() throws {
