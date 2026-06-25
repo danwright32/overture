@@ -40,6 +40,9 @@ final class Prospect {
     // records and the scout's inserts are unaffected.
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
+    // Dan-owned: once he corrects the discipline/production, the scout must not revert
+    // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.
+    var classificationOverriddenByDan: Bool = false
 
     // Filled by the Prep run (Trigger 2). Defaulted so the scout's inserts are unaffected.
     var contactName: String? = nil

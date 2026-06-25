@@ -73,6 +73,7 @@
 		A8CD2E0531E96EFEA5557C36 /* ResultsImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFDC7DC01B718B9C18B54C /* ResultsImportTests.swift */; };
 		B2D2ED69408C169F9F1658C6 /* Ranker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295AFE7FD066E8FA04E4EC2D /* Ranker.swift */; };
 		B59A9FC6B274B0F898E07406 /* NaturalKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36D082430691342F0343826 /* NaturalKeyTests.swift */; };
+		B8F2869EDCD83DED941DE6E0 /* ClassificationOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21465867C8C8C91EB41B9F68 /* ClassificationOverride.swift */; };
 		BAFBBEF83992A1D7340C8D9C /* ScoutStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF01B805DA5B480951430061 /* ScoutStatusTests.swift */; };
 		BCC0290EE5CB3895E45F2342 /* DraftCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E1EB8F1FD834F2944330EC /* DraftCheck.swift */; };
 		C1173E800878BB4F747E2273 /* ReplyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B93E8FC8C1C412E9F4A274 /* ReplyService.swift */; };
@@ -85,6 +86,7 @@
 		D1DA16CE093E998F279DC660 /* ProspectAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D2CD6E3596C49C463321EA /* ProspectAssemblerTests.swift */; };
 		D3D1FD57D74D4440175FCB03 /* QueueModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F488479D4DEA383519C548 /* QueueModelTests.swift */; };
 		D6427CB831C0CA5366638D5A /* FollowUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58091E7E5682F2DC98DF631F /* FollowUpTests.swift */; };
+		D94B2CC284F406DF250C901C /* ClassificationOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04423CAB808AFFABA409121C /* ClassificationOverrideTests.swift */; };
 		DA4AC8C2D48649D2D8EE6C0B /* PrepResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A994B8F944AA55C7BF692874 /* PrepResults.swift */; };
 		DAC5893A8F90B32F203F4558 /* GmailAuthExpiryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2787A4F75772AA074BD37003 /* GmailAuthExpiryTests.swift */; };
 		DBEAF2D810698FF79222656D /* GmailMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D6A768536BCBD7F7BBA2452 /* GmailMessageTests.swift */; };
@@ -118,12 +120,14 @@
 
 /* Begin PBXFileReference section */
 		00E563EC137DDC54063B7980 /* PrepImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepImporterTests.swift; sourceTree = "<group>"; };
+		04423CAB808AFFABA409121C /* ClassificationOverrideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationOverrideTests.swift; sourceTree = "<group>"; };
 		073482FF171FDD03F329446D /* DismissedProspectsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissedProspectsTests.swift; sourceTree = "<group>"; };
 		07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatternsView.swift; sourceTree = "<group>"; };
 		0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationConfidenceTests.swift; sourceTree = "<group>"; };
 		105BB4DA76C70DD7BD210835 /* WrapHStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrapHStack.swift; sourceTree = "<group>"; };
 		10BF247B7FD0179047746EA2 /* ReplyDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyDetectionTests.swift; sourceTree = "<group>"; };
 		1277AABACF169CD59F453422 /* CarnegieExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarnegieExtractor.swift; sourceTree = "<group>"; };
+		21465867C8C8C91EB41B9F68 /* ClassificationOverride.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationOverride.swift; sourceTree = "<group>"; };
 		222C952AB1A28F9E5785EFA9 /* AgentRoster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRoster.swift; sourceTree = "<group>"; };
 		25CEA888631E3F3292A7A5FB /* GmailSenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailSenderTests.swift; sourceTree = "<group>"; };
 		2730C91E327DE3CA26C11BB6 /* ScoutFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutFailure.swift; sourceTree = "<group>"; };
@@ -243,6 +247,7 @@
 			children = (
 				CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */,
 				0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */,
+				04423CAB808AFFABA409121C /* ClassificationOverrideTests.swift */,
 				073482FF171FDD03F329446D /* DismissedProspectsTests.swift */,
 				E72D937054FBE261722613B6 /* DownbeatBookingTests.swift */,
 				B479AD3011405F9BF9A2DA23 /* DownbeatExportHealthTests.swift */,
@@ -328,6 +333,7 @@
 			isa = PBXGroup;
 			children = (
 				222C952AB1A28F9E5785EFA9 /* AgentRoster.swift */,
+				21465867C8C8C91EB41B9F68 /* ClassificationOverride.swift */,
 				65B129F207D7325A80D5360D /* DismissedProspects.swift */,
 				BF13A18B3F23144C2AEAF3BD /* DownbeatBooking.swift */,
 				829EE2F8C8D00FB6BD62E196 /* DownbeatExport.swift */,
@@ -484,6 +490,7 @@
 			files = (
 				1694B85DAD9F436E1844C9C0 /* AgentRoster.swift in Sources */,
 				E953E2F9A05320E3CF28DD80 /* CarnegieExtractor.swift in Sources */,
+				B8F2869EDCD83DED941DE6E0 /* ClassificationOverride.swift in Sources */,
 				5ED4B798A43C3E9F7B28EDCC /* DesignTokens.swift in Sources */,
 				7AB8E71A600DA6C16E3208AB /* DismissedProspects.swift in Sources */,
 				3037E07771AF036EB6D4273A /* DismissedView.swift in Sources */,
@@ -546,6 +553,7 @@
 			files = (
 				FBB014F565369838DFA38489 /* AgentRosterTests.swift in Sources */,
 				3F8AA010C237FC233C3FC20F /* ClassificationConfidenceTests.swift in Sources */,
+				D94B2CC284F406DF250C901C /* ClassificationOverrideTests.swift in Sources */,
 				C7775A1D20DC00F8E256642B /* DismissedProspectsTests.swift in Sources */,
 				1BF4811736AD0C8A914EFCF1 /* DownbeatBookingTests.swift in Sources */,
 				E745C2E2C77CCB9211C59B71 /* DownbeatExportHealthTests.swift in Sources */,
