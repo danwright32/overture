@@ -72,6 +72,9 @@ enum ScoutService {
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0
+
+        // Phase 1: classify each event and collect prospect decisions (no upserts yet).
+        var prospects: [AssembledProspect] = []
         for e in events {
             let c = EventClassifier.classify(e)
             if c.confidence == .uncertain { uncertain += 1 }
@@ -80,26 +83,100 @@ enum ScoutService {
             case .skip:
                 skipped += 1
             case .prospect(let p):
-                let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: p.performanceDate, venue: p.venue)
-                let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-                if let existing = (try? context.fetch(descriptor))?.first {
-                    apply(p, to: existing)
-                    updated += 1
-                } else if let drifted = matchByStableSource(url: p.sourceListingURL, date: p.performanceDate, in: context) {
-                    // No exact key match, but the same source listing + date already exists:
-                    // the venue tweaked the title between runs. Re-key to the new title and
-                    // update in place so Dan's keep/dismiss decision survives (#29).
-                    drifted.naturalKey = key
-                    apply(p, to: drifted)
-                    updated += 1
-                } else {
-                    context.insert(make(p, key: key))
-                    inserted += 1
-                }
+                prospects.append(p)
+            }
+        }
+
+        // Phase 2: collapse multi-night runs so only the opening night is upserted.
+        let rows = prospects.map { p in
+            RunGrouping.RunRow(
+                groupName: p.groupName,
+                venue: p.venue,
+                performanceDate: p.performanceDate,
+                sourceListingURL: p.sourceListingURL
+            )
+        }
+        let grouped = RunGrouping.group(rows)
+
+        // Build a lookup from sourceListingURL to AssembledProspect so we can find the
+        // prospect that corresponds to each grouped run's opening night.
+        var prospectByURL: [String: AssembledProspect] = [:]
+        var prospectsWithoutURL: [AssembledProspect] = []
+        for p in prospects {
+            if let url = p.sourceListingURL {
+                prospectByURL[url] = p
+            } else {
+                prospectsWithoutURL.append(p)
+            }
+        }
+
+        // Phase 3: upsert one prospect per grouped run (opening night only).
+        // We iterate grouped runs (already one per run) rather than per-night prospects.
+        for gr in grouped {
+            guard let openingURL = gr.row.sourceListingURL,
+                  let p = prospectByURL[openingURL] else {
+                continue
+            }
+
+            // Fold run metadata onto the assembled prospect.
+            var enriched = p
+            enriched.runEndDate = gr.runEndDate
+            enriched.partOfRelatedRun = gr.partOfRelatedRun
+            enriched.runSourceURLs = gr.runSourceURLs
+
+            let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
+            let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
+            if let existing = (try? context.fetch(descriptor))?.first {
+                // Exact natural-key match: update in place.
+                apply(enriched, to: existing)
+                updated += 1
+            } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, in: context) {
+                // No exact key match, but a stored record shares one of this run's member
+                // URLs: re-key to the new opening-night key and update in place so Dan's
+                // keep/dismiss decision survives across run-window shifts (#132).
+                anyMatch.naturalKey = key
+                apply(enriched, to: anyMatch)
+                updated += 1
+            } else if let drifted = matchByStableSource(url: enriched.sourceListingURL, date: enriched.performanceDate, in: context) {
+                // No exact key match, but the same source listing + date already exists:
+                // the venue tweaked the title between runs. Re-key to the new title and
+                // update in place so Dan's keep/dismiss decision survives (#29).
+                drifted.naturalKey = key
+                apply(enriched, to: drifted)
+                updated += 1
+            } else {
+                context.insert(make(enriched, key: key))
+                inserted += 1
+            }
+        }
+
+        // Handle the rare case of a prospect with no source URL (cannot be grouped).
+        for p in prospectsWithoutURL {
+            let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: p.performanceDate, venue: p.venue)
+            let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
+            if let existing = (try? context.fetch(descriptor))?.first {
+                apply(p, to: existing)
+                updated += 1
+            } else {
+                context.insert(make(p, key: key))
+                inserted += 1
             }
         }
         try? context.save()
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)
+    }
+
+    // Matches an existing prospect that shares ANY of the given run member URLs, checking
+    // both the stored sourceListingURL and the stored runSourceURLs (#132). Used when the
+    // run's opening night has shifted between scouts so no exact natural key matches.
+    private static func matchByAnyRunURL(_ urls: [String], in context: ModelContext) -> Prospect? {
+        let candidates = Set(urls)
+        guard !candidates.isEmpty else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all.first { p in
+            if let u = p.sourceListingURL, candidates.contains(u) { return true }
+            return !Set(p.runSourceURLs).isDisjoint(with: candidates)
+        }
     }
 
     // A prospect identified by its stable source listing (URL + date), used to recognize
@@ -118,7 +195,8 @@ enum ScoutService {
             priorRelationship: p.priorRelationship, production: p.production, profile: p.profile,
             coverage: p.coverage, fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
-            possibleMatchName: p.possibleMatchName)
+            possibleMatchName: p.possibleMatchName,
+            runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs)
         prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
         return prospect
@@ -154,6 +232,9 @@ enum ScoutService {
             existing.fitScore = p.fitScore
             existing.tier = p.tier
         }
+        existing.runEndDate = p.runEndDate
+        existing.partOfRelatedRun = p.partOfRelatedRun
+        existing.runSourceURLs = p.runSourceURLs
         existing.ingestedAt = Date()
     }
 

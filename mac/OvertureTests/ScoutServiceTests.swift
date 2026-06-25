@@ -124,6 +124,40 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationOverriddenByDan == true)
     }
 
+    @Test func collapsesAConsecutiveRunIntoOneProspect() throws {
+        let ctx = ModelContext(try container())
+        let events = [
+            ExtractedEvent(title: "Mark Morris", presenter: "The Joyce Theater", venue: "The Joyce", performanceDate: "2026-07-14", sourceUrl: "u14"),
+            ExtractedEvent(title: "Mark Morris", presenter: "The Joyce Theater", venue: "The Joyce", performanceDate: "2026-07-15", sourceUrl: "u15"),
+            ExtractedEvent(title: "Mark Morris", presenter: "The Joyce Theater", venue: "The Joyce", performanceDate: "2026-07-16", sourceUrl: "u16"),
+        ]
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(stored.count == 1)
+        #expect(stored[0].performanceDate == "2026-07-14")
+        #expect(stored[0].runEndDate == "2026-07-16")
+        #expect(outcome.inserted == 1)
+    }
+
+    @Test func reRecognizesARunWhoseOpeningNightAgedOut() throws {
+        let ctx = ModelContext(try container())
+        let day1 = [
+            ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-14", sourceUrl: "n14"),
+            ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-15", sourceUrl: "n15"),
+        ]
+        _ = ScoutService.apply(events: day1, clients: [], history: [], blocked: [], into: ctx)
+        let kept = try ctx.fetch(FetchDescriptor<Prospect>())[0]
+        kept.statusRaw = "dismissed"   // Dan's decision
+        try? ctx.save()
+
+        // Next scout: the 14th has aged out of the window; only the 15th remains.
+        let day2 = [ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-15", sourceUrl: "n15")]
+        _ = ScoutService.apply(events: day2, clients: [], history: [], blocked: [], into: ctx)
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(stored.count == 1)               // re-attached, not duplicated
+        #expect(stored[0].statusRaw == "dismissed")  // decision preserved
+    }
+
     @Test func titleDriftWithSameSourceURLCarriesTheDecisionForward() throws {
         let ctx = ModelContext(try container())
         let url = "https://www.carnegiehall.org/event/abc-123"
