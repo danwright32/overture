@@ -45,6 +45,9 @@ export type ProspectRow = {
   possible_match_ref: string | null;
   possible_match_name: string | null;
   status: "new";
+  runEndDate?: string | null;
+  partOfRelatedRun?: boolean;
+  runSourceUrls?: string[];
 };
 
 export type Decision =
