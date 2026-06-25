@@ -14,6 +14,12 @@ describe("normalizeGroupName", () => {
   it("collapses whitespace and trims", () => {
     expect(normalizeGroupName("  The   Royal   Gala  ")).toBe("the royal gala");
   });
+  it("finds the presenter line even when it is not the first line (parity with the app) (#138)", () => {
+    expect(normalizeGroupName("Spring Gala Concert\nPresented by Every Voice Choirs")).toBe("every voice choirs");
+  });
+  it("falls back to the first line when no presenter line is present", () => {
+    expect(normalizeGroupName("Brooklyn Youth Chorus\nProgram of Bach")).toBe("brooklyn youth chorus");
+  });
 });
 
 describe("normalizeGroupName program subtitle", () => {

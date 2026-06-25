@@ -10,6 +10,11 @@ struct GroupNameMatchTests {
         #expect(GroupNameMatch.normalize("Brooklyn Youth Chorus\nProgram of Bach") == "brooklyn youth chorus")
     }
 
+    // #138 parity: the presenter line is found wherever it sits, matching the TS engine.
+    @Test func findsPresenterLineWhenNotFirst() {
+        #expect(GroupNameMatch.normalize("Spring Gala Concert\nPresented by Every Voice Choirs") == "every voice choirs")
+    }
+
     @Test func exactMatchIsConfident() {
         #expect(GroupNameMatch.isConfident("Brooklyn Youth Chorus", "brooklyn youth chorus"))
     }
