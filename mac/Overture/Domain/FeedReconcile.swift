@@ -18,17 +18,28 @@ enum FeedReconcile {
     // reconciled, so a Carnegie scout never flags a future prospect sourced elsewhere.
     static let scoutedHosts: Set<String> = ["carnegiehall.org"]
 
-    static func reconcile(stored: [Prospect], seenKeys: Set<String>, today: String,
+    // `seenSourceURLs` is the set of listing URLs in this run's RAW feed (before our own
+    // blocked-date / DNC / unreachable filtering). A prospect is "still listed" if it was
+    // upserted (seenKeys) OR any of its listing URLs is in the raw feed — so a show we merely
+    // filtered out this run is NOT mistaken for one the venue cancelled.
+    static func reconcile(stored: [Prospect], seenKeys: Set<String>,
+                          seenSourceURLs: Set<String> = [], today: String,
                           scoutedHosts: Set<String> = scoutedHosts) {
         for p in stored {
-            if seenKeys.contains(p.naturalKey) {
+            if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs) {
                 p.missedScoutCount = 0                       // present this run: definitely live
             } else if isFromScoutedSource(p, hosts: scoutedHosts) && isFuture(p, today: today) {
-                p.missedScoutCount += 1                       // expected in this feed, but absent
+                p.missedScoutCount += 1                       // gone from the venue's feed entirely
             }
             // Past performances and other-source prospects are left untouched: their absence is
             // not evidence of cancellation.
         }
+    }
+
+    private static func isStillListed(_ p: Prospect, seenKeys: Set<String>, seenSourceURLs: Set<String>) -> Bool {
+        if seenKeys.contains(p.naturalKey) { return true }
+        let urls = ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs)
+        return urls.contains { seenSourceURLs.contains($0) }
     }
 
     private static func isFromScoutedSource(_ p: Prospect, hosts: Set<String>) -> Bool {

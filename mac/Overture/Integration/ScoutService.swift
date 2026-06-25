@@ -172,7 +172,12 @@ enum ScoutService {
         // not "every show cancelled", so it must never accrue misses.
         if !events.isEmpty {
             let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-            FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys, today: QueueModel.easternToday())
+            // Presence is judged against the RAW feed's listing URLs, not just what we upserted,
+            // so a show we filtered out this run (newly blocked date / DNC) isn't mistaken for
+            // one the venue cancelled (#133).
+            let seenSourceURLs = Set(events.compactMap { $0.sourceUrl })
+            FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys,
+                                    seenSourceURLs: seenSourceURLs, today: QueueModel.easternToday())
         }
         try? context.save()
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)

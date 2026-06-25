@@ -72,4 +72,22 @@ struct FeedReconcileTests {
         FeedReconcile.reconcile(stored: [p], seenKeys: [], today: today)
         #expect(p.missedScoutCount == 0)
     }
+
+    @Test func stillListedButFilteredOutIsNotFlaggedGone() {
+        // The listing is still in the venue's raw feed (its URL is present), but it got filtered
+        // this run (e.g. a date Dan newly blocked), so it isn't among the upserted seenKeys. Its
+        // presence in the raw feed must reset the counter — it's filtered, not cancelled (#133).
+        let p = prospect(key: "kept-but-filtered", date: "2026-08-01", source: carnegie, missed: 1)
+        FeedReconcile.reconcile(stored: [p], seenKeys: [], seenSourceURLs: [carnegie], today: today)
+        #expect(p.missedScoutCount == 0)
+    }
+
+    @Test func presenceByAnyRunMemberURLCountsAsListed() {
+        // A multi-night run is "still listed" if ANY of its member night URLs is in the feed.
+        let p = prospect(key: "run", date: "2026-08-01", source: "https://www.carnegiehall.org/event/night1", missed: 1)
+        p.runSourceURLs = ["https://www.carnegiehall.org/event/night1", "https://www.carnegiehall.org/event/night2"]
+        FeedReconcile.reconcile(stored: [p], seenKeys: [],
+                                seenSourceURLs: ["https://www.carnegiehall.org/event/night2"], today: today)
+        #expect(p.missedScoutCount == 0)
+    }
 }
