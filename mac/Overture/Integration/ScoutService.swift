@@ -41,7 +41,7 @@ enum ScoutService {
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, now: Date()) > 0 {
+        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             try? context.save()
         }
         // Record that a scout completed, so the masthead can show freshness (#35).

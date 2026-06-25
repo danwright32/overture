@@ -77,6 +77,10 @@ final class Prospect {
     // detection (#99). Defaulted so existing records migrate cleanly.
     var downbeatClientId: String? = nil
 
+    // Set when a booking match is possible but not conclusive enough to auto-book.
+    // Defaulted so existing records migrate cleanly.
+    var bookingSuggested: Bool = false
+
     init(
         naturalKey: String,
         groupName: String,

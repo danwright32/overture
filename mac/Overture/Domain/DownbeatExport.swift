@@ -122,14 +122,14 @@ enum DownbeatBridge {
     // bad export yields empty clients so the scout still runs, with the warning surfaced.
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
-        -> (clients: [DownbeatClient], health: Health) {
+        -> (clients: [DownbeatClient], bookings: [OvertureBooking], health: Health) {
         guard let data = try? Data(contentsOf: url) else {
-            return ([], .missing)
+            return ([], [], .missing)
         }
         let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         guard let export = try? decode(data) else {
-            return ([], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+            return ([], [], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
         }
-        return (export.clients, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
+        return (export.clients, export.bookings, health(fileExists: true, decodeFailed: false, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
     }
 }
