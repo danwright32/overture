@@ -21,7 +21,9 @@ enum BookingMatch {
             guard orgMatches(booking: booking, prospect: prospect) else {
                 continue
             }
-            guard perfDate >= booking.startDate && perfDate <= booking.endDate else {
+            let runStart = perfDate
+            let runEnd = prospect.runEndDate ?? perfDate
+            guard runStart <= booking.endDate && runEnd >= booking.startDate else {
                 continue
             }
             let causallyValid = booking.startDate >= sendDay

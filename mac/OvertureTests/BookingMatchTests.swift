@@ -78,4 +78,26 @@ struct BookingMatchTests {
             Issue.record("expected .exact, got \(r)")
         }
     }
+
+    @Test func bookingMatchesAnyNightOfARun() {
+        // Run spans 2026-03-10 to 2026-03-12; booking covers only the last night
+        let p = prospect(date: "2026-03-10")
+        p.runEndDate = "2026-03-12"
+        let b = booking(id: "B-run-overlap", start: "2026-03-12", end: "2026-03-12")
+        let r = BookingMatch.classify(prospect: p, bookings: [b])
+        if case .exact(let matched) = r {
+            #expect(matched.id == "B-run-overlap")
+        } else {
+            Issue.record("expected .exact for a booking on a later night of the run, got \(r)")
+        }
+    }
+
+    @Test func bookingOutsideRunRangeDoesNotMatch() {
+        // Run spans 2026-03-10 to 2026-03-12; booking is entirely after the run
+        let p = prospect(date: "2026-03-10")
+        p.runEndDate = "2026-03-12"
+        let b = booking(start: "2026-03-20", end: "2026-03-20")
+        let r = BookingMatch.classify(prospect: p, bookings: [b])
+        #expect(r == .none)
+    }
 }
