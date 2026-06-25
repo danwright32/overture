@@ -7,11 +7,27 @@ import Foundation
 
 enum GroupNameMatch {
     static func normalize(_ name: String) -> String {
-        var s = orgLine(name).lowercased()
-        s = s.replacingOccurrences(of: #"^\s*presented by\s+"#, with: "", options: .regularExpression)
+        var s = orgLine(name)
+        s = s.replacingOccurrences(of: #"(?i)^\s*presented by\s+"#, with: "", options: .regularExpression)
+        s = stripProgramSubtitle(s)
+        s = s.lowercased()
         s = s.replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespaces)
+    }
+
+    // Drop a trailing program/subtitle after a clear separator (space-dash-space, en/em
+    // dash, or colon), keeping the presenter — but only when the presenter is >= 2 words,
+    // so a generic one-word prefix (e.g. "Jazz - ...") isn't collapsed. Booking-sheet names
+    // are "Presenter - Program"; the venue lists just the presenter, so this lets them match (#105).
+    private static func stripProgramSubtitle(_ s: String) -> String {
+        let pattern = #"^(.*?)(?:\s[-–—]\s|:\s).+$"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),
+              m.numberOfRanges >= 2,
+              let g1 = Range(m.range(at: 1), in: s) else { return s }
+        let presenter = s[g1].trimmingCharacters(in: .whitespaces)
+        return presenter.split(whereSeparator: { $0.isWhitespace }).count >= 2 ? presenter : s
     }
 
     // Isolate the org/presenter line from a messy, often multi-line history entry. A
