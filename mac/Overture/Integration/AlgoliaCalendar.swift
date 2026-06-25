@@ -64,16 +64,38 @@ enum AlgoliaCalendar {
     static func parse(_ data: Data) -> (events: [ExtractedEvent], nbPages: Int) {
         guard let resp = try? JSONDecoder().decode(Response.self, from: data),
               let page = resp.results.first else { return ([], 0) }
-        let events = page.hits.map { hit in
-            ExtractedEvent(
-                title: hit.title,
-                presenter: hit.licenseename?.nonBlank,
-                venue: hit.facility?.nonBlank,
-                performanceDate: hit.url.flatMap(dateFromCalendarURL),
-                sourceUrl: hit.url.map { "https://www.carnegiehall.org\($0)" }
-            )
-        }
+        let events = page.hits
+            .filter { !isCancelled($0.title) }
+            .map { hit in
+                ExtractedEvent(
+                    title: cleanText(hit.title),
+                    presenter: hit.licenseename.flatMap(nonBlank),
+                    venue: hit.facility.flatMap(nonBlank),
+                    performanceDate: hit.url.flatMap(dateFromCalendarURL),
+                    sourceUrl: hit.url.map { "https://www.carnegiehall.org\($0)" }
+                )
+            }
         return (events, page.nbPages ?? 1)
+    }
+
+    // The feed sometimes embeds HTML (e.g. <br/>) and zero-width characters in text fields.
+    // Drop tags, strip zero-width/carriage-return noise, and collapse the resulting whitespace.
+    static func cleanText(_ s: String) -> String {
+        let noTags = s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        let noNoise = noTags.replacingOccurrences(of: "\u{200B}", with: "").replacingOccurrences(of: "\r", with: "")
+        let collapsed = noNoise.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func nonBlank(_ s: String) -> String? {
+        let t = cleanText(s)
+        return t.isEmpty ? nil : t
+    }
+
+    // Cancelled performances ride along in the feed with a "Cancelled:" title prefix; they are
+    // noise Dan can't pitch, so they are dropped at parse time.
+    private static func isCancelled(_ title: String) -> Bool {
+        title.range(of: "^\\s*cancell?ed\\b", options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func dateFromCalendarURL(_ url: String) -> String? {
@@ -82,12 +104,5 @@ enum AlgoliaCalendar {
         // ["calendar", "yyyy", "mm", "dd"]
         guard parts.count >= 4 else { return nil }
         return "\(parts[1])-\(parts[2])-\(parts[3])"
-    }
-}
-
-private extension String {
-    var nonBlank: String? {
-        let t = trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
     }
 }

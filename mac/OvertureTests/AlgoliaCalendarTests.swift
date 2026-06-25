@@ -36,6 +36,24 @@ struct AlgoliaCalendarParseTests {
     @Test func emptyOrMalformedYieldsNoEvents() {
         #expect(AlgoliaCalendar.parse(Data("not json".utf8)).events.isEmpty)
     }
+
+    @Test func dropsCancelledPerformances() {
+        let raw = "{\"results\":[{\"nbPages\":1,\"hits\":[" +
+            "{\"title\":\"Cancelled: Citywide Show\",\"url\":\"/calendar/2026/07/10/x\"}," +
+            "{\"title\":\"Real Show\",\"url\":\"/calendar/2026/07/11/y\"}]}]}"
+        let events = AlgoliaCalendar.parse(Data(raw.utf8)).events
+        #expect(events.map(\.title) == ["Real Show"])
+    }
+
+    @Test func cleansHTMLAndZeroWidthFromTextFields() {
+        let raw = "{\"results\":[{\"nbPages\":1,\"hits\":[{" +
+            "\"title\":\"Anna Pierre, Piano<br />\u{200B}Virgile Roche, Piano\"," +
+            "\"licenseename\":\"French-American Piano Society<br/>\"," +
+            "\"facility\":\"Weill Recital Hall\",\"url\":\"/calendar/2026/07/07/z\"}]}]}"
+        let e = AlgoliaCalendar.parse(Data(raw.utf8)).events[0]
+        #expect(e.title == "Anna Pierre, Piano Virgile Roche, Piano")
+        #expect(e.presenter == "French-American Piano Society")
+    }
 }
 
 @Suite("Algolia date window")

@@ -50,9 +50,25 @@ export function params(startMs: number, endMs: number, hitsPerPage = HITS_PER_PA
   return `query=&hitsPerPage=${hitsPerPage}&page=${page}&numericFilters=${encodeURIComponent(numeric)}`;
 }
 
+// The feed sometimes embeds HTML (e.g. <br/>) and zero-width characters in text fields.
+// Drop tags, strip zero-width/carriage-return noise, and collapse the resulting whitespace.
+function cleanText(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[​\r]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function nonBlank(s: string | null | undefined): string | null {
-  const t = (s ?? "").trim();
+  const t = cleanText(s ?? "");
   return t === "" ? null : t;
+}
+
+// Cancelled performances ride along in the feed with a "Cancelled:" title prefix; they are
+// noise Dan can't pitch, so they are dropped at parse time.
+function isCancelled(title: string): boolean {
+  return /^\s*cancell?ed\b/i.test(title);
 }
 
 function dateFromCalendarUrl(url: string | null | undefined): string | null {
@@ -80,13 +96,15 @@ export function parseHits(raw: string): { events: ExtractedEvent[]; nbPages: num
   }
   const page = (json as { results?: Array<{ hits?: AlgoliaHit[]; nbPages?: number }> })?.results?.[0];
   if (!page) return { events: [], nbPages: 0 };
-  const events: ExtractedEvent[] = (page.hits ?? []).map((h) => ({
-    title: h.title,
-    presenter: nonBlank(h.licenseename),
-    venue: nonBlank(h.facility),
-    performanceDate: dateFromCalendarUrl(h.url),
-    sourceUrl: h.url ? `https://www.carnegiehall.org${h.url}` : null,
-  }));
+  const events: ExtractedEvent[] = (page.hits ?? [])
+    .filter((h) => !isCancelled(h.title ?? ""))
+    .map((h) => ({
+      title: cleanText(h.title ?? ""),
+      presenter: nonBlank(h.licenseename),
+      venue: nonBlank(h.facility),
+      performanceDate: dateFromCalendarUrl(h.url),
+      sourceUrl: h.url ? `https://www.carnegiehall.org${h.url}` : null,
+    }));
   return { events, nbPages: page.nbPages ?? 1 };
 }
 
