@@ -12,9 +12,26 @@ struct GmailSender: MailSender {
     var fromEmail: String
 
     func send(_ mail: OutgoingMail) async throws -> SentReceipt {
-        let token = try await GmailAuthManager.shared.validAccessToken()
+        try await send(mail,
+                       token: { try await GmailAuthManager.shared.validAccessToken() },
+                       fetch: { try await URLSession.shared.data(for: $0) },
+                       onAuthExpired: { await GmailAuthManager.shared.signalAuthExpired() })
+    }
+
+    // The full send with its dependencies injected (token provider + fetch + auth-expired hook),
+    // so the wiring the Send button actually drives is testable from the main actor without the
+    // network or live auth (#145). This is the path whose old synchronous bridge deadlocked, so
+    // exercising it on the main actor is what guards against that regression coming back.
+    // onAuthExpired has no default here (the main-actor singleton can't be a default in this
+    // nonisolated method); the production caller above passes the real hook explicitly.
+    func send(_ mail: OutgoingMail,
+              token: @Sendable () async throws -> String,
+              fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) },
+              onAuthExpired: @Sendable () async -> Void = {}) async throws -> SentReceipt {
+        let resolved = try await token()
         return try await GmailSender.performSend(
-            mail: mail, fromName: fromName, fromEmail: fromEmail, token: token)
+            mail: mail, fromName: fromName, fromEmail: fromEmail, token: resolved,
+            fetch: fetch, onAuthExpired: onAuthExpired)
     }
 
     // The testable core: encode the message, POST it, and interpret the response (success,
