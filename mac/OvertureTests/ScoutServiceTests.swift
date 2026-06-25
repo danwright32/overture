@@ -81,6 +81,49 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
     }
 
+    // #60 Task 3: Dan's corrected classification must survive a re-scout.
+    // Set up an existing prospect whose discipline was corrected to "dance" by Dan
+    // (classificationOverriddenByDan = true). Run apply with a fresh event that the
+    // classifier produces as "choral". The prospect's discipline must stay "dance" and
+    // fitScore must reflect dance (not the scout's choral value).
+    @Test func reScoutPreservesDansCorrectedClassification() throws {
+        let ctx = ModelContext(try container())
+
+        // Build the natural key the incoming event will produce.
+        let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
+                                          performanceDate: "2026-06-24",
+                                          venue: "Stern Auditorium / Perelman Stage")
+
+        // Dance score (no prior): discipline 3 + self 2 + strong 2 + likely_uncovered 2 = 9.
+        let existing = Prospect(naturalKey: key, groupName: "Indianapolis Children's Choir",
+                                discipline: "dance", venue: "Stern Auditorium / Perelman Stage",
+                                performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                                priorRelationship: "none", production: "self", profile: "strong",
+                                coverage: "likely_uncovered", fitScore: 9, tier: "high",
+                                fitReason: "corrected", matchedClientName: nil,
+                                possibleMatchSource: nil, possibleMatchName: nil)
+        existing.classificationOverriddenByDan = true
+        ctx.insert(existing)
+        try ctx.save()
+
+        // Scout re-runs; the classifier produces choral for this event (score = 7).
+        let choirEvent = ExtractedEvent(title: "Indianapolis Children's Choir",
+                                        presenter: "Indianapolis Children's Choir",
+                                        venue: "Stern Auditorium / Perelman Stage",
+                                        performanceDate: "2026-06-24",
+                                        sourceUrl: "https://example.com/b")
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], into: ctx)
+
+        let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(
+            predicate: #Predicate { $0.naturalKey == key })).first
+        // Dan's discipline must survive the re-scout.
+        #expect(refreshed?.discipline == "dance")
+        // fitScore must be re-derived from dance (9), not copied from the scout's choral result (7).
+        #expect(refreshed?.fitScore == 9)
+        // The override flag itself must be untouched.
+        #expect(refreshed?.classificationOverriddenByDan == true)
+    }
+
     @Test func titleDriftWithSameSourceURLCarriesTheDecisionForward() throws {
         let ctx = ModelContext(try container())
         let url = "https://www.carnegiehall.org/event/abc-123"
