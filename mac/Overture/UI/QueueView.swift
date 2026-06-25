@@ -5,7 +5,9 @@ import SwiftData
 struct QueueView: View {
     @Environment(\.modelContext) private var context
 
-    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc.
+    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc. The
+    // "hide untouched-gone" rule (#133) lives in QueueModel.queueOrder, not here, because a
+    // compound predicate overruns the #Predicate type-checker.
     @Query(
         filter: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
         sort: [SortDescriptor(\Prospect.performanceDate, order: .forward),
