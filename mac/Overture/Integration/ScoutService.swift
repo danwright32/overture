@@ -17,12 +17,14 @@ enum ScoutService {
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
 
-        // The single warning to show after a run, if any. Zero extracted events almost
-        // always means the venue page changed or was unreachable, so it takes precedence
-        // over a client-list warning (with no events there is nothing to match) (#27).
+        // The single warning to show after a run, if any. Zero events here means the feed was
+        // reached and parsed but nothing matched — distinct from a connection failure (the
+        // thrown-error path, see ScoutFailure). For a 90-day window that's unusual and usually
+        // means the feed's data format changed. Takes precedence over a client-list warning
+        // (with no events there is nothing to match) (#27, #126).
         var warning: String? {
             if found == 0 {
-                return "The scout found no events. The venue calendar may have changed or be temporarily unavailable — try running the scout again shortly."
+                return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window — the feed's data format may have changed."
             }
             return clientListWarning
         }
