@@ -31,8 +31,6 @@ enum DownbeatBooking {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
             if p.outcome == .booked { continue }
             if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
-            // NOTE: Dan owns this — a dismissed suggestion is sticky: no re-suggest, no auto-book.
-            if p.bookingSuggestionDismissed { continue }
             switch BookingMatch.classify(prospect: p, bookings: bookings) {
             case .exact(let booking):
                 if !consumed.contains(booking.id) {
@@ -43,19 +41,19 @@ enum DownbeatBooking {
                     consumed.insert(booking.id)
                     count += 1
                 } else {
-                    p.bookingSuggested = true
+                    // Tiebreak loser: suggest only if the prospect hasn't dismissed
+                    if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
                 }
             case .possible:
-                p.bookingSuggested = true
+                // Soft signal: don't re-suggest if dismissed
+                if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
             case .none:
                 // Fall back to old client-list org match — downgraded to suggestion
                 let orgMatch = clients.contains { client in
                     GroupNameMatch.isConfident(client.displayName, p.groupName)
                         || (client.shortName.map { GroupNameMatch.isConfident($0, p.groupName) } ?? false)
                 }
-                if orgMatch {
-                    p.bookingSuggested = true
-                }
+                if orgMatch && !p.bookingSuggestionDismissed { p.bookingSuggested = true }
             }
         }
         return count

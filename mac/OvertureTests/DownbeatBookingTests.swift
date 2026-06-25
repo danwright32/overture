@@ -234,7 +234,7 @@ struct DownbeatBookingTests {
         #expect(suggestedCount == 1)
     }
 
-    // ── TASK 4: dismissed suggestion is sticky (#114) ────────────────────────────
+    // ── TASK 4 (revised): dismissal silences soft suggestions; exact booking still auto-books (#114) ──
 
     // 8. Dismissed prospect whose org IS in the client list: reconcile must not re-suggest.
     @Test func dismissedProspectIsNotReSuggested() throws {
@@ -250,22 +250,44 @@ struct DownbeatBookingTests {
         #expect(p.outcome == .noResponse)
     }
 
-    // 9. Dismissed prospect that has an exact matching booking: dismissal wins, no auto-book.
-    @Test func dismissedProspectIsNotAutoBooked() throws {
+    // 9. Dismissed prospect with a .possible (causation-failed) booking: must not re-suggest.
+    @Test func dismissedProspectWithPossibleIsNotReSuggested() throws {
         let ctx = ModelContext(try container())
-        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let bookingStart = Date(timeIntervalSince1970: 1_751_328_000)
+        let sentAfter = bookingStart.addingTimeInterval(5 * 86_400)
         let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
-                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+                     sentAt: sentAfter, performanceDate: "2026-07-01", clientId: "C1")
         p.bookingSuggestionDismissed = true
-        let b = booking(id: "B-dismissed", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let startStr = BookingMatch.dayString(from: bookingStart)
+        let b = OvertureBooking(id: "B-poss-dismissed", clientId: "C1",
+                                clientDisplayName: "Acme Festival Chorus",
+                                shootName: "", startDate: startStr, endDate: "2026-07-01",
+                                venueId: nil, venueName: "V")
         let count = DownbeatBooking.reconcileBooked(
             prospects: [p], clients: [], bookings: [b], health: .ok, now: Date())
         #expect(count == 0)
+        #expect(p.bookingSuggested == false)
         #expect(p.outcome == .noResponse)
+    }
+
+    // 10. Dismissed prospect with an EXACT matching booking: hard proof wins, must still auto-book.
+    @Test func dismissedProspectWithExactMatchIsAutoBooked() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let now = Date(timeIntervalSince1970: 9_999_999)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.bookingSuggestionDismissed = true
+        let b = booking(id: "B-dismissed-exact", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let count = DownbeatBooking.reconcileBooked(
+            prospects: [p], clients: [], bookings: [b], health: .ok, now: now)
+        #expect(count == 1)
+        #expect(p.outcome == .booked)
+        #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
         #expect(p.bookingSuggested == false)
     }
 
-    // 10. Sanity: a non-dismissed prospect still gets suggested/booked as before.
+    // 11. Sanity: a non-dismissed prospect still gets suggested/booked as before.
     @Test func nonDismissedProspectStillAutoBooks() throws {
         let ctx = ModelContext(try container())
         let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
