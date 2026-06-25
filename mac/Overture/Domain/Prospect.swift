@@ -85,8 +85,9 @@ final class Prospect {
     var bookingSuggested: Bool = false
 
     // Set when Dan explicitly dismisses a booking suggestion ("Not a booking").
-    // Once set, reconcileBooked leaves this prospect alone — no re-suggestion and
-    // no auto-book. Dan's call is sticky. Defaulted so existing records migrate cleanly.
+    // Once set, reconcileBooked suppresses soft re-suggestions (possible/client-list/
+    // tiebreak), but an exact Downbeat booking STILL auto-books — dismissal silences
+    // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
     var bookingSuggestionDismissed: Bool = false
 
     init(
