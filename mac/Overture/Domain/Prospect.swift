@@ -76,6 +76,15 @@ final class Prospect {
     var followUpCount: Int = 0
     var lastFollowUpAt: Date? = nil
 
+    // Conversation lifecycle (#111): where an active reply sits between replied and booked, plus the
+    // timing anchors for its reminder (setAt = when the state was set; remindedAt = last time Dan
+    // acted on the reminder, re-anchoring it) and the auto/manual source so #112 cannot overwrite a
+    // manual set. Defaulted nil so existing records migrate cleanly (lightweight, like #132).
+    var conversationStateRaw: String? = nil
+    var conversationStateSetAt: Date? = nil
+    var conversationRemindedAt: Date? = nil
+    var conversationStateSourceRaw: String? = nil
+
     // Downbeat client id from the relationship match, used for per-event booking
     // detection (#99). Defaulted so existing records migrate cleanly.
     var downbeatClientId: String? = nil
@@ -176,6 +185,16 @@ final class Prospect {
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }
         set { outcomeRaw = newValue.rawValue }
+    }
+
+    var conversationState: ConversationState? {
+        get { conversationStateRaw.flatMap(ConversationState.init) }
+        set { conversationStateRaw = newValue?.rawValue }
+    }
+
+    var conversationStateSource: OutcomeSource? {
+        get { conversationStateSourceRaw.flatMap(OutcomeSource.init) }
+        set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
     // True once the email was actually sent (approved-and-sent). Outcomes only count

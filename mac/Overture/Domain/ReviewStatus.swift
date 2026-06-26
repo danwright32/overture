@@ -63,6 +63,29 @@ enum OutcomeSource: String, CaseIterable, Sendable {
     case manual    // Dan marked it
 }
 
+// Where an active conversation sits between a bare reply and a booking (#111). The three active
+// states get timed, event-aware reminders; `declined` is terminal (it resolves the lead to
+// lost-soft). Stored on Prospect as a raw string with an OutcomeSource (auto/manual), so #112's AI
+// suggestion never silently overwrites a state Dan set by hand.
+enum ConversationState: String, CaseIterable, Sendable {
+    case interested
+    case wantsToBook = "wants_to_book"
+    case hasQuestion = "has_question"
+    case declined
+
+    var label: String {
+        switch self {
+        case .interested: return "Interested"
+        case .wantsToBook: return "Wants to book"
+        case .hasQuestion: return "Has a question"
+        case .declined: return "Declined"
+        }
+    }
+
+    // The active states (everything but declined) generate reminders.
+    var isActive: Bool { self != .declined }
+}
+
 // The reasons Dan can give when dismissing, mirroring the engine's dismiss_reason set.
 enum DismissReason: String, CaseIterable, Sendable {
     case dateConflict = "date_conflict"

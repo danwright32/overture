@@ -94,6 +94,7 @@
 		C673577557212A661D01E532 /* ScoutOutcomeWarningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C000452A48174359570CDE9 /* ScoutOutcomeWarningTests.swift */; };
 		C765AE9C8AF8A97CA627D61B /* RunGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97DF326E45BD8893672AD58C /* RunGrouping.swift */; };
 		C7775A1D20DC00F8E256642B /* DismissedProspectsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 073482FF171FDD03F329446D /* DismissedProspectsTests.swift */; };
+		CC2314C11B59D0B0BAE7CE95 /* ConversationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03CC1D9B940C2E2847738B71 /* ConversationStateTests.swift */; };
 		CF5F5ADAD4D52546E3B96EA4 /* GmailSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8241C5C74975C9F06E4B505 /* GmailSender.swift */; };
 		CFD4386F273F2151A04916FC /* PrepQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97E9DA8F6EFABE1B82CE4BE8 /* PrepQueue.swift */; };
 		D1DA16CE093E998F279DC660 /* ProspectAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D2CD6E3596C49C463321EA /* ProspectAssemblerTests.swift */; };
@@ -137,6 +138,7 @@
 
 /* Begin PBXFileReference section */
 		00E563EC137DDC54063B7980 /* PrepImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepImporterTests.swift; sourceTree = "<group>"; };
+		03CC1D9B940C2E2847738B71 /* ConversationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStateTests.swift; sourceTree = "<group>"; };
 		04423CAB808AFFABA409121C /* ClassificationOverrideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationOverrideTests.swift; sourceTree = "<group>"; };
 		073482FF171FDD03F329446D /* DismissedProspectsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissedProspectsTests.swift; sourceTree = "<group>"; };
 		07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatternsView.swift; sourceTree = "<group>"; };
@@ -285,6 +287,7 @@
 				784094A755CF0B2AF8D904B7 /* CarnegieExtractorTests.swift */,
 				0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */,
 				04423CAB808AFFABA409121C /* ClassificationOverrideTests.swift */,
+				03CC1D9B940C2E2847738B71 /* ConversationStateTests.swift */,
 				073482FF171FDD03F329446D /* DismissedProspectsTests.swift */,
 				E72D937054FBE261722613B6 /* DownbeatBookingTests.swift */,
 				E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */,
@@ -613,6 +616,7 @@
 				97EE5CE422009747138E8D43 /* CarnegieExtractorTests.swift in Sources */,
 				3F8AA010C237FC233C3FC20F /* ClassificationConfidenceTests.swift in Sources */,
 				D94B2CC284F406DF250C901C /* ClassificationOverrideTests.swift in Sources */,
+				CC2314C11B59D0B0BAE7CE95 /* ConversationStateTests.swift in Sources */,
 				C7775A1D20DC00F8E256642B /* DismissedProspectsTests.swift in Sources */,
 				1BF4811736AD0C8A914EFCF1 /* DownbeatBookingTests.swift in Sources */,
 				7B4E721B2BC1ECCAFD669A5F /* DownbeatExportContractTests.swift in Sources */,
