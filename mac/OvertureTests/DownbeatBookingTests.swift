@@ -125,6 +125,8 @@ struct DownbeatBookingTests {
         #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
         #expect(p.outcomeAt == now)
         #expect(p.bookingSuggested == false)
+        // #203: the booking that auto-booked is recorded so Dan can later reject that exact one.
+        #expect(p.autoBookedFromBookingId == "B99")
     }
 
     // 2. Possible (booking predates send) → bookingSuggested, not booked.
@@ -299,5 +301,51 @@ struct DownbeatBookingTests {
             prospects: [p], clients: [], bookings: [b], health: .ok, now: Date())
         #expect(count == 1)
         #expect(p.outcome == .booked)
+    }
+
+    // ── #203: reject a wrong auto-detected booking (per-booking suppression) ──────
+
+    // Rejecting reverts the auto-booked outcome and records the rejected booking id.
+    @Test func rejectAutoBookingRevertsAndRecords() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     outcome: .booked, source: .auto)
+        p.autoBookedFromBookingId = "B99"
+        p.rejectAutoBooking(bookingId: "B99", now: Date(timeIntervalSince1970: 7_000))
+        #expect(p.outcome == .noResponse)
+        #expect(p.outcomeSourceRaw == nil)
+        #expect(p.rejectedBookingIds.contains("B99"))
+    }
+
+    // A rejected booking id is never re-booked, even on an otherwise-exact match.
+    @Test func rejectedBookingIsNotReBooked() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.rejectAutoBooking(bookingId: "B99", now: Date(timeIntervalSince1970: 7_000))
+        let b = booking(id: "B99", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: Date())
+        #expect(count == 0)
+        #expect(p.outcome == .noResponse)
+        #expect(p.bookingSuggested == false)
+    }
+
+    // Rejecting one booking does not stop a DIFFERENT genuine booking from auto-detecting.
+    @Test func rejectingOneBookingStillAllowsAnother() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.rejectAutoBooking(bookingId: "B-wrong", now: Date(timeIntervalSince1970: 7_000))
+        let b = booking(id: "B-right", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let now = Date(timeIntervalSince1970: 9_999)
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: now)
+        #expect(count == 1)
+        #expect(p.outcome == .booked)
+        #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
+        #expect(p.autoBookedFromBookingId == "B-right")
     }
 }

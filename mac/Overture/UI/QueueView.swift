@@ -270,6 +270,7 @@ struct QueueView: View {
                     onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
                     onConfirmBooking: { confirmBooking(item) },
                     onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
+                    onRejectBooking: { rejectBooking(item) },
                     gmailConnected: GmailAuthManager.shared.isConnected
                 )
             }
@@ -359,6 +360,14 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.bookingSuggested = false
         model.bookingSuggestionDismissed = true
+        try? context.save()
+    }
+
+    // Dan rejected a wrong auto-detected booking (#203): revert it to no-response and remember the
+    // booking id so reconcileBooked never re-books from that exact match.
+    private func rejectBooking(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId ?? "", now: Date())
         try? context.save()
     }
 

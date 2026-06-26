@@ -104,6 +104,16 @@ final class Prospect {
     // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
     var bookingSuggestionDismissed: Bool = false
 
+    // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
+    // time so Dan can reject that exact match. Defaulted so existing records migrate cleanly.
+    var autoBookedFromBookingId: String? = nil
+
+    // Booking ids Dan has rejected as wrong auto-detections (#203), newline-joined for
+    // SwiftData. reconcileBooked skips re-booking from any id in this set, so the rejection
+    // sticks per booking (a different genuine booking can still auto-detect). Read via
+    // rejectedBookingIds. Defaulted so existing records migrate cleanly.
+    var rejectedBookingIdsRaw: String = ""
+
     // Run-collapse fields (#132). The engine groups overlapping performances into a
     // collapsed run and emits these on every member. Defaulted so existing records
     // and older results files migrate cleanly without an explicit migration plan.
@@ -209,6 +219,26 @@ final class Prospect {
         outcomeSourceRaw = OutcomeSource.manual.rawValue
         outcomeAt = now
         bookingSuggested = false
+    }
+
+    // Booking ids Dan has rejected as wrong auto-detections (#203).
+    var rejectedBookingIds: Set<String> {
+        Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
+    }
+
+    // Dan rejected a wrong auto-detected booking (#203): revert the outcome to no-response and
+    // remember this specific booking id so reconcileBooked never re-books from it. Other genuine
+    // bookings for the same group can still auto-detect (per-booking, not per-prospect).
+    func rejectAutoBooking(bookingId: String, now: Date) {
+        outcome = .noResponse
+        outcomeSourceRaw = nil
+        outcomeAt = now
+        bookingSuggested = false
+        bookingSuggestionDismissed = true
+        autoBookedFromBookingId = nil
+        var ids = rejectedBookingIds
+        ids.insert(bookingId)
+        rejectedBookingIdsRaw = ids.sorted().joined(separator: "\n")
     }
 
     // Dan sets the conversation state by hand (#111). An active state also marks a not-yet-replied
