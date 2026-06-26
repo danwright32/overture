@@ -13,6 +13,7 @@ struct DraftReviewView: View {
     var onSetOutcome: (Outcome) -> Void = { _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
+    var onSetConversationState: (ConversationState) -> Void = { _ in }
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -128,6 +129,7 @@ struct DraftReviewView: View {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Spacer()
+                conversationStatePicker
                 outcomePicker
             } else if isApproved {
                 Button { onSend() } label: {
@@ -189,6 +191,36 @@ struct DraftReviewView: View {
         .fixedSize()
     }
 
+    // Where the conversation stands once the lead has replied (#111): Dan tags it so the right
+    // event-aware reminder fires. Setting an active state also marks the lead replied; declined
+    // resolves it to lost-soft. Shown beside the outcome once sent.
+    private var conversationStatePicker: some View {
+        Menu {
+            ForEach(ConversationState.allCases, id: \.self) { s in
+                Button {
+                    onSetConversationState(s)
+                } label: {
+                    if item.conversationState == s { Label(s.label, systemImage: "checkmark") }
+                    else { Text(s.label) }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if let state = item.conversationState {
+                    Circle().fill(state.accent).frame(width: 6, height: 6)
+                    Text(state.label).foregroundStyle(OVColor.ink)
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                    Text("Set conversation").foregroundStyle(OVColor.inkSoft)
+                }
+            }
+            .font(OVType.meta)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Where this conversation stands")
+    }
+
     // Always visible once Dan marks a lead lost: an optional note for his own reference
     // (it doesn't change the ranking, which is driven by the soft/hard choice).
     private var lostReasonField: some View {
@@ -217,6 +249,40 @@ struct DraftReviewView: View {
         case .lostSoft: return OVColor.inkSoft
         case .lostHard: return OVColor.rust
         case .noResponse: return OVColor.inkFaint
+        }
+    }
+}
+
+#Preview("Draft review (sent, conversation)") {
+    var item = QueueItem(
+        id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Carnegie Hall",
+        performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+        priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
+        fitScore: 8, tier: "high", fitReason: "Repeat-client-adjacent ensemble at a flagship venue.",
+        matchedClientName: "Aurora Strings", possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
+    item.contactName = "Emma Robinson"
+    item.contactRole = "Marketing & Communications Manager"
+    item.contactEmail = "emma@aurorastrings.example"
+    item.contactConfidence = .high
+    item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
+    item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."
+    item.sentAt = Date()
+    item.conversationState = .wantsToBook
+    return DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+        .padding(OVSpacing.lg)
+        .frame(width: 480)
+        .background(OVColor.canvas)
+}
+
+// The accent for a conversation state, shared by the lead-row picker and the Due list so a state
+// reads the same everywhere: forest = on track to book, gold = warm, rust = needs a response.
+extension ConversationState {
+    var accent: Color {
+        switch self {
+        case .wantsToBook: return OVColor.forest
+        case .interested: return OVColor.gold
+        case .hasQuestion: return OVColor.rust
+        case .declined: return OVColor.inkSoft
         }
     }
 }

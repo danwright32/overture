@@ -24,7 +24,10 @@ struct RootView: View {
     @State private var showPatterns = false
     @State private var showFollowUps = false
 
-    private var followUpsDue: Int { FollowUp.due(from: allProspects, now: Date()).count }
+    private var followUpsDue: Int {
+        FollowUp.due(from: allProspects, now: Date()).count
+            + ConversationReminder.due(from: allProspects, now: Date()).count
+    }
 
     private var canStartPrep: Bool {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
@@ -70,10 +73,10 @@ struct RootView: View {
                     Button {
                         showFollowUps = true
                     } label: {
-                        Label(followUpsDue == 0 ? "Follow-ups" : "Follow-ups (\(followUpsDue))",
+                        Label(followUpsDue == 0 ? "Due" : "Due (\(followUpsDue))",
                               systemImage: "arrow.uturn.right")
                     }
-                    .help("Prospects due for a gentle follow-up nudge")
+                    .help("Follow-ups and active conversations due for a touch")
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {

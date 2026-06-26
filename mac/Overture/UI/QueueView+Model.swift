@@ -44,6 +44,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
     var outcomeSourceRaw: String? = nil
+    var conversationState: ConversationState? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
@@ -131,7 +132,7 @@ enum QueueModel {
     // "is this in the past / within the booking window" never drifts a day off UTC or the
     // Mac's local zone wherever Dan happens to be.
     static func easternToday(_ now: Date = Date()) -> String {
-        dayFormatter.string(from: now)
+        EasternDate.today(now)
     }
 
     // The window the queue shows: past performances drop out, and anything more than this
@@ -144,11 +145,8 @@ enum QueueModel {
     // Whole days from `today` (a "yyyy-MM-dd" string) to the performance, as New York
     // calendar dates so nothing drifts a day across timezones.
     static func daysUntil(performanceDate: String?, today: String) -> Int? {
-        guard let performanceDate,
-              let from = day(today),
-              let to = day(performanceDate) else { return nil }
-        let comps = easternCalendar.dateComponents([.day], from: from, to: to)
-        return comps.day
+        guard let performanceDate else { return nil }
+        return EasternDate.daysUntil(from: today, to: performanceDate)
     }
 
     enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown }
@@ -277,23 +275,10 @@ enum QueueModel {
     // MARK: - Date helpers
 
     // Overture is always reckoned in New York time, never UTC or the Mac's local zone.
-    private static let eastern = TimeZone(identifier: "America/New_York")!
-    private static let easternCalendar: Calendar = {
-        var c = Calendar(identifier: .gregorian)
-        c.timeZone = eastern
-        return c
-    }()
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = eastern
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private static func day(_ iso: String) -> Date? { dayFormatter.date(from: iso) }
+    // Date math delegates to the shared EasternDate helper, the one source of truth (#116). The
+    // label formatting below still uses the Eastern calendar + day parsing through it.
+    private static let easternCalendar = EasternDate.calendar
+    private static func day(_ iso: String) -> Date? { EasternDate.date(from: iso) }
 
     private static let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     private static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

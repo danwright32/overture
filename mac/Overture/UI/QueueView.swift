@@ -264,6 +264,7 @@ struct QueueView: View {
                     onSetOutcome: { outcome in setOutcome(item, outcome) },
                     onSetLostReason: { reason in setLostReason(item, reason) },
                     onSend: { requestSend(item) },
+                    onSetConversationState: { state in setConversationState(item, state) },
                     onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
                     onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
                     onConfirmBooking: { confirmBooking(item) },
@@ -329,6 +330,12 @@ struct QueueView: View {
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
         model.bookingSuggested = false
+        try? context.save()
+    }
+
+    private func setConversationState(_ item: QueueItem, _ state: ConversationState) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.setConversationState(state, now: Date())
         try? context.save()
     }
 
