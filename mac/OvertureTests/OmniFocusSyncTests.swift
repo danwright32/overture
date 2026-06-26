@@ -4,9 +4,9 @@ import SwiftData
 @testable import Overture
 
 // #176 / #229: the pure core of the OmniFocus sync. `desired` builds the set of tasks that should
-// exist right now (only remotely-actionable reminders, within a horizon, each carrying its due);
-// `reconcile` diffs that against the existing Overture-tagged tasks into create/complete actions.
-// No OmniFocus dependency here.
+// exist now (only remotely-actionable reminders, within a horizon), each carrying a defer date
+// (11am Eastern on the due day) and a due date (6pm Eastern on the due day). `reconcile` diffs that
+// against the existing Overture-tagged tasks (by naturalKey + due day) into create/complete actions.
 @MainActor
 @Suite("OmniFocus sync")
 struct OmniFocusSyncTests {
@@ -33,38 +33,43 @@ struct OmniFocusSyncTests {
         return p
     }
 
-    @Test func desiredIncludesConfirmedActiveWithinHorizonWithItsDue() throws {
+    @Test func desiredCarriesDeferElevenAmAndDueSixPmEasternOnTheDueDay() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        // Confirmed (manual) wantsToBook set now: interval 7d -> due now+7d, inside a 14d horizon.
-        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)
+        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)  // wantsToBook = 7d
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 14)
         #expect(tasks.count == 1)
-        #expect(tasks.first?.naturalKey == "warm-lead")
-        #expect(tasks.first?.due == now.addingTimeInterval(7 * 86_400))
+        let t = try #require(tasks.first)
+        let cal = EasternDate.calendar
+        let dueDay = now.addingTimeInterval(7 * 86_400)
+        #expect(cal.component(.hour, from: t.deferDate) == 11)
+        #expect(cal.component(.hour, from: t.dueDate) == 18)
+        #expect(cal.isDate(t.deferDate, inSameDayAs: dueDay))
+        #expect(cal.isDate(t.dueDate, inSameDayAs: dueDay))
     }
 
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "auto", state: .wantsToBook, source: .auto, setAt: now)        // AI guess: in-app only
-        lead(ctx, key: "needsState", state: nil, source: nil, setAt: nil)             // replied, uncategorized
+        lead(ctx, key: "auto", state: .wantsToBook, source: .auto, setAt: now)
+        lead(ctx, key: "needsState", state: nil, source: nil, setAt: nil)
         lead(ctx, key: "booked", state: .wantsToBook, source: .manual, outcome: .booked, setAt: now)
-        lead(ctx, key: "farOff", state: .interested, source: .manual, setAt: now)     // interested = 10d > 3d horizon
+        lead(ctx, key: "farOff", state: .interested, source: .manual, setAt: now)  // interested = 10d > 3d horizon
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 3)
         #expect(tasks.isEmpty)
     }
 
     @Test func reconcileCreatesMissingAndCompletesStaleOrResolved() {
-        let now = Date(timeIntervalSince1970: 10_000_000)
-        let d1 = now.addingTimeInterval(7 * 86_400)
-        let desired = [OmniFocusSync.DesiredTask(naturalKey: "a", title: "A", note: "", due: d1),
-                       OmniFocusSync.DesiredTask(naturalKey: "c", title: "C", note: "", due: d1)]
-        let existing = [OmniFocusSync.ExistingTask(naturalKey: "a", due: d1),                          // matches: leave
-                        OmniFocusSync.ExistingTask(naturalKey: "b", due: d1),                          // resolved: complete
-                        OmniFocusSync.ExistingTask(naturalKey: "c", due: now)]                         // stale due: complete + recreate
+        let day1Defer = Date(timeIntervalSince1970: 20_000_000)
+        let day1Due = day1Defer.addingTimeInterval(7 * 3_600)
+        let dayOldDue = day1Due.addingTimeInterval(-7 * 86_400)
+        let desired = [OmniFocusSync.DesiredTask(naturalKey: "a", title: "A", note: "", deferDate: day1Defer, dueDate: day1Due),
+                       OmniFocusSync.DesiredTask(naturalKey: "c", title: "C", note: "", deferDate: day1Defer, dueDate: day1Due)]
+        let existing = [OmniFocusSync.ExistingTask(naturalKey: "a", dueDate: day1Due),   // matches: leave
+                        OmniFocusSync.ExistingTask(naturalKey: "b", dueDate: day1Due),   // resolved: complete
+                        OmniFocusSync.ExistingTask(naturalKey: "c", dueDate: dayOldDue)] // stale due day: complete + recreate
         let plan = OmniFocusSync.reconcile(desired: desired, existing: existing)
         #expect(Set(plan.toComplete.map(\.naturalKey)) == ["b", "c"])
         #expect(Set(plan.toCreate.map(\.naturalKey)) == ["c"])
