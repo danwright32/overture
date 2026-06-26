@@ -85,6 +85,11 @@ final class Prospect {
     var conversationRemindedAt: Date? = nil
     var conversationStateSourceRaw: String? = nil
 
+    // The latest inbound reply's text + when it was captured (#112): pulled lazily when a reply is
+    // first detected, handed to the classify workflow. Defaulted nil so existing records migrate cleanly.
+    var lastReplyText: String? = nil
+    var lastReplyAt: Date? = nil
+
     // Downbeat client id from the relationship match, used for per-event booking
     // detection (#99). Defaulted so existing records migrate cleanly.
     var downbeatClientId: String? = nil
