@@ -66,11 +66,25 @@ struct OutcomePatternsView: View {
                 } else {
                     Text("\(tally.replied + tally.booked) replied\(percent(tally.responseRate))")
                         .foregroundStyle(OVColor.inkSoft)
+                    if let split = bookingSplit(tally) {
+                        Text(split).foregroundStyle(OVColor.inkFaint)
+                    }
                 }
             }
             .font(OVType.meta)
         }
         .padding(.vertical, OVSpacing.xs)
+    }
+
+    // Show how the bookings were counted (#117): auto-detected from a Downbeat match versus
+    // confirmed by Dan, so a wrong attribution can't silently skew the rate he is told to trust.
+    // Nil when there are no bookings to attribute.
+    private func bookingSplit(_ tally: OutcomeTally) -> String? {
+        guard tally.booked > 0 else { return nil }
+        var parts: [String] = []
+        if tally.bookedAuto > 0 { parts.append("\(tally.bookedAuto) auto-detected") }
+        if tally.bookedManual > 0 { parts.append("\(tally.bookedManual) confirmed by you") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func percent(_ rate: Double?) -> String {

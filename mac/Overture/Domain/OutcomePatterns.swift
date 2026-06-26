@@ -38,7 +38,8 @@ enum OutcomePatterns {
             case .discipline: dim = p.discipline
             case .tier: dim = p.tier
             }
-            return OutcomeSample(wasContacted: p.wasContacted, outcome: p.outcome, dimension: dim)
+            return OutcomeSample(wasContacted: p.wasContacted, outcome: p.outcome, dimension: dim,
+                                 outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
         }
     }
 }
