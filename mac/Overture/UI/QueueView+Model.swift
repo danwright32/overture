@@ -262,6 +262,12 @@ enum QueueModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    // #217: the to-send queue is the bookable order with anyone already reached out to removed, so
+    // the "To send" and "Reached out" pipelines never show the same prospect twice.
+    static func toSendQueue(_ items: [QueueItem], reachedOutKeys: Set<String>, today: String) -> [QueueItem] {
+        queueOrder(items.filter { !reachedOutKeys.contains($0.id) }, today: today)
+    }
+
     static func summary(_ items: [QueueItem]) -> (total: Int, high: Int) {
         (items.count, items.filter { $0.tier == "high" }.count)
     }

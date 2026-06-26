@@ -18,6 +18,7 @@ struct QueueView: View {
     @State private var disciplineFilter: String?
     @State private var highOnly = false
     @State private var showPendingBookingsOnly = false
+    @State private var pipeline: Pipeline = .toSend
     @State private var pendingConfirm: PendingConfirm?
     @State private var showReconnect = false
 
@@ -28,6 +29,19 @@ struct QueueView: View {
     }
 
     private var items: [QueueItem] { prospects.map(QueueItem.init) }
+
+    // #217: split the queue into people still to email and people already reached out to.
+    enum Pipeline: String, CaseIterable {
+        case toSend, reachedOut
+        var label: String { self == .toSend ? "To send" : "Reached out" }
+    }
+
+    // Contacted prospects Dan is still working, ordered by when to next reach out (soonest first).
+    // Booked, lost, and finished-sequence leads drop off (ReachedOutQueue returns no next date).
+    private var reachedOutItems: [QueueItem] {
+        ReachedOutQueue.active(from: prospects, now: Date()).map(QueueItem.init)
+    }
+    private var reachedOutKeys: Set<String> { Set(reachedOutItems.map(\.id)) }
 
     private var filtered: [QueueItem] {
         items.filter { item in
@@ -41,7 +55,9 @@ struct QueueView: View {
     // What the queue actually shows: the filtered set windowed to the bookable date range
     // (past hidden, beyond-horizon hidden) with too-close events demoted to the bottom,
     // computed live against today so it stays correct between scout runs.
-    private var visible: [QueueItem] { QueueModel.queueOrder(filtered, today: today) }
+    private var visible: [QueueItem] {
+        QueueModel.toSendQueue(filtered, reachedOutKeys: reachedOutKeys, today: today)
+    }
 
     private var disciplines: [String] {
         Array(Set(items.map(\.discipline))).sorted()
@@ -108,18 +124,27 @@ struct QueueView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: OVSpacing.xl) {
                 masthead
-                QueueFilterBar(
-                    disciplines: disciplines,
-                    activeDiscipline: $disciplineFilter,
-                    highOnly: $highOnly
-                )
-                let groups = QueueModel.groupByDate(visible)
-                if groups.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(groups) { group in
-                        dateSection(group)
+                Picker("Pipeline", selection: $pipeline) {
+                    ForEach(Pipeline.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                if pipeline == .toSend {
+                    QueueFilterBar(
+                        disciplines: disciplines,
+                        activeDiscipline: $disciplineFilter,
+                        highOnly: $highOnly
+                    )
+                    let groups = QueueModel.groupByDate(visible)
+                    if groups.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(groups) { group in
+                            dateSection(group)
+                        }
                     }
+                } else {
+                    reachedOutList
                 }
             }
             .padding(.horizontal, OVSpacing.xl)
@@ -247,30 +272,52 @@ struct QueueView: View {
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
 
-            ForEach(group.items) { item in
-                ProspectRowView(
-                    item: item,
-                    today: today,
-                    onKeep: { setStatus(item, .queued, nil) },
-                    onDismiss: { reason in setStatus(item, .dismissed, reason) },
-                    onApprove: { setStatus(item, .approved, nil) },
-                    onUnapprove: { setStatus(item, .drafted, nil) },
-                    onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
-                    onSaveDraft: { subject, body in saveDraft(item, subject, body) },
-                    onSetOutcome: { outcome in setOutcome(item, outcome) },
-                    onSetLostReason: { reason in setLostReason(item, reason) },
-                    onSend: { requestSend(item) },
-                    onSetConversationState: { state in setConversationState(item, state) },
-                    onConfirmConversationState: { confirmConversationState(item) },
-                    onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
-                    onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
-                    onConfirmBooking: { confirmBooking(item) },
-                    onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
-                    onRejectBooking: { rejectBooking(item) },
-                    gmailConnected: GmailAuthManager.shared.isConnected
-                )
+            ForEach(group.items) { item in prospectRow(item) }
+        }
+    }
+
+    // #217: people Dan has already pitched, ordered by when to next reach out (soonest first).
+    // A flat list rather than date groups, since the next-reach-out order is what matters here.
+    @ViewBuilder private var reachedOutList: some View {
+        let rows = reachedOutItems
+        if rows.isEmpty {
+            VStack(spacing: OVSpacing.xs) {
+                Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                Text("Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out.")
+                    .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, OVSpacing.hero)
+            .padding(.horizontal, OVSpacing.xl)
+        } else {
+            VStack(alignment: .leading, spacing: OVSpacing.sm) {
+                ForEach(rows) { item in prospectRow(item) }
             }
         }
+    }
+
+    private func prospectRow(_ item: QueueItem) -> some View {
+        ProspectRowView(
+            item: item,
+            today: today,
+            onKeep: { setStatus(item, .queued, nil) },
+            onDismiss: { reason in setStatus(item, .dismissed, reason) },
+            onApprove: { setStatus(item, .approved, nil) },
+            onUnapprove: { setStatus(item, .drafted, nil) },
+            onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
+            onSaveDraft: { subject, body in saveDraft(item, subject, body) },
+            onSetOutcome: { outcome in setOutcome(item, outcome) },
+            onSetLostReason: { reason in setLostReason(item, reason) },
+            onSend: { requestSend(item) },
+            onSetConversationState: { state in setConversationState(item, state) },
+            onConfirmConversationState: { confirmConversationState(item) },
+            onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
+            onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
+            onConfirmBooking: { confirmBooking(item) },
+            onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
+            onRejectBooking: { rejectBooking(item) },
+            gmailConnected: GmailAuthManager.shared.isConnected
+        )
     }
 
     private var emptyState: some View {

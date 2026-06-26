@@ -15,10 +15,11 @@ private func item(
     possibleMatchSource: String? = nil,
     possibleMatchName: String? = nil,
     partOfRelatedRun: Bool = false,
-    status: ReviewStatus = .new
+    status: ReviewStatus = .new,
+    key: String = "k"
 ) -> QueueItem {
     var q = QueueItem(
-        id: "k", groupName: "Test Group", discipline: discipline, venue: venue,
+        id: key, groupName: "Test Group", discipline: discipline, venue: venue,
         performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
         priorRelationship: priorRelationship, production: production, profile: "neutral",
         coverage: coverage, fitScore: fitScore, tier: tier, fitReason: "reason",
@@ -33,6 +34,15 @@ private func item(
 struct QueueItemLifecycleTests {
     // #200: a contacted (sent) prospect stays "kept" so it remains visible in the queue,
     // just like the approved-and-sent rows did before the explicit state existed.
+    // #217: the to-send queue drops anyone already in the reached-out pipeline, so the two
+    // never show the same prospect.
+    @Test func toSendQueueExcludesReachedOutProspects() {
+        let a = item(performanceDate: nil, key: "a")
+        let b = item(performanceDate: nil, key: "b")
+        let result = QueueModel.toSendQueue([a, b], reachedOutKeys: ["b"], today: "2026-06-01")
+        #expect(result.map(\.id) == ["a"])
+    }
+
     @Test func keptCoversPursuedStatesThroughContacted() {
         #expect(item(status: .queued).isKept)
         #expect(item(status: .drafted).isKept)
