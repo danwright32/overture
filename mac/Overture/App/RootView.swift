@@ -135,6 +135,9 @@ struct RootView: View {
                 #endif
             }
             .task {
+                // Skip the app's launch-time background work when the app is only running as
+                // the unit suite's test host, so the suite doesn't pay the ~30s startup tax (#195).
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
                 ingestIfEmpty()
                 reconcileBookings()
                 // Detect replies on sent threads and auto-mark .replied (#40). Read-only;
@@ -156,6 +159,7 @@ struct RootView: View {
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
             .task {
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
                 // Keep the daily scout schedule honored while the app stays open (#33).
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)  // hourly
@@ -163,6 +167,7 @@ struct RootView: View {
                 }
             }
             .task {
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
                 // Re-reconcile when Downbeat rewrites its export while we're open (#197), so a
                 // booking made in Downbeat surfaces as Booked without a relaunch or scout. Same
                 // path as the launch reconcile above. The watcher tears down when this task ends
