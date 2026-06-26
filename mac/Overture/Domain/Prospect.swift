@@ -197,6 +197,35 @@ final class Prospect {
         set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
+    // Record an outcome as Dan's own call (manual source, timestamped, booking-suggestion cleared),
+    // matching the queue's setOutcome so ReplyService never silently overwrites it (#111 / #60).
+    func markOutcomeManually(_ outcome: Outcome, now: Date) {
+        self.outcome = outcome
+        outcomeSourceRaw = OutcomeSource.manual.rawValue
+        outcomeAt = now
+        bookingSuggested = false
+    }
+
+    // Dan sets the conversation state by hand (#111). An active state also marks a not-yet-replied
+    // lead as replied (manual) so the silent FollowUp sequencer stands down and the lead can't be in
+    // both queues; an existing reply keeps its source. `declined` resolves the lead to lost-soft
+    // (door open), recording the decline and stopping the reminders in one action.
+    func setConversationState(_ state: ConversationState, now: Date) {
+        conversationState = state
+        conversationStateSetAt = now
+        conversationStateSource = .manual
+        if state == .declined {
+            markOutcomeManually(.lostSoft, now: now)
+        } else if outcome == .noResponse {
+            markOutcomeManually(.replied, now: now)
+        }
+    }
+
+    // "Remind me later": step an active reminder forward by re-anchoring it, without sending.
+    func remindLater(now: Date) {
+        conversationRemindedAt = now
+    }
+
     // True once the email was actually sent (approved-and-sent). Outcomes only count
     // for these in the stats.
     var wasContacted: Bool { sentAt != nil || status == .approved }
