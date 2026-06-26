@@ -61,6 +61,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         outcome == .booked && outcomeSourceRaw == OutcomeSource.auto.rawValue
     }
 
+    // True when a reply was auto-detected from Gmail (#219); Dan can mark it "not a real reply".
+    var isAutoReplied: Bool {
+        outcome == .replied && outcomeSourceRaw == OutcomeSource.auto.rawValue
+    }
+
     var isSent: Bool { sentAt != nil }
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }

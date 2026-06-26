@@ -89,6 +89,11 @@ final class Prospect {
     // first detected, handed to the classify workflow. Defaulted nil so existing records migrate cleanly.
     var lastReplyText: String? = nil
     var lastReplyAt: Date? = nil
+    // The Gmail message id of the auto-detected reply (#219), recorded so a wrong detection can be
+    // dismissed by id. dismissedReplyId holds the one Dan said was not a real reply. Defaulted so
+    // existing records migrate cleanly.
+    var lastReplyId: String? = nil
+    var dismissedReplyId: String? = nil
 
     // Downbeat client id from the relationship match, used for per-event booking
     // detection (#99). Defaulted so existing records migrate cleanly.
@@ -229,6 +234,19 @@ final class Prospect {
     // Booking ids Dan has rejected as wrong auto-detections (#203).
     var rejectedBookingIds: Set<String> {
         Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
+    }
+
+    // Dan dismissed a wrong auto-detected reply (#219): revert to no-response and remember which
+    // reply (its Gmail message id) was wrong so ReplyService never re-flags that same one, while a
+    // genuinely newer reply on the thread still gets detected.
+    func dismissAutoReply(now: Date) {
+        guard outcome == .replied else { return }
+        outcome = .noResponse
+        outcomeSourceRaw = nil
+        outcomeAt = now
+        lastReplyText = nil
+        lastReplyAt = nil
+        dismissedReplyId = lastReplyId
     }
 
     // Dan rejected a wrong auto-detected booking (#203): revert the outcome to no-response and

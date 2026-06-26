@@ -44,6 +44,24 @@ enum ReplyDetection {
         }
     }
 
+    // The Gmail message id of the newest message from someone other than Dan (skipping automated
+    // senders), or nil if there's no real reply. Lets a single auto-detected reply be dismissed (#219)
+    // while a genuinely newer reply (a different id) still gets flagged.
+    static func latestReplyId(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]] else { return nil }
+        let me = email(from: selfEmail)
+        for m in messages.reversed() {
+            guard let payload = m["payload"] as? [String: Any],
+                  let headers = payload["headers"] as? [[String: Any]] else { continue }
+            let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
+            let e = email(from: from)
+            if e.isEmpty || e == me || isAutomated(e) { continue }
+            return m["id"] as? String
+        }
+        return nil
+    }
+
     // The latest inbound reply's text from a threads.get (format=full) response: the NEWEST message
     // from someone other than Dan (skipping automated senders). Prefers text/plain, falls back to
     // stripped text/html; base64url-decoded and capped. Residual quoted history is left for the
