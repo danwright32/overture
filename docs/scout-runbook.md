@@ -33,9 +33,11 @@ the app's own scout is the live one.
    — read the file, decide `production` / `profile` / `coverage` / `discipline` for each using
    the same rules plus your judgment (e.g. a self-presented orchestra that is actually already
    covered), and write the results as `overture-refined.json` (an array of
-   `{title, production, profile, coverage, discipline, fit_reason?}`). Re-run `run-scout.ts`; it
-   merges the refinements over the rules output and marks those events confident. Refining only
-   the unsure slice keeps cost near zero. The rules summary you also apply when refining:
+   `{title, production, profile, coverage, discipline, fit_reason?}`). Canonical samples of both
+   files (the cross-language contract guard, #159) live in `fixtures/scout-refine/`; echo each
+   `title` back verbatim, as it is the join key. Re-run `run-scout.ts`; it merges the refinements
+   over the rules output and marks those events confident. Refining only the unsure slice keeps
+   cost near zero. The rules summary you also apply when refining:
    - `production`: `agency` when presenter is a tour operator / management / a
      "International Competition Winners" or "Rising Stars" showcase rental; `self`
      when the presenter is the performing group itself (a choir, school, ensemble,
