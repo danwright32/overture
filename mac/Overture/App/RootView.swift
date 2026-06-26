@@ -128,6 +128,11 @@ struct RootView: View {
                 // Detect replies on sent threads and auto-mark .replied (#40). Read-only;
                 // skips silently if Gmail isn't connected.
                 await GmailReplyChecker().checkReplies(in: context)
+                // Ingest any classifications from a prior run, then (after replies are saved above)
+                // launch a classify run for replies still needing an intent (#112). Both no-op
+                // gracefully when there's nothing to do or the runner isn't configured.
+                ingestReplyClassifications()
+                startReplyClassifyIfNeeded()
                 // If a run is in flight at launch, watch it to completion; otherwise just
                 // ingest any results already on disk (a past success), without nagging
                 // about an old failed run (#48).
@@ -219,6 +224,19 @@ struct RootView: View {
 
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
     // on (#33). Safe to trigger unattended: the scout only reads/extracts, never sends.
+    // Ingest classifications a prior reply-classify run wrote (suggests states, auto). No-op if the
+    // results file isn't there yet.
+    private func ingestReplyClassifications() {
+        _ = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context)
+    }
+
+    // Launch a reply-classify run for replies still needing an intent. Throws (and is swallowed)
+    // when nothing needs classifying or the runner isn't configured, so it never disrupts launch.
+    private func startReplyClassifyIfNeeded() {
+        guard !ReplyClassifyService.isRunning(now: Date()) else { return }
+        _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
+    }
+
     private func autoScoutIfDue() {
         guard ScoutSchedule.shouldAutoScout(enabled: autoScoutEnabled, isScanning: isScanning,
                                             lastScoutedAt: ScoutService.lastScoutedAt(), now: Date()) else { return }
