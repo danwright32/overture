@@ -32,14 +32,42 @@ enum OutcomePatterns {
 
     static func samples(from prospects: [Prospect], by dimension: Dimension) -> [OutcomeSample] {
         prospects.map { p in
-            let dim: String
-            switch dimension {
-            case .production: dim = p.production
-            case .discipline: dim = p.discipline
-            case .tier: dim = p.tier
-            }
-            return OutcomeSample(wasContacted: p.wasContacted, outcome: p.outcome, dimension: dim,
-                                 outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
+            OutcomeSample(wasContacted: p.wasContacted, outcome: p.outcome,
+                          dimension: dimensionValue(of: p, by: dimension),
+                          outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
         }
+    }
+
+    private static func dimensionValue(of p: Prospect, by dimension: Dimension) -> String {
+        switch dimension {
+        case .production: return p.production
+        case .discipline: return p.discipline
+        case .tier: return p.tier
+        }
+    }
+
+    // One auto-detected booking behind a segment's "auto-detected" count (#212), so Dan can
+    // open the count and audit which Downbeat matches were booked on his behalf.
+    struct AutoBookedBooking: Equatable, Identifiable {
+        let groupName: String
+        let performanceDate: String?
+        let venue: String?
+        var id: String { "\(groupName)|\(performanceDate ?? "")|\(venue ?? "")" }
+    }
+
+    // The auto-detected bookings for one dimension value, oldest performance first. Only
+    // outcome == booked with an auto source counts; manual confirmations and other segments
+    // are excluded, matching the count shown in the patterns row.
+    static func autoBookedBookings(from prospects: [Prospect], by dimension: Dimension,
+                                   value: String) -> [AutoBookedBooking] {
+        prospects
+            .filter {
+                $0.outcome == .booked
+                    && $0.outcomeSourceRaw == OutcomeSource.auto.rawValue
+                    && dimensionValue(of: $0, by: dimension) == value
+            }
+            .sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
+            .map { AutoBookedBooking(groupName: $0.groupName, performanceDate: $0.performanceDate,
+                                     venue: $0.venue) }
     }
 }
