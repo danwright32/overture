@@ -42,14 +42,16 @@ extension ConversationState {
 
 enum ConversationReminder {
     enum Kind: Equatable, Sendable {
-        case active(ConversationState)   // an interval/event reminder for an active state
-        case closing                     // post-event "perhaps another time" note
-        case needsState                  // replied but uncategorized: prompt Dan to set a state
+        case active(ConversationState)     // a timed interval/event reminder for a CONFIRMED state
+        case suggested(ConversationState)  // an AUTO (AI) guess awaiting Dan's confirm/correct (#112)
+        case closing                       // post-event "perhaps another time" note
+        case needsState                    // replied but uncategorized: prompt Dan to set a state
     }
 
     static func accent(for kind: Kind) -> ReminderAccent {
         switch kind {
         case .active(let state): return state.accent
+        case .suggested(let state): return state.accent
         case .needsState: return .warm
         case .closing: return .neutral
         }
@@ -67,6 +69,7 @@ enum ConversationReminder {
         case .needsState: return 3
         case .closing: return 4
         case .active(.declined): return 5   // unreachable: declined is never due
+        case .suggested(let s): return urgencyRank(.active(s))   // a suggestion ranks like its state
         }
     }
 
@@ -81,13 +84,14 @@ enum ConversationReminder {
         case .active(.wantsToBook): return "Verbal yes, not booked"
         case .active(.hasQuestion): return "Owes a reply"
         case .active(.declined): return ""   // unreachable: declined is never active
+        case .suggested(let s): return "Suggested: \(s.label)"
         case .closing: return "Event passed, send a closing note"
         case .needsState: return "Replied, needs a state"
         }
     }
 
     static func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date?,
-                         performanceDate: String?, outcome: Outcome, now: Date,
+                         performanceDate: String?, outcome: Outcome, source: OutcomeSource?, now: Date,
                          config: ConversationReminderConfig = .init()) -> DueReminder? {
         // A booking or a lost outcome clears every conversation reminder.
         guard outcome != .booked, outcome != .lostSoft, outcome != .lostHard else { return nil }
@@ -99,6 +103,13 @@ enum ConversationReminder {
         }
 
         guard state.isActive, let interval = config.intervalDays(for: state) else { return nil }
+
+        // An AUTO (AI-classified) state is unconfirmed: surface it IMMEDIATELY as a suggestion so the
+        // lead never silently drops out of Due before its timed reminder would come due (the #112
+        // blocker). Confirming flips the source to manual and hands off to the timed track below.
+        if source == .auto {
+            return DueReminder(kind: .suggested(state), reason: reason(for: .suggested(state)))
+        }
 
         // Event-aware: how many Eastern days from today to the show (nil if no date).
         let daysToEvent = performanceDate.flatMap { EasternDate.daysUntil(from: EasternDate.today(now), to: $0) }
@@ -123,7 +134,7 @@ enum ConversationReminder {
         prospects.compactMap { p in
             reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
                      remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                     outcome: p.outcome, now: now, config: config).map { (p, $0) }
+                     outcome: p.outcome, source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
         }
         .sorted {
             let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)

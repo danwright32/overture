@@ -231,6 +231,24 @@ final class Prospect {
         conversationRemindedAt = now
     }
 
+    // The AI's auto-classification (#112) suggests a state (source = auto). NEVER overwrites a state
+    // Dan set by hand (#60). The suggestion surfaces immediately in Due until Dan confirms/corrects;
+    // the lead is already .replied from detection, so the outcome is left alone.
+    func suggestConversationState(_ state: ConversationState, now: Date) {
+        guard conversationStateSource != .manual else { return }
+        conversationState = state
+        conversationStateSetAt = now
+        conversationStateSource = .auto
+    }
+
+    // Dan accepts a suggestion: it becomes his (manual) and the timed reminder clock restarts from now.
+    func confirmConversationState(now: Date) {
+        guard conversationState != nil else { return }
+        conversationStateSource = .manual
+        conversationStateSetAt = now
+        conversationRemindedAt = nil
+    }
+
     // True once the email was actually sent (approved-and-sent). Outcomes only count
     // for these in the stats.
     var wasContacted: Bool { sentAt != nil || status == .approved }

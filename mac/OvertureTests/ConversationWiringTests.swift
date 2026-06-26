@@ -64,4 +64,27 @@ struct ConversationWiringTests {
         p.setConversationState(.wantsToBook, now: now)
         #expect(FollowUp.due(from: [p], now: now).isEmpty)      // now excluded: no double-count
     }
+
+    @Test func suggestSetsAutoAndNeverOverwritesAManualState() {
+        let manual = lead(outcome: .replied)
+        manual.setConversationState(.interested, now: now)                 // Dan's hand-set choice
+        manual.suggestConversationState(.declined, now: now.addingTimeInterval(100))
+        #expect(manual.conversationState == .interested)                  // unchanged (#60)
+        #expect(manual.conversationStateSource == .manual)
+
+        let fresh = lead(outcome: .replied)
+        fresh.suggestConversationState(.wantsToBook, now: now)
+        #expect(fresh.conversationState == .wantsToBook)
+        #expect(fresh.conversationStateSource == .auto)
+        #expect(fresh.conversationStateSetAt == now)
+    }
+
+    @Test func confirmFlipsAutoToManualAndRestartsTheClock() {
+        let p = lead(outcome: .replied)
+        p.suggestConversationState(.wantsToBook, now: daysAgo(5))
+        p.confirmConversationState(now: now)
+        #expect(p.conversationState == .wantsToBook)
+        #expect(p.conversationStateSource == .manual)
+        #expect(p.conversationStateSetAt == now)                          // timed clock starts at confirm
+    }
 }

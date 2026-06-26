@@ -94,8 +94,8 @@ enum SendService {
         case .closing:
             body = ConversationReminder.closingNudgeBody(contactName: prospect.contactName,
                                                          groupName: prospect.groupName, venue: prospect.venue)
-        case .needsState:
-            return false   // a prompt to categorize, not a sendable email
+        case .needsState, .suggested:
+            return false   // a prompt to categorize/confirm, not a sendable email
         }
         let mail = OutgoingMail(
             to: email,

@@ -16,9 +16,31 @@ struct ConversationReminderTests {
     private func daysAgo(_ d: Double) -> Date { now.addingTimeInterval(-d * 86_400) }
 
     private func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date? = nil,
-                          event: String? = nil, outcome: Outcome = .replied) -> ConversationReminder.DueReminder? {
+                          event: String? = nil, outcome: Outcome = .replied,
+                          source: OutcomeSource? = .manual) -> ConversationReminder.DueReminder? {
         ConversationReminder.reminder(state: state, setAt: setAt, remindedAt: remindedAt,
-                                      performanceDate: event, outcome: outcome, now: now)
+                                      performanceDate: event, outcome: outcome, source: source, now: now)
+    }
+
+    @Test func anAutoSuggestedStateIsDueImmediately() {
+        // source=auto means the AI guessed it: surface it RIGHT AWAY (interval not elapsed, event far)
+        // as a suggestion, so the lead never silently drops out of Due (red-team blocker).
+        #expect(reminder(state: .wantsToBook, setAt: now, event: "2026-12-01", source: .auto)?.kind
+                == .suggested(.wantsToBook))
+    }
+
+    @Test func aConfirmedManualStateUsesTheTimedTrack() {
+        // source=manual (Dan confirmed/set) follows the normal interval timing, not immediate.
+        #expect(reminder(state: .wantsToBook, setAt: now, event: "2026-12-01", source: .manual) == nil)
+        #expect(reminder(state: .wantsToBook, setAt: daysAgo(7), event: "2026-12-01", source: .manual)?.kind
+                == .active(.wantsToBook))
+    }
+
+    @Test func aSuggestedReminderCarriesItsOwnReason() {
+        let r = reminder(state: .wantsToBook, setAt: now, source: .auto)
+        #expect(r?.kind == .suggested(.wantsToBook))
+        #expect((r?.reason.isEmpty == false))
+        #expect(r?.reason != ConversationReminder.reason(for: .active(.wantsToBook)))
     }
 
     @Test func terminalOutcomesClearTheReminder() {
