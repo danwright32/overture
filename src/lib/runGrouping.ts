@@ -13,7 +13,7 @@ export type RunRow = {
 export type RunFields = {
   runEndDate: string | null;
   partOfRelatedRun: boolean;
-  runSourceURLs: string[];
+  runSourceUrls: string[];
 };
 
 const GAP_DAYS = 3;
@@ -58,13 +58,13 @@ export function groupIntoRuns<T extends RunRow>(rows: T[]): (T & RunFields)[] {
         ...open,
         runEndDate: run.length > 1 ? close.performanceDate : null,
         partOfRelatedRun: related,
-        runSourceURLs: run.map((r) => r.sourceListingUrl).filter((u): u is string => !!u),
+        runSourceUrls: run.map((r) => r.sourceListingUrl).filter((u): u is string => !!u),
       });
     }
   }
 
   for (const r of undated) {
-    out.push({ ...r, runEndDate: null, partOfRelatedRun: false, runSourceURLs: r.sourceListingUrl ? [r.sourceListingUrl] : [] });
+    out.push({ ...r, runEndDate: null, partOfRelatedRun: false, runSourceUrls: r.sourceListingUrl ? [r.sourceListingUrl] : [] });
   }
   return out;
 }
