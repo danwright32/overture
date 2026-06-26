@@ -11,6 +11,24 @@ struct FollowUpsView: View {
     @Query private var prospects: [Prospect]
     @State private var pending: PendingNudge?
     @State private var pendingConversation: PendingConversation?
+    @State private var showSettings = false
+
+    // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
+    // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
+    // step. Defaults to the baked values, so timing is unchanged until Dan edits.
+    @AppStorage(ConversationReminderConfig.Keys.wantsToBook)
+    private var wantsToBookDays = ConversationReminderConfig().wantsToBookDays
+    @AppStorage(ConversationReminderConfig.Keys.hasQuestion)
+    private var hasQuestionDays = ConversationReminderConfig().hasQuestionDays
+    @AppStorage(ConversationReminderConfig.Keys.interested)
+    private var interestedDays = ConversationReminderConfig().interestedDays
+    @AppStorage(ConversationReminderConfig.Keys.leadBuffer)
+    private var leadBufferDays = ConversationReminderConfig().leadBufferDays
+
+    private var reminderConfig: ConversationReminderConfig {
+        ConversationReminderConfig(interestedDays: interestedDays, wantsToBookDays: wantsToBookDays,
+                                   hasQuestionDays: hasQuestionDays, leadBufferDays: leadBufferDays)
+    }
 
     private struct PendingNudge: Identifiable {
         let id: String        // prospect naturalKey
@@ -32,7 +50,7 @@ struct FollowUpsView: View {
 
     // Already ordered by urgency then soonest event in ConversationReminder.due (domain-owned).
     private var conversationDue: [(Prospect, ConversationReminder.DueReminder)] {
-        ConversationReminder.due(from: prospects, now: Date())
+        ConversationReminder.due(from: prospects, now: Date(), config: reminderConfig)
     }
 
     private var gmailConnected: Bool { GmailAuthManager.shared.isConnected }
@@ -44,6 +62,10 @@ struct FollowUpsView: View {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Text("\(due.count + conversationDue.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
+                Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                    .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
+                    .help("Adjust reminder timing")
+                    .popover(isPresented: $showSettings, arrowEdge: .bottom) { ReminderSettingsView() }
                 Button("Done") { dismiss() }
             }
             .padding(OVSpacing.lg)
