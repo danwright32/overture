@@ -77,6 +77,15 @@ So an `interested` lead (10 day interval) whose event is 5 days out with a 3 day
 in 2 days, not 10; if the event is already within the buffer, the reminder is due immediately. A
 prospect with no `performanceDate` falls back to the plain interval.
 
+The date math reuses the app's EXISTING Eastern helpers, it does not add a parallel one: the queue
+model already has `easternToday`, `day(_:)` (parse a `YYYY-MM-DD` day string), and
+`daysUntil(performanceDate:today:)` (in `QueueView+Model.swift`), and `BookingMatch` has the Eastern
+calendar. We extract those into one shared helper and add the single missing primitive (add N days
+to a day string, or equivalently reason in `daysUntil` terms). A parallel helper would recreate the
+midnight-drift bug #116 exists to kill. "Event has passed" is `daysUntil(performanceDate) < 0` (the
+day AFTER the show), matching `daysUntil` returning 0 on the performance day everywhere else, so the
+closing nudge never fires on the morning of the show.
+
 No cap while the event is upcoming: the reminder keeps recurring (re-anchored each time Dan acts on
 it via `conversationRemindedAt`) until the lead is booked, lost, or the event passes. Dropping an
 active verbal yes is the worst case, so it nags until resolved.
@@ -96,13 +105,29 @@ skill when written. Sending it resolves the lead to `lostSoft` (door open, match
 time"), which stops all further reminders. Until Dan sends it or marks the lead lost, it stays in
 the queue as the one closing action.
 
+### Send path (a dedicated sender)
+
+The closing nudge and any active re-touch CANNOT reuse the existing senders: `SendService.sendOne`
+requires an unsent approved lead, and `SendService.sendFollowUp` requires `outcome == noResponse`
+and caps at `maxFollowUps` (2). A lead with a conversation state fails both. So we add
+`SendService.sendConversationNudge`, which:
+- threads onto the original conversation exactly like `sendFollowUp` (`inReplyTo: gmailMessageId`,
+  `threadId: gmailThreadId`, a single `Re:` subject) so the reply checker keeps watching the thread,
+- does NOT touch `followUpCount` (this is a separate track from the silent sequence, uncapped), and
+- on the closing variant, sets `outcome = .lostSoft` with `outcomeSourceRaw = manual`.
+
+Sending an active re-touch stamps `conversationRemindedAt` (the re-anchor); see below.
+
 ## Resolution / clearing
 
 - A `booked` outcome (including auto-detection from #99) clears the reminder automatically, because
   the calculator excludes booked/lost leads.
 - Any `lost` outcome clears it the same way.
 - Setting `declined` maps the outcome to `lostSoft` (door stays open), correctable to `lostHard`.
-  This records the decline and stops the reminders in one action.
+  This records the decline and stops the reminders in one action. It MUST go through the existing
+  `setOutcome` path (which stamps `outcomeSourceRaw = manual`, `outcomeAt`, and clears
+  `bookingSuggested`), not a raw write, or the reply checker (`ReplyService`) would silently flip it
+  back to `.replied` on the next pass (it only skips manual-sourced or already replied/booked leads).
 
 - A passed event resolves through the closing nudge (above): sending it sets `lostSoft`, which stops
   the reminders. The event passing does not by itself mark the lead lost; it changes the due item to
@@ -116,8 +141,26 @@ truth to keep in sync.
 The conversation-state reminders join the same due queue Dan already works the silent follow-ups in,
 each tagged by reason so the queue stays one place. Dan sets the conversation state from the existing
 outcome/review surface on a prospect that has replied; setting it stamps `conversationStateSetAt` and
-`conversationStateSource = manual`. Acting on a due reminder (a re-touch) stamps
-`conversationRemindedAt`.
+`conversationStateSource = manual`.
+
+Setting any conversation state ALSO records the lead as replied when its outcome is still
+`noResponse`: it sets `outcome = .replied` with `outcomeSourceRaw = manual` (through the `setOutcome`
+path). This covers an offline reply (Dan was told in person, never emailed back) and is what makes
+the silent follow-up sequencer stand down, since `FollowUp.due` only fires on `noResponse`. So the
+two reminder sources become genuinely mutually exclusive (no lead in both lists) rather than relying
+on an assertion. A lead that already replied keeps its existing source.
+
+Each active reminder carries an explicit "I followed up / remind me later" control (the re-anchor):
+acting on it stamps `conversationRemindedAt` so the reminder steps forward by its interval instead of
+nagging on every render. Sending an active re-touch email (via `sendConversationNudge`) stamps it
+too. The active states are reminders TO Dan, so the control is a manual acknowledgement, not only an
+email send.
+
+Closing finding-7 gap: a lead whose reply was auto-detected (`ReplyService` set `outcome = .replied`)
+but which Dan has not categorized has no conversation state yet, so neither reminder fires. To keep
+such a lead from going cold before #112's auto-tagging exists, the due queue surfaces a lightweight
+"replied, needs a state" entry for any `replied` lead with no conversation state, prompting Dan to
+categorize it. This is a small queue-side prompt, not a new stored field.
 
 ## #112 follow-on (not built here)
 
@@ -136,24 +179,36 @@ TDD throughout. Pure-logic tests (no SwiftData) for `ConversationReminder`:
 - event-aware timing: a near event pulls the due date earlier than the plain interval; an event
   inside the lead buffer makes it due immediately; a prospect with no `performanceDate` uses the
   plain interval,
+- the day-of-show boundary: at 23:59 Eastern on the performance day the ACTIVE reminder still shows
+  (event not passed); at 00:00 Eastern the next day it becomes the closing nudge,
 - the post-event closing nudge: a passed event on an active, unbooked lead surfaces the closing
   note (not the active reminder), with the right copy, and resolving it to `lostSoft` stops it,
 - booked and lost both clear the reminder,
 - `declined` is never due,
 - the per-prospect reason/label.
 
-Plus tests for the `declined -> lostSoft` mapping and for the due-queue integration (conversation
-reminders and silent follow-ups coexist in one queue without double-counting a lead).
+Plus tests for:
+- the `declined -> lostSoft` mapping going through `setOutcome` (manual source, so `ReplyService`
+  does not undo it),
+- setting a conversation state on a `noResponse` lead also marks it `replied` (manual), and
+  `FollowUp.due` then excludes it (the real no-double-count guard, not an assertion),
+- `sendConversationNudge`: it threads onto the original conversation, does not change `followUpCount`,
+  and the closing variant sets `outcome = .lostSoft` + manual source,
+- the re-anchor: stamping `conversationRemindedAt` steps the next due date forward by the interval,
+- the "replied, needs a state" queue entry appears for a `replied` lead with no conversation state
+  and disappears once a state is set.
 
 ## Risks / notes
 
-- The due queue now has two reminder sources (silent follow-up and conversation reminder). A lead
-  that is both silent and has a stale conversation state should not appear twice; the integration
-  test pins this. In practice they are mutually exclusive: the silent sequencer only fires on
-  `no_response`, and a conversation state implies a reply, but the test guards it explicitly.
+- The two reminder sources are made genuinely mutually exclusive by marking a state-set lead
+  `replied` (see Surfacing), so a lead never appears in both the silent and conversation lists. The
+  integration test pins it rather than trusting the invariant.
 - Intervals are first-guess defaults (7 / 2 / 10 days, 3 day lead buffer). They live in config so
   Dan can tune them without a model change.
-- Date handling must be Eastern (America/New_York), not UTC: `performanceDate` is a `YYYY-MM-DD` day
-  string, and "event minus the lead buffer" and "event has passed" are day comparisons in Dan's
-  timezone, consistent with the rest of Overture (see #116 and the Eastern-dates rule). Getting this
-  wrong would fire reminders a day early or late near midnight.
+- Date handling must be Eastern (America/New_York), not UTC, and reuses the app's existing Eastern
+  helpers (queue model + booking matcher) rather than a parallel one (see Event-aware timing). "Event
+  has passed" is the day AFTER the show (`daysUntil < 0`), so the closing nudge never fires day-of.
+- SwiftData migration is safe with no special work: the app uses lightweight migration (plain
+  `Schema([Prospect.self])`, no versioned migration plan), and #132 already added defaulted fields
+  the same way. The four new fields are defaulted-`nil` optionals (additive), and only `naturalKey`
+  is unique, so there is no index or uniqueness concern and no migration test is warranted.
