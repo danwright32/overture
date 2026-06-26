@@ -116,4 +116,54 @@ struct FeedReconcileTests {
                                 seenSourceURLs: ["https://www.carnegiehall.org/event/night2"], today: today)
         #expect(p.missedScoutCount == 0)
     }
+
+    // MARK: - Self-healing baseline (#152)
+
+    @Test func aSingleBadFetchDoesNotRatchetTheBaselineDown() {
+        // One tiny feed against a large baseline is treated as a degraded fetch: the baseline must
+        // hold, and when the feed recovers it re-baselines up to the healthy size (#150/#152).
+        var state = FeedReconcile.FeedHealthState(baseline: 80, degradedStreak: 0, lastDegradedCount: 0)
+        state = FeedReconcile.updatedHealth(state, currentCount: 4)
+        #expect(state.baseline == 80)
+        state = FeedReconcile.updatedHealth(state, currentCount: 79)
+        #expect(state.baseline == 79)
+        #expect(state.degradedStreak == 0)
+    }
+
+    @Test func aSustainedSmallerFeedReBaselinesAfterThreeScouts() {
+        // A venue calendar that genuinely shrank by more than half and STAYS there self-heals:
+        // after selfHealThreshold consecutive stable smaller feeds the smaller level is the new
+        // normal, and detection resumes against it (#152).
+        var state = FeedReconcile.FeedHealthState(baseline: 80, degradedStreak: 0, lastDegradedCount: 0)
+        state = FeedReconcile.updatedHealth(state, currentCount: 38)
+        #expect(state.baseline == 80)   // 1st degraded run, not yet
+        #expect(FeedReconcile.feedIsTrustworthy(currentCount: 38, baseline: state.baseline) == false)
+        state = FeedReconcile.updatedHealth(state, currentCount: 37)
+        #expect(state.baseline == 80)   // 2nd, still holding the old baseline
+        state = FeedReconcile.updatedHealth(state, currentCount: 39)
+        #expect(state.baseline == 39)   // 3rd consecutive stable degraded run becomes the new normal
+        #expect(state.degradedStreak == 0)
+        // Detection resumes: a feed at the new level is now trustworthy.
+        #expect(FeedReconcile.feedIsTrustworthy(currentCount: 38, baseline: state.baseline) == true)
+    }
+
+    @Test func anUnstableDegradedStreakNeverReBaselines() {
+        // Degraded feeds that swing around (not a stable new level) restart the streak each time,
+        // so a flapping/glitching feed can't re-baseline to a wrong level.
+        var state = FeedReconcile.FeedHealthState(baseline: 80, degradedStreak: 0, lastDegradedCount: 0)
+        state = FeedReconcile.updatedHealth(state, currentCount: 38)   // streak 1 @ 38
+        state = FeedReconcile.updatedHealth(state, currentCount: 4)    // collapses well below 38: restart
+        #expect(state.degradedStreak == 1)
+        state = FeedReconcile.updatedHealth(state, currentCount: 38)   // jumps back up: restart again
+        #expect(state.degradedStreak == 1)
+        #expect(state.baseline == 80)
+    }
+
+    @Test func consecutiveEmptyFeedsNeverReBaselineToZero() {
+        // An empty feed is a broken fetch, not a smaller-but-real calendar, so it never builds
+        // toward the self-heal streak (which would otherwise re-baseline to zero and trust anything).
+        var state = FeedReconcile.FeedHealthState(baseline: 80, degradedStreak: 0, lastDegradedCount: 0)
+        for _ in 0..<5 { state = FeedReconcile.updatedHealth(state, currentCount: 0) }
+        #expect(state.baseline == 80)
+    }
 }
