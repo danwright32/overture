@@ -46,20 +46,10 @@ enum BookingMatch {
         return GroupNameMatch.isConfident(booking.clientDisplayName, prospect.groupName)
     }
 
-    // Dan's timezone, the zone Downbeat authors its booking start/end day-strings in. The
-    // send-day is derived here in the same zone so a pitch sent late evening Eastern doesn't
-    // slip onto the next UTC day and shift the causation cutoff (#116).
-    private static var easternCalendar: Calendar {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "America/New_York")!
-        return cal
-    }
-
+    // The send-day is derived in Dan's timezone (the zone Downbeat authors its booking day-strings
+    // in) so a pitch sent late evening Eastern doesn't slip onto the next UTC day and shift the
+    // causation cutoff (#116). Delegates to the shared EasternDate helper, the one source of truth.
     static func dayString(from date: Date) -> String {
-        let comps = easternCalendar.dateComponents([.year, .month, .day], from: date)
-        let y = comps.year ?? 0
-        let m = comps.month ?? 0
-        let d = comps.day ?? 0
-        return String(format: "%04d-%02d-%02d", y, m, d)
+        EasternDate.dayString(from: date)
     }
 }
