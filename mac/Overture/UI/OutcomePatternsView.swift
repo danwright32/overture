@@ -8,6 +8,10 @@ struct OutcomePatternsView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var prospects: [Prospect]
     @State private var dimension: OutcomePatterns.Dimension = .production
+    @State private var auditTarget: AuditTarget?
+
+    // The segment whose auto-detected bookings the drill-down popover is showing (#212).
+    private struct AuditTarget: Identifiable { let value: String; var id: String { value } }
 
     private var rows: [(name: String, tally: OutcomeTally)] {
         OutcomePatterns.rankedTallies(from: prospects, by: dimension)
@@ -51,6 +55,9 @@ struct OutcomePatternsView: View {
         }
         .frame(width: 480, height: 540)
         .background(OVColor.canvas)
+        .popover(item: $auditTarget, arrowEdge: .trailing) { target in
+            autoBookedList(for: target.value)
+        }
     }
 
     private func patternRow(name: String, tally: OutcomeTally) -> some View {
@@ -66,9 +73,7 @@ struct OutcomePatternsView: View {
                 } else {
                     Text("\(tally.replied + tally.booked) replied\(percent(tally.responseRate))")
                         .foregroundStyle(OVColor.inkSoft)
-                    if let split = bookingSplit(tally) {
-                        Text(split).foregroundStyle(OVColor.inkFaint)
-                    }
+                    bookingSplit(name: name, tally: tally)
                 }
             }
             .font(OVType.meta)
@@ -78,13 +83,47 @@ struct OutcomePatternsView: View {
 
     // Show how the bookings were counted (#117): auto-detected from a Downbeat match versus
     // confirmed by Dan, so a wrong attribution can't silently skew the rate he is told to trust.
-    // Nil when there are no bookings to attribute.
-    private func bookingSplit(_ tally: OutcomeTally) -> String? {
-        guard tally.booked > 0 else { return nil }
-        var parts: [String] = []
-        if tally.bookedAuto > 0 { parts.append("\(tally.bookedAuto) auto-detected") }
-        if tally.bookedManual > 0 { parts.append("\(tally.bookedManual) confirmed by you") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    // The auto-detected count is tappable (#212): it opens a drill-down of those exact bookings
+    // so Dan can audit them. Empty when there are no bookings to attribute.
+    @ViewBuilder private func bookingSplit(name: String, tally: OutcomeTally) -> some View {
+        if tally.booked > 0 {
+            HStack(spacing: 4) {
+                if tally.bookedAuto > 0 {
+                    Button { auditTarget = AuditTarget(value: name) } label: {
+                        Text("\(tally.bookedAuto) auto-detected").underline()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(OVColor.forest)
+                    .help("Show which bookings were auto-detected")
+                    if tally.bookedManual > 0 {
+                        Text("·").foregroundStyle(OVColor.inkFaint)
+                    }
+                }
+                if tally.bookedManual > 0 {
+                    Text("\(tally.bookedManual) confirmed by you").foregroundStyle(OVColor.inkFaint)
+                }
+            }
+        }
+    }
+
+    // The drill-down behind a segment's "auto-detected" count (#212): the actual bookings counted,
+    // oldest first, so Dan can confirm the rate is built on real matches (and catch a wrong one).
+    private func autoBookedList(for value: String) -> some View {
+        let bookings = OutcomePatterns.autoBookedBookings(from: prospects, by: dimension, value: value)
+        return VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            Text("Auto-detected bookings").font(OVType.groupName).foregroundStyle(OVColor.ink)
+            ForEach(bookings) { b in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(b.groupName).foregroundStyle(OVColor.ink)
+                    let detail = [b.performanceDate, b.venue].compactMap { $0 }.joined(separator: " · ")
+                    if !detail.isEmpty {
+                        Text(detail).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    }
+                }
+            }
+        }
+        .padding(OVSpacing.lg)
+        .frame(width: 280, alignment: .leading)
     }
 
     private func percent(_ rate: Double?) -> String {

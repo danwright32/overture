@@ -48,6 +48,28 @@ struct OutcomePatternsTests {
         #expect(tallies["self"]?.booked == 1)
     }
 
+    // #212: the drill-down behind the "auto-detected" count lists only the auto-detected
+    // bookings for the tapped segment (not manual, not other segments, not unbooked).
+    @Test func autoBookedListsOnlyAutoBookingsForThatSegment() throws {
+        let ctx = ModelContext(try container())
+        let a = make(ctx, group: "Choir A", production: "self", discipline: "choral", tier: "high",
+                     status: .approved, outcome: .booked)
+        a.outcomeSourceRaw = OutcomeSource.auto.rawValue
+        let m = make(ctx, group: "Choir M", production: "self", discipline: "choral", tier: "high",
+                     status: .approved, outcome: .booked)
+        m.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        let other = make(ctx, group: "Band X", production: "agency", discipline: "band", tier: "mid",
+                         status: .approved, outcome: .booked)
+        other.outcomeSourceRaw = OutcomeSource.auto.rawValue
+        _ = make(ctx, group: "Choir N", production: "self", discipline: "choral", tier: "high",
+                 status: .approved, outcome: .noResponse)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let entries = OutcomePatterns.autoBookedBookings(from: all, by: .production, value: "self")
+        #expect(entries.map(\.groupName) == ["Choir A"])
+        #expect(entries.first?.venue == "V")
+    }
+
     @Test func flagsLowSampleGroupsSoEarlyNoiseIsntReadAsAPattern() {
         // Under the threshold of meaningful contacts, a rate is noise (e.g. 1 of 1 = 100%).
         #expect(OutcomePatterns.isLowSample(OutcomeTally(contacted: 1, replied: 0, booked: 1, lost: 0, noResponse: 0)))
