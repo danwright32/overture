@@ -247,6 +247,27 @@ struct DraftReviewView: View {
     }
 }
 
+#Preview("Draft review (sent, conversation)") {
+    var item = QueueItem(
+        id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Carnegie Hall",
+        performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+        priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
+        fitScore: 8, tier: "high", fitReason: "Repeat-client-adjacent ensemble at a flagship venue.",
+        matchedClientName: "Aurora Strings", possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
+    item.contactName = "Emma Robinson"
+    item.contactRole = "Marketing & Communications Manager"
+    item.contactEmail = "emma@aurorastrings.example"
+    item.contactConfidence = .high
+    item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
+    item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."
+    item.sentAt = Date()
+    item.conversationState = .wantsToBook
+    return DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+        .padding(OVSpacing.lg)
+        .frame(width: 480)
+        .background(OVColor.canvas)
+}
+
 private struct ConfidencePip: View {
     let confidence: ContactConfidence
     var body: some View {

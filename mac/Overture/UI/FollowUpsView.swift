@@ -226,3 +226,42 @@ struct FollowUpsView: View {
         try? context.save()
     }
 }
+
+private func previewProspect(_ group: String, event: String?) -> Prospect {
+    Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "Carnegie Hall",
+             performanceDate: event, sourceListingURL: nil, websiteURL: nil,
+             priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
+             fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
+             possibleMatchSource: nil, possibleMatchName: nil)
+}
+
+#Preview("Due (populated)") {
+    let container = try! ModelContainer(for: Prospect.self,
+                                        configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let ctx = container.mainContext
+    let longAgo = Date(timeIntervalSinceNow: -30 * 86_400)
+
+    // Active "wants to book" reminder: state set long ago, event still well ahead.
+    let a = previewProspect("Aurora Strings", event: "2026-12-01")
+    a.contactEmail = "emma@aurorastrings.example"; a.sentAt = longAgo
+    a.outcome = .replied; a.conversationState = .wantsToBook; a.conversationStateSetAt = longAgo
+    ctx.insert(a)
+
+    // Post-event closing note: the show has passed, still unbooked.
+    let b = previewProspect("Lumen Dance", event: "2020-01-01")
+    b.contactEmail = "info@lumendance.example"; b.sentAt = longAgo
+    b.outcome = .replied; b.conversationState = .interested; b.conversationStateSetAt = longAgo
+    ctx.insert(b)
+
+    // Replied but uncategorized: prompt to set a state.
+    let c = previewProspect("City Brass Band", event: "2026-11-01")
+    c.contactEmail = "hello@citybrass.example"; c.sentAt = longAgo; c.outcome = .replied
+    ctx.insert(c)
+
+    // A plain silent follow-up (no conversation state, no reply).
+    let d = previewProspect("Old Town Opera", event: "2026-10-01")
+    d.contactEmail = "box@oldtownopera.example"; d.sentAt = longAgo
+    ctx.insert(d)
+
+    return FollowUpsView().modelContainer(container)
+}
