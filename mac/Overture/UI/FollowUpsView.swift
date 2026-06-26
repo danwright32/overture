@@ -1,14 +1,16 @@
 import SwiftUI
 import SwiftData
 
-// Who's due for a gentle re-touch (#45): prospects sent a while ago with no response yet,
-// under the 2-nudge cap. Each is sent only on Dan's explicit confirm — nothing autonomous,
-// and the sequence stops itself the moment someone replies or books.
+// Everything due for a touch, in one place (#45, #111): silent leads that need a gentle nudge, and
+// ACTIVE conversations that need a re-touch, a reply, or a gracious closing note. Each is sent only
+// on Dan's explicit confirm, nothing autonomous; the silent sequence stops the moment someone
+// replies, and a conversation reminder steps forward when Dan acts on it or resolves when booked/lost.
 struct FollowUpsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var prospects: [Prospect]
     @State private var pending: PendingNudge?
+    @State private var pendingConversation: PendingConversation?
 
     private struct PendingNudge: Identifiable {
         let id: String        // prospect naturalKey
@@ -16,31 +18,55 @@ struct FollowUpsView: View {
         let preview: String
     }
 
+    private struct PendingConversation: Identifiable {
+        let id: String        // prospect naturalKey
+        let recipient: String
+        let preview: String
+        let isClosing: Bool
+    }
+
     private var due: [Prospect] {
         FollowUp.due(from: prospects, now: Date())
             .sorted { ($0.sentAt ?? .distantPast) < ($1.sentAt ?? .distantPast) }
     }
 
+    private var conversationDue: [(Prospect, ConversationReminder.DueReminder)] {
+        ConversationReminder.due(from: prospects, now: Date())
+            .sorted { ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999") }
+    }
+
     private var gmailConnected: Bool { GmailAuthManager.shared.isConnected }
+    private var isEmpty: Bool { due.isEmpty && conversationDue.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Follow-ups due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                Text("\(due.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                Text("\(due.count + conversationDue.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
                 Button("Done") { dismiss() }
             }
             .padding(OVSpacing.lg)
             Divider()
-            if due.isEmpty {
-                Text("Nothing to nudge. Prospects you've emailed show up here once it's time for a gentle follow-up, and drop off the moment they reply or book.")
+            if isEmpty {
+                Text("Nothing to act on. Leads you've emailed show up here for a gentle follow-up, active conversations for a re-touch, and they drop off the moment they reply, book, or you close them out.")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                        ForEach(due) { p in row(p); Divider() }
+                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                        if !conversationDue.isEmpty {
+                            section("Conversations") {
+                                ForEach(conversationDue, id: \.0.naturalKey) { p, reminder in
+                                    conversationRow(p, reminder); Divider()
+                                }
+                            }
+                        }
+                        if !due.isEmpty {
+                            section("Silent follow-ups") {
+                                ForEach(due) { p in row(p); Divider() }
+                            }
+                        }
                     }
                     .padding(OVSpacing.lg)
                 }
@@ -56,8 +82,25 @@ struct FollowUpsView: View {
         } message: { p in
             Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one follow-up right now, to this recipient only. Nothing else goes out.")
         }
+        .alert("Send this note now?",
+               isPresented: Binding(get: { pendingConversation != nil }, set: { if !$0 { pendingConversation = nil } }),
+               presenting: pendingConversation) { p in
+            Button("Send") { performConversationNudge(p.id, isClosing: p.isClosing) }
+            Button("Cancel", role: .cancel) { pendingConversation = nil }
+        } message: { p in
+            Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one message right now, to this recipient only."
+                + (p.isClosing ? " It also closes the lead out (kept warm for next time)." : ""))
+        }
     }
 
+    @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            Text(title.uppercased()).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+            content()
+        }
+    }
+
+    // A silent follow-up (#45).
     private func row(_ p: Prospect) -> some View {
         HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
@@ -66,16 +109,66 @@ struct FollowUpsView: View {
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
             }
             Spacer(minLength: OVSpacing.sm)
-            Button { requestNudge(p) } label: {
-                Text("Send nudge").font(OVType.meta).foregroundStyle(OVColor.onForest)
-                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.forest))
-            }
-            .buttonStyle(.plain)
-            .disabled(!gmailConnected || p.contactEmail == nil)
-            .help(gmailConnected ? "Review and send a gentle follow-up" : "Connect Gmail first")
+            sendButton("Send nudge", enabled: gmailConnected && p.contactEmail != nil) { requestNudge(p) }
         }
         .padding(.vertical, OVSpacing.xs)
+    }
+
+    // A conversation reminder (#111): tagged by reason, with the action its kind calls for.
+    private func conversationRow(_ p: Prospect, _ reminder: ConversationReminder.DueReminder) -> some View {
+        HStack(alignment: .top, spacing: OVSpacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                reasonPill(reminder.reason)
+                Text(p.contactEmail ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+            }
+            Spacer(minLength: OVSpacing.sm)
+            VStack(alignment: .trailing, spacing: 6) {
+                switch reminder.kind {
+                case .active(let state):
+                    sendButton("Send nudge", enabled: gmailConnected && p.contactEmail != nil) {
+                        requestConversationNudge(p, kind: .active(state))
+                    }
+                    Button("Remind me later") { remindLater(p) }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                case .closing:
+                    sendButton("Send closing note", enabled: gmailConnected && p.contactEmail != nil) {
+                        requestConversationNudge(p, kind: .closing)
+                    }
+                case .needsState:
+                    setStateMenu(p)
+                }
+            }
+        }
+        .padding(.vertical, OVSpacing.xs)
+    }
+
+    private func reasonPill(_ text: String) -> some View {
+        Text(text)
+            .font(OVType.tag).foregroundStyle(OVColor.gold)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(OVColor.gold.opacity(0.12)))
+    }
+
+    private func sendButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(OVType.meta).foregroundStyle(OVColor.onForest)
+                .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                .background(Capsule().fill(OVColor.forest))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(gmailConnected ? "Review and send" : "Connect Gmail first")
+    }
+
+    private func setStateMenu(_ p: Prospect) -> some View {
+        Menu("Set a state") {
+            ForEach(ConversationState.allCases, id: \.self) { s in
+                Button(s.label) { setState(p, s) }
+            }
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .font(OVType.meta)
     }
 
     private func requestNudge(_ p: Prospect) {
@@ -85,14 +178,51 @@ struct FollowUpsView: View {
         pending = PendingNudge(id: p.naturalKey, recipient: email, preview: preview)
     }
 
+    private func requestConversationNudge(_ p: Prospect, kind: ConversationReminder.Kind) {
+        guard let email = p.contactEmail else { return }
+        let body: String
+        var closing = false
+        switch kind {
+        case .active(let state):
+            body = ConversationReminder.nudgeBody(for: state, contactName: p.contactName, groupName: p.groupName, venue: p.venue)
+        case .closing:
+            body = ConversationReminder.closingNudgeBody(contactName: p.contactName, groupName: p.groupName, venue: p.venue)
+            closing = true
+        case .needsState:
+            return
+        }
+        pendingConversation = PendingConversation(id: p.naturalKey, recipient: email, preview: body, isClosing: closing)
+    }
+
     private func performNudge(_ naturalKey: String) {
         pending = nil
         guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
-        // Await off the synchronous button action so the main thread never blocks on the
-        // Gmail token work (the old blocking send bridge deadlocked here).
+        // Await off the synchronous button action so the main thread never blocks on the Gmail
+        // token work (the old blocking send bridge deadlocked here).
         Task {
             _ = await SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
             try? context.save()
         }
+    }
+
+    private func performConversationNudge(_ naturalKey: String, isClosing: Bool) {
+        pendingConversation = nil
+        guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        let kind: ConversationReminder.Kind = isClosing ? .closing : .active(p.conversationState ?? .wantsToBook)
+        Task {
+            _ = await SendService.sendConversationNudge(p, kind: kind, now: Date(),
+                                                        sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            try? context.save()
+        }
+    }
+
+    private func remindLater(_ p: Prospect) {
+        p.remindLater(now: Date())
+        try? context.save()
+    }
+
+    private func setState(_ p: Prospect, _ state: ConversationState) {
+        p.setConversationState(state, now: Date())
+        try? context.save()
     }
 }
