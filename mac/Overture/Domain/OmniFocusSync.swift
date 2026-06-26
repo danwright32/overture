@@ -10,12 +10,27 @@ enum OmniFocusSync {
         let naturalKey: String
         let title: String
         let note: String
-        let due: Date
+        let deferDate: Date   // 11am Eastern on the due day: when the task surfaces
+        let dueDate: Date     // 6pm Eastern on the due day: the deadline
     }
 
     struct ExistingTask: Equatable, Sendable {
         let naturalKey: String
-        let due: Date
+        let dueDate: Date
+    }
+
+    // Defer/due clock times on the reminder's due day, in Eastern (Overture's canonical timezone).
+    static let deferHour = 11
+    static let dueHour = 18
+
+    // A specific clock hour on the Eastern calendar day of `date`.
+    private static func easternTime(hour: Int, onDayOf date: Date) -> Date {
+        let cal = EasternDate.calendar
+        var comps = cal.dateComponents([.year, .month, .day], from: date)
+        comps.hour = hour
+        comps.minute = 0
+        comps.second = 0
+        return cal.date(from: comps) ?? date
     }
 
     struct Plan: Equatable, Sendable {
@@ -40,7 +55,9 @@ enum OmniFocusSync {
                 outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig)
             else { return nil }
             guard due <= cutoff else { return nil }
-            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p), note: note(for: p), due: due)
+            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p), note: note(for: p),
+                               deferDate: easternTime(hour: deferHour, onDayOf: due),
+                               dueDate: easternTime(hour: dueHour, onDayOf: due))
         }
     }
 
@@ -52,10 +69,10 @@ enum OmniFocusSync {
         let desiredByKey = Dictionary(desired.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
         let toComplete = existing.filter { e in
             guard let d = desiredByKey[e.naturalKey] else { return true }   // lead resolved / no longer desired
-            return d.due != e.due                                          // stale due (re-anchored)
+            return d.dueDate != e.dueDate                                  // stale due (re-anchored)
         }
         let liveByKey = Dictionary(
-            existing.filter { e in desiredByKey[e.naturalKey]?.due == e.due }.map { ($0.naturalKey, $0) },
+            existing.filter { e in desiredByKey[e.naturalKey]?.dueDate == e.dueDate }.map { ($0.naturalKey, $0) },
             uniquingKeysWith: { a, _ in a })
         let toCreate = desired.filter { liveByKey[$0.naturalKey] == nil }
         return Plan(toCreate: toCreate, toComplete: toComplete)
