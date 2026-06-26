@@ -106,6 +106,13 @@ struct SendConversationNudgeTests {
         #expect(await SendService.sendConversationNudge(p, kind: .needsState, now: Date(), sender: CapturingSender()) == false)
     }
 
+    @Test func aSuggestionIsNotSendable() async throws {
+        // A suggestion is confirmed/corrected, not emailed; sending one must no-op.
+        let ctx = ModelContext(try container())
+        let p = sentLead(ctx, state: .wantsToBook)
+        #expect(await SendService.sendConversationNudge(p, kind: .suggested(.wantsToBook), now: Date(), sender: CapturingSender()) == false)
+    }
+
     @Test func aLeadNeverEmailedCannotBeNudged() async throws {
         let ctx = ModelContext(try container())
         let p = sentLead(ctx, state: .wantsToBook)

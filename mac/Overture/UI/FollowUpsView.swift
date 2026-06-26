@@ -135,6 +135,11 @@ struct FollowUpsView: View {
                     sendButton("Send closing note", enabled: gmailConnected && p.contactEmail != nil) {
                         requestConversationNudge(p, kind: .closing)
                     }
+                case .suggested:
+                    // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
+                    Button("Confirm") { confirm(p) }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                    setStateMenu(p)
                 case .needsState:
                     setStateMenu(p)
                 }
@@ -189,8 +194,8 @@ struct FollowUpsView: View {
         case .closing:
             body = ConversationReminder.closingNudgeBody(contactName: p.contactName, groupName: p.groupName, venue: p.venue)
             closing = true
-        case .needsState:
-            return
+        case .needsState, .suggested:
+            return   // not a sendable nudge; handled by confirm / set-a-state
         }
         pendingConversation = PendingConversation(id: p.naturalKey, recipient: email, preview: body, isClosing: closing)
     }
@@ -224,6 +229,11 @@ struct FollowUpsView: View {
 
     private func setState(_ p: Prospect, _ state: ConversationState) {
         p.setConversationState(state, now: Date())
+        try? context.save()
+    }
+
+    private func confirm(_ p: Prospect) {
+        p.confirmConversationState(now: Date())
         try? context.save()
     }
 }
