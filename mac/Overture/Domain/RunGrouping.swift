@@ -25,15 +25,6 @@ enum RunGrouping {
             .trimmingCharacters(in: .whitespaces)
     }
 
-    private static func dayNumber(_ date: String) -> Int {
-        let p = date.split(separator: "-").compactMap { Int($0) }
-        guard p.count == 3 else { return 0 }
-        var c = DateComponents(); c.year = p[0]; c.month = p[1]; c.day = p[2]
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "America/New_York")!
-        let secs = cal.date(from: c)?.timeIntervalSince1970 ?? 0
-        return Int(secs / 86_400)
-    }
-
     static func group(_ rows: [RunRow]) -> [GroupedRun] {
         let undated = rows.filter { $0.performanceDate == nil }
         let dated = rows.filter { $0.performanceDate != nil }
@@ -52,7 +43,8 @@ enum RunGrouping {
             var runs: [[RunRow]] = []
             for r in group {
                 if let last = runs.last, let prev = last.last,
-                   dayNumber(r.performanceDate!) - dayNumber(prev.performanceDate!) <= gapDays {
+                   let gap = EasternDate.daysUntil(from: prev.performanceDate!, to: r.performanceDate!),
+                   gap <= gapDays {
                     runs[runs.count - 1].append(r)
                 } else {
                     runs.append([r])
