@@ -125,7 +125,10 @@ struct QueueView: View {
             VStack(alignment: .leading, spacing: OVSpacing.xl) {
                 masthead
                 Picker("Pipeline", selection: $pipeline) {
-                    ForEach(Pipeline.allCases, id: \.self) { Text($0.label).tag($0) }
+                    ForEach(Pipeline.allCases, id: \.self) { p in
+                        Text(p == .toSend ? "To send (\(visible.count))"
+                                          : "Reached out (\(reachedOutItems.count))").tag(p)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
