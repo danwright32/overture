@@ -351,4 +351,21 @@ struct DownbeatBookingTests {
         #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
         #expect(p.autoBookedFromBookingId == "B-right")
     }
+
+    // #218: a booking auto-detected before #203 has no recorded id (autoBookedFromBookingId nil).
+    // Rejecting it must still stop reconcile from re-booking, via a per-prospect fallback.
+    @Test func rejectingLegacyAutoBookingWithoutIdStillSuppresses() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     outcome: .booked, source: .auto,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        p.autoBookedFromBookingId = nil
+        p.rejectAutoBooking(bookingId: p.autoBookedFromBookingId, now: Date(timeIntervalSince1970: 7_000))
+        let b = booking(id: "B-legacy", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: Date())
+        #expect(count == 0)
+        #expect(p.outcome == .noResponse)
+    }
 }
