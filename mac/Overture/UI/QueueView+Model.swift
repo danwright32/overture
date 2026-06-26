@@ -67,6 +67,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var hasDraft: Bool { draftBody != nil }
     // Dan marked this lead lost (soft or hard); the row shows an editable reason note.
     var isLost: Bool { outcome == .lostSoft || outcome == .lostHard }
+    // Confirmed booked (auto-detected or hand-marked); the row reads as Booked, not a lead to pitch.
+    var isBooked: Bool { outcome == .booked }
+    // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
+    // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
+    var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
 }
 
 enum QueueModel {
@@ -150,7 +155,7 @@ enum QueueModel {
         return EasternDate.daysUntil(from: today, to: performanceDate)
     }
 
-    enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown }
+    enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown, booked }
     struct Timing: Equatable { let label: String; let urgency: Urgency
         static func == (l: Timing, r: Timing) -> Bool { l.label == r.label && l.urgency == r.urgency } }
 
@@ -172,6 +177,13 @@ enum QueueModel {
         return Timing(label: "In \(days) days — send ~3 weeks out", urgency: .ahead)
     }
 
+    // A booked prospect reads "Booked" instead of any outreach urgency, so the row never nags
+    // Dan to pitch someone he has already booked (#198). Otherwise the normal outreach timing.
+    static func displayTiming(performanceDate: String?, today: String, isBooked: Bool) -> Timing {
+        if isBooked { return Timing(label: "Booked", urgency: .booked) }
+        return outreachTiming(performanceDate: performanceDate, today: today)
+    }
+
     // Orders the queue for display: hide past performances and anything beyond the lead-time
     // window, keep everything else, and demote the too-close events to the bottom — graded so
     // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).
@@ -184,6 +196,9 @@ enum QueueModel {
         var bookable: [QueueItem] = []
         var tooSoon: [(item: QueueItem, days: Int, index: Int)] = []
         for (index, item) in items.enumerated() {
+            // A confirmed booking is settled and leaves the reach-out queue (#201). An auto-detected
+            // booking is kept (handled just below) so Dan can confirm it or catch a wrong match.
+            if item.isConfirmedBooking { continue }
             // A detected booking awaiting Dan's confirmation is a separate workflow from
             // pitching, so it stays put regardless of how near or past its date is.
             if item.bookingSuggested {

@@ -267,3 +267,62 @@ struct DisappearedFeedQueueTests {
         #expect(ids.contains("kept"))
     }
 }
+
+// #198: a booked prospect must read as Booked, not as a lead to pitch.
+@Suite("Booked display")
+struct BookedDisplayTests {
+    private func booked() -> QueueItem {
+        var q = item(performanceDate: "2026-07-01")
+        q.outcome = .booked
+        return q
+    }
+
+    @Test func bookedOutcomeIsBooked() {
+        #expect(booked().isBooked)
+        #expect(!item().isBooked)
+    }
+
+    @Test func displayTimingReadsBookedRegardlessOfDate() {
+        // A booked prospect must never show pitch urgency ("reach out now"); the row reads "Booked".
+        let t = QueueModel.displayTiming(performanceDate: "2026-07-01", today: "2026-06-26", isBooked: true)
+        #expect(t.label == "Booked")
+        #expect(t.urgency == .booked)
+    }
+
+    @Test func displayTimingFallsBackToOutreachWhenNotBooked() {
+        let today = "2026-06-26"
+        #expect(QueueModel.displayTiming(performanceDate: "2026-07-01", today: today, isBooked: false)
+                == QueueModel.outreachTiming(performanceDate: "2026-07-01", today: today))
+    }
+}
+
+// #201: a confirmed booking leaves the reach-out queue; an auto-detected one stays until Dan confirms it.
+@Suite("Booked queue placement")
+struct BookedQueueTests {
+    private func q(_ id: String, outcome: Outcome = .noResponse,
+                   source: OutcomeSource? = nil, date: String? = "2026-07-10") -> QueueItem {
+        var p = QueueItem(
+            id: id, groupName: id, discipline: "music", venue: "V",
+            performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+            priorRelationship: "none", production: "unknown", profile: "neutral",
+            coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+            matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
+        p.outcome = outcome
+        p.outcomeSourceRaw = source?.rawValue
+        return p
+    }
+
+    @Test func confirmedBookingLeavesTheQueue() {
+        let order = QueueModel.queueOrder(
+            [q("lead"), q("confirmed", outcome: .booked, source: .manual)], today: "2026-06-26")
+        let ids = order.map(\.id)
+        #expect(ids.contains("lead"))
+        #expect(!ids.contains("confirmed"))
+    }
+
+    @Test func autoDetectedBookingStaysUntilConfirmed() {
+        let order = QueueModel.queueOrder(
+            [q("auto", outcome: .booked, source: .auto)], today: "2026-06-26")
+        #expect(order.map(\.id).contains("auto"))
+    }
+}

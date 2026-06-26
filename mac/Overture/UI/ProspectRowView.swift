@@ -23,13 +23,13 @@ struct ProspectRowView: View {
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
-        QueueModel.outreachTiming(performanceDate: item.performanceDate, today: today)
+        QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .top, spacing: OVSpacing.md) {
-                fitSeal
+                if item.isBooked { bookedSeal } else { fitSeal }
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
                     feedStatusFlag
@@ -69,15 +69,15 @@ struct ProspectRowView: View {
         .padding(OVSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(item.bookingSuggested ? OVColor.forest.opacity(0.12) : OVColor.surface)
+                .fill(item.bookingSuggested || item.isBooked ? OVColor.forest.opacity(0.12) : OVColor.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(
-                    item.bookingSuggested ? OVColor.forest.opacity(0.9)
+                    item.bookingSuggested || item.isBooked ? OVColor.forest.opacity(0.9)
                         : item.isHighFit ? OVColor.gold.opacity(0.45)
                         : OVColor.line,
-                    lineWidth: item.bookingSuggested ? 2 : 1)
+                    lineWidth: item.bookingSuggested || item.isBooked ? 2 : 1)
         )
     }
 
@@ -90,6 +90,22 @@ struct ProspectRowView: View {
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(1.2)
                 .foregroundStyle(item.isHighFit ? OVColor.gold : OVColor.inkFaint)
+        }
+        .frame(width: 64)
+        .padding(.top, 2)
+    }
+
+    // Replaces the fit seal once a prospect is booked, so the row reads unmistakably as done
+    // rather than as a lead to pitch (#198).
+    private var bookedSeal: some View {
+        VStack(spacing: 3) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(OVColor.forest)
+            Text("BOOKED")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1.2)
+                .foregroundStyle(OVColor.forest)
         }
         .frame(width: 64)
         .padding(.top, 2)
@@ -109,7 +125,8 @@ struct ProspectRowView: View {
                 Text(item.venue ?? "Venue TBD")
                 Text("·").foregroundStyle(OVColor.inkFaint)
                 Text(timing.label)
-                    .foregroundStyle(timing.urgency == .imminent ? OVColor.rust : OVColor.inkSoft)
+                    .foregroundStyle(timing.urgency == .imminent ? OVColor.rust
+                                     : timing.urgency == .booked ? OVColor.forest : OVColor.inkSoft)
                 Text("·").foregroundStyle(OVColor.inkFaint)
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
             }
@@ -212,12 +229,25 @@ struct ProspectRowView: View {
         }
     }
 
-    // A small neutral tag shown only when the booking was auto-detected, so Dan knows
-    // it wasn't manually marked (#114). Hidden for bookings Dan set himself.
+    // Shown only on an auto-detected booking Dan hasn't confirmed yet (#114/#201): it names the
+    // source AND lets him confirm. Confirming flips it to a Dan-owned booking, which moves it out
+    // of the reach-out queue. Hidden for bookings Dan set himself.
     @ViewBuilder private var autoBookedTag: some View {
         if item.isAutoBooked {
-            FlowTags(tags: [Tag(text: "auto-detected", tone: .warn)])
-                .padding(.top, 2)
+            Button { onConfirmBooking() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.seal")
+                    Text("Auto-detected — confirm booking")
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.forest)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.forest.opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .help("This booking was auto-detected from Downbeat. Click to confirm it; it then moves out of the reach-out list.")
+            .padding(.top, 2)
         }
     }
 
@@ -229,7 +259,7 @@ struct ProspectRowView: View {
             if let w = item.websiteURL, let url = URL(string: w) {
                 Link("Group website", destination: url)
             }
-            if !item.hasDraft {
+            if !item.hasDraft && !item.isBooked {
                 Text(item.isKept ? "Contact: pending Prep run" : "Contact: keep to prep")
                     .foregroundStyle(OVColor.inkFaint)
             }
