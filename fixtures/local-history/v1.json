@@ -1,0 +1,8 @@
+[
+  { "groupName": "Aurora Strings", "status": "booked" },
+  { "groupName": "Old Town Opera", "status": "dnc" },
+  { "groupName": "Lumen Dance", "status": "lost_soft" },
+  { "groupName": "The Velvet Notes", "status": "warm" },
+  { "groupName": "City Brass Band", "status": "contacted" },
+  { "groupName": "Unknown Status Co", "status": null }
+]

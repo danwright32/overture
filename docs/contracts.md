@@ -8,7 +8,7 @@ other side has not caught up to fails silently in production (the #109 regressio
 client was silently treated as cold).
 
 The guard against that is a committed sample fixture per contract under `fixtures/`, asserted by a
-test on each programmatic side (#113 established it for the Downbeat export; #157 and #159 extended
+test on each programmatic side (#113 established it for the Downbeat export; #157, #159, and #166 extended
 it to the rest). When a format changes, update the fixture and every side's test in the same change;
 a side that has not caught up then fails its test instead of drifting silently. Where one side is a
 Claude Code workflow rather than code, there is no automated test for that side, so the fixture plus
@@ -19,7 +19,7 @@ the workflow's runbook is its spec.
 | File (in app-support dir) | Writer | Reader | Version | Fixture | Tests |
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | Scout (`parseDownbeatExport`) + App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `downbeatExportContract.test.ts`, `DownbeatExportContractTests.swift` |
-| `overture-history.json` | Importer (`scripts/import-history.ts`) | Scout (`loadLocalHistory`) | none (plain array) | none yet | `localHistory.test.ts` (parser unit) |
+| `overture-history.json` | Importer (`scripts/import-history.ts`) | Scout (`loadLocalHistory`) + App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `localHistoryContract.test.ts`, `LocalHistoryContractTests.swift` |
 | `overture-results.json` | Scout (`buildResultsFile`) | App (`ResultsFileDecoder.decode`) | 1, 2 | `fixtures/scout-results/` | `resultsContract.test.ts`, `ResultsContractTests.swift` |
 | `overture-uncertain.json` | Scout (`buildUncertainPayload`) | Scout refine agent (workflow) | none (plain array) | `fixtures/scout-refine/uncertain.json` | `refineContract.test.ts` (writer) |
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
@@ -42,11 +42,12 @@ and `blockedDates` start empty and only fill from bookings made through the app 
 
 ### `overture-history.json`
 
-A one-time legacy import of past booking history (`{ groupName, status }`), so repeat-client matching
-and do-not-contact suppression work before the app has its own activity. The scout reads it through
-`loadLocalHistory`, which maps the app's camelCase shape to the matcher's snake_case
-(`{ group_name, status }`); skipping that mapping silently reads `undefined` and matches nothing
-(the core of #104). This file predates the fixture guard and has no shared fixture yet.
+Past booking history (`{ groupName, status }`), so repeat-client matching and do-not-contact
+suppression work before the app has its own activity. A two-reader contract: the scout reads it
+through `loadLocalHistory`, which maps the app's camelCase shape to the matcher's snake_case
+(`{ group_name, status }`), and the app reads it through `[HistoryRecord]`. Skipping that mapping
+silently reads `undefined` and matches nothing (the core of #104), so the shared fixture is decoded
+by both readers (#166). `status` may be null; an unrecognized status reads as cold.
 
 ### `overture-results.json`
 
