@@ -290,13 +290,17 @@ struct QueueView: View {
             .padding(.vertical, OVSpacing.hero)
             .padding(.horizontal, OVSpacing.xl)
         } else {
+            let now = Date()
+            let dated = ReachedOutQueue.activeWithDates(from: prospects, now: now)
+            let labels = Dictionary(dated.map { ($0.prospect.naturalKey, ReachedOutQueue.timingLabel(next: $0.next, now: now)) },
+                                    uniquingKeysWith: { a, _ in a })
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
-                ForEach(rows) { item in prospectRow(item) }
+                ForEach(rows) { item in prospectRow(item, reachOutLabel: labels[item.id]) }
             }
         }
     }
 
-    private func prospectRow(_ item: QueueItem) -> some View {
+    private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
         ProspectRowView(
             item: item,
             today: today,
@@ -317,7 +321,8 @@ struct QueueView: View {
             onConfirmBooking: { confirmBooking(item) },
             onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
             onRejectBooking: { rejectBooking(item) },
-            gmailConnected: GmailAuthManager.shared.isConnected
+            gmailConnected: GmailAuthManager.shared.isConnected,
+            reachOutLabel: reachOutLabel
         )
     }
 
