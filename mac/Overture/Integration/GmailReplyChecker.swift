@@ -35,17 +35,26 @@ struct GmailReplyChecker {
 
         var threads: [String: Data] = [:]
         for id in threadIds {
-            if let data = await fetchThread(id: id, token: token, fetch: fetch) { threads[id] = data }
+            if let data = await fetchThread(id: id, token: token, format: "metadata", fetch: fetch) { threads[id] = data }
         }
-        let marked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now) { threads[$0] }
+        // Full-fetch the body ONLY for threads that actually have a reply (lazy), so the classify
+        // workflow (#112) gets the reply text without pulling full bodies for the whole sent list.
+        var fullThreads: [String: Data] = [:]
+        for (id, data) in threads where ReplyDetection.hasReply(
+            fromAddresses: ReplyDetection.fromAddresses(threadJSON: data), selfEmail: fromEmail) {
+            if let full = await fetchThread(id: id, token: token, format: "full", fetch: fetch) { fullThreads[id] = full }
+        }
+        let marked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now,
+                                                fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
         if marked > 0 { try? context.save() }
     }
 
     private func fetchThread(
-        id: String, token: String,
+        id: String, token: String, format: String = "metadata",
         fetch: (URLRequest) async throws -> (Data, URLResponse)
     ) async -> Data? {
-        guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/\(id)?format=metadata&metadataHeaders=From") else { return nil }
+        let query = format == "metadata" ? "format=metadata&metadataHeaders=From" : "format=full"
+        guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/\(id)?\(query)") else { return nil }
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         guard let (data, resp) = try? await fetch(req),

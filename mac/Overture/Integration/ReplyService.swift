@@ -6,9 +6,14 @@ import Foundation
 // Manual outcomes and already-known stronger outcomes (replied/booked) are never touched.
 @MainActor
 enum ReplyService {
+    // `fetchThread` returns the cheap metadata thread (From headers) used to detect a reply;
+    // `fetchFullThread` returns the full thread WITH the body, and is consulted only for a thread
+    // that actually has a reply (lazy), so the body text is captured for the classify workflow (#112)
+    // without pulling full bodies for the whole sent list.
     @discardableResult
     static func detectReplies(in prospects: [Prospect], selfEmail: String, now: Date,
-                              fetchThread: (String) -> Data?) -> Int {
+                              fetchThread: (String) -> Data?,
+                              fetchFullThread: (String) -> Data? = { _ in nil }) -> Int {
         var count = 0
         for p in prospects {
             guard let threadId = p.gmailThreadId, !threadId.isEmpty, p.sentAt != nil else { continue }
@@ -20,6 +25,11 @@ enum ReplyService {
                 p.outcome = .replied
                 p.outcomeSourceRaw = OutcomeSource.auto.rawValue
                 p.outcomeAt = now
+                if let full = fetchFullThread(threadId),
+                   let body = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail) {
+                    p.lastReplyText = body
+                    p.lastReplyAt = now
+                }
                 count += 1
             }
         }
