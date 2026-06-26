@@ -37,16 +37,16 @@ enum ScoutService {
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = loadLocalHistory() + LocalHistory.records(from: existing)
-        let baseline = lastHealthyFeedCount()
+        let health = feedHealthState()
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
         var outcome = apply(events: events, clients: loaded.clients, history: history,
-                            blocked: blocked, baselineFeedCount: baseline, into: context)
+                            blocked: blocked, baselineFeedCount: health.baseline, into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
-        // Update the health baseline only after a trustworthy (full-sized) feed, so a degraded
-        // run can't lower the bar for the next one (#150).
-        if FeedReconcile.feedIsTrustworthy(currentCount: events.count, baseline: baseline) {
-            recordHealthyFeedCount(events.count)
-        }
+        // Fold this run into the feed-health state: a full feed re-baselines immediately, and a feed
+        // that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
+        // too, so a genuine sustained calendar shrink self-heals without one bad fetch ratcheting the
+        // baseline down (#150/#152).
+        recordFeedHealthState(FeedReconcile.updatedHealth(health, currentCount: events.count))
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -68,15 +68,37 @@ enum ScoutService {
         defaults.object(forKey: lastScoutKey) as? Date
     }
 
-    // The size of the last HEALTHY (trustworthy) feed, the baseline a later run is judged against
-    // to spot a degraded/partial feed (#150). Only updated after a trustworthy run, so one bad
-    // fetch can't ratchet the baseline down. Injectable defaults keep test side effects contained.
+    // The baseline a later run is judged against to spot a degraded/partial feed (#150), the
+    // `baseline` field of the persisted feed-health state. runScout updates it through
+    // recordFeedHealthState (a degraded run can't ratchet it down, but a sustained shrink re-baselines
+    // it, #152). These two accessors remain for direct baseline reads/writes and tests. Injectable
+    // defaults keep test side effects contained.
     static let lastHealthyFeedCountKey = "scoutLastHealthyFeedCount"
     static func recordHealthyFeedCount(_ count: Int, in defaults: UserDefaults = .standard) {
         defaults.set(count, forKey: lastHealthyFeedCountKey)
     }
     static func lastHealthyFeedCount(in defaults: UserDefaults = .standard) -> Int {
         defaults.integer(forKey: lastHealthyFeedCountKey)   // 0 when unset = no baseline yet
+    }
+
+    // The degraded-streak half of the feed-health state (#152): how many consecutive degraded feeds
+    // have held at a stable smaller level, and the size of the most recent one. Stored beside the
+    // baseline (which keeps reusing lastHealthyFeedCountKey) so the self-heal decision survives
+    // between scouts. Injectable defaults keep test side effects contained.
+    static let degradedStreakKey = "scoutDegradedStreakCount"
+    static let lastDegradedFeedCountKey = "scoutLastDegradedFeedCount"
+
+    static func feedHealthState(in defaults: UserDefaults = .standard) -> FeedReconcile.FeedHealthState {
+        FeedReconcile.FeedHealthState(
+            baseline: defaults.integer(forKey: lastHealthyFeedCountKey),
+            degradedStreak: defaults.integer(forKey: degradedStreakKey),
+            lastDegradedCount: defaults.integer(forKey: lastDegradedFeedCountKey))
+    }
+
+    static func recordFeedHealthState(_ state: FeedReconcile.FeedHealthState, in defaults: UserDefaults = .standard) {
+        defaults.set(state.baseline, forKey: lastHealthyFeedCountKey)
+        defaults.set(state.degradedStreak, forKey: degradedStreakKey)
+        defaults.set(state.lastDegradedCount, forKey: lastDegradedFeedCountKey)
     }
 
     // Application of already-extracted events with injected data, so the full

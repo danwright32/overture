@@ -189,6 +189,22 @@ struct ScoutServiceTests {
         #expect(ScoutService.lastHealthyFeedCount(in: defaults) == 42)
     }
 
+    // #152: the persisted feed-health state self-heals across scouts — a full feed sets the
+    // baseline, then three consecutive stable smaller feeds re-baseline to the new normal.
+    @Test func feedHealthStatePersistsAndSelfHeals() {
+        let defaults = UserDefaults(suiteName: "feedhealth-\(UUID().uuidString)")!
+        #expect(ScoutService.feedHealthState(in: defaults).baseline == 0)   // unset = no baseline
+        func scout(_ count: Int) {
+            let next = FeedReconcile.updatedHealth(ScoutService.feedHealthState(in: defaults), currentCount: count)
+            ScoutService.recordFeedHealthState(next, in: defaults)
+        }
+        scout(80)
+        #expect(ScoutService.feedHealthState(in: defaults).baseline == 80)
+        for c in [38, 37, 39] { scout(c) }
+        #expect(ScoutService.feedHealthState(in: defaults).baseline == 39)   // re-baselined to new normal
+        #expect(ScoutService.feedHealthState(in: defaults).degradedStreak == 0)
+    }
+
     @Test func collapsesAConsecutiveRunIntoOneProspect() throws {
         let ctx = ModelContext(try container())
         let events = [

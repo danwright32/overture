@@ -30,6 +30,46 @@ enum FeedReconcile {
         return Double(currentCount) >= Double(baseline) * fraction
     }
 
+    // Persisted feed-health state across scouts (#152). `baseline` is the size the next run is
+    // judged against (see feedIsTrustworthy). `degradedStreak`/`lastDegradedCount` track a run of
+    // consecutive degraded feeds that have held at a stable smaller level, the signal that lets a
+    // genuine, sustained calendar shrink self-heal without one bad fetch ratcheting the baseline down.
+    struct FeedHealthState: Equatable, Sendable {
+        var baseline: Int
+        var degradedStreak: Int
+        var lastDegradedCount: Int
+
+        static let empty = FeedHealthState(baseline: 0, degradedStreak: 0, lastDegradedCount: 0)
+    }
+
+    // Consecutive degraded scouts at a stable smaller size before that smaller level is accepted as
+    // the new normal (re-baselined). Three, so one or two anomalous fetches can't ratchet the
+    // baseline down, but a calendar that genuinely shrank and stayed there stops being treated as a
+    // permanent glitch and detection resumes (#152).
+    static let selfHealThreshold = 3
+
+    // Folds one scout's feed size into the health state.
+    //   - A trustworthy (full) feed re-baselines immediately to its size and clears the streak.
+    //   - A degraded feed extends the streak only while it stays at a stable level (each degraded
+    //     run within the healthy fraction of the previous one, both ways). Once the streak reaches
+    //     selfHealThreshold the stable smaller level becomes the new baseline, so detection resumes.
+    //   - An empty feed is a broken fetch, not a smaller-but-real calendar, so it never builds toward
+    //     (or resets) the streak; otherwise consecutive empties would re-baseline to zero.
+    static func updatedHealth(_ state: FeedHealthState, currentCount: Int) -> FeedHealthState {
+        if feedIsTrustworthy(currentCount: currentCount, baseline: state.baseline) {
+            return FeedHealthState(baseline: currentCount, degradedStreak: 0, lastDegradedCount: 0)
+        }
+        guard currentCount > 0 else { return state }
+        let stableWithPrior = state.degradedStreak > 0
+            && feedIsTrustworthy(currentCount: currentCount, baseline: state.lastDegradedCount)
+            && feedIsTrustworthy(currentCount: state.lastDegradedCount, baseline: currentCount)
+        let streak = stableWithPrior ? state.degradedStreak + 1 : 1
+        if streak >= selfHealThreshold {
+            return FeedHealthState(baseline: currentCount, degradedStreak: 0, lastDegradedCount: 0)
+        }
+        return FeedHealthState(baseline: state.baseline, degradedStreak: streak, lastDegradedCount: currentCount)
+    }
+
     // `seenSourceURLs` is the set of listing URLs in this run's RAW feed (before our own
     // blocked-date / DNC / unreachable filtering). A prospect is "still listed" if it was
     // upserted (seenKeys) OR any of its listing URLs is in the raw feed — so a show we merely
