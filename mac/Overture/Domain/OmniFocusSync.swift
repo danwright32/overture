@@ -64,11 +64,17 @@ enum OmniFocusSync {
                 outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig)
             else { return nil }
             guard due <= cutoff else { return nil }
-            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p), note: note(for: p),
+            let dueDate = easternTime(hour: dueHour, onDayOf: due)
+            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p),
+                               note: note(for: p, dueDate: dueDate),
                                deferDate: easternTime(hour: deferHour, onDayOf: due),
-                               dueDate: easternTime(hour: dueHour, onDayOf: due))
+                               dueDate: dueDate)
         }
     }
+
+    // The Eastern day token written into the task note as paragraph 2, read back verbatim by the
+    // client (avoids reading date components out of AppleScript, which is unreliable).
+    static let dueNotePrefix = "Due: "
 
     // Read what OmniFocus holds, diff against what should exist, then create/complete via the client.
     // Each step is independent so a single failed Apple event doesn't abort the rest of the sync.
@@ -102,8 +108,11 @@ enum OmniFocusSync {
         "Follow up with \(p.groupName)"
     }
 
-    private static func note(for p: Prospect) -> String {
-        var parts = ["Overture lead: \(p.naturalKey)"]
+    // Note layout is load-bearing: paragraph 1 is the lead key, paragraph 2 is the due day. The
+    // client reads those two lines back verbatim, so their order must not change.
+    static let notePrefix = "Overture lead: "
+    private static func note(for p: Prospect, dueDate: Date) -> String {
+        var parts = ["\(notePrefix)\(p.naturalKey)", "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
         return parts.joined(separator: "\n")

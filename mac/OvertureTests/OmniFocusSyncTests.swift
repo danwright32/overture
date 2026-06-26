@@ -49,6 +49,19 @@ struct OmniFocusSyncTests {
         #expect(cal.isDate(t.dueDate, inSameDayAs: dueDay))
     }
 
+    // The note layout is load-bearing: the AppleScript client reads paragraph 1 (lead key) and
+    // paragraph 2 (due day) back. Lock that order/format.
+    @Test func desiredNoteCarriesLeadKeyThenDueDayInFirstTwoLines() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)
+        let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                                   now: now, horizonDays: 14).first)
+        let lines = t.note.components(separatedBy: "\n")
+        #expect(lines[0] == "Overture lead: warm-lead")
+        #expect(lines[1] == "Due: " + EasternDate.dayString(from: t.dueDate))
+    }
+
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
