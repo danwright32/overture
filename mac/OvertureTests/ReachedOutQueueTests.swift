@@ -68,6 +68,15 @@ struct ReachedOutQueueTests {
         #expect(ReachedOutQueue.nextReachOut(for: p, now: now) == now)
     }
 
+    // #223: a plain-language label for when to next reach out, shown on each reached-out row.
+    @Test func timingLabelReadsOverdueTodayAndFuture() {
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        #expect(ReachedOutQueue.timingLabel(next: now, now: now) == "Reach out now")
+        #expect(ReachedOutQueue.timingLabel(next: now.addingTimeInterval(-5 * 86_400), now: now) == "Reach out now")
+        #expect(ReachedOutQueue.timingLabel(next: now.addingTimeInterval(86_400), now: now) == "in 1 day")
+        #expect(ReachedOutQueue.timingLabel(next: now.addingTimeInterval(3 * 86_400), now: now) == "in 3 days")
+    }
+
     @Test func activeListIsSortedSoonestFirstAndExcludesStopped() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)

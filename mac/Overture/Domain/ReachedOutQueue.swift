@@ -22,17 +22,34 @@ enum ReachedOutQueue {
             .min()
     }
 
+    // Contacted prospects with outreach still active, each paired with its next-reach-out date,
+    // soonest first. The view formats the date with timingLabel.
+    static func activeWithDates(from prospects: [Prospect], now: Date,
+                                followUpConfig: FollowUpConfig = .init(),
+                                reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, next: Date)] {
+        prospects
+            .compactMap { p -> (prospect: Prospect, next: Date)? in
+                nextReachOut(for: p, now: now, followUpConfig: followUpConfig,
+                             reminderConfig: reminderConfig).map { (prospect: p, next: $0) }
+            }
+            .sorted { $0.next < $1.next }
+    }
+
     // Contacted prospects with outreach still active, soonest next-reach-out first.
     static func active(from prospects: [Prospect], now: Date,
                        followUpConfig: FollowUpConfig = .init(),
                        reminderConfig: ConversationReminderConfig = .init()) -> [Prospect] {
-        prospects
-            .compactMap { p -> (Prospect, Date)? in
-                nextReachOut(for: p, now: now, followUpConfig: followUpConfig,
-                             reminderConfig: reminderConfig).map { (p, $0) }
-            }
-            .sorted { $0.1 < $1.1 }
-            .map(\.0)
+        activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig,
+                        reminderConfig: reminderConfig).map(\.prospect)
+    }
+
+    // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
+    // now or overdue reads "Reach out now"; future dates read "in N day(s)" (whole days, rounded up).
+    static func timingLabel(next: Date, now: Date) -> String {
+        let seconds = next.timeIntervalSince(now)
+        if seconds <= 0 { return "Reach out now" }
+        let days = Int((seconds / 86_400).rounded(.up))
+        return days == 1 ? "in 1 day" : "in \(days) days"
     }
 
     // The next silent nudge for a no-response lead, mirroring FollowUp.isDue: paced by gapDays from
