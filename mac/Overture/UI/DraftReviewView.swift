@@ -206,13 +206,19 @@ struct DraftReviewView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                Text(item.conversationState?.label ?? "Set conversation")
+                if let state = item.conversationState {
+                    Circle().fill(state.accent).frame(width: 6, height: 6)
+                    Text(state.label).foregroundStyle(OVColor.ink)
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                    Text("Set conversation").foregroundStyle(OVColor.inkSoft)
+                }
             }
-            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            .font(OVType.meta)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .help("Where this conversation stands")
     }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
@@ -266,6 +272,19 @@ struct DraftReviewView: View {
         .padding(OVSpacing.lg)
         .frame(width: 480)
         .background(OVColor.canvas)
+}
+
+// The accent for a conversation state, shared by the lead-row picker and the Due list so a state
+// reads the same everywhere: forest = on track to book, gold = warm, rust = needs a response.
+extension ConversationState {
+    var accent: Color {
+        switch self {
+        case .wantsToBook: return OVColor.forest
+        case .interested: return OVColor.gold
+        case .hasQuestion: return OVColor.rust
+        case .declined: return OVColor.inkSoft
+        }
+    }
 }
 
 private struct ConfidencePip: View {

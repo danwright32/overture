@@ -32,7 +32,33 @@ struct FollowUpsView: View {
 
     private var conversationDue: [(Prospect, ConversationReminder.DueReminder)] {
         ConversationReminder.due(from: prospects, now: Date())
-            .sorted { ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999") }
+            .sorted {
+                let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)
+                if ra != rb { return ra < rb }
+                return ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999")
+            }
+    }
+
+    // Order by likelihood-to-convert and time-sensitivity (Dan's call): a verbal yes is the lead
+    // most likely to book, so it leads; then someone awaiting a reply, then warm-but-cooling, then a
+    // reply still to triage, and finally the lapsed-event closing note (least time-sensitive).
+    private func urgencyRank(_ kind: ConversationReminder.Kind) -> Int {
+        switch kind {
+        case .active(.wantsToBook): return 0
+        case .active(.hasQuestion): return 1
+        case .active(.interested): return 2
+        case .needsState: return 3
+        case .closing: return 4
+        case .active(.declined): return 5   // unreachable: declined is never due
+        }
+    }
+
+    private func kindColor(_ kind: ConversationReminder.Kind) -> Color {
+        switch kind {
+        case .active(let state): return state.accent
+        case .closing: return OVColor.inkSoft
+        case .needsState: return OVColor.gold
+        }
     }
 
     private var gmailConnected: Bool { GmailAuthManager.shared.isConnected }
@@ -119,7 +145,7 @@ struct FollowUpsView: View {
         HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                reasonPill(reminder.reason)
+                reasonPill(reminder.reason, color: kindColor(reminder.kind))
                 Text(p.contactEmail ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
             }
             Spacer(minLength: OVSpacing.sm)
@@ -143,11 +169,12 @@ struct FollowUpsView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    private func reasonPill(_ text: String) -> some View {
+    private func reasonPill(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(OVType.tag).foregroundStyle(OVColor.gold)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(OVColor.gold.opacity(0.12)))
+            .font(OVType.tag).fontWeight(.medium).foregroundStyle(color)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(Capsule().fill(color.opacity(0.14)))
+            .overlay(Capsule().strokeBorder(color.opacity(0.25)))
     }
 
     private func sendButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
