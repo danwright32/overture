@@ -11,7 +11,7 @@ describe("groupIntoRuns", () => {
     expect(out).toHaveLength(1);
     expect(out[0].performanceDate).toBe("2026-07-14");
     expect(out[0].runEndDate).toBe("2026-07-16");
-    expect(out[0].runSourceURLs.sort()).toEqual(["u-2026-07-14", "u-2026-07-15", "u-2026-07-16"]);
+    expect(out[0].runSourceUrls.sort()).toEqual(["u-2026-07-14", "u-2026-07-15", "u-2026-07-16"]);
     expect(out[0].partOfRelatedRun).toBe(false);
   });
 
@@ -39,7 +39,7 @@ describe("groupIntoRuns", () => {
   it("leaves a single night with a null runEndDate and its own url", () => {
     const out = groupIntoRuns([row("Solo", "2026-07-01")]);
     expect(out[0].runEndDate).toBeNull();
-    expect(out[0].runSourceURLs).toEqual(["u-2026-07-01"]);
+    expect(out[0].runSourceUrls).toEqual(["u-2026-07-01"]);
   });
 
   it("passes undated rows through unmerged", () => {

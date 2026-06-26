@@ -61,13 +61,9 @@ export function serializeProspect(row: ProspectRow) {
 }
 
 export function buildResultsFile(rows: ProspectRow[], generatedAt: string): ResultsFile {
-  // Serialize, then collapse multi-night runs. groupIntoRuns returns the internal `runSourceURLs`
-  // (capital); emit only the lowercase `runSourceUrls` the reader expects, with no stray key.
-  const runs = groupIntoRuns(rows.map(serializeProspect));
-  const prospects: WireProspect[] = runs.map(({ runSourceURLs, ...rest }) => ({
-    ...rest,
-    runSourceUrls: runSourceURLs,
-  }));
+  // Serialize, then collapse multi-night runs. groupIntoRuns emits the wire field names directly
+  // (runEndDate / partOfRelatedRun / runSourceUrls), so the run rows already are WireProspects.
+  const prospects: WireProspect[] = groupIntoRuns(rows.map(serializeProspect));
 
   // Soonest performance first; undated last; ties broken by fit score descending.
   prospects.sort((a, b) => {
