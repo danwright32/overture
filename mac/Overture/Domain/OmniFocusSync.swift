@@ -5,6 +5,15 @@ import Foundation
 // to chase, or a post-event closing note), whose next-reach-out is within a horizon, each carrying
 // its due. `reconcile` diffs that against the existing Overture-tagged tasks. Keyed on naturalKey so
 // the side-effecting client can find-or-create-or-complete idempotently. No OmniFocus dependency.
+// The side-effecting boundary to OmniFocus, injected so the orchestrator is testable with a fake.
+// The real implementation (AppleScriptOmniFocusClient) talks to OmniFocus; it is the one piece that
+// can only be verified live, not unit-tested.
+protocol OmniFocusClient {
+    func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
+    func create(_ task: OmniFocusSync.DesiredTask) throws
+    func complete(naturalKey: String) throws
+}
+
 enum OmniFocusSync {
     struct DesiredTask: Equatable, Sendable {
         let naturalKey: String
@@ -59,6 +68,17 @@ enum OmniFocusSync {
                                deferDate: easternTime(hour: deferHour, onDayOf: due),
                                dueDate: easternTime(hour: dueHour, onDayOf: due))
         }
+    }
+
+    // Read what OmniFocus holds, diff against what should exist, then create/complete via the client.
+    // Each step is independent so a single failed Apple event doesn't abort the rest of the sync.
+    static func run(prospects: [Prospect], now: Date, client: OmniFocusClient, horizonDays: Int = 14,
+                    reminderConfig: ConversationReminderConfig = .init()) throws {
+        let existing = try client.existingOvertureTasks()
+        let want = desired(from: prospects, now: now, horizonDays: horizonDays, reminderConfig: reminderConfig)
+        let plan = reconcile(desired: want, existing: existing)
+        for task in plan.toCreate { try client.create(task) }
+        for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey) }
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey). Complete any
