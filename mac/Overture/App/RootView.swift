@@ -26,7 +26,7 @@ struct RootView: View {
 
     private var followUpsDue: Int {
         FollowUp.due(from: allProspects, now: Date()).count
-            + ConversationReminder.due(from: allProspects, now: Date()).count
+            + ConversationReminder.due(from: allProspects, now: Date(), config: .loaded()).count
     }
 
     private var canStartPrep: Bool {

@@ -22,6 +22,42 @@ struct ConversationReminderConfig: Sendable {
     }
 }
 
+// Persistence for the cadence (#178). The intervals and lead buffer are sensible baked defaults, but
+// Dan may want to retune them once he sees them in real use, without a code change. They round-trip
+// through UserDefaults under these keys; any key he hasn't touched falls back to the baked default,
+// so behavior is unchanged until he edits. Injected defaults keep test side effects contained, the
+// same pattern ScoutService uses. The values stay whole days, matching the rest of the calculator.
+extension ConversationReminderConfig {
+    enum Keys {
+        static let wantsToBook = "reminderWantsToBookDays"
+        static let hasQuestion = "reminderHasQuestionDays"
+        static let interested = "reminderInterestedDays"
+        static let leadBuffer = "reminderLeadBufferDays"
+    }
+
+    static func loaded(from defaults: UserDefaults = .standard) -> ConversationReminderConfig {
+        let baked = ConversationReminderConfig()
+        return ConversationReminderConfig(
+            interestedDays: stored(defaults, Keys.interested) ?? baked.interestedDays,
+            wantsToBookDays: stored(defaults, Keys.wantsToBook) ?? baked.wantsToBookDays,
+            hasQuestionDays: stored(defaults, Keys.hasQuestion) ?? baked.hasQuestionDays,
+            leadBufferDays: stored(defaults, Keys.leadBuffer) ?? baked.leadBufferDays)
+    }
+
+    func save(to defaults: UserDefaults = .standard) {
+        defaults.set(interestedDays, forKey: Keys.interested)
+        defaults.set(wantsToBookDays, forKey: Keys.wantsToBook)
+        defaults.set(hasQuestionDays, forKey: Keys.hasQuestion)
+        defaults.set(leadBufferDays, forKey: Keys.leadBuffer)
+    }
+
+    // nil when the key was never set (so the caller keeps the baked default), distinguishing an
+    // absent key from a deliberately stored 0 (a valid lead buffer meaning "due by the event day").
+    private static func stored(_ defaults: UserDefaults, _ key: String) -> Int? {
+        defaults.object(forKey: key) == nil ? nil : defaults.integer(forKey: key)
+    }
+}
+
 // A UI-agnostic accent for a reminder/state, so the colour decision is testable without SwiftUI.
 // The view maps each token to a brand colour. onTrack = heading to a booking, attention = someone
 // waiting on a reply, warm = interested/uncategorized, neutral = winding down.
