@@ -137,11 +137,10 @@ struct FollowUpsView: View {
                     }
                 case .suggested:
                     // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
-                    Button("Confirm") { confirm(p) }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                    setStateMenu(p)
+                    sendButton("Confirm", enabled: true) { confirm(p) }
+                    setStateMenu(p, label: "Change")
                 case .needsState:
-                    setStateMenu(p)
+                    setStateMenu(p, label: "Set a state")
                 }
             }
         }
@@ -167,8 +166,8 @@ struct FollowUpsView: View {
         .help(gmailConnected ? "Review and send" : "Connect Gmail first")
     }
 
-    private func setStateMenu(_ p: Prospect) -> some View {
-        Menu("Set a state") {
+    private func setStateMenu(_ p: Prospect, label: String = "Set a state") -> some View {
+        Menu(label) {
             ForEach(ConversationState.allCases, id: \.self) { s in
                 Button(s.label) { setState(p, s) }
             }

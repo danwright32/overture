@@ -142,6 +142,7 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             outcomeSourceRaw: p.outcomeSourceRaw,
             conversationState: p.conversationState,
+            conversationStateSource: p.conversationStateSource,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed
