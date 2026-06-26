@@ -25,6 +25,10 @@ private struct AlwaysFailSender: MailSender {
     func send(_ mail: OutgoingMail) async throws -> SentReceipt { throw MailSenderError.notConfigured }
 }
 
+// Records the URL the injected fetch was handed, so a test can prove the live network path
+// was never reached when driving the real GmailSender through sendOne (#194).
+private final class Hit: @unchecked Sendable { var url: URL? }
+
 @MainActor
 @Suite("Send service")
 struct SendServiceTests {
@@ -148,6 +152,34 @@ struct SendServiceTests {
         a.sentAt = Date(); a.outcome = .replied
         #expect(await SendService.sendFollowUp(a, now: Date(), sender: FakeSender()) == false)
         #expect(a.followUpCount == 0)
+    }
+
+    // #194: sendOne must be able to drive the REAL GmailSender send chain (token acquisition +
+    // HTTP), not just a substitute MailSender, with the token and fetch injected so the live
+    // path runs from the main actor without the network. Proves the injected fetch fired (so no
+    // live request escaped) and the receipt was recorded onto the prospect.
+    @Test func sendOneDrivesTheRealGmailSenderWithInjectedTokenAndFetch() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Real", ingested: Date(timeIntervalSince1970: 1))
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        let hit = Hit()
+        let sender = GmailSender(
+            fromEmail: "dan@danwrightphotography.com",
+            token: { "tok" },
+            fetch: { req in
+                hit.url = req.url
+                return (Data(#"{"threadId":"t-194","id":"m1"}"#.utf8),
+                        HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            })
+
+        #expect(await SendService.sendOne(p, now: now, sender: sender) == true)
+        #expect(p.sentAt == now)
+        #expect(p.gmailThreadId == "t-194")
+        #expect(p.gmailMessageId?.hasSuffix("@danwrightphotography.com>") == true)
+        // The injected fetch was the one that ran (the real URLSession path was never reached).
+        #expect(hit.url?.absoluteString == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
     }
 
     @Test func sendOneRecordsErrorOnFailure() async throws {
