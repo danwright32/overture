@@ -13,8 +13,11 @@ enum ReachedOutQueue {
         guard p.sentAt != nil else { return nil }                 // only contacted prospects
         guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
 
-        return [nextFollowUp(for: p, now: now, config: followUpConfig),
-                nextReminder(for: p, now: now, config: reminderConfig)]
+        let reminderDate = ConversationReminder.nextReminderDate(
+            state: p.conversationState, setAt: p.conversationStateSetAt, remindedAt: p.conversationRemindedAt,
+            performanceDate: p.performanceDate, outcome: p.outcome, source: p.conversationStateSource,
+            now: now, config: reminderConfig)
+        return [nextFollowUp(for: p, now: now, config: followUpConfig), reminderDate]
             .compactMap { $0 }
             .min()
     }
@@ -42,24 +45,4 @@ enum ReachedOutQueue {
         return lastTouch.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
 
-    // The next conversation reminder, mirroring ConversationReminder.reminder's schedule: a replied
-    // lead with no state needs categorizing now; an unconfirmed (AI) or event-passed state surfaces
-    // now; an active timed state is due at the earlier of (anchor + interval) and (event - buffer).
-    private static func nextReminder(for p: Prospect, now: Date, config: ConversationReminderConfig) -> Date? {
-        guard let state = p.conversationState else {
-            return p.outcome == .replied ? now : nil
-        }
-        guard state.isActive, let interval = config.intervalDays(for: state) else { return nil }
-        if p.conversationStateSource == .auto { return now }
-        let daysToEvent = p.performanceDate.flatMap { EasternDate.daysUntil(from: EasternDate.today(now), to: $0) }
-        if let d = daysToEvent, d < 0 { return now }
-        var dates: [Date] = []
-        if let anchor = p.conversationRemindedAt ?? p.conversationStateSetAt {
-            dates.append(anchor.addingTimeInterval(TimeInterval(interval) * 86_400))
-        }
-        if let d = daysToEvent {
-            dates.append(now.addingTimeInterval(TimeInterval(d - config.leadBufferDays) * 86_400))
-        }
-        return dates.min()
-    }
 }
