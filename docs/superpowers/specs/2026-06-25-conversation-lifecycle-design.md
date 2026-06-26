@@ -150,11 +150,16 @@ the silent follow-up sequencer stand down, since `FollowUp.due` only fires on `n
 two reminder sources become genuinely mutually exclusive (no lead in both lists) rather than relying
 on an assertion. A lead that already replied keeps its existing source.
 
-Each active reminder carries an explicit "I followed up / remind me later" control (the re-anchor):
-acting on it stamps `conversationRemindedAt` so the reminder steps forward by its interval instead of
-nagging on every render. Sending an active re-touch email (via `sendConversationNudge`) stamps it
-too. The active states are reminders TO Dan, so the control is a manual acknowledgement, not only an
-email send.
+Every active state gets its OWN pre-written nudge body that Dan reviews and sends, plus the
+post-event closing note: `interested`, `wantsToBook`, and `hasQuestion` each have copy in
+`ConversationReminder`, all in Dan's voice (no performative enthusiasm, no em dashes, the
+`dan-wright-brand-voice` skill). The `hasQuestion` nudge is necessarily generic (a "wanted to make
+sure I answered your question, happy to help" style note) since it cannot know the specific question;
+Dan can edit before sending, draft-and-approve as always.
+
+Each active reminder also carries an explicit "remind me later" control. Both sending the nudge (via
+`sendConversationNudge`) and tapping "remind me later" stamp `conversationRemindedAt` (the
+re-anchor), so the reminder steps forward by its interval instead of nagging on every render.
 
 Closing finding-7 gap: a lead whose reply was auto-detected (`ReplyService` set `outcome = .replied`)
 but which Dan has not categorized has no conversation state yet, so neither reminder fires. To keep
