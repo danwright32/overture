@@ -25,6 +25,8 @@ the workflow's runbook is its spec.
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
 Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
@@ -74,3 +76,13 @@ does the research and drafting, and writes `prep-results.json`; the app ingests 
 key the run must echo back verbatim, never rebuild. The Prep run is the counterpart side with no
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
+
+### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
+
+The app's round trip with the reply-classify run (#112). The app writes the queue (kept replies, each
+with the captured `replyText`, via `ReplyClassifyQueueBuilder.encode`); the classify workflow reads
+it, judges each reply's intent (`ReplyIntent`: interested / wants_to_book / has_question / declined),
+and writes the results; the app ingests them and suggests the conversation state (auto). The
+`naturalKey` is the opaque join key the run must echo back verbatim. The classify run is the
+counterpart side with no automated test, so `fixtures/reply-classify/` is its spec (runbook added in
+the workflow phase).
