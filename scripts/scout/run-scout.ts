@@ -20,6 +20,7 @@ import { classifyEvent, type EventClassification, type ExtractedEvent } from "..
 import { fetchCalendar, WINDOW_DAYS } from "../../src/lib/algoliaCalendar";
 import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
 import { buildResultsFile } from "../../src/lib/resultsContract";
+import { buildUncertainPayload } from "../../src/lib/refineContract";
 
 function appSupport(name: string): string {
   return join(homedir(), "Library", "Application Support", "Overture", name);
@@ -60,20 +61,12 @@ async function main() {
   // Dan's Max plan, not a paid API. It reads this file, re-judges each event, and writes
   // overture-refined.json; the next run merges those in. Refining only the uncertain slice
   // keeps cost near zero.
-  const uncertainEvents = events.filter((e) => byTitle.get(e.title)?.confidence === "uncertain");
+  // The uncertain work-list shape is the #159 contract (src/lib/refineContract.ts), pinned by
+  // refineContract.test.ts against fixtures/scout-refine/ and read back below via applyRefinements.
+  const uncertainPayload = buildUncertainPayload(events, byTitle);
   writeFileSync(
     appSupport("overture-uncertain.json"),
-    JSON.stringify(
-      uncertainEvents.map((e) => {
-        const c = byTitle.get(e.title)!;
-        return {
-          title: e.title, presenter: e.presenter, venue: e.venue,
-          performanceDate: e.performanceDate, sourceUrl: e.sourceUrl,
-          rulesGuess: { production: c.production, profile: c.profile, coverage: c.coverage, discipline: c.discipline },
-        };
-      }),
-      null, 2,
-    ) + "\n",
+    JSON.stringify(uncertainPayload, null, 2) + "\n",
     "utf8",
   );
 
@@ -86,7 +79,7 @@ async function main() {
   if (refinements.length) console.log(`Applied ${refinements.length} AI refinements to uncertain events.`);
 
   const rows: ProspectRow[] = [];
-  const uncertain = uncertainEvents.map((e) => e.title);
+  const uncertain = uncertainPayload.map((p) => p.title);
   const skipped: Record<string, number> = {};
 
   for (const e of events) {

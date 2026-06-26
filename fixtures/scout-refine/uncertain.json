@@ -1,0 +1,28 @@
+[
+  {
+    "title": "An Evening with the Velvet Notes",
+    "presenter": null,
+    "venue": "Zankel Hall",
+    "performanceDate": "2026-04-05",
+    "sourceUrl": "https://example.org/velvet-notes",
+    "rulesGuess": {
+      "production": "unknown",
+      "profile": "neutral",
+      "coverage": "unknown",
+      "discipline": "music"
+    }
+  },
+  {
+    "title": "Winter Concert",
+    "presenter": "Hudson Valley Philharmonic Society",
+    "venue": "Stern Auditorium",
+    "performanceDate": "2026-04-12",
+    "sourceUrl": "https://example.org/hv-phil",
+    "rulesGuess": {
+      "production": "self",
+      "profile": "neutral",
+      "coverage": "unknown",
+      "discipline": "music"
+    }
+  }
+]
