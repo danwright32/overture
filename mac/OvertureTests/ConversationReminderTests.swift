@@ -80,6 +80,57 @@ struct ConversationReminderTests {
         #expect(reminder(state: nil, setAt: nil, outcome: .noResponse) == nil)
     }
 
+    private func prospect(state: ConversationState?, setAt: Date?, event: String?, outcome: Outcome) -> Prospect {
+        let p = Prospect(naturalKey: "k-\(event ?? "none")-\(state?.rawValue ?? "nil")-\(outcome.rawValue)",
+                         groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: event, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil)
+        p.outcome = outcome
+        p.conversationState = state
+        p.conversationStateSetAt = setAt
+        return p
+    }
+
+    @Test func dueIsSortedByUrgencyThenEvent() {
+        let leads = [
+            prospect(state: .interested, setAt: daysAgo(30), event: "2020-01-01", outcome: .replied),     // closing
+            prospect(state: nil, setAt: nil, event: "2026-12-01", outcome: .replied),                     // needsState
+            prospect(state: .interested, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),     // interested
+            prospect(state: .hasQuestion, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),    // hasQuestion
+            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),    // wantsToBook
+        ]
+        let kinds = ConversationReminder.due(from: leads, now: now).map { $0.1.kind }
+        #expect(kinds == [
+            .active(.wantsToBook), .active(.hasQuestion), .active(.interested), .needsState, .closing,
+        ])
+    }
+
+    @Test func dueBreaksTiesBySoonestEvent() {
+        let leads = [
+            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-08-01", outcome: .replied),
+            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-07-01", outcome: .replied),
+        ]
+        let events = ConversationReminder.due(from: leads, now: now).map { $0.0.performanceDate }
+        #expect(events == ["2026-07-01", "2026-08-01"])
+    }
+
+    @Test func accentMapsEachKindToASemanticToken() {
+        #expect(ConversationReminder.accent(for: .active(.wantsToBook)) == .onTrack)
+        #expect(ConversationReminder.accent(for: .active(.hasQuestion)) == .attention)
+        #expect(ConversationReminder.accent(for: .active(.interested)) == .warm)
+        #expect(ConversationReminder.accent(for: .needsState) == .warm)
+        #expect(ConversationReminder.accent(for: .closing) == .neutral)
+    }
+
+    @Test func conversationStateAccentMatchesItsActiveReminder() {
+        #expect(ConversationState.wantsToBook.accent == .onTrack)
+        #expect(ConversationState.hasQuestion.accent == .attention)
+        #expect(ConversationState.interested.accent == .warm)
+        #expect(ConversationState.declined.accent == .neutral)
+    }
+
     @Test func everyDueReminderCarriesANonEmptyReason() {
         let kinds = [
             reminder(state: .wantsToBook, setAt: daysAgo(7)),
