@@ -50,7 +50,8 @@ struct DownbeatBookingTests {
     // Old: client-list match → auto-book. New: client-list match → bookingSuggested only.
     @Test func contactedMatchBecomesBookedAuto() throws {
         let ctx = ModelContext(try container())
-        let p = make(ctx, group: "Acme Festival Chorus", status: .approved)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: Date(timeIntervalSince1970: 1_000))
         let now = Date(timeIntervalSince1970: 5_000)
         let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")],
                                                     bookings: [], health: .ok, now: now)
@@ -61,7 +62,8 @@ struct DownbeatBookingTests {
 
     @Test func alreadyAClientWhenPitchedIsNotReBooked() throws {
         let ctx = ModelContext(try container())
-        let p = make(ctx, group: "Acme Festival Chorus", status: .approved)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: Date(timeIntervalSince1970: 1_000))
         p.priorRelationshipAtSend = "booked"
         let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")],
                                                     bookings: [], health: .ok, now: Date())
@@ -72,7 +74,8 @@ struct DownbeatBookingTests {
     @Test func coldWhenPitchedThatBecomesAClientIsBooked() throws {
         // #66: cold at contact, now a Downbeat client. Old: auto-book. New: suggest only.
         let ctx = ModelContext(try container())
-        let p = make(ctx, group: "Acme Festival Chorus", status: .approved)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: Date(timeIntervalSince1970: 1_000))
         p.priorRelationshipAtSend = "none"
         let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [client("Acme Festival Chorus")],
                                                     bookings: [], health: .ok, now: Date())

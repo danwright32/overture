@@ -63,7 +63,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
 
     var isSent: Bool { sentAt != nil }
     var isHighFit: Bool { tier == "high" }
-    var isKept: Bool { status == .queued || status == .drafted || status == .approved }
+    var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }
     var hasDraft: Bool { draftBody != nil }
     // Dan marked this lead lost (soft or hard); the row shows an editable reason note.
     var isLost: Bool { outcome == .lostSoft || outcome == .lostHard }

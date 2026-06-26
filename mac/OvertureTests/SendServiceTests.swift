@@ -89,6 +89,26 @@ struct SendServiceTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(all.first?.sentAt == now)
         #expect(all.first?.gmailThreadId == "t-123")
+        // #200: sending advances the lifecycle to an explicit contacted state, not just a date.
+        #expect(all.first?.status == .contacted)
+    }
+
+    // #200: "contacted" means the pitch went out, not merely that Dan approved it. An approved
+    // prospect still waiting in the send queue is NOT contacted; once sent it is.
+    @Test func approvedButUnsentIsNotYetContacted() throws {
+        let ctx = ModelContext(try container())
+        let key = Prospect.makeNaturalKey(groupName: "Held", performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: "Held", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        ctx.insert(p)
+        #expect(p.wasContacted == false)
+        p.status = .contacted
+        p.sentAt = Date(timeIntervalSince1970: 9)
+        #expect(p.wasContacted == true)
     }
 
     @Test func dripsOneAtATimeAndThrottlesTheRest() async throws {

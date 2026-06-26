@@ -23,6 +23,9 @@ struct OutcomePatternsTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status)
         p.outcome = outcome
+        // A contacted prospect is one whose pitch went out (#200): approved-in-these-tests means
+        // sent, so it carries a send date. New prospects stay uncontacted (no date).
+        if status == .approved { p.sentAt = Date(timeIntervalSince1970: 1_000) }
         ctx.insert(p)
         return p
     }

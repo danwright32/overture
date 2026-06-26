@@ -34,6 +34,7 @@ enum SendService {
         do {
             let receipt = try await sender.send(mail)
             prospect.sentAt = now
+            prospect.status = .contacted
             prospect.gmailThreadId = receipt.threadId
             prospect.gmailMessageId = receipt.messageID
             prospect.priorRelationshipAtSend = prospect.priorRelationship
@@ -144,6 +145,7 @@ enum SendService {
         do {
             let receipt = try await sender.send(mail)
             next.sentAt = now
+            next.status = .contacted
             next.gmailThreadId = receipt.threadId
             next.gmailMessageId = receipt.messageID
             next.priorRelationshipAtSend = next.priorRelationship
