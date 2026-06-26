@@ -19,12 +19,9 @@ enum AlgoliaCalendar {
     // A safety stop so a surprise in the index can never spin the pager forever.
     static let maxPages = 5
 
-    private static let eastern = TimeZone(identifier: "America/New_York")!
-    private static let easternCalendar: Calendar = {
-        var c = Calendar(identifier: .gregorian)
-        c.timeZone = eastern
-        return c
-    }()
+    // Eastern day boundaries via the shared helper (#177), so this window math can't drift from the
+    // rest of the app's date handling (#116).
+    private static let easternCalendar = EasternDate.calendar
 
     // The index stores `startdate` as a millisecond epoch. The window opens at midnight (New
     // York) of today and runs to midnight of the day after the last included day, so every
