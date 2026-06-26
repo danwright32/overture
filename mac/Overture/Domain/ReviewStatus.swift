@@ -2,13 +2,15 @@ import Foundation
 
 // Where a prospect sits in Dan's review. The scout writes everything as `.new`;
 // Dan moves it to `.queued` (keep), the Prep run fills a contact + draft and marks
-// it `.drafted` (ready to review), Dan `.approved` it to send, or `.dismissed` a no-go.
+// it `.drafted` (ready to review), Dan `.approved` it to send, the send advances it to
+// `.contacted` (the pitch went out, #200), or `.dismissed` a no-go.
 // Stored on the model as a raw string so SwiftData keeps it simple.
 enum ReviewStatus: String, CaseIterable, Sendable {
     case new
     case queued
     case drafted
     case approved
+    case contacted
     case dismissed
 }
 

@@ -28,6 +28,19 @@ struct PrepStatus: Equatable, Sendable {
 
     private var keptSuffix: String { kept > 0 ? " \(kept)" : "" }
 
+    // Count the pipeline from the live prospects. approved means approved AND still waiting to
+    // send (#200): once sent, a prospect is .contacted (or legacy .approved with a send date),
+    // so the send date excludes it here and it stops inflating the "approved" figure.
+    static func from(prospects: [Prospect], lastRunStartedAt: Date?, running: Bool) -> PrepStatus {
+        PrepStatus(
+            kept: prospects.filter { $0.status == .queued && !$0.hasDraft }.count,
+            drafted: prospects.filter { $0.status == .drafted }.count,
+            approved: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
+            lastRunStartedAt: lastRunStartedAt,
+            running: running
+        )
+    }
+
     // Coarse relative time, enough for "is this fresh?". No external dependency.
     static func relative(from: Date, to: Date) -> String {
         let seconds = max(0, to.timeIntervalSince(from))

@@ -227,13 +227,9 @@ struct QueueView: View {
     }
 
     private var prepStatus: PrepStatus {
-        PrepStatus(
-            kept: prospects.filter { $0.status == .queued && !$0.hasDraft }.count,
-            drafted: prospects.filter { $0.status == .drafted }.count,
-            approved: prospects.filter { $0.status == .approved }.count,
-            lastRunStartedAt: PrepQueueService.lastRunStartedAt,
-            running: PrepQueueService.isRunning(now: Date())
-        )
+        PrepStatus.from(prospects: prospects,
+                        lastRunStartedAt: PrepQueueService.lastRunStartedAt,
+                        running: PrepQueueService.isRunning(now: Date()))
     }
 
     private func dateSection(_ group: QueueModel.DateGroup) -> some View {

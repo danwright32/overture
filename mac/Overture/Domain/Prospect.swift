@@ -281,7 +281,10 @@ final class Prospect {
 
     // True once the email was actually sent (approved-and-sent). Outcomes only count
     // for these in the stats.
-    var wasContacted: Bool { sentAt != nil || status == .approved }
+    // Contacted means the pitch actually went out (#200): a send always stamps sentAt and
+    // advances status to .contacted. Reads the send date so prospects sent before the explicit
+    // .contacted state (stored as .approved + a send date) still count, with no migration.
+    var wasContacted: Bool { sentAt != nil }
 
     // The content key two results files agree on for "the same performance". Each
     // part is CANONICALIZED so a scraped name and the same name fetched/decoded

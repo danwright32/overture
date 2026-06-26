@@ -14,7 +14,8 @@ private func item(
     matchedClientName: String? = nil,
     possibleMatchSource: String? = nil,
     possibleMatchName: String? = nil,
-    partOfRelatedRun: Bool = false
+    partOfRelatedRun: Bool = false,
+    status: ReviewStatus = .new
 ) -> QueueItem {
     var q = QueueItem(
         id: "k", groupName: "Test Group", discipline: discipline, venue: venue,
@@ -22,10 +23,24 @@ private func item(
         priorRelationship: priorRelationship, production: production, profile: "neutral",
         coverage: coverage, fitScore: fitScore, tier: tier, fitReason: "reason",
         matchedClientName: matchedClientName, possibleMatchSource: possibleMatchSource,
-        possibleMatchName: possibleMatchName, status: .new
+        possibleMatchName: possibleMatchName, status: status
     )
     q.partOfRelatedRun = partOfRelatedRun
     return q
+}
+
+@Suite("Queue item lifecycle")
+struct QueueItemLifecycleTests {
+    // #200: a contacted (sent) prospect stays "kept" so it remains visible in the queue,
+    // just like the approved-and-sent rows did before the explicit state existed.
+    @Test func keptCoversPursuedStatesThroughContacted() {
+        #expect(item(status: .queued).isKept)
+        #expect(item(status: .drafted).isKept)
+        #expect(item(status: .approved).isKept)
+        #expect(item(status: .contacted).isKept)
+        #expect(item(status: .new).isKept == false)
+        #expect(item(status: .dismissed).isKept == false)
+    }
 }
 
 @Suite("Queue label helpers")
