@@ -5,6 +5,15 @@ import Foundation
 // to chase, or a post-event closing note), whose next-reach-out is within a horizon, each carrying
 // its due. `reconcile` diffs that against the existing Overture-tagged tasks. Keyed on naturalKey so
 // the side-effecting client can find-or-create-or-complete idempotently. No OmniFocus dependency.
+// The side-effecting boundary to OmniFocus, injected so the orchestrator is testable with a fake.
+// The real implementation (AppleScriptOmniFocusClient) talks to OmniFocus; it is the one piece that
+// can only be verified live, not unit-tested.
+protocol OmniFocusClient {
+    func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
+    func create(_ task: OmniFocusSync.DesiredTask) throws
+    func complete(naturalKey: String) throws
+}
+
 enum OmniFocusSync {
     struct DesiredTask: Equatable, Sendable {
         let naturalKey: String
@@ -55,10 +64,27 @@ enum OmniFocusSync {
                 outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig)
             else { return nil }
             guard due <= cutoff else { return nil }
-            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p), note: note(for: p),
+            let dueDate = easternTime(hour: dueHour, onDayOf: due)
+            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p),
+                               note: note(for: p, dueDate: dueDate),
                                deferDate: easternTime(hour: deferHour, onDayOf: due),
-                               dueDate: easternTime(hour: dueHour, onDayOf: due))
+                               dueDate: dueDate)
         }
+    }
+
+    // The Eastern day token written into the task note as paragraph 2, read back verbatim by the
+    // client (avoids reading date components out of AppleScript, which is unreliable).
+    static let dueNotePrefix = "Due: "
+
+    // Read what OmniFocus holds, diff against what should exist, then create/complete via the client.
+    // Each step is independent so a single failed Apple event doesn't abort the rest of the sync.
+    static func run(prospects: [Prospect], now: Date, client: OmniFocusClient, horizonDays: Int = 14,
+                    reminderConfig: ConversationReminderConfig = .init()) throws {
+        let existing = try client.existingOvertureTasks()
+        let want = desired(from: prospects, now: now, horizonDays: horizonDays, reminderConfig: reminderConfig)
+        let plan = reconcile(desired: want, existing: existing)
+        for task in plan.toCreate { try client.create(task) }
+        for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey) }
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey). Complete any
@@ -82,8 +108,11 @@ enum OmniFocusSync {
         "Follow up with \(p.groupName)"
     }
 
-    private static func note(for p: Prospect) -> String {
-        var parts = ["Overture lead: \(p.naturalKey)"]
+    // Note layout is load-bearing: paragraph 1 is the lead key, paragraph 2 is the due day. The
+    // client reads those two lines back verbatim, so their order must not change.
+    static let notePrefix = "Overture lead: "
+    private static func note(for p: Prospect, dueDate: Date) -> String {
+        var parts = ["\(notePrefix)\(p.naturalKey)", "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
         return parts.joined(separator: "\n")

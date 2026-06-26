@@ -49,6 +49,19 @@ struct OmniFocusSyncTests {
         #expect(cal.isDate(t.dueDate, inSameDayAs: dueDay))
     }
 
+    // The note layout is load-bearing: the AppleScript client reads paragraph 1 (lead key) and
+    // paragraph 2 (due day) back. Lock that order/format.
+    @Test func desiredNoteCarriesLeadKeyThenDueDayInFirstTwoLines() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)
+        let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                                   now: now, horizonDays: 14).first)
+        let lines = t.note.components(separatedBy: "\n")
+        #expect(lines[0] == "Overture lead: warm-lead")
+        #expect(lines[1] == "Due: " + EasternDate.dayString(from: t.dueDate))
+    }
+
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
@@ -59,6 +72,29 @@ struct OmniFocusSyncTests {
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 3)
         #expect(tasks.isEmpty)
+    }
+
+    // A fake client records what the orchestrator asked OmniFocus to do, with a preset existing set.
+    final class FakeClient: OmniFocusClient {
+        var existing: [OmniFocusSync.ExistingTask]
+        var created: [OmniFocusSync.DesiredTask] = []
+        var completed: [String] = []
+        init(existing: [OmniFocusSync.ExistingTask]) { self.existing = existing }
+        func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { existing }
+        func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
+        func complete(naturalKey: String) throws { completed.append(naturalKey) }
+    }
+
+    @Test func runCreatesDesiredAndCompletesStaleViaTheClient() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)  // desired, due in 7d
+        // OmniFocus already has a stale task for a lead that's since resolved.
+        let fake = FakeClient(existing: [OmniFocusSync.ExistingTask(naturalKey: "gone", dueDate: now)])
+        try OmniFocusSync.run(prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
+                              now: now, client: fake, horizonDays: 14)
+        #expect(fake.created.map(\.naturalKey) == ["warm-lead"])
+        #expect(fake.completed == ["gone"])
     }
 
     @Test func reconcileCreatesMissingAndCompletesStaleOrResolved() {
