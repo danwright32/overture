@@ -13,6 +13,7 @@ struct DraftReviewView: View {
     var onSetOutcome: (Outcome) -> Void = { _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
+    var onSetConversationState: (ConversationState) -> Void = { _ in }
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -128,6 +129,7 @@ struct DraftReviewView: View {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Spacer()
+                conversationStatePicker
                 outcomePicker
             } else if isApproved {
                 Button { onSend() } label: {
@@ -184,6 +186,30 @@ struct DraftReviewView: View {
                 Text(item.outcome.label).font(OVType.meta)
             }
             .foregroundStyle(OVColor.inkSoft)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    // Where the conversation stands once the lead has replied (#111): Dan tags it so the right
+    // event-aware reminder fires. Setting an active state also marks the lead replied; declined
+    // resolves it to lost-soft. Shown beside the outcome once sent.
+    private var conversationStatePicker: some View {
+        Menu {
+            ForEach(ConversationState.allCases, id: \.self) { s in
+                Button {
+                    onSetConversationState(s)
+                } label: {
+                    if item.conversationState == s { Label(s.label, systemImage: "checkmark") }
+                    else { Text(s.label) }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                Text(item.conversationState?.label ?? "Set conversation")
+            }
+            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()

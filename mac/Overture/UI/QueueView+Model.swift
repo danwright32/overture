@@ -44,6 +44,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
     var outcomeSourceRaw: String? = nil
+    var conversationState: ConversationState? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).

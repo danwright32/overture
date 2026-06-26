@@ -141,6 +141,7 @@ extension QueueItem {
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
             outcomeSourceRaw: p.outcomeSourceRaw,
+            conversationState: p.conversationState,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed
