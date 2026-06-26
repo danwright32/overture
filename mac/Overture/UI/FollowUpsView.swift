@@ -30,35 +30,9 @@ struct FollowUpsView: View {
             .sorted { ($0.sentAt ?? .distantPast) < ($1.sentAt ?? .distantPast) }
     }
 
+    // Already ordered by urgency then soonest event in ConversationReminder.due (domain-owned).
     private var conversationDue: [(Prospect, ConversationReminder.DueReminder)] {
         ConversationReminder.due(from: prospects, now: Date())
-            .sorted {
-                let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)
-                if ra != rb { return ra < rb }
-                return ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999")
-            }
-    }
-
-    // Order by likelihood-to-convert and time-sensitivity (Dan's call): a verbal yes is the lead
-    // most likely to book, so it leads; then someone awaiting a reply, then warm-but-cooling, then a
-    // reply still to triage, and finally the lapsed-event closing note (least time-sensitive).
-    private func urgencyRank(_ kind: ConversationReminder.Kind) -> Int {
-        switch kind {
-        case .active(.wantsToBook): return 0
-        case .active(.hasQuestion): return 1
-        case .active(.interested): return 2
-        case .needsState: return 3
-        case .closing: return 4
-        case .active(.declined): return 5   // unreachable: declined is never due
-        }
-    }
-
-    private func kindColor(_ kind: ConversationReminder.Kind) -> Color {
-        switch kind {
-        case .active(let state): return state.accent
-        case .closing: return OVColor.inkSoft
-        case .needsState: return OVColor.gold
-        }
     }
 
     private var gmailConnected: Bool { GmailAuthManager.shared.isConnected }
@@ -145,7 +119,7 @@ struct FollowUpsView: View {
         HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                reasonPill(reminder.reason, color: kindColor(reminder.kind))
+                reasonPill(reminder.reason, color: ConversationReminder.accent(for: reminder.kind).color)
                 Text(p.contactEmail ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
             }
             Spacer(minLength: OVSpacing.sm)

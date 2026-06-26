@@ -207,7 +207,7 @@ struct DraftReviewView: View {
         } label: {
             HStack(spacing: 4) {
                 if let state = item.conversationState {
-                    Circle().fill(state.accent).frame(width: 6, height: 6)
+                    Circle().fill(state.accent.color).frame(width: 6, height: 6)
                     Text(state.label).foregroundStyle(OVColor.ink)
                 } else {
                     Image(systemName: "bubble.left.and.bubble.right")
@@ -274,15 +274,16 @@ struct DraftReviewView: View {
         .background(OVColor.canvas)
 }
 
-// The accent for a conversation state, shared by the lead-row picker and the Due list so a state
-// reads the same everywhere: forest = on track to book, gold = warm, rust = needs a response.
-extension ConversationState {
-    var accent: Color {
+// Maps the domain accent token to a brand colour, shared by the lead-row picker and the Due list so
+// a state reads the same everywhere: forest = on track to book, rust = needs a response, gold = warm,
+// inkSoft = winding down. The token (which state/kind gets which) is decided and tested in the domain.
+extension ReminderAccent {
+    var color: Color {
         switch self {
-        case .wantsToBook: return OVColor.forest
-        case .interested: return OVColor.gold
-        case .hasQuestion: return OVColor.rust
-        case .declined: return OVColor.inkSoft
+        case .onTrack: return OVColor.forest
+        case .attention: return OVColor.rust
+        case .warm: return OVColor.gold
+        case .neutral: return OVColor.inkSoft
         }
     }
 }

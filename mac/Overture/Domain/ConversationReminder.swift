@@ -22,11 +22,52 @@ struct ConversationReminderConfig: Sendable {
     }
 }
 
+// A UI-agnostic accent for a reminder/state, so the colour decision is testable without SwiftUI.
+// The view maps each token to a brand colour. onTrack = heading to a booking, attention = someone
+// waiting on a reply, warm = interested/uncategorized, neutral = winding down.
+enum ReminderAccent: Equatable, Sendable {
+    case onTrack, attention, warm, neutral
+}
+
+extension ConversationState {
+    var accent: ReminderAccent {
+        switch self {
+        case .wantsToBook: return .onTrack
+        case .hasQuestion: return .attention
+        case .interested: return .warm
+        case .declined: return .neutral
+        }
+    }
+}
+
 enum ConversationReminder {
     enum Kind: Equatable, Sendable {
         case active(ConversationState)   // an interval/event reminder for an active state
         case closing                     // post-event "perhaps another time" note
         case needsState                  // replied but uncategorized: prompt Dan to set a state
+    }
+
+    static func accent(for kind: Kind) -> ReminderAccent {
+        switch kind {
+        case .active(let state): return state.accent
+        case .needsState: return .warm
+        case .closing: return .neutral
+        }
+    }
+
+    // Due-queue order (Dan's call): a verbal yes is the lead most likely to book, so it leads;
+    // then someone awaiting a reply, then warm-but-cooling, then a reply still to triage, and the
+    // lapsed-event closing note last (least time-sensitive). due() applies this, ties broken by
+    // soonest event, so the ordering is owned and tested here, not in the view.
+    static func urgencyRank(_ kind: Kind) -> Int {
+        switch kind {
+        case .active(.wantsToBook): return 0
+        case .active(.hasQuestion): return 1
+        case .active(.interested): return 2
+        case .needsState: return 3
+        case .closing: return 4
+        case .active(.declined): return 5   // unreachable: declined is never due
+        }
     }
 
     struct DueReminder: Equatable, Sendable {
@@ -83,6 +124,11 @@ enum ConversationReminder {
             reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
                      remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
                      outcome: p.outcome, now: now, config: config).map { (p, $0) }
+        }
+        .sorted {
+            let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)
+            if ra != rb { return ra < rb }
+            return ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999")
         }
     }
 
