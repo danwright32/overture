@@ -14,6 +14,7 @@ struct DraftReviewView: View {
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onSetConversationState: (ConversationState) -> Void = { _ in }
+    var onConfirmConversationState: () -> Void = {}
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -29,6 +30,7 @@ struct DraftReviewView: View {
             contactLine
             draftBlock
             actionRow
+            conversationSuggestionRow
             if item.isLost { lostReasonField }
         }
         .padding(OVSpacing.sm)
@@ -129,7 +131,7 @@ struct DraftReviewView: View {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Spacer()
-                conversationStatePicker
+                if item.conversationStateSource != .auto { conversationStatePicker }   // auto -> own row below
                 outcomePicker
             } else if isApproved {
                 Button { onSend() } label: {
@@ -194,7 +196,34 @@ struct DraftReviewView: View {
     // Where the conversation stands once the lead has replied (#111): Dan tags it so the right
     // event-aware reminder fires. Setting an active state also marks the lead replied; declined
     // resolves it to lost-soft. Shown beside the outcome once sent.
+    // The plain set/change picker, used in the action row for a lead with no state or a hand-set one.
     private var conversationStatePicker: some View {
+        conversationStateMenu(label: nil).help("Where this conversation stands")
+    }
+
+    // The AI's read of the reply, on its own line so it reads as a sentence: what the reply looks
+    // like, then a clear Confirm (accept onto the timed reminder track) or Change (correct it).
+    @ViewBuilder private var conversationSuggestionRow: some View {
+        if let state = item.conversationState, item.conversationStateSource == .auto {
+            HStack(spacing: OVSpacing.xs) {
+                Text("Their reply looks like").foregroundStyle(OVColor.inkSoft)
+                Text(state.label).fontWeight(.semibold).foregroundStyle(state.accent.color)
+                Spacer()
+                Button { onConfirmConversationState() } label: {
+                    Text("Confirm").foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                conversationStateMenu(label: "Change")
+            }
+            .font(OVType.meta)
+            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(state.accent.color.opacity(0.08)))
+        }
+    }
+
+    private func conversationStateMenu(label: String?) -> some View {
         Menu {
             ForEach(ConversationState.allCases, id: \.self) { s in
                 Button {
@@ -206,7 +235,9 @@ struct DraftReviewView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                if let state = item.conversationState {
+                if let label {
+                    Text(label)
+                } else if let state = item.conversationState {
                     Circle().fill(state.accent.color).frame(width: 6, height: 6)
                     Text(state.label).foregroundStyle(OVColor.ink)
                 } else {
@@ -214,11 +245,10 @@ struct DraftReviewView: View {
                     Text("Set conversation").foregroundStyle(OVColor.inkSoft)
                 }
             }
-            .font(OVType.meta)
+            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Where this conversation stands")
     }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
