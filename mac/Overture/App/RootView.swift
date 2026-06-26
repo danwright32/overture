@@ -150,6 +150,20 @@ struct RootView: View {
                     autoScoutIfDue()
                 }
             }
+            .task {
+                // Re-reconcile when Downbeat rewrites its export while we're open (#197), so a
+                // booking made in Downbeat surfaces as Booked without a relaunch or scout. Same
+                // path as the launch reconcile above. The watcher tears down when this task ends
+                // (view gone or cancelled) via the stream's onTermination.
+                var lastSeen = exportModifiedAt()
+                for await _ in DownbeatExportWatcher.changes() {
+                    let current = exportModifiedAt()
+                    if DownbeatExportWatcher.shouldReconcile(previous: lastSeen, current: current) {
+                        lastSeen = current
+                        reconcileBookings()
+                    }
+                }
+            }
             .alert("Something went wrong", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -278,6 +292,13 @@ struct RootView: View {
         if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             try? context.save()
         }
+    }
+
+    // Last-modified time of the Downbeat export, used to gate the live re-reconcile (#197)
+    // so a spurious filesystem event on an unchanged file doesn't trigger redundant work.
+    private func exportModifiedAt() -> Date? {
+        (try? DownbeatBridge.defaultURL
+            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? nil
     }
 
     // First launch with an empty store: ingest a results file if one is present, so
