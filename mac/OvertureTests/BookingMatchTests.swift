@@ -103,6 +103,56 @@ struct BookingMatchTests {
         #expect(BookingMatch.dayString(from: lateEveningET) == "2026-07-01")
     }
 
+    @Test func venueBreaksTieAmongSameOrgAndDate() {
+        // Two bookings match the same org and date range. The prospect's venue confidently
+        // matches the SECOND one, so venue (a soft tiebreaker) must select it over the first.
+        let p = prospect()
+        p.venue = "Carnegie Hall"
+        let first = booking(id: "B-tie-first", start: "2026-03-10", end: "2026-03-12",
+                            venueName: "Town Hall")
+        let second = booking(id: "B-tie-second", start: "2026-03-10", end: "2026-03-12",
+                             venueName: "Carnegie Hall")
+        let r = BookingMatch.classify(prospect: p, bookings: [first, second])
+        if case .exact(let matched) = r {
+            #expect(matched.id == "B-tie-second")
+        } else {
+            Issue.record("expected venue to break the tie to B-tie-second, got \(r)")
+        }
+    }
+
+    @Test func venueNeverRejectsALoneMatch() {
+        // A single causally-valid org+date booking whose venue does NOT match the prospect's
+        // venue must still be an exact match. Venue is a soft tiebreaker only: it never rejects
+        // or downgrades an otherwise-exact match.
+        let p = prospect()
+        p.venue = "Carnegie Hall"
+        let b = booking(id: "B-lone", start: "2026-03-10", end: "2026-03-12",
+                        venueName: "Somewhere Else Entirely")
+        let r = BookingMatch.classify(prospect: p, bookings: [b])
+        if case .exact(let matched) = r {
+            #expect(matched.id == "B-lone")
+        } else {
+            Issue.record("expected .exact despite venue mismatch, got \(r)")
+        }
+    }
+
+    @Test func firstMatchKeptWhenNoVenueMatches() {
+        // Two bookings tie on org and date; neither venue matches the prospect's venue.
+        // Behavior is unchanged: the first causally-valid candidate wins.
+        let p = prospect()
+        p.venue = "Carnegie Hall"
+        let first = booking(id: "B-nofit-first", start: "2026-03-10", end: "2026-03-12",
+                            venueName: "Town Hall")
+        let second = booking(id: "B-nofit-second", start: "2026-03-10", end: "2026-03-12",
+                             venueName: "Symphony Space")
+        let r = BookingMatch.classify(prospect: p, bookings: [first, second])
+        if case .exact(let matched) = r {
+            #expect(matched.id == "B-nofit-first")
+        } else {
+            Issue.record("expected first-match fallback B-nofit-first, got \(r)")
+        }
+    }
+
     @Test func bookingOutsideRunRangeDoesNotMatch() {
         // Run spans 2026-03-10 to 2026-03-12; booking is entirely after the run
         let p = prospect(date: "2026-03-10")
