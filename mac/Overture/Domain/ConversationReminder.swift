@@ -85,4 +85,50 @@ enum ConversationReminder {
                      outcome: p.outcome, now: now, config: config).map { (p, $0) }
         }
     }
+
+    // The pre-written, reviewable nudge per active state, in Dan's level voice (no performative
+    // enthusiasm, no em dashes, contractions throughout). Dan edits before sending; the hasQuestion
+    // copy is deliberately generic since it cannot know the specific question. Follows the
+    // dan-wright-brand-voice skill. Mirrors FollowUp.nudgeBody.
+    static func nudgeBody(for state: ConversationState, contactName: String?, groupName: String, venue: String?) -> String {
+        let greeting = "Hi \(firstName(contactName)),"
+        let g = groupName + venueClause(venue)
+        let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
+        let middle: String
+        switch state {
+        case .interested:
+            middle = "\n\nI wanted to follow up about photographing \(g). If documentary coverage of the "
+                + "performance would be useful, I'm glad to share a few sample frames or talk through specifics. "
+                + "No problem if the timing isn't right."
+        case .wantsToBook:
+            middle = "\n\nFollowing up on photographing \(g). Whenever you're ready to set the date I can hold it "
+                + "and send over the details. Let me know what works on your end."
+        case .hasQuestion:
+            middle = "\n\nI wanted to make sure I answered your question about photographing \(g). Happy to clarify "
+                + "anything on coverage, timing, or rate. Let me know what would help."
+        case .declined:
+            middle = "\n\nFollowing up on photographing \(g)."   // unreachable: declined is never active
+        }
+        return greeting + middle + signoff
+    }
+
+    // The gracious post-event close: a kind "perhaps another time" that keeps the relationship warm
+    // for a future season. Sending it resolves the lead to lost-soft.
+    static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
+        let greeting = "Hi \(firstName(contactName)),"
+        let g = groupName + venueClause(venue)
+        let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
+        return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
+            + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
+            + "then. Either way, it was good to be in touch." + signoff
+    }
+
+    private static func venueClause(_ venue: String?) -> String {
+        (venue?.isEmpty == false) ? " at \(venue!)" : ""
+    }
+
+    private static func firstName(_ name: String?) -> String {
+        guard let n = name?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return "there" }
+        return n.split(separator: " ").first.map(String.init) ?? "there"
+    }
 }
