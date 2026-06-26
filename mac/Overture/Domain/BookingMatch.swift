@@ -17,6 +17,9 @@ enum BookingMatch {
         let sendDay = dayString(from: sentAt)
 
         var best: BookingMatchResult = .none
+        // Collect every causally-valid org+date match in encounter order so venue can break a
+        // tie among them. A booking that predates the send still demotes us to .possible.
+        var exactCandidates: [OvertureBooking] = []
         for booking in bookings {
             guard orgMatches(booking: booking, prospect: prospect) else {
                 continue
@@ -28,12 +31,20 @@ enum BookingMatch {
             }
             let causallyValid = booking.startDate >= sendDay
             if causallyValid {
-                return .exact(booking)
+                exactCandidates.append(booking)
             } else {
                 best = .possible
             }
         }
-        return best
+
+        guard let firstExact = exactCandidates.first else { return best }
+        // Venue is a SOFT tiebreaker: prefer the candidate whose venue confidently matches the
+        // prospect's venue, but fall back to the first encountered when none do. It never rejects
+        // or downgrades an otherwise-exact match.
+        let venueMatch = exactCandidates.first { candidate in
+            GroupNameMatch.isConfident(candidate.venueName, prospect.venue ?? "")
+        }
+        return .exact(venueMatch ?? firstExact)
     }
 
     private static func orgMatches(
