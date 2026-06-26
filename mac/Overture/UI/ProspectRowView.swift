@@ -20,6 +20,7 @@ struct ProspectRowView: View {
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
+    var onRejectBooking: () -> Void = {}
     var gmailConnected: Bool = false
 
     private var timing: QueueModel.Timing {
@@ -234,19 +235,22 @@ struct ProspectRowView: View {
     // of the reach-out queue. Hidden for bookings Dan set himself.
     @ViewBuilder private var autoBookedTag: some View {
         if item.isAutoBooked {
-            Button { onConfirmBooking() } label: {
+            Menu {
+                Button("Confirm booking") { onConfirmBooking() }
+                Button("Not a booking") { onRejectBooking() }
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.seal")
-                    Text("Auto-detected — confirm booking")
+                    Text("Auto-detected booking, confirm?")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.forest)
                 .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
                 .background(Capsule().fill(OVColor.forest.opacity(0.14)))
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("This booking was auto-detected from Downbeat. Click to confirm it; it then moves out of the reach-out list.")
+            .help("This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out.")
             .padding(.top, 2)
         }
     }
