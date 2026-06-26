@@ -43,6 +43,24 @@ struct QueueItemLifecycleTests {
         #expect(result.map(\.id) == ["a"])
     }
 
+    // #219: an auto-detected Gmail reply is flagged so Dan can dismiss it; a hand-set reply is not.
+    @MainActor
+    @Test func isAutoRepliedOnlyForAutoDetectedReplies() {
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.outcome = .replied
+        p.outcomeSourceRaw = OutcomeSource.auto.rawValue
+        #expect(QueueItem(p).isAutoReplied)
+        p.outcomeSourceRaw = OutcomeSource.manual.rawValue
+        #expect(QueueItem(p).isAutoReplied == false)   // Dan set it by hand: not dismissable as auto
+        p.outcome = .booked
+        p.outcomeSourceRaw = OutcomeSource.auto.rawValue
+        #expect(QueueItem(p).isAutoReplied == false)   // auto, but a booking, not a reply
+    }
+
     @Test func keptCoversPursuedStatesThroughContacted() {
         #expect(item(status: .queued).isKept)
         #expect(item(status: .drafted).isKept)

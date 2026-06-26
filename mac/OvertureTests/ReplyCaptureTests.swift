@@ -42,6 +42,40 @@ struct ReplyCaptureTests {
         #expect(p.lastReplyAt == now)
     }
 
+    // #219: the id of the newest message from someone other than Dan, used to dismiss one specific
+    // auto-detected reply while still catching a genuinely new one later.
+    @Test func latestReplyIdIsTheNewestNonSelfMessage() {
+        let json = Data(#"{"messages":[{"id":"m1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"m2","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        #expect(ReplyDetection.latestReplyId(threadJSON: json, selfEmail: me) == "m2")
+    }
+
+    // #219: marking a reply "not real" reverts it and stops THAT reply re-detecting, but a genuinely
+    // new reply on the thread still flags.
+    @Test func dismissedReplyIsNotReDetectedButANewReplyIs() {
+        let p = sentLead()
+        let oneReply = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 100),
+                                       fetchThread: { _ in oneReply })
+        #expect(p.outcome == .replied)
+        #expect(p.lastReplyId == "r1")
+
+        p.dismissAutoReply(now: Date(timeIntervalSince1970: 200))
+        #expect(p.outcome == .noResponse)
+        #expect(p.dismissedReplyId == "r1")
+
+        let n2 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 300),
+                                            fetchThread: { _ in oneReply })
+        #expect(n2 == 0)
+        #expect(p.outcome == .noResponse)
+
+        let twoReplies = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}},{"id":"r2","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        let n3 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 400),
+                                            fetchThread: { _ in twoReplies })
+        #expect(n3 == 1)
+        #expect(p.outcome == .replied)
+        #expect(p.lastReplyId == "r2")
+    }
+
     @Test func doesNotFullFetchWhenThereIsNoReply() {
         let p = sentLead()
         let selfOnly = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}}]}"#.utf8)

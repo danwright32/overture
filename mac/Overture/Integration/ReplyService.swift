@@ -22,9 +22,14 @@ enum ReplyService {
             guard let data = fetchThread(threadId) else { continue }
             if ReplyDetection.hasReply(fromAddresses: ReplyDetection.fromAddresses(threadJSON: data),
                                        selfEmail: selfEmail) {
+                let replyId = ReplyDetection.latestReplyId(threadJSON: data, selfEmail: selfEmail)
+                // Dan dismissed this exact reply as not real (#219): skip it, but a newer reply
+                // (a different id) still flags.
+                if let replyId, replyId == p.dismissedReplyId { continue }
                 p.outcome = .replied
                 p.outcomeSourceRaw = OutcomeSource.auto.rawValue
                 p.outcomeAt = now
+                p.lastReplyId = replyId
                 if let full = fetchFullThread(threadId),
                    let body = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail) {
                     p.lastReplyText = body

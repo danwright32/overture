@@ -15,6 +15,7 @@ struct DraftReviewView: View {
     var onSend: () -> Void = {}
     var onSetConversationState: (ConversationState) -> Void = { _ in }
     var onConfirmConversationState: () -> Void = {}
+    var onDismissReply: () -> Void = {}
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -131,6 +132,11 @@ struct DraftReviewView: View {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Spacer()
+                if item.isAutoReplied {
+                    Button("Not a real reply") { onDismissReply() }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .help("This was not a genuine reply (an auto-reply or out of office). Revert it; a new reply will still flag.")
+                }
                 if item.conversationStateSource != .auto { conversationStatePicker }   // auto -> own row below
                 outcomePicker
             } else if isApproved {

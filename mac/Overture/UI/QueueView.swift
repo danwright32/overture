@@ -311,6 +311,7 @@ struct QueueView: View {
             onSend: { requestSend(item) },
             onSetConversationState: { state in setConversationState(item, state) },
             onConfirmConversationState: { confirmConversationState(item) },
+            onDismissReply: { dismissReply(item) },
             onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
             onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
             onConfirmBooking: { confirmBooking(item) },
@@ -318,6 +319,14 @@ struct QueueView: View {
             onRejectBooking: { rejectBooking(item) },
             gmailConnected: GmailAuthManager.shared.isConnected
         )
+    }
+
+    // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that reply
+    // so it does not re-flag, while a genuinely new reply still will.
+    private func dismissReply(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.dismissAutoReply(now: Date())
+        try? context.save()
     }
 
     private var emptyState: some View {
