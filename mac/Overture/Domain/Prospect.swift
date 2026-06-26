@@ -114,6 +114,11 @@ final class Prospect {
     // rejectedBookingIds. Defaulted so existing records migrate cleanly.
     var rejectedBookingIdsRaw: String = ""
 
+    // Fallback for #203 when the rejected auto-booking has no recorded source id (#218): a booking
+    // auto-detected before that id was tracked. Set true on such a reject so reconcileBooked never
+    // re-books this prospect at all. Defaulted so existing records migrate cleanly.
+    var autoBookingRejectedWithoutId: Bool = false
+
     // Run-collapse fields (#132). The engine groups overlapping performances into a
     // collapsed run and emits these on every member. Defaulted so existing records
     // and older results files migrate cleanly without an explicit migration plan.
@@ -229,16 +234,21 @@ final class Prospect {
     // Dan rejected a wrong auto-detected booking (#203): revert the outcome to no-response and
     // remember this specific booking id so reconcileBooked never re-books from it. Other genuine
     // bookings for the same group can still auto-detect (per-booking, not per-prospect).
-    func rejectAutoBooking(bookingId: String, now: Date) {
+    func rejectAutoBooking(bookingId: String?, now: Date) {
         outcome = .noResponse
         outcomeSourceRaw = nil
         outcomeAt = now
         bookingSuggested = false
         bookingSuggestionDismissed = true
         autoBookedFromBookingId = nil
-        var ids = rejectedBookingIds
-        ids.insert(bookingId)
-        rejectedBookingIdsRaw = ids.sorted().joined(separator: "\n")
+        if let bookingId, !bookingId.isEmpty {
+            var ids = rejectedBookingIds
+            ids.insert(bookingId)
+            rejectedBookingIdsRaw = ids.sorted().joined(separator: "\n")
+        } else {
+            // Legacy auto-booking with no recorded id: block re-detection for this prospect (#218).
+            autoBookingRejectedWithoutId = true
+        }
     }
 
     // Dan sets the conversation state by hand (#111). An active state also marks a not-yet-replied

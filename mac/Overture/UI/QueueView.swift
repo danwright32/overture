@@ -363,7 +363,7 @@ struct QueueView: View {
     // booking id so reconcileBooked never re-books from that exact match.
     private func rejectBooking(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId ?? "", now: Date())
+        model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
         try? context.save()
     }
 

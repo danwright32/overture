@@ -33,9 +33,10 @@ enum DownbeatBooking {
             if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
             switch BookingMatch.classify(prospect: p, bookings: bookings) {
             case .exact(let booking):
-                // Dan rejected this exact booking as a wrong match (#203): never re-book from it,
-                // and don't fall through to suggesting it either.
-                if p.rejectedBookingIds.contains(booking.id) { continue }
+                // Dan rejected this exact booking as a wrong match (#203), or rejected a legacy
+                // auto-booking with no recorded id (#218): never re-book from it, and don't fall
+                // through to suggesting it either.
+                if p.autoBookingRejectedWithoutId || p.rejectedBookingIds.contains(booking.id) { continue }
                 if !consumed.contains(booking.id) {
                     p.outcome = .booked
                     p.outcomeSourceRaw = OutcomeSource.auto.rawValue
