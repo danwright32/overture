@@ -15,17 +15,15 @@ import { join, dirname } from "node:path";
 import { loadDownbeatExport } from "../../src/lib/downbeatBridge";
 import { loadLocalHistory } from "../../src/lib/localHistory";
 import { matchRelationship } from "../../src/lib/historyMatch";
-import { decideProspect, type DiscoveredEvent, type Classification } from "../../src/lib/assembleProspect";
+import { decideProspect, type DiscoveredEvent, type Classification, type ProspectRow } from "../../src/lib/assembleProspect";
 import { classifyEvent, type EventClassification, type ExtractedEvent } from "../../src/lib/classifyEvent";
 import { fetchCalendar, WINDOW_DAYS } from "../../src/lib/algoliaCalendar";
 import { applyRefinements, type EventRefinement } from "../../src/lib/refineClassifications";
-import { groupIntoRuns } from "../../src/lib/runGrouping";
+import { buildResultsFile } from "../../src/lib/resultsContract";
 
 function appSupport(name: string): string {
   return join(homedir(), "Library", "Application Support", "Overture", name);
 }
-
-const RESULTS_VERSION = 2;
 
 async function main() {
   const inputPath = process.argv[2];
@@ -87,7 +85,7 @@ async function main() {
   const classifications = applyRefinements(byTitle, refinements);
   if (refinements.length) console.log(`Applied ${refinements.length} AI refinements to uncertain events.`);
 
-  const prospects: Record<string, unknown>[] = [];
+  const rows: ProspectRow[] = [];
   const uncertain = uncertainEvents.map((e) => e.title);
   const skipped: Record<string, number> = {};
 
@@ -116,55 +114,19 @@ async function main() {
       skipped[decision.reason] = (skipped[decision.reason] ?? 0) + 1;
       continue;
     }
-    const r = decision.row;
-    prospects.push({
-      groupName: r.group_name,
-      discipline: r.discipline,
-      venue: r.venue,
-      performanceDate: r.performance_date,
-      sourceListingUrl: r.source_listing_url,
-      websiteUrl: r.website_url,
-      priorRelationship: r.prior_relationship,
-      production: r.production,
-      profile: r.profile,
-      coverage: r.coverage,
-      fitScore: r.fit_score,
-      tier: r.tier,
-      fitReason: r.fit_reason,
-      matchedClientName: r.matched_client_name,
-      possibleMatchSource: r.possible_match_source,
-      possibleMatchName: r.possible_match_name,
-    });
+    rows.push(decision.row);
   }
 
-  const runs = groupIntoRuns(
-    prospects as Array<{ groupName: string; venue: string | null; performanceDate: string | null; sourceListingUrl: string | null }>,
-  );
-  prospects.length = 0;
-  for (const r of runs as Array<Record<string, unknown>>) {
-    // Drop the function's internal `runSourceURLs` (capital) and emit only the lowercase
-    // `runSourceUrls` the results contract / Swift reader expect, so the JSON carries no
-    // stray duplicate key. runEndDate/partOfRelatedRun keep their names.
-    const { runSourceURLs, ...rest } = r;
-    prospects.push({ ...rest, runSourceUrls: runSourceURLs });
-  }
-
-  prospects.sort((a, b) => {
-    const da = (a.performanceDate as string) ?? "9999-99-99";
-    const db = (b.performanceDate as string) ?? "9999-99-99";
-    if (da !== db) return da < db ? -1 : 1;
-    return (b.fitScore as number) - (a.fitScore as number);
-  });
+  // Serialize, collapse multi-night runs, and sort — the whole writer contract lives in
+  // buildResultsFile (src/lib/resultsContract.ts), pinned by resultsContract.test.ts and the
+  // Swift ResultsContractTests against the shared fixtures (#157).
+  const resultsFile = buildResultsFile(rows, new Date().toISOString());
 
   const outPath = join(homedir(), "Library", "Application Support", "Overture", "overture-results.json");
   mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(
-    outPath,
-    JSON.stringify({ version: RESULTS_VERSION, generatedAt: new Date().toISOString(), prospects }, null, 2) + "\n",
-    "utf8",
-  );
+  writeFileSync(outPath, JSON.stringify(resultsFile, null, 2) + "\n", "utf8");
 
-  console.log(`Wrote ${prospects.length} prospects to ${outPath}`);
+  console.log(`Wrote ${resultsFile.prospects.length} prospects to ${outPath}`);
   if (Object.keys(skipped).length) console.log(`Skipped: ${JSON.stringify(skipped)}`);
   if (uncertain.length) {
     const refined = refinements.length;

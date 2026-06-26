@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "generatedAt": "2026-01-15T12:00:00.000Z",
+  "prospects": [
+    {
+      "groupName": "Old Format Ensemble",
+      "discipline": "music",
+      "priorRelationship": "cold",
+      "production": "concert",
+      "profile": "professional",
+      "coverage": "full",
+      "fitScore": 70,
+      "tier": "B",
+      "fitReason": "Pre-run-collapse results file: optional fields and run-collapse keys are omitted, so the reader must default them."
+    }
+  ]
+}

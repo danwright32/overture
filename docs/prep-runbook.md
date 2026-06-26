@@ -22,6 +22,10 @@ before this was codified.
 byte-for-byte. NEVER rebuild it from group/date/venue — that is the silent-mismatch
 trap. The human-readable fields are for research only.
 
+Canonical samples of both files (the cross-language contract guard, #157) live in
+`fixtures/prep-queue/` and `fixtures/prep-results/`. Match those shapes exactly; if the
+format ever changes, update the fixture and the Swift contract test in the same change.
+
 ## Per prospect
 
 ### 1. Find the contact (waterfall, PLAN.md §5)

@@ -57,8 +57,9 @@ the app's own scout is the live one.
 
 4. **Write the results file.** Emit the surviving, ranked prospects as
    `~/Library/Application Support/Overture/overture-results.json` (the format in
-   `scripts/scout/run-scout.ts` and `mac/.../Domain/ResultsFile.swift`). The Mac app
-   ingests it, upserting by natural key so Dan's keep/dismiss decisions are preserved.
+   `scripts/scout/run-scout.ts` and `mac/.../Domain/ResultsFile.swift`; canonical sample
+   and the cross-language contract guard live in `fixtures/scout-results/`, #157). The Mac
+   app ingests it, upserting by natural key so Dan's keep/dismiss decisions are preserved.
 
 ## Status
 
