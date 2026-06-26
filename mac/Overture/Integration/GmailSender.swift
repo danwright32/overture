@@ -10,12 +10,19 @@ import Foundation
 struct GmailSender: MailSender {
     var fromName: String = "Dan Wright"
     var fromEmail: String
+    // The send dependencies, injectable so the protocol send(_:) the Send button drives is itself
+    // testable from the main actor without the network or live auth (#194). Each defaults to nil
+    // and falls back to the live implementation below, so production callers construct the sender
+    // exactly as before while a test can hand in fakes and still exercise the real send chain.
+    var token: (@Sendable () async throws -> String)? = nil
+    var fetch: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil
+    var onAuthExpired: (@Sendable () async -> Void)? = nil
 
     func send(_ mail: OutgoingMail) async throws -> SentReceipt {
         try await send(mail,
-                       token: { try await GmailAuthManager.shared.validAccessToken() },
-                       fetch: { try await URLSession.shared.data(for: $0) },
-                       onAuthExpired: { await GmailAuthManager.shared.signalAuthExpired() })
+                       token: token ?? { try await GmailAuthManager.shared.validAccessToken() },
+                       fetch: fetch ?? { try await URLSession.shared.data(for: $0) },
+                       onAuthExpired: onAuthExpired ?? { await GmailAuthManager.shared.signalAuthExpired() })
     }
 
     // The full send with its dependencies injected (token provider + fetch + auth-expired hook),
