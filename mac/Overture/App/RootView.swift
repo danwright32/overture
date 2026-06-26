@@ -121,6 +121,18 @@ struct RootView: View {
                     .help("Scout the venue calendars for new performances (⌘R). Auto-runs about daily.")
                     .keyboardShortcut("r", modifiers: .command)
                 }
+                #if DEBUG
+                // DEBUG ONLY (#196): stage a prospect as already sent so post-send flows can be
+                // tested without a live Gmail send. Compiled out of release builds entirely.
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        debugStageFirstAsSent()
+                    } label: {
+                        Label("DEBUG: Mark as sent", systemImage: "ladybug")
+                    }
+                    .help("DEBUG ONLY: mark the first un-sent prospect as approved-and-sent so booking detection, follow-ups, reminders, and reply handling can be tested without sending mail")
+                }
+                #endif
             }
             .task {
                 ingestIfEmpty()
@@ -164,6 +176,20 @@ struct RootView: View {
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showFollowUps) { FollowUpsView() }
     }
+
+    #if DEBUG
+    // DEBUG ONLY (#196): stage the first not-yet-sent prospect as approved-and-sent so the
+    // post-send lifecycle can be exercised end to end without a real send or store surgery.
+    private func debugStageFirstAsSent() {
+        guard let target = allProspects.first(where: { $0.sentAt == nil }) else {
+            statusMessage = "DEBUG: no un-sent prospect to stage"
+            return
+        }
+        DebugStaging.stageAsSent(target, now: Date())
+        try? context.save()
+        statusMessage = "DEBUG: staged \(target.groupName) as sent"
+    }
+    #endif
 
     private func connectGmail() {
         isConnectingGmail = true
