@@ -65,9 +65,7 @@ enum PrepQueueService {
     }
 
     static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
-        guard let mod = try? markerURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        else { return false }
-        return now.timeIntervalSince(mod) < markerStaleAfter
+        DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
     // Writes the work-list and launches the detached run. Returns the count queued.
@@ -108,21 +106,14 @@ enum PrepQueueService {
         guard let script = runnerScriptURL(), FileManager.default.isExecutableFile(atPath: script.path) else {
             throw PrepLaunchError.runnerUnavailable
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "'\(script.path)' >/dev/null 2>&1 &"]
-        try process.run()
-        // Detached: do not wait. The run writes the results file when done.
+        try DetachedRunner.launch(scriptPath: script.path)   // detached; never waits
     }
 
-    // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once
-    // via a string default so it is not hardcoded into the binary:
+    // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once via a string
+    // default so it is not hardcoded into the binary:
     //   defaults write com.danwright.overture prepRunnerScriptPath "/abs/path/to/mac/scripts/prep-run.sh"
     // Returns nil when unset, so startPrep fails gracefully with "runner unavailable".
     static func runnerScriptURL() -> URL? {
-        guard let path = UserDefaults.standard.string(forKey: "prepRunnerScriptPath"), !path.isEmpty else {
-            return nil
-        }
-        return URL(fileURLWithPath: path)
+        DetachedRunner.scriptURL(defaultsKey: "prepRunnerScriptPath")
     }
 }
