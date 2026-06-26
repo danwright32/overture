@@ -25,3 +25,7 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
   `pnpm seed`, `pnpm import-history`.
 - Mac app: `cd mac && xcodegen generate`, then
   `xcodebuild -scheme Overture -destination 'platform=macOS' test`.
+
+The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
+catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
+any cross-boundary file shape.
