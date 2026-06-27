@@ -21,6 +21,37 @@ enum AgentLogLocation {
     // plenty of recent diagnostics; with the single retained backup, disk stays bounded at ~10 MB.
     static let defaultMaxLogBytes = 5 * 1_024 * 1_024
 
+    // #302: how big overture-agent.err.log was when Dan last opened the logs. The menu-bar nudge keys
+    // off growth past this, so opening the logs clears it. Read reactively in the menu via @AppStorage.
+    static let viewedErrorSizeKey = "agentLogsViewedErrorSize"
+
+    // #302: only flag the agent's stderr once it has grown by at least this much new content since Dan
+    // last looked. A growth threshold (not "any new byte") keeps the odd line of macOS framework
+    // chatter from constantly raising the nudge; a genuinely misbehaving agent (retry loops, stack
+    // traces) blows well past it. ~8 KB comfortably exceeds the incidental noise of a login or two.
+    static let unreadErrorThresholdBytes = 8 * 1_024
+
+    // Record the current error-log size as "seen", so later growth past the threshold re-raises the
+    // nudge. Missing file counts as size 0. Best-effort.
+    static func recordViewed(errorLog: URL = standardErrorURL, into defaults: UserDefaults = .standard,
+                             fileManager: FileManager = .default) {
+        let size = (try? fileManager.attributesOfItem(atPath: errorLog.path))?[.size] as? Int ?? 0
+        defaults.set(Double(size), forKey: viewedErrorSizeKey)
+    }
+
+    // #302: true when the error log has gained at least `threshold` bytes of new stderr since the
+    // recorded `viewedSize` — the menu-bar nudge's signal. capLogs (#295) truncates the file, so a log
+    // now SMALLER than the recorded size is wholly new: count all of it, never a negative growth.
+    // Missing file → false (nothing to flag). Pure read; best-effort.
+    static func hasUnreadErrors(viewedSize: Int, threshold: Int = unreadErrorThresholdBytes,
+                                errorLog: URL = standardErrorURL,
+                                fileManager: FileManager = .default) -> Bool {
+        guard let size = (try? fileManager.attributesOfItem(atPath: errorLog.path))?[.size] as? Int
+        else { return false }
+        let newBytes = size >= viewedSize ? size - viewedSize : size
+        return newBytes >= threshold
+    }
+
     // Bound each log to maxBytes, logrotate "copytruncate" style: when a file is over the cap, copy it
     // to a single ".1" backup (replacing any prior one) then truncate the LIVE file in place to zero.
     // Truncating in place (not renaming) is load-bearing: launchd opens these files in append mode
