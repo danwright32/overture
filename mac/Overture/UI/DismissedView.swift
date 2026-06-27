@@ -6,6 +6,7 @@ import SwiftData
 struct DismissedView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ActionFeedback.self) private var feedback   // #285
 
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "dismissed" },
            sort: [SortDescriptor(\Prospect.ingestedAt, order: .reverse)])
@@ -41,6 +42,7 @@ struct DismissedView: View {
         }
         .frame(width: 480, height: 540)
         .background(OVColor.canvas)
+        .actionFeedbackBanner()
     }
 
     private func row(_ p: Prospect) -> some View {
@@ -75,5 +77,7 @@ struct DismissedView: View {
     private func restore(_ p: Prospect) {
         DismissedProspects.restore(p)
         try? context.save()
+        // #285: the row leaves this sheet, but it lands back in the queue offscreen — confirm that.
+        feedback.acknowledge(ActionAck.restored(org: p.groupName))
     }
 }

@@ -1,0 +1,54 @@
+import Foundation
+import Observation
+
+// #285: a single app-wide "this ran" acknowledgment. Controls whose effect isn't otherwise visible
+// (a context-menu toggle, a restore that lands offscreen behind a sheet, an async send) call
+// acknowledge(...) and a shared bottom banner shows the message briefly. One object so the main
+// window and every sheet share the same surface rather than each reinventing feedback.
+@MainActor
+@Observable
+final class ActionFeedback {
+    enum Tone { case info, warning }
+
+    private(set) var message: String?
+    private(set) var tone: Tone = .info
+    // Bumped on every acknowledge (even a repeat of the same text) so the banner can restart its
+    // auto-dismiss timer by keying a .task on it.
+    private(set) var revision = 0
+
+    func acknowledge(_ message: String, tone: Tone = .info) {
+        self.message = message
+        self.tone = tone
+        revision += 1
+    }
+
+    func clear() {
+        message = nil
+    }
+}
+
+// The exact wording, in one place so it's testable and consistent. Each helper names the org so an
+// acknowledgment reads on its own, and the send helpers carry an honest failure line (a swallowed
+// send failure was one of the silent no-ops this sweep fixes).
+enum ActionAck {
+    static func voiceLearning(excluded: Bool, org: String) -> String {
+        excluded ? "Won't learn from \(org)'s email" : "Learning from \(org)'s email again"
+    }
+
+    static func restored(org: String) -> String {
+        "Restored \(org) to the queue"
+    }
+
+    static func followUpSent(org: String, success: Bool) -> String {
+        success ? "Follow-up sent to \(org)" : "Couldn't send the follow-up to \(org)"
+    }
+
+    static func conversationNudge(org: String, closing: Bool, success: Bool) -> String {
+        if success { return closing ? "Closing note sent to \(org)" : "Nudge sent to \(org)" }
+        return closing ? "Couldn't send the closing note to \(org)" : "Couldn't send the nudge to \(org)"
+    }
+
+    static func remindLater(org: String) -> String {
+        "Snoozed \(org). I'll remind you later."
+    }
+}
