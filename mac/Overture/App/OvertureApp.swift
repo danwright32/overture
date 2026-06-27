@@ -55,6 +55,13 @@ struct OvertureApp: App {
         }
         .defaultSize(width: 860, height: 720)
         .windowResizability(.contentMinSize)
+
+        // #266: the resident menu-bar presence. With LSUIElement (Info.plist), closing the window
+        // leaves the process running here in the menu bar, where the reconciles keep firing and Dan
+        // can reopen the queue or quit.
+        MenuBarExtra("Overture", systemImage: "binoculars") {
+            MenuBarContent()
+        }
     }
 }
 
