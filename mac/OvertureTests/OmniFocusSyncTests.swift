@@ -97,6 +97,23 @@ struct OmniFocusSyncTests {
         #expect(fake.completed == ["gone"])
     }
 
+    @Test func deepLinkEncodesLeadKeyIntoOvertureScheme() {
+        let link = OmniFocusSync.deepLink(for: "Choir A | 2026-07-01 | Weill Recital Hall")
+        #expect(link.hasPrefix("overture://lead?key="))
+        #expect(!link.contains(" "))   // spaces and separators percent-encoded so it's a valid URL
+    }
+
+    @Test func configDefaultsOffWith14DayHorizonAndRoundTrips() {
+        let defaults = UserDefaults(suiteName: "of-sync-test-\(UUID().uuidString)")!
+        let blank = OmniFocusSyncConfig.loaded(from: defaults)
+        #expect(blank.enabled == false)   // opt-in: off until Dan turns it on
+        #expect(blank.horizonDays == 14)
+        OmniFocusSyncConfig(enabled: true, horizonDays: 21).save(to: defaults)
+        let reloaded = OmniFocusSyncConfig.loaded(from: defaults)
+        #expect(reloaded.enabled == true)
+        #expect(reloaded.horizonDays == 21)
+    }
+
     @Test func reconcileCreatesMissingAndCompletesStaleOrResolved() {
         let day1Defer = Date(timeIntervalSince1970: 20_000_000)
         let day1Due = day1Defer.addingTimeInterval(7 * 3_600)

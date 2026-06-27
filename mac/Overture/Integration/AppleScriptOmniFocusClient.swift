@@ -57,13 +57,16 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "\"\(esc(String($0)))\"" }
             .joined(separator: " & linefeed & ")
+        // Build the dates in plain AppleScript context FIRST. Inside a `tell application "OmniFocus"`
+        // block, OmniFocus's dictionary shadows the date terms day/month/year and setting them throws
+        // "Can't get day. Access not allowed." So construct dfr/du out here, then pass them in.
         let src = """
+        \(dateExpr("dfr", task.deferDate))
+        \(dateExpr("du", task.dueDate))
         tell application "OmniFocus" to tell default document
           set p to first flattened project whose id is "\(projectId)"
           set t to make new task at end of tasks of p with properties {name:"\(esc(task.title))", note:\(noteLiteral)}
-        \(dateExpr("dfr", task.deferDate))
           set defer date of t to dfr
-        \(dateExpr("du", task.dueDate))
           set due date of t to du
         \(tagNames.map { "  add (first flattened tag whose name is \"\(esc($0))\") to tags of t" }.joined(separator: "\n"))
         end tell
