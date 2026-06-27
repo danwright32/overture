@@ -59,9 +59,9 @@ struct OvertureApp: App {
         // #266: the resident menu-bar presence. With LSUIElement (Info.plist), closing the window
         // leaves the process running here in the menu bar, where the reconciles keep firing and Dan
         // can reopen the queue or quit.
-        // A monochrome template symbol so it matches the other menu-bar icons (the brand is an
-        // airplane; the full color app icon rendered far too large and off-style up here).
-        MenuBarExtra("Overture", systemImage: "paperplane.fill") {
+        // #276: Overture's own brand mark (the "O" formed by a paper plane's trail) as a monochrome
+        // template image, so macOS tints it for light/dark instead of the earlier SF Symbol stand-in.
+        MenuBarExtra("Overture", image: "MenuBarGlyph") {
             MenuBarContent()
         }
     }
