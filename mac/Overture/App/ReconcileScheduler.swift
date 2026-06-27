@@ -81,7 +81,7 @@ final class ReconcileScheduler {
         let repliedBefore = Set(before.filter { $0.outcome == .replied }.map(\.naturalKey))
         let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
 
-        let booked = reconcileBookings(now: now)
+        reconcileBookings(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         await GmailReplyChecker().checkReplies(in: context)
         var omniFocusChanged = 0
@@ -98,7 +98,7 @@ final class ReconcileScheduler {
 
         lastReconcileAt = now
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
-        return ReconcileSummary(bookingsMarked: booked, omniFocusChanged: omniFocusChanged,
+        return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings)
     }
 

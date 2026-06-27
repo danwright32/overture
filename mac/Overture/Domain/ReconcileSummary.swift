@@ -4,7 +4,6 @@ import Foundation
 // acknowledge itself even when nothing was due. The automatic timer/watcher passes ignore this (they
 // would otherwise notify every tick); only the on-demand menu action surfaces the message.
 struct ReconcileSummary: Equatable, Sendable {
-    var bookingsMarked: Int
     var omniFocusChanged: Int
     // #269: names of leads that became replied / booked THIS tick, for the while-away notification.
     var newReplies: [String] = []
@@ -12,14 +11,15 @@ struct ReconcileSummary: Equatable, Sendable {
 
     var message: String {
         var parts: [String] = []
-        // #287: a reply found this pass is the headline event, so lead with it and name the org (Dan
-        // works by name, matching the while-away alert); without this a reply-only run wrongly reads as
-        // "nothing was due".
-        if !newReplies.isEmpty {
-            parts.append("\(newReplies.count) new repl\(newReplies.count == 1 ? "y" : "ies") (\(newReplies.joined(separator: ", ")))")
+        // #287 / #297: a reply or booking found this pass is the headline event, so lead with it and name
+        // the org (Dan works by name). Both go through OutreachEventPhrasing so the manual ack and the
+        // while-away alert phrase the same event identically; without this a reply/booking-only run
+        // wrongly reads as "nothing was due".
+        if let reply = OutreachEventPhrasing.replyPhrase(newReplies) {
+            parts.append(reply)
         }
-        if bookingsMarked > 0 {
-            parts.append("\(bookingsMarked) newly booked")
+        if let booking = OutreachEventPhrasing.bookingPhrase(newBookings) {
+            parts.append(booking)
         }
         if omniFocusChanged > 0 {
             parts.append("\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated")
