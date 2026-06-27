@@ -6,6 +6,9 @@ import Foundation
 struct ReconcileSummary: Equatable, Sendable {
     var bookingsMarked: Int
     var omniFocusChanged: Int
+    // #269: names of leads that became replied / booked THIS tick, for the while-away notification.
+    var newReplies: [String] = []
+    var newBookings: [String] = []
 
     var message: String {
         var parts: [String] = []

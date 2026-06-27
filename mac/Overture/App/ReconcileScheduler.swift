@@ -45,11 +45,11 @@ final class ReconcileScheduler {
     func start() {
         timerTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.runSafeReconcilesOnce()
+            self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(ReconcileScheduler.intervalSeconds() * 1_000_000_000))
                 if Task.isCancelled { break }
-                await self.runSafeReconcilesOnce()
+                self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
             }
         }
         watcherTask = Task { @MainActor [weak self] in
@@ -59,7 +59,7 @@ final class ReconcileScheduler {
                 let current = ReconcileScheduler.exportModifiedAt()
                 if DownbeatExportWatcher.shouldReconcile(previous: lastSeen, current: current) {
                     lastSeen = current
-                    await self.runSafeReconcilesOnce()
+                    self.notifyIfNewWhileAway(await self.runSafeReconcilesOnce())
                 }
             }
         }
@@ -75,6 +75,12 @@ final class ReconcileScheduler {
     // reminder), then the OmniFocus push (gated on Dan's opt-in, like the old auto path).
     @discardableResult
     func runSafeReconcilesOnce(now: Date = Date()) async -> ReconcileSummary {
+        // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
+        // reconcile names exactly what arrived this tick (each item reported once).
+        let before = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let repliedBefore = Set(before.filter { $0.outcome == .replied }.map(\.naturalKey))
+        let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
+
         let booked = reconcileBookings(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         await GmailReplyChecker().checkReplies(in: context)
@@ -83,9 +89,25 @@ final class ReconcileScheduler {
         if config.enabled {
             omniFocusChanged = syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(), horizonDays: config.horizonDays)
         }
+
+        let after = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let newReplies = AwayAlert.newNames(before: repliedBefore,
+            after: after.filter { $0.outcome == .replied }.map { (key: $0.naturalKey, name: $0.groupName) })
+        let newBookings = AwayAlert.newNames(before: bookedBefore,
+            after: after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) })
+
         lastReconcileAt = now
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
-        return ReconcileSummary(bookingsMarked: booked, omniFocusChanged: omniFocusChanged)
+        return ReconcileSummary(bookingsMarked: booked, omniFocusChanged: omniFocusChanged,
+                                newReplies: newReplies, newBookings: newBookings)
+    }
+
+    // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
+    // notification naming any new replies/bookings. The manual menu run uses the ack instead (#285), so
+    // a click is never double-notified.
+    private func notifyIfNewWhileAway(_ summary: ReconcileSummary) {
+        guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
+        LocalNotifier.post(title: "Overture", body: body, id: "overture.away")
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
