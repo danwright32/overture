@@ -35,6 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // #279: ensure the owner-only log directory exists even in the degraded/no-store state (that is
         // exactly when the agent's stderr matters); the installer created it, this is the safety net.
         AgentLogLocation.prepareDirectory()
+        // #295: bound the agent's stdout/stderr so an always-resident process can't grow them without
+        // limit. Runs every launch (= every login for the resident agent); a no-op until a file is large.
+        AgentLogLocation.capLogs()
         guard let container = AppDelegate.sharedContainer else { return }
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()

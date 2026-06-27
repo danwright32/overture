@@ -49,6 +49,59 @@ struct AgentLogLocationTests {
         #expect(FileManager.default.fileExists(atPath: dir.path))
     }
 
+    // #295: an always-resident agent's stdout/stderr would otherwise grow without bound. A file past
+    // the cap is rotated logrotate-style: its contents move to a single ".1" backup and the live file
+    // is truncated, so disk stays bounded at ~2x the cap.
+    @Test func capLogsRotatesAFileOverTheCapAndKeepsABackup() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("overture-agent.err.log")
+        let contents = String(repeating: "x", count: 4_096)
+        try contents.write(to: file, atomically: true, encoding: .utf8)
+
+        let rotated = AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
+
+        #expect(rotated == [file])
+        #expect((try Data(contentsOf: file)).isEmpty)   // live file truncated
+        let backup = dir.appendingPathComponent("overture-agent.err.log.1")
+        #expect(try String(contentsOf: backup, encoding: .utf8) == contents)   // old contents preserved
+    }
+
+    @Test func capLogsLeavesAFileUnderTheCapUntouched() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("overture-agent.err.log")
+        try "small".write(to: file, atomically: true, encoding: .utf8)
+
+        let rotated = AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
+
+        #expect(rotated.isEmpty)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "small")
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("overture-agent.err.log.1").path))
+    }
+
+    // The rotation MUST truncate in place, not replace the file: launchd opens these logs in append
+    // mode before the agent starts and holds them open, so a new inode would orphan the agent's writes.
+    @Test func capLogsTruncatesInPlacePreservingTheInode() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("overture-agent.err.log")
+        try String(repeating: "x", count: 4_096).write(to: file, atomically: true, encoding: .utf8)
+        let inodeBefore = try FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? Int
+
+        AgentLogLocation.capLogs(maxBytes: 1_024, files: [file])
+
+        let inodeAfter = try FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? Int
+        #expect(inodeBefore != nil)
+        #expect(inodeAfter == inodeBefore)
+    }
+
     @Test func prepareTightensAnAlreadyExistingDirectory() throws {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
