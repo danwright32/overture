@@ -5,13 +5,16 @@ import Foundation
 // contacted and how it turned out. The tallying/rates live in OutcomeStats (tested).
 enum OutcomePatterns {
     enum Dimension: String, CaseIterable, Sendable {
-        case production, discipline, tier
+        case production, discipline, tier, coverage, profile, venue
 
         var label: String {
             switch self {
             case .production: return "Production"
             case .discipline: return "Discipline"
             case .tier: return "Fit tier"
+            case .coverage: return "Coverage"
+            case .profile: return "Profile"
+            case .venue: return "Venue"
             }
         }
     }
@@ -43,6 +46,9 @@ enum OutcomePatterns {
         case .production: return p.production
         case .discipline: return p.discipline
         case .tier: return p.tier
+        case .coverage: return p.coverage
+        case .profile: return p.profile
+        case .venue: return p.venue ?? "No venue"
         }
     }
 
