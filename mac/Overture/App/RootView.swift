@@ -3,6 +3,7 @@ import SwiftData
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.openWindow) private var openWindow
     @State private var isScanning = false
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
@@ -42,6 +43,10 @@ struct RootView: View {
     var body: some View {
         QueueView(deepLinkedKey: $deepLinkedKey)
             .onOpenURL { url in
+                // #282: `overture://show` (used by the build script) just surfaces the main window;
+                // delivering the URL already reopens the resident copy's window, openWindow makes it
+                // explicit and focuses it.
+                if OvertureDeepLink.isShowCommand(url) { openWindow(id: "main"); return }
                 // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; hand the
                 // key to the queue to jump to that lead.
                 if let key = OvertureDeepLink.leadKey(from: url) { deepLinkedKey = key }
