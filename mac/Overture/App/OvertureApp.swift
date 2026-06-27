@@ -3,29 +3,50 @@ import SwiftData
 
 @main
 struct OvertureApp: App {
-    let modelContainer: ModelContainer
+    // Optional now (#264): nil means the store couldn't be opened (another copy holds the lock, or
+    // open failed). The app degrades instead of crashing — a fatalError under the future launchd
+    // agent would become a crash-respawn loop on a transiently locked store.
+    let modelContainer: ModelContainer?
+    private let storeLock: StoreLock?      // held for the process lifetime to keep the single-writer lock
+    private let degradedReason: String?
 
     init() {
         let schema = Schema([Prospect.self])
-        // Local-only storage, like Downbeat: cloud sync off, in-memory under tests
-        // so a test run never opens or mutates the real database.
-        let config = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: AppEnvironment.isRunningUnderTests,
-            cloudKitDatabase: .none
-        )
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            fatalError("Could not create local ModelContainer: \(error)")
+        var container: ModelContainer? = nil
+        var lock: StoreLock? = nil
+        var reason: String? = nil
+
+        if AppEnvironment.isRunningUnderTests {
+            // Tests build their own in-memory stores; the host never touches the real store or its lock.
+            container = try? ModelContainer(for: schema,
+                configurations: [ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)])
+        } else if let acquired = StoreLock.acquire(at: StoreLocation.lockURL) {
+            // Single-writer guard taken BEFORE opening the store (#264): flock is the real guard.
+            lock = acquired
+            do {
+                container = try ModelContainer(for: schema,
+                    configurations: [ModelConfiguration(schema: schema, url: StoreLocation.storeURL,
+                                                        cloudKitDatabase: .none)])
+            } catch {
+                reason = "Couldn't open Overture's data: \(error.localizedDescription)"
+            }
+        } else {
+            reason = "Another copy of Overture is already using its data."
         }
+
+        self.modelContainer = container
+        self.storeLock = lock
+        self.degradedReason = reason
     }
 
     var body: some Scene {
         Window("Overture", id: "main") {
-            RootView()
+            if let modelContainer {
+                RootView().modelContainer(modelContainer)
+            } else {
+                StoreUnavailableView(reason: degradedReason ?? "Overture's data is unavailable.")
+            }
         }
-        .modelContainer(modelContainer)
         .defaultSize(width: 860, height: 720)
         .windowResizability(.contentMinSize)
     }
