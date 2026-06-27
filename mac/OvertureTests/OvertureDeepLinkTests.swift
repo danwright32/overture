@@ -13,6 +13,20 @@ struct OvertureDeepLinkTests {
         #expect(OvertureDeepLink.leadKey(from: url) == key)
     }
 
+    // #301: a tapped notification routes to the lead via leadURL(forKey:), the inverse of
+    // leadKey(from:). Round-trips a key with the spaces/pipes a naturalKey carries.
+    @Test func buildsALeadURLThatRoundTripsBackToTheKey() throws {
+        let key = "aurora strings|2026-03-10|carnegie hall"
+        let url = try #require(OvertureDeepLink.leadURL(forKey: key))
+        #expect(url.scheme == OvertureDeepLink.scheme)
+        #expect(url.host == OvertureDeepLink.leadHost)
+        #expect(OvertureDeepLink.leadKey(from: url) == key)
+    }
+
+    @Test func leadURLIsNilForAnEmptyKey() {
+        #expect(OvertureDeepLink.leadURL(forKey: "") == nil)
+    }
+
     @Test func rejectsOtherSchemesHostsAndMissingKeys() throws {
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "https://example.com/lead?key=x"))) == nil)
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://other?key=x"))) == nil)

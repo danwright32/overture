@@ -16,6 +16,44 @@ enum NotificationService {
         case omniFocusFailed = "overture.omnifocus.failed"
     }
 
+    // #301: custom tap-button identifiers (the buttons that appear under a notification). The
+    // OmniFocus-permission alert carries an Open Settings button.
+    enum Button: String {
+        case openSettings = "overture.action.openSettings"
+    }
+
+    // #301: where a tapped notification should route. Pure result of `route(...)`, acted on by the
+    // UNUserNotificationCenterDelegate (AppDelegate).
+    enum Route: Equatable, Sendable {
+        case openLead(key: String)
+        case openSettings
+        case openApp
+    }
+
+    // #301: userInfo key carrying a lead's natural key, so a tap can deep-link straight to it.
+    static let leadKeyUserInfoKey = "leadKey"
+
+    // #301: categories register the custom action buttons with the center. Only the permission alert
+    // has one (Open Settings); the others rely on the default tap. Registered once at launch by the
+    // delegate via UNUserNotificationCenter.setNotificationCategories.
+    static func categories() -> Set<UNNotificationCategory> {
+        let openSettings = UNNotificationAction(identifier: Button.openSettings.rawValue,
+                                                title: "Open Settings", options: [.foreground])
+        let permission = UNNotificationCategory(identifier: Action.omniFocusPermission.rawValue,
+                                                actions: [openSettings], intentIdentifiers: [],
+                                                options: [])
+        return [permission]
+    }
+
+    // #301: the pure tap router. The Open Settings button routes to settings; a default tap deep-links
+    // to the lead when one rode along, else just opens the app; a dismiss routes nowhere.
+    static func route(actionIdentifier: String, userInfo: [AnyHashable: Any]) -> Route? {
+        if actionIdentifier == Button.openSettings.rawValue { return .openSettings }
+        if actionIdentifier == UNNotificationDismissActionIdentifier { return nil }
+        if let key = userInfo[leadKeyUserInfoKey] as? String, !key.isEmpty { return .openLead(key: key) }
+        return .openApp
+    }
+
     // The single up-front authorization request (used by #270 onboarding). Returns whether granted;
     // a thrown error collapses to not-granted.
     @discardableResult
@@ -34,11 +72,16 @@ enum NotificationService {
         _ action: Action,
         title: String,
         body: String,
+        leadKey: String? = nil,
         deliver: (UNNotificationRequest) -> Void = { UNUserNotificationCenter.current().add($0) }
     ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        // #301: the category attaches the registered action buttons (e.g. Open Settings on the
+        // permission alert); the leadKey rides in userInfo so a tap can deep-link to that lead.
+        content.categoryIdentifier = action.rawValue
+        if let leadKey { content.userInfo = [leadKeyUserInfoKey: leadKey] }
         deliver(UNNotificationRequest(identifier: action.rawValue, content: content, trigger: nil))
     }
 }

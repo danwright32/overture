@@ -91,23 +91,34 @@ final class ReconcileScheduler {
         }
 
         let after = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let newReplies = AwayAlert.newNames(before: repliedBefore,
-            after: after.filter { $0.outcome == .replied }.map { (key: $0.naturalKey, name: $0.groupName) })
-        let newBookings = AwayAlert.newNames(before: bookedBefore,
-            after: after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) })
+        let repliedAfter = after.filter { $0.outcome == .replied }.map { (key: $0.naturalKey, name: $0.groupName) }
+        let bookedAfter = after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) }
+        let newReplies = AwayAlert.newNames(before: repliedBefore, after: repliedAfter)
+        let newBookings = AwayAlert.newNames(before: bookedBefore, after: bookedAfter)
+        // #301: keep the keys aligned with the names so the away alert can deep-link to a sole new lead.
+        let newReplyKeys = AwayAlert.newKeys(before: repliedBefore, after: repliedAfter)
+        let newBookingKeys = AwayAlert.newKeys(before: bookedBefore, after: bookedAfter)
 
         lastReconcileAt = now
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
-                                newReplies: newReplies, newBookings: newBookings)
+                                newReplies: newReplies, newBookings: newBookings,
+                                newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys)
     }
 
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
     // notification naming any new replies/bookings. The manual menu run uses the ack instead (#285), so
     // a click is never double-notified.
-    private func notifyIfNewWhileAway(_ summary: ReconcileSummary) {
+    // The poster is injected (defaulting to NotificationService.post) so the body and the deep-link key
+    // threaded onto the alert are testable without the live notification center (#301).
+    func notifyIfNewWhileAway(_ summary: ReconcileSummary,
+                              post: (_ body: String, _ leadKey: String?) -> Void = {
+                                  NotificationService.post(.away, title: "Overture", body: $0, leadKey: $1)
+                              }) {
         guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
-        NotificationService.post(.away, title: "Overture", body: body)
+        // #301: deep-link to the lead when exactly one is new this tick; otherwise (nil) the tap opens
+        // the main window.
+        post(body, summary.deepLinkKey)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.

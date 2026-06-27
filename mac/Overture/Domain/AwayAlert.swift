@@ -10,6 +10,12 @@ enum AwayAlert {
         after.filter { !before.contains($0.key) }.map { $0.name }
     }
 
+    // #301: the natural keys of the leads new this tick, in the same order as newNames, so the away
+    // alert can deep-link to one (it links only when exactly one lead is new — see ReconcileSummary).
+    static func newKeys(before: Set<String>, after: [(key: String, name: String)]) -> [String] {
+        after.filter { !before.contains($0.key) }.map { $0.key }
+    }
+
     // One notification body summarizing what arrived, or nil when nothing is new (no notification).
     // #297: phrasing lives in OutreachEventPhrasing so this matches the manual ack word-for-word.
     static func message(newReplies: [String], newBookings: [String]) -> String? {

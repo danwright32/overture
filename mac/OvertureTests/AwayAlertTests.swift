@@ -42,4 +42,12 @@ struct AwayAlertTests {
         let fresh = AwayAlert.newNames(before: before, after: after)
         #expect(fresh == ["New One"])
     }
+
+    // #301: the same diff exposes the natural KEYS of the new leads, so the away alert can deep-link
+    // to one. Order matches newNames so a name and its key align.
+    @Test func newKeysReturnsKeysNotPresentBefore() {
+        let before: Set<String> = ["a|2026|v"]
+        let after = [(key: "a|2026|v", name: "Old"), (key: "b|2026|v", name: "New One")]
+        #expect(AwayAlert.newKeys(before: before, after: after) == ["b|2026|v"])
+    }
 }
