@@ -407,6 +407,12 @@ struct RootView: View {
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,
                                              prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
         if !leaks.isEmpty { notes.append("⚠ voice guidance leaked a name — quarantined") }
+        // #251: if the run altered or dropped Dan's hand-written notes, restore them from the pre-run
+        // backup (the fresh auto section is kept).
+        if VoiceNotesProtector.restoreIfNeeded(fileURL: VoiceGuidanceGuard.defaultURL,
+                                               backupURL: VoiceNotesProtector.defaultBackupURL) {
+            notes.append("restored your guidance notes")
+        }
         if !notes.isEmpty { statusMessage = "Prep: " + notes.joined(separator: " · ") }
     }
 }
