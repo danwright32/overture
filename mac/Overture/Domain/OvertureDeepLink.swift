@@ -7,6 +7,14 @@ import Foundation
 enum OvertureDeepLink {
     static let scheme = "overture"
     static let leadHost = "lead"
+    static let showHost = "show"
+
+    // #282: `overture://show` asks the resident copy to surface its main window. The build script
+    // opens this instead of re-launching the bundle, so it routes to the already-running instance
+    // rather than spawning a second copy the store lock would refuse.
+    static func isShowCommand(_ url: URL) -> Bool {
+        url.scheme == scheme && url.host == showHost
+    }
 
     static func leadKey(from url: URL) -> String? {
         guard url.scheme == scheme, url.host == leadHost,

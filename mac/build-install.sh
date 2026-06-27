@@ -81,7 +81,10 @@ launchctl bootstrap "${GUI_DOMAIN}" "${AGENT_DEST}" \
 echo "==> Installed: ${DEST} (resident via ${AGENT_LABEL})"
 
 if [[ "${1:-}" == "--launch" ]]; then
-  # The agent already started Overture resident; bring its window to the foreground for dev.
-  echo "==> Bringing Overture to the foreground"
-  open "${DEST}"
+  # The login agent already started Overture resident. Do NOT `open` the bundle: LaunchServices may
+  # not associate the agent-spawned process, so `open` launches a SECOND copy that the store lock
+  # then refuses (the #282 degraded-window clash). Instead surface the running copy via its URL
+  # scheme, which routes to the already-running instance.
+  echo "==> Surfacing the resident Overture window"
+  open "overture://show" 2>/dev/null || true
 fi

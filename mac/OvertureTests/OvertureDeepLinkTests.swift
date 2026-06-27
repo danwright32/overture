@@ -19,4 +19,13 @@ struct OvertureDeepLinkTests {
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://lead?notkey=x"))) == nil)
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://lead?key="))) == nil)
     }
+
+    // #282: `overture://show` surfaces the resident copy's window. The build script opens this URL
+    // instead of re-launching the bundle, which routes to the already-running instance rather than
+    // spawning a second copy that the store lock then refuses.
+    @Test func recognizesTheShowWindowCommand() throws {
+        #expect(OvertureDeepLink.isShowCommand(try #require(URL(string: "overture://show"))))
+        #expect(!OvertureDeepLink.isShowCommand(try #require(URL(string: "overture://lead?key=x"))))
+        #expect(!OvertureDeepLink.isShowCommand(try #require(URL(string: "https://example.com/show"))))
+    }
 }
