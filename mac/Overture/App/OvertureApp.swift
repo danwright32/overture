@@ -59,7 +59,9 @@ struct OvertureApp: App {
         // #266: the resident menu-bar presence. With LSUIElement (Info.plist), closing the window
         // leaves the process running here in the menu bar, where the reconciles keep firing and Dan
         // can reopen the queue or quit.
-        MenuBarExtra("Overture", systemImage: "binoculars") {
+        // A monochrome template symbol so it matches the other menu-bar icons (the brand is an
+        // airplane; the full color app icon rendered far too large and off-style up here).
+        MenuBarExtra("Overture", systemImage: "paperplane.fill") {
             MenuBarContent()
         }
     }
