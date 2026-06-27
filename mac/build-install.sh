@@ -40,9 +40,19 @@ if [[ ! -d "${BUILT_APP}" ]]; then
   exit 1
 fi
 
+# Login agent that keeps Overture resident across logins (#267 / Phase 3 of #237).
+AGENT_LABEL="com.danwright.overture"
+AGENT_SRC="$(pwd)/launchd/${AGENT_LABEL}.plist"
+AGENT_DEST="${HOME}/Library/LaunchAgents/${AGENT_LABEL}.plist"
+GUI_DOMAIN="gui/$(id -u)"
+
 echo "==> Installing to ${DEST}"
+# Unload any running login agent FIRST so it can't respawn the old binary while we swap the bundle.
+# Best-effort: on a first-ever install there is no agent to boot out yet.
+launchctl bootout "${GUI_DOMAIN}/${AGENT_LABEL}" 2>/dev/null || true
 if [[ -d "${DEST}" ]]; then
-  # If the app is running, quit it first so the replace doesn't fail.
+  # A copy launched by hand (not by the agent) won't be stopped by bootout; quit it so the
+  # replace doesn't fail.
   if pgrep -xq "Overture"; then
     echo "    Quitting running Overture..."
     osascript -e 'tell application "Overture" to quit' || true
@@ -59,9 +69,19 @@ xattr -dr com.apple.quarantine "${DEST}" 2>/dev/null || true
 # (helps TCC/Full Disk Access grants persist).
 codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
 
-echo "==> Installed: ${DEST}"
+# Install/refresh the login agent and load it into the user's GUI (Aqua) session — the GUI session
+# is what the menu-bar NSStatusItem requires (a system domain would have no menu bar). RunAtLoad then
+# starts Overture resident immediately and again at every login.
+echo "==> Installing login agent: ${AGENT_DEST}"
+mkdir -p "${HOME}/Library/LaunchAgents"
+cp "${AGENT_SRC}" "${AGENT_DEST}"
+launchctl bootstrap "${GUI_DOMAIN}" "${AGENT_DEST}" \
+  || echo "    (agent bootstrap reported an error; inspect with: launchctl print ${GUI_DOMAIN}/${AGENT_LABEL})"
+
+echo "==> Installed: ${DEST} (resident via ${AGENT_LABEL})"
 
 if [[ "${1:-}" == "--launch" ]]; then
-  echo "==> Launching"
+  # The agent already started Overture resident; bring its window to the foreground for dev.
+  echo "==> Bringing Overture to the foreground"
   open "${DEST}"
 fi
