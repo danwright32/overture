@@ -81,19 +81,41 @@ enum OmniFocusSync {
         return prospects.compactMap { p in
             guard p.status != .dismissed else { return nil }   // #238: a no-go lead never nags via OmniFocus
             guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
-            guard let state = p.conversationState, state.isActive else { return nil }   // no state -> needsState, in-app only
-            guard p.conversationStateSource != .auto else { return nil }                // unconfirmed AI guess, in-app only
-            guard let due = ConversationReminder.nextReminderDate(
-                state: p.conversationState, setAt: p.conversationStateSetAt,
-                remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig)
-            else { return nil }
-            guard due <= cutoff else { return nil }
-            let dueDate = easternTime(hour: dueHour, onDayOf: due)
-            return DesiredTask(naturalKey: p.naturalKey, title: title(for: p),
-                               note: note(for: p, dueDate: dueDate),
-                               deferDate: easternTime(hour: deferHour, onDayOf: due),
-                               dueDate: dueDate)
+
+            // A CONFIRMED (manual, active) conversation state is the normal follow-up: chase it on its
+            // next reach-out date, if that falls within the horizon. A confirmed lead never triages.
+            let hasConfirmedActiveState = (p.conversationState?.isActive ?? false) && p.conversationStateSource != .auto
+            if hasConfirmedActiveState {
+                guard let due = ConversationReminder.nextReminderDate(
+                    state: p.conversationState, setAt: p.conversationStateSetAt,
+                    remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
+                    outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig),
+                    due <= cutoff
+                else { return nil }
+                let dueDate = easternTime(hour: dueHour, onDayOf: due)
+                return DesiredTask(naturalKey: p.naturalKey, title: title(for: p),
+                                   note: note(for: p, dueDate: dueDate),
+                                   deferDate: easternTime(hour: deferHour, onDayOf: due),
+                                   dueDate: dueDate)
+            }
+
+            // #271 / Phase 7: a reply Dan hasn't categorized (no confirmed active state) would otherwise
+            // leave NO trace in OmniFocus while he's away — only an in-app badge he can't see. Emit a
+            // triage task due today, keyed by the SAME naturalKey so reconcile dedupes it against the
+            // follow-up once Dan confirms the state (the in-app badge and this task never compete: one
+            // OmniFocus task per lead, and confirming the state re-anchors it via the due-day diff).
+            if p.outcome == .replied {
+                // Anchor the triage due to a STABLE date on the lead (when its state was last
+                // touched, else when Dan first reached out), NOT `now` — otherwise the day-token diff
+                // would complete+recreate the task on every new calendar day until Dan triages it.
+                let anchor = p.conversationStateSetAt ?? p.sentAt ?? now
+                let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
+                return DesiredTask(naturalKey: p.naturalKey, title: triageTitle(for: p),
+                                   note: note(for: p, dueDate: dueDate),
+                                   deferDate: easternTime(hour: deferHour, onDayOf: anchor),
+                                   dueDate: dueDate)
+            }
+            return nil
         }
     }
 
@@ -140,6 +162,11 @@ enum OmniFocusSync {
 
     private static func title(for p: Prospect) -> String {
         "Follow up with \(p.groupName)"
+    }
+
+    // #271: an uncategorized reply needs Dan to read it and set the conversation state in Overture.
+    private static func triageTitle(for p: Prospect) -> String {
+        "Triage reply from \(p.groupName)"
     }
 
     // Note layout is load-bearing: paragraph 1 is the lead key, paragraph 2 is the due day. The

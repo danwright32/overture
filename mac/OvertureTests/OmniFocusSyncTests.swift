@@ -77,13 +77,71 @@ struct OmniFocusSyncTests {
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "auto", state: .wantsToBook, source: .auto, setAt: now)
-        lead(ctx, key: "needsState", state: nil, source: nil, setAt: nil)
+        // No-reply leads: an .auto suggestion and a needsState lead with nothing to triage stay out of
+        // OmniFocus (the #271 triage only fires when there's an actual reply). Booked is resolved; the
+        // confirmed lead's next reach-out is beyond the horizon.
+        lead(ctx, key: "auto", state: .wantsToBook, source: .auto, outcome: .noResponse, setAt: now)
+        lead(ctx, key: "needsState", state: nil, source: nil, outcome: .noResponse, setAt: nil)
         lead(ctx, key: "booked", state: .wantsToBook, source: .manual, outcome: .booked, setAt: now)
         lead(ctx, key: "farOff", state: .interested, source: .manual, setAt: now)  // interested = 10d > 3d horizon
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 3)
         #expect(tasks.isEmpty)
+    }
+
+    // #271 / Phase 7: a reply Dan hasn't categorized would otherwise leave NO trace in OmniFocus while
+    // he's away (the needsState/.auto guards drop it). Emit a "triage" task instead, keyed by the same
+    // naturalKey so it dedupes against the eventual follow-up.
+    @Test func desiredEmitsTriageTaskForRepliedUncategorizedLead() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "fresh-reply", state: nil, source: nil, outcome: .replied, setAt: nil)
+        let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()), now: now, horizonDays: 3)
+        #expect(tasks.count == 1)
+        let t = try #require(tasks.first)
+        #expect(t.naturalKey == "fresh-reply")          // same key → reconcile dedupes against the follow-up
+        #expect(t.title.contains("Triage"))
+    }
+
+    @Test func desiredTriagesAnAutoSuggestedRepliedLead() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "auto-reply", state: .wantsToBook, source: .auto, outcome: .replied, setAt: now)
+        let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                                   now: now, horizonDays: 3).first)
+        #expect(t.naturalKey == "auto-reply")
+        #expect(t.title.contains("Triage"))
+    }
+
+    @Test func triageTaskDueIsStableAcrossReconcilesSoItDoesNotChurn() throws {
+        // Anchored to a date on the lead, not "now", so a still-uncategorized reply keeps the SAME
+        // OmniFocus task day after day rather than completing+recreating it every reconcile.
+        let ctx = ModelContext(try container())
+        let day1 = Date(timeIntervalSince1970: 10_000_000)
+        let day2 = day1.addingTimeInterval(3 * 86_400)
+        lead(ctx, key: "fresh-reply", state: nil, source: nil, outcome: .replied, setAt: nil)
+        let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
+        let t1 = try #require(OmniFocusSync.desired(from: prospects, now: day1, horizonDays: 3).first)
+        let t2 = try #require(OmniFocusSync.desired(from: prospects, now: day2, horizonDays: 3).first)
+        #expect(t1.dueDate == t2.dueDate)
+    }
+
+    @Test func desiredDoesNotTriageALeadWithNoReply() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "no-reply", state: nil, source: nil, outcome: .noResponse, setAt: nil)
+        let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()), now: now, horizonDays: 3)
+        #expect(tasks.isEmpty)
+    }
+
+    @Test func desiredPrefersFollowUpOverTriageForAConfirmedRepliedLead() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        lead(ctx, key: "confirmed", state: .wantsToBook, source: .manual, outcome: .replied, setAt: now)
+        let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                                   now: now, horizonDays: 14).first)
+        #expect(t.title.contains("Follow up"))      // confirmed → the normal follow-up, not a triage task
+        #expect(!t.title.contains("Triage"))
     }
 
     // A fake client records what the orchestrator asked OmniFocus to do, with a preset existing set.
