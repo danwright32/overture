@@ -168,29 +168,25 @@ struct RootView: View {
                 #endif
             }
             .task {
-                // Skip the app's launch-time background work when the app is only running as
-                // the unit suite's test host, so the suite doesn't pay the ~30s startup tax (#195).
+                // The ATTENDED launch work (window present). The SAFE reconciles — booking detection,
+                // reply detection, and the OmniFocus push — and the Downbeat-export watcher now live on
+                // the app-owned ReconcileScheduler (#265) so they run independent of this window. What
+                // stays here is the AI/scout work, which must stay attended (never run unattended).
+                // Skip it entirely when running only as the unit suite's test host (#195).
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
                 ingestIfEmpty()
-                reconcileBookings()
-                // Detect replies on sent threads and auto-mark .replied (#40). Read-only;
-                // skips silently if Gmail isn't connected.
-                await GmailReplyChecker().checkReplies(in: context)
-                // Ingest any classifications from a prior run, then (after replies are saved above)
-                // launch a classify run for replies still needing an intent (#112). Both no-op
-                // gracefully when there's nothing to do or the runner isn't configured.
+                // Ingest any classifications from a prior run, then launch a classify run for replies
+                // still needing an intent (#112). Both no-op when there's nothing to do.
                 ingestReplyClassifications()
                 startReplyClassifyIfNeeded()
-                // If a run is in flight at launch, watch it to completion; otherwise just
-                // ingest any results already on disk (a past success), without nagging
-                // about an old failed run (#48).
+                // If a run is in flight at launch, watch it to completion; otherwise just ingest any
+                // results already on disk, without nagging about an old failed run (#48).
                 if PrepQueueService.isRunning(now: Date()) {
                     await watchPrepRun()
                 } else {
                     ingestPrep()
                 }
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
-                syncOmniFocus()    // push due reminders to OmniFocus if enabled (#176/#231)
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -198,22 +194,6 @@ struct RootView: View {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)  // hourly
                     autoScoutIfDue()
-                }
-            }
-            .task {
-                guard AppEnvironment.shouldStartBackgroundServices else { return }
-                // Re-reconcile when Downbeat rewrites its export while we're open (#197), so a
-                // booking made in Downbeat surfaces as Booked without a relaunch or scout. Same
-                // path as the launch reconcile above. The watcher tears down when this task ends
-                // (view gone or cancelled) via the stream's onTermination.
-                var lastSeen = exportModifiedAt()
-                for await _ in DownbeatExportWatcher.changes() {
-                    let current = exportModifiedAt()
-                    if DownbeatExportWatcher.shouldReconcile(previous: lastSeen, current: current) {
-                        lastSeen = current
-                        reconcileBookings()
-                        syncOmniFocus()   // a resolved/changed lead may add or clear an OmniFocus task
-                    }
                 }
             }
             .alert("Something went wrong", isPresented: errorBinding) {
@@ -366,14 +346,6 @@ struct RootView: View {
     // suggest otherwise, so a booking made in Downbeat shows up without running a scout first.
     // Not gated on a non-empty client list — bookings are an independent array, so an export
     // with bookings but no clients must still reconcile; reconcileBooked gates on export health.
-    private func reconcileBookings() {
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
-            try? context.save()
-        }
-    }
-
     // Push due conversation reminders into OmniFocus (#176/#231). The desired set is computed here
     // on the main actor (it reads prospects); the slow AppleScript I/O runs off-main in a detached
     // task so a hung Apple event never stalls the UI or the rest of launch. Best-effort: any error,
@@ -400,13 +372,6 @@ struct RootView: View {
                 if force { errorMessage = "OmniFocus sync failed: \(error)" }
             }
         }
-    }
-
-    // Last-modified time of the Downbeat export, used to gate the live re-reconcile (#197)
-    // so a spurious filesystem event on an unchanged file doesn't trigger redundant work.
-    private func exportModifiedAt() -> Date? {
-        (try? DownbeatBridge.defaultURL
-            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? nil
     }
 
     // First launch with an empty store: ingest a results file if one is present, so
