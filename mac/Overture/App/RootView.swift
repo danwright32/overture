@@ -10,6 +10,8 @@ struct RootView: View {
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var warningMessage: String?
+    // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
+    @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
 
     // Kept prospects with no draft yet — what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
@@ -38,7 +40,12 @@ struct RootView: View {
         QueueView()
             .toolbar {
                 ToolbarItem(placement: .status) {
-                    if let statusMessage {
+                    if omniFocusFailedAt > 0 {
+                        Label("OmniFocus sync failing", systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                            .help("The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this.")
+                    } else if let statusMessage {
                         Text(statusMessage)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkFaint)
@@ -375,10 +382,13 @@ struct RootView: View {
         Task { @MainActor in
             do {
                 let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                OmniFocusSyncStatus.recordSuccess()   // clears any prior failure warning (#239)
                 if force {
                     statusMessage = "OmniFocus: \(desired.count) due · existing \(r.existing) · created \(r.created) · completed \(r.completed)"
                 }
             } catch {
+                // #239: record even the swallowed automatic failure so it stays visible in the masthead.
+                OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
                 if force { errorMessage = "OmniFocus sync failed: \(error)" }
             }
         }
