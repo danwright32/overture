@@ -77,6 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         switch route {
         case .openLead(let key):
             if let url = OvertureDeepLink.leadURL(forKey: key) { open(url) }
+        case .openLeads(let keys):
+            // #308: a coalesced multi-lead away alert opens the queue filtered to exactly the new leads.
+            // Round-trips through the app's own URL scheme (like the single-lead/window routes) so the
+            // windowless resident reactivates and reopens its window before the queue focuses the set.
+            if let url = OvertureDeepLink.leadsURL(forKeys: keys) { open(url) }
         case .openApp:
             if let url = URL(string: "\(OvertureDeepLink.scheme)://\(OvertureDeepLink.showHost)") { open(url) }
         case .openSettings:

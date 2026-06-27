@@ -80,4 +80,18 @@ struct ReconcileSummaryTests {
     @Test func deepLinkKeyIsNilWhenNothingIsNew() {
         #expect(ReconcileSummary(omniFocusChanged: 0).deepLinkKey == nil)
     }
+
+    // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
+    // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
+    // them. deepLinkKey is just the count==1 special case of this.
+    @Test func newLeadKeysAreRepliesThenBookings() {
+        let s = ReconcileSummary(omniFocusChanged: 0,
+                                 newReplies: ["A"], newBookings: ["B"],
+                                 newReplyKeys: ["a|2026|v"], newBookingKeys: ["b|2026|v"])
+        #expect(s.newLeadKeys == ["a|2026|v", "b|2026|v"])
+    }
+
+    @Test func newLeadKeysIsEmptyWhenNothingIsNew() {
+        #expect(ReconcileSummary(omniFocusChanged: 0).newLeadKeys.isEmpty)
+    }
 }

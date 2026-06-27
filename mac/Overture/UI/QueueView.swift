@@ -27,6 +27,12 @@ struct QueueView: View {
     @Binding var deepLinkedKey: String?
     @State private var highlightedKey: String?
 
+    // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
+    // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
+    // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
+    @Binding var deepLinkedKeys: [String]?
+    @State private var focusedKeys: [String]?
+
     // The one email awaiting Dan's explicit confirm before it sends (#49).
     private struct PendingConfirm: Identifiable {
         let id: String   // prospect naturalKey
@@ -130,30 +136,12 @@ struct QueueView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead
-                    Picker("Pipeline", selection: $pipeline) {
-                        ForEach(Pipeline.allCases, id: \.self) { p in
-                            Text(p == .toSend ? "To send (\(visible.count))"
-                                              : "Reached out (\(reachedOutItems.count))").tag(p)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    if pipeline == .toSend {
-                        QueueFilterBar(
-                            disciplines: disciplines,
-                            activeDiscipline: $disciplineFilter,
-                            highOnly: $highOnly
-                        )
-                        let groups = QueueModel.groupByDate(visible)
-                        if groups.isEmpty {
-                            emptyState
-                        } else {
-                            ForEach(groups) { group in
-                                dateSection(group)
-                            }
-                        }
+                    // #308: a tapped multi-lead away alert focuses the queue on exactly those leads;
+                    // otherwise the normal pipeline view shows.
+                    if let focused = focusedKeys {
+                        focusedSection(focused)
                     } else {
-                        reachedOutList
+                        pipelineContent
                     }
                 }
                 .padding(.horizontal, OVSpacing.xl)
@@ -164,12 +152,80 @@ struct QueueView: View {
             .onChange(of: deepLinkedKey) { _, key in
                 if let key { navigateToLead(key, proxy: proxy) }
             }
+            .onChange(of: deepLinkedKeys) { _, keys in
+                if let keys, !keys.isEmpty { focusOnLeads(keys, proxy: proxy) }
+            }
+        }
+    }
+
+    // The normal queue: pipeline picker plus the to-send date groups or the reached-out list. Lifted
+    // out of queueScroll so the focused/normal branch stays a small expression (#122).
+    @ViewBuilder private var pipelineContent: some View {
+        Picker("Pipeline", selection: $pipeline) {
+            ForEach(Pipeline.allCases, id: \.self) { p in
+                Text(p == .toSend ? "To send (\(visible.count))"
+                                  : "Reached out (\(reachedOutItems.count))").tag(p)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        if pipeline == .toSend {
+            QueueFilterBar(
+                disciplines: disciplines,
+                activeDiscipline: $disciplineFilter,
+                highOnly: $highOnly
+            )
+            let groups = QueueModel.groupByDate(visible)
+            if groups.isEmpty {
+                emptyState
+            } else {
+                ForEach(groups) { group in
+                    dateSection(group)
+                }
+            }
+        } else {
+            reachedOutList
+        }
+    }
+
+    // #308: the focused new-leads view a tapped multi-lead away alert lands on — exactly the leads named
+    // in the alert, as a flat list (booked leads that drop out of both pipelines still appear because it
+    // filters all non-dismissed prospects, not the windowed queue). "Show all" returns to the queue.
+    @ViewBuilder private func focusedSection(_ keys: [String]) -> some View {
+        let wanted = Set(keys)
+        let rows = items.filter { wanted.contains($0.id) }
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(rows.count) new lead\(rows.count == 1 ? "" : "s") while you were away")
+                    .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                Spacer()
+                Button("Show all") { focusedKeys = nil }
+            }
+            .padding(.bottom, OVSpacing.xxs)
+            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+            if rows.isEmpty {
+                Text("These leads are no longer in your queue.")
+                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+            } else {
+                ForEach(rows) { item in prospectRow(item) }
+            }
+        }
+    }
+
+    // #308: enter the focused new-leads view and scroll its first lead into view. Clears the request
+    // once handled, mirroring navigateToLead (#236).
+    private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
+        focusedKeys = keys
+        deepLinkedKeys = nil
+        DispatchQueue.main.async {
+            if let first = keys.first { withAnimation { proxy.scrollTo(first, anchor: .top) } }
         }
     }
 
     // #236: land on a deep-linked lead — switch to the pipeline holding it, clear filters that would
     // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
+        focusedKeys = nil   // #308: leave any focused new-leads view so the row is reachable in the queue
         pipeline = reachedOutKeys.contains(key) ? .reachedOut : .toSend
         disciplineFilter = nil
         highOnly = false

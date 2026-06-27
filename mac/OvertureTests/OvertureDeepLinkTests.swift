@@ -34,6 +34,30 @@ struct OvertureDeepLinkTests {
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://lead?key="))) == nil)
     }
 
+    // #308: a coalesced multi-lead away alert routes to overture://leads?key=k1&key=k2…, carrying the
+    // whole set so the tap can filter the queue to exactly those leads. Round-trips keys with the
+    // spaces/pipes a naturalKey carries, and stays distinct from the singular `lead` host (#236).
+    @Test func buildsALeadsURLThatRoundTripsBackToTheKeys() throws {
+        let keys = ["aurora strings|2026-03-10|carnegie hall", "joyce|2026-03-14|theater"]
+        let url = try #require(OvertureDeepLink.leadsURL(forKeys: keys))
+        #expect(url.scheme == OvertureDeepLink.scheme)
+        #expect(url.host == OvertureDeepLink.leadsHost)
+        #expect(OvertureDeepLink.leadKeys(from: url) == keys)
+    }
+
+    @Test func leadsURLDropsEmptyKeysAndIsNilWhenNoneRemain() throws {
+        let url = try #require(OvertureDeepLink.leadsURL(forKeys: ["", "k1", ""]))
+        #expect(OvertureDeepLink.leadKeys(from: url) == ["k1"])
+        #expect(OvertureDeepLink.leadsURL(forKeys: ["", ""]) == nil)
+        #expect(OvertureDeepLink.leadsURL(forKeys: []) == nil)
+    }
+
+    @Test func leadKeysRejectsOtherSchemesAndHosts() throws {
+        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "https://example.com/leads?key=x"))) == nil)
+        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "overture://lead?key=x"))) == nil)
+        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "overture://leads?notkey=x"))) == nil)
+    }
+
     // #282: `overture://show` surfaces the resident copy's window. The build script opens this URL
     // instead of re-launching the bundle, which routes to the already-running instance rather than
     // spawning a second copy that the store lock then refuses.

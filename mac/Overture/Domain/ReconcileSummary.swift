@@ -13,12 +13,16 @@ struct ReconcileSummary: Equatable, Sendable {
     var newReplyKeys: [String] = []
     var newBookingKeys: [String] = []
 
+    // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
+    // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
+    // those leads. deepLinkKey is just the count==1 special case of this.
+    var newLeadKeys: [String] { newReplyKeys + newBookingKeys }
+
     // #301: the deep-link target for the away alert — the sole new lead's key when exactly one lead is
-    // new this tick (a reply OR a booking). nil when zero or several are new, so a coalesced multi-lead
-    // alert opens the window instead of arbitrarily jumping to one (Dan's #301 decision).
+    // new this tick (a reply OR a booking). nil when zero or several are new; the multi-lead case routes
+    // to the filtered new-leads view via newLeadKeys instead (#308).
     var deepLinkKey: String? {
-        let keys = newReplyKeys + newBookingKeys
-        return keys.count == 1 ? keys.first : nil
+        newLeadKeys.count == 1 ? newLeadKeys.first : nil
     }
 
     var message: String {

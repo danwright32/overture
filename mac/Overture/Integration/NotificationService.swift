@@ -28,13 +28,17 @@ enum NotificationService {
     // UNUserNotificationCenterDelegate (AppDelegate).
     enum Route: Equatable, Sendable {
         case openLead(key: String)
+        // #308: a coalesced multi-lead away alert routes here, to the queue filtered to exactly the new
+        // leads. The single-lead tap stays .openLead (#301).
+        case openLeads(keys: [String])
         case openSettings
         case openApp
         case retrySync
     }
 
-    // #301: userInfo key carrying a lead's natural key, so a tap can deep-link straight to it.
-    static let leadKeyUserInfoKey = "leadKey"
+    // #301/#308: userInfo key carrying the new leads' natural keys (a one-element array for a single
+    // lead), so a tap can deep-link straight to them.
+    static let leadKeysUserInfoKey = "leadKeys"
 
     // #301: categories register the custom action buttons with the center. The permission alert has an
     // Open Settings button; the failed alert has a Retry sync button (#306); the others rely on the
@@ -56,14 +60,17 @@ enum NotificationService {
         return [permission, failed]
     }
 
-    // #301: the pure tap router. The Open Settings button routes to settings; the Retry sync button
-    // (#306) forces a reconcile; a default tap deep-links to the lead when one rode along, else just
-    // opens the app; a dismiss routes nowhere.
+    // #301/#308: the pure tap router. The Open Settings button routes to settings; the Retry sync button
+    // (#306) forces a reconcile; a default tap deep-links to the lead(s) that rode along — one lead opens
+    // it directly, several open the filtered new-leads view — else just opens the app; a dismiss routes
+    // nowhere.
     static func route(actionIdentifier: String, userInfo: [AnyHashable: Any]) -> Route? {
         if actionIdentifier == Button.openSettings.rawValue { return .openSettings }
         if actionIdentifier == Button.retrySync.rawValue { return .retrySync }
         if actionIdentifier == UNNotificationDismissActionIdentifier { return nil }
-        if let key = userInfo[leadKeyUserInfoKey] as? String, !key.isEmpty { return .openLead(key: key) }
+        let keys = (userInfo[leadKeysUserInfoKey] as? [String])?.filter { !$0.isEmpty } ?? []
+        if keys.count == 1 { return .openLead(key: keys[0]) }
+        if keys.count >= 2 { return .openLeads(keys: keys) }
         return .openApp
     }
 
@@ -85,16 +92,17 @@ enum NotificationService {
         _ action: Action,
         title: String,
         body: String,
-        leadKey: String? = nil,
+        leadKeys: [String] = [],
         deliver: (UNNotificationRequest) -> Void = { UNUserNotificationCenter.current().add($0) }
     ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        // #301: the category attaches the registered action buttons (e.g. Open Settings on the
-        // permission alert); the leadKey rides in userInfo so a tap can deep-link to that lead.
+        // #301/#308: the category attaches the registered action buttons (e.g. Open Settings on the
+        // permission alert); the new leads' keys ride in userInfo so a tap can deep-link to them.
         content.categoryIdentifier = action.rawValue
-        if let leadKey { content.userInfo = [leadKeyUserInfoKey: leadKey] }
+        let keys = leadKeys.filter { !$0.isEmpty }
+        if !keys.isEmpty { content.userInfo = [leadKeysUserInfoKey: keys] }
         deliver(UNNotificationRequest(identifier: action.rawValue, content: content, trigger: nil))
     }
 }
