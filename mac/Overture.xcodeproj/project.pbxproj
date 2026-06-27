@@ -89,6 +89,7 @@
 		7242EF6BE729BFC0B62B0348 /* VoiceGuidanceGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506D734A84A056EAEF4C60B0 /* VoiceGuidanceGuardTests.swift */; };
 		7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */; };
 		73679705D41DA095CC9189DC /* Prospect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C22E2042542477FF4D916B3 /* Prospect.swift */; };
+		736DC21DB32A83706102E1FB /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A871E236F74AA30B8F4E6 /* AppDelegate.swift */; };
 		760ED1E077A4CAD241B5DDFE /* ReplyDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10BF247B7FD0179047746EA2 /* ReplyDetectionTests.swift */; };
 		766A7F7AE14436E13E6294BD /* GmailReplyChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED5B3A0D5D7B33059542583 /* GmailReplyChecker.swift */; };
 		7787427A33E165B7429D8157 /* ReplyBodyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BDDA5B65CE959D25BB9239A /* ReplyBodyTests.swift */; };
@@ -304,6 +305,7 @@
 		AFE4D30240BCE6CB07CD1713 /* ResultsImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsImporter.swift; sourceTree = "<group>"; };
 		B03027BBDEDB1185CBDDC376 /* ResultsRunFieldsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsRunFieldsTests.swift; sourceTree = "<group>"; };
 		B075FC1DB65AFA2E46FD21A3 /* HistoryMatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryMatch.swift; sourceTree = "<group>"; };
+		B10A871E236F74AA30B8F4E6 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B1417C41A53BFC9C1A9ED6D5 /* PrepRunOutcomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepRunOutcomeTests.swift; sourceTree = "<group>"; };
 		B1F488479D4DEA383519C548 /* QueueModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueModelTests.swift; sourceTree = "<group>"; };
 		B20D7FD318D128229C69A6CE /* PrepResultsContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepResultsContractTests.swift; sourceTree = "<group>"; };
@@ -368,6 +370,7 @@
 		502EA650BC10085494390D1F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				B10A871E236F74AA30B8F4E6 /* AppDelegate.swift */,
 				D9B0914E3F338108E97924DF /* OvertureApp.swift */,
 				595B0E6C06FF1BA88F84DBEA /* ReconcileScheduler.swift */,
 				77C9D0C269C0084ADFE58328 /* RootView.swift */,
@@ -688,6 +691,7 @@
 			files = (
 				1694B85DAD9F436E1844C9C0 /* AgentRoster.swift in Sources */,
 				DDE9A993CA6F315D1BBB4F1F /* AlgoliaCalendar.swift in Sources */,
+				736DC21DB32A83706102E1FB /* AppDelegate.swift in Sources */,
 				A5AD8D5BA082FC4CA9E2F5AB /* AppleScriptOmniFocusClient.swift in Sources */,
 				1AA5848075651F3A40AEBDAD /* BookingMatch.swift in Sources */,
 				E953E2F9A05320E3CF28DD80 /* CarnegieExtractor.swift in Sources */,

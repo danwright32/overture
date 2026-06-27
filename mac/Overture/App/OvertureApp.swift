@@ -9,6 +9,9 @@ struct OvertureApp: App {
     let modelContainer: ModelContainer?
     private let storeLock: StoreLock?      // held for the process lifetime to keep the single-writer lock
     private let degradedReason: String?
+    // #265: an app-level delegate owns the ReconcileScheduler so the safe reconciles run independent of
+    // any window. The container is handed to it via AppDelegate.sharedContainer below.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
         let schema = Schema([Prospect.self])
@@ -37,6 +40,9 @@ struct OvertureApp: App {
         self.modelContainer = container
         self.storeLock = lock
         self.degradedReason = reason
+        // Hand the opened store to the app-level scheduler owner (#265). nil in the degraded state, so
+        // the delegate simply doesn't start the scheduler.
+        AppDelegate.sharedContainer = container
     }
 
     var body: some Scene {
