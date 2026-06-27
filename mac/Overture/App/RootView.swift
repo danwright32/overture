@@ -12,6 +12,9 @@ struct RootView: View {
     @State private var warningMessage: String?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
+    // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
+    // select and scroll to. Cleared by the queue once it has acted on it.
+    @State private var deepLinkedKey: String?
 
     // Kept prospects with no draft yet — what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
@@ -37,7 +40,12 @@ struct RootView: View {
     }
 
     var body: some View {
-        QueueView()
+        QueueView(deepLinkedKey: $deepLinkedKey)
+            .onOpenURL { url in
+                // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; hand the
+                // key to the queue to jump to that lead.
+                if let key = OvertureDeepLink.leadKey(from: url) { deepLinkedKey = key }
+            }
             .toolbar {
                 ToolbarItem(placement: .status) {
                     if omniFocusFailedAt > 0 {
