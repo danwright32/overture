@@ -109,16 +109,16 @@ final class ReconcileScheduler {
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
     // notification naming any new replies/bookings. The manual menu run uses the ack instead (#285), so
     // a click is never double-notified.
-    // The poster is injected (defaulting to NotificationService.post) so the body and the deep-link key
-    // threaded onto the alert are testable without the live notification center (#301).
+    // The poster is injected (defaulting to NotificationService.post) so the body and the deep-link keys
+    // threaded onto the alert are testable without the live notification center (#301/#308).
     func notifyIfNewWhileAway(_ summary: ReconcileSummary,
-                              post: (_ body: String, _ leadKey: String?) -> Void = {
-                                  NotificationService.post(.away, title: "Overture", body: $0, leadKey: $1)
+                              post: (_ body: String, _ leadKeys: [String]) -> Void = {
+                                  NotificationService.post(.away, title: "Overture", body: $0, leadKeys: $1)
                               }) {
         guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
-        // #301: deep-link to the lead when exactly one is new this tick; otherwise (nil) the tap opens
-        // the main window.
-        post(body, summary.deepLinkKey)
+        // #308: carry every new-lead key — a tap deep-links to the sole lead when one is new, or to the
+        // filtered new-leads view when several are.
+        post(body, summary.newLeadKeys)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.

@@ -16,6 +16,9 @@ struct RootView: View {
     // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
     // select and scroll to. Cleared by the queue once it has acted on it.
     @State private var deepLinkedKey: String?
+    // #308: the natural keys of the new leads from a tapped multi-lead away alert, handed to the queue
+    // to filter down to exactly them. Cleared by the queue once it has acted on it.
+    @State private var deepLinkedKeys: [String]?
 
     // Kept prospects with no draft yet — what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
@@ -41,12 +44,15 @@ struct RootView: View {
     }
 
     var body: some View {
-        QueueView(deepLinkedKey: $deepLinkedKey)
+        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
                 // explicit and focuses it.
                 if OvertureDeepLink.isShowCommand(url) { openWindow(id: "main"); return }
+                // #308: a tapped multi-lead away alert opens overture://leads?key=…&key=…; hand the set
+                // to the queue to filter down to exactly those new leads.
+                if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = keys; return }
                 // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; hand the
                 // key to the queue to jump to that lead.
                 if let key = OvertureDeepLink.leadKey(from: url) { deepLinkedKey = key }

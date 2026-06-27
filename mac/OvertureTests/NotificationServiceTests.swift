@@ -39,29 +39,37 @@ struct NotificationServiceTests {
         #expect(!granted)
     }
 
-    // #301: an away/reply alert carries the lead's natural key so a tap can deep-link to it, and stamps
-    // the action's category so the registered action buttons (e.g. Open Settings) attach.
-    @Test func postStampsTheLeadKeyAndCategorySoATapCanDeepLink() {
+    // #301/#308: an away/reply alert carries the new leads' natural keys so a tap can deep-link, and
+    // stamps the action's category so the registered action buttons (e.g. Open Settings) attach.
+    @Test func postStampsTheLeadKeysAndCategorySoATapCanDeepLink() {
         var delivered: UNNotificationRequest?
         NotificationService.post(.away, title: "Overture", body: "1 new reply (Carnegie Hall)",
-                                 leadKey: "carnegie|2026-03-10|hall", deliver: { delivered = $0 })
-        #expect(delivered?.content.userInfo[NotificationService.leadKeyUserInfoKey] as? String == "carnegie|2026-03-10|hall")
+                                 leadKeys: ["carnegie|2026-03-10|hall"], deliver: { delivered = $0 })
+        #expect(delivered?.content.userInfo[NotificationService.leadKeysUserInfoKey] as? [String] == ["carnegie|2026-03-10|hall"])
         #expect(delivered?.content.categoryIdentifier == NotificationService.Action.away.rawValue)
     }
 
-    @Test func postWithoutALeadKeyCarriesNoDeepLink() {
+    @Test func postWithoutLeadKeysCarriesNoDeepLink() {
         var delivered: UNNotificationRequest?
         NotificationService.post(.omniFocusPermission, title: "t", body: "b", deliver: { delivered = $0 })
-        #expect(delivered?.content.userInfo[NotificationService.leadKeyUserInfoKey] == nil)
+        #expect(delivered?.content.userInfo[NotificationService.leadKeysUserInfoKey] == nil)
         #expect(delivered?.content.categoryIdentifier == NotificationService.Action.omniFocusPermission.rawValue)
     }
 
-    // #301: the pure tap router. A default tap with a lead key deep-links; the Open Settings button
-    // opens settings; a default tap with no key just opens the app; a dismiss routes nowhere.
-    @Test func routeDeepLinksOnADefaultTapCarryingALeadKey() {
+    // #301: the pure tap router. A default tap carrying one lead key deep-links to that lead; the Open
+    // Settings button opens settings; a default tap with no key just opens the app; a dismiss routes
+    // nowhere.
+    @Test func routeDeepLinksOnADefaultTapCarryingOneLeadKey() {
         let route = NotificationService.route(actionIdentifier: UNNotificationDefaultActionIdentifier,
-                                              userInfo: [NotificationService.leadKeyUserInfoKey: "k1"])
+                                              userInfo: [NotificationService.leadKeysUserInfoKey: ["k1"]])
         #expect(route == .openLead(key: "k1"))
+    }
+
+    // #308: a default tap carrying several lead keys routes to the filtered new-leads view.
+    @Test func routeOpensTheFilteredSetOnADefaultTapCarryingSeveralLeadKeys() {
+        let route = NotificationService.route(actionIdentifier: UNNotificationDefaultActionIdentifier,
+                                              userInfo: [NotificationService.leadKeysUserInfoKey: ["k1", "k2"]])
+        #expect(route == .openLeads(keys: ["k1", "k2"]))
     }
 
     @Test func routeOpensSettingsForTheOpenSettingsButton() {
@@ -85,7 +93,7 @@ struct NotificationServiceTests {
 
     @Test func routeIgnoresADismiss() {
         let route = NotificationService.route(actionIdentifier: UNNotificationDismissActionIdentifier,
-                                              userInfo: [NotificationService.leadKeyUserInfoKey: "k1"])
+                                              userInfo: [NotificationService.leadKeysUserInfoKey: ["k1"]])
         #expect(route == nil)
     }
 
