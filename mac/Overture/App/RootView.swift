@@ -8,6 +8,9 @@ struct RootView: View {
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    // #285: the shared acknowledgment surface for this window and its sheets, so a control whose
+    // effect isn't otherwise visible still shows it ran.
+    @State private var feedback = ActionFeedback()
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var warningMessage: String?
@@ -221,6 +224,9 @@ struct RootView: View {
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showFollowUps) { FollowUpsView() }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
+            .actionFeedbackBanner()
+            // Injected outermost so the sheets above inherit it too (#285).
+            .environment(feedback)
     }
 
     #if DEBUG

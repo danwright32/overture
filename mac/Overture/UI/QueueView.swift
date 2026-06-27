@@ -4,6 +4,7 @@ import SwiftData
 // The window Dan lives in: ranked performances, grouped by date, kept or dismissed.
 struct QueueView: View {
     @Environment(\.modelContext) private var context
+    @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
 
     // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc. The
     // "hide untouched-gone" rule (#133) lives in QueueModel.queueOrder, not here, because a
@@ -437,6 +438,9 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.excludedFromVoiceLearning.toggle()
         try? context.save()
+        // #285: a context-menu toggle changes nothing visible on the row, so say it ran.
+        feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning,
+                                                     org: item.groupName))
     }
 
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that reply

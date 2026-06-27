@@ -8,6 +8,7 @@ import SwiftData
 struct FollowUpsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ActionFeedback.self) private var feedback   // #285
     @Query private var prospects: [Prospect]
     @State private var pending: PendingNudge?
     @State private var pendingConversation: PendingConversation?
@@ -113,6 +114,7 @@ struct FollowUpsView: View {
             Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one message right now, to this recipient only."
                 + (p.isClosing ? " It also closes the lead out (kept warm for next time)." : ""))
         }
+        .actionFeedbackBanner()
     }
 
     @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -224,28 +226,38 @@ struct FollowUpsView: View {
     private func performNudge(_ naturalKey: String) {
         pending = nil
         guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        let org = p.groupName
         // Await off the synchronous button action so the main thread never blocks on the Gmail
         // token work (the old blocking send bridge deadlocked here).
         Task {
-            _ = await SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let sent = await SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
             try? context.save()
+            // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
+            feedback.acknowledge(ActionAck.followUpSent(org: org, success: sent),
+                                 tone: sent ? .info : .warning)
         }
     }
 
     private func performConversationNudge(_ naturalKey: String, isClosing: Bool) {
         pendingConversation = nil
         guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        let org = p.groupName
         let kind: ConversationReminder.Kind = isClosing ? .closing : .active(p.conversationState ?? .wantsToBook)
         Task {
-            _ = await SendService.sendConversationNudge(p, kind: kind, now: Date(),
+            let sent = await SendService.sendConversationNudge(p, kind: kind, now: Date(),
                                                         sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
             try? context.save()
+            // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
+            feedback.acknowledge(ActionAck.conversationNudge(org: org, closing: isClosing, success: sent),
+                                 tone: sent ? .info : .warning)
         }
     }
 
     private func remindLater(_ p: Prospect) {
         p.remindLater(now: Date())
         try? context.save()
+        // #285: the row drops off the due list, which could read as "sent" — say it was snoozed.
+        feedback.acknowledge(ActionAck.remindLater(org: p.groupName))
     }
 
     private func setState(_ p: Prospect, _ state: ConversationState) {
@@ -295,5 +307,5 @@ private func previewProspect(_ group: String, event: String?) -> Prospect {
     d.contactEmail = "box@oldtownopera.example"; d.sentAt = longAgo
     ctx.insert(d)
 
-    return FollowUpsView().modelContainer(container)
+    return FollowUpsView().modelContainer(container).environment(ActionFeedback())
 }
