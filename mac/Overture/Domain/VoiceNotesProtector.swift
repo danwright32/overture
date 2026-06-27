@@ -37,12 +37,24 @@ enum VoiceNotesProtector {
     // the current auto section. Otherwise leave `current` untouched.
     static func protectedContents(current: String, backup: String) -> (contents: String, restored: Bool) {
         let backupNotes = notesSection(of: backup)
-        guard !backupNotes.isEmpty else { return (current, false) }
-        guard notesSection(of: current) != backupNotes else { return (current, false) }
+        guard hasSubstantiveBody(backupNotes) else { return (current, false) }
+        // #254: only restore an actual WIPE (the notes section missing, or emptied to its heading). If
+        // the section is still present with content — even if changed — treat it as Dan's own edit,
+        // possibly made during an in-flight run, and leave it. (Time-based detection can't help: the
+        // run rewrites the whole file every time, so the file is always "modified after run start".)
+        guard !hasSubstantiveBody(notesSection(of: current)) else { return (current, false) }
 
         let auto = autoSection(of: current)
         let rebuilt = [backupNotes, auto].filter { !$0.isEmpty }.joined(separator: "\n\n") + "\n"
         return (rebuilt, true)
+    }
+
+    // True if the notes block has real content beyond its heading (not missing, not heading-only).
+    private static func hasSubstantiveBody(_ notesBlock: String) -> Bool {
+        guard !notesBlock.isEmpty else { return false }
+        let body = notesBlock.components(separatedBy: "\n").dropFirst()
+            .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !body.isEmpty
     }
 
     // Copy the guidance file aside before a run, so the post-run restore has a trusted reference.
