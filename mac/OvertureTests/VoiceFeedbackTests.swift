@@ -50,6 +50,22 @@ struct VoiceFeedbackTests {
         #expect(fb.pairs.map(\.naturalKey) == ["edited-sent"])
     }
 
+    @Test func excludedProspectsAreNotExported() {
+        // #244: Dan marked a send as "don't learn from this" — it must never reach the drafter.
+        let kept = prospect(key: "kept",
+                            original: "Hi, I'd be glad to cover this.",
+                            sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                            sentAt: Date(timeIntervalSince1970: 100))
+        let excluded = prospect(key: "excluded",
+                                original: "Hi, I'd be glad to cover this.",
+                                sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                                sentAt: Date(timeIntervalSince1970: 200))
+        excluded.excludedFromVoiceLearning = true
+
+        let fb = VoiceFeedbackBuilder.build(from: [kept, excluded], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.map(\.naturalKey) == ["kept"])
+    }
+
     @Test func dropsNearIdenticalPairs() {
         // Dan edited substantively earlier, then the final sent copy ended up ~identical to the AI
         // draft (a near-revert / one-typo). No voice lesson, so it must be dropped.
