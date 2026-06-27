@@ -12,6 +12,12 @@ struct ReconcileSummary: Equatable, Sendable {
 
     var message: String {
         var parts: [String] = []
+        // #287: a reply found this pass is the headline event, so lead with it and name the org (Dan
+        // works by name, matching the while-away alert); without this a reply-only run wrongly reads as
+        // "nothing was due".
+        if !newReplies.isEmpty {
+            parts.append("\(newReplies.count) new repl\(newReplies.count == 1 ? "y" : "ies") (\(newReplies.joined(separator: ", ")))")
+        }
         if bookingsMarked > 0 {
             parts.append("\(bookingsMarked) newly booked")
         }
