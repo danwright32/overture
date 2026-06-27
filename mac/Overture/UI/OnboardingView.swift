@@ -110,8 +110,7 @@ struct OnboardingView: View {
     private func grantNotifications() {
         busy = true; status = "Requesting notification permission…"
         Task {
-            let granted = (try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound])) ?? false
+            let granted = await NotificationService.requestAuthorization()
             await refreshAsync()
             status = granted
                 ? "Notifications allowed."
