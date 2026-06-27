@@ -364,9 +364,7 @@ struct QueueView: View {
 
     private func saveDraft(_ item: QueueItem, _ subject: String, _ body: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.draftSubject = subject
-        model.draftBody = body
-        model.draftEditedByDan = true
+        model.applyEdit(subject: subject, body: body)
         try? context.save()
     }
 
