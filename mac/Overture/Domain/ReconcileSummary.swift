@@ -8,6 +8,18 @@ struct ReconcileSummary: Equatable, Sendable {
     // #269: names of leads that became replied / booked THIS tick, for the while-away notification.
     var newReplies: [String] = []
     var newBookings: [String] = []
+    // #301: the natural keys of those same leads (aligned with the name arrays), so the away alert can
+    // deep-link to one when exactly one lead is new.
+    var newReplyKeys: [String] = []
+    var newBookingKeys: [String] = []
+
+    // #301: the deep-link target for the away alert — the sole new lead's key when exactly one lead is
+    // new this tick (a reply OR a booking). nil when zero or several are new, so a coalesced multi-lead
+    // alert opens the window instead of arbitrarily jumping to one (Dan's #301 decision).
+    var deepLinkKey: String? {
+        let keys = newReplyKeys + newBookingKeys
+        return keys.count == 1 ? keys.first : nil
+    }
 
     var message: String {
         var parts: [String] = []

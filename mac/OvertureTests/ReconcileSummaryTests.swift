@@ -56,4 +56,28 @@ struct ReconcileSummaryTests {
         #expect(m.contains("follow-up"))
         #expect(!m.contains("nothing was due"))
     }
+
+    // #301: the away alert deep-links only when exactly one lead is new this tick (a reply OR a
+    // booking). Zero or several new leads → no single target, so the tap just opens the window.
+    @Test func deepLinkKeyIsTheSoleNewLeadWhenExactlyOneIsNew() {
+        let s = ReconcileSummary(omniFocusChanged: 0, newReplies: ["Carnegie Hall"], newReplyKeys: ["carnegie|2026|hall"])
+        #expect(s.deepLinkKey == "carnegie|2026|hall")
+    }
+
+    @Test func deepLinkKeyIsNilWhenSeveralLeadsAreNew() {
+        let s = ReconcileSummary(omniFocusChanged: 0,
+                                 newReplies: ["A", "B"], newReplyKeys: ["a|2026|v", "b|2026|v"])
+        #expect(s.deepLinkKey == nil)
+    }
+
+    @Test func deepLinkKeyIsNilWhenOneReplyAndOneBookingAreBothNew() {
+        let s = ReconcileSummary(omniFocusChanged: 0,
+                                 newReplies: ["A"], newBookings: ["B"],
+                                 newReplyKeys: ["a|2026|v"], newBookingKeys: ["b|2026|v"])
+        #expect(s.deepLinkKey == nil)
+    }
+
+    @Test func deepLinkKeyIsNilWhenNothingIsNew() {
+        #expect(ReconcileSummary(omniFocusChanged: 0).deepLinkKey == nil)
+    }
 }

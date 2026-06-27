@@ -9,7 +9,7 @@ import UserNotifications
 // after the Phase 0 lock). Starting here, at applicationDidFinishLaunching, rather than in a View's
 // .task, is what survives the window closing (the point of the resident rearchitecture).
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     // Set by OvertureApp.init once the store has been opened (nil in the degraded/no-store state).
     // Written once on the main thread during launch and read in applicationDidFinishLaunching (also
     // main), so the unchecked isolation is safe.
@@ -27,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard AppEnvironment.shouldStartBackgroundServices else { return }
+        // #301: become the notification delegate so a tapped alert is actionable instead of a dead end,
+        // and register the action buttons (the OmniFocus-permission alert's Open Settings).
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.setNotificationCategories(NotificationService.categories())
         // #279: ensure the owner-only log directory exists even in the degraded/no-store state (that is
         // exactly when the agent's stderr matters); the installer created it, this is the safety net.
         AgentLogLocation.prepareDirectory()
@@ -46,6 +51,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 loginAgentInstalled: OnboardingState.agentInstalled())
             if state.shouldAutoShow { self.showOnboarding() }
         }
+    }
+
+    // #301: handle a tapped notification. The decision is the pure NotificationService.route; here we
+    // only carry out its side effects. Lead/window routes reuse the existing deep-link handler
+    // (RootView.onOpenURL) by opening the app's own URL scheme, which reactivates this instance and
+    // reopens its window; the settings route jumps to the Automation privacy pane.
+    // nonisolated because UNUserNotificationCenterDelegate isn't main-actor-isolated; the routing
+    // decision is pure, and the side effects hop to the main actor (NSWorkspace/NSApp). The completion
+    // handler is called immediately — the routing work is fire-and-forget.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        if let route = NotificationService.route(actionIdentifier: response.actionIdentifier, userInfo: userInfo) {
+            Task { @MainActor in self.handle(route) }
+        }
+        completionHandler()
+    }
+
+    // Carry out a tapped notification's route. Lead/window routes reuse the existing deep-link handler
+    // (RootView.onOpenURL) by opening the app's own URL scheme, which reactivates this instance and
+    // reopens its window (#236/#282); the settings route jumps to the Automation privacy pane.
+    private func handle(_ route: NotificationService.Route) {
+        switch route {
+        case .openLead(let key):
+            if let url = OvertureDeepLink.leadURL(forKey: key) { open(url) }
+        case .openApp:
+            if let url = URL(string: "\(OvertureDeepLink.scheme)://\(OvertureDeepLink.showHost)") { open(url) }
+        case .openSettings:
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    private func open(_ url: URL) {
+        NSWorkspace.shared.open(url)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // The menu's "Run reconcile now".

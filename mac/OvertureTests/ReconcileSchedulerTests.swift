@@ -68,5 +68,26 @@ struct ReconcileSchedulerTests {
         #expect(OmniFocusSyncStatus.lastFailure(from: defaults) == nil)   // a clean sync clears the warning
     }
 
+    // #301: the while-away alert threads the sole-new-lead key onto the notification so a tap deep-links
+    // to it; a coalesced multi-lead alert carries no key (the tap opens the window).
+    @Test func whileAwayAlertCarriesTheDeepLinkKeyForASoleNewLead() {
+        let scheduler = ReconcileScheduler(context: ModelContext(try! container()))
+        var captured: (body: String, key: String?)?
+        scheduler.notifyIfNewWhileAway(
+            ReconcileSummary(omniFocusChanged: 0, newReplies: ["Carnegie Hall"], newReplyKeys: ["carnegie|2026|hall"]),
+            post: { captured = (body: $0, key: $1) })
+        #expect(captured?.key == "carnegie|2026|hall")
+    }
+
+    @Test func whileAwayAlertCarriesNoKeyWhenSeveralLeadsAreNew() {
+        let scheduler = ReconcileScheduler(context: ModelContext(try! container()))
+        var captured: (body: String, key: String?)?
+        scheduler.notifyIfNewWhileAway(
+            ReconcileSummary(omniFocusChanged: 0, newReplies: ["A", "B"], newReplyKeys: ["a|2026|v", "b|2026|v"]),
+            post: { captured = (body: $0, key: $1) })
+        #expect(captured != nil)            // a message was posted
+        #expect(captured?.key == nil)       // but no single deep-link target
+    }
+
     private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "sched-\(UUID().uuidString)")! }
 }
