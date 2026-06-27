@@ -83,6 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
                 NSWorkspace.shared.open(url)
             }
+        case .retrySync:
+            // #306: the Retry sync button on the OmniFocus-failed alert re-runs the safe reconcile,
+            // whose last step is the OmniFocus push; runNow already acks with a result notification.
+            runReconcileNow()
         }
     }
 

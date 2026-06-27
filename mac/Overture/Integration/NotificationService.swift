@@ -17,9 +17,11 @@ enum NotificationService {
     }
 
     // #301: custom tap-button identifiers (the buttons that appear under a notification). The
-    // OmniFocus-permission alert carries an Open Settings button.
+    // OmniFocus-permission alert carries an Open Settings button; the OmniFocus-failed alert carries a
+    // Retry sync button (#306).
     enum Button: String {
         case openSettings = "overture.action.openSettings"
+        case retrySync = "overture.action.retrySync"
     }
 
     // #301: where a tapped notification should route. Pure result of `route(...)`, acted on by the
@@ -28,27 +30,38 @@ enum NotificationService {
         case openLead(key: String)
         case openSettings
         case openApp
+        case retrySync
     }
 
     // #301: userInfo key carrying a lead's natural key, so a tap can deep-link straight to it.
     static let leadKeyUserInfoKey = "leadKey"
 
-    // #301: categories register the custom action buttons with the center. Only the permission alert
-    // has one (Open Settings); the others rely on the default tap. Registered once at launch by the
-    // delegate via UNUserNotificationCenter.setNotificationCategories.
+    // #301: categories register the custom action buttons with the center. The permission alert has an
+    // Open Settings button; the failed alert has a Retry sync button (#306); the others rely on the
+    // default tap. Registered once at launch by the delegate via
+    // UNUserNotificationCenter.setNotificationCategories.
     static func categories() -> Set<UNNotificationCategory> {
         let openSettings = UNNotificationAction(identifier: Button.openSettings.rawValue,
                                                 title: "Open Settings", options: [.foreground])
         let permission = UNNotificationCategory(identifier: Action.omniFocusPermission.rawValue,
                                                 actions: [openSettings], intentIdentifiers: [],
                                                 options: [])
-        return [permission]
+        // #306: Retry runs the reconcile quietly in the resident process — no .foreground, so it doesn't
+        // yank the windowless app to the front. The reconcile acks itself with a result notification.
+        let retrySync = UNNotificationAction(identifier: Button.retrySync.rawValue,
+                                             title: "Retry sync", options: [])
+        let failed = UNNotificationCategory(identifier: Action.omniFocusFailed.rawValue,
+                                            actions: [retrySync], intentIdentifiers: [],
+                                            options: [])
+        return [permission, failed]
     }
 
-    // #301: the pure tap router. The Open Settings button routes to settings; a default tap deep-links
-    // to the lead when one rode along, else just opens the app; a dismiss routes nowhere.
+    // #301: the pure tap router. The Open Settings button routes to settings; the Retry sync button
+    // (#306) forces a reconcile; a default tap deep-links to the lead when one rode along, else just
+    // opens the app; a dismiss routes nowhere.
     static func route(actionIdentifier: String, userInfo: [AnyHashable: Any]) -> Route? {
         if actionIdentifier == Button.openSettings.rawValue { return .openSettings }
+        if actionIdentifier == Button.retrySync.rawValue { return .retrySync }
         if actionIdentifier == UNNotificationDismissActionIdentifier { return nil }
         if let key = userInfo[leadKeyUserInfoKey] as? String, !key.isEmpty { return .openLead(key: key) }
         return .openApp

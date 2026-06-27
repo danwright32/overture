@@ -15,6 +15,6 @@ struct OmniFocusUserNotifier: OmniFocusNotifier {
     func notifySyncFailed(_ message: String) {
         NotificationService.post(.omniFocusFailed,
             title: "Overture couldn't update OmniFocus",
-            body: "The last follow-up sync failed. Open Overture to retry.")
+            body: "The last follow-up sync failed. Tap Retry sync to try again.")
     }
 }
