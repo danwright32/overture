@@ -4,8 +4,9 @@ import Foundation
 
 // #269 / Phase 5: when a reconcile detects new replies or new bookings while Dan is away, it posts one
 // coalesced notification naming them — not silence, and not one per item. The message builder and the
-// before/after diff that finds what's NEW this tick are pure and tested; delivery is the LocalNotifier
-// shim. Reply/booking detection itself is covered by GmailReplyChecker / DownbeatBooking tests.
+// before/after diff that finds what's NEW this tick are pure and tested; delivery goes through the
+// NotificationService shim (#289). Reply/booking detection itself is covered by GmailReplyChecker /
+// DownbeatBooking tests.
 @Suite("Away alert (#269)")
 struct AwayAlertTests {
     @Test func nothingNewProducesNoMessage() {

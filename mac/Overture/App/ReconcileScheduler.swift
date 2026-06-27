@@ -27,7 +27,7 @@ final class ReconcileScheduler {
     // Trigger one reconcile on demand (the menu's "Run reconcile now"). Unlike the silent timer ticks,
     // a manual run ALWAYS acknowledges itself with a notification — even when nothing was due — so the
     // click never appears to do nothing (#285).
-    func runNow(notify: @escaping (String) -> Void = { LocalNotifier.post(title: "Overture", body: $0, id: "overture.reconcile") }) {
+    func runNow(notify: @escaping (String) -> Void = { NotificationService.post(.reconcile, title: "Overture", body: $0) }) {
         Task { @MainActor in
             let summary = await self.runSafeReconcilesOnce()
             notify(summary.message)
@@ -107,7 +107,7 @@ final class ReconcileScheduler {
     // a click is never double-notified.
     private func notifyIfNewWhileAway(_ summary: ReconcileSummary) {
         guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
-        LocalNotifier.post(title: "Overture", body: body, id: "overture.away")
+        NotificationService.post(.away, title: "Overture", body: body)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
