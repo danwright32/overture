@@ -129,6 +129,13 @@ struct ConversationReminderTests {
         ])
     }
 
+    @Test func dueExcludesDismissedLeads() {
+        // #238: a dismissed lead must not surface as a conversation reminder, even with an active state.
+        let p = prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied)
+        p.status = .dismissed
+        #expect(ConversationReminder.due(from: [p], now: now).isEmpty)
+    }
+
     @Test func dueBreaksTiesBySoonestEvent() {
         let leads = [
             prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-08-01", outcome: .replied),

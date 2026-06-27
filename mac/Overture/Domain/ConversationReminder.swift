@@ -172,9 +172,10 @@ enum ConversationReminder {
     static func due(from prospects: [Prospect], now: Date,
                     config: ConversationReminderConfig = .init()) -> [(Prospect, DueReminder)] {
         prospects.compactMap { p in
-            reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
-                     remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                     outcome: p.outcome, source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
+            guard p.status != .dismissed else { return nil }   // #238: dismissed leads stop nagging
+            return reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
+                            remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
+                            outcome: p.outcome, source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
         }
         .sorted {
             let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)

@@ -62,6 +62,18 @@ struct OmniFocusSyncTests {
         #expect(lines[1] == "Due: " + EasternDate.dayString(from: t.dueDate))
     }
 
+    @Test func desiredExcludesDismissedLeads() throws {
+        // #238: a lead Dan dismissed is a no-go and must not generate an OmniFocus task, even if it
+        // still carries an active confirmed conversation state.
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        let p = lead(ctx, key: "dismissed-but-active", state: .wantsToBook, source: .manual, setAt: now)
+        p.status = .dismissed
+        let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                          now: now, horizonDays: 14)
+        #expect(tasks.isEmpty)
+    }
+
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
