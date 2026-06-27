@@ -26,10 +26,13 @@
 	<key>ThrottleInterval</key>
 	<integer>60</integer>
 
-	<!-- Diagnosing a silently-failing unattended agent is otherwise blind; capture output. -->
+	<!-- Diagnosing a silently-failing unattended agent is otherwise blind; capture output. These live
+	     under the user's own ~/Library/Logs/Overture (owner-only 0700) rather than world-readable /tmp,
+	     so the diagnostics stay private and survive reboots (#279). launchd does NOT expand ~, so
+	     build-install.sh substitutes __OVERTURE_LOG_DIR__ with the absolute path at install time. -->
 	<key>StandardOutPath</key>
-	<string>/tmp/overture-agent.out.log</string>
+	<string>__OVERTURE_LOG_DIR__/overture-agent.out.log</string>
 	<key>StandardErrorPath</key>
-	<string>/tmp/overture-agent.err.log</string>
+	<string>__OVERTURE_LOG_DIR__/overture-agent.err.log</string>
 </dict>
 </plist>

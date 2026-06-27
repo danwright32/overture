@@ -19,6 +19,7 @@
 		0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */; };
 		0E4306B2FECBB993459C09B2 /* ScoutScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */; };
 		1412FC939FC74701F566D9E8 /* StoreLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780FA66ADB1FB483CA9CAEAB /* StoreLock.swift */; };
+		1622F4C853E61EB11D1DA49F /* AgentLogLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */; };
 		1694B85DAD9F436E1844C9C0 /* AgentRoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222C952AB1A28F9E5785EFA9 /* AgentRoster.swift */; };
 		1722A20B5F53B06DCF2A5823 /* QueuePriorityBreakdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629B1479E6AF604949EB439B /* QueuePriorityBreakdown.swift */; };
 		1753A6B08FB04DDDD79F5CE6 /* RefreshResponseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF936B56EA75558296D03EFE /* RefreshResponseTests.swift */; };
@@ -154,6 +155,7 @@
 		CC2314C11B59D0B0BAE7CE95 /* ConversationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03CC1D9B940C2E2847738B71 /* ConversationStateTests.swift */; };
 		CF5F5ADAD4D52546E3B96EA4 /* GmailSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8241C5C74975C9F06E4B505 /* GmailSender.swift */; };
 		CFD4386F273F2151A04916FC /* PrepQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97E9DA8F6EFABE1B82CE4BE8 /* PrepQueue.swift */; };
+		D002F4FC4262FE11122CB75C /* AgentLogLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */; };
 		D1DA16CE093E998F279DC660 /* ProspectAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D2CD6E3596C49C463321EA /* ProspectAssemblerTests.swift */; };
 		D3D1FD57D74D4440175FCB03 /* QueueModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F488479D4DEA383519C548 /* QueueModelTests.swift */; };
 		D6427CB831C0CA5366638D5A /* FollowUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58091E7E5682F2DC98DF631F /* FollowUpTests.swift */; };
@@ -299,6 +301,7 @@
 		82C7BC03DCBF8D7D88007436 /* DebugStaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugStaging.swift; sourceTree = "<group>"; };
 		8346725D57DE5FF79B50AF8B /* PrepQueueContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepQueueContractTests.swift; sourceTree = "<group>"; };
 		84AE10D36682E3684202FBBE /* BookingMatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingMatch.swift; sourceTree = "<group>"; };
+		881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogLocationTests.swift; sourceTree = "<group>"; };
 		8B66C9CFB43F669F34124D47 /* VoiceFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFeedbackTests.swift; sourceTree = "<group>"; };
 		8C123ECEC709AA3AEFD20BF5 /* EasternDateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasternDateTests.swift; sourceTree = "<group>"; };
 		8E8CE9327EAB13D8526847F9 /* LocalHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalHistory.swift; sourceTree = "<group>"; };
@@ -362,6 +365,7 @@
 		CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRosterTests.swift; sourceTree = "<group>"; };
 		CED5B3A0D5D7B33059542583 /* GmailReplyChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailReplyChecker.swift; sourceTree = "<group>"; };
 		D1CF189903BC52B8964DFD8B /* GmailCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailCredentials.swift; sourceTree = "<group>"; };
+		D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogLocation.swift; sourceTree = "<group>"; };
 		D33E969396D2DF078F0D8654 /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContent.swift; sourceTree = "<group>"; };
 		D3BA73E38C88C3BA40CA80F1 /* MenuBarStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatusTests.swift; sourceTree = "<group>"; };
 		D3E1EB8F1FD834F2944330EC /* DraftCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftCheck.swift; sourceTree = "<group>"; };
@@ -402,6 +406,7 @@
 		502EA650BC10085494390D1F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */,
 				B10A871E236F74AA30B8F4E6 /* AppDelegate.swift */,
 				D33E969396D2DF078F0D8654 /* MenuBarContent.swift */,
 				0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */,
@@ -418,6 +423,7 @@
 		6AE88116F3EF720AE866B7E1 /* OvertureTests */ = {
 			isa = PBXGroup;
 			children = (
+				881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */,
 				CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */,
 				BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */,
 				E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */,
@@ -737,6 +743,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1622F4C853E61EB11D1DA49F /* AgentLogLocation.swift in Sources */,
 				1694B85DAD9F436E1844C9C0 /* AgentRoster.swift in Sources */,
 				DDE9A993CA6F315D1BBB4F1F /* AlgoliaCalendar.swift in Sources */,
 				736DC21DB32A83706102E1FB /* AppDelegate.swift in Sources */,
@@ -839,6 +846,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D002F4FC4262FE11122CB75C /* AgentLogLocationTests.swift in Sources */,
 				FBB014F565369838DFA38489 /* AgentRosterTests.swift in Sources */,
 				DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */,
 				0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */,

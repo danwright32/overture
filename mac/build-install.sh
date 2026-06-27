@@ -74,7 +74,14 @@ codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
 # starts Overture resident immediately and again at every login.
 echo "==> Installing login agent: ${AGENT_DEST}"
 mkdir -p "${HOME}/Library/LaunchAgents"
-cp "${AGENT_SRC}" "${AGENT_DEST}"
+# Owner-only log directory for the agent's stdout/stderr (#279). launchd opens StandardOutPath at
+# spawn before any app code runs, so the directory must exist now; it lives under the user's own
+# Library/Logs (private, survives reboots) instead of world-readable, reboot-cleared /tmp.
+AGENT_LOG_DIR="${HOME}/Library/Logs/Overture"
+mkdir -p "${AGENT_LOG_DIR}"
+chmod 700 "${AGENT_LOG_DIR}"
+# launchd does NOT expand ~, so bake the absolute log path into the installed plist copy.
+sed "s|__OVERTURE_LOG_DIR__|${AGENT_LOG_DIR}|g" "${AGENT_SRC}" > "${AGENT_DEST}"
 launchctl bootstrap "${GUI_DOMAIN}" "${AGENT_DEST}" \
   || echo "    (agent bootstrap reported an error; inspect with: launchctl print ${GUI_DOMAIN}/${AGENT_LABEL})"
 
