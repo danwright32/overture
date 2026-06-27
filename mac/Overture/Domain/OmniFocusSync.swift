@@ -176,14 +176,11 @@ enum OmniFocusSync {
         var parts = ["\(notePrefix)\(p.naturalKey)", "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
-        parts.append("Open in Overture: \(deepLink(for: p.naturalKey))")
+        // #231 / #307: a clickable link back to Overture, built by the single OvertureDeepLink builder
+        // (the same one the app's URL handler parses), so the embedded link can't drift from the parser.
+        if let link = OvertureDeepLink.leadURL(forKey: p.naturalKey)?.absoluteString {
+            parts.append("Open in Overture: \(link)")
+        }
         return parts.joined(separator: "\n")
-    }
-
-    // A clickable link back to Overture (#231). Opens the app via its registered scheme; the lead
-    // key rides in the query so a future handler can jump straight to this lead.
-    static func deepLink(for naturalKey: String) -> String {
-        let key = naturalKey.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-        return "overture://lead?key=\(key)"
     }
 }

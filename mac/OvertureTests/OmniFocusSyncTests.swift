@@ -167,10 +167,20 @@ struct OmniFocusSyncTests {
         #expect(fake.completed == ["gone"])
     }
 
-    @Test func deepLinkEncodesLeadKeyIntoOvertureScheme() {
-        let link = OmniFocusSync.deepLink(for: "Choir A | 2026-07-01 | Weill Recital Hall")
-        #expect(link.hasPrefix("overture://lead?key="))
-        #expect(!link.contains(" "))   // spaces and separators percent-encoded so it's a valid URL
+    // #307: the OmniFocus note's deep link is built by the single OvertureDeepLink builder, so the
+    // embedded link and the app's parser can never drift. The note line must equal exactly what
+    // OvertureDeepLink.leadURL produces (spaces/pipes/hyphens are the chars a naturalKey carries).
+    @Test func noteDeepLinkIsBuiltByTheSingleOvertureDeepLinkBuilder() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        let key = "Choir A|2026-07-01|Weill Recital Hall"
+        lead(ctx, key: key, state: .wantsToBook, source: .manual, setAt: now)
+        let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
+                                          now: now, horizonDays: 14)
+        let note = try #require(tasks.first?.note)
+        let linkLine = try #require(note.split(separator: "\n").first { $0.hasPrefix("Open in Overture: ") })
+        let expected = try #require(OvertureDeepLink.leadURL(forKey: key)?.absoluteString)
+        #expect(linkLine == "Open in Overture: \(expected)")
     }
 
     @Test func configDefaultsOffWith14DayHorizonAndRoundTrips() {
