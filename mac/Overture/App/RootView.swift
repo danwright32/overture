@@ -23,6 +23,7 @@ struct RootView: View {
     @State private var showDismissed = false
     @State private var showPatterns = false
     @State private var showFollowUps = false
+    @State private var showVoiceGuidance = false
 
     private var followUpsDue: Int {
         FollowUp.due(from: allProspects, now: Date()).count
@@ -85,6 +86,14 @@ struct RootView: View {
                         Label("What converts", systemImage: "chart.bar")
                     }
                     .help("Booking and response rates by production, discipline, and fit tier")
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showVoiceGuidance = true
+                    } label: {
+                        Label("Voice guidance", systemImage: "text.quote")
+                    }
+                    .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -205,6 +214,7 @@ struct RootView: View {
             .sheet(isPresented: $showDismissed) { DismissedView() }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showFollowUps) { FollowUpsView() }
+            .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
     }
 
     #if DEBUG
