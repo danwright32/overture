@@ -18,6 +18,8 @@
 	<string>14.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Dan Wright Photography</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Overture creates and updates follow-up tasks in OmniFocus so due reminders reach you when you're away from the app.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

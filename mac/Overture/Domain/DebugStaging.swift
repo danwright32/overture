@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // #196: a DEBUG-only test affordance. Booking detection, follow-ups, conversation reminders,
 // and reply handling all key off a prospect being contacted (sentAt set), but the only
@@ -17,6 +18,35 @@ enum DebugStaging {
         prospect.status = .approved
         prospect.priorRelationshipAtSend = prospect.priorRelationship
         prospect.sendError = nil
+    }
+
+    // Insert a fresh lead already eligible for the OmniFocus sync (#231): contacted, replied, with a
+    // confirmed (manual) "verbal yes" set now, so its next reminder is ~7 days out (inside the
+    // horizon). Used to verify a task actually gets created end to end, regardless of live data.
+    @discardableResult
+    static func stageReminderDueLead(in context: ModelContext, now: Date) -> Prospect {
+        let key = "debug-of-\(Int(now.timeIntervalSince1970))"
+        let p = Prospect(naturalKey: key, groupName: "Test Choir (debug)", discipline: "choral",
+                         venue: "Weill Recital Hall",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "debug", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
+        p.sentAt = now.addingTimeInterval(-86_400)
+        p.outcome = .replied
+        p.conversationStateRaw = ConversationState.wantsToBook.rawValue
+        p.conversationStateSourceRaw = OutcomeSource.manual.rawValue
+        p.conversationStateSetAt = now
+        context.insert(p)
+        return p
+    }
+
+    // Remove every debug-staged lead (naturalKey prefix "debug-of-"). After this, a sync completes
+    // their now-orphaned OmniFocus tasks (they leave the desired set). Cleans up after testing.
+    static func clearDebugLeads(in context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        for p in all where p.naturalKey.hasPrefix("debug-of-") { context.delete(p) }
     }
 }
 #endif

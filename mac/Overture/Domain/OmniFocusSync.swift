@@ -5,6 +5,30 @@ import Foundation
 // to chase, or a post-event closing note), whose next-reach-out is within a horizon, each carrying
 // its due. `reconcile` diffs that against the existing Overture-tagged tasks. Keyed on naturalKey so
 // the side-effecting client can find-or-create-or-complete idempotently. No OmniFocus dependency.
+// Opt-in settings for the OmniFocus sync (#231). Off until Dan enables it. horizonDays sets how
+// far ahead of a reminder's due day a task is created (best-effort: it only lands if Overture is
+// opened in that window).
+struct OmniFocusSyncConfig: Sendable {
+    var enabled: Bool = false
+    var horizonDays: Int = 14
+
+    enum Keys {
+        static let enabled = "omniFocusSyncEnabled"
+        static let horizon = "omniFocusSyncHorizonDays"
+    }
+    static func loaded(from defaults: UserDefaults = .standard) -> OmniFocusSyncConfig {
+        var c = OmniFocusSyncConfig()
+        if defaults.object(forKey: Keys.enabled) != nil { c.enabled = defaults.bool(forKey: Keys.enabled) }
+        let h = defaults.integer(forKey: Keys.horizon)
+        if h > 0 { c.horizonDays = h }
+        return c
+    }
+    func save(to defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: Keys.enabled)
+        defaults.set(horizonDays, forKey: Keys.horizon)
+    }
+}
+
 // The side-effecting boundary to OmniFocus, injected so the orchestrator is testable with a fake.
 // The real implementation (AppleScriptOmniFocusClient) talks to OmniFocus; it is the one piece that
 // can only be verified live, not unit-tested.
@@ -80,11 +104,20 @@ enum OmniFocusSync {
     // Each step is independent so a single failed Apple event doesn't abort the rest of the sync.
     static func run(prospects: [Prospect], now: Date, client: OmniFocusClient, horizonDays: Int = 14,
                     reminderConfig: ConversationReminderConfig = .init()) throws {
+        try apply(desired: desired(from: prospects, now: now, horizonDays: horizonDays,
+                                   reminderConfig: reminderConfig), client: client)
+    }
+
+    // The OmniFocus I/O half, over value types only, so it can run off the main actor while the
+    // prospect read (desired) stays on it. Each step is independent: a failed Apple event on one
+    // task doesn't abort the rest.
+    @discardableResult
+    static func apply(desired: [DesiredTask], client: OmniFocusClient) throws -> (existing: Int, created: Int, completed: Int) {
         let existing = try client.existingOvertureTasks()
-        let want = desired(from: prospects, now: now, horizonDays: horizonDays, reminderConfig: reminderConfig)
-        let plan = reconcile(desired: want, existing: existing)
+        let plan = reconcile(desired: desired, existing: existing)
         for task in plan.toCreate { try client.create(task) }
         for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey) }
+        return (existing.count, plan.toCreate.count, plan.toComplete.count)
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey). Complete any
@@ -115,6 +148,14 @@ enum OmniFocusSync {
         var parts = ["\(notePrefix)\(p.naturalKey)", "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
+        parts.append("Open in Overture: \(deepLink(for: p.naturalKey))")
         return parts.joined(separator: "\n")
+    }
+
+    // A clickable link back to Overture (#231). Opens the app via its registered scheme; the lead
+    // key rides in the query so a future handler can jump straight to this lead.
+    static func deepLink(for naturalKey: String) -> String {
+        let key = naturalKey.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        return "overture://lead?key=\(key)"
     }
 }

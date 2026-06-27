@@ -121,16 +121,25 @@ struct RootView: View {
                     .help("Scout the venue calendars for new performances (⌘R). Auto-runs about daily.")
                     .keyboardShortcut("r", modifiers: .command)
                 }
-                #if DEBUG
-                // DEBUG ONLY (#196): stage a prospect as already sent so post-send flows can be
-                // tested without a live Gmail send. Compiled out of release builds entirely.
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        debugStageFirstAsSent()
+                        syncOmniFocus(force: true)
                     } label: {
-                        Label("DEBUG: Mark as sent", systemImage: "ladybug")
+                        Label("Sync to OmniFocus", systemImage: "checklist")
                     }
-                    .help("DEBUG ONLY: mark the first un-sent prospect as approved-and-sent so booking detection, follow-ups, reminders, and reply handling can be tested without sending mail")
+                    .help("Push your due follow-ups into the OmniFocus Outreach project now. The first time, macOS will ask permission to control OmniFocus.")
+                }
+                #if DEBUG
+                // DEBUG ONLY (#196): test affordances, compiled out of release builds. Grouped into
+                // one menu to stay under SwiftUI's toolbar item limit.
+                ToolbarItem(placement: .secondaryAction) {
+                    Menu {
+                        Button("Mark first as sent") { debugStageFirstAsSent() }
+                        Button("Stage reminder-due lead") { debugStageReminderLead() }
+                        Button("Clear debug leads") { debugClearDebugLeads() }
+                    } label: {
+                        Label("DEBUG", systemImage: "ladybug")
+                    }
                 }
                 #endif
             }
@@ -157,6 +166,7 @@ struct RootView: View {
                     ingestPrep()
                 }
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
+                syncOmniFocus()    // push due reminders to OmniFocus if enabled (#176/#231)
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -178,6 +188,7 @@ struct RootView: View {
                     if DownbeatExportWatcher.shouldReconcile(previous: lastSeen, current: current) {
                         lastSeen = current
                         reconcileBookings()
+                        syncOmniFocus()   // a resolved/changed lead may add or clear an OmniFocus task
                     }
                 }
             }
@@ -207,6 +218,19 @@ struct RootView: View {
         DebugStaging.stageAsSent(target, now: Date())
         try? context.save()
         statusMessage = "DEBUG: staged \(target.groupName) as sent"
+    }
+
+    private func debugStageReminderLead() {
+        let p = DebugStaging.stageReminderDueLead(in: context, now: Date())
+        try? context.save()
+        statusMessage = "DEBUG: staged \(p.groupName) as reminder-due"
+    }
+
+    private func debugClearDebugLeads() {
+        DebugStaging.clearDebugLeads(in: context)
+        try? context.save()
+        syncOmniFocus(force: true)   // completes the now-orphaned OmniFocus tasks
+        statusMessage = "DEBUG: cleared debug leads"
     }
     #endif
 
@@ -322,6 +346,31 @@ struct RootView: View {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             try? context.save()
+        }
+    }
+
+    // Push due conversation reminders into OmniFocus (#176/#231). The desired set is computed here
+    // on the main actor (it reads prospects); the slow AppleScript I/O runs off-main in a detached
+    // task so a hung Apple event never stalls the UI or the rest of launch. Best-effort: any error,
+    // including a denied Automation permission, is swallowed. `force` runs it on an explicit user
+    // action regardless of the opt-in (which gates only the automatic launch/data-change syncs).
+    private func syncOmniFocus(force: Bool = false) {
+        let config = OmniFocusSyncConfig.loaded()
+        guard force || config.enabled else { return }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let desired = OmniFocusSync.desired(from: all, now: Date(), horizonDays: config.horizonDays)
+        // NSAppleScript must run on the main thread. Use a (non-awaited) main-actor task so this
+        // doesn't block the launch sequence, but still runs where AppleScript works. The work is a
+        // handful of Apple events, so the brief main-actor occupancy is acceptable.
+        Task { @MainActor in
+            do {
+                let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                if force {
+                    statusMessage = "OmniFocus: \(desired.count) due · existing \(r.existing) · created \(r.created) · completed \(r.completed)"
+                }
+            } catch {
+                if force { errorMessage = "OmniFocus sync failed: \(error)" }
+            }
         }
     }
 

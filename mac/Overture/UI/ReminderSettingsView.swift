@@ -14,6 +14,10 @@ struct ReminderSettingsView: View {
     private var interestedDays = ConversationReminderConfig().interestedDays
     @AppStorage(ConversationReminderConfig.Keys.leadBuffer)
     private var leadBufferDays = ConversationReminderConfig().leadBufferDays
+    @AppStorage(OmniFocusSyncConfig.Keys.enabled)
+    private var omniFocusEnabled = OmniFocusSyncConfig().enabled
+    @AppStorage(OmniFocusSyncConfig.Keys.horizon)
+    private var omniFocusHorizon = OmniFocusSyncConfig().horizonDays
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -26,6 +30,16 @@ struct ReminderSettingsView: View {
             row("Interested, going quiet", value: $interestedDays, range: 1...90)
             Divider()
             row("Lead buffer before the event", value: $leadBufferDays, range: 0...30)
+            Divider()
+            Toggle(isOn: $omniFocusEnabled) {
+                Text("Sync due reminders to OmniFocus").font(OVType.body).foregroundStyle(OVColor.ink)
+            }
+            if omniFocusEnabled {
+                Text("Adds a follow-up task to your Outreach project (deferred to 11am, due 6pm on the day it's due) so a near-event lead reaches you when you're away from Overture. Only fires while Overture is open, so it looks ahead by:")
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                row("Look-ahead window", value: $omniFocusHorizon, range: 1...60)
+            }
         }
         .padding(OVSpacing.lg)
         .frame(width: 340)
