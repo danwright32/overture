@@ -51,6 +51,37 @@ struct OutcomePatternsTests {
         #expect(tallies["self"]?.booked == 1)
     }
 
+    // #4: the insight view also breaks outcomes down by coverage, profile, and venue, so Dan can
+    // see the full set of factors that predict bookings before adjusting weights by hand.
+    private func sent(_ ctx: ModelContext, key: String, profile: String, coverage: String, venue: String?) {
+        let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: venue,
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: profile,
+                         coverage: coverage, fitScore: 5, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        p.sentAt = Date(timeIntervalSince1970: 1_000)
+        ctx.insert(p)
+    }
+
+    @Test func groupsByCoverageProfileAndVenue() throws {
+        let ctx = ModelContext(try container())
+        sent(ctx, key: "a", profile: "strong", coverage: "likely_uncovered", venue: "Carnegie Hall")
+        sent(ctx, key: "b", profile: "weak", coverage: "likely_covered", venue: "Roulette")
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        #expect(Set(OutcomePatterns.samples(from: all, by: .coverage).map(\.dimension)) == ["likely_uncovered", "likely_covered"])
+        #expect(Set(OutcomePatterns.samples(from: all, by: .profile).map(\.dimension)) == ["strong", "weak"])
+        #expect(Set(OutcomePatterns.samples(from: all, by: .venue).map(\.dimension)) == ["Carnegie Hall", "Roulette"])
+    }
+
+    @Test func venueDimensionHasAFallbackWhenMissing() throws {
+        let ctx = ModelContext(try container())
+        sent(ctx, key: "novenue", profile: "strong", coverage: "unknown", venue: nil)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(OutcomePatterns.samples(from: all, by: .venue).map(\.dimension) == ["No venue"])
+    }
+
     // #212: the drill-down behind the "auto-detected" count lists only the auto-detected
     // bookings for the tapped segment (not manual, not other segments, not unbooked).
     @Test func autoBookedListsOnlyAutoBookingsForThatSegment() throws {
