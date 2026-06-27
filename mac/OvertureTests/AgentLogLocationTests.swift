@@ -33,6 +33,22 @@ struct AgentLogLocationTests {
         #expect(perms == 0o700)
     }
 
+    // #296: the "Open agent logs" menu item ensures the directory exists, then hands Finder the log
+    // directory — so the click never opens Finder to a missing folder.
+    @Test func revealEnsuresTheDirectoryThenOpensIt() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        let dir = base.appendingPathComponent("Overture", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        var opened: URL?
+        let returned = AgentLogLocation.revealInFinder(directory: dir, open: { opened = $0 })
+
+        #expect(opened == dir)
+        #expect(returned == dir)
+        #expect(FileManager.default.fileExists(atPath: dir.path))
+    }
+
     @Test func prepareTightensAnAlreadyExistingDirectory() throws {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // Canonical home for the resident login agent's stdout/stderr (#279). Lives under the user's own
 // Library/Logs (owner-only 0700) instead of world-readable /tmp, so the captured diagnostics stay
@@ -26,5 +27,17 @@ enum AgentLogLocation {
         // the mode on an already-existing directory too.
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         return directory
+    }
+
+    // #296: reveal the agent's log directory in Finder so the now-private, out-of-the-way diagnostics
+    // are actually discoverable when the unattended agent misbehaves. Ensures the directory exists
+    // first (so the click never opens Finder to nothing). The opener is injected so the prep + path
+    // logic is unit-testable without launching Finder. Returns the directory it opened.
+    @discardableResult
+    static func revealInFinder(directory: URL = AgentLogLocation.directory,
+                              open: (URL) -> Void = { NSWorkspace.shared.open($0) }) -> URL {
+        let dir = prepareDirectory(at: directory)
+        open(dir)
+        return dir
     }
 }
