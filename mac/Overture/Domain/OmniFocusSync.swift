@@ -79,6 +79,7 @@ enum OmniFocusSync {
                         reminderConfig: ConversationReminderConfig = .init()) -> [DesiredTask] {
         let cutoff = now.addingTimeInterval(TimeInterval(horizonDays) * 86_400)
         return prospects.compactMap { p in
+            guard p.status != .dismissed else { return nil }   // #238: a no-go lead never nags via OmniFocus
             guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
             guard let state = p.conversationState, state.isActive else { return nil }   // no state -> needsState, in-app only
             guard p.conversationStateSource != .auto else { return nil }                // unconfirmed AI guess, in-app only
