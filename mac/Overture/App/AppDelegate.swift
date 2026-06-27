@@ -26,8 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard AppEnvironment.shouldStartBackgroundServices,
-              let container = AppDelegate.sharedContainer else { return }
+        guard AppEnvironment.shouldStartBackgroundServices else { return }
+        // #279: ensure the owner-only log directory exists even in the degraded/no-store state (that is
+        // exactly when the agent's stderr matters); the installer created it, this is the safety net.
+        AgentLogLocation.prepareDirectory()
+        guard let container = AppDelegate.sharedContainer else { return }
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler
