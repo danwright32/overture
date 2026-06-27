@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import AppKit
+import UserNotifications
 
 // Owns the ReconcileScheduler for the PROCESS lifetime (#265 / Phase 1 of #237), so the safe
 // reconciles run independent of any window. Wired via @NSApplicationDelegateAdaptor in OvertureApp;
@@ -16,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Reachable from the menu-bar scene (#266) so "Run reconcile now" can trigger the scheduler.
     static weak var shared: AppDelegate?
     private var scheduler: ReconcileScheduler?
+    private var onboardingWindow: NSWindow?
 
     override init() {
         super.init()
@@ -28,10 +31,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler
+
+        // #270: surface first-run onboarding while Dan is present whenever a grant is missing, so the
+        // resident process can inherit working permissions instead of degrading silently while away.
+        Task { @MainActor in
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            let state = OnboardingState(
+                gmailConnected: GmailAuthManager.shared.isConnected,
+                omniFocusGranted: OmniFocusAutomationPermission.current() == .granted,
+                notificationsAuthorized: settings.authorizationStatus == .authorized,
+                loginAgentInstalled: OnboardingState.agentInstalled())
+            if state.shouldAutoShow { self.showOnboarding() }
+        }
     }
 
     // The menu's "Run reconcile now".
     func runReconcileNow() {
         scheduler?.runNow()
+    }
+
+    // The menu's "Set up Overture…" and the first-run auto-show. Hosts OnboardingView in a plain
+    // AppKit window so it works for the windowless resident (LSUIElement) process at launch.
+    func showOnboarding() {
+        if let existing = onboardingWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let hosting = NSHostingController(rootView: OnboardingView(onClose: { [weak self] in
+            self?.onboardingWindow?.close()
+        }))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Set up Overture"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        onboardingWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

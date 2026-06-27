@@ -16,6 +16,7 @@ struct MenuBarContent: View {
         Divider()
         Button("Open Overture") { openWindow(id: "main") }
         Button("Run reconcile now") { AppDelegate.shared?.runReconcileNow() }
+        Button("Set up Overture…") { AppDelegate.shared?.showOnboarding() }
         Divider()
         Button("Quit Overture") { NSApplication.shared.terminate(nil) }
     }
