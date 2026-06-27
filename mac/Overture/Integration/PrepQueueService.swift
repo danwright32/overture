@@ -90,6 +90,10 @@ enum PrepQueueService {
         // effort: a feedback-write failure must never block the Prep run itself.
         try? VoiceFeedbackService.export(from: context, generatedAt: stamp, url: voiceFeedbackURL)
 
+        // Back up the voice-guidance file so Dan's notes can be restored if the run drops them (#251).
+        VoiceNotesProtector.backup(fileURL: VoiceGuidanceGuard.defaultURL,
+                                   backupURL: VoiceNotesProtector.defaultBackupURL)
+
         try launch()
         // Mark in-flight immediately (the script also drops its own marker and clears
         // it on exit); guards an instant second press before the script starts.
