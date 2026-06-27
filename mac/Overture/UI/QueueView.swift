@@ -22,6 +22,11 @@ struct QueueView: View {
     @State private var pendingConfirm: PendingConfirm?
     @State private var showReconnect = false
 
+    // #236: a lead opened from an OmniFocus deep link. When it changes, the queue switches to the
+    // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
+    @Binding var deepLinkedKey: String?
+    @State private var highlightedKey: String?
+
     // The one email awaiting Dan's explicit confirm before it sends (#49).
     private struct PendingConfirm: Identifiable {
         let id: String   // prospect naturalKey
@@ -121,39 +126,62 @@ struct QueueView: View {
     }
 
     private var queueScroll: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                masthead
-                Picker("Pipeline", selection: $pipeline) {
-                    ForEach(Pipeline.allCases, id: \.self) { p in
-                        Text(p == .toSend ? "To send (\(visible.count))"
-                                          : "Reached out (\(reachedOutItems.count))").tag(p)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                if pipeline == .toSend {
-                    QueueFilterBar(
-                        disciplines: disciplines,
-                        activeDiscipline: $disciplineFilter,
-                        highOnly: $highOnly
-                    )
-                    let groups = QueueModel.groupByDate(visible)
-                    if groups.isEmpty {
-                        emptyState
-                    } else {
-                        ForEach(groups) { group in
-                            dateSection(group)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: OVSpacing.xl) {
+                    masthead
+                    Picker("Pipeline", selection: $pipeline) {
+                        ForEach(Pipeline.allCases, id: \.self) { p in
+                            Text(p == .toSend ? "To send (\(visible.count))"
+                                              : "Reached out (\(reachedOutItems.count))").tag(p)
                         }
                     }
-                } else {
-                    reachedOutList
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if pipeline == .toSend {
+                        QueueFilterBar(
+                            disciplines: disciplines,
+                            activeDiscipline: $disciplineFilter,
+                            highOnly: $highOnly
+                        )
+                        let groups = QueueModel.groupByDate(visible)
+                        if groups.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(groups) { group in
+                                dateSection(group)
+                            }
+                        }
+                    } else {
+                        reachedOutList
+                    }
                 }
+                .padding(.horizontal, OVSpacing.xl)
+                .padding(.vertical, OVSpacing.xl)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.horizontal, OVSpacing.xl)
-            .padding(.vertical, OVSpacing.xl)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .onChange(of: deepLinkedKey) { _, key in
+                if let key { navigateToLead(key, proxy: proxy) }
+            }
+        }
+    }
+
+    // #236: land on a deep-linked lead — switch to the pipeline holding it, clear filters that would
+    // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
+    private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
+        pipeline = reachedOutKeys.contains(key) ? .reachedOut : .toSend
+        disciplineFilter = nil
+        highOnly = false
+        showPendingBookingsOnly = false
+        highlightedKey = key
+        deepLinkedKey = nil
+        // Let the pipeline/filter change lay out before scrolling to the row.
+        DispatchQueue.main.async {
+            withAnimation { proxy.scrollTo(key, anchor: .center) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            if highlightedKey == key { highlightedKey = nil }
         }
     }
 
@@ -328,17 +356,24 @@ struct QueueView: View {
             gmailConnected: GmailAuthManager.shared.isConnected,
             reachOutLabel: reachOutLabel
         )
+        // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
+        let highlighted = highlightedKey == item.id
+        let framed = row
+            .padding(highlighted ? OVSpacing.sm : 0)
+            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8))
+            .id(item.id)
         // #244: a sent draft Dan hand-edited is a voice-learning candidate. Let him opt a poor
         // example out (or back in) from a right-click, so the loop never learns from a rushed send.
         if let model, model.sentAt != nil, model.originalDraftBody != nil {
-            return AnyView(row.contextMenu {
+            return AnyView(framed.contextMenu {
                 Button(model.excludedFromVoiceLearning ? "Learn from this email again"
                                                        : "Don't learn from this email") {
                     toggleVoiceLearning(item)
                 }
             })
         }
-        return AnyView(row)
+        return AnyView(framed)
     }
 
     // #244: flip whether this prospect's edited-and-sent draft feeds the voice-learning loop.
