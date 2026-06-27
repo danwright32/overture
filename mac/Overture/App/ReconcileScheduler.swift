@@ -24,9 +24,14 @@ final class ReconcileScheduler {
         self.context = context
     }
 
-    // Trigger one reconcile on demand (the menu's "Run reconcile now").
-    func runNow() {
-        Task { @MainActor in await self.runSafeReconcilesOnce() }
+    // Trigger one reconcile on demand (the menu's "Run reconcile now"). Unlike the silent timer ticks,
+    // a manual run ALWAYS acknowledges itself with a notification — even when nothing was due — so the
+    // click never appears to do nothing (#285).
+    func runNow(notify: @escaping (String) -> Void = { LocalNotifier.post(title: "Overture", body: $0, id: "overture.reconcile") }) {
+        Task { @MainActor in
+            let summary = await self.runSafeReconcilesOnce()
+            notify(summary.message)
+        }
     }
 
     // The reconcile cadence (#245 decision: configurable, 30-minute default).
@@ -68,16 +73,19 @@ final class ReconcileScheduler {
     // Run the safe reconciles once. Best-effort: each step swallows its own failure so one cannot
     // abort the others. Bookings first, then reply detection (so a fresh reply can become a due
     // reminder), then the OmniFocus push (gated on Dan's opt-in, like the old auto path).
-    func runSafeReconcilesOnce(now: Date = Date()) async {
-        reconcileBookings(now: now)
+    @discardableResult
+    func runSafeReconcilesOnce(now: Date = Date()) async -> ReconcileSummary {
+        let booked = reconcileBookings(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         await GmailReplyChecker().checkReplies(in: context)
+        var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {
-            syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(), horizonDays: config.horizonDays)
+            omniFocusChanged = syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(), horizonDays: config.horizonDays)
         }
         lastReconcileAt = now
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
+        return ReconcileSummary(bookingsMarked: booked, omniFocusChanged: omniFocusChanged)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
@@ -94,18 +102,20 @@ final class ReconcileScheduler {
     // Push due conversation reminders into OmniFocus and record the result so a failure stays visible
     // (#239). Synchronous on the main actor (AppleScript requires it); the caller awaits the whole tick
     // so the Apple events complete rather than racing teardown (unlike the old fire-and-forget).
+    @discardableResult
     func syncOmniFocus(now: Date, client: OmniFocusClient, horizonDays: Int,
                        permission: AutomationAuthorization = OmniFocusAutomationPermission.current(),
                        notifier: OmniFocusNotifier = OmniFocusUserNotifier(),
-                       statusDefaults: UserDefaults = .standard) {
+                       statusDefaults: UserDefaults = .standard) -> Int {
         // #268: gate on a SILENT Automation pre-check. If OmniFocus isn't already grantable, the runner
         // skips the AppleScript (so this windowless process can't post a TCC modal into the void) and
         // notifies once; otherwise it applies and records success/failure. AppleScript stays synchronous
         // on this main actor, awaited by the caller, so the write completes before the tick returns.
+        // Returns the number of OmniFocus tasks changed, for the manual-reconcile acknowledgment (#285).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: now, horizonDays: horizonDays)
-        OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
-                                notifier: notifier, now: now, defaults: statusDefaults)
+        return OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
+                                       notifier: notifier, now: now, defaults: statusDefaults)
     }
 
     // Last-modified time of the Downbeat export, to gate the live re-reconcile (#197) so a spurious

@@ -22,26 +22,31 @@ protocol OmniFocusNotifier {
 }
 
 enum OmniFocusSyncRunner {
+    // Returns how many OmniFocus tasks changed (created + completed), so a manual reconcile can report
+    // it; 0 when skipped or failed.
+    @discardableResult
     static func run(desired: [OmniFocusSync.DesiredTask],
                     permission: AutomationAuthorization,
                     client: OmniFocusClient,
                     notifier: OmniFocusNotifier,
                     now: Date,
-                    defaults: UserDefaults = .standard) {
+                    defaults: UserDefaults = .standard) -> Int {
         guard permission == .granted else {
             // Edge-detect on the prior state so a denial that persists across many ticks notifies once.
             let alreadyFlagged = OmniFocusSyncStatus.isPermissionNeeded(from: defaults)
             OmniFocusSyncStatus.recordPermissionNeeded(at: now, into: defaults)
             if !alreadyFlagged { notifier.notifyPermissionNeeded() }
-            return
+            return 0
         }
         let hadFailure = OmniFocusSyncStatus.lastFailure(from: defaults) != nil
         do {
-            _ = try OmniFocusSync.apply(desired: desired, client: client)
+            let r = try OmniFocusSync.apply(desired: desired, client: client)
             OmniFocusSyncStatus.recordSuccess(into: defaults)
+            return r.created + r.completed
         } catch {
             OmniFocusSyncStatus.recordFailure("\(error)", at: now, into: defaults)
             if !hadFailure { notifier.notifySyncFailed("\(error)") }   // one per failure episode
+            return 0
         }
     }
 }
