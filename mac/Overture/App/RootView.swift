@@ -402,6 +402,11 @@ struct RootView: View {
         if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
+        // #249: fail closed if the distiller leaked a real name into the voice guidance — quarantine
+        // the contaminated section so it can't feed a future draft, and warn Dan.
+        let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,
+                                             prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
+        if !leaks.isEmpty { notes.append("⚠ voice guidance leaked a name — quarantined") }
         if !notes.isEmpty { statusMessage = "Prep: " + notes.joined(separator: " · ") }
     }
 }
