@@ -15,8 +15,18 @@ final class ReconcileScheduler {
     private var timerTask: Task<Void, Never>?
     private var watcherTask: Task<Void, Never>?
 
+    // When the last reconcile finished — surfaced in the menu-bar status line (#266). Mirrored to
+    // UserDefaults so the menu can read it reactively without holding the scheduler instance.
+    nonisolated static let lastReconcileKey = "lastReconcileAt"
+    private(set) var lastReconcileAt: Date?
+
     init(context: ModelContext) {
         self.context = context
+    }
+
+    // Trigger one reconcile on demand (the menu's "Run reconcile now").
+    func runNow() {
+        Task { @MainActor in await self.runSafeReconcilesOnce() }
     }
 
     // The reconcile cadence (#245 decision: configurable, 30-minute default).
@@ -66,6 +76,8 @@ final class ReconcileScheduler {
         if config.enabled {
             syncOmniFocus(now: now, client: AppleScriptOmniFocusClient(), horizonDays: config.horizonDays)
         }
+        lastReconcileAt = now
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.

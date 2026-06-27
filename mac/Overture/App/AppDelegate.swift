@@ -13,7 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // main), so the unchecked isolation is safe.
     nonisolated(unsafe) static var sharedContainer: ModelContainer?
 
+    // Reachable from the menu-bar scene (#266) so "Run reconcile now" can trigger the scheduler.
+    static weak var shared: AppDelegate?
     private var scheduler: ReconcileScheduler?
+
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard AppEnvironment.shouldStartBackgroundServices,
@@ -21,5 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler
+    }
+
+    // The menu's "Run reconcile now".
+    func runReconcileNow() {
+        scheduler?.runNow()
     }
 }
