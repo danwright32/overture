@@ -57,6 +57,16 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
+    // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
+    // frozen at send so a later draft edit can't make the "sent" side lie. Together they let the
+    // drafter learn how Dan revises. Defaulted nil so existing records migrate cleanly (lightweight
+    // additive, like #132).
+    var originalDraftSubject: String? = nil
+    var originalDraftBody: String? = nil
+    var sentSubject: String? = nil
+    var sentBody: String? = nil
+
     // Outcome of the outreach. Defaults to no-response (like Dan's sheet), so most
     // prospects need no touch. Set manually by Dan, or automatically later from
     // Gmail (replied) / Downbeat (booked). Only meaningful once sent.
@@ -206,6 +216,45 @@ final class Prospect {
     }
 
     var hasDraft: Bool { draftBody != nil }
+
+    // Apply Dan's edit to the draft (#240 / #119). The FIRST time the edited text meaningfully
+    // differs from the AI draft, snapshot the AI version into originalDraft* so the voice-learning
+    // loop can study the delta; trivial / no-op saves never overwrite that baseline. draftEditedByDan
+    // keeps its existing meaning (set on any save) so the lint-hiding and re-draft-skip behavior is
+    // unchanged.
+    func applyEdit(subject: String, body: String) {
+        if originalDraftBody == nil,
+           Prospect.isSubstantiveEdit(oldSubject: draftSubject, oldBody: draftBody,
+                                      newSubject: subject, newBody: body) {
+            originalDraftSubject = draftSubject
+            originalDraftBody = draftBody
+        }
+        draftSubject = subject
+        draftBody = body
+        draftEditedByDan = true
+    }
+
+    // Freeze the exact subject/body emailed, immune to later draft edits, so the "sent" side of the
+    // learning pair stays trustworthy (#240 / #119).
+    func freezeSentCopy(subject: String, body: String) {
+        sentSubject = subject
+        sentBody = body
+    }
+
+    // An edit is substantive (worth learning from) when the text differs beyond whitespace. Pure
+    // whitespace or no-op saves are not a voice signal; the richer min-delta gate lives in the
+    // export step (#241).
+    static func isSubstantiveEdit(oldSubject: String?, oldBody: String?,
+                                  newSubject: String, newBody: String) -> Bool {
+        normalizedForEditCompare(oldBody) != normalizedForEditCompare(newBody)
+            || normalizedForEditCompare(oldSubject) != normalizedForEditCompare(newSubject)
+    }
+
+    private static func normalizedForEditCompare(_ s: String?) -> String {
+        (s ?? "")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }

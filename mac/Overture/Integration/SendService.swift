@@ -38,6 +38,7 @@ enum SendService {
             prospect.gmailThreadId = receipt.threadId
             prospect.gmailMessageId = receipt.messageID
             prospect.priorRelationshipAtSend = prospect.priorRelationship
+            prospect.freezeSentCopy(subject: mail.subject, body: body)
             prospect.sendError = nil
             return true
         } catch {
@@ -149,6 +150,7 @@ enum SendService {
             next.gmailThreadId = receipt.threadId
             next.gmailMessageId = receipt.messageID
             next.priorRelationshipAtSend = next.priorRelationship
+            next.freezeSentCopy(subject: mail.subject, body: mail.body)
             next.sendError = nil
             try? context.save()
             return Outcome(sent: 1, failed: 0, throttled: queue.count > 1)
