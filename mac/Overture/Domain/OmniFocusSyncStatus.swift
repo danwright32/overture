@@ -8,10 +8,28 @@ import Foundation
 enum OmniFocusSyncStatus {
     static let failedAtKey = "omniFocusLastSyncFailedAt"
     static let errorKey = "omniFocusLastSyncError"
+    // #268: a denied/not-yet-granted Automation permission is a distinct kind of failure — it is fixed
+    // by re-granting the grant, not by retrying — so the notification path can say exactly that, and
+    // the flag drives the once-per-episode notify edge.
+    static let permissionNeededKey = "omniFocusPermissionNeeded"
 
     static func recordSuccess(into defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: failedAtKey)
         defaults.removeObject(forKey: errorKey)
+        defaults.removeObject(forKey: permissionNeededKey)
+    }
+
+    // #268: record that OmniFocus Automation is not granted. Also lights the masthead failure key so
+    // the warning shows when the window is open; the dedicated flag distinguishes it from a generic
+    // failure for the notification path.
+    static func recordPermissionNeeded(at date: Date, into defaults: UserDefaults = .standard) {
+        defaults.set(date.timeIntervalSince1970, forKey: failedAtKey)
+        defaults.set("OmniFocus needs Automation permission", forKey: errorKey)
+        defaults.set(true, forKey: permissionNeededKey)
+    }
+
+    static func isPermissionNeeded(from defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: permissionNeededKey)
     }
 
     static func recordFailure(_ message: String, at date: Date, into defaults: UserDefaults = .standard) {

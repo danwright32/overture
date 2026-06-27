@@ -95,15 +95,17 @@ final class ReconcileScheduler {
     // (#239). Synchronous on the main actor (AppleScript requires it); the caller awaits the whole tick
     // so the Apple events complete rather than racing teardown (unlike the old fire-and-forget).
     func syncOmniFocus(now: Date, client: OmniFocusClient, horizonDays: Int,
+                       permission: AutomationAuthorization = OmniFocusAutomationPermission.current(),
+                       notifier: OmniFocusNotifier = OmniFocusUserNotifier(),
                        statusDefaults: UserDefaults = .standard) {
+        // #268: gate on a SILENT Automation pre-check. If OmniFocus isn't already grantable, the runner
+        // skips the AppleScript (so this windowless process can't post a TCC modal into the void) and
+        // notifies once; otherwise it applies and records success/failure. AppleScript stays synchronous
+        // on this main actor, awaited by the caller, so the write completes before the tick returns.
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: now, horizonDays: horizonDays)
-        do {
-            _ = try OmniFocusSync.apply(desired: desired, client: client)
-            OmniFocusSyncStatus.recordSuccess(into: statusDefaults)
-        } catch {
-            OmniFocusSyncStatus.recordFailure("\(error)", at: now, into: statusDefaults)
-        }
+        OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
+                                notifier: notifier, now: now, defaults: statusDefaults)
     }
 
     // Last-modified time of the Downbeat export, to gate the live re-reconcile (#197) so a spurious
