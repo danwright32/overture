@@ -70,6 +70,13 @@ struct NotificationServiceTests {
         #expect(route == .openSettings)
     }
 
+    // #306: the Retry sync button on the OmniFocus-failed alert routes to a forced reconcile.
+    @Test func routeRetriesSyncForTheRetrySyncButton() {
+        let route = NotificationService.route(actionIdentifier: NotificationService.Button.retrySync.rawValue,
+                                              userInfo: [:])
+        #expect(route == .retrySync)
+    }
+
     @Test func routeOpensTheAppOnADefaultTapWithNoLeadKey() {
         let route = NotificationService.route(actionIdentifier: UNNotificationDefaultActionIdentifier,
                                               userInfo: [:])
@@ -87,5 +94,12 @@ struct NotificationServiceTests {
         let permission = NotificationService.categories().first { $0.identifier == NotificationService.Action.omniFocusPermission.rawValue }
         #expect(permission != nil)
         #expect(permission?.actions.contains { $0.identifier == NotificationService.Button.openSettings.rawValue } == true)
+    }
+
+    // #306: the OmniFocus-failed category carries a Retry sync action button.
+    @Test func categoriesIncludeRetrySyncOnTheFailedAlert() {
+        let failed = NotificationService.categories().first { $0.identifier == NotificationService.Action.omniFocusFailed.rawValue }
+        #expect(failed != nil)
+        #expect(failed?.actions.contains { $0.identifier == NotificationService.Button.retrySync.rawValue } == true)
     }
 }
