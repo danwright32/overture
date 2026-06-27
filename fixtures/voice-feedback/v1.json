@@ -1,0 +1,15 @@
+{
+  "version" : 1,
+  "generatedAt" : "2026-06-26T00:00:00Z",
+  "pairs" : [
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "discipline" : "music",
+      "originalSubject" : "Photographing Aurora Strings at Carnegie Hall",
+      "originalBody" : "Hi, I'd be glad to cover this performance.",
+      "sentSubject" : "Photographing Aurora Strings at Carnegie Hall",
+      "sentBody" : "Hi Maria, I photograph performing arts in New York and would document this run unobtrusively, no flash.",
+      "sentAt" : "2026-03-01T14:30:00Z"
+    }
+  ]
+}

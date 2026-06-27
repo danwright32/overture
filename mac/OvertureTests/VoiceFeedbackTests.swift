@@ -1,0 +1,143 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import Overture
+
+// #241 (milestone 6 / #119): export the high-signal edit pairs the capture step (#240) recorded.
+// Only prospects Dan SUBSTANTIVELY edited AND sent, where the AI draft and the sent copy genuinely
+// differ, newest first, capped, so a few trivial or stale edits can't dominate the drafter's context.
+
+@MainActor
+@Suite("Voice feedback export (#241)")
+struct VoiceFeedbackTests {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    private func prospect(key: String, discipline: String = "music",
+                          original: String?, sent: String?, sentAt: Date?,
+                          originalSubject: String? = "AI subject",
+                          sentSubject: String? = "Sent subject") -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "G", discipline: discipline, venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        p.originalDraftSubject = original == nil ? nil : originalSubject
+        p.originalDraftBody = original
+        p.sentSubject = sent == nil ? nil : sentSubject
+        p.sentBody = sent
+        p.sentAt = sentAt
+        return p
+    }
+
+    @Test func includesOnlyEditedAndSentPairs() {
+        let edited = prospect(key: "edited-sent",
+                              original: "Hi, I'd be glad to cover this.",
+                              sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                              sentAt: Date(timeIntervalSince1970: 100))
+        let sentNotEdited = prospect(key: "sent-only", original: nil,
+                                     sent: "An unedited AI draft that went out as-is.",
+                                     sentAt: Date(timeIntervalSince1970: 200))
+        let editedNotSent = prospect(key: "edited-only",
+                                     original: "Hi, I'd be glad to cover this.",
+                                     sent: nil, sentAt: nil)
+
+        let fb = VoiceFeedbackBuilder.build(from: [edited, sentNotEdited, editedNotSent],
+                                            generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.map(\.naturalKey) == ["edited-sent"])
+    }
+
+    @Test func dropsNearIdenticalPairs() {
+        // Dan edited substantively earlier, then the final sent copy ended up ~identical to the AI
+        // draft (a near-revert / one-typo). No voice lesson, so it must be dropped.
+        let p = prospect(key: "near-identical",
+                         original: "Hi there, I would be glad to cover this.",
+                         sent: "Hi there, I would be glad to cover this!",   // one char differs
+                         sentAt: Date(timeIntervalSince1970: 100))
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.isEmpty)
+    }
+
+    @Test func newestFirstAndCappedAtTwenty() {
+        let many = (0..<22).map { i in
+            prospect(key: "p-\(i)",
+                     original: "AI draft number \(i) offering to cover the show.",
+                     sent: "Reworked send \(i): I photograph performing arts unobtrusively in New York.",
+                     sentAt: Date(timeIntervalSince1970: TimeInterval(i)))
+        }
+        let fb = VoiceFeedbackBuilder.build(from: many, generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.count == 20)
+        #expect(fb.pairs.first?.naturalKey == "p-21")   // newest (largest sentAt) first
+        #expect(fb.pairs.last?.naturalKey == "p-2")     // oldest two (p-0, p-1) dropped by the cap
+    }
+
+    @Test func mapsAllPairFields() {
+        let p = prospect(key: "k1", discipline: "dance",
+                         original: "Hi, I'd be glad to cover this.",
+                         sent: "Hi Maria, I document dance unobtrusively and would love to cover this run.",
+                         sentAt: Date(timeIntervalSince1970: 0),
+                         originalSubject: "Photographing the spring run",
+                         sentSubject: "Photographing your spring run")
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        let pair = fb.pairs.first
+        #expect(pair?.naturalKey == "k1")
+        #expect(pair?.discipline == "dance")
+        #expect(pair?.originalSubject == "Photographing the spring run")
+        #expect(pair?.originalBody == "Hi, I'd be glad to cover this.")
+        #expect(pair?.sentSubject == "Photographing your spring run")
+        #expect(pair?.sentBody == "Hi Maria, I document dance unobtrusively and would love to cover this run.")
+        #expect(pair?.sentAt == "1970-01-01T00:00:00Z")
+        #expect(fb.version == 1)
+    }
+
+    @Test func exportWritesADecodableFile() throws {
+        let ctx = ModelContext(try container())
+        ctx.insert(prospect(key: "k1",
+                            original: "Hi, I'd be glad to cover this.",
+                            sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                            sentAt: Date(timeIntervalSince1970: 100)))
+        try ctx.save()
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("vf-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let count = try VoiceFeedbackService.export(from: ctx, generatedAt: "2026-06-26T00:00:00Z", url: url)
+        #expect(count == 1)
+        let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: url))
+        #expect(decoded.version == 1)
+        #expect(decoded.pairs.first?.naturalKey == "k1")
+    }
+
+    @Test func startPrepWritesVoiceFeedbackAlongsideTheQueue() throws {
+        let ctx = ModelContext(try container())
+        // One kept-undrafted prospect so the queue is non-empty (otherwise startPrep throws).
+        let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
+                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              priorRelationship: "none", production: "self", profile: "strong",
+                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                              status: .queued)
+        ctx.insert(toPrep)
+        // One edited+sent prospect that should land in the feedback file.
+        ctx.insert(prospect(key: "edited-sent",
+                            original: "Hi, I'd be glad to cover this.",
+                            sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                            sentAt: Date(timeIntervalSince1970: 100)))
+        try ctx.save()
+
+        let queueURL = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        let feedbackURL = FileManager.default.temporaryDirectory.appendingPathComponent("vf-\(UUID().uuidString).json")
+        defer { [queueURL, marker, feedbackURL].forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                       queueURL: queueURL, markerURL: marker,
+                                       voiceFeedbackURL: feedbackURL, launch: {})
+
+        let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: feedbackURL))
+        #expect(decoded.pairs.map(\.naturalKey) == ["edited-sent"])
+    }
+}
