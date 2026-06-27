@@ -31,11 +31,9 @@ struct StoreLockTests {
         again?.release()
     }
 
-    @Test func storePathMatchesTheLegacyDefaultSoDataIsNotOrphaned() {
-        // The release store must remain Application Support/default.store (SwiftData's historical
-        // default) — changing it would strand Dan's existing prospects. Debug/Release split is #267.
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        #expect(StoreLocation.storeURL == appSupport.appendingPathComponent("default.store"))
+    @Test func lockSitsBesideTheStore() {
+        // The lock must live in the same directory as the store so the single-writer guard covers the
+        // file actually opened (the Debug/Release path split itself is covered by StoreLocationTests, #267).
         #expect(StoreLocation.lockURL.deletingLastPathComponent() == StoreLocation.storeURL.deletingLastPathComponent())
     }
 }

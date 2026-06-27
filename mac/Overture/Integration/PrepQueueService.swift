@@ -59,7 +59,7 @@ enum PrepQueueService {
     static let markerStaleAfter: TimeInterval = 3 * 60
 
     static var defaultMarkerURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        StoreLocation.dataDirectory
             .appendingPathComponent("Overture", isDirectory: true)
             .appendingPathComponent("prep-running")
     }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- User LaunchAgent that keeps Overture resident across logins (#267 / Phase 3 of #237).
+	     Installed to ~/Library/LaunchAgents by build-install.sh and bootstrapped into the user's
+	     gui/$UID Aqua session (NOT a system domain) — the GUI session is what the menu-bar
+	     NSStatusItem requires. A user agent ignores the app's ad-hoc signature, so this is
+	     compatible with the no-cert constraint. -->
+	<key>Label</key>
+	<string>com.danwright.overture</string>
+
+	<!-- Fixed install location; the resident copy always lives in /Applications. -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Applications/Overture.app/Contents/MacOS/Overture</string>
+	</array>
+
+	<!-- Start at login. -->
+	<key>RunAtLoad</key>
+	<true/>
+
+	<!-- Deliberately NO KeepAlive: if the store can't open (Phase 0 degraded state) a bare
+	     KeepAlive would respawn forever. ThrottleInterval bounds restart frequency so even a
+	     genuine crash can't become a tight respawn loop. -->
+	<key>ThrottleInterval</key>
+	<integer>60</integer>
+
+	<!-- Diagnosing a silently-failing unattended agent is otherwise blind; capture output. -->
+	<key>StandardOutPath</key>
+	<string>/tmp/overture-agent.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/overture-agent.err.log</string>
+</dict>
+</plist>
