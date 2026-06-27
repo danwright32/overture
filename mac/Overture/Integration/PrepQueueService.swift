@@ -74,6 +74,7 @@ enum PrepQueueService {
     static func startPrep(from context: ModelContext, now: Date,
                           queueURL: URL = PrepQueueBuilder.defaultURL,
                           markerURL: URL = defaultMarkerURL,
+                          voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
                           launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
@@ -84,6 +85,10 @@ enum PrepQueueService {
         let data = try PrepQueueBuilder.encode(queue)
         try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: queueURL, options: .atomic)
+
+        // Refresh the voice-learning handoff so the run drafts with Dan's latest edits (#241). Best
+        // effort: a feedback-write failure must never block the Prep run itself.
+        try? VoiceFeedbackService.export(from: context, generatedAt: stamp, url: voiceFeedbackURL)
 
         try launch()
         // Mark in-flight immediately (the script also drops its own marker and clears

@@ -27,6 +27,7 @@ the workflow's runbook is its spec.
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
 Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
@@ -86,3 +87,16 @@ and writes the results; the app ingests them and suggests the conversation state
 `naturalKey` is the opaque join key the run must echo back verbatim. The classify run is the
 counterpart side with no automated test, so `fixtures/reply-classify/` is its spec (runbook added in
 the workflow phase).
+
+### `overture-voice-feedback.json`
+
+How Dan revises drafts, so the Prep drafter learns his voice over time (#241 / #119). The app writes
+it when a Prep run launches (`PrepQueueService.startPrep`, best-effort so a feedback-write failure
+never blocks the run); the Prep workflow reads it (wired by #242). One-sided: the reader is a Claude
+Code workflow with no automated test, so `fixtures/voice-feedback/` plus the prep runbook is its spec.
+Only HIGH-SIGNAL pairs are written: a prospect Dan substantively edited (`originalDraftBody`, captured
+in #240) AND sent (`sentBody`, frozen at send), where the sent copy still differs from the AI original
+by more than a near-revert/typo (`VoiceFeedbackBuilder.minEditDistance`). Newest first, capped at
+`maxPairs` (20), so a few trivial or stale edits can't dominate the drafter's context. The distiller
+(#242) must anonymize before reusing: the bodies carry org/venue/contact specifics that are NOT
+transferable voice and must never leak into other drafts.
