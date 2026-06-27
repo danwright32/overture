@@ -67,6 +67,11 @@ final class Prospect {
     var sentSubject: String? = nil
     var sentBody: String? = nil
 
+    // Dan-owned: he marked this send as a poor example ("don't learn from this") so the voice-learning
+    // export (#241) skips it, keeping the signal clean (#244). Defaulted so existing records migrate
+    // cleanly (lightweight additive, like #132).
+    var excludedFromVoiceLearning: Bool = false
+
     // Outcome of the outreach. Defaults to no-response (like Dan's sheet), so most
     // prospects need no touch. Set manually by Dan, or automatically later from
     // Gmail (replied) / Downbeat (booked). Only meaningful once sent.

@@ -36,7 +36,8 @@ enum VoiceFeedbackBuilder {
         let iso = ISO8601DateFormatter()
         let pairs = prospects
             .compactMap { p -> (Prospect, Date)? in
-                guard let sentAt = p.sentAt,
+                guard !p.excludedFromVoiceLearning,        // #244: Dan opted this send out of learning
+                      let sentAt = p.sentAt,
                       let original = p.originalDraftBody,
                       let sent = p.sentBody,
                       isHighSignal(originalBody: original, sentBody: sent) else { return nil }

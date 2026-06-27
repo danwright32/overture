@@ -304,7 +304,8 @@ struct QueueView: View {
     }
 
     private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
-        ProspectRowView(
+        let model = prospects.first(where: { $0.naturalKey == item.id })
+        let row = ProspectRowView(
             item: item,
             today: today,
             onKeep: { setStatus(item, .queued, nil) },
@@ -327,6 +328,24 @@ struct QueueView: View {
             gmailConnected: GmailAuthManager.shared.isConnected,
             reachOutLabel: reachOutLabel
         )
+        // #244: a sent draft Dan hand-edited is a voice-learning candidate. Let him opt a poor
+        // example out (or back in) from a right-click, so the loop never learns from a rushed send.
+        if let model, model.sentAt != nil, model.originalDraftBody != nil {
+            return AnyView(row.contextMenu {
+                Button(model.excludedFromVoiceLearning ? "Learn from this email again"
+                                                       : "Don't learn from this email") {
+                    toggleVoiceLearning(item)
+                }
+            })
+        }
+        return AnyView(row)
+    }
+
+    // #244: flip whether this prospect's edited-and-sent draft feeds the voice-learning loop.
+    private func toggleVoiceLearning(_ item: QueueItem) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.excludedFromVoiceLearning.toggle()
+        try? context.save()
     }
 
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that reply
