@@ -14,6 +14,11 @@ private final class CapturingOmniFocusClient: OmniFocusClient, @unchecked Sendab
     func complete(naturalKey: String) throws {}
 }
 
+private struct NoopNotifier: OmniFocusNotifier {
+    func notifyPermissionNeeded() {}
+    func notifySyncFailed(_ message: String) {}
+}
+
 @MainActor
 @Suite("Reconcile scheduler (#265)")
 struct ReconcileSchedulerTests {
@@ -42,7 +47,10 @@ struct ReconcileSchedulerTests {
 
         let fake = CapturingOmniFocusClient()
         let scheduler = ReconcileScheduler(context: ctx)
-        scheduler.syncOmniFocus(now: now, client: fake, horizonDays: 14, statusDefaults: freshDefaults())
+        // #268: inject granted permission so this exercises the apply path (the real silent probe would
+        // skip under the test host); the gating decision itself is covered by OmniFocusSyncRunnerTests.
+        scheduler.syncOmniFocus(now: now, client: fake, horizonDays: 14,
+                                permission: .granted, notifier: NoopNotifier(), statusDefaults: freshDefaults())
 
         #expect(fake.created.contains { $0.naturalKey == "warm-lead" })
     }
@@ -54,7 +62,8 @@ struct ReconcileSchedulerTests {
 
         let scheduler = ReconcileScheduler(context: ctx)
         scheduler.syncOmniFocus(now: Date(timeIntervalSince1970: 100),
-                                client: CapturingOmniFocusClient(), horizonDays: 14, statusDefaults: defaults)
+                                client: CapturingOmniFocusClient(), horizonDays: 14,
+                                permission: .granted, notifier: NoopNotifier(), statusDefaults: defaults)
 
         #expect(OmniFocusSyncStatus.lastFailure(from: defaults) == nil)   // a clean sync clears the warning
     }
