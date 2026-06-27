@@ -66,6 +66,39 @@ struct VoiceFeedbackTests {
         #expect(fb.pairs.map(\.naturalKey) == ["kept"])
     }
 
+    @Test func pairsAreTaggedWithTheirOutcome() {
+        // #245: each pair carries the prospect's outcome so the distiller can lean on winners.
+        let p = prospect(key: "booked",
+                         original: "Hi, I'd be glad to cover this.",
+                         sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                         sentAt: Date(timeIntervalSince1970: 100))
+        p.outcome = .booked
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.first?.outcome == "booked")
+    }
+
+    @Test func winnersAreKeptAndOrderedAheadOfRecentNonResponders() {
+        // #245: a booked email survives the cap and leads, even when it's older than 20 no-response
+        // edits, so the loop learns from what actually landed.
+        let recent = (0..<20).map { i in
+            prospect(key: "nr-\(i)",
+                     original: "AI draft \(i) offering coverage.",
+                     sent: "Reworked \(i): I photograph performing arts unobtrusively in New York.",
+                     sentAt: Date(timeIntervalSince1970: TimeInterval(100 + i)))
+        }
+        let booked = prospect(key: "booked",
+                              original: "AI draft offering coverage.",
+                              sent: "Reworked: I photograph performing arts unobtrusively in New York City.",
+                              sentAt: Date(timeIntervalSince1970: 1))   // oldest of all
+        booked.outcome = .booked
+
+        let fb = VoiceFeedbackBuilder.build(from: recent + [booked], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.count == 20)
+        #expect(fb.pairs.first?.naturalKey == "booked")                       // winner leads
+        #expect(fb.pairs.contains { $0.naturalKey == "booked" })              // survived the cap
+        #expect(!fb.pairs.contains { $0.naturalKey == "nr-0" })               // oldest loser dropped instead
+    }
+
     @Test func dropsNearIdenticalPairs() {
         // Dan edited substantively earlier, then the final sent copy ended up ~identical to the AI
         // draft (a near-revert / one-typo). No voice lesson, so it must be dropped.

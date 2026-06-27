@@ -21,6 +21,8 @@ struct VoiceFeedbackPair: Codable, Equatable, Sendable {
     var sentSubject: String?       // the exact text Dan sent
     var sentBody: String?
     var sentAt: String             // ISO8601, the ordering key (newest first)
+    var outcome: String            // the prospect's outcome (#245): "booked"/"replied"/etc., so the
+                                   // distiller can lean on the edits that actually landed
 }
 
 enum VoiceFeedbackBuilder {
@@ -43,7 +45,12 @@ enum VoiceFeedbackBuilder {
                       isHighSignal(originalBody: original, sentBody: sent) else { return nil }
                 return (p, sentAt)
             }
-            .sorted { $0.1 > $1.1 }   // newest first
+            // Winners first (#245), then newest first within a tier — so an email that landed a reply
+            // or booking survives the cap even when older than recent no-response edits.
+            .sorted { a, b in
+                let ra = outcomeRank(a.0.outcome), rb = outcomeRank(b.0.outcome)
+                return ra != rb ? ra > rb : a.1 > b.1
+            }
             .prefix(maxPairs)
             .map { (p, sentAt) in
                 VoiceFeedbackPair(
@@ -53,10 +60,21 @@ enum VoiceFeedbackBuilder {
                     originalBody: p.originalDraftBody,
                     sentSubject: p.sentSubject,
                     sentBody: p.sentBody,
-                    sentAt: iso.string(from: sentAt)
+                    sentAt: iso.string(from: sentAt),
+                    outcome: p.outcome.rawValue
                 )
             }
         return VoiceFeedback(version: version, generatedAt: generatedAt, pairs: Array(pairs))
+    }
+
+    // How strongly to favor an edit by what it earned (#245). Booked beats replied beats the rest, so
+    // proven-effective edits lead and survive the cap.
+    static func outcomeRank(_ outcome: Outcome) -> Int {
+        switch outcome {
+        case .booked: return 2
+        case .replied: return 1
+        default: return 0
+        }
     }
 
     static func isHighSignal(originalBody: String, sentBody: String) -> Bool {

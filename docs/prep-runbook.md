@@ -41,9 +41,11 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
 
 1. **Read the feedback.** Open `overture-voice-feedback.json`. Each `pairs[]` entry holds
    `originalSubject`/`originalBody` (the AI draft) and `sentSubject`/`sentBody` (what Dan
-   actually sent), plus `discipline` and `sentAt`. If the file is absent or `pairs` is
-   empty, SKIP this whole section and draft from the skill alone — there is nothing to
-   learn yet (the normal state on a fresh setup).
+   actually sent), plus `discipline`, `sentAt`, and `outcome` (#245: "booked" / "replied" /
+   "no_response" / etc.). If the file is absent or `pairs` is empty, SKIP this whole section
+   and draft from the skill alone — there is nothing to learn yet (the normal state on a
+   fresh setup). Pairs are already ordered winners-first, but weight them yourself too: an
+   edit on a `booked` or `replied` email is a stronger lesson than one that got no response.
 
 2. **Distill ANONYMIZED tendencies.** For each pair, compare the AI draft against what Dan
    sent and capture the PATTERN of the change, never the content: tone (does he level it
