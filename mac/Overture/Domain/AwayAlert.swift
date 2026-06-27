@@ -11,14 +11,12 @@ enum AwayAlert {
     }
 
     // One notification body summarizing what arrived, or nil when nothing is new (no notification).
+    // #297: phrasing lives in OutreachEventPhrasing so this matches the manual ack word-for-word.
     static func message(newReplies: [String], newBookings: [String]) -> String? {
-        var parts: [String] = []
-        if !newReplies.isEmpty {
-            parts.append("\(newReplies.count) new repl\(newReplies.count == 1 ? "y" : "ies") (\(newReplies.joined(separator: ", ")))")
-        }
-        if !newBookings.isEmpty {
-            parts.append("\(newBookings.count) new booking\(newBookings.count == 1 ? "" : "s") (\(newBookings.joined(separator: ", ")))")
-        }
+        let parts = [
+            OutreachEventPhrasing.replyPhrase(newReplies),
+            OutreachEventPhrasing.bookingPhrase(newBookings)
+        ].compactMap { $0 }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: ", ")
     }

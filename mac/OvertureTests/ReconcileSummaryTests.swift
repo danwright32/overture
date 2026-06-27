@@ -8,26 +8,27 @@ import Foundation
 @Suite("Reconcile summary (#285)")
 struct ReconcileSummaryTests {
     @Test func emptyRunStillAcknowledgesItself() {
-        let m = ReconcileSummary(bookingsMarked: 0, omniFocusChanged: 0).message
+        let m = ReconcileSummary(omniFocusChanged: 0).message
         #expect(m.contains("nothing was due"))
     }
 
-    @Test func reportsNewBookings() {
-        let m = ReconcileSummary(bookingsMarked: 2, omniFocusChanged: 0).message
-        #expect(m.contains("2"))
-        #expect(m.contains("booked"))
+    // #297: bookings are named on the manual ack too, matching the while-away alert.
+    @Test func reportsNewBookingsByName() {
+        let m = ReconcileSummary(omniFocusChanged: 0,
+                                 newBookings: ["Joe's Pub", "The Knights"]).message
+        #expect(m.contains("2 new bookings (Joe's Pub, The Knights)"))
         #expect(!m.contains("nothing was due"))
     }
 
     @Test func reportsFollowUpUpdates() {
-        let m = ReconcileSummary(bookingsMarked: 0, omniFocusChanged: 3).message
+        let m = ReconcileSummary(omniFocusChanged: 3).message
         #expect(m.contains("3"))
         #expect(m.lowercased().contains("follow-up"))
     }
 
     @Test func reportsBothWhenBothChanged() {
-        let m = ReconcileSummary(bookingsMarked: 1, omniFocusChanged: 2).message
-        #expect(m.contains("1"))
+        let m = ReconcileSummary(omniFocusChanged: 2, newBookings: ["Carnegie Hall"]).message
+        #expect(m.contains("1 new booking (Carnegie Hall)"))
         #expect(m.contains("2"))
         #expect(!m.contains("nothing was due"))
     }
@@ -35,22 +36,23 @@ struct ReconcileSummaryTests {
     // #287: a reply found this pass must be acknowledged too, so a reply-only run never reads as
     // "nothing was due".
     @Test func reportsASingleNewReplyAndNamesTheOrg() {
-        let m = ReconcileSummary(bookingsMarked: 0, omniFocusChanged: 0, newReplies: ["Carnegie Hall"]).message
+        let m = ReconcileSummary(omniFocusChanged: 0, newReplies: ["Carnegie Hall"]).message
         #expect(m.contains("1 new reply (Carnegie Hall)"))
         #expect(!m.contains("nothing was due"))
     }
 
     @Test func pluralizesCountsAndNamesSeveralReplies() {
-        let m = ReconcileSummary(bookingsMarked: 0, omniFocusChanged: 0,
+        let m = ReconcileSummary(omniFocusChanged: 0,
                                  newReplies: ["Carnegie Hall", "Joe's Pub"]).message
         #expect(m.contains("2 new replies (Carnegie Hall, Joe's Pub)"))
         #expect(!m.contains("nothing was due"))
     }
 
     @Test func reportsRepliesAlongsideBookingsAndFollowUps() {
-        let m = ReconcileSummary(bookingsMarked: 1, omniFocusChanged: 2, newReplies: ["Carnegie Hall"]).message
+        let m = ReconcileSummary(omniFocusChanged: 2,
+                                 newReplies: ["Carnegie Hall"], newBookings: ["Joe's Pub"]).message
         #expect(m.contains("1 new reply (Carnegie Hall)"))
-        #expect(m.contains("newly booked"))
+        #expect(m.contains("1 new booking (Joe's Pub)"))
         #expect(m.contains("follow-up"))
         #expect(!m.contains("nothing was due"))
     }
