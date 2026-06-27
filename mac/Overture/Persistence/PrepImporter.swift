@@ -67,7 +67,7 @@ enum PrepImporter {
     }
 
     static var defaultURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        StoreLocation.dataDirectory
             .appendingPathComponent("Overture", isDirectory: true)
             .appendingPathComponent("overture-prep-results.json")
     }

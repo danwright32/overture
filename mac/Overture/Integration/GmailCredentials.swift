@@ -25,7 +25,7 @@ struct StoredTokens: Codable, Equatable, Sendable {
 
 enum GmailCredentials {
     static var supportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        StoreLocation.dataDirectory
             .appendingPathComponent("Overture", isDirectory: true)
     }
     static var clientConfigURL: URL { supportDir.appendingPathComponent("gmail-oauth.json") }
