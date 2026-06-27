@@ -47,14 +47,29 @@ struct VoiceNotesProtectorTests {
         #expect(result.contents.contains("- New tendency learned this run."))       // fresh auto kept
     }
 
-    @Test func tamperedNotesAreRestoredFromBackup() {
-        let tampered = withNotes.replacingOccurrences(of: "Lead with the venue. Keep it level.",
-                                                      with: "Some text the run wrongly wrote here.")
-        let result = VoiceNotesProtector.protectedContents(current: tampered, backup: withNotes)
+    @Test func editedNonEmptyNotesAreKeptAsDansOwnEdit() {
+        // #254: if the notes section is still present and non-empty but different, treat it as Dan's
+        // own edit (possibly made during an in-flight run) and DON'T revert it. Only a wipe is restored.
+        let edited = withNotes.replacingOccurrences(of: "Lead with the venue. Keep it level.",
+                                                    with: "New guidance Dan typed during the run.")
+        let result = VoiceNotesProtector.protectedContents(current: edited, backup: withNotes)
+        #expect(result.restored == false)
+        #expect(result.contents.contains("New guidance Dan typed during the run."))
+    }
+
+    @Test func notesEmptiedToHeadingOnlyAreRestored() {
+        // The run left the heading but dropped the body — a wipe, so restore from backup.
+        let emptied = """
+        ## Dan's notes (authoritative — never auto-edited)
+
+        ## Observed tendencies (auto-generated; regenerated each run)
+
+        - New tendency learned this run.
+        """
+        let result = VoiceNotesProtector.protectedContents(current: emptied, backup: withNotes)
         #expect(result.restored == true)
         #expect(result.contents.contains("Lead with the venue. Keep it level."))
-        #expect(!result.contents.contains("Some text the run wrongly wrote here."))
-        #expect(result.contents.contains("- Dan cuts the second opener sentence."))  // auto preserved
+        #expect(result.contents.contains("- New tendency learned this run."))
     }
 
     @Test func noBackupNotesMeansNoRestore() {
