@@ -30,11 +30,14 @@ MARKER="$SUPPORT/prep-running"
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
-PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. Read the work-list at
-$QUEUE, and for every item find the contact (waterfall, strict verification) and draft
-the email in Dan's voice (invoke the dan-wright-brand-voice skill). Copy each item's
-naturalKey verbatim. Write the complete PrepResults JSON to $RESULTS and nothing else
-to that file. Do the web research needed to find real, verifiable contacts."
+PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. FIRST, once per run, do the
+'Learn from Dan's recent edits' step: read overture-voice-feedback.json if present and update
+the anonymized auto-generated section of overture-voice-guidance.md (strip all org/venue/contact
+specifics; never carry them into other drafts). Then read the work-list at $QUEUE, and for every
+item find the contact (waterfall, strict verification) and draft the email in Dan's voice (invoke
+the dan-wright-brand-voice skill; apply the voice guidance only as secondary nudges, the skill
+wins). Copy each item's naturalKey verbatim. Write the complete PrepResults JSON to $RESULTS and
+nothing else to that file. Do the web research needed to find real, verifiable contacts."
 
 # Resolve the claude binary: the app launches us with a minimal PATH, so look in the
 # usual install spots rather than relying on PATH.

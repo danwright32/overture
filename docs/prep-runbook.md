@@ -17,6 +17,14 @@ before this was codified.
   `possibleMatchName`, `priorRelationship`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults`: `results[]` each with `naturalKey`, `contact`, `draft`).
+- **Read (optional, #119 voice learning):**
+  `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
+  `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
+  setup — skip the learning step when so. See "Once per run" below.
+- **Write (optional, #119 voice learning):**
+  `~/Library/Application Support/Overture/overture-voice-guidance.md` — the distilled,
+  anonymized voice tendencies, an editable artifact. You regenerate ONLY its
+  auto-generated section; Dan's own notes section is preserved untouched.
 
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result
 byte-for-byte. NEVER rebuild it from group/date/venue — that is the silent-mismatch
@@ -25,6 +33,46 @@ trap. The human-readable fields are for research only.
 Canonical samples of both files (the cross-language contract guard, #157) live in
 `fixtures/prep-queue/` and `fixtures/prep-results/`. Match those shapes exactly; if the
 format ever changes, update the fixture and the Swift contract test in the same change.
+
+## Once per run: learn from Dan's recent edits (#119 / #242)
+
+Before drafting anything, fold in how Dan has been revising drafts, so the copy trends
+toward send-ready over time. Do this ONCE per run; apply the result to every draft below.
+
+1. **Read the feedback.** Open `overture-voice-feedback.json`. Each `pairs[]` entry holds
+   `originalSubject`/`originalBody` (the AI draft) and `sentSubject`/`sentBody` (what Dan
+   actually sent), plus `discipline` and `sentAt`. If the file is absent or `pairs` is
+   empty, SKIP this whole section and draft from the skill alone — there is nothing to
+   learn yet (the normal state on a fresh setup).
+
+2. **Distill ANONYMIZED tendencies.** For each pair, compare the AI draft against what Dan
+   sent and capture the PATTERN of the change, never the content: tone (does he level it
+   out, cool it down?), length (does he cut, tighten?), word choice (what he swaps in or
+   out, e.g. "cover" → "photograph"), structure (what he drops — throat-clearing,
+   over-explaining), punctuation.
+
+   STRIP EVERY SPECIFIC. The bodies carry org names, venues, contact names, production
+   titles, prior-relationship facts, and dates. NONE of that is transferable voice, and
+   carrying any of it forward is the cross-contamination trap: putting one org's
+   "Carnegie Hall" or "I shot your run last spring" into an unrelated email is factually
+   wrong and worse than no learning. Write only generalized lessons ("Dan usually cuts the
+   second opener sentence", "he replaces warm verbs with plain ones"), NEVER a specific
+   ("Dan mentioned Carnegie Hall"). If a tendency can't be stated without a proper noun,
+   drop it.
+
+3. **Write the guidance file.** Update `overture-voice-guidance.md`. It has two parts and
+   you OWN ONLY THE SECOND:
+   - `## Dan's notes (authoritative — never auto-edited)`: NEVER touch this. If the file
+     does not exist yet, create it with this heading and an empty body for Dan to fill.
+   - `## Observed tendencies (auto-generated; regenerated each run)`: REPLACE this
+     section's body with your freshly distilled, anonymized bullets. Keep it SHORT (a
+     handful of bullets); prune stale or one-off observations rather than letting it grow.
+
+4. **Apply it when drafting, strictly subordinate.** Precedence, strongest first: the
+   `dan-wright-brand-voice` skill (authoritative), then Dan's notes, then the
+   auto-observed tendencies (the weakest signal — gentle nudges only). A tendency NEVER
+   overrides the skill or Dan's notes and NEVER reintroduces anything the skill forbids
+   (e.g. performative enthusiasm). On any conflict, the skill wins.
 
 ## Per prospect
 
@@ -47,7 +95,8 @@ form/DM or inferred = low.
 
 ### 2. Draft the email (PLAN.md §7 + the dan-wright-brand-voice skill)
 
-INVOKE the `dan-wright-brand-voice` skill and follow it. Anatomy:
+INVOKE the `dan-wright-brand-voice` skill and follow it. Then, as secondary nudges only,
+apply the distilled voice guidance from "Once per run" above (the skill always wins). Anatomy:
 
 - **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
 - **Opener:** a genuine, specific reason, group + performance named correctly. No
