@@ -55,6 +55,9 @@ struct OvertureApp: App {
         }
         .defaultSize(width: 860, height: 720)
         .windowResizability(.contentMinSize)
+        // #336: the styled in-content wordmark is the app's name; hide the redundant
+        // title-bar label so "Overture" doesn't appear stacked twice.
+        .windowStyle(.hiddenTitleBar)
 
         // #266: the resident menu-bar presence. With LSUIElement (Info.plist), closing the window
         // leaves the process running here in the menu bar, where the reconciles keep firing and Dan

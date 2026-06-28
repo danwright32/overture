@@ -248,14 +248,8 @@ struct QueueView: View {
         let priority = QueuePriorityBreakdown.summarize(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
-                Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
-                Circle().fill(OVColor.gold).frame(width: 7, height: 7)
-            }
+            Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
             Rectangle().fill(OVColor.gold.opacity(0.5)).frame(height: 1).frame(maxWidth: .infinity)
-            Text("Performances worth pitching, ranked by fit. Keep the ones worth pursuing and dismiss the rest.")
-                .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: OVSpacing.xs) {
                 Text("\(summary.total)").fontWeight(.semibold).foregroundStyle(OVColor.ink)
                 Text("in the queue").foregroundStyle(OVColor.inkFaint)
