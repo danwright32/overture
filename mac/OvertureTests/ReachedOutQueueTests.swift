@@ -15,7 +15,8 @@ struct ReachedOutQueueTests {
     }
 
     private func make(_ ctx: ModelContext, group: String, sentAt: Date?,
-                      outcome: Outcome = .noResponse) -> Prospect {
+                      outcome: Outcome = .noResponse,
+                      contactEmail: String? = "contact@example.com") -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
@@ -24,6 +25,7 @@ struct ReachedOutQueueTests {
                          status: .contacted)
         p.sentAt = sentAt
         p.outcome = outcome
+        p.contactEmail = contactEmail
         ctx.insert(p)
         return p
     }
@@ -32,6 +34,17 @@ struct ReachedOutQueueTests {
         let ctx = ModelContext(try container())
         let p = make(ctx, group: "A", sentAt: nil)
         #expect(ReachedOutQueue.nextReachOut(for: p, now: Date(timeIntervalSince1970: 1_000_000)) == nil)
+    }
+
+    // #331: a record with a sent timestamp but no contact address was never really emailed
+    // (a real send requires a contact). It must not show up in the reached-out pipeline.
+    @Test func sentWithoutAContactIsNotReachedOut() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let ghost = make(ctx, group: "Ghost", sentAt: now.addingTimeInterval(-86_400),
+                         outcome: .noResponse, contactEmail: nil)
+        #expect(ReachedOutQueue.nextReachOut(for: ghost, now: now) == nil)
+        #expect(ReachedOutQueue.active(from: [ghost], now: now).isEmpty)
     }
 
     @Test func bookedOrLostDropsOff() throws {

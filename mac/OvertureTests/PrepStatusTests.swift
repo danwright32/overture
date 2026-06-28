@@ -63,6 +63,15 @@ struct PrepStatusTests {
         #expect(s.summary(now: now) == "All caught up")
     }
 
+    // #333: a fresh store can carry a sentinel/epoch timestamp under the last-run key. That must
+    // read as "never ran" (nil) so the header omits the clause instead of rendering "20632d ago".
+    @Test func implausiblyOldLastRunReadsAsNever() {
+        #expect(PrepQueueService.sanitizedLastRun(nil) == nil)
+        #expect(PrepQueueService.sanitizedLastRun(Date(timeIntervalSince1970: 0)) == nil)
+        let recent = Date(timeIntervalSince1970: 1_700_000_000) // late 2023
+        #expect(PrepQueueService.sanitizedLastRun(recent) == recent)
+    }
+
     @Test func relativeTimeBuckets() {
         #expect(PrepStatus.relative(from: now.addingTimeInterval(-30), to: now) == "just now")
         #expect(PrepStatus.relative(from: now.addingTimeInterval(-600), to: now) == "10m ago")

@@ -34,6 +34,8 @@ enum DebugStaging {
                          fitScore: 7, tier: "high", fitReason: "debug", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
         p.sentAt = now.addingTimeInterval(-86_400)
+        p.contactName = "Test Contact (debug)"
+        p.contactEmail = "reminder@debug.example"   // a real send always has a contact (#331)
         p.outcome = .replied
         p.conversationStateRaw = ConversationState.wantsToBook.rawValue
         p.conversationStateSourceRaw = OutcomeSource.manual.rawValue

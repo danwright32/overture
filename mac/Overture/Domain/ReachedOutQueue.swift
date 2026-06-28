@@ -11,6 +11,9 @@ enum ReachedOutQueue {
                              followUpConfig: FollowUpConfig = .init(),
                              reminderConfig: ConversationReminderConfig = .init()) -> Date? {
         guard p.sentAt != nil else { return nil }                 // only contacted prospects
+        // #331: a real send always has a contact address; a sent timestamp without one is a
+        // staged/corrupt record that was never actually emailed, so it doesn't belong here.
+        guard p.contactEmail != nil else { return nil }
         guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
 
         let reminderDate = ConversationReminder.nextReminderDate(
