@@ -40,6 +40,17 @@ struct LocalHistoryTests {
         #expect(records.first?.status == "contacted")
     }
 
+    // #351: "Don't want to shoot this" is a personal-taste pass on one event. Unlike a scheduling
+    // miss (which keeps the org a hot "declined" lead), it must NOT touch the org's future ranking,
+    // so it produces no history record (neutral), the same as "Not a fit".
+    @Test func personalPassDismissalIsNeutral() throws {
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Passed Org", status: .dismissed, dismissReason: .dontWantToShoot)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.isEmpty)
+        #expect(DismissReason.dontWantToShoot.label == "Don't want to shoot this")
+    }
+
     @Test func bookedOutcomeBecomesBookedHistory() throws {
         let ctx = ModelContext(try container())
         make(ctx, group: "Booked Band", status: .approved, sentAt: Date(), outcome: .booked)
