@@ -59,6 +59,7 @@
 		344BE667D62BDDA954D3C079 /* AwayAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7898067DFDC5D9F853011C60 /* AwayAlert.swift */; };
 		3487AC4739F6C400D59C5D37 /* BackgroundServicesGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694D5E32D7521B59A78C9414 /* BackgroundServicesGateTests.swift */; };
 		34B4D59778B45482B07FEE79 /* QueueView+Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715B637F291B723A32F86486 /* QueueView+Model.swift */; };
+		3624EF7B94003425372E2F27 /* HandoffDirectoryGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29444CAEC02973DC38FC0E88 /* HandoffDirectoryGuardTests.swift */; };
 		37372F3559560F0C3B090AFF /* QueuePriorityBreakdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B9D7D606522FE8925BFC1F /* QueuePriorityBreakdownTests.swift */; };
 		3A68CC1E662466A5C1C21846 /* ReconcileSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7C882006FA1851C12EEBCC /* ReconcileSchedulerTests.swift */; };
 		3C4283ACCC0E8C096D4A1D5E /* ReconcileSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4592F13E7DFB6258CFEAF69E /* ReconcileSummary.swift */; };
@@ -242,6 +243,7 @@
 		2730C91E327DE3CA26C11BB6 /* ScoutFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutFailure.swift; sourceTree = "<group>"; };
 		2787A4F75772AA074BD37003 /* GmailAuthExpiryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAuthExpiryTests.swift; sourceTree = "<group>"; };
 		29142D7CC954AB5D8C0B6052 /* ReplyClassifyImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyImporterTests.swift; sourceTree = "<group>"; };
+		29444CAEC02973DC38FC0E88 /* HandoffDirectoryGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffDirectoryGuardTests.swift; sourceTree = "<group>"; };
 		295AFE7FD066E8FA04E4EC2D /* Ranker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ranker.swift; sourceTree = "<group>"; };
 		29B1B340C5C9A1E6B98D0D4C /* VoiceFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFeedbackService.swift; sourceTree = "<group>"; };
 		2BEF53A35386C9A1C2BF8967 /* ReplyDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyDetection.swift; sourceTree = "<group>"; };
@@ -477,6 +479,7 @@
 				25CEA888631E3F3292A7A5FB /* GmailSenderTests.swift */,
 				50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */,
 				61BFE4E6528A1F2DB7FA5E67 /* GroupNameDriftTests.swift */,
+				29444CAEC02973DC38FC0E88 /* HandoffDirectoryGuardTests.swift */,
 				B730D9D74C05F700D65AB92D /* LocalHistoryContractTests.swift */,
 				4C7C1703A7C49EFB8B8309E7 /* LocalHistoryTests.swift */,
 				98F9028B89AB5EDEFDADF826 /* LoopbackListenerTests.swift */,
@@ -912,6 +915,7 @@
 				04602E0E963B445CB6DCC62D /* GmailSenderTests.swift in Sources */,
 				7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */,
 				3036B8BD103E67917232F4FB /* GroupNameDriftTests.swift in Sources */,
+				3624EF7B94003425372E2F27 /* HandoffDirectoryGuardTests.swift in Sources */,
 				5A3B535D68CD68F9E18AF534 /* LocalHistoryContractTests.swift in Sources */,
 				FA01CA7C102A7796B07EC9AF /* LocalHistoryTests.swift in Sources */,
 				870FF7F88E5ABBC8CC257B6A /* LoopbackListenerTests.swift in Sources */,
