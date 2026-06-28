@@ -43,7 +43,7 @@ enum FollowUp {
     // isn't a verbatim repeat of the first (#75).
     static func nudgeBody(contactName: String?, groupName: String, venue: String?, attempt: Int = 1) -> String {
         let venueClause = (venue?.isEmpty == false) ? " at \(venue!)" : ""
-        let greeting = "Hi \(firstName(contactName)),"
+        let greeting = Salutation.greeting(for: contactName)
         let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
         if attempt >= FollowUpConfig().maxFollowUps {
             return greeting + "\n\nOne last note on photographing \(groupName)\(venueClause). "
@@ -53,10 +53,5 @@ enum FollowUp {
         return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
             + "No problem if the timing isn't right." + signoff
-    }
-
-    private static func firstName(_ name: String?) -> String {
-        guard let n = name?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return "there" }
-        return n.split(separator: " ").first.map(String.init) ?? "there"
     }
 }

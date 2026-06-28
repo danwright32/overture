@@ -189,7 +189,7 @@ enum ConversationReminder {
     // copy is deliberately generic since it cannot know the specific question. Follows the
     // dan-wright-brand-voice skill. Mirrors FollowUp.nudgeBody.
     static func nudgeBody(for state: ConversationState, contactName: String?, groupName: String, venue: String?) -> String {
-        let greeting = "Hi \(firstName(contactName)),"
+        let greeting = Salutation.greeting(for: contactName)
         let g = groupName + venueClause(venue)
         let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
         let middle: String
@@ -213,7 +213,7 @@ enum ConversationReminder {
     // The gracious post-event close: a kind "perhaps another time" that keeps the relationship warm
     // for a future season. Sending it resolves the lead to lost-soft.
     static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
-        let greeting = "Hi \(firstName(contactName)),"
+        let greeting = Salutation.greeting(for: contactName)
         let g = groupName + venueClause(venue)
         let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
         return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
@@ -223,10 +223,5 @@ enum ConversationReminder {
 
     private static func venueClause(_ venue: String?) -> String {
         (venue?.isEmpty == false) ? " at \(venue!)" : ""
-    }
-
-    private static func firstName(_ name: String?) -> String {
-        guard let n = name?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return "there" }
-        return n.split(separator: " ").first.map(String.init) ?? "there"
     }
 }
