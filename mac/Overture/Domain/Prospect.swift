@@ -145,12 +145,9 @@ final class Prospect {
     // rejectedBookingIds. Defaulted so existing records migrate cleanly.
     var rejectedBookingIdsRaw: String = ""
 
-    // Legacy (#391): recipients used to live here as a JSON-encoded blob. As of #409 recipients are
-    // their own SwiftData rows (see `recipients` below); this column is kept ONLY as input to the
-    // one-shot blob->rows migration (RecipientMigration) and is dropped once that is live-verified.
-    var recipientsRaw: String = ""
-
     // The performance's recipients as their own rows (#409). Cascade-deleted with the performance.
+    // (Recipients briefly lived in a JSON blob, #391; that column was dropped once the live store was
+    // migrated to rows — Dan's store never carried blob data, so there was nothing to migrate from it.)
     @Relationship(deleteRule: .cascade, inverse: \Recipient.prospect)
     var recipients: [Recipient] = []
 

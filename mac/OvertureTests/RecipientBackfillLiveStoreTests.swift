@@ -51,7 +51,7 @@ struct RecipientBackfillLiveStoreTests {
         defer { try? fm.removeItem(at: scratch) }
         let storeCopy = try copyLiveStore(to: scratch)
 
-        // First open: applies the additive recipientsRaw migration, then backfill.
+        // First open: applies the additive Recipient entity + relationship migration, then backfill.
         let container = try openContainer(at: storeCopy)
         let context = ModelContext(container)
         let all = try context.fetch(FetchDescriptor<Prospect>())
