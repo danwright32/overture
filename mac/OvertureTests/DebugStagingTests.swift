@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // #196: the DEBUG-only staging helper that marks a prospect as already sent, so post-send
@@ -54,6 +55,49 @@ struct DebugStagingTests {
         #expect(p.lastReplyText == nil)
         #expect(p.draftBody == "hello")
         #expect(p.draftSubject == "subj")
+    }
+
+    // #325: a self-addressed lead so the real approve -> send path can be verified end to end
+    // without risking a real email to a prospect.
+    private func makeInMemoryContext() throws -> ModelContext {
+        let container = try ModelContainer(for: Schema([Prospect.self]),
+                                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        return ModelContext(container)
+    }
+
+    @Test func stagesASelfAddressedDraftedLead() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let p = DebugStaging.stageSelfSendLead(in: ctx, now: now, address: "self@example.com")
+
+        #expect(p.contactEmail == "self@example.com")
+        #expect(p.draftBody != nil)
+        // Drafted (not pre-approved) so Dan exercises the real approve + send clicks himself.
+        #expect(p.status == .drafted)
+        #expect(p.sentAt == nil)
+        // Keyed under the debug prefix so clearDebugLeads can remove it.
+        #expect(p.naturalKey.hasPrefix("debug-of-"))
+    }
+
+    @Test @MainActor func selfSendLeadEntersTheSendQueueOnceApproved() throws {
+        let ctx = try makeInMemoryContext()
+        let p = DebugStaging.stageSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+        p.status = .approved
+        try ctx.save()
+
+        // The whole point: after approval the real send queue accepts it, so a live send goes to self.
+        #expect(SendService.pending(in: ctx).contains { $0.naturalKey == p.naturalKey })
+    }
+
+    @Test func clearDebugLeadsRemovesTheSelfSendLead() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+        try ctx.save()
+
+        DebugStaging.clearDebugLeads(in: ctx)
+
+        #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
 }
 #endif

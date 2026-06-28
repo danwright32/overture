@@ -42,6 +42,30 @@ enum DebugStaging {
         return p
     }
 
+    // #325: stage a self-addressed lead so the real approve -> send -> success path can be verified
+    // end to end without risking a real email to a prospect. It goes to `address` (Dan's own inbox by
+    // default). Left `.drafted` (not pre-approved) so Dan exercises the real approve + send clicks; its
+    // performance date is inside the bookable window so it shows in the queue; keyed under the
+    // "debug-of-" prefix so clearDebugLeads removes it.
+    @discardableResult
+    static func stageSelfSendLead(in context: ModelContext, now: Date,
+                                  address: String = "dan@danwrightphotography.com") -> Prospect {
+        let key = "debug-of-selfsend-\(Int(now.timeIntervalSince1970))"
+        let p = Prospect(naturalKey: key, groupName: "Self-send Test (debug)", discipline: "choral",
+                         venue: "Weill Recital Hall",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "debug self-send", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
+        p.contactName = "Dan (test)"
+        p.contactEmail = address
+        p.draftSubject = "Overture self-send test"
+        p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
+        context.insert(p)
+        return p
+    }
+
     // Remove every debug-staged lead (naturalKey prefix "debug-of-"). After this, a sync completes
     // their now-orphaned OmniFocus tasks (they leave the desired set). Cleans up after testing.
     static func clearDebugLeads(in context: ModelContext) {
