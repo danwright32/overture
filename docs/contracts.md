@@ -24,7 +24,7 @@ the workflow's runbook is its spec.
 | `overture-uncertain.json` | Scout (`buildUncertainPayload`) | Scout refine agent (workflow) | none (plain array) | `fixtures/scout-refine/uncertain.json` | `refineContract.test.ts` (writer) |
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
@@ -77,6 +77,13 @@ does the research and drafting, and writes `prep-results.json`; the app ingests 
 key the run must echo back verbatim, never rebuild. The Prep run is the counterpart side with no
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
+
+Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
+the run found for the performance: the act plus at most one real presenting org, each labelled with a
+`provenance` (`act` / `presenter`), and NEVER the host venue. `PrepImporter` ingests them as the
+prospect's recipients (one separate email per recipient). The reader's tolerant gate (1 through 2)
+still accepts the v1 single-`contact` file, which a custom `init(from:)` maps to a one-element
+`contacts[]`; `v1.json` stays byte-identical as that proof, `v2.json` is the multi-contact spec.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

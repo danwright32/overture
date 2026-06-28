@@ -11,11 +11,14 @@ import SwiftData
 // in exactly one place (consolidation): a staged lead and a backfilled one carry identical recipients.
 enum RecipientBackfill {
     // Build recipients[0] from a prospect's legacy singular fields, or nil when there is no contact
-    // to make a recipient from (a scout-only performance has zero recipients).
+    // to make a recipient from (a scout-only performance with neither email nor form has zero
+    // recipients). A form-only act (#368) gets a recipient keyed on its form URL with a nil email.
     static func synthesizedRecipient(from prospect: Prospect) -> Recipient? {
-        guard let email = prospect.contactEmail, !email.isEmpty else { return nil }
+        guard let id = Recipient.makeId(email: prospect.contactEmail,
+                                        formURL: prospect.contactFormURL) else { return nil }
+        let email = (prospect.contactEmail?.isEmpty == false) ? prospect.contactEmail : nil
 
-        var r = Recipient(id: ReplyDetection.email(from: email),
+        var r = Recipient(id: id,
                           email: email,
                           name: prospect.contactName,
                           role: prospect.contactRole,

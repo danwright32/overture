@@ -57,6 +57,11 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // A freeze SEPARATE from draftEditedByDan (#392): set once Dan has curated the recipient list
+    // (manual add/remove at approval, Phase 7), so a Prep re-run never clobbers his recipient edits
+    // even while a body redraft still flows. The two freezes are independent.
+    var recipientsEditedByDan: Bool = false
+
     // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
     // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
     // frozen at send so a later draft edit can't make the "sent" side lie. Together they let the

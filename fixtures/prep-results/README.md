@@ -11,6 +11,13 @@ this fixture is the canonical example the runbook points the workflow at. A chan
 `PrepResults` shape then fails that test, forcing the runbook + fixture to update in lockstep
 instead of the workflow silently writing a file the app can't ingest (the #109 class of bug).
 
-The fixture exercises the contract's edge cases: a full result (named decision-maker contact + a
-drafted email with a recorded `variant`), a contact-only result (no draft yet, and the contact's
-own optionals omitted), and a bare result (just the echoed `naturalKey`, no contact or draft).
+`v1.json` (version 1) exercises the legacy single-`contact` shape's edge cases: a full result (named
+decision-maker contact + a drafted email with a recorded `variant`), a contact-only result (no draft
+yet, and the contact's own optionals omitted), a bare result (just the echoed `naturalKey`, no
+contact or draft), and a form-only act (a `form_or_dm` contact with a `formUrl` and no email). It
+stays byte-identical as the proof that the custom `init(from:)` still maps a v1 singular `contact` to
+a one-element `contacts[]`.
+
+`v2.json` (version 2, #392) is the current shape new runs MUST write: `contacts[]`, one entry per
+party to email, each with a `provenance` (`act` / `presenter`, never the host venue). It exercises a
+performance with both an act and a presenter, plus a form-only act with no email.
