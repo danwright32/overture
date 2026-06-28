@@ -172,6 +172,7 @@ struct RootView: View {
                 // one menu to stay under SwiftUI's toolbar item limit.
                 ToolbarItem(placement: .secondaryAction) {
                     Menu {
+                        Button("Seed dev data from live") { debugSeedFromLive() }
                         Button("Mark first as sent") { debugStageFirstAsSent() }
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
@@ -232,6 +233,28 @@ struct RootView: View {
     #if DEBUG
     // DEBUG ONLY (#196): stage the first not-yet-sent prospect as approved-and-sent so the
     // post-send lifecycle can be exercised end to end without a real send or store surgery.
+    // DEBUG ONLY (#281): copy the live handoff inputs into the isolated Overture-Debug folder, then
+    // force a fresh re-ingest so scout/booking/reply features show realistic data without a relaunch.
+    // ResultsImporter is idempotent (keep/dismiss decisions survive a re-run), so this is safe to run
+    // repeatedly; booking reconcile reads the now-seeded Downbeat export on its next cycle.
+    private func debugSeedFromLive() {
+        let result: (copied: [String], missing: [String])
+        do {
+            result = try DebugSeed.seedFromLive()
+        } catch {
+            statusMessage = "DEBUG seed failed: \(error.localizedDescription)"
+            return
+        }
+        let resultsURL = ResultsImporter.defaultResultsURL
+        if FileManager.default.fileExists(atPath: resultsURL.path) {
+            _ = try? ResultsImporter.ingestFile(at: resultsURL, into: context)
+        }
+        ingestPrep()
+        ingestReplyClassifications()
+        statusMessage = "DEBUG: seeded \(result.copied.count) file\(result.copied.count == 1 ? "" : "s")"
+            + (result.copied.isEmpty ? " (none found in live)" : ": " + result.copied.joined(separator: ", "))
+    }
+
     private func debugStageFirstAsSent() {
         guard let target = allProspects.first(where: { $0.sentAt == nil }) else {
             statusMessage = "DEBUG: no un-sent prospect to stage"
