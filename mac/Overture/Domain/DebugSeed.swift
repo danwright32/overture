@@ -36,15 +36,44 @@ enum DebugSeed {
     static func seed(liveBase: URL, debugBase: URL,
                      fileManager: FileManager = .default) throws -> (copied: [String], missing: [String]) {
         try fileManager.createDirectory(at: debugBase, withIntermediateDirectories: true)
+        return try copyPresent(plan(liveBase: liveBase, debugBase: debugBase), fileManager: fileManager)
+    }
+
+    // Shared copy loop for both the dev-data seed and the #325 Gmail seed: copy each present source
+    // over any stale destination, report copied vs missing. The token file carries a real refresh
+    // token, so it is tightened to owner-only (0600) on arrival, matching GmailCredentials.saveTokens.
+    private static func copyPresent(_ items: [(name: String, src: URL, dest: URL)],
+                                    fileManager: FileManager) throws -> (copied: [String], missing: [String]) {
         var copied: [String] = []
         var missing: [String] = []
-        for item in plan(liveBase: liveBase, debugBase: debugBase) {
+        for item in items {
             guard fileManager.fileExists(atPath: item.src.path) else { missing.append(item.name); continue }
             if fileManager.fileExists(atPath: item.dest.path) { try fileManager.removeItem(at: item.dest) }
             try fileManager.copyItem(at: item.src, to: item.dest)
+            if item.name == "gmail-tokens.json" {
+                try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: item.dest.path)
+            }
             copied.append(item.name)
         }
         return (copied, missing)
+    }
+
+    // #325: the Gmail credential files, copied as a SEPARATE opt-in action so the general dev-data
+    // seed (inputFileNames) never carries credentials. gmail-oauth.json is the OAuth client config
+    // and gmail-tokens.json holds the real refresh token.
+    static let gmailFileNames = ["gmail-oauth.json", "gmail-tokens.json"]
+
+    // Copy the live Gmail credential files into the isolated Overture-Debug handoff folder so the real
+    // approve -> send -> success/error path can be driven end to end in a dev build (#267 otherwise
+    // leaves the Debug build with no Gmail login). Sensitive: opt-in, DEBUG-gated, 0600 on the token.
+    @discardableResult
+    static func seedGmail(liveBase: URL, debugBase: URL,
+                          fileManager: FileManager = .default) throws -> (copied: [String], missing: [String]) {
+        try fileManager.createDirectory(at: debugBase, withIntermediateDirectories: true)
+        let items = gmailFileNames.map { name in
+            (name: name, src: liveBase.appendingPathComponent(name), dest: debugBase.appendingPathComponent(name))
+        }
+        return try copyPresent(items, fileManager: fileManager)
     }
 
     // The live handoff directory (Release data root), regardless of which build is running.
@@ -60,6 +89,12 @@ enum DebugSeed {
     @discardableResult
     static func seedFromLive() throws -> (copied: [String], missing: [String]) {
         try seed(liveBase: liveHandoffDirectory, debugBase: debugHandoffDirectory)
+    }
+
+    // #325: copy the live Gmail credentials into the Debug folder so the dev build is connected.
+    @discardableResult
+    static func seedGmailFromLive() throws -> (copied: [String], missing: [String]) {
+        try seedGmail(liveBase: liveHandoffDirectory, debugBase: debugHandoffDirectory)
     }
 
     // #318: the targeted-reset counterpart to seed. Removes the handoff INPUTS this helper manages
