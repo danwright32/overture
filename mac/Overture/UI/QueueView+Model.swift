@@ -37,6 +37,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftEditedByDan: Bool = false
     var outcome: Outcome = .noResponse
     var sentAt: Date? = nil
+    // At least one recipient is still pending with an address, so this performance can still send (#394).
+    // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
+    // the button must persist until the LAST recipient goes, so it gates on this, not on `isSent`.
+    var hasPendingRecipient: Bool = false
     var sendError: String? = nil
     var lostReason: String? = nil
     var classificationConfidence: String = Confidence.confident.rawValue

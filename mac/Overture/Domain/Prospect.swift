@@ -257,8 +257,12 @@ final class Prospect {
     }
 
     // Freeze the exact subject/body emailed, immune to later draft edits, so the "sent" side of the
-    // learning pair stays trustworthy (#240 / #119).
+    // learning pair stays trustworthy (#240 / #119). Idempotent (#395): under per-recipient fan-out
+    // this fires once per recipient, but the captured pair is lead-level and one-per-shared-body, so
+    // only the FIRST send writes it. Later recipient sends (and any draft edits after) leave it intact,
+    // making the frozen template stable regardless of recipient send order.
     func freezeSentCopy(subject: String, body: String) {
+        guard sentBody == nil else { return }
         sentSubject = subject
         sentBody = body
     }

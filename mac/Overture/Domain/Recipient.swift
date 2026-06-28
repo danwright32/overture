@@ -105,5 +105,22 @@ final class Recipient {
     // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
     var isSilent: Bool { sendState == .sent && !replied && !bounced }
 
+    // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
+    // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
+    // queue, the manual-send picker, and the "show fully sent?" rollup all read this one predicate.
+    var isSendablePending: Bool { sendState == .pending && (email?.isEmpty == false) }
+
+    // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
+    // the manual-send picker must impose a stable order or "the next recipient" (and which address each
+    // click sends) would vary run to run. Act contacts go first, then a presenter, then a manual add
+    // (the #366/#368 contact ladder: target the act; the presenter only after), ties broken by id.
+    var sendOrderRank: Int {
+        switch provenance {
+        case .act: return 0
+        case .presenter: return 1
+        case .manual: return 2
+        }
+    }
+
     var firstName: String { Salutation.firstName(name) }
 }

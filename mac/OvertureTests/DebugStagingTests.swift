@@ -60,7 +60,7 @@ struct DebugStagingTests {
     // #325: a self-addressed lead so the real approve -> send path can be verified end to end
     // without risking a real email to a prospect.
     private func makeInMemoryContext() throws -> ModelContext {
-        let container = try ModelContainer(for: Schema([Prospect.self]),
+        let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         return ModelContext(container)
     }
@@ -87,7 +87,7 @@ struct DebugStagingTests {
         try ctx.save()
 
         // The whole point: after approval the real send queue accepts it, so a live send goes to self.
-        #expect(SendService.pending(in: ctx).contains { $0.naturalKey == p.naturalKey })
+        #expect(SendService.pending(in: ctx).contains { $0.prospect.naturalKey == p.naturalKey })
     }
 
     @Test func clearDebugLeadsRemovesTheSelfSendLead() throws {
