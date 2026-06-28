@@ -20,7 +20,7 @@ struct PrepResultsContractTests {
     @Test func decodesTheV1FixtureToTheAgreedLogicalShape() throws {
         let results = try PrepResultsDecoder.decode(try fixture("v1.json"))
         #expect(results.version == 1)
-        #expect(results.results.count == 3)
+        #expect(results.results.count == 4)
 
         // Full result: named decision-maker contact + a drafted email with a recorded variant.
         let full = results.results[0]
@@ -44,5 +44,19 @@ struct PrepResultsContractTests {
         #expect(bare.naturalKey == "unmatched|key|here")
         #expect(bare.contact == nil)
         #expect(bare.draft == nil)
+    }
+
+    // The act has no published email, only a contact form (#368, the Ivalas Quartet case). The
+    // contract must carry a form-only contact: a contactForm method with a formUrl and NO email,
+    // so the app can surface the form as the way to reach the act instead of falling back to a
+    // venue inbox. Pins that this shape round-trips through PrepResults.
+    @Test func decodesAFormOnlyActContact() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v1.json"))
+        let formOnly = results.results[3]
+        #expect(formOnly.naturalKey == "ivalas-quartet|2026-07-01|madison-square-park")
+        #expect(formOnly.contact?.method == "form_or_dm")
+        #expect(formOnly.contact?.confidence == "low")
+        #expect(formOnly.contact?.email == nil)
+        #expect(formOnly.contact?.formUrl == "https://www.ivalasquartet.com/contact")
     }
 }

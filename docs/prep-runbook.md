@@ -80,14 +80,37 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
 
 ### 1. Find the contact (waterfall, PLAN.md §5)
 
+**Who you are reaching: the performing ACT, never the host venue (#366 / #368).** The
+target is the act named in `groupName` (the performers / ensemble / company putting on
+the show). The `venue` field is only WHERE the show happens, never who Dan is pitching.
+
+**Hard venue-disqualify rule (#368).** Any address belonging to the host venue is
+DISQUALIFIED, not a low-confidence fallback. Treat the `venue` value as the host: its
+own inbox and its staff addresses (e.g. `publicrelations@carnegiehall.org` for a show
+at Carnegie Hall) are off the table entirely. Returning a venue address is a wrong
+result, not a weak one. Better to return a form/DM, or no contact at all, than the
+venue. (Interim source for "what counts as the venue": the queue's `venue` field and
+its domain; a curated venue map will replace this, #342.)
+
+**`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
+site, do NOT harvest a contact from it; find the act's OWN site (search the
+`groupName`). Landing on the venue's staff page is exactly the bug this rule prevents.
+
 Walk in order, stop at the first that works:
 
-1. **Named decision-maker.** Prefer whoever owns photography/marketing for the org: a
-   Marketing & Communications Manager, Marketing Coordinator, or Development officer,
-   then the Artistic/Executive Director. Read their email off a real page (the org's
-   staff/contact page, found from `websiteURL` or a web search).
-2. **Verified generic inbox** (info@, frontdesk@) read off the org's site.
-3. **Web form / Instagram DM** when no email is published.
+1. **The act's named decision-maker / direct email.** Whoever owns the act's
+   photography/marketing, read off the ACT's own staff/contact page.
+2. **The act's generic inbox** (info@, the ensemble's published address). A real email
+   for the act, even a generic one, is PREFERRED over a contact form.
+3. **The act's contact form / Instagram DM** when the act publishes no email. Record it
+   as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
+   tappable link). This outranks any venue inbox.
+4. **A genuine presenting org** (the presenter named for the show, NOT the venue) only
+   if the act itself is unreachable. Emailing every relevant party (multiple performers
+   plus a presenter) is a later capability; for now return the single best ACT contact.
+
+If none of the above yields a non-venue contact, return the result with the key echoed
+and `contact` absent rather than reaching for the venue.
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an
 address actually READ from a real page; set `formUrl` to that source URL. NEVER emit
