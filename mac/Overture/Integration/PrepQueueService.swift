@@ -103,8 +103,19 @@ enum PrepQueueService {
 
     static let lastRunKey = "prepLastRunStartedAt"
 
+    // Prep could not have run before Overture existed, so any persisted timestamp older than this
+    // floor is a sentinel/epoch artifact (e.g. a fresh Debug store) and means "never ran".
+    nonisolated static let earliestPlausibleRun = Date(timeIntervalSince1970: 1_577_836_800) // 2020-01-01 UTC
+
+    // #333: collapse an implausibly-old stored date to nil so the header reads "never" (omits the
+    // clause) instead of rendering a ~56-year "last prep 20632d ago".
+    nonisolated static func sanitizedLastRun(_ stored: Date?) -> Date? {
+        guard let stored, stored >= earliestPlausibleRun else { return nil }
+        return stored
+    }
+
     static var lastRunStartedAt: Date? {
-        UserDefaults.standard.object(forKey: lastRunKey) as? Date
+        sanitizedLastRun(UserDefaults.standard.object(forKey: lastRunKey) as? Date)
     }
 
     // Launches the Prep runner script detached. The script (docs/prep-runbook) drives
