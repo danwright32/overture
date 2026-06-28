@@ -192,6 +192,10 @@ struct RootView: View {
                 // stays here is the AI/scout work, which must stay attended (never run unattended).
                 // Skip it entirely when running only as the unit suite's test host (#195).
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
+                // One-time, idempotent migration onto the recipients model (#391): seed recipients[0]
+                // from the legacy singular contact fields for any performance that predates it. Guarded
+                // by recipients.isEmpty, so it's a no-op on every launch after the first.
+                RecipientBackfill.run(in: context)
                 ingestIfEmpty()
                 // Ingest any classifications from a prior run, then launch a classify run for replies
                 // still needing an intent (#112). Both no-op when there's nothing to do.

@@ -134,6 +134,11 @@ final class Prospect {
     // rejectedBookingIds. Defaulted so existing records migrate cleanly.
     var rejectedBookingIdsRaw: String = ""
 
+    // The performance's recipients (#391), stored as a JSON-encoded blob and read via `recipients`.
+    // Defaulted "" so existing records and the scout's inserts migrate cleanly (additive, like the
+    // other defaulted fields the live store already carries). "" decodes to no recipients.
+    var recipientsRaw: String = ""
+
     // Fallback for #203 when the rejected auto-booking has no recorded source id (#218): a booking
     // auto-detected before that id was tracked. Set true on such a reject so reconcileBooked never
     // re-books this prospect at all. Defaulted so existing records migrate cleanly.
@@ -288,6 +293,45 @@ final class Prospect {
     // Booking ids Dan has rejected as wrong auto-detections (#203).
     var rejectedBookingIds: Set<String> {
         Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
+    }
+
+    // The performance's recipients (#391): each act contact, presenter, or manual add Dan emails
+    // separately over the shared body. Stored as a JSON blob in recipientsRaw (Recipient is a struct,
+    // not a stringly value, so JSON rather than rejectedBookingIds' newline-join), with a computed
+    // accessor and mutating helpers — the same raw-string-plus-accessor idiom the live store already
+    // survives. All writers decode -> change one element -> re-encode; the empty string decodes to [].
+    var recipients: [Recipient] {
+        get {
+            guard let data = recipientsRaw.data(using: .utf8), !data.isEmpty else { return [] }
+            return (try? JSONDecoder().decode([Recipient].self, from: data)) ?? []
+        }
+        set { recipientsRaw = Prospect.encodeRecipients(newValue) }
+    }
+
+    private static func encodeRecipients(_ recipients: [Recipient]) -> String {
+        guard !recipients.isEmpty, let data = try? JSONEncoder().encode(recipients) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    func setRecipients(_ recipients: [Recipient]) {
+        self.recipients = recipients
+    }
+
+    func addRecipient(_ recipient: Recipient) {
+        recipients.append(recipient)
+    }
+
+    func removeRecipient(id: String) {
+        recipients.removeAll { $0.id == id }
+    }
+
+    // Mutate exactly one recipient in place (the decode-mutate-reencode idiom). A no-op for an
+    // unknown id, so callers needn't pre-check membership.
+    func updateRecipient(id: String, _ mutate: (inout Recipient) -> Void) {
+        var current = recipients
+        guard let index = current.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&current[index])
+        recipients = current
     }
 
     // Dan dismissed a wrong auto-detected reply (#219): revert to no-response and remember which
