@@ -43,6 +43,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         scheduler.start()
         self.scheduler = scheduler
 
+        // #334: give the resident app a Dock running cue while its main window is open. Recompute the
+        // activation policy whenever a window becomes key or closes, so a normal Dock tile (with the
+        // running dot) appears in use and the app drops back to menu-bar-only when the window closes.
+        let nc = NotificationCenter.default
+        nc.addObserver(self, selector: #selector(windowVisibilityChanged),
+                       name: NSWindow.didBecomeKeyNotification, object: nil)
+        nc.addObserver(self, selector: #selector(windowWillClose),
+                       name: NSWindow.willCloseNotification, object: nil)
+        updateDockPresence()
+
         // #270: surface first-run onboarding while Dan is present whenever a grant is missing, so the
         // resident process can inherit working permissions instead of degrading silently while away.
         Task { @MainActor in
@@ -127,5 +137,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         onboardingWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // #334 Dock running cue. didBecomeKey fires as the main window opens; willClose fires as it
+    // closes (deferred a tick so the closing window has left NSApp.windows before we recount).
+    @objc private func windowVisibilityChanged() { updateDockPresence() }
+
+    @objc private func windowWillClose() {
+        DispatchQueue.main.async { [weak self] in self?.updateDockPresence() }
+    }
+
+    private func updateDockPresence() {
+        let visible = NSApp.windows.contains(where: isMainContentWindow)
+        let policy = DockPresence.policy(mainWindowVisible: visible)
+        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+    }
+
+    // The main Overture window only (#334 chose to exclude the onboarding window): a visible,
+    // titled window that can become main, and isn't the onboarding window or the menu-bar item.
+    private func isMainContentWindow(_ w: NSWindow) -> Bool {
+        w.isVisible && w !== onboardingWindow && w.canBecomeMain && w.styleMask.contains(.titled)
     }
 }
