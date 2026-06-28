@@ -140,9 +140,17 @@ struct ProspectRowView: View {
             // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
             // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing
             // keeping its urgency colour.
-            Text(item.venue ?? "Venue TBD")
+            // #342: when the venue is a known hall, show its parent building inline ("…, Carnegie Hall")
+            // and the city/state as a fainter line beneath, so any venue is locatable at a glance.
+            let venueInfo = VenueDisplay.resolve(item.venue)
+            Text(venueInfo.nameLine)
                 .font(OVType.body)
                 .foregroundStyle(OVColor.inkSoft)
+            if let location = venueInfo.location {
+                Text(location)
+                    .font(OVType.meta.weight(.regular))
+                    .foregroundStyle(OVColor.inkFaint)
+            }
             HStack(spacing: 6) {
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
                     .foregroundStyle(OVColor.inkFaint)
