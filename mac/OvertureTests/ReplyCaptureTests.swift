@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // Capturing the reply text onto the prospect when a reply is first detected (#181). The full-format
@@ -16,7 +17,14 @@ struct ReplyCaptureTests {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    private func sentLead() -> Prospect {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    // Detection reads recipient threads now (#418 A2), so the sent lead carries a sent recipient on
+    // thread "t". The lead gmailThreadId is kept for the A3 rollup readers.
+    private func sentLead(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
                          performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
@@ -24,11 +32,18 @@ struct ReplyCaptureTests {
                          possibleMatchSource: nil, possibleMatchName: nil)
         p.gmailThreadId = "t"
         p.sentAt = Date(timeIntervalSince1970: 1)
+        ctx.insert(p)
+        let r = Recipient(id: "emma@org.example", email: "emma@org.example", provenance: .act)
+        r.gmailThreadId = "t"
+        r.sentAt = p.sentAt
+        r.sendState = .sent
+        p.addRecipient(r)
         return p
     }
 
-    @Test func capturesReplyBodyWhenMarkingReplied() {
-        let p = sentLead()
+    @Test func capturesReplyBodyWhenMarkingReplied() throws {
+        let ctx = ModelContext(try container())
+        let p = sentLead(ctx)
         let meta = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
         let full = Data("""
         {"messages":[{"payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(b64url("Yes, let's book."))"}}}]}
@@ -51,8 +66,9 @@ struct ReplyCaptureTests {
 
     // #219: marking a reply "not real" reverts it and stops THAT reply re-detecting, but a genuinely
     // new reply on the thread still flags.
-    @Test func dismissedReplyIsNotReDetectedButANewReplyIs() {
-        let p = sentLead()
+    @Test func dismissedReplyIsNotReDetectedButANewReplyIs() throws {
+        let ctx = ModelContext(try container())
+        let p = sentLead(ctx)
         let oneReply = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
         _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 100),
                                        fetchThread: { _ in oneReply })
@@ -76,8 +92,9 @@ struct ReplyCaptureTests {
         #expect(p.lastReplyId == "r2")
     }
 
-    @Test func doesNotFullFetchWhenThereIsNoReply() {
-        let p = sentLead()
+    @Test func doesNotFullFetchWhenThereIsNoReply() throws {
+        let ctx = ModelContext(try container())
+        let p = sentLead(ctx)
         let selfOnly = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}}]}"#.utf8)
         var fullFetched = false
         let n = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(),

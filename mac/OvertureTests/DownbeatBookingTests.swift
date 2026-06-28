@@ -10,7 +10,7 @@ import SwiftData
 @Suite("Downbeat auto-booked")
 struct DownbeatBookingTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -112,6 +112,27 @@ struct DownbeatBookingTests {
     }
 
     // ── NEW TESTS (7 behaviors, TDD) ─────────────────────────────────────────────
+
+    // #418 A4 — a confirmed booking pauses every still-unsent recipient (booking-freeze), but leaves
+    // an already-sent recipient alone. This is the freeze the locked model assumed but didn't exist.
+    @Test func bookingSuppressesStillPendingRecipients() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = make(ctx, group: "Acme Festival Chorus", status: .approved,
+                     sentAt: sendDay, performanceDate: "2026-07-01", clientId: "C1")
+        let sent = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        sent.sendState = .sent; sent.sentAt = sendDay
+        let pending = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        // pending by default
+        p.setRecipients([sent, pending])
+        let b = booking(id: "B99", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: Date(timeIntervalSince1970: 9_999))
+        #expect(count == 1)
+        #expect(p.recipients.first { $0.id == "b@present.example" }?.sendState == .suppressed)
+        #expect(p.recipients.first { $0.id == "a@act.example" }?.sendState == .sent)
+    }
 
     // 1. Exact match auto-books a contacted, sent prospect.
     @Test func exactMatchAutoBooks() throws {

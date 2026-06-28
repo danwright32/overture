@@ -345,12 +345,19 @@ final class Prospect {
     // genuinely newer reply on the thread still gets detected.
     func dismissAutoReply(now: Date) {
         guard outcome == .replied else { return }
+        let dismissed = lastReplyId
         outcome = .noResponse
         outcomeSourceRaw = nil
         outcomeAt = now
         lastReplyText = nil
         lastReplyAt = nil
-        dismissedReplyId = lastReplyId
+        dismissedReplyId = dismissed
+        // Per-recipient detection (#418 A2) reads recipient.dismissedReplyId, so the lead dismiss must
+        // also dismiss the contact(s) that produced this reply or detection would immediately re-flag it.
+        // (Until the Phase B per-recipient surface, this keeps the existing lead-level dismiss button correct.)
+        for r in recipients where r.replied && r.lastReplyId == dismissed {
+            r.dismissAutoReply()
+        }
     }
 
     // Dan rejected a wrong auto-detected booking (#203): revert the outcome to no-response and

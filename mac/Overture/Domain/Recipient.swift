@@ -60,6 +60,13 @@ final class Recipient {
     var lastReplyText: String?
     var bounced: Bool = false
     var resolutionRaw: String?
+    // Whether Dan hand-set this recipient's state (#418 A1b), mirroring Prospect.outcomeSourceRaw:
+    // nil = no manual mark, OutcomeSource.manual = Dan judged this contact by hand. Per-recipient
+    // reply detection short-circuits on this so one contact's manual mark can't blind the others.
+    var outcomeSourceRaw: String?
+    // Reply-triage auto-pause (#418 A4): a reply on the show pauses this still-unsent recipient
+    // pending Dan's triage. Its OWN flag, distinct from sendState .suppressed (the booking-freeze).
+    var pausedByReply: Bool = false
 
     // The performance this recipient belongs to (inverse of Prospect.recipients).
     var prospect: Prospect?
@@ -102,6 +109,11 @@ final class Recipient {
         set { resolutionRaw = newValue?.rawValue }
     }
 
+    var outcomeSource: OutcomeSource? {
+        get { outcomeSourceRaw.flatMap(OutcomeSource.init) }
+        set { outcomeSourceRaw = newValue?.rawValue }
+    }
+
     // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
     var isSilent: Bool { sendState == .sent && !replied && !bounced }
 
@@ -123,4 +135,15 @@ final class Recipient {
     }
 
     var firstName: String { Salutation.firstName(name) }
+
+    // Dan dismissed a wrong auto-detected reply for THIS contact (#219, per-recipient #418): revert
+    // the replied state and remember the wrong reply's id so detection never re-flags that same one,
+    // while a genuinely newer reply on the contact's thread still gets detected.
+    func dismissAutoReply() {
+        guard replied else { return }
+        replied = false
+        repliedAt = nil
+        lastReplyText = nil
+        dismissedReplyId = lastReplyId
+    }
 }

@@ -90,6 +90,27 @@ struct RecipientTests {
         #expect(Recipient.makeId(email: nil, formURL: nil) == nil)
     }
 
+    // A1b (#418): a per-recipient manual-outcome source, mirroring Prospect.outcomeSourceRaw, so
+    // detection can tell "Dan judged this contact by hand" from "auto". nil = no manual mark.
+    @Test func outcomeSourceMapsThroughRawString() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.outcomeSource == nil)
+        #expect(r.outcomeSourceRaw == nil)
+        r.outcomeSource = .manual
+        #expect(r.outcomeSourceRaw == "manual")
+        r.outcomeSourceRaw = "auto"
+        #expect(r.outcomeSource == .auto)
+    }
+
+    // A4 (#418): reply-triage auto-pause is its OWN flag, distinct from sendState .suppressed
+    // (which means booking-freeze). Defaults off.
+    @Test func pausedByReplyDefaultsOff() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.pausedByReply == false)
+        r.pausedByReply = true
+        #expect(r.pausedByReply == true)
+    }
+
     // Per-recipient resolution (#389 derived-outcome model): an additive field capturing the
     // terminal commercial outcomes that aren't inferable from send/reply/bounce state. Phase 5
     // reads it to derive the performance status; here we only pin that it round-trips.

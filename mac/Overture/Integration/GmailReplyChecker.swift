@@ -25,12 +25,19 @@ struct GmailReplyChecker {
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
     ) async {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let threadIds = Set(all.compactMap { p -> String? in
-            guard let t = p.gmailThreadId, !t.isEmpty, p.sentAt != nil,
-                  p.outcomeSourceRaw != OutcomeSource.manual.rawValue,
-                  p.outcome != .replied, p.outcome != .booked else { return nil }
-            return t
-        })
+        // Watch EVERY sent recipient's own thread (#418 A2), not just the lead's first-send thread,
+        // so a reply to any contact is seen. Skip a show only on a MANUAL lead resolution or a booking
+        // (a closed show); never on the auto .replied rollup, or a second contact's reply would be missed.
+        var threadIds: Set<String> = []
+        for p in all {
+            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
+            for r in p.recipients {
+                guard let t = r.gmailThreadId, !t.isEmpty,
+                      r.outcomeSourceRaw != OutcomeSource.manual.rawValue,
+                      !r.replied, r.resolution != .booked else { continue }
+                threadIds.insert(t)
+            }
+        }
         guard !threadIds.isEmpty else { return }
 
         var threads: [String: Data] = [:]
