@@ -18,7 +18,7 @@ private struct FixedSender: MailSender {
 @Suite("Draft edit capture (#240)")
 struct DraftEditCaptureTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -79,6 +79,7 @@ struct DraftEditCaptureTests {
         let ctx = ModelContext(try container())
         let p = drafted(subject: "Sent subject", body: "The exact body that went out.")
         ctx.insert(p)
+        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
         try ctx.save()
 
         let sent = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 1),
@@ -96,6 +97,7 @@ struct DraftEditCaptureTests {
         let ctx = ModelContext(try container())
         let p = drafted(subject: "One-off subject", body: "One-off body sent now.")
         ctx.insert(p)
+        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
         try ctx.save()
 
         #expect(await SendService.sendOne(p, now: Date(), sender: FixedSender()) == true)

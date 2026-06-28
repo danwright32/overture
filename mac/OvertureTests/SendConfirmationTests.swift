@@ -11,7 +11,7 @@ import SwiftData
 @Suite("Send confirmation")
 struct SendConfirmationTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -29,6 +29,10 @@ struct SendConfirmationTests {
         p.draftBody = body
         p.sentAt = sentAt
         ctx.insert(p)
+        // Confirmation now reads the next pending recipient (#394). Seed the act recipient from the
+        // singular fields the same way the launch backfill does, so sentAt -> already-sent state too.
+        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        try? ctx.save()
         return p
     }
 
@@ -53,5 +57,34 @@ struct SendConfirmationTests {
         #expect(SendConfirmation(prospect: make(ctx, email: "")) == nil)          // blank contact
         #expect(SendConfirmation(prospect: make(ctx, body: nil)) == nil)          // no draft
         #expect(SendConfirmation(prospect: make(ctx, sentAt: Date())) == nil)     // already sent
+    }
+
+    // #394: on a multi-recipient show the confirm step targets the NEXT pending recipient, and once
+    // every recipient is sent there is nothing left to confirm (the partial-send gate).
+    @Test func targetsTheNextPendingRecipientThenRefusesWhenAllSent() throws {
+        let ctx = ModelContext(try container())
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: Date())
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        ctx.insert(p)
+        let act = Recipient(id: "emma@act.example", email: "emma@act.example", name: "Emma", provenance: .act)
+        let presenter = Recipient(id: "noah@p.example", email: "noah@p.example", name: "Noah", provenance: .presenter)
+        p.setRecipients([act, presenter])
+        try? ctx.save()
+
+        // The act is the first pending recipient.
+        #expect(SendConfirmation(prospect: p)?.recipient == "emma@act.example")
+
+        // Mark the act sent: the confirm step now points at the presenter.
+        act.sendState = .sent; act.sentAt = Date()
+        #expect(SendConfirmation(prospect: p)?.recipient == "noah@p.example")
+
+        // Both sent: nothing left to confirm.
+        presenter.sendState = .sent; presenter.sentAt = Date()
+        #expect(SendConfirmation(prospect: p) == nil)
     }
 }

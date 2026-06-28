@@ -134,7 +134,10 @@ struct DraftReviewView: View {
 
     private var actionRow: some View {
         HStack(spacing: OVSpacing.xs) {
-            if item.isSent {
+            // "Sent" only once EVERY recipient has gone. A multi-recipient show keeps the Send button
+            // (it stays approved with a pending recipient) even after the first email, so each recipient
+            // gets its own click (#394).
+            if item.isSent && !item.hasPendingRecipient {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
                 Spacer()
@@ -153,7 +156,7 @@ struct DraftReviewView: View {
                         .background(Capsule().fill(OVColor.forest))
                 }
                 .buttonStyle(.plain)
-                .disabled(!gmailConnected || item.contactEmail == nil)
+                .disabled(!gmailConnected || !item.hasPendingRecipient)
                 .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
                 Button("Unapprove") { onUnapprove() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)

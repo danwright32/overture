@@ -45,7 +45,7 @@ struct SendDeadlockGuardTests {
     // the send completed.
     @MainActor private static func sendOne(with sender: MailSender) async -> Bool {
         let container = try! ModelContainer(
-            for: Schema([Prospect.self]),
+            for: Schema([Prospect.self, Recipient.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = ModelContext(container)
         let p = Prospect(naturalKey: "guard", groupName: "Guard", discipline: "choral", venue: "V",
@@ -55,7 +55,9 @@ struct SendDeadlockGuardTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
         p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
-        ctx.insert(p); try? ctx.save()
+        ctx.insert(p)
+        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        try? ctx.save()
         return await SendService.sendOne(p, now: Date(), sender: sender)
     }
 

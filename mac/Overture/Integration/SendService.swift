@@ -14,38 +14,93 @@ enum SendService {
         var throttled: Bool   // there were pending sends but the throttle held them
     }
 
-    // The send queue: approved prospects with a draft and a contact email, not yet
-    // sent, oldest-approved first (FIFO by ingestedAt as a stand-in for approval order).
-    static func pending(in context: ModelContext) -> [Prospect] {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all
-            .filter { $0.status == .approved && $0.sentAt == nil && $0.draftBody != nil && $0.contactEmail != nil }
-            .sorted { $0.ingestedAt < $1.ingestedAt }
+    // One queued email: a specific recipient of a specific performance. Fan-out (#394) means a show
+    // with two acts plus a presenter contributes one PendingSend per pending recipient, not one per show.
+    struct PendingSend {
+        let prospect: Prospect
+        let recipient: Recipient
     }
 
-    // Sends ONE specific prospect immediately, bypassing the throttle. This is the
-    // manual per-draft "Send" Dan clicks (one click = one email); manual approval is
-    // its own pacing, so no drip needed. Records the receipt or the error for retry.
+    // The send queue: one item per still-to-send recipient of an approved, drafted performance,
+    // oldest-approved first (FIFO by the performance's ingestedAt as a stand-in for approval order).
+    // Reads recipient state, NOT the lead `sentAt` rollup, so a partially-sent show still surfaces its
+    // remaining recipients (closes the duplicate-send / stranded-recipient hole, #389).
+    static func pending(in context: ModelContext) -> [PendingSend] {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let drafted = all
+            .filter { $0.status == .approved && $0.draftBody != nil }
+            .sorted { $0.ingestedAt < $1.ingestedAt }
+        var queue: [PendingSend] = []
+        for prospect in drafted {
+            for recipient in sendOrdered(prospect.recipients) where recipient.isSendablePending {
+                queue.append(PendingSend(prospect: prospect, recipient: recipient))
+            }
+        }
+        return queue
+    }
+
+    // A performance's recipients in deterministic send order (SwiftData to-many is unordered).
+    private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
+        recipients.sorted {
+            $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id
+        }
+    }
+
+    // The next recipient a manual or throttled send would target for this performance: the first
+    // still-sendable one, or nil when the show is fully sent (or not sendable at all). Shared by
+    // sendOne and SendConfirmation so the picker and the actual send can never disagree.
+    static func nextPendingRecipient(for prospect: Prospect) -> Recipient? {
+        guard prospect.status == .approved, prospect.draftBody != nil else { return nil }
+        return sendOrdered(prospect.recipients).first(where: \.isSendablePending)
+    }
+
+    // Sends ONE recipient of a performance immediately, bypassing the throttle. This is the manual
+    // per-draft "Send" Dan clicks (one click = one email); for a multi-recipient show each click sends
+    // the next pending recipient. Manual approval is its own pacing, so no drip needed.
     @discardableResult
     static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
-        guard prospect.status == .approved, prospect.sentAt == nil,
-              let email = prospect.contactEmail, let body = prospect.draftBody else { return false }
-        // The stored body is salutation-free (#393); the app owns the greeting at send, one per
-        // recipient. The frozen sent copy below stays the BARE body so voice learning sees the shared
-        // template, not the greeting.
+        guard let recipient = nextPendingRecipient(for: prospect) else { return false }
+        return await deliver(recipient, of: prospect, now: now, sender: sender)
+    }
+
+    // Deliver to one recipient over the shared, salutation-free body (#393), composing that recipient's
+    // own greeting at send. Stamps the recipient's send receipt/state, rolls the first send up to the
+    // lead level (write-once), freezes the voice pair once (#395), and flips the show to `.contacted`
+    // only when no sendable recipient remains. Records the error on the recipient for retry on failure.
+    @discardableResult
+    private static func deliver(_ recipient: Recipient, of prospect: Prospect,
+                                now: Date, sender: MailSender) async -> Bool {
+        guard let email = recipient.email, !email.isEmpty, let body = prospect.draftBody else { return false }
         let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
-                                body: Salutation.greeting(for: prospect.contactName) + "\n\n" + body)
+                                body: Salutation.greeting(for: recipient.name) + "\n\n" + body)
         do {
             let receipt = try await sender.send(mail)
-            prospect.sentAt = now
-            prospect.status = .contacted
-            prospect.gmailThreadId = receipt.threadId
-            prospect.gmailMessageId = receipt.messageID
-            prospect.priorRelationshipAtSend = prospect.priorRelationship
+            recipient.sentAt = now
+            recipient.sendState = .sent
+            recipient.gmailThreadId = receipt.threadId
+            recipient.gmailMessageId = receipt.messageID
+            recipient.sendError = nil
+            // Lead-level first-send rollup (#389 Phase 1): set once, never overwritten, so the ~20
+            // "was this performance contacted at all" readers keep working unchanged. The thread/
+            // message ids also roll up from the first send so follow-up threading (#74) and reply
+            // detection keep working until Phase 4 moves them to per-recipient threads.
+            if prospect.sentAt == nil {
+                prospect.sentAt = now
+                prospect.priorRelationshipAtSend = prospect.priorRelationship
+                prospect.gmailThreadId = receipt.threadId
+                prospect.gmailMessageId = receipt.messageID
+            }
             prospect.freezeSentCopy(subject: mail.subject, body: body)
             prospect.sendError = nil
+            // Per-click only (no autonomous drip): the show stays approved while any recipient is still
+            // sendable, so the Send button persists for the next one. Once the last one goes, it is
+            // contacted.
+            if !prospect.recipients.contains(where: \.isSendablePending) {
+                prospect.status = .contacted
+            }
             return true
         } catch {
+            recipient.sendError = error.localizedDescription
             prospect.sendError = error.localizedDescription
             return false
         }
@@ -125,12 +180,15 @@ enum SendService {
         }
     }
 
+    // Throttle input: the timestamp of every recipient email already sent, across all performances,
+    // so the drip counts EMAILS, not leads (#389). A two-recipient show contributes two send dates.
     static func recentSendDates(in context: ModelContext) -> [Date] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all.compactMap { $0.sentAt }
+        return all.flatMap { $0.recipients.compactMap(\.sentAt) }
     }
 
-    // Sends the next due email if the throttle allows. At most one per call.
+    // Sends the next due recipient email if the throttle allows. At most one per call, so an
+    // N-recipient approval drips out one address at a time and never bursts past SendThrottle.
     @discardableResult
     static func releaseDueSends(in context: ModelContext, now: Date, sender: MailSender,
                                 config: SendThrottleConfig = .default) async -> Outcome {
@@ -142,28 +200,9 @@ enum SendService {
             return Outcome(sent: 0, failed: 0, throttled: true)
         }
 
-        // Salutation-free body (#393): compose the greeting at send, but freeze the BARE body below.
-        let body = next.draftBody ?? ""
-        let mail = OutgoingMail(
-            to: next.contactEmail ?? "",
-            subject: next.draftSubject ?? "",
-            body: Salutation.greeting(for: next.contactName) + "\n\n" + body
-        )
-        do {
-            let receipt = try await sender.send(mail)
-            next.sentAt = now
-            next.status = .contacted
-            next.gmailThreadId = receipt.threadId
-            next.gmailMessageId = receipt.messageID
-            next.priorRelationshipAtSend = next.priorRelationship
-            next.freezeSentCopy(subject: mail.subject, body: body)
-            next.sendError = nil
-            try? context.save()
-            return Outcome(sent: 1, failed: 0, throttled: queue.count > 1)
-        } catch {
-            next.sendError = error.localizedDescription
-            try? context.save()
-            return Outcome(sent: 0, failed: 1, throttled: false)
-        }
+        let ok = await deliver(next.recipient, of: next.prospect, now: now, sender: sender)
+        try? context.save()
+        if ok { return Outcome(sent: 1, failed: 0, throttled: queue.count > 1) }
+        return Outcome(sent: 0, failed: 1, throttled: false)
     }
 }

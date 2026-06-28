@@ -33,7 +33,7 @@ private final class Hit: @unchecked Sendable { var url: URL? }
 @Suite("Send service")
 struct SendServiceTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -48,7 +48,18 @@ struct SendServiceTests {
         p.contactEmail = email
         p.draftSubject = "S"; p.draftBody = draft
         ctx.insert(p)
+        seedRecipient(p)
         try? ctx.save()
+    }
+
+    // Mirror the live flow: a performance has its Recipient rows (seeded at launch by RecipientBackfill)
+    // before any send runs. The send path reads recipients, not the legacy singular fields, so a test
+    // prospect needs its act recipient synthesized the same way the app does.
+    @discardableResult
+    private func seedRecipient(_ p: Prospect) -> Recipient? {
+        guard let r = RecipientBackfill.synthesizedRecipient(from: p) else { return nil }
+        p.setRecipients([r])
+        return r
     }
 
     private func approvedNamed(_ ctx: ModelContext, group: String, name: String?, email: String,
@@ -62,6 +73,7 @@ struct SendServiceTests {
         p.contactEmail = email; p.contactName = name
         p.draftSubject = "S"; p.draftBody = body
         ctx.insert(p)
+        seedRecipient(p)
         try? ctx.save()
         return p
     }
@@ -110,7 +122,7 @@ struct SendServiceTests {
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
         approved(ctx, group: "No Email", email: nil, ingested: Date(timeIntervalSince1970: 2))
         approved(ctx, group: "No Draft", draft: nil, ingested: Date(timeIntervalSince1970: 3))
-        #expect(SendService.pending(in: ctx).map(\.groupName) == ["Ready"])
+        #expect(SendService.pending(in: ctx).map(\.prospect.groupName) == ["Ready"])
     }
 
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
@@ -124,6 +136,7 @@ struct SendServiceTests {
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
         p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
         ctx.insert(p)
+        seedRecipient(p)
 
         let sent = await SendService.sendOne(p, now: Date(), sender: FakeSender())
         #expect(sent)
@@ -297,5 +310,110 @@ struct SendServiceTests {
         #expect(sender.last?.threadId == "th-9")
         #expect(sender.last?.inReplyTo == "<orig@x.org>")
         #expect(sender.last?.subject == "Re: Photographs for A")
+    }
+
+    // MARK: - Fan-out (#394): one email per recipient over the shared body
+
+    // An approved performance with two recipients (an act and a presenter) sharing one drafted body.
+    private func twoRecipients(_ ctx: ModelContext, body: String, ingested: Date) -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
+        p.draftSubject = "S"; p.draftBody = body
+        ctx.insert(p)
+        let act = Recipient(id: "emma@act.example", email: "emma@act.example", name: "Emma Robinson", provenance: .act)
+        let presenter = Recipient(id: "noah@present.example", email: "noah@present.example",
+                                  name: "Noah Lee", provenance: .presenter)
+        p.setRecipients([act, presenter])
+        try? ctx.save()
+        return p
+    }
+
+    @Test func sendOneFansOutToEachRecipientWithItsOwnGreeting() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        let sender = CapturingSender()
+
+        // First click -> the act contact, greeted by her own name.
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
+        #expect(sender.last?.to == "emma@act.example")
+        #expect(sender.last?.body == "Hi Emma,\n\nI document dance.")
+        // The show keeps a pending recipient, so it is NOT yet fully contacted and stays sendable.
+        #expect(p.status == .approved)
+        #expect(p.recipients.first { $0.email == "emma@act.example" }?.sendState == .sent)
+        #expect(p.recipients.first { $0.email == "noah@present.example" }?.sendState == .pending)
+
+        // Second click -> the presenter, greeted by his own name.
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: sender) == true)
+        #expect(sender.last?.to == "noah@present.example")
+        #expect(sender.last?.body == "Hi Noah,\n\nI document dance.")
+        // Every recipient sent -> now contacted.
+        #expect(p.status == .contacted)
+
+        // A third click is a no-op: nothing left to send (kills the duplicate-send risk).
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 30), sender: sender) == false)
+    }
+
+    @Test func firstRecipientSetsTheLeadRollupWriteOnce() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        p.priorRelationship = "warm"
+        let t1 = Date(timeIntervalSince1970: 100)
+        let t2 = Date(timeIntervalSince1970: 500)
+
+        _ = await SendService.sendOne(p, now: t1, sender: FakeSender())
+        #expect(p.sentAt == t1)
+        #expect(p.gmailThreadId == "t-123")
+        #expect(p.priorRelationshipAtSend == "warm")
+
+        _ = await SendService.sendOne(p, now: t2, sender: FakeSender())
+        // The lead rollup reflects the FIRST send only, never overwritten by the second recipient.
+        #expect(p.sentAt == t1)
+    }
+
+    @Test func recentSendDatesCountsEmailsNotLeads() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+
+        // One show, two recipients sent -> the throttle must see TWO send dates, not one.
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 100), sender: FakeSender())
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 500), sender: FakeSender())
+        #expect(SendService.recentSendDates(in: ctx).count == 2)
+    }
+
+    @Test func dripFansOutOneRecipientPerReleaseForOneShow() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        let first = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
+        #expect(first.sent == 1)
+        #expect(first.throttled == true)   // the second recipient is still queued
+
+        // The min-gap holds the second recipient back until the throttle allows it.
+        let held = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(10), sender: FakeSender())
+        #expect(held.sent == 0)
+
+        let second = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(200), sender: FakeSender())
+        #expect(second.sent == 1)
+        #expect(SendService.pending(in: ctx).isEmpty)
+        #expect(p.status == .contacted)
+    }
+
+    // #395: under fan-out, freezeSentCopy fires once per recipient, but the captured voice pair is
+    // lead-level and one-per-shared-body, so only the first send writes it (over the bare body).
+    @Test func fanOutFreezesExactlyOnePairOverTheBareBody() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
+        let afterFirst = p.sentBody
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
+        #expect(p.sentBody == "I document dance.")   // the BARE body, no greeting baked in
+        #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
 }
