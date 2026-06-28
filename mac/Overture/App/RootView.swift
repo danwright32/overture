@@ -177,6 +177,7 @@ struct RootView: View {
                         Button("Clear dev data") { debugClearDevData() }
                         Button("Mark first as sent") { debugStageFirstAsSent() }
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
+                        Button("Stage self-send test lead") { debugStageSelfSendLead() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
                     } label: {
                         Label("DEBUG", systemImage: "ladybug")
@@ -309,6 +310,14 @@ struct RootView: View {
         let p = DebugStaging.stageReminderDueLead(in: context, now: Date())
         try? context.save()
         statusMessage = "DEBUG: staged \(p.groupName) as reminder-due"
+    }
+
+    // DEBUG ONLY (#325): stage a self-addressed lead so the real approve -> send path can be verified
+    // without risking a real email to a prospect. Approve it, then Send: it goes to Dan's own inbox.
+    private func debugStageSelfSendLead() {
+        let p = DebugStaging.stageSelfSendLead(in: context, now: Date())
+        try? context.save()
+        statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?") — approve it, then Send"
     }
 
     private func debugClearDebugLeads() {
