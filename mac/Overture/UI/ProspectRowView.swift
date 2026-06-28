@@ -51,6 +51,7 @@ struct ProspectRowView: View {
                             .font(OVType.reason)
                             .foregroundStyle(OVColor.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)   // #340: let the caveat breathe instead of crowding the metadata
                     }
                     tags
                     relatedRunNote
@@ -135,17 +136,22 @@ struct ProspectRowView: View {
                 .font(OVType.groupName)
                 .foregroundStyle(item.disappearedFromFeed ? OVColor.inkFaint : OVColor.ink)
                 .strikethrough(item.disappearedFromFeed, color: OVColor.rust)
+            // #340: give the metadata a calmer hierarchy instead of cramming venue, timing and date
+            // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
+            // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing
+            // keeping its urgency colour.
+            Text(item.venue ?? "Venue TBD")
+                .font(OVType.body)
+                .foregroundStyle(OVColor.inkSoft)
             HStack(spacing: 6) {
-                Text(item.venue ?? "Venue TBD")
-                Text("·").foregroundStyle(OVColor.inkFaint)
+                Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
+                    .foregroundStyle(OVColor.inkFaint)
+                Text("·").foregroundStyle(OVColor.lineStrong)
                 Text(timing.label)
                     .foregroundStyle(timing.urgency == .imminent ? OVColor.rust
-                                     : timing.urgency == .booked ? OVColor.forest : OVColor.inkSoft)
-                Text("·").foregroundStyle(OVColor.inkFaint)
-                Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
+                                     : timing.urgency == .booked ? OVColor.forest : OVColor.inkFaint)
             }
-            .font(OVType.body)
-            .foregroundStyle(OVColor.inkSoft)
+            .font(OVType.meta.weight(.regular))
         }
     }
 
