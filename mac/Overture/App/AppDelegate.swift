@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // limit. Runs every launch (= every login for the resident agent); a no-op until a file is large.
         AgentLogLocation.capLogs()
         guard let container = AppDelegate.sharedContainer else { return }
+        // One-time, idempotent migration onto the recipients model (#391). Runs here on the
+        // window-independent launch path (not in a View's .task) so a windowless resident launch still
+        // migrates BEFORE the reconciler — and any later per-recipient send — can read the new model.
+        // Guarded by recipients.isEmpty, so it's a no-op on every launch after the first.
+        RecipientBackfill.run(in: container.mainContext)
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler
