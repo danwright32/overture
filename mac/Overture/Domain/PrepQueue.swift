@@ -43,8 +43,7 @@ enum PrepQueueBuilder {
     }
 
     static var defaultURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-prep-queue.json")
     }
 }

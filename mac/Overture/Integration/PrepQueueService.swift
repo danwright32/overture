@@ -59,8 +59,7 @@ enum PrepQueueService {
     static let markerStaleAfter: TimeInterval = 3 * 60
 
     static var defaultMarkerURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("prep-running")
     }
 

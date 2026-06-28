@@ -76,8 +76,7 @@ enum VoiceNotesProtector {
     }
 
     static var defaultBackupURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-voice-guidance.backup.md")
     }
 }
