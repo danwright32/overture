@@ -173,6 +173,7 @@ struct RootView: View {
                 ToolbarItem(placement: .secondaryAction) {
                     Menu {
                         Button("Seed dev data from live") { debugSeedFromLive() }
+                        Button("Connect Gmail from live") { debugSeedGmailFromLive() }
                         Button("Clear dev data") { debugClearDevData() }
                         Button("Mark first as sent") { debugStageFirstAsSent() }
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
@@ -254,6 +255,27 @@ struct RootView: View {
         ingestReplyClassifications()
         statusMessage = "DEBUG: seeded \(result.copied.count) file\(result.copied.count == 1 ? "" : "s")"
             + (result.copied.isEmpty ? " (none found in live)" : ": " + result.copied.joined(separator: ", "))
+    }
+
+    // DEBUG ONLY (#325): copy the live Gmail credentials into the isolated Overture-Debug folder so the
+    // real approve -> send -> success/error path can be driven end to end in a dev build. The #267 split
+    // otherwise leaves the Debug build with no Gmail login. Sensitive (real OAuth client + refresh
+    // token); opt-in. Requires that the release app is already connected (the token file must exist).
+    private func debugSeedGmailFromLive() {
+        let result: (copied: [String], missing: [String])
+        do {
+            result = try DebugSeed.seedGmailFromLive()
+        } catch {
+            statusMessage = "DEBUG Gmail connect failed: \(error.localizedDescription)"
+            return
+        }
+        if result.missing.contains("gmail-tokens.json") {
+            statusMessage = "DEBUG: live Gmail isn't connected — connect it in the release app first, then retry."
+            return
+        }
+        statusMessage = GmailAuthManager.shared.isConnected
+            ? "DEBUG: Gmail connected from live (\(result.copied.joined(separator: ", ")))"
+            : "DEBUG: copied \(result.copied.count) file(s) but Gmail still reads as not connected"
     }
 
     // DEBUG ONLY (#318): targeted reset of the isolated Overture-Debug dev environment — empties the

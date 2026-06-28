@@ -123,6 +123,72 @@ struct DebugSeedTests {
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
 
+    // #325: a SEPARATE DEBUG copy path for the Gmail credential files, so the real send path can be
+    // exercised in the isolated dev build. Kept distinct from seed()/inputFileNames, which must never
+    // carry credentials.
+    @Test func gmailFileNamesAreOnlyTheCredentialFiles() {
+        #expect(DebugSeed.gmailFileNames == ["gmail-oauth.json", "gmail-tokens.json"])
+    }
+
+    @Test func generalSeedStillExcludesGmailCredentials() {
+        #expect(!DebugSeed.inputFileNames.contains("gmail-oauth.json"))
+        #expect(!DebugSeed.inputFileNames.contains("gmail-tokens.json"))
+    }
+
+    @Test func seedGmailCopiesPresentCredentialsAndReportsMissingOnes() throws {
+        let live = try makeTempDir()
+        let debug = try makeTempDir()
+        // Only the client config is present; the token file is absent (live Gmail not connected).
+        try "{\"clientId\":\"x\",\"clientSecret\":\"y\"}"
+            .write(to: live.appendingPathComponent("gmail-oauth.json"), atomically: true, encoding: .utf8)
+
+        let result = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
+
+        #expect(result.copied == ["gmail-oauth.json"])
+        #expect(result.missing == ["gmail-tokens.json"])
+        let copied = try String(contentsOf: debug.appendingPathComponent("gmail-oauth.json"), encoding: .utf8)
+        #expect(copied == "{\"clientId\":\"x\",\"clientSecret\":\"y\"}")
+    }
+
+    @Test func seedGmailSetsOwnerOnlyPermissionOnTheTokenFile() throws {
+        let live = try makeTempDir()
+        let debug = try makeTempDir()
+        try "{\"clientId\":\"x\",\"clientSecret\":\"y\"}"
+            .write(to: live.appendingPathComponent("gmail-oauth.json"), atomically: true, encoding: .utf8)
+        try "{\"refreshToken\":\"r\"}"
+            .write(to: live.appendingPathComponent("gmail-tokens.json"), atomically: true, encoding: .utf8)
+
+        _ = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
+
+        let attrs = try FileManager.default.attributesOfItem(
+            atPath: debug.appendingPathComponent("gmail-tokens.json").path)
+        #expect((attrs[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+    }
+
+    @Test func seedGmailOverwritesAStaleDestination() throws {
+        let live = try makeTempDir()
+        let debug = try makeTempDir()
+        try "new".write(to: live.appendingPathComponent("gmail-tokens.json"), atomically: true, encoding: .utf8)
+        try "stale".write(to: debug.appendingPathComponent("gmail-tokens.json"), atomically: true, encoding: .utf8)
+
+        _ = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
+
+        let after = try String(contentsOf: debug.appendingPathComponent("gmail-tokens.json"), encoding: .utf8)
+        #expect(after == "new")
+    }
+
+    @Test func seedGmailCreatesTheDestinationDirectoryWhenAbsent() throws {
+        let live = try makeTempDir()
+        let debug = FileManager.default.temporaryDirectory
+            .appendingPathComponent("debug-seed-gmail-missing-\(UUID().uuidString)", isDirectory: true)
+        try "{}".write(to: live.appendingPathComponent("gmail-oauth.json"), atomically: true, encoding: .utf8)
+
+        let result = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
+
+        #expect(result.copied == ["gmail-oauth.json"])
+        #expect(FileManager.default.fileExists(atPath: debug.appendingPathComponent("gmail-oauth.json").path))
+    }
+
     @Test func seedCreatesTheDestinationDirectoryWhenAbsent() throws {
         let live = try makeTempDir()
         let debug = FileManager.default.temporaryDirectory
