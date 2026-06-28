@@ -1,0 +1,18 @@
+{
+  "version" : 2,
+  "generatedAt" : "2026-06-26T00:00:00.000Z",
+  "items" : [
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "groupName" : "Aurora Strings",
+      "venue" : "Carnegie Hall",
+      "replyText" : "Yes, we'd like to book.",
+      "recipientId" : "pres@presentingorg.example"
+    },
+    {
+      "naturalKey" : "lumen-dance|undated|none",
+      "groupName" : "Lumen Dance",
+      "replyText" : "Could you send your rate?"
+    }
+  ]
+}

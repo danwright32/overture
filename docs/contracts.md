@@ -25,9 +25,9 @@ the workflow's runbook is its spec.
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
-| `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
+| `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1, 2 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
 Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
@@ -95,6 +95,12 @@ and writes the results; the app ingests them and suggests the conversation state
 counterpart side with no automated test, so `fixtures/reply-classify/` is its spec (runbook added in
 the workflow phase).
 
+Version 2 (#392) adds an optional `recipientId` to each queue item and each result, so a reply is
+tied to the specific recipient on the show it came from (a presenter reply and an act reply are then
+classified independently instead of collapsing to the first replier). It is additive: the tolerant
+gate (1 through 2) still accepts the v1 files (`queue.json` / `results.json`), where `recipientId`
+decodes to nil; `queue-v2.json` / `results-v2.json` are the discriminator spec.
+
 ### `overture-voice-feedback.json`
 
 How Dan revises drafts, so the Prep drafter learns his voice over time (#241 / #119). The app writes
@@ -107,3 +113,9 @@ by more than a near-revert/typo (`VoiceFeedbackBuilder.minEditDistance`). Newest
 `maxPairs` (20), so a few trivial or stale edits can't dominate the drafter's context. The distiller
 (#242) must anonymize before reusing: the bodies carry org/venue/contact specifics that are NOT
 transferable voice and must never leak into other drafts.
+
+Version 2 (#392) adds an optional `outcomeRecipientId` to each pair, attributing the outcome to the
+recipient who earned it (the booked one, else the first replier). The drafted body is shared across a
+performance's recipients, so there is still exactly ONE pair per show; the discriminator only credits
+the win, it does not duplicate the body. Additive: `v1.json` stays byte-identical (its
+`outcomeRecipientId` decodes to nil), `v2.json` is the new spec.

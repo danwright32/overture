@@ -30,14 +30,15 @@ struct ReplyClassifyQueue: Codable, Equatable, Sendable {
 }
 
 struct ReplyClassifyItem: Codable, Equatable, Sendable {
-    var naturalKey: String   // opaque, echo verbatim
-    var groupName: String    // research only
+    var naturalKey: String     // opaque show join key, echo verbatim
+    var groupName: String      // research only
     var venue: String?
     var replyText: String
+    var recipientId: String?   // v2 (#392): which recipient on the show this reply came from
 }
 
 enum ReplyClassifyQueueBuilder {
-    static let version = 1
+    static let version = 2
 
     static func build(from items: [ReplyClassifyItem], generatedAt: String) -> ReplyClassifyQueue {
         ReplyClassifyQueue(version: version, generatedAt: generatedAt, items: items)
@@ -64,7 +65,8 @@ struct ReplyClassifyResults: Codable, Equatable, Sendable {
 
 struct ReplyClassifyResult: Codable, Equatable, Sendable {
     var naturalKey: String
-    var intent: String   // raw ReplyIntent value; tolerated as a string so an unknown value decodes
+    var intent: String         // raw ReplyIntent value; tolerated as a string so an unknown value decodes
+    var recipientId: String?   // v2 (#392): echoed back so the intent attaches to the right recipient
 
     var replyIntent: ReplyIntent? { ReplyIntent(rawValue: intent) }
 }
@@ -75,8 +77,8 @@ enum ReplyClassifyResultsError: Error, Equatable {
 
 enum ReplyClassifyResultsDecoder {
     // Tolerant version gate (min...supported), mirroring the #157 decoders so a version bump leaves
-    // older files still accepted.
-    static let supportedVersion = 1
+    // older files still accepted. v2 (#392) added the optional recipient discriminator.
+    static let supportedVersion = 2
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> ReplyClassifyResults {

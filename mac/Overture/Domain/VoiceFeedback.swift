@@ -23,10 +23,13 @@ struct VoiceFeedbackPair: Codable, Equatable, Sendable {
     var sentAt: String             // ISO8601, the ordering key (newest first)
     var outcome: String            // the prospect's outcome (#245): "booked"/"replied"/etc., so the
                                    // distiller can lean on the edits that actually landed
+    var outcomeRecipientId: String?  // v2 (#392): which recipient earned the outcome (the booked one,
+                                     // else the first replier). The body is shared, so there is still
+                                     // ONE pair per show; this only attributes the win.
 }
 
 enum VoiceFeedbackBuilder {
-    static let version = 1
+    static let version = 2
     static let maxPairs = 20
     // Below this normalized edit distance the AI draft and the sent copy are effectively the same
     // (a typo fix or a near-revert): no voice lesson, so the pair is dropped. The capture step
@@ -61,10 +64,21 @@ enum VoiceFeedbackBuilder {
                     sentSubject: p.sentSubject,
                     sentBody: p.sentBody,
                     sentAt: iso.string(from: sentAt),
-                    outcome: p.outcome.rawValue
+                    outcome: p.outcome.rawValue,
+                    outcomeRecipientId: outcomeRecipient(p)
                 )
             }
         return VoiceFeedback(version: version, generatedAt: generatedAt, pairs: Array(pairs))
+    }
+
+    // Which recipient earned the show's outcome (#392): the booked one, else the first replier, else
+    // nil. The drafted body is shared across recipients, so there is still exactly one pair per show;
+    // this only attributes the win so the distiller knows which contact the lesson landed through.
+    static func outcomeRecipient(_ p: Prospect) -> String? {
+        let recipients = p.recipients
+        if let booked = recipients.first(where: { $0.resolution == .booked }) { return booked.id }
+        if let replied = recipients.first(where: { $0.replied }) { return replied.id }
+        return nil
     }
 
     // How strongly to favor an edit by what it earned (#245). Booked beats replied beats the rest, so

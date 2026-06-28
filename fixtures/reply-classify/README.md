@@ -16,3 +16,9 @@ echo back verbatim, never rebuild (the silent-mismatch trap). `intent` is a `Rep
 (`interested` / `wants_to_book` / `has_question` / `declined`), tolerated as a string so an unknown
 value decodes rather than throwing. The queue fixture exercises both an item with a venue and one
 with it omitted.
+
+`queue.json` / `results.json` are the v1 shape (kept byte-identical as the backward-decode proof).
+`queue-v2.json` / `results-v2.json` are version 2 (#392): each item and result gains an optional
+`recipientId`, the opaque per-recipient token the workflow echoes back so a reply attaches to the
+right recipient on a multi-recipient show. It is additive, so the tolerant gate (1 through 2) decodes
+both; in the v1 files `recipientId` is simply absent (decodes to nil).
