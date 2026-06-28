@@ -35,7 +35,7 @@ enum AgentRoster {
 
     private static func prep(_ i: AgentInputs) -> AgentStatus {
         if i.prepRunning { return AgentStatus(name: "Prep", state: .working, detail: "Finding contacts and drafting…") }
-        if i.keptToPrep > 0 { return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) kept to prep") }
+        if i.keptToPrep > 0 { return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep") }
         return AgentStatus(name: "Prep", state: .idle, detail: "Nothing waiting")
     }
 
