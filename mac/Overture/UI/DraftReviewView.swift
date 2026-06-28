@@ -42,24 +42,30 @@ struct DraftReviewView: View {
     }
 
     @ViewBuilder private var contactLine: some View {
+        let display = ContactDisplay.from(name: item.contactName, role: item.contactRole,
+                                          email: item.contactEmail, formURL: item.contactFormURL)
         HStack(spacing: OVSpacing.xs) {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(OVColor.inkFaint)
-            if let name = item.contactName {
+            switch display {
+            case let .person(name, role, _):
                 Text(name).fontWeight(.medium).foregroundStyle(OVColor.ink)
-                if let role = item.contactRole {
-                    Text(role).foregroundStyle(OVColor.inkFaint)
-                }
-            } else if let email = item.contactEmail {
+                if let role { Text(role).foregroundStyle(OVColor.inkFaint) }
+            case let .email(email):
                 Text(email).foregroundStyle(OVColor.ink)
-            } else {
+            case let .form(url):
+                Link(destination: url) { Label("Contact form", systemImage: "link") }
+                    .foregroundStyle(OVColor.forest)
+            case .none:
                 Text("No contact found").foregroundStyle(OVColor.inkFaint)
             }
             if let conf = item.contactConfidence {
                 ConfidencePip(confidence: conf)
             }
             Spacer()
-            if let email = item.contactEmail {
+            // The address is echoed small on the right only for a named contact (name on the left,
+            // email on the right); the email-only case already shows it on the left, so no repeat.
+            if case let .person(_, _, email?) = display {
                 Text(email).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
             }
         }

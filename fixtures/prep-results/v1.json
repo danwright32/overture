@@ -28,6 +28,14 @@
     },
     {
       "naturalKey": "unmatched|key|here"
+    },
+    {
+      "naturalKey": "ivalas-quartet|2026-07-01|madison-square-park",
+      "contact": {
+        "method": "form_or_dm",
+        "confidence": "low",
+        "formUrl": "https://www.ivalasquartet.com/contact"
+      }
     }
   ]
 }
