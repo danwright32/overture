@@ -52,9 +52,41 @@ private let sampleJSON = """
 @Suite("Results import")
 struct ResultsImportTests {
     private func makeContainer() throws -> ModelContainer {
-        let schema = Schema([Prospect.self])
+        let schema = Schema([Prospect.self, Recipient.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContainer(for: schema, configurations: [config])
+    }
+
+    // #394: the queue item exposes whether the performance can still send, so the Send button persists
+    // for the next recipient until every one is sent (the lead sentAt rollup flips on the FIRST send,
+    // so the button must NOT gate on that alone under fan-out).
+    @Test func queueItemTracksWhetherARecipientCanStillSend() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        ctx.insert(p)
+        let act = Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)
+        let presenter = Recipient(id: "b@x.example", email: "b@x.example", name: "B", provenance: .presenter)
+        p.setRecipients([act, presenter])
+
+        #expect(QueueItem(p).hasPendingRecipient == true)            // both pending
+
+        act.sendState = .sent; act.sentAt = Date()
+        #expect(QueueItem(p).hasPendingRecipient == true)            // one sent, one still pending
+
+        presenter.sendState = .sent; presenter.sentAt = Date()
+        #expect(QueueItem(p).hasPendingRecipient == false)          // every recipient sent
+
+        // A form-only contact (no email) is pending but not auto-sendable, so it does NOT keep the row sendable.
+        let formOnly = Recipient(id: "form:https://x", email: nil, name: "C", provenance: .act,
+                                 contactFormURL: "https://x")
+        p.setRecipients([formOnly])
+        #expect(QueueItem(p).hasPendingRecipient == false)
     }
 
     @Test func decodesFileAndRejectsWrongVersion() throws {
