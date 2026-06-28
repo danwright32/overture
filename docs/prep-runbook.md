@@ -16,7 +16,12 @@ before this was codified.
   `performanceDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults`: `results[]` each with `naturalKey`, `contact`, `draft`).
+  (`PrepResults` version `2`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
+  Each entry in `contacts[]` is one party to email for the performance, carrying a
+  `provenance` of `act` or `presenter` (never the host venue). Emit the act, plus at most
+  one real presenting org; the app sends one separate email per contact. (The legacy v1
+  shape carried a single `contact` object; the app still reads it, but new runs MUST write
+  `contacts[]`.)
 - **Read (optional, #119 voice learning):**
   `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
@@ -105,12 +110,15 @@ Walk in order, stop at the first that works:
 3. **The act's contact form / Instagram DM** when the act publishes no email. Record it
    as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
    tappable link). This outranks any venue inbox.
-4. **A genuine presenting org** (the presenter named for the show, NOT the venue) only
-   if the act itself is unreachable. Emailing every relevant party (multiple performers
-   plus a presenter) is a later capability; for now return the single best ACT contact.
+4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Emit
+   the presenter as a SECOND entry in `contacts[]` with `provenance: "presenter"`, in
+   addition to the act, when you find a real presenting org for the show. At most one
+   presenter, and never the host venue. The act stays the primary contact (`provenance:
+   "act"`); the presenter is additive, not a fallback.
 
-If none of the above yields a non-venue contact, return the result with the key echoed
-and `contact` absent rather than reaching for the venue.
+Each contact you emit becomes its own entry in `contacts[]` with its own `provenance`. If
+none of the above yields a non-venue contact, return the result with the key echoed and
+`contacts` absent rather than reaching for the venue.
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an
 address actually READ from a real page; set `formUrl` to that source URL. NEVER emit

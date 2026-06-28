@@ -94,9 +94,28 @@ struct RecipientBackfillTests {
         #expect(r?.isSilent == false)
     }
 
-    @Test func noRecipientWhenThereIsNoContactEmail() {
+    // A scout-only performance (no email, no form) has nothing to make a recipient from.
+    @Test func noRecipientWhenThereIsNeitherEmailNorForm() {
         let p = makeProspect(contactEmail: nil)
+        p.contactFormURL = nil
         #expect(RecipientBackfill.synthesizedRecipient(from: p) == nil)
+    }
+
+    // A form-only act (#368) still becomes a recipient so it shows in the list and can be tracked;
+    // its id is the form URL (not an email) and its email starts nil for Dan to fill in later.
+    @Test func synthesizesAFormOnlyRecipientWhenThereIsNoEmail() {
+        let p = makeProspect(contactEmail: nil)
+        p.contactName = "Ivalas Quartet"
+        p.contactFormURL = "https://www.ivalasquartet.com/contact"
+        p.contactMethodRaw = "form_or_dm"
+
+        let r = RecipientBackfill.synthesizedRecipient(from: p)
+
+        #expect(r != nil)
+        #expect(r?.email == nil)
+        #expect(r?.id == "form:https://www.ivalasquartet.com/contact")
+        #expect(r?.contactFormURL == "https://www.ivalasquartet.com/contact")
+        #expect(r?.provenance == .act)
     }
 
     @Test func runSeedsEveryContactedProspectExactlyOnce() throws {

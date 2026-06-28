@@ -59,4 +59,36 @@ struct RecipientTests {
         let back = try JSONDecoder().decode(Recipient.self, from: data)
         #expect(back == r)
     }
+
+    // A form-only contact (#368, the Ivalas Quartet case) has no published email, only a contact
+    // form. It still becomes a recipient so it shows in the list and can be tracked; its id is the
+    // form URL (not an email), so the SAME recipient is kept when Dan fills in an email later.
+    @Test func aFormOnlyRecipientHasNoEmailAndAStableFormId() {
+        let id = Recipient.makeId(email: nil, formURL: "https://www.ivalasquartet.com/contact")
+        let r = Recipient(id: id!, email: nil, provenance: .act,
+                          contactFormURL: "https://www.ivalasquartet.com/contact")
+        #expect(r.email == nil)
+        #expect(r.id == "form:https://www.ivalasquartet.com/contact")
+    }
+
+    // The id is the canonicalized email when there is one, the form URL otherwise, and nil when
+    // there is neither (nothing to make a recipient from).
+    @Test func makeIdPrefersTheCanonicalizedEmailThenTheForm() {
+        #expect(Recipient.makeId(email: "Erobinson@Aurora.Example", formURL: "x") == "erobinson@aurora.example")
+        #expect(Recipient.makeId(email: nil, formURL: "https://act.example/contact") == "form:https://act.example/contact")
+        #expect(Recipient.makeId(email: "", formURL: "https://act.example/contact") == "form:https://act.example/contact")
+        #expect(Recipient.makeId(email: nil, formURL: nil) == nil)
+    }
+
+    // Per-recipient resolution (#389 derived-outcome model): an additive field capturing the
+    // terminal commercial outcomes that aren't inferable from send/reply/bounce state. Phase 5
+    // reads it to derive the performance status; here we only pin that it round-trips.
+    @Test func resolutionRoundTripsThroughRawString() throws {
+        var r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.resolution == nil)
+        r.resolution = .declinedSoft
+        #expect(r.resolutionRaw == "declined_soft")
+        let back = try JSONDecoder().decode(Recipient.self, from: JSONEncoder().encode(r))
+        #expect(back.resolution == .declinedSoft)
+    }
 }

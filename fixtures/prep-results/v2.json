@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "generatedAt": "2026-06-28T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "contacts": [
+        {
+          "name": "Emma Robinson",
+          "role": "Marketing & Communications Manager",
+          "email": "erobinson@aurorastrings.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "act"
+        },
+        {
+          "name": "Daniel Okafor",
+          "role": "Director of Presentations",
+          "email": "tickets@presentingorg.example",
+          "method": "named_decision_maker",
+          "confidence": "medium",
+          "provenance": "presenter"
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Aurora Strings at Carnegie Hall.",
+        "body": "I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall on March 10. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+        "variant": "rate_stated"
+      }
+    },
+    {
+      "naturalKey": "ivalas-quartet|2026-07-01|madison-square-park",
+      "contacts": [
+        {
+          "method": "form_or_dm",
+          "confidence": "low",
+          "formUrl": "https://www.ivalasquartet.com/contact",
+          "provenance": "act"
+        }
+      ]
+    }
+  ]
+}
