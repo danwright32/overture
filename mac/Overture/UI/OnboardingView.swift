@@ -102,7 +102,7 @@ struct OnboardingView: View {
             await refreshAsync()
             status = omniFocus
                 ? "OmniFocus permission granted."
-                : "Still not granted — allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
+                : "Still not granted. Allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
             busy = false
         }
     }
@@ -114,7 +114,7 @@ struct OnboardingView: View {
             await refreshAsync()
             status = granted
                 ? "Notifications allowed."
-                : "Not allowed — enable Overture in System Settings ▸ Notifications."
+                : "Not allowed. Enable Overture in System Settings ▸ Notifications."
             busy = false
         }
     }
@@ -123,7 +123,7 @@ struct OnboardingView: View {
         agent = OnboardingState.agentInstalled()
         status = agent
             ? "Login agent is installed."
-            : "Not installed yet — run your Overture build once to install it."
+            : "Not installed yet. Run your Overture build once to install it."
     }
 
     private func refresh() {

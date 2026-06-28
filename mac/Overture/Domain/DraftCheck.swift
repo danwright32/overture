@@ -28,7 +28,7 @@ enum DraftCheck {
     static func findings(in body: String) -> [DraftIssue] {
         let text = body.lowercased()
         var issues: [DraftIssue] = []
-        if body.contains("—") { issues.append(.emDash) }
+        if body.contains(Typography.emDash) { issues.append(.emDash) }
         if body.contains("!") || performative.contains(where: text.contains) { issues.append(.performativeEnthusiasm) }
         if booking.contains(where: text.contains) { issues.append(.presumesBooking) }
         if coldHedges.contains(where: text.contains) { issues.append(.coldHedge) }

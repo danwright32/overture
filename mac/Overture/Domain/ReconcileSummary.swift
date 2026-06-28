@@ -40,7 +40,7 @@ struct ReconcileSummary: Equatable, Sendable {
         if omniFocusChanged > 0 {
             parts.append("\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated")
         }
-        guard !parts.isEmpty else { return "Reconcile complete — nothing was due." }
-        return "Reconcile complete — " + parts.joined(separator: ", ") + "."
+        guard !parts.isEmpty else { return "Reconcile complete: nothing was due." }
+        return "Reconcile complete: " + parts.joined(separator: ", ") + "."
     }
 }

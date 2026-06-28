@@ -156,7 +156,7 @@ struct ProspectRowView: View {
         if item.disappearedFromFeed {
             HStack(spacing: 5) {
                 Image(systemName: "calendar.badge.exclamationmark")
-                Text("No longer in the feed — may be cancelled")
+                Text("No longer in the feed, may be cancelled")
             }
             .font(OVType.tag)
             .foregroundStyle(OVColor.rust)
@@ -205,7 +205,7 @@ struct ProspectRowView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "questionmark.diamond.fill")
-                    Text("Unsure call — tap to confirm or fix")
+                    Text("Unsure call, tap to confirm or fix")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.rust)
@@ -229,7 +229,7 @@ struct ProspectRowView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
-                    Text("Possible booking — confirm?")
+                    Text("Possible booking, confirm?")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.gold)

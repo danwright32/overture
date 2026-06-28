@@ -11,7 +11,7 @@ import Foundation
 @Suite("Voice notes protector (#251)")
 struct VoiceNotesProtectorTests {
     private let withNotes = """
-    ## Dan's notes (authoritative — never auto-edited)
+    ## Dan's notes (authoritative, never auto-edited)
 
     Lead with the venue. Keep it level.
 
@@ -22,7 +22,7 @@ struct VoiceNotesProtectorTests {
 
     @Test func notesSectionExtractsOnlyTheDansNotesBlock() {
         let notes = VoiceNotesProtector.notesSection(of: withNotes)
-        #expect(notes.contains("## Dan's notes (authoritative — never auto-edited)"))
+        #expect(notes.contains("## Dan's notes (authoritative, never auto-edited)"))
         #expect(notes.contains("Lead with the venue. Keep it level."))
         #expect(!notes.contains("Observed tendencies"))            // auto section excluded
         #expect(!notes.contains("Dan cuts the second opener"))
@@ -60,7 +60,7 @@ struct VoiceNotesProtectorTests {
     @Test func notesEmptiedToHeadingOnlyAreRestored() {
         // The run left the heading but dropped the body — a wipe, so restore from backup.
         let emptied = """
-        ## Dan's notes (authoritative — never auto-edited)
+        ## Dan's notes (authoritative, never auto-edited)
 
         ## Observed tendencies (auto-generated; regenerated each run)
 

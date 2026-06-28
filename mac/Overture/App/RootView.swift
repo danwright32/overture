@@ -271,7 +271,7 @@ struct RootView: View {
             return
         }
         if result.missing.contains("gmail-tokens.json") {
-            statusMessage = "DEBUG: live Gmail isn't connected — connect it in the release app first, then retry."
+            statusMessage = "DEBUG: live Gmail isn't connected. Connect it in the release app first, then retry."
             return
         }
         statusMessage = GmailAuthManager.shared.isConnected
@@ -317,7 +317,7 @@ struct RootView: View {
     private func debugStageSelfSendLead() {
         let p = DebugStaging.stageSelfSendLead(in: context, now: Date())
         try? context.save()
-        statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?") — approve it, then Send"
+        statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
     }
 
     private func debugClearDebugLeads() {
@@ -488,7 +488,7 @@ struct RootView: View {
         // the contaminated section so it can't feed a future draft, and warn Dan.
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,
                                              prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
-        if !leaks.isEmpty { notes.append("⚠ voice guidance leaked a name — quarantined") }
+        if !leaks.isEmpty { notes.append("⚠ voice guidance leaked a name, quarantined") }
         // #251: if the run altered or dropped Dan's hand-written notes, restore them from the pre-run
         // backup (the fresh auto section is kept).
         if VoiceNotesProtector.restoreIfNeeded(fileURL: VoiceGuidanceGuard.defaultURL,

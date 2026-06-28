@@ -169,17 +169,17 @@ enum QueueModel {
             return Timing(label: "Date TBD", urgency: .unknown)
         }
         if days < 0 { return Timing(label: "Performance passed", urgency: .past) }
-        if days == 0 { return Timing(label: "Performs today — too close to book", urgency: .tooSoon) }
+        if days == 0 { return Timing(label: "Performs today, too close to book", urgency: .tooSoon) }
         if days <= tooCloseDays {
-            return Timing(label: "In \(days) day\(days == 1 ? "" : "s") — likely too close to book", urgency: .tooSoon)
+            return Timing(label: "In \(days) day\(days == 1 ? "" : "s"), likely too close to book", urgency: .tooSoon)
         }
         if days <= 7 {
-            return Timing(label: "In \(days) days — reach out now", urgency: .imminent)
+            return Timing(label: "In \(days) days, reach out now", urgency: .imminent)
         }
         if days <= 21 {
-            return Timing(label: "In \(days) days — good to send", urgency: .soon)
+            return Timing(label: "In \(days) days, good to send", urgency: .soon)
         }
-        return Timing(label: "In \(days) days — send ~3 weeks out", urgency: .ahead)
+        return Timing(label: "In \(days) days, send ~3 weeks out", urgency: .ahead)
     }
 
     // A booked prospect reads "Booked" instead of any outreach urgency, so the row never nags
@@ -281,8 +281,8 @@ enum QueueModel {
         items.filter(\.bookingSuggested).count
     }
 
-    // "Jun 25" for a single date (end nil or same as start), "Jun 25–28" for a same-month
-    // range, "Jun 28–Jul 2" for a cross-month range, "Date to be confirmed" for a bad start.
+    // "Jun 25" for a single date (end nil or same as start), "Jun 25 to 28" for a same-month
+    // range, "Jun 28 to Jul 2" for a cross-month range, "Date to be confirmed" for a bad start.
     static func runDateLabel(start: String?, end: String?) -> String {
         guard let start, let d = day(start) else { return "Date to be confirmed" }
         let cal = easternCalendar
@@ -292,7 +292,7 @@ enum QueueModel {
         let endLabel = sameMonth
             ? "\(cal.component(.day, from: e))"
             : "\(shortMonth(cal.component(.month, from: e))) \(cal.component(.day, from: e))"
-        return "\(startLabel)\u{2013}\(endLabel)"
+        return "\(startLabel) to \(endLabel)"
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {
