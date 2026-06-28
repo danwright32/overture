@@ -173,6 +173,7 @@ struct RootView: View {
                 ToolbarItem(placement: .secondaryAction) {
                     Menu {
                         Button("Seed dev data from live") { debugSeedFromLive() }
+                        Button("Clear dev data") { debugClearDevData() }
                         Button("Mark first as sent") { debugStageFirstAsSent() }
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
@@ -253,6 +254,23 @@ struct RootView: View {
         ingestReplyClassifications()
         statusMessage = "DEBUG: seeded \(result.copied.count) file\(result.copied.count == 1 ? "" : "s")"
             + (result.copied.isEmpty ? " (none found in live)" : ": " + result.copied.joined(separator: ", "))
+    }
+
+    // DEBUG ONLY (#318): targeted reset of the isolated Overture-Debug dev environment — empties the
+    // store and removes the seeded handoff inputs, so seed/test/reset is repeatable. Only ever
+    // touches the Debug location; leaves the dev Gmail login intact.
+    private func debugClearDevData() {
+        DebugSeed.clearStore(in: context)
+        try? context.save()
+        let removed: [String]
+        do {
+            removed = try DebugSeed.clearHandoffInputs(debugBase: DebugSeed.debugHandoffDirectory)
+        } catch {
+            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            return
+        }
+        syncOmniFocus(force: true)   // completes the now-orphaned OmniFocus tasks
+        statusMessage = "DEBUG: cleared dev data (store + \(removed.count) file\(removed.count == 1 ? "" : "s"))"
     }
 
     private func debugStageFirstAsSent() {

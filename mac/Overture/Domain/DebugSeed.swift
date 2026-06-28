@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // #281: a DEBUG-only test affordance. Phase 3 (#267) walls the Debug build off into its own
 // Overture-Debug data directory, so a dev run starts empty and never sees the handoff files the
@@ -65,6 +66,30 @@ enum DebugSeed {
     @discardableResult
     static func seedFromLive() throws -> (copied: [String], missing: [String]) {
         try seed(liveBase: liveHandoffDirectory, debugBase: debugHandoffDirectory)
+    }
+
+    // #318: the targeted-reset counterpart to seed. Removes the handoff INPUTS this helper manages
+    // (only the inputFileNames set) from the Debug folder, returning the names actually removed.
+    // Because it takes only the Debug base and touches only its own file set, it can never reach the
+    // live folder, and it leaves the dev Gmail login (and any other stray dev file) intact.
+    @discardableResult
+    static func clearHandoffInputs(debugBase: URL,
+                                   fileManager: FileManager = .default) throws -> [String] {
+        var removed: [String] = []
+        for name in inputFileNames {
+            let url = debugBase.appendingPathComponent(name)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            try fileManager.removeItem(at: url)
+            removed.append(name)
+        }
+        return removed
+    }
+
+    // Empty the dev store by deleting every model object (Prospect is the only @Model). Emptying the
+    // contents in the running app is safe and immediate, unlike deleting the open store file on disk.
+    static func clearStore(in context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        for p in all { context.delete(p) }
     }
 }
 #endif
