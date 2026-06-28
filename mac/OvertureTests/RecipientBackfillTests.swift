@@ -197,6 +197,22 @@ struct RecipientBackfillTests {
         #expect(p.recipients.count == 2)
     }
 
+    // #410 on the blob path: a legacy blob predates `resolution`, so a booked performance migrated
+    // from the blob must still get its act recipient attributed from the lead outcome.
+    @Test func blobMigrationSeedsResolutionFromTheLeadOutcome() throws {
+        let ctx = try makeInMemoryContext()
+        let p = makeProspect(contactEmail: "act@x.com")
+        p.outcome = .booked
+        p.recipientsRaw = """
+        [{"id":"act@x.com","email":"act@x.com","provenanceRaw":"act","sendStateRaw":"sent","followUpCount":0,"replied":false,"bounced":false}]
+        """
+        ctx.insert(p)
+
+        _ = RecipientBackfill.run(in: ctx)
+
+        #expect(p.recipients.first?.resolution == .booked)
+    }
+
     @Test func runIsIdempotentAndNeverClobbersExistingRecipients() throws {
         let ctx = try makeInMemoryContext()
         let p = makeProspect(contactEmail: "ann@example.com")
