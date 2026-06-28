@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // One party emailed for a performance. Multiple per performance, each with its own send state and
@@ -49,15 +50,24 @@ struct RecipientTests {
         #expect(r.sendStateRaw == "suppressed")
     }
 
-    @Test func codableRoundTripPreservesState() throws {
-        var r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .manual)
+    // Recipient is now a SwiftData @Model (#409): state persists through the store, not a JSON blob.
+    @Test func persistsThroughTheStore() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .manual)
         r.name = "Virgile Roche"
         r.sendState = .sent
         r.replied = true
         r.gmailThreadId = "t1"
-        let data = try JSONEncoder().encode(r)
-        let back = try JSONDecoder().decode(Recipient.self, from: data)
-        #expect(back == r)
+        ctx.insert(r)
+        try ctx.save()
+
+        let back = try ctx.fetch(FetchDescriptor<Recipient>()).first
+        #expect(back?.name == "Virgile Roche")
+        #expect(back?.sendState == .sent)
+        #expect(back?.replied == true)
+        #expect(back?.gmailThreadId == "t1")
+        #expect(back?.provenance == .manual)
     }
 
     // A form-only contact (#368, the Ivalas Quartet case) has no published email, only a contact
@@ -83,12 +93,12 @@ struct RecipientTests {
     // Per-recipient resolution (#389 derived-outcome model): an additive field capturing the
     // terminal commercial outcomes that aren't inferable from send/reply/bounce state. Phase 5
     // reads it to derive the performance status; here we only pin that it round-trips.
-    @Test func resolutionRoundTripsThroughRawString() throws {
-        var r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+    @Test func resolutionMapsThroughRawString() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.resolution == nil)
         r.resolution = .declinedSoft
         #expect(r.resolutionRaw == "declined_soft")
-        let back = try JSONDecoder().decode(Recipient.self, from: JSONEncoder().encode(r))
-        #expect(back.resolution == .declinedSoft)
+        r.resolutionRaw = "booked"
+        #expect(r.resolution == .booked)
     }
 }

@@ -70,30 +70,28 @@ enum PrepImporter {
     // mirrored into the legacy singular fields for the current UI, removed in the Phase 8 cleanup.
     @MainActor
     private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect) {
-        var current = p.recipients
         for c in contacts {
             guard let id = Recipient.makeId(email: c.email, formURL: c.formUrl) else { continue }
             let provenance = RecipientProvenance(rawValue: c.provenance ?? "") ?? .act
             let email = (c.email?.isEmpty == false) ? c.email : nil
 
-            if let i = current.firstIndex(where: { $0.id == id }) {
-                apply(c, email: email, provenance: provenance, to: &current[i])
-            } else if let i = current.firstIndex(where: {
-                $0.provenance == provenance && $0.provenance != .manual && $0.sendState == .pending
-            }) {
-                current[i].id = id
-                apply(c, email: email, provenance: provenance, to: &current[i])
+            if let existing = p.recipients.first(where: { $0.id == id }) {
+                apply(c, email: email, provenance: provenance, to: existing)
+            } else if let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
+                // A corrected email for an existing pending act/presenter (or a form-only recipient
+                // that just gained an email, matched by its form URL #408) updates the row in place.
+                existing.id = id
+                apply(c, email: email, provenance: provenance, to: existing)
             } else {
-                current.append(Recipient(id: id, email: email, name: c.name, role: c.role,
+                p.addRecipient(Recipient(id: id, email: email, name: c.name, role: c.role,
                                          provenance: provenance, contactMethodRaw: c.method,
                                          contactConfidenceRaw: c.confidence, contactFormURL: c.formUrl))
             }
         }
-        p.setRecipients(current)
 
         // Transitional legacy mirror: track the act contact (or the first recipient) so the current
         // single-contact UI keeps working until Phase 7 reads recipients directly.
-        if let primary = current.first(where: { $0.provenance == .act }) ?? current.first {
+        if let primary = p.recipients.first(where: { $0.provenance == .act }) ?? p.recipients.first {
             p.contactName = primary.name
             p.contactRole = primary.role
             p.contactEmail = primary.email
@@ -103,10 +101,25 @@ enum PrepImporter {
         }
     }
 
-    // Refresh a recipient's contact fields from a found contact, preserving its send/engagement
+    // Find a still-pending, non-manual recipient of the same provenance to update in place. When the
+    // incoming contact carries a form URL, match the recipient with that SAME form URL (so a
+    // form-only recipient gaining an email keeps its row, #408) and never grab an unrelated pending
+    // recipient; otherwise (a plain email correction) match the first pending one of that provenance.
+    private static func matchPending(in p: Prospect, provenance: RecipientProvenance,
+                                     formURL: String?) -> Recipient? {
+        let pending = p.recipients.filter {
+            $0.provenance == provenance && $0.provenance != .manual && $0.sendState == .pending
+        }
+        if let formURL {
+            return pending.first { $0.contactFormURL == formURL }
+        }
+        return pending.first
+    }
+
+    // Refresh a recipient row's contact fields from a found contact, preserving its send/engagement
     // state. nil fields in the new contact don't erase existing values.
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
-                              to r: inout Recipient) {
+                              to r: Recipient) {
         if let email { r.email = email }
         r.name = c.name ?? r.name
         r.role = c.role ?? r.role

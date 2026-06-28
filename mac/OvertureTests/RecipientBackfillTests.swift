@@ -153,6 +153,50 @@ struct RecipientBackfillTests {
         #expect(unsent.sentAt == nil)
     }
 
+    // #410: a past booked/lost performance must seed the recipient's terminal resolution, or it would
+    // re-derive as Active under the per-recipient status.
+    @Test func synthesizesResolutionFromBookedAndLostOutcomes() {
+        let booked = makeProspect(contactEmail: "a@x.com"); booked.outcome = .booked
+        #expect(RecipientBackfill.synthesizedRecipient(from: booked)?.resolution == .booked)
+        let soft = makeProspect(contactEmail: "b@x.com"); soft.outcome = .lostSoft
+        #expect(RecipientBackfill.synthesizedRecipient(from: soft)?.resolution == .declinedSoft)
+        let hard = makeProspect(contactEmail: "c@x.com"); hard.outcome = .lostHard
+        #expect(RecipientBackfill.synthesizedRecipient(from: hard)?.resolution == .declinedHard)
+        let open = makeProspect(contactEmail: "d@x.com")
+        #expect(RecipientBackfill.synthesizedRecipient(from: open)?.resolution == nil)
+    }
+
+    // #409: the one-shot migration must turn a legacy multi-recipient blob into rows, preserving every
+    // recipient's own state (provenance, send state, follow-up count, replied/bounced). This is the
+    // risky one-way path the in-memory suite otherwise never exercises.
+    @Test func migratesTheLegacyBlobIntoRowsPreservingPerRecipientState() throws {
+        let ctx = try makeInMemoryContext()
+        let p = makeProspect(contactEmail: "act@x.com")
+        p.recipientsRaw = """
+        [{"id":"act@x.com","email":"act@x.com","name":"Act","provenanceRaw":"act","sendStateRaw":"sent","followUpCount":2,"replied":true,"bounced":false},
+         {"id":"pres@y.com","email":"pres@y.com","name":"Pres","provenanceRaw":"presenter","sendStateRaw":"pending","followUpCount":0,"replied":false,"bounced":true}]
+        """
+        ctx.insert(p)
+
+        let seeded = RecipientBackfill.run(in: ctx)
+
+        #expect(seeded == 1)
+        #expect(p.recipients.count == 2)
+        let act = p.recipients.first { $0.id == "act@x.com" }
+        #expect(act?.provenance == .act)
+        #expect(act?.sendState == .sent)
+        #expect(act?.followUpCount == 2)
+        #expect(act?.replied == true)
+        let pres = p.recipients.first { $0.id == "pres@y.com" }
+        #expect(pres?.provenance == .presenter)
+        #expect(pres?.sendState == .pending)
+        #expect(pres?.bounced == true)
+
+        // Idempotent: a second run sees a populated relationship and does nothing.
+        #expect(RecipientBackfill.run(in: ctx) == 0)
+        #expect(p.recipients.count == 2)
+    }
+
     @Test func runIsIdempotentAndNeverClobbersExistingRecipients() throws {
         let ctx = try makeInMemoryContext()
         let p = makeProspect(contactEmail: "ann@example.com")

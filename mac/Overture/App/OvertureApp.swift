@@ -14,7 +14,7 @@ struct OvertureApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
-        let schema = Schema([Prospect.self])
+        let schema = Schema([Prospect.self, Recipient.self])
         var container: ModelContainer? = nil
         var lock: StoreLock? = nil
         var reason: String? = nil
