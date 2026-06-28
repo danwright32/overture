@@ -30,7 +30,11 @@ enum SendService {
     static func sendOne(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
         guard prospect.status == .approved, prospect.sentAt == nil,
               let email = prospect.contactEmail, let body = prospect.draftBody else { return false }
-        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "", body: body)
+        // The stored body is salutation-free (#393); the app owns the greeting at send, one per
+        // recipient. The frozen sent copy below stays the BARE body so voice learning sees the shared
+        // template, not the greeting.
+        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
+                                body: Salutation.greeting(for: prospect.contactName) + "\n\n" + body)
         do {
             let receipt = try await sender.send(mail)
             prospect.sentAt = now
@@ -138,10 +142,12 @@ enum SendService {
             return Outcome(sent: 0, failed: 0, throttled: true)
         }
 
+        // Salutation-free body (#393): compose the greeting at send, but freeze the BARE body below.
+        let body = next.draftBody ?? ""
         let mail = OutgoingMail(
             to: next.contactEmail ?? "",
             subject: next.draftSubject ?? "",
-            body: next.draftBody ?? ""
+            body: Salutation.greeting(for: next.contactName) + "\n\n" + body
         )
         do {
             let receipt = try await sender.send(mail)
@@ -150,7 +156,7 @@ enum SendService {
             next.gmailThreadId = receipt.threadId
             next.gmailMessageId = receipt.messageID
             next.priorRelationshipAtSend = next.priorRelationship
-            next.freezeSentCopy(subject: mail.subject, body: mail.body)
+            next.freezeSentCopy(subject: mail.subject, body: body)
             next.sendError = nil
             try? context.save()
             return Outcome(sent: 1, failed: 0, throttled: queue.count > 1)

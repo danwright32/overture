@@ -51,6 +51,60 @@ struct SendServiceTests {
         try? ctx.save()
     }
 
+    private func approvedNamed(_ ctx: ModelContext, group: String, name: String?, email: String,
+                               body: String, ingested: Date) -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
+        p.contactEmail = email; p.contactName = name
+        p.draftSubject = "S"; p.draftBody = body
+        ctx.insert(p)
+        try? ctx.save()
+        return p
+    }
+
+    // Phase 2.5 (#393): the body is salutation-free; the app composes the greeting at send. The frozen
+    // sent copy stays the BARE body so the voice pair learns the shared template, not the greeting.
+    @Test func sendOneComposesTheGreetingOverTheBareBody() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
+                              body: "I photograph performing arts in New York.",
+                              ingested: Date(timeIntervalSince1970: 1))
+        let sender = CapturingSender()
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sender.last?.body == "Hi Emma,\n\nI photograph performing arts in New York.")
+        #expect(p.sentBody == "I photograph performing arts in New York.")
+    }
+
+    @Test func sendOneGreetsThereWhenNoName() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: nil, email: "info@act.example",
+                              body: "I document dance unobtrusively.",
+                              ingested: Date(timeIntervalSince1970: 1))
+        let sender = CapturingSender()
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sender.last?.body == "Hi there,\n\nI document dance unobtrusively.")
+    }
+
+    @Test func releaseDueSendsComposesTheGreetingAndFreezesTheBareBody() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Lumen", name: "Lou Park", email: "lou@act.example",
+                              body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        let sender = CapturingSender()
+
+        _ = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sender.last?.body == "Hi Lou,\n\nI document dance.")
+        #expect(p.sentBody == "I document dance.")
+    }
+
     @Test func pendingExcludesUnsendable() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))

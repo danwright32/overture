@@ -57,6 +57,12 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // Phase 2.5 (#393): set when the salutation normalizer found a greeting-shaped opener it could
+    // not confidently strip, so the stored body may still carry an inline greeting. Such a draft is
+    // treated as act-only (it can't be reused for a differently-named recipient) until a Prep re-run
+    // produces a salutation-free body.
+    var draftNeedsSalutationReview: Bool = false
+
     // A freeze SEPARATE from draftEditedByDan (#392): set once Dan has curated the recipient list
     // (manual add/remove at approval, Phase 7), so a Prep re-run never clobbers his recipient edits
     // even while a body redraft still flows. The two freezes are independent.

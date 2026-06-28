@@ -15,8 +15,9 @@ instead of the workflow silently writing a file the app can't ingest (the #109 c
 decision-maker contact + a drafted email with a recorded `variant`), a contact-only result (no draft
 yet, and the contact's own optionals omitted), a bare result (just the echoed `naturalKey`, no
 contact or draft), and a form-only act (a `form_or_dm` contact with a `formUrl` and no email). It
-stays byte-identical as the proof that the custom `init(from:)` still maps a v1 singular `contact` to
-a one-element `contacts[]`.
+keeps the legacy single-`contact` shape as the proof that the custom `init(from:)` still maps a v1
+singular `contact` to a one-element `contacts[]`. Its draft body is salutation-free (#393): the app
+owns the greeting at send, so no fixture body carries an inline "Hi <name>,".
 
 `v2.json` (version 2, #392) is the current shape new runs MUST write: `contacts[]`, one entry per
 party to email, each with a `provenance` (`act` / `presenter`, never the host venue). It exercises a
