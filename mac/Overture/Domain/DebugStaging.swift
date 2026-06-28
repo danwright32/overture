@@ -18,6 +18,16 @@ enum DebugStaging {
         prospect.status = .approved
         prospect.priorRelationshipAtSend = prospect.priorRelationship
         prospect.sendError = nil
+        seedRecipient(prospect)
+    }
+
+    // #391: mirror the staged singular fields into recipients[0] in-session, reusing the same
+    // synthesizer the launch backfill uses, so a staged lead carries the new model immediately
+    // instead of showing zero recipients until the next-launch backfill. No-op when the staged lead
+    // has no contact email (nothing to make a recipient from).
+    private static func seedRecipient(_ prospect: Prospect) {
+        guard let recipient = RecipientBackfill.synthesizedRecipient(from: prospect) else { return }
+        prospect.setRecipients([recipient])
     }
 
     // Insert a fresh lead already eligible for the OmniFocus sync (#231): contacted, replied, with a
@@ -40,6 +50,7 @@ enum DebugStaging {
         p.conversationStateRaw = ConversationState.wantsToBook.rawValue
         p.conversationStateSourceRaw = OutcomeSource.manual.rawValue
         p.conversationStateSetAt = now
+        seedRecipient(p)
         context.insert(p)
         return p
     }
@@ -64,6 +75,7 @@ enum DebugStaging {
         p.contactEmail = address
         p.draftSubject = "Overture self-send test"
         p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
+        seedRecipient(p)
         context.insert(p)
         return p
     }

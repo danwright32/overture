@@ -99,5 +99,41 @@ struct DebugStagingTests {
 
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
+
+    // #391: each stager must seed a matching recipients[0] in-session, or a freshly staged lead shows
+    // zero recipients until a relaunch triggers the backfill (same unaudited-path class as #317).
+    @Test func stageAsSentSeedsASentRecipient() {
+        let p = makeProspect()
+        p.contactEmail = "ann@example.com"
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        DebugStaging.stageAsSent(p, now: now)
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.provenance == .act)
+        #expect(p.recipients.first?.sendState == .sent)
+        #expect(p.recipients.first?.sentAt == now)
+    }
+
+    @Test func reminderDueLeadSeedsARepliedRecipient() throws {
+        let ctx = try makeInMemoryContext()
+
+        let p = DebugStaging.stageReminderDueLead(in: ctx, now: Date())
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.email == "reminder@debug.example")
+        #expect(p.recipients.first?.sendState == .sent)
+        #expect(p.recipients.first?.replied == true)
+    }
+
+    @Test func selfSendLeadSeedsAPendingRecipient() throws {
+        let ctx = try makeInMemoryContext()
+
+        let p = DebugStaging.stageSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.email == "self@example.com")
+        #expect(p.recipients.first?.sendState == .pending)
+    }
 }
 #endif
