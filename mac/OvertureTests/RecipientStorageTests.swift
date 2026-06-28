@@ -1,18 +1,27 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
-// Phase 1 (#391): recipients are stored as a JSON blob on Prospect (recipientsRaw) with a computed
-// [Recipient] accessor and mutating helpers, mirroring the rejectedBookingIdsRaw raw-string idiom.
-// These cover the storage layer only; the backfill that seeds recipients[0] is covered separately.
+// #409: recipients are their own SwiftData rows, a cascade-deleted relationship on Prospect, with
+// mutating helpers (setRecipients/addRecipient/removeRecipient/updateRecipient). These cover the
+// relationship-mutation layer; the blob->rows migration is covered separately.
+@MainActor
 @Suite("Recipient storage")
 struct RecipientStorageTests {
-    private func makeProspect() -> Prospect {
-        Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
-                 performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
-                 priorRelationship: "warm", production: "self", profile: "neutral",
-                 coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
-                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    private func makeProspect(_ ctx: ModelContext) -> Prospect {
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        return p
     }
 
     private func recipient(_ email: String, name: String? = nil,
@@ -20,35 +29,36 @@ struct RecipientStorageTests {
         Recipient(id: email, email: email, name: name, provenance: provenance)
     }
 
-    @Test func emptyRawDecodesToNoRecipients() {
-        let p = makeProspect()
-        #expect(p.recipientsRaw == "")
+    @Test func anewProspectHasNoRecipients() throws {
+        let p = makeProspect(try context())
         #expect(p.recipients.isEmpty)
     }
 
-    @Test func setRecipientsRoundTrips() {
-        let p = makeProspect()
-        let a = recipient("a@example.com", name: "Ann")
-        let b = recipient("b@example.com", name: "Bo", provenance: .presenter)
+    @Test func setRecipientsPersistsThroughTheStore() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
 
-        p.setRecipients([a, b])
+        p.setRecipients([recipient("a@example.com", name: "Ann"),
+                         recipient("b@example.com", name: "Bo", provenance: .presenter)])
+        try ctx.save()
 
-        #expect(p.recipients == [a, b])
-        // Persisted as JSON, not empty, so a re-read after a store reload still decodes.
-        #expect(!p.recipientsRaw.isEmpty)
+        let back = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(Set(back?.recipients.map(\.id) ?? []) == ["a@example.com", "b@example.com"])
     }
 
-    @Test func addRecipientAppends() {
-        let p = makeProspect()
+    @Test func addRecipientAppends() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
         p.setRecipients([recipient("a@example.com")])
 
         p.addRecipient(recipient("b@example.com"))
 
-        #expect(p.recipients.map(\.id) == ["a@example.com", "b@example.com"])
+        #expect(Set(p.recipients.map(\.id)) == ["a@example.com", "b@example.com"])
     }
 
-    @Test func removeRecipientDropsById() {
-        let p = makeProspect()
+    @Test func removeRecipientDropsById() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
         p.setRecipients([recipient("a@example.com"), recipient("b@example.com")])
 
         p.removeRecipient(id: "a@example.com")
@@ -56,22 +66,25 @@ struct RecipientStorageTests {
         #expect(p.recipients.map(\.id) == ["b@example.com"])
     }
 
-    @Test func updateRecipientMutatesOneElement() {
-        let p = makeProspect()
+    @Test func updateRecipientMutatesOneRow() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
         p.setRecipients([recipient("a@example.com"), recipient("b@example.com")])
 
         p.updateRecipient(id: "b@example.com") { $0.sendState = .sent }
 
-        #expect(p.recipients[0].sendState == .pending)
-        #expect(p.recipients[1].sendState == .sent)
+        #expect(p.recipients.first { $0.id == "a@example.com" }?.sendState == .pending)
+        #expect(p.recipients.first { $0.id == "b@example.com" }?.sendState == .sent)
     }
 
-    @Test func updateRecipientIgnoresUnknownId() {
-        let p = makeProspect()
+    @Test func updateRecipientIgnoresUnknownId() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
         p.setRecipients([recipient("a@example.com")])
 
         p.updateRecipient(id: "missing@example.com") { $0.bounced = true }
 
-        #expect(p.recipients == [recipient("a@example.com")])
+        #expect(p.recipients.map(\.id) == ["a@example.com"])
+        #expect(p.recipients.first?.bounced == false)
     }
 }

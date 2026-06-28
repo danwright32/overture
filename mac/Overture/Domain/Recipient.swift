@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // Where a recipient came from. `act` = the performers; `presenter` = a real presenting org (never
 // the host venue); `manual` = an address Dan typed in at approval.
@@ -24,37 +25,44 @@ enum RecipientResolution: String, Codable, CaseIterable, Sendable {
 }
 
 // One party emailed for a performance: an act contact, a presenter, or a manual add. A performance
-// holds one or more of these (stored as a JSON blob on Prospect, like rejectedBookingIdsRaw). Each
-// carries its own send + engagement state so reply detection, follow-ups, and reminders are
-// per-recipient, while booking and the one draft stay on the performance.
-struct Recipient: Codable, Equatable, Sendable {
+// holds one or more of these as its own SwiftData rows (#409, promoted from a JSON blob so editing
+// one recipient can't overwrite another's state and the row identity survives a form-only contact
+// gaining an email). Each carries its own send + engagement state so reply detection, follow-ups, and
+// reminders are per-recipient, while booking and the one draft stay on the performance.
+@Model
+final class Recipient {
     // Identity + contact. `id` is the canonicalized email when there is one, otherwise the contact
     // form URL (a form-only act, #368), so the SAME recipient is kept when Dan fills in an email
-    // later. `email` is nil for a form-only contact until Dan adds one.
-    var id: String
+    // later. `email` is nil for a form-only contact until Dan adds one. NOTE: `id` is deliberately
+    // NOT @Attribute(.unique) — the same act emailed for two performances shares an id, and a unique
+    // constraint would merge those rows across prospects.
+    var id: String = ""
     var email: String?
     var name: String?
     var role: String?
-    var provenanceRaw: String
+    var provenanceRaw: String = RecipientProvenance.manual.rawValue
     var contactMethodRaw: String?
     var contactConfidenceRaw: String?
     var contactFormURL: String?
 
     // Per-recipient send + engagement.
-    var sendStateRaw: String
+    var sendStateRaw: String = SendState.pending.rawValue
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?
     var sendError: String?
-    var followUpCount: Int
+    var followUpCount: Int = 0
     var lastFollowUpAt: Date?
-    var replied: Bool
+    var replied: Bool = false
     var repliedAt: Date?
     var lastReplyId: String?
     var dismissedReplyId: String?
     var lastReplyText: String?
-    var bounced: Bool
+    var bounced: Bool = false
     var resolutionRaw: String?
+
+    // The performance this recipient belongs to (inverse of Prospect.recipients).
+    var prospect: Prospect?
 
     init(id: String, email: String?, name: String? = nil, role: String? = nil,
          provenance: RecipientProvenance,
@@ -68,20 +76,6 @@ struct Recipient: Codable, Equatable, Sendable {
         self.contactMethodRaw = contactMethodRaw
         self.contactConfidenceRaw = contactConfidenceRaw
         self.contactFormURL = contactFormURL
-        self.sendStateRaw = SendState.pending.rawValue
-        self.sentAt = nil
-        self.gmailThreadId = nil
-        self.gmailMessageId = nil
-        self.sendError = nil
-        self.followUpCount = 0
-        self.lastFollowUpAt = nil
-        self.replied = false
-        self.repliedAt = nil
-        self.lastReplyId = nil
-        self.dismissedReplyId = nil
-        self.lastReplyText = nil
-        self.bounced = false
-        self.resolutionRaw = nil
     }
 
     // The stable join + dedupe key: the canonicalized email when present, else the form URL (so a

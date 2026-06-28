@@ -57,6 +57,12 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // Phase 2.5 (#393): set when the salutation normalizer found a greeting-shaped opener it could
+    // not confidently strip, so the stored body may still carry an inline greeting. Such a draft is
+    // treated as act-only (it can't be reused for a differently-named recipient) until a Prep re-run
+    // produces a salutation-free body.
+    var draftNeedsSalutationReview: Bool = false
+
     // A freeze SEPARATE from draftEditedByDan (#392): set once Dan has curated the recipient list
     // (manual add/remove at approval, Phase 7), so a Prep re-run never clobbers his recipient edits
     // even while a body redraft still flows. The two freezes are independent.
@@ -139,10 +145,14 @@ final class Prospect {
     // rejectedBookingIds. Defaulted so existing records migrate cleanly.
     var rejectedBookingIdsRaw: String = ""
 
-    // The performance's recipients (#391), stored as a JSON-encoded blob and read via `recipients`.
-    // Defaulted "" so existing records and the scout's inserts migrate cleanly (additive, like the
-    // other defaulted fields the live store already carries). "" decodes to no recipients.
+    // Legacy (#391): recipients used to live here as a JSON-encoded blob. As of #409 recipients are
+    // their own SwiftData rows (see `recipients` below); this column is kept ONLY as input to the
+    // one-shot blob->rows migration (RecipientMigration) and is dropped once that is live-verified.
     var recipientsRaw: String = ""
+
+    // The performance's recipients as their own rows (#409). Cascade-deleted with the performance.
+    @Relationship(deleteRule: .cascade, inverse: \Recipient.prospect)
+    var recipients: [Recipient] = []
 
     // Fallback for #203 when the rejected auto-booking has no recorded source id (#218): a booking
     // auto-detected before that id was tracked. Set true on such a reject so reconcileBooked never
@@ -300,26 +310,15 @@ final class Prospect {
         Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
     }
 
-    // The performance's recipients (#391): each act contact, presenter, or manual add Dan emails
-    // separately over the shared body. Stored as a JSON blob in recipientsRaw (Recipient is a struct,
-    // not a stringly value, so JSON rather than rejectedBookingIds' newline-join), with a computed
-    // accessor and mutating helpers — the same raw-string-plus-accessor idiom the live store already
-    // survives. All writers decode -> change one element -> re-encode; the empty string decodes to [].
-    var recipients: [Recipient] {
-        get {
-            guard let data = recipientsRaw.data(using: .utf8), !data.isEmpty else { return [] }
-            return (try? JSONDecoder().decode([Recipient].self, from: data)) ?? []
+    // The performance's recipients (#409): each act contact, presenter, or manual add Dan emails
+    // separately over the shared body, now their own rows (the `recipients` @Relationship above).
+    // These helpers mutate the relationship directly; deletions go through the model context so a
+    // removed recipient row is actually destroyed, not just detached.
+    func setRecipients(_ newRecipients: [Recipient]) {
+        for existing in recipients where !newRecipients.contains(where: { $0 === existing }) {
+            modelContext?.delete(existing)
         }
-        set { recipientsRaw = Prospect.encodeRecipients(newValue) }
-    }
-
-    private static func encodeRecipients(_ recipients: [Recipient]) -> String {
-        guard !recipients.isEmpty, let data = try? JSONEncoder().encode(recipients) else { return "" }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    func setRecipients(_ recipients: [Recipient]) {
-        self.recipients = recipients
+        recipients = newRecipients
     }
 
     func addRecipient(_ recipient: Recipient) {
@@ -327,16 +326,17 @@ final class Prospect {
     }
 
     func removeRecipient(id: String) {
+        for r in recipients where r.id == id {
+            modelContext?.delete(r)
+        }
         recipients.removeAll { $0.id == id }
     }
 
-    // Mutate exactly one recipient in place (the decode-mutate-reencode idiom). A no-op for an
-    // unknown id, so callers needn't pre-check membership.
-    func updateRecipient(id: String, _ mutate: (inout Recipient) -> Void) {
-        var current = recipients
-        guard let index = current.firstIndex(where: { $0.id == id }) else { return }
-        mutate(&current[index])
-        recipients = current
+    // Mutate exactly one recipient in place (it is a managed row, so the change persists on save).
+    // A no-op for an unknown id, so callers needn't pre-check membership.
+    func updateRecipient(id: String, _ mutate: (Recipient) -> Void) {
+        guard let r = recipients.first(where: { $0.id == id }) else { return }
+        mutate(r)
     }
 
     // Dan dismissed a wrong auto-detected reply (#219): revert to no-response and remember which

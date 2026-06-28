@@ -164,6 +164,57 @@ struct PrepImporterTests {
     // recipientsEditedByDan is a freeze SEPARATE from draftEditedByDan: once Dan has curated the
     // recipient list (manual add/remove, Phase 7), a re-run must not clobber it, even while a body
     // redraft still flows.
+    // #408 / #409: a form-only recipient that later gains an email via a Prep re-run must keep the
+    // SAME row (matched by its form URL), not spawn a duplicate.
+    @Test func aFormOnlyRecipientGainingAnEmailKeepsTheSameRow() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Ivalas Quartet", date: "2026-07-01", venue: "Madison Square Park")
+        let form = "https://www.ivalasquartet.com/contact"
+
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Ivalas Quartet", role: nil, email: nil, method: "form_or_dm",
+                            confidence: "low", formUrl: form, provenance: "act"),
+            ])
+        ]), into: ctx)
+        // The act later replies to the form submission, so a re-run has a real email for it.
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Ivalas Quartet", role: "Manager", email: "hello@ivalas.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: form, provenance: "act"),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 1)
+        #expect(p?.recipients.first?.email == "hello@ivalas.example")
+        #expect(p?.recipients.first?.id == "hello@ivalas.example")
+        #expect(p?.recipients.first?.contactFormURL == form)
+    }
+
+    // The plain corrected-email path (no form URL): a re-run with a different email for the same
+    // pending act updates that row in place rather than duplicating.
+    @Test func aCorrectedEmailUpdatesThePendingActInPlace() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: nil, email: "old@act.example", method: nil,
+                            confidence: nil, formUrl: nil, provenance: "act"),
+            ])
+        ]), into: ctx)
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: nil, email: "new@act.example", method: nil,
+                            confidence: nil, formUrl: nil, provenance: "act"),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 1)
+        #expect(p?.recipients.first?.email == "new@act.example")
+    }
+
     @Test func recipientsEditedByDanFreezeIsNotClobberedByAReRun() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
