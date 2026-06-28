@@ -51,10 +51,12 @@ struct ReplyDetectionTests {
 @Suite("Reply service")
 struct ReplyServiceTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // Detection now reads recipient threads (#418 A2), so a sent prospect needs a sent recipient
+    // carrying the thread (the lead gmailThreadId rollup is kept too for the A3 bridge readers).
     @discardableResult
     private func make(_ ctx: ModelContext, group: String, threadId: String?, sentAt: Date?,
                       outcome: Outcome = .noResponse, source: OutcomeSource? = nil) -> Prospect {
@@ -69,7 +71,20 @@ struct ReplyServiceTests {
         p.outcome = outcome
         p.outcomeSourceRaw = source?.rawValue
         ctx.insert(p)
+        if let threadId {
+            addRecipient(p, id: group + "@act.example", threadId: threadId, sentAt: sentAt)
+        }
         return p
+    }
+
+    @discardableResult
+    private func addRecipient(_ p: Prospect, id: String, threadId: String?, sentAt: Date?) -> Recipient {
+        let r = Recipient(id: id, email: id, provenance: .act)
+        r.gmailThreadId = threadId
+        r.sentAt = sentAt
+        r.sendState = sentAt != nil ? .sent : .pending
+        p.addRecipient(r)
+        return r
     }
 
     private let replyThread = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
@@ -98,5 +113,72 @@ struct ReplyServiceTests {
         #expect(n == 0)
         #expect(noReply.outcome == .noResponse)
         #expect(manual.outcome == .lostSoft)   // manual is never overwritten
+    }
+
+    // #418 A2 — the core fix: a reply on a NON-first recipient's thread is detected and attributed to
+    // that recipient (not lost behind the first contact's state), and rolls up to the lead.
+    @Test func detectsAReplyOnANonFirstRecipientThread() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())   // recipient A on t1
+        addRecipient(p, id: "b@present.example", threadId: "t2", sentAt: Date())  // recipient B on t2
+
+        let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
+                                           now: Date(timeIntervalSince1970: 9)) { id in
+            id == "t2" ? self.replyThread : self.noReplyThread
+        }
+        #expect(n == 1)
+        #expect(p.recipients.first { $0.gmailThreadId == "t2" }?.replied == true)
+        #expect(p.recipients.first { $0.gmailThreadId == "t1" }?.replied == false)
+        #expect(p.outcome == .replied)   // A3 rollup keeps lead-level readers working
+    }
+
+    // #418 A2 — the regression for the swallow bug: once contact A replies (lead becomes auto .replied),
+    // a LATER reply from contact B is still detected. Before this phase the lead-level guard buried B.
+    @Test func anAlreadyRepliedLeadStillDetectsASecondContactsReply() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())
+        addRecipient(p, id: "b@present.example", threadId: "t2", sentAt: Date())
+        let me = "dan@danwrightphotography.com"
+
+        // Round 1: only A (t1) has replied.
+        _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 9)) {
+            $0 == "t1" ? self.replyThread : self.noReplyThread
+        }
+        #expect(p.outcome == .replied)   // lead is now auto .replied
+
+        // Round 2: B (t2) now replies too — must NOT be swallowed by the lead's .replied state.
+        let n2 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 99)) { _ in
+            self.replyThread
+        }
+        #expect(n2 == 1)
+        #expect(p.recipients.first { $0.gmailThreadId == "t2" }?.replied == true)
+    }
+
+    // #418 A2 — a per-recipient MANUAL mark on one contact does not blind detection of another.
+    @Test func aManualMarkOnOneRecipientDoesNotBlindAnother() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())
+        p.recipients.first?.outcomeSource = .manual   // contact A hand-judged
+        addRecipient(p, id: "b@present.example", threadId: "t2", sentAt: Date())
+
+        let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
+                                           now: Date(timeIntervalSince1970: 9)) { _ in self.replyThread }
+        #expect(n == 1)   // only B is newly detected
+        #expect(p.recipients.first { $0.gmailThreadId == "t1" }?.replied == false)  // manual A untouched
+        #expect(p.recipients.first { $0.gmailThreadId == "t2" }?.replied == true)
+    }
+
+    // #418 A3 — the bridge writes lead lastReplyText + lastReplyAt so ReplyClassifyService.needsClassify
+    // (which re-fires on lastReplyAt > conversationStateSetAt) keeps working during Phases A-E.
+    @Test func rollupCapturesReplyBodyAndTimeForClassify() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())
+        // "WWVz" is base64url for "Yes"; a valid text/plain part so latestReplyBody returns it.
+        let full = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}],"mimeType":"text/plain","body":{"data":"WWVz"}}}]}"#.utf8)
+        _ = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
+                                       now: Date(timeIntervalSince1970: 50),
+                                       fetchThread: { _ in self.replyThread },
+                                       fetchFullThread: { _ in full })
+        #expect(p.lastReplyAt == Date(timeIntervalSince1970: 50))
     }
 }

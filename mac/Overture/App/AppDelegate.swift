@@ -44,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // migrates BEFORE the reconciler — and any later per-recipient send — can read the new model.
         // Guarded by recipients.isEmpty, so it's a no-op on every launch after the first.
         RecipientBackfill.run(in: container.mainContext)
+        // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
+        // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
+        // every contacted recipient carries its own thread.
+        RecipientBackfill.repairThreadDown(in: container.mainContext)
         // Recover salutation-free bodies from legacy inline-greeting drafts (#393), so the app can
         // render the greeting per recipient at send. Idempotent (a stripped body has nothing to strip).
         DraftSalutationMigration.run(in: container.mainContext)

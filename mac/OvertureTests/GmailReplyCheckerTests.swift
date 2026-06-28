@@ -9,10 +9,12 @@ import SwiftData
 @Suite("Gmail reply checker")
 struct GmailReplyCheckerTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // Detection watches recipient threads now (#418 A2), so the sent prospect carries a sent recipient
+    // on the thread (lead gmailThreadId kept too for the A3 rollup readers).
     @discardableResult
     private func sentProspect(_ ctx: ModelContext, group: String, threadId: String) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
@@ -24,6 +26,11 @@ struct GmailReplyCheckerTests {
         p.sentAt = Date()
         p.gmailThreadId = threadId
         ctx.insert(p)
+        let r = Recipient(id: group + "@act.example", email: group + "@act.example", provenance: .act)
+        r.gmailThreadId = threadId
+        r.sentAt = p.sentAt
+        r.sendState = .sent
+        p.addRecipient(r)
         return p
     }
 

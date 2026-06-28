@@ -45,6 +45,13 @@ enum DownbeatBooking {
                     p.autoBookedFromBookingId = booking.id
                     consumed.insert(booking.id)
                     count += 1
+                    // Booking-freeze (#418 A4, locked decision g): a confirmed booking pauses every
+                    // still-unsent recipient so Overture stops emailing the other contacts on a show
+                    // that already landed. Uses .suppressed (its documented booking-freeze meaning);
+                    // reply-triage auto-pause uses the separate recipient.pausedByReply flag instead.
+                    for r in p.recipients where r.sendState == .pending {
+                        r.sendState = .suppressed
+                    }
                 } else {
                     // Tiebreak loser: suggest only if the prospect hasn't dismissed
                     if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
