@@ -131,6 +131,7 @@ struct FollowUpsView: View {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
                 Text("\(p.contactEmail ?? "no contact") · nudge \(p.followUpCount + 1) of \(FollowUpConfig().maxFollowUps)")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                sendFailureLine(p)
             }
             Spacer(minLength: OVSpacing.sm)
             sendButton("Send nudge", enabled: gmailConnected && p.contactEmail != nil) { requestNudge(p) }
@@ -145,6 +146,7 @@ struct FollowUpsView: View {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
                 reasonPill(reminder.reason, color: ConversationReminder.accent(for: reminder.kind).color)
                 Text(p.contactEmail ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                sendFailureLine(p)
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
@@ -169,6 +171,15 @@ struct FollowUpsView: View {
             }
         }
         .padding(.vertical, OVSpacing.xs)
+    }
+
+    // #316: the durable failure surface. A real send failure is persisted on the prospect
+    // (SendService sets sendError), so it stays visible here until the next successful send clears it
+    // — unlike the fading banner, which a later success can overwrite before Dan sees it.
+    @ViewBuilder private func sendFailureLine(_ p: Prospect) -> some View {
+        if let line = SendFailureLine.text(for: p.sendError) {
+            Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
+        }
     }
 
     private func reasonPill(_ text: String, color: Color) -> some View {

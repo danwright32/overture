@@ -151,8 +151,8 @@ struct DraftReviewView: View {
                 .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
                 Button("Unapprove") { onUnapprove() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                if let err = item.sendError {
-                    Text(err).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                if let line = SendFailureLine.text(for: item.sendError) {
+                    Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                 }
                 Spacer()
             } else {

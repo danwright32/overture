@@ -79,6 +79,7 @@
 		4B822A1013C867F99F2E5314 /* MailSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E6FD194E3EAEC89C465A64 /* MailSender.swift */; };
 		4DCA874D8ADB734AECF85EE3 /* OmniFocusSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BA8782BE24D5499DA7D1C9A /* OmniFocusSyncTests.swift */; };
 		4E714A9C55362471DE98AFE2 /* ReplyDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEF53A35386C9A1C2BF8967 /* ReplyDetection.swift */; };
+		4EAAA3BC6BEBD8539D544759 /* SendFailureLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F74344AC7C3FDBB02A25E25 /* SendFailureLineTests.swift */; };
 		4FFA01E44380C4A3FC2C27AF /* SendThrottleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA52A2DA17906C043DC938EF /* SendThrottleTests.swift */; };
 		517C12902DACDC5C274A4F58 /* ReplyClassify.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3705BA568ACF80E4BE5ECBEF /* ReplyClassify.swift */; };
 		534815A4119D1F98E4E5389D /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10AA74775D09ADD6707F71F /* NotificationServiceTests.swift */; };
@@ -140,6 +141,7 @@
 		A24B8F8D657AAD85A05B39AF /* SendThrottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD454D9A197497DED827E01C /* SendThrottle.swift */; };
 		A2D28CF1179A7796EED54940 /* OmniFocusAutomationPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAC65CD53F43F8DB4B3D5B7 /* OmniFocusAutomationPermission.swift */; };
 		A30042B78AA7BC7216C3C396 /* OmniFocusSyncRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */; };
+		A3A367503BF96C9C1B1896FE /* SendFailureLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04454C008A40315381B7306 /* SendFailureLine.swift */; };
 		A568A105B754E3A220EDD917 /* ReminderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBDCFFF39EBE62517CF021C4 /* ReminderSettingsView.swift */; };
 		A5AD8D5BA082FC4CA9E2F5AB /* AppleScriptOmniFocusClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231902E5D155CC8939CF078E /* AppleScriptOmniFocusClient.swift */; };
 		A8CD2E0531E96EFEA5557C36 /* ResultsImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFDC7DC01B718B9C18B54C /* ResultsImportTests.swift */; };
@@ -301,6 +303,7 @@
 		6D782E08C651DE5D0AA3A899 /* DraftReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewView.swift; sourceTree = "<group>"; };
 		6E802B334BDB315718EC86C0 /* GmailAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAuthManager.swift; sourceTree = "<group>"; };
 		6EAC65CD53F43F8DB4B3D5B7 /* OmniFocusAutomationPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusAutomationPermission.swift; sourceTree = "<group>"; };
+		6F74344AC7C3FDBB02A25E25 /* SendFailureLineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFailureLineTests.swift; sourceTree = "<group>"; };
 		715B637F291B723A32F86486 /* QueueView+Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QueueView+Model.swift"; sourceTree = "<group>"; };
 		75EF1A94243625631CFBC6E7 /* ScoutServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutServiceTests.swift; sourceTree = "<group>"; };
 		76B93E8FC8C1C412E9F4A274 /* ReplyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyService.swift; sourceTree = "<group>"; };
@@ -393,6 +396,7 @@
 		DA52A2DA17906C043DC938EF /* SendThrottleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendThrottleTests.swift; sourceTree = "<group>"; };
 		DBC08DD66544C1916398438E /* EventClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifierTests.swift; sourceTree = "<group>"; };
 		DCA9CE13BE24FCCD1ED3BF39 /* SendServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendServiceTests.swift; sourceTree = "<group>"; };
+		E04454C008A40315381B7306 /* SendFailureLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFailureLine.swift; sourceTree = "<group>"; };
 		E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatus.swift; sourceTree = "<group>"; };
 		E507C0A339C96A42C60B567F /* SendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendService.swift; sourceTree = "<group>"; };
 		E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportContractTests.swift; sourceTree = "<group>"; };
@@ -527,6 +531,7 @@
 				FF01B805DA5B480951430061 /* ScoutStatusTests.swift */,
 				E7401013CA3A714300090BE7 /* SendConfirmationTests.swift */,
 				B2E8C30BA496E5958478D6FE /* SendDeadlockGuardTests.swift */,
+				6F74344AC7C3FDBB02A25E25 /* SendFailureLineTests.swift */,
 				DCA9CE13BE24FCCD1ED3BF39 /* SendServiceTests.swift */,
 				DA52A2DA17906C043DC938EF /* SendThrottleTests.swift */,
 				561B2AEA036704AD5AD5076B /* StoreLocationTests.swift */,
@@ -636,6 +641,7 @@
 				E85CCBC10E94DCB73294F923 /* ScoutSchedule.swift */,
 				AA8D2818D1C0214152E05C92 /* ScoutStatus.swift */,
 				AE4E85FCB552D0FFC474291F /* SendConfirmation.swift */,
+				E04454C008A40315381B7306 /* SendFailureLine.swift */,
 				BD454D9A197497DED827E01C /* SendThrottle.swift */,
 				BE2828C9E7342BC961B7DF77 /* VenueParser.swift */,
 				19DFF66FCAE3F43F3F5966B5 /* VoiceFeedback.swift */,
@@ -860,6 +866,7 @@
 				4A9031E5AE33243B77A5A3E3 /* ScoutService.swift in Sources */,
 				5D04BB2281702E508DADFE68 /* ScoutStatus.swift in Sources */,
 				E8028E2B5F26AD6C323F09EF /* SendConfirmation.swift in Sources */,
+				A3A367503BF96C9C1B1896FE /* SendFailureLine.swift in Sources */,
 				04FA610FA66C8446BAD3F238 /* SendService.swift in Sources */,
 				A24B8F8D657AAD85A05B39AF /* SendThrottle.swift in Sources */,
 				C16DF56D58BFC994D195EF2F /* StoreLocation.swift in Sources */,
@@ -963,6 +970,7 @@
 				BAFBBEF83992A1D7340C8D9C /* ScoutStatusTests.swift in Sources */,
 				E82E5F721B14BDEB66C1CB9F /* SendConfirmationTests.swift in Sources */,
 				2F0E3B5CD3B7745B2347EEF4 /* SendDeadlockGuardTests.swift in Sources */,
+				4EAAA3BC6BEBD8539D544759 /* SendFailureLineTests.swift in Sources */,
 				947B8AF36612B7183C02B452 /* SendServiceTests.swift in Sources */,
 				4FFA01E44380C4A3FC2C27AF /* SendThrottleTests.swift in Sources */,
 				93D7529C757F664D1C24F219 /* StoreLocationTests.swift in Sources */,
