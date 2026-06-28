@@ -13,7 +13,7 @@ enum ScoutFailure {
         if auto {
             return (nil, "Auto-scout couldn't reach the calendar feed (a connection or service problem, not a quiet week). It'll try again later.")
         }
-        let alert = "Couldn't reach Carnegie's calendar feed. This is a connection or service problem, not a quiet week — check your internet and run the scout again. If it keeps failing, the feed's data source may have changed.\n\nDetails: \(message)"
+        let alert = "Couldn't reach Carnegie's calendar feed. This is a connection or service problem, not a quiet week. Check your internet and run the scout again. If it keeps failing, the feed's data source may have changed.\n\nDetails: \(message)"
         return (alert, nil)
     }
 }

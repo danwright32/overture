@@ -265,10 +265,10 @@ struct GroupingTests {
 @Suite("Run display")
 struct RunDisplayTests {
     @Test func formatsADateRangeWhenRunSpansNights() {
-        #expect(QueueModel.runDateLabel(start: "2026-06-25", end: "2026-06-28") == "Jun 25\u{2013}28")
+        #expect(QueueModel.runDateLabel(start: "2026-06-25", end: "2026-06-28") == "Jun 25 to 28")
     }
     @Test func formatsCrossMonthRange() {
-        #expect(QueueModel.runDateLabel(start: "2026-06-28", end: "2026-07-02") == "Jun 28\u{2013}Jul 2")
+        #expect(QueueModel.runDateLabel(start: "2026-06-28", end: "2026-07-02") == "Jun 28 to Jul 2")
     }
     @Test func showsSingleDateWhenNoRange() {
         #expect(QueueModel.runDateLabel(start: "2026-06-25", end: nil) == "Jun 25")

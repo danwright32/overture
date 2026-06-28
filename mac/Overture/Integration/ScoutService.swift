@@ -24,7 +24,7 @@ enum ScoutService {
         // (with no events there is nothing to match) (#27, #126).
         var warning: String? {
             if found == 0 {
-                return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window — the feed's data format may have changed."
+                return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
             }
             return clientListWarning
         }

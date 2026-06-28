@@ -19,7 +19,7 @@ struct VoiceGuidanceStoreTests {
     @Test func loadReturnsTheFileContentsWhenPresent() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("vg-\(UUID().uuidString).md")
         defer { try? FileManager.default.removeItem(at: url) }
-        let body = "## Dan's notes (authoritative — never auto-edited)\n\nLead with the venue.\n"
+        let body = "## Dan's notes (authoritative, never auto-edited)\n\nLead with the venue.\n"
         try body.write(to: url, atomically: true, encoding: .utf8)
         #expect(VoiceGuidanceStore.load(from: url) == body)
     }
@@ -29,7 +29,7 @@ struct VoiceGuidanceStoreTests {
         let url = dir.appendingPathComponent("overture-voice-guidance.md")
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let edited = "## Dan's notes (authoritative — never auto-edited)\n\nKeep it level.\n"
+        let edited = "## Dan's notes (authoritative, never auto-edited)\n\nKeep it level.\n"
         #expect(VoiceGuidanceStore.save(edited, to: url) == true)
         #expect(VoiceGuidanceStore.load(from: url) == edited)   // round-trips
     }

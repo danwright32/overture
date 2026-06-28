@@ -40,7 +40,7 @@ struct AgentRosterTests {
 
         var disconnected = calm; disconnected.readyToSend = 1; disconnected.gmailConnected = false
         #expect(status("Send", disconnected).state == .needsAttention)
-        #expect(status("Send", disconnected).detail.contains("Connect Gmail"))
+        #expect(status("Send", disconnected).detail.contains("connect Gmail"))
     }
 
     @Test func followUpsNeedAttentionWhenDue() {

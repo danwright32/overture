@@ -27,7 +27,7 @@ struct VoiceGuidanceGuardTests {
     }
 
     private let clean = """
-    ## Dan's notes (authoritative — never auto-edited)
+    ## Dan's notes (authoritative, never auto-edited)
 
     Keep it level.
 
@@ -57,7 +57,7 @@ struct VoiceGuidanceGuardTests {
     @Test func findLeaksIgnoresDansOwnNotesSection() {
         // A name in Dan's notes is his call, not a leak — only the auto section is guarded.
         let inNotes = """
-        ## Dan's notes (authoritative — never auto-edited)
+        ## Dan's notes (authoritative, never auto-edited)
 
         Remember the Aurora Strings tone.
 
@@ -88,7 +88,7 @@ struct VoiceGuidanceGuardTests {
             of: "- Dan cuts the second opener sentence.",
             with: "- Like the Aurora Strings email, lead with the venue.")
         let cleaned = VoiceGuidanceGuard.quarantineAutoSection(in: leaked)
-        #expect(cleaned.contains("## Dan's notes (authoritative — never auto-edited)"))
+        #expect(cleaned.contains("## Dan's notes (authoritative, never auto-edited)"))
         #expect(cleaned.contains("Keep it level."))                 // Dan's notes preserved
         #expect(!cleaned.contains("Aurora Strings"))                // leaked auto body gone
         #expect(cleaned.contains("## Observed tendencies"))         // heading kept

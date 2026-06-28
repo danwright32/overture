@@ -10,7 +10,7 @@ enum VoiceGuidanceStore {
     // edits the right structure from the start. His section is authoritative; the auto section fills
     // in after the loop has edits to learn from.
     static let starterTemplate = """
-    ## Dan's notes (authoritative — never auto-edited)
+    ## Dan's notes (authoritative, never auto-edited)
 
     Write any voice guidance you want every draft to follow. This section is yours; Prep runs never change it.
 

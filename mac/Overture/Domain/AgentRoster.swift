@@ -51,7 +51,7 @@ enum AgentRoster {
         if i.readyToSend > 0 {
             let detail = i.gmailConnected
                 ? "\(i.readyToSend) approved, ready to send"
-                : "\(i.readyToSend) approved — Connect Gmail to send"
+                : "\(i.readyToSend) approved, connect Gmail to send"
             return AgentStatus(name: "Send", state: .needsAttention, detail: detail)
         }
         return AgentStatus(name: "Send", state: .idle, detail: "Nothing to send")
