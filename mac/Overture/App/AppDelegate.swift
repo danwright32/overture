@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // migrates BEFORE the reconciler — and any later per-recipient send — can read the new model.
         // Guarded by recipients.isEmpty, so it's a no-op on every launch after the first.
         RecipientBackfill.run(in: container.mainContext)
+        // Recover salutation-free bodies from legacy inline-greeting drafts (#393), so the app can
+        // render the greeting per recipient at send. Idempotent (a stripped body has nothing to strip).
+        DraftSalutationMigration.run(in: container.mainContext)
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler

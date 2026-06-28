@@ -131,9 +131,15 @@ form/DM or inferred = low.
 INVOKE the `dan-wright-brand-voice` skill and follow it. Then, as secondary nudges only,
 apply the distilled voice guidance from "Once per run" above (the skill always wins). Anatomy:
 
+- **No greeting in the body (#393).** The drafted `body` MUST start at the first real
+  sentence with NO greeting token: write "I photograph performing arts in New York and
+  saw..." NOT "Hi Emma, I photograph...". The app owns the greeting and renders it per
+  recipient at send (`Salutation.greeting(for:)`), so the same salutation-free body can go
+  to the act and to a differently-named presenter. A body that opens with "Hi <name>," is a
+  wrong result.
 - **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
 - **Opener:** a genuine, specific reason, group + performance named correctly. No
-  throat-clearing ("I hope this finds you well").
+  throat-clearing ("I hope this finds you well") and no greeting line.
 - **Body, 2-3 sentences:** unobtrusive no-flash documentary coverage; why it fits this
   performance; a discipline-matched gallery link (below).
 - **Offer:** held positively. A/B variant — either state the rate plainly ($250 an
