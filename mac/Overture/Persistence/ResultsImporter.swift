@@ -46,8 +46,7 @@ enum ResultsImporter {
 
     // The default handoff location, sibling to Downbeat's downbeat-export.json.
     static var defaultResultsURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-results.json")
     }
 

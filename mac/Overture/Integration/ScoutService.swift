@@ -321,8 +321,7 @@ enum ScoutService {
     }
 
     private static func appSupport(_ name: String) -> URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent(name)
     }
 }

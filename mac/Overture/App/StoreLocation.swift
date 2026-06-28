@@ -41,4 +41,21 @@ enum StoreLocation {
 
     static var storeURL: URL { dataDirectory.appendingPathComponent("default.store") }
     static var lockURL: URL { dataDirectory.appendingPathComponent("default.store.lock") }
+
+    // The single source of truth for the handoff directory: the "Overture" subfolder of the data
+    // directory, where every cross-boundary JSON file the app reads or writes lives (docs/contracts.md).
+    // Pure and testable, mirroring dataDirectory; every call site must derive its path from this so a
+    // file can never silently land outside the Debug/Release split (#317).
+    static func handoffDirectory(appSupport: URL, isDebugBuild: Bool) -> URL {
+        dataDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+            .appendingPathComponent("Overture", isDirectory: true)
+    }
+
+    // The handoff directory for THIS build. Creates it on first use (dataDirectory already ensures the
+    // parent exists), so writers never hit a missing-directory error.
+    static var handoffDirectory: URL {
+        let dir = handoffDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 }

@@ -84,8 +84,7 @@ enum VoiceGuidanceGuard {
     }
 
     static var defaultURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-voice-guidance.md")
     }
 }

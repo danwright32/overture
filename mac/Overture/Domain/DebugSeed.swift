@@ -23,10 +23,6 @@ enum DebugSeed {
         "overture-blocked-dates.json",
     ]
 
-    // The handoff subfolder under the data directory. Each domain file appends this itself today
-    // (consolidation tracked in #317); kept here as one local constant for the seed.
-    private static let handoffSubfolder = "Overture"
-
     // Pure: maps each input filename to a (source in live, dest in debug) pair under each base.
     static func plan(liveBase: URL, debugBase: URL) -> [(name: String, src: URL, dest: URL)] {
         inputFileNames.map { name in
@@ -53,14 +49,12 @@ enum DebugSeed {
 
     // The live handoff directory (Release data root), regardless of which build is running.
     static var liveHandoffDirectory: URL {
-        StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
-            .appendingPathComponent(handoffSubfolder, isDirectory: true)
+        StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
     }
 
     // The Debug build's isolated handoff directory.
     static var debugHandoffDirectory: URL {
-        StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: true)
-            .appendingPathComponent(handoffSubfolder, isDirectory: true)
+        StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: true)
     }
 
     @discardableResult

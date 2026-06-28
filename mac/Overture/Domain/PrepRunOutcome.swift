@@ -23,8 +23,7 @@ enum PrepRunOutcome {
 // rather than guessing. Pure string slice; the file read is a thin wrapper.
 enum PrepLog {
     static var defaultURL: URL {
-        StoreLocation.dataDirectory
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("prep-run.log")
     }
 

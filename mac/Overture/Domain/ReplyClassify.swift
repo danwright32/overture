@@ -50,8 +50,7 @@ enum ReplyClassifyQueueBuilder {
     }
 
     static var defaultURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-reply-classify-queue.json")
     }
 }
@@ -89,8 +88,7 @@ enum ReplyClassifyResultsDecoder {
     }
 
     static var defaultURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Overture", isDirectory: true)
+        StoreLocation.handoffDirectory
             .appendingPathComponent("overture-reply-classify-results.json")
     }
 }

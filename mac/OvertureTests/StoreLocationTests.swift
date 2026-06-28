@@ -37,4 +37,34 @@ struct StoreLocationTests {
             #expect(store.deletingLastPathComponent() == lock.deletingLastPathComponent())
         }
     }
+
+    // #317: the handoff directory (where every cross-boundary JSON file lives) is the "Overture"
+    // subfolder of the data directory, derived through one helper so it cannot drift per-call-site.
+    @Test func handoffDirectoryIsTheOvertureSubfolderInRelease() {
+        let dir = StoreLocation.handoffDirectory(appSupport: appSupport, isDebugBuild: false)
+        #expect(dir == appSupport.appendingPathComponent("Overture", isDirectory: true))
+    }
+
+    @Test func handoffDirectoryIsIsolatedInDebug() {
+        // The Debug build's handoff files must live UNDER Overture-Debug, never the live folder.
+        let dir = StoreLocation.handoffDirectory(appSupport: appSupport, isDebugBuild: true)
+        #expect(dir == appSupport.appendingPathComponent("Overture-Debug", isDirectory: true)
+            .appendingPathComponent("Overture", isDirectory: true))
+    }
+
+    @Test func handoffDirectorySitsUnderTheDataDirectory() {
+        for isDebug in [true, false] {
+            let data = StoreLocation.dataDirectory(appSupport: appSupport, isDebugBuild: isDebug)
+            let handoff = StoreLocation.handoffDirectory(appSupport: appSupport, isDebugBuild: isDebug)
+            #expect(handoff.deletingLastPathComponent() == data)
+        }
+    }
+
+    // Regression for the #317 leak: the two reply-classify files used to build their path from the
+    // raw application-support root, bypassing StoreLocation, so a Debug run wrote them to the LIVE
+    // folder. They must now resolve under the (this-build) handoff directory like every other file.
+    @Test func replyClassifyFilesResolveUnderTheHandoffDirectory() {
+        #expect(ReplyClassifyQueueBuilder.defaultURL.deletingLastPathComponent() == StoreLocation.handoffDirectory)
+        #expect(ReplyClassifyResultsDecoder.defaultURL.deletingLastPathComponent() == StoreLocation.handoffDirectory)
+    }
 }
