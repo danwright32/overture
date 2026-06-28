@@ -31,10 +31,15 @@ struct RecipientBackfillLiveStoreTests {
         return dest
     }
 
+    // Open under the CURRENT app schema (Prospect + the Recipient @Model, #409). Opening a store
+    // created under the old Prospect-only schema this way is exactly the additive entity+relationship
+    // migration Dan's real store will undergo on first launch of the promoted build — proving it here
+    // on a COPY is the Phase C gate.
     private func openContainer(at url: URL) throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
-                           configurations: [ModelConfiguration(schema: Schema([Prospect.self]),
-                                                               url: url, cloudKitDatabase: .none)])
+        let schema = Schema([Prospect.self, Recipient.self])
+        return try ModelContainer(for: schema,
+                                  configurations: [ModelConfiguration(schema: schema,
+                                                                      url: url, cloudKitDatabase: .none)])
     }
 
     @Test func backfillsEveryContactedProspectInACopyOfTheLiveStore() throws {

@@ -89,6 +89,7 @@ enum RecipientBackfill {
         for prospect in prospects where prospect.recipients.isEmpty {
             if let rows = rowsFromLegacyBlob(prospect.recipientsRaw), !rows.isEmpty {
                 prospect.setRecipients(rows)
+                seedOutcomeResolution(prospect)
                 seeded += 1
             } else if let r = synthesizedRecipient(from: prospect) {
                 prospect.setRecipients([r])
@@ -96,6 +97,19 @@ enum RecipientBackfill {
             }
         }
         return seeded
+    }
+
+    // #410 for the blob path: legacy blobs predate `resolution` (Phase 1 never wrote it), so a
+    // booked/lost performance migrated from the blob would carry no resolution and re-derive as
+    // Active under the per-recipient status. When the lead is booked/lost and no recipient yet
+    // carries a resolution, attribute it to the act recipient (or the first). The synthesize path
+    // already sets this, so this only fills the blob path.
+    private static func seedOutcomeResolution(_ prospect: Prospect) {
+        guard let res = resolution(for: prospect.outcome),
+              !prospect.recipients.contains(where: { $0.resolution != nil }),
+              let target = prospect.recipients.first(where: { $0.provenance == .act })
+                ?? prospect.recipients.first else { return }
+        target.resolution = res
     }
 
     private static func rowsFromLegacyBlob(_ raw: String) -> [Recipient]? {
