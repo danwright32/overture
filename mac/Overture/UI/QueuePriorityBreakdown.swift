@@ -10,6 +10,14 @@ enum QueuePriorityBreakdown {
         var relationshipDriven = 0   // high only because of the prior relationship
         var meritDriven = 0          // the event clears high on its own
         var longshot = 0
+
+        // #335: a plain-language decomposition of the high-fit count for the masthead. Leading with
+        // "Of the N high-fit:" makes explicit that the two numbers split that count, so the line
+        // no longer reads as a separate total. nil when there is nothing high-fit to break down.
+        func highFitBreakdownLabel() -> String? {
+            guard high > 0 else { return nil }
+            return "Of the \(high) high-fit: \(relationshipDriven) from a prior relationship, \(meritDriven) on event merit"
+        }
     }
 
     static func summarize(_ items: [QueueItem]) -> Counts {
