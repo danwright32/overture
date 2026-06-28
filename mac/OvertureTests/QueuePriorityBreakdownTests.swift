@@ -44,4 +44,15 @@ struct QueuePriorityBreakdownTests {
     @Test func emptyQueueIsAllZeros() {
         #expect(QueuePriorityBreakdown.summarize([]) == QueuePriorityBreakdown.Counts())
     }
+
+    // #335: the masthead breakdown must read as a decomposition of the high-fit count, not a
+    // separate total. The label leads with "Of the N high-fit:" so the two numbers visibly sum to N.
+    @Test func highFitBreakdownLabelTiesToTheHighFitCount() {
+        let c = QueuePriorityBreakdown.Counts(high: 10, relationshipDriven: 2, meritDriven: 8, longshot: 5)
+        #expect(c.highFitBreakdownLabel() == "Of the 10 high-fit: 2 from a prior relationship, 8 on event merit")
+    }
+
+    @Test func highFitBreakdownLabelIsNilWhenNoHighFit() {
+        #expect(QueuePriorityBreakdown.Counts(high: 0).highFitBreakdownLabel() == nil)
+    }
 }
