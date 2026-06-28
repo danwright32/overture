@@ -24,6 +24,7 @@ struct AgentRosterTests {
         #expect(status("Prep", i).state == .working)
         i.prepRunning = false; i.keptToPrep = 3
         #expect(status("Prep", i).state == .needsAttention)
+        #expect(status("Prep", i).detail == "3 ready to prep")   // #347: natural phrasing
     }
 
     @Test func reviewNeedsAttentionWithDrafts() {
