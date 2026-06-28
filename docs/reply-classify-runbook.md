@@ -8,13 +8,19 @@ and writes the results file the app ingests for review. The app never supervises
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-reply-classify-queue.json`
-  (`ReplyClassifyQueue`: `items[]` each with `naturalKey`, `groupName`, `venue`, `replyText`).
+  (`ReplyClassifyQueue` version `2`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  `replyText`, and an optional `recipientId`).
 - **Write:** `~/Library/Application Support/Overture/overture-reply-classify-results.json`
-  (`ReplyClassifyResults`: `results[]` each with `naturalKey`, `intent`).
+  (`ReplyClassifyResults` version `2`: `results[]` each with `naturalKey`, `intent`, and the
+  `recipientId` echoed back when the queue item carried one).
 
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result byte-for-byte.
-NEVER rebuild it. The human-readable fields are for context only. Canonical samples of both files
-(the contract guard, #183) live in `fixtures/reply-classify/`; match those shapes exactly.
+NEVER rebuild it. **`recipientId` is the same kind of opaque token** (#392): when a queue item
+carries one, echo it back verbatim on that result so the intent attaches to the right recipient on a
+multi-recipient show; when it is absent, omit it. The human-readable fields are for context only.
+Canonical samples of both files (the contract guard, #183) live in `fixtures/reply-classify/`; the v1
+files (`queue.json` / `results.json`) and the v2 files (`queue-v2.json` / `results-v2.json`) both
+decode under the tolerant gate. Match those shapes exactly.
 
 ## Per reply
 
@@ -32,9 +38,9 @@ Judge the genuine intent, not surface politeness: a warm-sounding note that ends
 strongest forward intent (a question alongside clear booking intent is `wants_to_book`). The reply
 text may include quoted history from earlier in the thread; classify the NEW message, not the quotes.
 
-Write one `results[]` entry per queue item with the echoed `naturalKey` and the chosen `intent`.
-Every state Overture sets from this is a SUGGESTION Dan confirms or corrects (#60), so a wrong read
-is recoverable, but aim for the genuine intent.
+Write one `results[]` entry per queue item with the echoed `naturalKey` (and the echoed `recipientId`
+when the item had one) and the chosen `intent`. Every state Overture sets from this is a SUGGESTION
+Dan confirms or corrects (#60), so a wrong read is recoverable, but aim for the genuine intent.
 
 ## One-time setup
 

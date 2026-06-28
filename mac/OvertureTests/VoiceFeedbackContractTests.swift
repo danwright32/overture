@@ -44,4 +44,20 @@ struct VoiceFeedbackContractTests {
         let roundTripped = try JSONDecoder().decode(VoiceFeedback.self, from: data)
         #expect(roundTripped == expected)
     }
+
+    // v2 (#392): the pair gains an outcomeRecipientId attributing the win to a specific recipient.
+    // Still exactly one pair per show (the body is shared). v1.json stays byte-identical above as the
+    // backward-decode proof (its outcomeRecipientId decodes to nil).
+    @Test func theV2FixtureCarriesTheOutcomeRecipientAttribution() throws {
+        let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: try fixture("v2.json"))
+        #expect(decoded.version == 2)
+        #expect(decoded.pairs.count == 1)
+        #expect(decoded.pairs.first?.outcomeRecipientId == "erobinson@aurorastrings.example")
+        #expect(decoded.pairs.first?.outcome == "booked")
+    }
+
+    @Test func theV1FixtureStillDecodesWithoutTheDiscriminator() throws {
+        let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: try fixture("v1.json"))
+        #expect(decoded.pairs.first?.outcomeRecipientId == nil)
+    }
 }

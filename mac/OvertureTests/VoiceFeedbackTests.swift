@@ -139,7 +139,7 @@ struct VoiceFeedbackTests {
         #expect(pair?.sentSubject == "Photographing your spring run")
         #expect(pair?.sentBody == "Hi Maria, I document dance unobtrusively and would love to cover this run.")
         #expect(pair?.sentAt == "1970-01-01T00:00:00Z")
-        #expect(fb.version == 1)
+        #expect(fb.version == 2)
     }
 
     @Test func exportWritesADecodableFile() throws {
@@ -156,7 +156,7 @@ struct VoiceFeedbackTests {
         let count = try VoiceFeedbackService.export(from: ctx, generatedAt: "2026-06-26T00:00:00Z", url: url)
         #expect(count == 1)
         let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: url))
-        #expect(decoded.version == 1)
+        #expect(decoded.version == 2)
         #expect(decoded.pairs.first?.naturalKey == "k1")
     }
 
@@ -188,5 +188,58 @@ struct VoiceFeedbackTests {
 
         let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: feedbackURL))
         #expect(decoded.pairs.map(\.naturalKey) == ["edited-sent"])
+    }
+
+    // #392 (Dan's call, Option A): keep exactly ONE voice pair per performance (the shared body edit),
+    // but attribute the outcome to the recipient who earned it, so the distiller knows which contact
+    // the lesson landed through without duplicating the body N times.
+    private func sentRecipient(_ id: String, provenance: RecipientProvenance,
+                               replied: Bool = false, resolution: RecipientResolution? = nil) -> Recipient {
+        var r = Recipient(id: id, email: id, provenance: provenance)
+        r.sendState = .sent
+        r.replied = replied
+        r.resolution = resolution
+        return r
+    }
+
+    @Test func attributesTheOutcomeToTheRepliedRecipientAsOnePair() {
+        let p = prospect(key: "k",
+                         original: "Hi, I'd be glad to cover this.",
+                         sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                         sentAt: Date(timeIntervalSince1970: 100))
+        p.outcome = .replied
+        p.setRecipients([sentRecipient("act@x.example", provenance: .act),
+                         sentRecipient("pres@y.example", provenance: .presenter, replied: true)])
+
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+
+        #expect(fb.pairs.count == 1)
+        #expect(fb.pairs.first?.outcomeRecipientId == "pres@y.example")
+    }
+
+    @Test func aBookedRecipientWinsTheOutcomeAttributionOverAReplier() {
+        let p = prospect(key: "k",
+                         original: "Hi, I'd be glad to cover this.",
+                         sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                         sentAt: Date(timeIntervalSince1970: 100))
+        p.outcome = .booked
+        p.setRecipients([sentRecipient("pres@y.example", provenance: .presenter, replied: true),
+                         sentRecipient("act@x.example", provenance: .act, resolution: .booked)])
+
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+
+        #expect(fb.pairs.first?.outcomeRecipientId == "act@x.example")
+    }
+
+    @Test func noOutcomeRecipientWhenNoOneRepliedOrBooked() {
+        let p = prospect(key: "k",
+                         original: "Hi, I'd be glad to cover this.",
+                         sent: "Hi Maria, I photograph performing arts and would document this run unobtrusively.",
+                         sentAt: Date(timeIntervalSince1970: 100))
+        p.setRecipients([sentRecipient("act@x.example", provenance: .act)])
+
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+
+        #expect(fb.pairs.first?.outcomeRecipientId == nil)
     }
 }

@@ -54,5 +54,29 @@ struct ReplyClassifyContractTests {
         #expect(results.results[0].replyIntent == .wantsToBook)
         #expect(results.results[1].naturalKey == "lumen-dance|undated|none")
         #expect(results.results[1].replyIntent == .hasQuestion)
+        // v1 carries no recipient discriminator; it decodes to nil under the tolerant gate.
+        #expect(results.results[0].recipientId == nil)
+    }
+
+    // v2 (#392): a per-recipient discriminator ties a reply to the specific recipient it came from,
+    // so a presenter reply and an act reply on the same show are classified independently rather than
+    // collapsing to the first replier. naturalKey stays the show join key; recipientId is additive.
+    @Test func theV2QueueCarriesTheRecipientDiscriminator() throws {
+        let queue = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue-v2.json"))
+        #expect(queue.version == 2)
+        #expect(queue.items[0].recipientId == "pres@presentingorg.example")
+        #expect(queue.items[1].recipientId == nil)   // omitted still decodes
+    }
+
+    @Test func theV2ResultsCarryTheRecipientDiscriminator() throws {
+        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v2.json"))
+        #expect(results.version == 2)
+        #expect(results.results[0].recipientId == "pres@presentingorg.example")
+        #expect(results.results[0].replyIntent == .wantsToBook)
+    }
+
+    @Test func theBuilderNowStampsVersion2() {
+        let q = ReplyClassifyQueueBuilder.build(from: [], generatedAt: "2026-06-26T00:00:00.000Z")
+        #expect(q.version == 2)
     }
 }

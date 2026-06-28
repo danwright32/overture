@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "generatedAt": "2026-06-26T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "intent": "wants_to_book",
+      "recipientId": "pres@presentingorg.example"
+    },
+    {
+      "naturalKey": "lumen-dance|undated|none",
+      "intent": "has_question"
+    }
+  ]
+}
