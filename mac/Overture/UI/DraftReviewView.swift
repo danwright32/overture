@@ -10,7 +10,6 @@ struct DraftReviewView: View {
     let onUnapprove: () -> Void
     let onSkip: () -> Void
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
-    var onSetOutcome: (Outcome) -> Void = { _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onSetConversationState: (ConversationState) -> Void = { _ in }
@@ -158,7 +157,7 @@ struct DraftReviewView: View {
                         .help("This was not a genuine reply (an auto-reply or out of office). Revert it; a new reply will still flag.")
                 }
                 if item.conversationStateSource != .auto { conversationStatePicker }   // auto -> own row below
-                outcomePicker
+                derivedStatusLabel
             } else if isApproved {
                 Button { onSend() } label: {
                     Label("Send", systemImage: "paperplane")
@@ -320,27 +319,16 @@ struct DraftReviewView: View {
         return OVColor.inkSoft
     }
 
-    // Shown once sent: defaults to No response (most prospects), Dan marks exceptions.
-    // Replied/Booked also arrive automatically later (Gmail/Downbeat); see Outcome.
-    private var outcomePicker: some View {
-        Menu {
-            ForEach(Outcome.allCases, id: \.self) { o in
-                Button {
-                    onSetOutcome(o)
-                } label: {
-                    if item.outcome == o { Label(o.label, systemImage: "checkmark") }
-                    else { Text(o.label) }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Circle().fill(outcomeColor).frame(width: 6, height: 6)
-                Text(item.outcome.label).font(OVType.meta)
-            }
-            .foregroundStyle(OVColor.inkSoft)
+    // Read-only show status derived from the contacts (#447): the editable lead-level outcome picker
+    // is gone, so outcomes are set per contact (the Contacts section below) and the show just reflects
+    // them. Booking still arrives lead-level (Confirm booking / Downbeat); see PerformanceStatus.
+    private var derivedStatusLabel: some View {
+        HStack(spacing: 4) {
+            Circle().fill(derivedStatusColor).frame(width: 6, height: 6)
+            Text(item.performanceStatus.label).font(OVType.meta)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .foregroundStyle(OVColor.inkSoft)
+        .help("The show's status, read from its contacts. Mark a contact below to change it.")
     }
 
     // Where the conversation stands once the lead has replied (#111): Dan tags it so the right
@@ -422,13 +410,13 @@ struct DraftReviewView: View {
         }
     }
 
-    private var outcomeColor: Color {
-        switch item.outcome {
+    private var derivedStatusColor: Color {
+        switch item.performanceStatus {
         case .booked: return OVColor.forest
-        case .replied: return OVColor.gold
-        case .lostSoft: return OVColor.inkSoft
-        case .lostHard: return OVColor.rust
-        case .noResponse: return OVColor.inkFaint
+        case .active: return OVColor.gold
+        case .lostDoorOpen: return OVColor.inkSoft
+        case .lostNotInterested: return OVColor.rust
+        case .new: return OVColor.inkFaint
         }
     }
 }

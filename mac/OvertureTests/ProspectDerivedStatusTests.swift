@@ -9,6 +9,14 @@ import SwiftData
 // show that was already closed.
 @Suite("Prospect derived status")
 struct ProspectDerivedStatusTests {
+    @Test func performanceStatusHasAReadableLabelForEachCase() {
+        #expect(PerformanceStatus.new.label == "New")
+        #expect(PerformanceStatus.active.label == "Active")
+        #expect(PerformanceStatus.lostDoorOpen.label == "Closed (not now)")
+        #expect(PerformanceStatus.lostNotInterested.label == "Closed (not interested)")
+        #expect(PerformanceStatus.booked.label == "Booked")
+    }
+
     private func makeInMemoryContext() throws -> ModelContext {
         let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])

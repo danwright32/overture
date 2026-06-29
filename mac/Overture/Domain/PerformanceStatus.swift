@@ -58,6 +58,18 @@ extension Recipient {
 }
 
 extension PerformanceStatus {
+    // The read-only label shown on the review surface now the editable lead outcome picker is gone
+    // (#447): a show's status is derived from its contacts, not hand-set at the lead level.
+    var label: String {
+        switch self {
+        case .new: return "New"
+        case .active: return "Active"
+        case .lostDoorOpen: return "Closed (not now)"
+        case .lostNotInterested: return "Closed (not interested)"
+        case .booked: return "Booked"
+        }
+    }
+
     // The show's status from its current contacts. Booked stays owned by the lead outcome
     // (DownbeatBooking / a manual booking); this reads it as the top-precedence input.
     static func of(_ prospect: Prospect) -> PerformanceStatus {

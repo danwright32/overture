@@ -395,7 +395,6 @@ struct QueueView: View {
             onUnapprove: { setStatus(item, .drafted, nil) },
             onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
             onSaveDraft: { subject, body in saveDraft(item, subject, body) },
-            onSetOutcome: { outcome in setOutcome(item, outcome) },
             onSetLostReason: { reason in setLostReason(item, reason) },
             onSend: { requestSend(item) },
             onSetConversationState: { state in setConversationState(item, state) },
@@ -554,15 +553,6 @@ struct QueueView: View {
     private func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
-        try? context.save()
-    }
-
-    private func setOutcome(_ item: QueueItem, _ outcome: Outcome) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.outcome = outcome
-        model.outcomeSourceRaw = OutcomeSource.manual.rawValue
-        model.outcomeAt = Date()
-        model.bookingSuggested = false
         try? context.save()
     }
 
