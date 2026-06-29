@@ -52,9 +52,10 @@ struct ReplyCaptureTests {
         let n = ReplyService.detectReplies(in: [p], selfEmail: me, now: now,
                                            fetchThread: { _ in meta }, fetchFullThread: { _ in full })
         #expect(n == 1)
-        #expect(p.outcome == .replied)
-        #expect(p.lastReplyText == "Yes, let's book.")
-        #expect(p.lastReplyAt == now)
+        // Phase F: the reply is captured on the CONTACT, not rolled up to the lead.
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.lastReplyText == "Yes, let's book.")
+        #expect(p.recipients.first?.repliedAt == now)
     }
 
     // #219: the id of the newest message from someone other than Dan, used to dismiss one specific
@@ -72,24 +73,25 @@ struct ReplyCaptureTests {
         let oneReply = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
         _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 100),
                                        fetchThread: { _ in oneReply })
-        #expect(p.outcome == .replied)
-        #expect(p.lastReplyId == "r1")
+        // Phase F: detection + dismiss are per-contact now (no lead rollup).
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.lastReplyId == "r1")
 
-        p.dismissAutoReply(now: Date(timeIntervalSince1970: 200))
-        #expect(p.outcome == .noResponse)
-        #expect(p.dismissedReplyId == "r1")
+        p.recipients.first?.dismissAutoReply()
+        #expect(p.recipients.first?.replied == false)
+        #expect(p.recipients.first?.dismissedReplyId == "r1")
 
         let n2 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 300),
                                             fetchThread: { _ in oneReply })
         #expect(n2 == 0)
-        #expect(p.outcome == .noResponse)
+        #expect(p.recipients.first?.replied == false)
 
         let twoReplies = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}},{"id":"r2","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
         let n3 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 400),
                                             fetchThread: { _ in twoReplies })
         #expect(n3 == 1)
-        #expect(p.outcome == .replied)
-        #expect(p.lastReplyId == "r2")
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.lastReplyId == "r2")
     }
 
     @Test func doesNotFullFetchWhenThereIsNoReply() throws {

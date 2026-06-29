@@ -96,8 +96,9 @@ struct ReplyServiceTests {
         let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
                                            now: Date(timeIntervalSince1970: 9)) { _ in self.replyThread }
         #expect(n == 1)
-        #expect(p.outcome == .replied)
-        #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
+        // Phase F: the reply lives on the CONTACT now (no lead rollup).
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.outcomeSource != .manual)
     }
 
     @Test func leavesAloneWhenNoReplyOrNotSentOrManual() throws {
@@ -129,7 +130,7 @@ struct ReplyServiceTests {
         #expect(n == 1)
         #expect(p.recipients.first { $0.gmailThreadId == "t2" }?.replied == true)
         #expect(p.recipients.first { $0.gmailThreadId == "t1" }?.replied == false)
-        #expect(p.outcome == .replied)   // A3 rollup keeps lead-level readers working
+        #expect(p.hasUnhandledReply)   // Phase F: the show reads as having an unhandled reply, derived
     }
 
     // #418 A2 — the regression for the swallow bug: once contact A replies (lead becomes auto .replied),
@@ -144,7 +145,7 @@ struct ReplyServiceTests {
         _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 9)) {
             $0 == "t1" ? self.replyThread : self.noReplyThread
         }
-        #expect(p.outcome == .replied)   // lead is now auto .replied
+        #expect(p.recipients.first { $0.gmailThreadId == "t1" }?.replied == true)   // contact A replied
 
         // Round 2: B (t2) now replies too — must NOT be swallowed by the lead's .replied state.
         let n2 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 99)) { _ in
@@ -168,9 +169,9 @@ struct ReplyServiceTests {
         #expect(p.recipients.first { $0.gmailThreadId == "t2" }?.replied == true)
     }
 
-    // #418 A3 — the bridge writes lead lastReplyText + lastReplyAt so ReplyClassifyService.needsClassify
-    // (which re-fires on lastReplyAt > conversationStateSetAt) keeps working during Phases A-E.
-    @Test func rollupCapturesReplyBodyAndTimeForClassify() throws {
+    // The contact's reply body + time are captured so ReplyClassifyService.needsClassify (which
+    // re-fires on repliedAt) can queue it. Per-contact now (Phase F removed the lead rollup).
+    @Test func capturesReplyBodyAndTimeOnTheContactForClassify() throws {
         let ctx = ModelContext(try container())
         let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())
         // "WWVz" is base64url for "Yes"; a valid text/plain part so latestReplyBody returns it.
@@ -179,6 +180,7 @@ struct ReplyServiceTests {
                                        now: Date(timeIntervalSince1970: 50),
                                        fetchThread: { _ in self.replyThread },
                                        fetchFullThread: { _ in full })
-        #expect(p.lastReplyAt == Date(timeIntervalSince1970: 50))
+        #expect(p.recipients.first?.repliedAt == Date(timeIntervalSince1970: 50))
+        #expect(p.recipients.first?.lastReplyText == "Yes")
     }
 }

@@ -52,8 +52,9 @@ struct GmailReplyCheckerTests {
         await checker.markReplies(in: ctx, token: "tok", now: Date(),
                                   fetch: threadFetch(from: "manager@bachsociety.org"))
 
-        #expect(p.outcome == .replied)
-        #expect(p.outcomeSourceRaw == OutcomeSource.auto.rawValue)
+        // Phase F: the reply is marked on the CONTACT, not rolled up to the lead.
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.outcomeSource != .manual)
     }
 
     // Two-phase fetch (#181): metadata returned for the format=metadata request, a full thread with
@@ -81,8 +82,8 @@ struct GmailReplyCheckerTests {
         await checker.markReplies(in: ctx, token: "tok", now: Date(),
                                   fetch: twoPhaseFetch(from: "emma@aurora.example", body: "Yes, let's book."))
 
-        #expect(p.outcome == .replied)
-        #expect(p.lastReplyText == "Yes, let's book.")
+        #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.lastReplyText == "Yes, let's book.")
     }
 
     @Test func leavesNoResponseWhenOnlyDanIsOnTheThread() async throws {
