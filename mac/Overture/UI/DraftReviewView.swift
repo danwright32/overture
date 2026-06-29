@@ -126,19 +126,26 @@ struct DraftReviewView: View {
     // Dan edits it, it's his.
     @ViewBuilder private var draftCheckFlags: some View {
         if !item.draftEditedByDan, let body = item.draftBody {
-            let findings = DraftCheck.findings(in: body)
-            if !findings.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(findings, id: \.self) { f in
-                        HStack(spacing: 5) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                            Text(f.label)
-                        }
-                        .font(OVType.tag).foregroundStyle(OVColor.rust)
+            issueFlags(DraftCheck.findings(in: body,
+                                           knownsDate: item.performanceDate != nil,
+                                           knownsVenue: item.venue != nil))
+        }
+    }
+
+    // The shared warning-row rendering for any DraftCheck findings, used by both the cold draft
+    // review above and the reply draft below (#456) so there is one surface, not two.
+    @ViewBuilder private func issueFlags(_ findings: [DraftIssue]) -> some View {
+        if !findings.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(findings, id: \.self) { f in
+                    HStack(spacing: 5) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text(f.label)
                     }
+                    .font(OVType.tag).foregroundStyle(OVColor.rust)
                 }
-                .padding(.top, 2)
             }
+            .padding(.top, 2)
         }
     }
 
@@ -278,6 +285,11 @@ struct DraftReviewView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(OVSpacing.sm)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
+                // #456: the reply drafter had no deterministic check; flag a draft that asks the
+                // contact for the date/venue this show already carries, same as the cold path.
+                issueFlags(DraftCheck.findings(in: c.replyDraftBody ?? "",
+                                               knownsDate: item.performanceDate != nil,
+                                               knownsVenue: item.venue != nil))
                 HStack(spacing: OVSpacing.xs) {
                     Button { onSendReply(c.id) } label: {
                         Label("Send reply", systemImage: "paperplane")
