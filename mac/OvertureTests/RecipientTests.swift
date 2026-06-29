@@ -298,6 +298,19 @@ struct RecipientTests {
         #expect(!pending.isSendablePending)    // so the drip/queue won't email it
     }
 
+    @Test func aReplyDraftStallsOnlyAfterTheTimeoutWithNoDraft() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let requested = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(!r.isReplyDraftStalled(now: requested))   // no request yet
+
+        r.replyDraftRequestedAt = requested
+        #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(60)))   // still within timeout
+        #expect(r.isReplyDraftStalled(now: requested.addingTimeInterval(Recipient.replyDraftStallTimeout)))  // dead run (#431)
+
+        r.replyDraftBody = "Here's a draft."                // the draft landed
+        #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(3600)))  // no longer stalled
+    }
+
     @Test func resolutionMapsThroughRawString() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.resolution == nil)

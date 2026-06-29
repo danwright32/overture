@@ -171,6 +171,16 @@ final class Recipient {
 
     // Copy-out path (#421): Dan pasted the draft into the Gmail thread he's reading and sent it there
     // himself, so Overture sends nothing. Consume the draft and re-anchor this contact's clock.
+    // #431: a "Drafting a reply…" run that has produced nothing after this long is treated as a dead
+    // run and surfaced as needs-attention, so a stranded request never sits in progress forever.
+    static let replyDraftStallTimeout: TimeInterval = 5 * 60
+
+    // True when a reply draft was requested, none has landed, and the timeout has elapsed (#431).
+    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout) -> Bool {
+        guard let requested = replyDraftRequestedAt, (replyDraftBody?.isEmpty != false) else { return false }
+        return now.timeIntervalSince(requested) >= timeout
+    }
+
     func recordRepliedInGmail(now: Date) {
         replyDraftSubject = nil
         replyDraftBody = nil

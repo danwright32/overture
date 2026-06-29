@@ -49,6 +49,16 @@ struct AgentRosterTests {
         #expect(status("Follow-ups", i).state == .needsAttention)
     }
 
+    @Test func followUpsFlagAStalledReplyDraft() {
+        var i = calm; i.stalledReplyDrafts = 1
+        #expect(status("Follow-ups", i).state == .needsAttention)
+        #expect(status("Follow-ups", i).detail == "1 reply draft stalled")   // #431
+
+        i.stalledReplyDrafts = 2
+        #expect(status("Follow-ups", i).detail == "2 reply drafts stalled")
+        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 1)
+    }
+
     @Test func rollUpCountsAttentionAndError() {
         var i = calm; i.keptToPrep = 1; i.toReview = 1; i.sendErrors = 1; i.readyToSend = 1
         #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 3)  // Prep, Review, Send
