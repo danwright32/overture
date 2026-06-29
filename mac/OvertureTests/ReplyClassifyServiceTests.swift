@@ -103,4 +103,34 @@ struct ReplyClassifyServiceTests {
         }
         #expect(launches == 1)
     }
+
+    // #420 C5 — the stale window is 10 minutes (a cold merged classify+drafter run): a marker younger
+    // than that still reads as running; older than it is stale and frees the run.
+    @Test func theStaleWindowIsTenMinutes() throws {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        // Separate files per case: URL resource values cache per URL, so reusing one would read stale.
+        func marker(ageMinutes: Double) throws -> URL {
+            let url = tmp()
+            try Data().write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-ageMinutes * 60)],
+                                                  ofItemAtPath: url.path)
+            return url
+        }
+        #expect(ReplyClassifyService.isRunning(markerURL: try marker(ageMinutes: 5), now: now) == true)    // within 10m
+        #expect(ReplyClassifyService.isRunning(markerURL: try marker(ageMinutes: 11), now: now) == false)  // past 10m: stale
+    }
+
+    // #420 C5 — if the launch fails, the atomic lock is released so a retry isn't permanently blocked.
+    @Test func aFailedLaunchReleasesTheLock() throws {
+        struct LaunchFailed: Error {}
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k7", replyText: "Yes")
+        let queueURL = tmp(); let markerURL = tmp()
+        #expect(throws: LaunchFailed.self) {
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+                                                   queueURL: queueURL, markerURL: markerURL,
+                                                   launch: { throw LaunchFailed() })
+        }
+        #expect(FileManager.default.fileExists(atPath: markerURL.path) == false)   // lock released
+    }
 }
