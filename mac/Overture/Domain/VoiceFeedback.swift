@@ -14,6 +14,7 @@ struct VoiceFeedback: Codable, Equatable, Sendable {
 }
 
 struct VoiceFeedbackPair: Codable, Equatable, Sendable {
+    var kind: String?              // v3 (#463): "reply" for an inbound-reply edit; nil/absent = cold opener
     var naturalKey: String
     var discipline: String
     var originalSubject: String?   // the AI's draft, before Dan's edits
@@ -29,7 +30,7 @@ struct VoiceFeedbackPair: Codable, Equatable, Sendable {
 }
 
 enum VoiceFeedbackBuilder {
-    static let version = 2
+    static let version = 3
     static let maxPairs = 20
     // Below this normalized edit distance the AI draft and the sent copy are effectively the same
     // (a typo fix or a near-revert): no voice lesson, so the pair is dropped. The capture step
@@ -37,38 +38,55 @@ enum VoiceFeedbackBuilder {
     // export owns, comparing the AI ORIGINAL against the SENT copy (not any intermediate draft).
     static let minEditDistance = 3
 
+    // One ranked entry feeding the export: the pair plus the keys it is sorted by (winners first #245,
+    // then newest first). Cold openers (one per show) and reply edits (one per recipient, #463) compete
+    // in the same capped list, so a few of either kind can't crowd out the other at Dan's low volume.
+    private struct Entry { var pair: VoiceFeedbackPair; var rank: Int; var date: Date }
+
     static func build(from prospects: [Prospect], generatedAt: String) -> VoiceFeedback {
         let iso = ISO8601DateFormatter()
-        let pairs = prospects
-            .compactMap { p -> (Prospect, Date)? in
-                guard !p.excludedFromVoiceLearning,        // #244: Dan opted this send out of learning
-                      let sentAt = p.sentAt,
-                      let original = p.originalDraftBody,
-                      let sent = p.sentBody,
-                      isHighSignal(originalBody: original, sentBody: sent) else { return nil }
-                return (p, sentAt)
-            }
-            // Winners first (#245), then newest first within a tier — so an email that landed a reply
-            // or booking survives the cap even when older than recent no-response edits.
-            .sorted { a, b in
-                let ra = outcomeRank(a.0.outcome), rb = outcomeRank(b.0.outcome)
-                return ra != rb ? ra > rb : a.1 > b.1
-            }
-            .prefix(maxPairs)
-            .map { (p, sentAt) in
-                VoiceFeedbackPair(
-                    naturalKey: p.naturalKey,
-                    discipline: p.discipline,
-                    originalSubject: p.originalDraftSubject,
-                    originalBody: p.originalDraftBody,
-                    sentSubject: p.sentSubject,
-                    sentBody: p.sentBody,
+        var entries: [Entry] = []
+        for p in prospects where !p.excludedFromVoiceLearning {   // #244: Dan opted this show out of learning
+            // Cold opener: the shared lead body Dan edited and sent.
+            if let sentAt = p.sentAt, let original = p.originalDraftBody, let sent = p.sentBody,
+               isHighSignal(originalBody: original, sentBody: sent) {
+                entries.append(Entry(pair: VoiceFeedbackPair(
+                    naturalKey: p.naturalKey, discipline: p.discipline,
+                    originalSubject: p.originalDraftSubject, originalBody: p.originalDraftBody,
+                    sentSubject: p.sentSubject, sentBody: p.sentBody,
                     sentAt: iso.string(from: sentAt),
-                    outcome: p.outcome.rawValue,
-                    outcomeRecipientId: outcomeRecipient(p)
-                )
+                    outcome: p.outcome.rawValue, outcomeRecipientId: outcomeRecipient(p)),
+                    rank: outcomeRank(p.outcome), date: sentAt))
             }
+            // Reply edits: per recipient, the inbound-reply Dan rewrote and committed (#463).
+            for r in p.recipients {
+                guard let original = r.originalReplyDraftBody, let sent = r.sentReplyBody,
+                      let sentAt = r.replySentAt, isHighSignal(originalBody: original, sentBody: sent) else { continue }
+                let outcome = replyOutcome(r)
+                entries.append(Entry(pair: VoiceFeedbackPair(
+                    kind: "reply", naturalKey: p.naturalKey, discipline: p.discipline,
+                    originalBody: original, sentBody: sent,
+                    sentAt: iso.string(from: sentAt),
+                    outcome: outcome.rawValue, outcomeRecipientId: r.id),
+                    rank: outcomeRank(outcome), date: sentAt))
+            }
+        }
+        // Winners first (#245), then newest first within a tier — so an email that landed a reply or
+        // booking survives the cap even when older than recent no-response edits.
+        let pairs = entries
+            .sorted { $0.rank != $1.rank ? $0.rank > $1.rank : $0.date > $1.date }
+            .prefix(maxPairs)
+            .map(\.pair)
         return VoiceFeedback(version: version, generatedAt: generatedAt, pairs: Array(pairs))
+    }
+
+    // The outcome a reply lesson landed through, from the recipient's own state (#463): the contact who
+    // booked beats one who merely replied. Reply pairs are per-recipient, so the win is attributed here
+    // rather than at the lead level.
+    static func replyOutcome(_ r: Recipient) -> Outcome {
+        if r.resolution == .booked { return .booked }
+        if r.replied { return .replied }
+        return .noResponse
     }
 
     // Which recipient earned the show's outcome (#392): the booked one, else the first replier, else

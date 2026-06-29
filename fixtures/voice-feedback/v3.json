@@ -1,0 +1,27 @@
+{
+  "version" : 3,
+  "generatedAt" : "2026-06-26T00:00:00Z",
+  "pairs" : [
+    {
+      "kind" : "reply",
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "discipline" : "music",
+      "originalBody" : "Sure, send me the details.",
+      "sentBody" : "Hi Maria, yes, I'd be glad to cover the run. I document performing arts unobtrusively, no flash.",
+      "sentAt" : "2026-03-02T10:15:00Z",
+      "outcome" : "booked",
+      "outcomeRecipientId" : "erobinson@aurorastrings.example"
+    },
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "discipline" : "music",
+      "originalSubject" : "Photographing Aurora Strings at Carnegie Hall",
+      "originalBody" : "Hi, I'd be glad to cover this performance.",
+      "sentSubject" : "Photographing Aurora Strings at Carnegie Hall",
+      "sentBody" : "Hi Maria, I photograph performing arts in New York and would document this run unobtrusively, no flash.",
+      "sentAt" : "2026-03-01T14:30:00Z",
+      "outcome" : "booked",
+      "outcomeRecipientId" : "erobinson@aurorastrings.example"
+    }
+  ]
+}

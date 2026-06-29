@@ -139,7 +139,8 @@ struct VoiceFeedbackTests {
         #expect(pair?.sentSubject == "Photographing your spring run")
         #expect(pair?.sentBody == "Hi Maria, I document dance unobtrusively and would love to cover this run.")
         #expect(pair?.sentAt == "1970-01-01T00:00:00Z")
-        #expect(fb.version == 2)
+        #expect(pair?.kind == nil)            // a cold opener carries no kind tag (defaults to cold)
+        #expect(fb.version == 3)
     }
 
     @Test func exportWritesADecodableFile() throws {
@@ -156,7 +157,7 @@ struct VoiceFeedbackTests {
         let count = try VoiceFeedbackService.export(from: ctx, generatedAt: "2026-06-26T00:00:00Z", url: url)
         #expect(count == 1)
         let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: url))
-        #expect(decoded.version == 2)
+        #expect(decoded.version == 3)
         #expect(decoded.pairs.first?.naturalKey == "k1")
     }
 
@@ -241,5 +242,77 @@ struct VoiceFeedbackTests {
         let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
 
         #expect(fb.pairs.first?.outcomeRecipientId == nil)
+    }
+
+    // #463: a reply Dan substantively edited AND committed is its own voice lesson, per recipient,
+    // tagged kind "reply" so the distiller learns the reply register separately from cold openers.
+    private func replyRecipient(_ id: String, original: String?, sent: String?, sentAt: Date?,
+                                replied: Bool = true, resolution: RecipientResolution? = nil) -> Recipient {
+        let r = Recipient(id: id, email: id, provenance: .act)
+        r.sendState = .sent
+        r.replied = replied
+        r.resolution = resolution
+        r.originalReplyDraftBody = original
+        r.sentReplyBody = sent
+        r.replySentAt = sentAt
+        return r
+    }
+
+    @Test func includesEditedAndSentReplyPairs() {
+        let p = prospect(key: "show", original: nil, sent: nil, sentAt: nil)   // no cold pair on this show
+        p.setRecipients([replyRecipient("act@x.example",
+            original: "Sure, send me the details.",
+            sent: "Hi Maria — yes, I'd be glad to cover the run. I shoot unobtrusively, no flash.",
+            sentAt: Date(timeIntervalSince1970: 100))])
+
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+
+        #expect(fb.pairs.count == 1)
+        let pair = fb.pairs.first
+        #expect(pair?.kind == "reply")
+        #expect(pair?.naturalKey == "show")
+        #expect(pair?.originalBody == "Sure, send me the details.")
+        #expect(pair?.sentBody == "Hi Maria — yes, I'd be glad to cover the run. I shoot unobtrusively, no flash.")
+        #expect(pair?.outcomeRecipientId == "act@x.example")
+        #expect(pair?.outcome == "replied")
+    }
+
+    @Test func anUnsentReplyEditIsNotExported() {
+        let p = prospect(key: "show", original: nil, sent: nil, sentAt: nil)
+        p.setRecipients([replyRecipient("act@x.example",
+            original: "Sure, send me the details.",
+            sent: nil, sentAt: nil)])   // edited but never committed
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.isEmpty)
+    }
+
+    @Test func anUneditedSentReplyIsNotExported() {
+        let p = prospect(key: "show", original: nil, sent: nil, sentAt: nil)
+        p.setRecipients([replyRecipient("act@x.example",
+            original: nil,   // no AI baseline captured -> nothing to learn from
+            sent: "Yes, glad to cover this run.", sentAt: Date(timeIntervalSince1970: 100))])
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.isEmpty)
+    }
+
+    @Test func excludedShowDropsItsReplyPairs() {
+        let p = prospect(key: "show", original: nil, sent: nil, sentAt: nil)
+        p.excludedFromVoiceLearning = true
+        p.setRecipients([replyRecipient("act@x.example",
+            original: "Sure, send details.",
+            sent: "Hi Maria — yes, glad to cover the run unobtrusively, no flash.",
+            sentAt: Date(timeIntervalSince1970: 100))])
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.isEmpty)
+    }
+
+    @Test func aBookedReplyRecipientOutranksItsOutcome() {
+        let p = prospect(key: "show", original: nil, sent: nil, sentAt: nil)
+        p.setRecipients([replyRecipient("act@x.example",
+            original: "Sure, details?",
+            sent: "Hi — yes, I'd be glad to cover the run unobtrusively, no flash at all.",
+            sentAt: Date(timeIntervalSince1970: 100), resolution: .booked)])
+        let fb = VoiceFeedbackBuilder.build(from: [p], generatedAt: "2026-06-26T00:00:00Z")
+        #expect(fb.pairs.first?.outcome == "booked")
     }
 }

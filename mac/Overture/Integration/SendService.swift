@@ -202,6 +202,7 @@ enum SendService {
             let receipt = try await sender.send(mail)
             recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours
             if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
+            recipient.freezeSentReply(now: now)                   // capture the committed copy for voice learning (#463)
             recipient.replyDraftSubject = nil
             recipient.replyDraftBody = nil
             recipient.lastFollowUpAt = now                        // re-anchor this contact's clock

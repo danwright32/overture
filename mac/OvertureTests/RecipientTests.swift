@@ -177,6 +177,35 @@ struct RecipientTests {
         #expect(r.replyDraftEditedByDan == false)
     }
 
+    // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
+    // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
+    // a later re-draft can't rewrite the lesson.
+    @Test func editingAReplySnapshotsTheAIOriginalOnce() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replyDraftBody = "AI reply draft."
+        r.applyReplyDraftEdit("Dan's rewritten reply, much warmer.")
+        #expect(r.originalReplyDraftBody == "AI reply draft.")     // baseline captured
+        r.applyReplyDraftEdit("Dan tweaks it again.")
+        #expect(r.originalReplyDraftBody == "AI reply draft.")     // baseline not overwritten by later edits
+    }
+
+    @Test func aWhitespaceOnlyReplyEditDoesNotSnapshot() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replyDraftBody = "AI reply draft."
+        r.applyReplyDraftEdit("AI reply draft.   ")   // only trailing whitespace differs
+        #expect(r.originalReplyDraftBody == nil)
+    }
+
+    @Test func recordRepliedInGmailFreezesTheSentReply() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replyDraftBody = "AI reply draft."
+        r.applyReplyDraftEdit("Dan's committed reply text.")
+        r.recordRepliedInGmail(now: Date(timeIntervalSince1970: 7))
+        #expect(r.sentReplyBody == "Dan's committed reply text.")
+        #expect(r.replySentAt == Date(timeIntervalSince1970: 7))
+        #expect(r.replyDraftBody == nil)   // still consumed
+    }
+
     // #459 — the reply-draft self-check is shown on an AI draft but suppressed once Dan edits it, the
     // same suppression the cold path applies. This is the behavior the reply view renders.
     private func snapshot(body: String, edited: Bool) -> RecipientSnapshot {
