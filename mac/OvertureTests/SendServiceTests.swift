@@ -327,11 +327,13 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let (p, r) = sentContact(ctx, group: "A", threadId: "th-9", msgId: "<orig@x.org>")
 
-        let sender = CapturingSender()
+        let sender = CapturingSender()   // returns messageID "<m>"
         #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: sender) == true)
         #expect(sender.last?.threadId == "th-9")
-        #expect(sender.last?.inReplyTo == "<orig@x.org>")
+        #expect(sender.last?.inReplyTo == "<orig@x.org>")   // this nudge replies to the prior message
         #expect(sender.last?.subject == "Re: Photographs for A")
+        // The contact's message-id advances to this nudge, so the NEXT nudge threads off it (#74).
+        #expect(r.gmailMessageId == "<m>")
     }
 
     // MARK: - Fan-out (#394): one email per recipient over the shared body
