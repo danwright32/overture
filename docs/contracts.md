@@ -103,7 +103,9 @@ decodes to nil; `queue-v2.json` / `results-v2.json` are the discriminator spec.
 
 Version 3 (#420) folds the AI reply-DRAFTER into the same run: each result adds optional `draftSubject`
 and `draftBody` (the contextual reply drafted in Dan's voice for that recipient), and the queue now
-emits one item per replied recipient with `recipientId` populated. The run reads Dan's distilled voice
+emits one item per replied recipient with `recipientId` populated. It also adds an optional
+`performanceDate` to each queue item (#438) so a draft can NAME the known show date rather than ask for
+it; absent only for a genuinely undated show. A draft must never request a field the queue already holds. The run reads Dan's distilled voice
 guidance (`overture-voice-guidance.md`) and applies only distilled tendencies, never raw past pairs
 (#119/#249 leak guard). The `intent` is consumed as a NON-BINDING hint (it never sets a binding
 per-recipient outcome). Additive: the tolerant gate (1 through 3) still accepts v1/v2; `queue-v3.json`

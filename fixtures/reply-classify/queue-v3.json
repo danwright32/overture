@@ -6,6 +6,7 @@
       "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
       "groupName" : "Aurora Strings",
       "venue" : "Carnegie Hall",
+      "performanceDate" : "2026-03-10",
       "replyText" : "Yes, we'd like to book.",
       "recipientId" : "pres@presentingorg.example"
     },
@@ -13,6 +14,7 @@
       "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
       "groupName" : "Aurora Strings",
       "venue" : "Carnegie Hall",
+      "performanceDate" : "2026-03-10",
       "replyText" : "Thanks, but we already have a photographer.",
       "recipientId" : "act@aurorastrings.example"
     },

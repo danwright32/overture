@@ -30,11 +30,13 @@ struct ReplyClassifyQueue: Codable, Equatable, Sendable {
 }
 
 struct ReplyClassifyItem: Codable, Equatable, Sendable {
-    var naturalKey: String     // opaque show join key, echo verbatim
-    var groupName: String      // research only
+    var naturalKey: String       // opaque show join key, echo verbatim
+    var groupName: String        // research only
     var venue: String?
+    var performanceDate: String? // v3 (#438): the show date Overture already knows, so a draft names it
+                                 // instead of asking for it; absent only for a genuinely undated show
     var replyText: String
-    var recipientId: String?   // v2 (#392): which recipient on the show this reply came from
+    var recipientId: String?     // v2 (#392): which recipient on the show this reply came from
 }
 
 enum ReplyClassifyQueueBuilder {

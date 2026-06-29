@@ -117,6 +117,8 @@ The `dan-wright-brand-voice` rules are ported into Overture as the drafter's sys
 4. Offer: handled positively. No multi-concert pitch, no promised freebies.
 5. CTA: soft, aimed at the decision-maker, for example "let me know how that lands."
 
+**Never ask for what Overture already knows (#438).** Every prospect is a specific known show, so the drafter holds the date, venue, and location. It references them ("your March 10 concert at Carnegie Hall"), it never requests them ("let me know the date"). Asking for a known fact reads as careless and undercuts the researched-your-show impression the whole approach depends on. The drafter never requests any field the system already holds.
+
 **A/B testing is a v1 requirement, not a nicety,** because the current cold approach is not converting. The drafter and sender assign and track email variants from day one. First things to test: stating the rate plainly vs linking the contract page, including a portfolio link vs not, and different openers. Deeper statistical analysis is filed as a later issue.
 
 **Portfolio links** map a performance's discipline to the closest of the five site galleries: Music, Performing Arts, Bands, Comedy, Dance. There is no dedicated opera, theater, or choral gallery, so a choir or classical recital points to Music, a staged opera or play to Performing Arts, a dance company to Dance, and so on.

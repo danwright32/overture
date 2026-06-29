@@ -151,6 +151,12 @@ Hard rules: no em dashes; contractions throughout; NO fabrication (only what's r
 from the listing — never invent performer states); never volunteer the dance
 rate-flexibility in a cold email.
 
+**Never ask for a fact Overture already holds (#438).** Each queue item carries `venue` and
+`performanceDate` (every prospect is a specific known show). REFERENCE them, never request them —
+"your March 10 concert at Carnegie Hall", never "let me know the date and venue". Asking for known
+details reads as careless and undercuts the researched-your-specific-show impression the targeting
+is built on. A draft must never request ANY field the work-list already supplies.
+
 **No performative enthusiasm (Dan).** Keep it level and professional, not eager.
 Avoid "I'd love to", "exactly the kind of work I love", "thrilled", "so excited",
 "can't wait", exclamation points, and similar warmth-signaling. State the genuine

@@ -26,8 +26,9 @@ enum ReplyClassifyService {
         for p in all {
             for r in p.recipients where recipientNeedsClassify(r) {
                 items.append(ReplyClassifyItem(naturalKey: p.naturalKey, groupName: p.groupName,
-                                               venue: p.venue, replyText: r.lastReplyText ?? "",
-                                               recipientId: r.id))   // v3: the discriminator is now populated
+                                               venue: p.venue, performanceDate: p.performanceDate,
+                                               replyText: r.lastReplyText ?? "",
+                                               recipientId: r.id))   // v3: recipientId + performanceDate (#438) populated
             }
         }
         return ReplyClassifyQueueBuilder.build(from: items, generatedAt: generatedAt)
