@@ -90,4 +90,26 @@ struct ReplyClassifyImporterTests {
         #expect(p.conversationState == .wantsToBook)   // lead hint prefers the active intent over the decline
         #expect(ra?.resolution == nil && rp?.resolution == nil)   // hints are non-binding (decision f)
     }
+
+    // #459 — a fresh AI draft must reset Dan's "edited" mark on that contact, so the deterministic
+    // warnings reappear on text he hasn't touched (the flag means "the current draft is Dan's edit").
+    @Test func aFreshAIDraftClearsDansEditedFlag() throws {
+        let ctx = ModelContext(try container())
+        let p = lead(ctx, key: "show")
+        let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
+        act.sendState = .sent; act.replied = true
+        act.applyReplyDraftEdit("Dan's hand-edited reply.")   // edited; warnings suppressed
+        p.setRecipients([act])
+        try ctx.save()
+
+        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
+            ReplyClassifyResult(naturalKey: "show", intent: "interested", recipientId: "act@a.example",
+                                draftSubject: "Re: A", draftBody: "A new AI draft."),
+        ])
+        ReplyClassifyImporter.ingest(res, into: ctx)
+
+        let ra = p.recipients.first { $0.id == "act@a.example" }
+        #expect(ra?.replyDraftBody == "A new AI draft.")
+        #expect(ra?.replyDraftEditedByDan == false)
+    }
 }

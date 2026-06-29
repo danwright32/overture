@@ -38,7 +38,9 @@ enum ReplyClassifyImporter {
                 p.updateRecipient(id: rid) { rec in
                     rec.intentHint = r.intent
                     if let s = r.draftSubject { rec.replyDraftSubject = s }
-                    if let b = r.draftBody { rec.replyDraftBody = b }
+                    // A fresh AI draft is not Dan's edit, so clear his "edited" mark (#459) — otherwise
+                    // a stale flag would suppress the deterministic warnings on text he never touched.
+                    if let b = r.draftBody { rec.replyDraftBody = b; rec.replyDraftEditedByDan = false }
                 }
             }
             // Lead conversation hint (bridge, C4 non-binding): once per show, never over a manual state,

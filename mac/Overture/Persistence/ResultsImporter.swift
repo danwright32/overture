@@ -154,7 +154,8 @@ extension QueueItem {
                                       lastReplyText: r.lastReplyText, resolution: r.resolution,
                                       bounced: r.bounced, outcomeSource: r.outcomeSource,
                                       replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
-                                      replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint)
+                                      replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
+                                      replyDraftEditedByDan: r.replyDraftEditedByDan)
                 }
         )
     }

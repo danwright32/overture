@@ -111,9 +111,18 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
+    var replyDraftEditedByDan: Bool = false
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
+
+    // The deterministic self-check findings to surface on the reply draft (#456), or none once Dan has
+    // edited it — it's his text then, the same suppression the cold path applies via draftEditedByDan
+    // (#459). Lives here, not in the view, so the suppression is unit-testable.
+    func replyDraftFindings(knownsDate: Bool, knownsVenue: Bool) -> [DraftIssue] {
+        guard !replyDraftEditedByDan, let body = replyDraftBody else { return [] }
+        return DraftCheck.findings(in: body, knownsDate: knownsDate, knownsVenue: knownsVenue)
+    }
     // A draft was requested but hasn't arrived yet: show progress.
     var isDraftingReply: Bool { replyDraftRequestedAt != nil && !hasReplyDraft }
 
