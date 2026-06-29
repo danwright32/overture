@@ -22,6 +22,7 @@ struct AgentInputs: Sendable {
     var gmailConnected: Bool
     var sendErrors: Int      // approved sends that failed
     var followUpsDue: Int
+    var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
 }
 
 enum AgentRoster {
@@ -58,6 +59,12 @@ enum AgentRoster {
     }
 
     private static func followUps(_ i: AgentInputs) -> AgentStatus {
+        // A dead reply-drafter run takes priority: it's an abnormal stall Dan should clear (#431).
+        if i.stalledReplyDrafts > 0 {
+            let n = i.stalledReplyDrafts
+            return AgentStatus(name: "Follow-ups", state: .needsAttention,
+                               detail: "\(n) reply draft\(n == 1 ? "" : "s") stalled")
+        }
         if i.followUpsDue > 0 { return AgentStatus(name: "Follow-ups", state: .needsAttention, detail: "\(i.followUpsDue) nudge\(i.followUpsDue == 1 ? "" : "s") due") }
         return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due")
     }
