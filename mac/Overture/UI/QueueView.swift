@@ -406,6 +406,7 @@ struct QueueView: View {
             onDraftReply: { rid in draftReply(item, rid) },
             onSendReply: { rid in sendReply(item, rid) },
             onCopyReply: { rid in copyReply(item, rid) },
+            onEditReplyDraft: { rid, body in editReplyDraft(item, rid, body) },
             onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
             onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
             onConfirmBooking: { confirmBooking(item) },
@@ -488,6 +489,13 @@ struct QueueView: View {
             try? context.save()
             if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
         }
+    }
+
+    // #423 (E) — Dan edits the AI reply draft before sending, the same affordance as an outbound draft.
+    private func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.replyDraftBody = body }
+        try? context.save()
     }
 
     // #421 copy-out — copy the draft to the clipboard for Dan to paste into the Gmail thread he's
