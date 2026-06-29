@@ -498,7 +498,7 @@ struct QueueView: View {
     // #423 (E) — Dan edits the AI reply draft before sending, the same affordance as an outbound draft.
     private func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.replyDraftBody = body }
+        model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
         try? context.save()
     }
 

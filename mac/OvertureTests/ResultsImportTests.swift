@@ -116,6 +116,27 @@ struct ResultsImportTests {
         #expect(ann.lastReplyText == "Yes, let's talk.")
     }
 
+    // #459 — the per-recipient "Dan edited this reply draft" flag must reach the snapshot the view reads,
+    // so the deterministic warnings can be suppressed on his edited text.
+    @Test func queueItemCarriesTheReplyDraftEditedFlag() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let edited = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        edited.sendState = .sent; edited.replied = true; edited.applyReplyDraftEdit("Dan's edit.")
+        let fresh = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        fresh.sendState = .sent; fresh.replied = true; fresh.replyDraftBody = "AI draft."
+        p.setRecipients([edited, fresh])
+
+        let item = QueueItem(p)
+        #expect(item.contacts.first { $0.id == "a@act.example" }?.replyDraftEditedByDan == true)
+        #expect(item.contacts.first { $0.id == "b@present.example" }?.replyDraftEditedByDan == false)
+    }
+
     // #418 B1 — the derived per-contact status line: terminal resolution wins, then bounce, then reply,
     // then send state; and isAutoReplied is true only for an auto (not hand-marked) reply.
     @Test func recipientSnapshotStatusLabelsAndAutoReplied() {

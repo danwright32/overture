@@ -156,6 +156,44 @@ struct RecipientTests {
         #expect(back?.recipients.first { $0.id == "b@p.example" }?.replyDraftBody == "AI draft B")
     }
 
+    // #459 — editing the AI reply draft marks it as Dan's, the same way Prospect.applyEdit does for the
+    // cold draft, so the deterministic DraftCheck warnings stop nagging on text he already owns.
+    @Test func editingAReplyDraftMarksItEditedByDan() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replyDraftBody = "AI draft"
+        #expect(r.replyDraftEditedByDan == false)
+        r.applyReplyDraftEdit("Dan's edited reply.")
+        #expect(r.replyDraftBody == "Dan's edited reply.")
+        #expect(r.replyDraftEditedByDan == true)
+    }
+
+    // Dismissing a wrongly-detected reply wipes the draft, so the edited flag must reset too — otherwise
+    // a later AI draft would inherit a stale "edited" mark and wrongly suppress its warnings.
+    @Test func dismissingAnAutoReplyClearsTheReplyDraftEditedFlag() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replied = true
+        r.applyReplyDraftEdit("Dan's edited reply.")
+        r.dismissAutoReply()
+        #expect(r.replyDraftEditedByDan == false)
+    }
+
+    // #459 — the reply-draft self-check is shown on an AI draft but suppressed once Dan edits it, the
+    // same suppression the cold path applies. This is the behavior the reply view renders.
+    private func snapshot(body: String, edited: Bool) -> RecipientSnapshot {
+        RecipientSnapshot(id: "a", name: "N", email: "a@a.example", role: nil, provenance: .act,
+                          sendState: .sent, replied: true, lastReplyText: nil, resolution: nil,
+                          bounced: false, outcomeSource: nil, replyDraftBody: body,
+                          replyDraftEditedByDan: edited)
+    }
+
+    @Test func replyDraftWarningsShowOnAnAIDraftAndVanishOnceEdited() {
+        let asksKnownDate = "Great — let me know the date and I'll be there."
+        let aiDraft = snapshot(body: asksKnownDate, edited: false)
+        #expect(aiDraft.replyDraftFindings(knownsDate: true, knownsVenue: false).contains { $0 == .asksForKnownFact })
+        let dansEdit = snapshot(body: asksKnownDate, edited: true)
+        #expect(dansEdit.replyDraftFindings(knownsDate: true, knownsVenue: false).isEmpty)
+    }
+
     // #418 B2 — manual-judge marking stamps the manual source flag (so detection won't overwrite) and
     // maps the locked vocabulary onto resolution + bounced with no new enum.
     @Test func manualMarkingMapsTheLockedVocabularyAndStampsManualSource() {

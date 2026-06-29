@@ -75,6 +75,10 @@ final class Recipient {
     var replyDraftBody: String?
     var replyDraftRequestedAt: Date?
     var intentHint: String?
+    // Whether Dan hand-edited THIS reply draft (#459), mirroring Prospect.draftEditedByDan for the cold
+    // draft: once set, the deterministic DraftCheck warnings stop nagging on text he already owns. A
+    // fresh AI draft clears it again so warnings reappear on text he hasn't touched.
+    var replyDraftEditedByDan: Bool = false
 
     // The performance this recipient belongs to (inverse of Prospect.recipients).
     var prospect: Prospect?
@@ -181,6 +185,13 @@ final class Recipient {
         return now.timeIntervalSince(requested) >= timeout
     }
 
+    // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
+    // his text wins and the deterministic DraftCheck warnings stop nagging on it.
+    func applyReplyDraftEdit(_ body: String) {
+        replyDraftBody = body
+        replyDraftEditedByDan = true
+    }
+
     func recordRepliedInGmail(now: Date) {
         replyDraftSubject = nil
         replyDraftBody = nil
@@ -202,5 +213,6 @@ final class Recipient {
         replyDraftSubject = nil
         replyDraftBody = nil
         replyDraftRequestedAt = nil
+        replyDraftEditedByDan = false
     }
 }

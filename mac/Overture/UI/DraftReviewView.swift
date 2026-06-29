@@ -285,11 +285,13 @@ struct DraftReviewView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(OVSpacing.sm)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
-                // #456: the reply drafter had no deterministic check; flag a draft that asks the
-                // contact for the date/venue this show already carries, same as the cold path.
-                issueFlags(DraftCheck.findings(in: c.replyDraftBody ?? "",
-                                               knownsDate: item.performanceDate != nil,
-                                               knownsVenue: item.venue != nil))
+                if c.replyDraftEditedByDan {
+                    Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                }
+                // #456 / #459: flag a reply draft that asks for the date/venue this show already carries,
+                // same as the cold path — but suppressed once Dan edits (logic in replyDraftFindings).
+                issueFlags(c.replyDraftFindings(knownsDate: item.performanceDate != nil,
+                                                knownsVenue: item.venue != nil))
                 HStack(spacing: OVSpacing.xs) {
                     Button { onSendReply(c.id) } label: {
                         Label("Send reply", systemImage: "paperplane")
