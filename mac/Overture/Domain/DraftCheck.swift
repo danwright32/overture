@@ -10,6 +10,8 @@ enum DraftIssue: Equatable, Hashable, Sendable {
     case presumesBooking          // assumes the client already decided to hire him
     case coldHedge                // hedges like a cold pitch at a warm/repeat client
     case asksForKnownFact         // asks the contact for the date/venue Overture already holds (#456)
+    case concessionLanguage       // offers a discount or free/complimentary work (#39/#458)
+    case nonCanonicalRate         // states a rate other than the canonical $250/hr + tax (#39/#458)
 
     var label: String {
         switch self {
@@ -18,6 +20,8 @@ enum DraftIssue: Equatable, Hashable, Sendable {
         case .presumesBooking: return "Presumes the booking instead of handing back the decision"
         case .coldHedge: return "Hedges like a cold pitch at a warm client"
         case .asksForKnownFact: return "Asks for the date or venue Overture already knows"
+        case .concessionLanguage: return "Offers a discount or free/complimentary work"
+        case .nonCanonicalRate: return "States a rate other than $250 an hour plus tax"
         }
     }
 }
@@ -31,6 +35,10 @@ enum DraftCheck {
     // enough that merely stating the fact ("I'll be there on April 12") never trips them — only a
     // request does. Matched as lowercased substrings, like the lists above.
     private static let dateRequests = ["let me know the date", "let me know when", "what date", "what's the date", "what is the date", "which date", "what day", "when is the show", "when's the show", "when is the performance", "when's the performance", "when is the concert", "when's the concert", "when is the event", "when's the event", "confirm the date", "send me the date", "send over the date", "remind me of the date", "remind me when"]
+    // Concession language banned in a cold pitch (#39/#458). "free" is handled separately with a
+    // word boundary so "feel free" (natural warm phrasing) doesn't trip it.
+    private static let concession = ["discount", "complimentary", "flexible"]
+
     private static let venueRequests = ["what venue", "which venue", "what's the venue", "what is the venue", "let me know the venue", "name of the venue", "what location", "which location", "what's the location", "what is the location", "let me know the location", "let me know where", "send me the venue", "send me the location", "where is the show", "where's the show", "where is the performance", "where's the performance", "where is the concert", "where's the concert", "where is the event", "where's the event", "where is it being held", "where is it taking place", "where will it be held"]
 
     // `knownsDate`/`knownsVenue` opt the caller into the #456 known-fact check: the flag fires ONLY
@@ -46,6 +54,26 @@ enum DraftCheck {
         let asksKnownDate = knownsDate && dateRequests.contains(where: text.contains)
         let asksKnownVenue = knownsVenue && venueRequests.contains(where: text.contains)
         if asksKnownDate || asksKnownVenue { issues.append(.asksForKnownFact) }
+        if hasConcession(text) { issues.append(.concessionLanguage) }
+        if hasNonCanonicalRate(text) { issues.append(.nonCanonicalRate) }
         return issues
+    }
+
+    private static func hasConcession(_ text: String) -> Bool {
+        if concession.contains(where: text.contains) { return true }
+        // "free" as a standalone word, but not the warm phrase "feel free".
+        return text.range(of: #"(?<!feel )\bfree\b"#, options: .regularExpression) != nil
+    }
+
+    // The canonical rate is "$250 an hour plus tax, one-hour minimum" (#39). Any other dollar
+    // figure in the body is a non-canonical rate; stating $250 itself is fine.
+    private static func hasNonCanonicalRate(_ text: String) -> Bool {
+        guard let re = try? NSRegularExpression(pattern: #"\$\s?(\d[\d,]*)"#) else { return false }
+        let ns = text as NSString
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let amount = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: "")
+            if amount != "250" { return true }
+        }
+        return false
     }
 }
