@@ -297,6 +297,28 @@ final class Prospect {
         set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
+    // Phase F (#424): the show's status derived from its contacts (Booked > Active > Lost > New).
+    var performanceStatus: PerformanceStatus { PerformanceStatus.of(self) }
+
+    // Closed for routine follow-ups/reminders: booked, every contact resolved (derived), or Dan closed
+    // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
+    // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
+    var isClosed: Bool {
+        switch performanceStatus {
+        case .booked, .lostDoorOpen, .lostNotInterested: return true
+        case .active, .new: return outcome == .lostSoft || outcome == .lostHard
+        }
+    }
+
+    // A contact replied and nobody has dealt with it: not booked, Dan hasn't hand-set a conversation
+    // state, and some contact is replied / unresolved / un-bounced. Deliberately INDEPENDENT of
+    // `isClosed` (#424, Dan's call) so a late reply on a closed show still surfaces for triage.
+    var hasUnhandledReply: Bool {
+        performanceStatus != .booked
+            && conversationStateSource != .manual
+            && recipients.contains { $0.replied && $0.resolution == nil && !$0.bounced }
+    }
+
     // Record an outcome as Dan's own call (manual source, timestamped, booking-suggestion cleared),
     // matching the queue's setOutcome so ReplyService never silently overwrites it (#111 / #60).
     func markOutcomeManually(_ outcome: Outcome, now: Date) {
