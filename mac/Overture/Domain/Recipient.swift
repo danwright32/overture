@@ -186,7 +186,7 @@ final class Recipient {
     // himself, so Overture sends nothing. Consume the draft and re-anchor this contact's clock.
     // #431: a "Drafting a reply…" run that has produced nothing after this long is treated as a dead
     // run and surfaced as needs-attention, so a stranded request never sits in progress forever.
-    static let replyDraftStallTimeout: TimeInterval = 5 * 60
+    static let replyDraftStallTimeout: TimeInterval = RunTimeouts.replyDraft
 
     // True when a reply draft was requested, none has landed, and the timeout has elapsed (#431).
     func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout) -> Bool {

@@ -24,6 +24,12 @@ struct DraftReviewView: View {
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     var gmailConnected: Bool = false
+    // #436: when this outbound draft is mid-send, the instant it was launched (nil = not sending), so the
+    // Send button is replaced by a live "Sending… m:ss" indicator that flips to "looks stuck" past the
+    // send timeout. No retry here: a second click could double-send, so recovery is the await resolving.
+    var outboundSendSince: Date? = nil
+    // Same, keyed per recipient for an in-flight reply send.
+    var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
 
     @State private var editing = false
     @State private var draftSubject = ""
@@ -166,19 +172,24 @@ struct DraftReviewView: View {
                 if item.conversationStateSource != .auto { conversationStatePicker }   // auto -> own row below
                 derivedStatusLabel
             } else if isApproved {
-                Button { onSend() } label: {
-                    Label("Send", systemImage: "paperplane")
-                        .font(OVType.meta).foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
-                        .background(Capsule().fill(OVColor.forest))
-                }
-                .buttonStyle(.plain)
-                .disabled(!gmailConnected || !item.hasPendingRecipient)
-                .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
-                Button("Unapprove") { onUnapprove() }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                if let line = SendFailureLine.text(for: item.sendError) {
-                    Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                if let since = outboundSendSince {
+                    LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else {
+                    Button { onSend() } label: {
+                        Label("Send", systemImage: "paperplane")
+                            .font(OVType.meta).foregroundStyle(OVColor.onForest)
+                            .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                            .background(Capsule().fill(OVColor.forest))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!gmailConnected || !item.hasPendingRecipient)
+                    .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
+                    Button("Unapprove") { onUnapprove() }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    if let line = SendFailureLine.text(for: item.sendError) {
+                        Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                    }
                 }
                 Spacer()
             } else {
@@ -292,24 +303,33 @@ struct DraftReviewView: View {
                 // same as the cold path — but suppressed once Dan edits (logic in replyDraftFindings).
                 issueFlags(c.replyDraftFindings(knownsDate: item.performanceDate != nil,
                                                 knownsVenue: item.venue != nil))
-                HStack(spacing: OVSpacing.xs) {
-                    Button { onSendReply(c.id) } label: {
-                        Label("Send reply", systemImage: "paperplane")
-                            .font(OVType.meta).foregroundStyle(OVColor.onForest)
-                            .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
-                            .background(Capsule().fill(OVColor.forest))
+                if let since = replySendSince(c.id) {
+                    LiveRunLabel(base: "Sending reply", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else {
+                    HStack(spacing: OVSpacing.xs) {
+                        Button { onSendReply(c.id) } label: {
+                            Label("Send reply", systemImage: "paperplane")
+                                .font(OVType.meta).foregroundStyle(OVColor.onForest)
+                                .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                                .background(Capsule().fill(OVColor.forest))
+                        }
+                        .buttonStyle(.plain).disabled(!gmailConnected)
+                        .help(gmailConnected ? "Send this reply on the contact's thread" : "Connect Gmail first")
+                        Button("Edit") { replyEditText = c.replyDraftBody ?? ""; editingReplyFor = c.id }
+                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                        Button("Copy") { onCopyReply(c.id) }
+                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                            .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
                     }
-                    .buttonStyle(.plain).disabled(!gmailConnected)
-                    .help(gmailConnected ? "Send this reply on the contact's thread" : "Connect Gmail first")
-                    Button("Edit") { replyEditText = c.replyDraftBody ?? ""; editingReplyFor = c.id }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                    Button("Copy") { onCopyReply(c.id) }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                        .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
                 }
             } else if c.isDraftingReply {
+                // #436: past the stall timeout this flips to a visible "looks stuck" state with a Retry
+                // (re-stamps and re-launches the draft) instead of an indefinite spinner.
                 LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
-                             font: OVType.meta, color: OVColor.inkSoft)
+                             timeout: RunTimeouts.replyDraft,
+                             font: OVType.meta, color: OVColor.inkSoft,
+                             onRetry: { onDraftReply(c.id) })
             } else {
                 Button("Draft a reply") { onDraftReply(c.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)

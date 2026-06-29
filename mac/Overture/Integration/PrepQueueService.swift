@@ -56,7 +56,7 @@ enum PrepQueueService {
     // a guess at total run time: a marker untouched past it means the run died, so the
     // app can never get permanently stuck "running" yet also never falsely frees the
     // double-run guard mid-batch.
-    static let markerStaleAfter: TimeInterval = 3 * 60
+    static let markerStaleAfter: TimeInterval = RunTimeouts.prep
 
     static var defaultMarkerURL: URL {
         StoreLocation.handoffDirectory
