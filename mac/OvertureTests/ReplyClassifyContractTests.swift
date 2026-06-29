@@ -75,8 +75,42 @@ struct ReplyClassifyContractTests {
         #expect(results.results[0].replyIntent == .wantsToBook)
     }
 
-    @Test func theBuilderNowStampsVersion2() {
+    @Test func theBuilderNowStampsVersion3() {
         let q = ReplyClassifyQueueBuilder.build(from: [], generatedAt: "2026-06-26T00:00:00.000Z")
-        #expect(q.version == 2)
+        #expect(q.version == 3)
+    }
+
+    // v3 (#420): the queue now populates recipientId on every item (one item per replied recipient),
+    // and the results carry an AI-drafted reply (draftSubject/draftBody) per recipient alongside the
+    // non-binding intent hint. Two items can share a naturalKey with different recipientIds.
+    @Test func theV3QueueHasOneItemPerRecipientWithIds() throws {
+        let queue = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue-v3.json"))
+        #expect(queue.version == 3)
+        let aurora = queue.items.filter { $0.naturalKey == "aurora-strings|2026-03-10|carnegie-hall" }
+        #expect(aurora.count == 2)   // presenter + act, distinct recipients on one show
+        #expect(Set(aurora.compactMap(\.recipientId)) == ["pres@presentingorg.example", "act@aurorastrings.example"])
+        #expect(queue.items.allSatisfy { $0.recipientId != nil })
+    }
+
+    @Test func theV3ResultsCarryPerRecipientDraftAndHint() throws {
+        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v3.json"))
+        #expect(results.version == 3)
+        let pres = results.results.first { $0.recipientId == "pres@presentingorg.example" }
+        #expect(pres?.replyIntent == .wantsToBook)
+        #expect(pres?.draftSubject == "Re: Photographing Aurora Strings at Carnegie Hall")
+        #expect(pres?.draftBody?.isEmpty == false)
+        let act = results.results.first { $0.recipientId == "act@aurorastrings.example" }
+        #expect(act?.replyIntent == .declined)
+        #expect(act?.draftBody?.isEmpty == false)
+    }
+
+    // The tolerant gate still accepts v1/v2 after the v3 bump (no draft fields decode to nil).
+    @Test func olderResultsStillDecodeUnderTheV3Gate() throws {
+        let v1 = try ReplyClassifyResultsDecoder.decode(try fixture("results.json"))
+        #expect(v1.version == 1)
+        #expect(v1.results[0].draftSubject == nil)
+        let v2 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v2.json"))
+        #expect(v2.version == 2)
+        #expect(v2.results[0].draftBody == nil)
     }
 }

@@ -102,6 +102,26 @@ struct RecipientTests {
         #expect(r.outcomeSource == .auto)
     }
 
+    // C0 (#420): the AI inbound-reply drafter writes a per-recipient draft + a non-binding intent hint;
+    // replyDraftRequestedAt drives the request-response progress + needs-attention timeout. All additive.
+    @Test func replyDraftFieldsRoundTripAndDefaultEmpty() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.replyDraftSubject == nil)
+        #expect(r.replyDraftBody == nil)
+        #expect(r.replyDraftRequestedAt == nil)
+        #expect(r.intentHint == nil)
+
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        r.replyDraftSubject = "Re: Photographing the Clarion Choir"
+        r.replyDraftBody = "Thanks for getting back to me. July 4 works well..."
+        r.replyDraftRequestedAt = when
+        r.intentHint = ReplyIntent.wantsToBook.rawValue
+        #expect(r.replyDraftSubject == "Re: Photographing the Clarion Choir")
+        #expect(r.replyDraftBody?.hasPrefix("Thanks") == true)
+        #expect(r.replyDraftRequestedAt == when)
+        #expect(r.intentHint == "wants_to_book")
+    }
+
     // A4 (#418): reply-triage auto-pause is its OWN flag, distinct from sendState .suppressed
     // (which means booking-freeze). Defaults off.
     @Test func pausedByReplyDefaultsOff() {

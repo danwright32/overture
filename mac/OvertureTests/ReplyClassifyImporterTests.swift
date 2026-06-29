@@ -9,7 +9,7 @@ import SwiftData
 @Suite("Reply classify importer")
 struct ReplyClassifyImporterTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -57,5 +57,37 @@ struct ReplyClassifyImporterTests {
         let out = ReplyClassifyImporter.ingest(results([("nope", "interested")]), into: ctx)
         #expect(out.unmatchedKeys == ["nope"])
         #expect(out.suggested == 0)
+    }
+
+    // #420 C3/C4 — v3: two contacts on one show route their OWN intent hint + AI draft to their own
+    // recipient row; the lead conversation hint prefers an active intent over a decline; and the
+    // per-contact hints are NON-BINDING (no RecipientResolution is set by the importer).
+    @Test func v3RoutesPerContactDraftAndHintAndPrefersActiveForTheLead() throws {
+        let ctx = ModelContext(try container())
+        let p = lead(ctx, key: "show")
+        let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
+        act.sendState = .sent; act.replied = true
+        let pres = Recipient(id: "pres@p.example", email: "pres@p.example", provenance: .presenter)
+        pres.sendState = .sent; pres.replied = true
+        p.setRecipients([act, pres])
+        try ctx.save()
+
+        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
+            ReplyClassifyResult(naturalKey: "show", intent: "declined", recipientId: "act@a.example",
+                                draftSubject: "Re: A", draftBody: "Thanks for letting me know."),
+            ReplyClassifyResult(naturalKey: "show", intent: "wants_to_book", recipientId: "pres@p.example",
+                                draftSubject: "Re: P", draftBody: "Wonderful, I'd be glad to."),
+        ])
+        let out = ReplyClassifyImporter.ingest(res, into: ctx)
+
+        #expect(out.matched == 2)
+        let ra = p.recipients.first { $0.id == "act@a.example" }
+        let rp = p.recipients.first { $0.id == "pres@p.example" }
+        #expect(ra?.intentHint == "declined")
+        #expect(ra?.replyDraftBody == "Thanks for letting me know.")
+        #expect(rp?.intentHint == "wants_to_book")
+        #expect(rp?.replyDraftBody == "Wonderful, I'd be glad to.")
+        #expect(p.conversationState == .wantsToBook)   // lead hint prefers the active intent over the decline
+        #expect(ra?.resolution == nil && rp?.resolution == nil)   // hints are non-binding (decision f)
     }
 }

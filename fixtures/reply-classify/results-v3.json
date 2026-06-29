@@ -1,0 +1,27 @@
+{
+  "version": 3,
+  "generatedAt": "2026-06-28T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "intent": "wants_to_book",
+      "recipientId": "pres@presentingorg.example",
+      "draftSubject": "Re: Photographing Aurora Strings at Carnegie Hall",
+      "draftBody": "Wonderful, thank you. I'd be glad to cover the March 10 program. I shoot unobtrusive, no-flash documentary coverage and deliver the gallery within two weeks. Would it help to set up a quick call to go over the run of show?"
+    },
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "intent": "declined",
+      "recipientId": "act@aurorastrings.example",
+      "draftSubject": "Re: Photographing Aurora Strings at Carnegie Hall",
+      "draftBody": "Understood, and thanks for letting me know. If your plans change for a future program, I'd be happy to help."
+    },
+    {
+      "naturalKey": "lumen-dance|undated|none",
+      "intent": "has_question",
+      "recipientId": "info@lumendance.example",
+      "draftSubject": "Re: Photographing Lumen Dance",
+      "draftBody": "Happy to share: my rate is $250 an hour plus tax, one-hour minimum, and I deliver the gallery within two weeks. Let me know the date and I'll confirm availability."
+    }
+  ]
+}

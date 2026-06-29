@@ -38,7 +38,7 @@ struct ReplyClassifyItem: Codable, Equatable, Sendable {
 }
 
 enum ReplyClassifyQueueBuilder {
-    static let version = 2
+    static let version = 3
 
     static func build(from items: [ReplyClassifyItem], generatedAt: String) -> ReplyClassifyQueue {
         ReplyClassifyQueue(version: version, generatedAt: generatedAt, items: items)
@@ -65,8 +65,12 @@ struct ReplyClassifyResults: Codable, Equatable, Sendable {
 
 struct ReplyClassifyResult: Codable, Equatable, Sendable {
     var naturalKey: String
-    var intent: String         // raw ReplyIntent value; tolerated as a string so an unknown value decodes
+    var intent: String         // raw ReplyIntent value; tolerated as a string so an unknown value decodes.
+                               // v3 (#420 C4): consumed as a NON-BINDING intent hint (recipient.intentHint),
+                               // never auto-sets a RecipientResolution.
     var recipientId: String?   // v2 (#392): echoed back so the intent attaches to the right recipient
+    var draftSubject: String?  // v3 (#420): the AI-drafted reply subject for this recipient (optional)
+    var draftBody: String?     // v3 (#420): the AI-drafted reply body for this recipient (optional)
 
     var replyIntent: ReplyIntent? { ReplyIntent(rawValue: intent) }
 }
@@ -77,8 +81,9 @@ enum ReplyClassifyResultsError: Error, Equatable {
 
 enum ReplyClassifyResultsDecoder {
     // Tolerant version gate (min...supported), mirroring the #157 decoders so a version bump leaves
-    // older files still accepted. v2 (#392) added the optional recipient discriminator.
-    static let supportedVersion = 2
+    // older files still accepted. v2 (#392) added the optional recipient discriminator; v3 (#420)
+    // added the optional per-recipient draftSubject/draftBody.
+    static let supportedVersion = 3
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> ReplyClassifyResults {

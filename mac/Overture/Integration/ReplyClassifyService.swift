@@ -7,22 +7,28 @@ import SwiftData
 // file later (ReplyClassifyImporter).
 @MainActor
 enum ReplyClassifyService {
-    // A reply needs classifying when the lead has replied, we captured its text, Dan hasn't set the
-    // state by hand, and either there's no state yet OR a fresh reply landed after the state was set
-    // (so an "actually, yes" turnaround is re-read rather than lost).
-    static func needsClassify(_ p: Prospect) -> Bool {
-        guard p.outcome == .replied, let text = p.lastReplyText, !text.isEmpty else { return false }
-        guard p.conversationStateSource != .manual else { return false }
-        if p.conversationState == nil { return true }
-        if let replyAt = p.lastReplyAt, let setAt = p.conversationStateSetAt, replyAt > setAt { return true }
+    // A CONTACT needs classifying + drafting (#420 C2) when it replied, we captured its reply text,
+    // Dan hasn't hand-marked it, and either there's no draft yet OR a fresh reply landed after the last
+    // draft was requested (so an "actually, yes" turnaround is re-read rather than lost). Per-recipient
+    // now, so each contact on a show is queued independently and once (keyed by recipientId), never
+    // collapsing to the first replier.
+    static func recipientNeedsClassify(_ r: Recipient) -> Bool {
+        guard r.replied, let text = r.lastReplyText, !text.isEmpty else { return false }
+        guard r.outcomeSource != .manual else { return false }
+        if r.replyDraftBody == nil { return true }
+        if let repliedAt = r.repliedAt, let requestedAt = r.replyDraftRequestedAt, repliedAt > requestedAt { return true }
         return false
     }
 
     static func buildQueue(from context: ModelContext, generatedAt: String) -> ReplyClassifyQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let items = all.filter(needsClassify).map { p in
-            ReplyClassifyItem(naturalKey: p.naturalKey, groupName: p.groupName,
-                              venue: p.venue, replyText: p.lastReplyText ?? "")
+        var items: [ReplyClassifyItem] = []
+        for p in all {
+            for r in p.recipients where recipientNeedsClassify(r) {
+                items.append(ReplyClassifyItem(naturalKey: p.naturalKey, groupName: p.groupName,
+                                               venue: p.venue, replyText: r.lastReplyText ?? "",
+                                               recipientId: r.id))   // v3: the discriminator is now populated
+            }
         }
         return ReplyClassifyQueueBuilder.build(from: items, generatedAt: generatedAt)
     }
@@ -38,7 +44,11 @@ enum ReplyClassifyService {
         }
     }
 
-    static let markerStaleAfter: TimeInterval = 3 * 60
+    // Raised for the merged classify+drafter run (#420 C5): a cold Claude Code boot drafting replies for
+    // several recipients runs well past the old 3-minute ceiling, so a too-short stale window would let a
+    // second run start and clobber the shared results file. The atomic marker lock below is the real
+    // guard; this ceiling only frees a genuinely dead run.
+    static let markerStaleAfter: TimeInterval = 10 * 60
 
     static var defaultMarkerURL: URL {
         StoreLocation.handoffDirectory
@@ -60,12 +70,26 @@ enum ReplyClassifyService {
         let queue = buildQueue(from: context, generatedAt: stamp)
         guard !queue.items.isEmpty else { throw ClassifyLaunchError.nothingToClassify }
 
-        let data = try ReplyClassifyQueueBuilder.encode(queue)
-        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: queueURL, options: .atomic)
+        // Take the lock ATOMICALLY (#420 C5): clear any stale marker, then exclusive-create so two
+        // near-simultaneous starts can't both proceed and clobber the shared results file. If the
+        // exclusive create fails, a racer already holds the lock.
+        try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: markerURL)
+        do {
+            try Data().write(to: markerURL, options: .withoutOverwriting)
+        } catch {
+            throw ClassifyLaunchError.alreadyRunning
+        }
 
-        try launch()
-        try? Data().write(to: markerURL)   // mark in-flight immediately; the script heartbeats/clears it
+        do {
+            let data = try ReplyClassifyQueueBuilder.encode(queue)
+            try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: queueURL, options: .atomic)
+            try launch()   // the script heartbeats/clears the marker from here
+        } catch {
+            try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
+            throw error
+        }
         return queue.items.count
     }
 
