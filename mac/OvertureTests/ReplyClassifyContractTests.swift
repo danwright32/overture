@@ -92,6 +92,17 @@ struct ReplyClassifyContractTests {
         #expect(queue.items.allSatisfy { $0.recipientId != nil })
     }
 
+    // #438: a draft must never ask for a field Overture already holds. The reply-classify queue carried
+    // venue but NOT the performance date, which is why a reply draft asked "let me know the date." v3 now
+    // carries performanceDate so the draft can name the actual date; an undated show omits it.
+    @Test func theV3QueueCarriesThePerformanceDate() throws {
+        let queue = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue-v3.json"))
+        let aurora = queue.items.filter { $0.naturalKey == "aurora-strings|2026-03-10|carnegie-hall" }
+        #expect(aurora.allSatisfy { $0.performanceDate == "2026-03-10" })
+        let lumen = queue.items.first { $0.naturalKey == "lumen-dance|undated|none" }
+        #expect(lumen?.performanceDate == nil)   // undated show omits it; still decodes
+    }
+
     @Test func theV3ResultsCarryPerRecipientDraftAndHint() throws {
         let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v3.json"))
         #expect(results.version == 3)

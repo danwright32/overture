@@ -33,7 +33,10 @@ trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 PROMPT="You are the Overture reply-classify + reply-drafter run (v3). Follow $RUNBOOK exactly. Read the
 work-list at $QUEUE. For EVERY item: (1) classify the reply's intent as exactly one of interested,
 wants_to_book, has_question, or declined; (2) DRAFT a short reply in Dan's voice that responds to what
-the contact actually wrote, emitting draftSubject and draftBody. Read Dan's distilled voice guidance at
+the contact actually wrote, emitting draftSubject and draftBody. NEVER ask the contact for the date,
+venue, or location (#438): each item carries venue and performanceDate (the show Overture already knows) —
+REFERENCE them, never request them (e.g. 'your March 10 concert at Carnegie Hall', never 'let me know the
+date'). Read Dan's distilled voice guidance at
 $VOICE and apply ONLY those distilled tendencies — NEVER quote or paraphrase raw past email pairs
 (the #119/#249 leak guard). Copy each item's naturalKey AND recipientId verbatim so each result attaches
 to the right contact. Write the complete v3 ReplyClassifyResults JSON (version 3; each result =

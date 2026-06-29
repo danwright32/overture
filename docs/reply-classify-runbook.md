@@ -8,8 +8,9 @@ and writes the results file the app ingests for review. The app never supervises
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-reply-classify-queue.json`
-  (`ReplyClassifyQueue` version `2`: `items[]` each with `naturalKey`, `groupName`, `venue`,
-  `replyText`, and an optional `recipientId`).
+  (`ReplyClassifyQueue` version `3`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  `performanceDate`, `replyText`, and `recipientId`. `venue` and `performanceDate` are the show
+  details Overture already knows — see the "never ask for known facts" rule below).
 - **Write:** `~/Library/Application Support/Overture/overture-reply-classify-results.json`
   (`ReplyClassifyResults` version `2`: `results[]` each with `naturalKey`, `intent`, and the
   `recipientId` echoed back when the queue item carried one).
@@ -81,6 +82,13 @@ Rules:
   draft from the voice rules in this runbook alone.
 - Keep drafts short, warm, and concrete; include Dan's standing facts only when relevant (rate, two-week
   delivery, unobtrusive no-flash coverage). A `declined` reply still gets a brief, gracious draft.
+- **NEVER ask the contact for the date, venue, or location (#438).** Every prospect is a specific known
+  show: the queue item carries `venue` and `performanceDate`. REFERENCE them, never request them — write
+  "your March 10 concert at Carnegie Hall", never "let me know the date and I'll confirm availability".
+  Asking for a fact Overture already holds reads as careless and undercuts the researched-your-show
+  impression the whole approach is built on. Ask only about genuinely-unknown things (e.g. confirming
+  Dan's own availability, logistics he can't infer). A draft must never request ANY field the queue
+  already supplies. If `performanceDate` is absent (a genuinely undated show), simply don't name a date.
 - Write the complete **version 3** `ReplyClassifyResults` JSON (each result =
   `{naturalKey, recipientId, intent, draftSubject, draftBody}`) to the results file and nothing else.
 
