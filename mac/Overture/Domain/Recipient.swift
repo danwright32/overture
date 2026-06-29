@@ -184,5 +184,11 @@ final class Recipient {
         repliedAt = nil
         lastReplyText = nil
         dismissedReplyId = lastReplyId
+        // The reply is gone, so its derived AI hint + draft must go too (#449); otherwise the
+        // contact reads "Awaiting reply" yet still shows an intent suggestion and a leftover draft.
+        intentHint = nil
+        replyDraftSubject = nil
+        replyDraftBody = nil
+        replyDraftRequestedAt = nil
     }
 }

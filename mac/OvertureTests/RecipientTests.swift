@@ -242,6 +242,29 @@ struct RecipientTests {
     // Per-recipient resolution (#389 derived-outcome model): an additive field capturing the
     // terminal commercial outcomes that aren't inferable from send/reply/bounce state. Phase 5
     // reads it to derive the performance status; here we only pin that it round-trips.
+    @Test func dismissingAReplyAlsoClearsTheStaleIntentHintAndDraft() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.sendState = .sent
+        r.replied = true
+        r.repliedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        r.lastReplyId = "msg-1"
+        r.lastReplyText = "Sure, let's talk."
+        r.intentHint = ReplyIntent.wantsToBook.rawValue
+        r.replyDraftSubject = "Re: Photographing the Clarion Choir"
+        r.replyDraftBody = "Thanks for getting back to me..."
+        r.replyDraftRequestedAt = Date(timeIntervalSince1970: 1_700_000_100)
+
+        r.dismissAutoReply()
+
+        // The reply is gone, so its derived hint + draft must go too (#449).
+        #expect(r.replied == false)
+        #expect(r.dismissedReplyId == "msg-1")
+        #expect(r.intentHint == nil)
+        #expect(r.replyDraftSubject == nil)
+        #expect(r.replyDraftBody == nil)
+        #expect(r.replyDraftRequestedAt == nil)
+    }
+
     @Test func resolutionMapsThroughRawString() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.resolution == nil)
