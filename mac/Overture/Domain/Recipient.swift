@@ -162,6 +162,14 @@ final class Recipient {
         self.outcomeSource = .manual
     }
 
+    // Copy-out path (#421): Dan pasted the draft into the Gmail thread he's reading and sent it there
+    // himself, so Overture sends nothing. Consume the draft and re-anchor this contact's clock.
+    func recordRepliedInGmail(now: Date) {
+        replyDraftSubject = nil
+        replyDraftBody = nil
+        lastFollowUpAt = now
+    }
+
     // Dan dismissed a wrong auto-detected reply for THIS contact (#219, per-recipient #418): revert
     // the replied state and remember the wrong reply's id so detection never re-flags that same one,
     // while a genuinely newer reply on the contact's thread still gets detected.

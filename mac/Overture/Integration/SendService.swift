@@ -182,6 +182,35 @@ enum SendService {
 
     // Throttle input: the timestamp of every recipient email already sent, across all performances,
     // so the drip counts EMAILS, not leads (#389). A two-recipient show contributes two send dates.
+    // Sends Dan's approved AI-drafted reply to ONE recipient, on THAT recipient's own Gmail thread
+    // (#421): threads on recipient.gmailMessageId/gmailThreadId, NOT the lead rollup (the rollup is the
+    // first contact's thread, so replying to a second contact on it would land on the wrong
+    // conversation). On success it consumes the draft and re-anchors that contact's clock. One of the
+    // two locked send paths (d); the other is copy-out (recordRepliedInGmail), handled in the UI.
+    @discardableResult
+    static func sendReplyDraft(_ recipient: Recipient, of prospect: Prospect,
+                               now: Date, sender: MailSender) async -> Bool {
+        guard let email = recipient.email, !email.isEmpty,
+              let body = recipient.replyDraftBody, !body.isEmpty else { return false }
+        let subject = recipient.replyDraftSubject
+            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName)
+        let mail = OutgoingMail(to: email, subject: subject, body: body,
+                                inReplyTo: recipient.gmailMessageId, threadId: recipient.gmailThreadId)
+        do {
+            let receipt = try await sender.send(mail)
+            recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours
+            if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
+            recipient.replyDraftSubject = nil
+            recipient.replyDraftBody = nil
+            recipient.lastFollowUpAt = now                        // re-anchor this contact's clock
+            recipient.sendError = nil
+            return true
+        } catch {
+            recipient.sendError = error.localizedDescription
+            return false
+        }
+    }
+
     static func recentSendDates(in context: ModelContext) -> [Date] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         return all.flatMap { $0.recipients.compactMap(\.sentAt) }

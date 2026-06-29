@@ -19,6 +19,10 @@ struct DraftReviewView: View {
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
+    // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
+    var onDraftReply: (_ recipientId: String) -> Void = { _ in }
+    var onSendReply: (_ recipientId: String) -> Void = { _ in }
+    var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -240,10 +244,54 @@ struct DraftReviewView: View {
                 }
                 .padding(.leading, 20)
             }
+            if c.replied { replyDraftBlock(c) }
         }
         .padding(.vertical, 3)
         .padding(.horizontal, OVSpacing.sm)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surface.opacity(0.6)))
+    }
+
+    // The AI reply drafter surface for one replied contact (#420 C6 / #421): a non-binding intent hint,
+    // and either the drafted reply (send on the thread / copy out), a "drafting…" progress, or a button
+    // to request a draft. Treated as request-response even though the run is detached.
+    @ViewBuilder private func replyDraftBlock(_ c: RecipientSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let hint = c.intentHint, !hint.isEmpty {
+                Text("AI read: \(QueueModel.replyIntentLabel(hint))")
+                    .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+            }
+            if c.hasReplyDraft {
+                Text(c.replyDraftBody ?? "")
+                    .font(OVType.body).foregroundStyle(OVColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(OVSpacing.sm)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
+                HStack(spacing: OVSpacing.xs) {
+                    Button { onSendReply(c.id) } label: {
+                        Label("Send reply", systemImage: "paperplane")
+                            .font(OVType.meta).foregroundStyle(OVColor.onForest)
+                            .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                            .background(Capsule().fill(OVColor.forest))
+                    }
+                    .buttonStyle(.plain).disabled(!gmailConnected)
+                    .help(gmailConnected ? "Send this reply on the contact's thread" : "Connect Gmail first")
+                    Button("Copy") { onCopyReply(c.id) }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                        .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
+                }
+            } else if c.isDraftingReply {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Drafting a reply…").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+            } else {
+                Button("Draft a reply") { onDraftReply(c.id) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
+                    .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
+            }
+        }
+        .padding(.leading, 20)
     }
 
     private func provenanceLabel(_ p: RecipientProvenance) -> String {

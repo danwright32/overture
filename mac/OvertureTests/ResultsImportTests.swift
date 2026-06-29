@@ -142,6 +142,26 @@ struct ResultsImportTests {
         #expect(noName.displayName == "e@e.example")
     }
 
+    // #420 C6 — the draft-state computed props that drive the conversation surface (draft present vs
+    // drafting-in-progress vs neither) and the plain-language intent-hint label.
+    @Test func recipientSnapshotDraftStatesAndIntentLabel() {
+        func s(body: String? = nil, requestedAt: Date? = nil) -> RecipientSnapshot {
+            RecipientSnapshot(id: "x", name: "N", email: "e@e.example", role: nil, provenance: .act,
+                              sendState: .sent, replied: true, lastReplyText: nil, resolution: nil,
+                              bounced: false, outcomeSource: nil, replyDraftSubject: nil,
+                              replyDraftBody: body, replyDraftRequestedAt: requestedAt, intentHint: nil)
+        }
+        #expect(s(body: "a draft").hasReplyDraft == true)
+        #expect(s().hasReplyDraft == false)
+        #expect(s(requestedAt: Date()).isDraftingReply == true)            // requested, not yet arrived
+        #expect(s(body: "a draft", requestedAt: Date()).isDraftingReply == false)  // arrived
+        #expect(s().isDraftingReply == false)                             // never requested
+
+        #expect(QueueModel.replyIntentLabel("wants_to_book") == "wants to book")
+        #expect(QueueModel.replyIntentLabel("has_question") == "has a question")
+        #expect(QueueModel.replyIntentLabel("weird") == "weird")          // unknown passes through
+    }
+
     @Test func decodesFileAndRejectsWrongVersion() throws {
         let file = try ResultsFileDecoder.decode(Data(sampleJSON.utf8))
         #expect(file.version == 1)

@@ -101,6 +101,15 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     let resolution: RecipientResolution?
     let bounced: Bool
     let outcomeSource: OutcomeSource?
+    var replyDraftSubject: String? = nil
+    var replyDraftBody: String? = nil
+    var replyDraftRequestedAt: Date? = nil
+    var intentHint: String? = nil
+
+    // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
+    var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
+    // A draft was requested but hasn't arrived yet: show progress.
+    var isDraftingReply: Bool { replyDraftRequestedAt != nil && !hasReplyDraft }
 
     var displayName: String {
         if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
@@ -132,6 +141,17 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
 }
 
 enum QueueModel {
+    // Plain-language label for the AI's non-binding reply-intent hint (#420 C6).
+    static func replyIntentLabel(_ raw: String) -> String {
+        switch ReplyIntent(rawValue: raw) {
+        case .interested: return "interested"
+        case .wantsToBook: return "wants to book"
+        case .hasQuestion: return "has a question"
+        case .declined: return "declined"
+        case nil: return raw
+        }
+    }
+
     static func disciplineLabel(_ discipline: String) -> String {
         switch discipline {
         case "dance": return "Dance"

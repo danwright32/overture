@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 // The window Dan lives in: ranked performances, grouped by date, kept or dismissed.
 struct QueueView: View {
@@ -402,6 +403,9 @@ struct QueueView: View {
             onDismissReply: { dismissReply(item) },
             onMarkContact: { rid, resolution, bounced in markContact(item, rid, resolution, bounced) },
             onDismissContactReply: { rid in dismissContactReply(item, rid) },
+            onDraftReply: { rid in draftReply(item, rid) },
+            onSendReply: { rid in sendReply(item, rid) },
+            onCopyReply: { rid in copyReply(item, rid) },
             onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
             onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
             onConfirmBooking: { confirmBooking(item) },
@@ -461,6 +465,40 @@ struct QueueView: View {
     private func dismissContactReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
+        try? context.save()
+    }
+
+    // #420 C6 — request an AI-drafted reply for ONE contact: stamp the request (drives the progress +
+    // needs-attention timeout) and launch the detached classify+drafter run. Request-response feel.
+    private func draftReply(_ item: QueueItem, _ recipientId: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
+        try? context.save()
+        _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
+    }
+
+    // #421 — send Dan's approved AI reply on the contact's own thread, off the main thread (same
+    // non-blocking pattern as performSend); surface a reconnect prompt if the token was revoked.
+    private func sendReply(_ item: QueueItem, _ recipientId: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
+        Task {
+            let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
+            try? context.save()
+            if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
+        }
+    }
+
+    // #421 copy-out — copy the draft to the clipboard for Dan to paste into the Gmail thread he's
+    // reading, and mark the contact replied-in-Gmail (consumes the draft, re-anchors the clock).
+    private func copyReply(_ item: QueueItem, _ recipientId: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }),
+              let body = recipient.replyDraftBody, !body.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(body, forType: .string)
+        model.updateRecipient(id: recipientId) { $0.recordRepliedInGmail(now: Date()) }
         try? context.save()
     }
 

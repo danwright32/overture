@@ -60,3 +60,28 @@ replies simply stay surfaced as "needs a state" for Dan to tag by hand.
   so the run never overrides his call.
 - A fresh reply after a state was already set re-queues the lead, so an "actually, yes" turnaround is
   re-read rather than lost.
+
+## v3 (#420): per-recipient classify + reply drafting
+
+The run now does two jobs per work-list item, per recipient:
+
+1. **Classify** the reply's intent (interested / wants_to_book / has_question / declined). This is a
+   NON-BINDING hint on the app side; Dan still marks the binding outcome by hand.
+2. **Draft a reply** in Dan's voice that responds to what the contact actually wrote. Emit
+   `draftSubject` and `draftBody`.
+
+Rules:
+
+- Each work-list item carries a `recipientId`. Echo BOTH `naturalKey` and `recipientId` verbatim on the
+  result so each draft attaches to the right contact. The queue emits one item per replied recipient,
+  so two contacts on one show are drafted independently.
+- Read Dan's distilled voice guidance at `~/Library/Application Support/Overture/overture-voice-guidance.md`
+  and apply ONLY those distilled tendencies. NEVER quote or paraphrase raw past email pairs (the
+  #119/#249 leak guard) — the guidance file is already the safe, distilled form. If the file is absent,
+  draft from the voice rules in this runbook alone.
+- Keep drafts short, warm, and concrete; include Dan's standing facts only when relevant (rate, two-week
+  delivery, unobtrusive no-flash coverage). A `declined` reply still gets a brief, gracious draft.
+- Write the complete **version 3** `ReplyClassifyResults` JSON (each result =
+  `{naturalKey, recipientId, intent, draftSubject, draftBody}`) to the results file and nothing else.
+
+`fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape.
