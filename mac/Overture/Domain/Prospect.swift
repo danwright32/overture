@@ -319,8 +319,9 @@ final class Prospect {
             && recipients.contains { $0.replied && $0.resolution == nil && !$0.bounced }
     }
 
-    // Record an outcome as Dan's own call (manual source, timestamped, booking-suggestion cleared),
-    // matching the queue's setOutcome so ReplyService never silently overwrites it (#111 / #60).
+    // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion
+    // cleared) so ReplyService never silently overwrites it (#111 / #60). Still used by the lead-level
+    // booking confirm, closing close, and conversation state; the editable outcome picker is gone (#447).
     func markOutcomeManually(_ outcome: Outcome, now: Date) {
         self.outcome = outcome
         outcomeSourceRaw = OutcomeSource.manual.rawValue
