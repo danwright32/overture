@@ -60,6 +60,15 @@ enum ReplyClassifyService {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
+    // When the last classify+drafter run began, so the completion watcher can ask DetachedRunOutcome
+    // whether the run refreshed its results or finished empty (#435). Mirrors PrepQueueService; the
+    // same plausibility floor collapses an epoch/sentinel timestamp from a fresh store to "never".
+    static let lastRunKey = "replyClassifyLastRunStartedAt"
+
+    static var lastRunStartedAt: Date? {
+        PrepQueueService.sanitizedLastRun(UserDefaults.standard.object(forKey: lastRunKey) as? Date)
+    }
+
     @discardableResult
     static func startClassify(from context: ModelContext, now: Date,
                               queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
@@ -87,6 +96,7 @@ enum ReplyClassifyService {
             try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: queueURL, options: .atomic)
             try launch()   // the script heartbeats/clears the marker from here
+            UserDefaults.standard.set(now, forKey: lastRunKey)   // for the completion watcher (#435)
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             throw error
