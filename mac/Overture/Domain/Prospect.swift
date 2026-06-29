@@ -362,6 +362,18 @@ final class Prospect {
         mutate(r)
     }
 
+    // Closing the whole show by hand (#448) writes the close through to the contacts Dan actually
+    // engaged: an emailed, still-open, un-bounced contact (`standing.isInPlay`) resolves to the given
+    // resolution as Dan's manual call. Deliberately leaves UNTRIED contacts (never emailed) and
+    // already-terminal ones (resolved/bounced) untouched: a contact Dan never reached must not read as
+    // won or lost (Dan, 2026-06-29). Because an untried-but-reachable contact keeps the derived status
+    // Active, the show-level `isClosed` union (lead lostSoft/lostHard) stays the honest closed signal.
+    func resolveEngagedContacts(_ resolution: RecipientResolution) {
+        for r in recipients where r.standing.isInPlay {
+            r.markOutcomeManually(resolution: resolution)
+        }
+    }
+
     // Dan dismissed a wrong auto-detected reply (#219): revert to no-response and remember which
     // reply (its Gmail message id) was wrong so ReplyService never re-flags that same one, while a
     // genuinely newer reply on the thread still gets detected.
@@ -412,6 +424,7 @@ final class Prospect {
         conversationStateSource = .manual
         if state == .declined {
             markOutcomeManually(.lostSoft, now: now)
+            resolveEngagedContacts(.declinedSoft)
         } else if outcome == .noResponse {
             markOutcomeManually(.replied, now: now)
         }

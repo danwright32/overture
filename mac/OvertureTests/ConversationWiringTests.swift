@@ -50,6 +50,33 @@ struct ConversationWiringTests {
         #expect(p.outcomeSourceRaw == OutcomeSource.manual.rawValue)
     }
 
+    @Test func decliningWritesThroughToEngagedContactsButLeavesUntriedAccurate() {
+        let p = lead(outcome: .replied, source: .auto)
+        // Emailed, still open: Dan engaged this contact, so a close resolves it.
+        let engaged = Recipient(id: "act@x.org", email: "act@x.org", provenance: .act)
+        engaged.sendState = .sent
+        // Never emailed but reachable (the act-then-presenter ladder): must stay accurate, NOT
+        // marked won or lost, because Dan never contacted them.
+        let untried = Recipient(id: "pres@x.org", email: "pres@x.org", provenance: .presenter)
+        untried.sendState = .pending
+        // Emailed but bounced: already terminal, not a Dan-declined contact.
+        let bounced = Recipient(id: "bad@x.org", email: "bad@x.org", provenance: .act)
+        bounced.sendState = .sent
+        bounced.bounced = true
+        p.setRecipients([engaged, untried, bounced])
+
+        p.setConversationState(.declined, now: now)
+
+        #expect(p.outcome == .lostSoft)                       // show-level close signal stays
+        #expect(engaged.resolution == .declinedSoft)          // engaged contact written through
+        #expect(engaged.outcomeSource == .manual)
+        #expect(untried.resolution == nil)                    // never contacted -> no false outcome
+        #expect(untried.sendState == .pending)
+        #expect(bounced.resolution == nil)                    // bounced left untouched
+        #expect(bounced.bounced == true)
+        #expect(p.isClosed == true)                           // honest close despite an untried contact left
+    }
+
     @Test func remindLaterStampsTheReanchor() {
         let p = lead()
         p.remindLater(now: now)
