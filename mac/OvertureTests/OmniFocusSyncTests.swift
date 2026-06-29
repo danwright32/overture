@@ -30,6 +30,14 @@ struct OmniFocusSyncTests {
         p.conversationStateSourceRaw = source?.rawValue
         p.conversationStateSetAt = setAt
         ctx.insert(p)
+        // Phase F: the derived reads come from contacts, so seed one whose standing matches `outcome`.
+        let r = Recipient(id: key + "@e.com", email: key + "@e.com", provenance: .act)
+        r.sendState = .sent
+        if outcome == .replied { r.replied = true }
+        if outcome == .lostSoft { r.resolution = .declinedSoft }
+        if outcome == .lostHard { r.resolution = .declinedHard }
+        ctx.insert(r)
+        p.setRecipients([r])
         return p
     }
 

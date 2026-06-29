@@ -27,6 +27,16 @@ struct ReachedOutQueueTests {
         p.outcome = outcome
         p.contactEmail = contactEmail
         ctx.insert(p)
+        // Phase F: the derived reads come from contacts, so seed one whose standing matches `outcome`.
+        if let contactEmail {
+            let r = Recipient(id: contactEmail, email: contactEmail, provenance: .act)
+            r.sendState = .sent
+            if outcome == .replied { r.replied = true }
+            if outcome == .lostSoft { r.resolution = .declinedSoft }
+            if outcome == .lostHard { r.resolution = .declinedHard }
+            ctx.insert(r)
+            p.setRecipients([r])
+        }
         return p
     }
 

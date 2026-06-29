@@ -80,7 +80,9 @@ enum OmniFocusSync {
         let cutoff = now.addingTimeInterval(TimeInterval(horizonDays) * 86_400)
         return prospects.compactMap { p in
             guard p.status != .dismissed else { return nil }   // #238: a no-go lead never nags via OmniFocus
-            guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
+            // Closed shows drop out — UNLESS a fresh reply still needs triage (a late reply on a
+            // closed show still deserves a task, #424).
+            guard !p.isClosed || p.hasUnhandledReply else { return nil }
 
             // A CONFIRMED (manual, active) conversation state is the normal follow-up: chase it on its
             // next reach-out date, if that falls within the horizon. A confirmed lead never triages.
@@ -89,7 +91,8 @@ enum OmniFocusSync {
                 guard let due = ConversationReminder.nextReminderDate(
                     state: p.conversationState, setAt: p.conversationStateSetAt,
                     remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                    outcome: p.outcome, source: p.conversationStateSource, now: now, config: reminderConfig),
+                    isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
+                    source: p.conversationStateSource, now: now, config: reminderConfig),
                     due <= cutoff
                 else { return nil }
                 let dueDate = easternTime(hour: dueHour, onDayOf: due)
@@ -104,7 +107,7 @@ enum OmniFocusSync {
             // triage task due today, keyed by the SAME naturalKey so reconcile dedupes it against the
             // follow-up once Dan confirms the state (the in-app badge and this task never compete: one
             // OmniFocus task per lead, and confirming the state re-anchors it via the due-day diff).
-            if p.outcome == .replied {
+            if p.hasUnhandledReply {
                 // Anchor the triage due to a STABLE date on the lead (when its state was last
                 // touched, else when Dan first reached out), NOT `now` — otherwise the day-token diff
                 // would complete+recreate the task on every new calendar day until Dan triages it.
