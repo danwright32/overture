@@ -13,6 +13,7 @@ enum ReplyClassifyImporter {
         var matched = 0
         var suggested = 0
         var skippedManual = 0          // matched but Dan had set the lead state by hand
+        var skippedEdited = 0          // draft left untouched because Dan had hand-edited the reply (#462)
         var unmatchedKeys: [String] = []
     }
 
@@ -36,11 +37,19 @@ enum ReplyClassifyImporter {
             for r in group {
                 guard let rid = r.recipientId else { continue }
                 p.updateRecipient(id: rid) { rec in
-                    rec.intentHint = r.intent
-                    if let s = r.draftSubject { rec.replyDraftSubject = s }
-                    // A fresh AI draft is not Dan's edit, so clear his "edited" mark (#459) — otherwise
-                    // a stale flag would suppress the deterministic warnings on text he never touched.
-                    if let b = r.draftBody { rec.replyDraftBody = b; rec.replyDraftEditedByDan = false }
+                    rec.intentHint = r.intent   // non-binding hint, always the latest read
+                    // Never clobber a reply Dan hand-edited (#462): his unsent text wins until he sends
+                    // or dismisses it, mirroring the cold path (PrepImporter draftEditedByDan). Guard on
+                    // actual edited TEXT, not the marker alone, so a draft he already sent in Gmail
+                    // (body cleared, marker still set) still takes a fresh draft for a genuinely new reply.
+                    if rec.replyDraftEditedByDan, rec.replyDraftBody?.isEmpty == false {
+                        outcome.skippedEdited += 1
+                    } else {
+                        if let s = r.draftSubject { rec.replyDraftSubject = s }
+                        // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker —
+                        // otherwise this AI body would be wrongly protected on the next run.
+                        if let b = r.draftBody { rec.replyDraftBody = b; rec.replyDraftEditedByDan = false }
+                    }
                 }
             }
             // Lead conversation hint (bridge, C4 non-binding): once per show, never over a manual state,
