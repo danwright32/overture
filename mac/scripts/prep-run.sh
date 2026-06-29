@@ -10,7 +10,9 @@
 set -eu
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
-SUPPORT="$HOME/Library/Application Support/Overture"
+# The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug subfolder).
+# Fall back to the live path for a hand-run from a terminal.
+SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"

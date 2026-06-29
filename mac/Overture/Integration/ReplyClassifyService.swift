@@ -98,6 +98,6 @@ enum ReplyClassifyService {
               FileManager.default.isExecutableFile(atPath: script.path) else {
             throw ClassifyLaunchError.runnerUnavailable
         }
-        try DetachedRunner.launch(scriptPath: script.path)
+        try DetachedRunner.launch(scriptPath: script.path, supportDirectory: StoreLocation.handoffDirectory)
     }
 }

@@ -19,11 +19,25 @@ enum DetachedRunner {
         return URL(fileURLWithPath: path)
     }
 
+    // The inherited environment plus OVERTURE_SUPPORT_DIR, which tells the script which handoff folder
+    // to read/write. Without it the script falls back to the live path and a Debug build (whose handoff
+    // dir is the isolated Overture-Debug subfolder) reads the wrong folder, finds no work-list, and dies
+    // silently — the Debug/Release leak class #317 warns about. Pure so the contract is unit-tested.
+    static func runnerEnvironment(base: [String: String], supportDirectory: URL) -> [String: String] {
+        var env = base
+        env["OVERTURE_SUPPORT_DIR"] = supportDirectory.path
+        return env
+    }
+
     // Launches the script detached via /bin/sh; never waits. The run writes its results file when done.
-    static func launch(scriptPath: String) throws {
+    // `supportDirectory` is THIS build's handoff dir (StoreLocation.handoffDirectory), passed through so
+    // the script keys its queue/results/marker off the same folder the app wrote them to.
+    static func launch(scriptPath: String, supportDirectory: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", "'\(scriptPath)' >/dev/null 2>&1 &"]
+        process.environment = runnerEnvironment(base: ProcessInfo.processInfo.environment,
+                                                supportDirectory: supportDirectory)
         try process.run()
     }
 }

@@ -315,7 +315,9 @@ struct RootView: View {
     // DEBUG ONLY (#325): stage a self-addressed lead so the real approve -> send path can be verified
     // without risking a real email to a prospect. Approve it, then Send: it goes to Dan's own inbox.
     private func debugStageSelfSendLead() {
-        let p = DebugStaging.stageSelfSendLead(in: context, now: Date())
+        let address = DebugStaging.resolvedSelfSendAddress(
+            override: UserDefaults.standard.string(forKey: "selfSendTestAddress"))
+        let p = DebugStaging.stageSelfSendLead(in: context, now: Date(), address: address)
         try? context.save()
         statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
     }
