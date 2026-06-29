@@ -142,6 +142,22 @@ struct LostOutcomeTests {
         #expect(none.isLost == false)
     }
 
+    @Test func isLostForADerivedLostShowWithNoLeadMark() {
+        // Phase F: every contact declined but the lead outcome was never hand-marked; the row should
+        // still read as lost, derived from the contacts.
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        r.resolution = .declinedHard
+        p.setRecipients([r])
+        #expect(p.outcome == .noResponse)   // no lead-level mark
+        #expect(QueueItem(p).isLost)        // derived from the declined contact
+    }
+
     @Test func blankLostReasonClearsToNil() {
         #expect(QueueModel.normalizedLostReason("") == nil)
         #expect(QueueModel.normalizedLostReason("   \n ") == nil)
