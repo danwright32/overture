@@ -111,6 +111,89 @@ struct RecipientTests {
         #expect(r.pausedByReply == true)
     }
 
+    // #418 B2 — manual-judge marking stamps the manual source flag (so detection won't overwrite) and
+    // maps the locked vocabulary onto resolution + bounced with no new enum.
+    @Test func manualMarkingMapsTheLockedVocabularyAndStampsManualSource() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+
+        r.markOutcomeManually(resolution: .booked)                 // Booked (attribution only)
+        #expect(r.resolution == .booked)
+        #expect(r.bounced == false)
+        #expect(r.outcomeSource == .manual)
+
+        r.markOutcomeManually(resolution: .declinedSoft)           // Closed-not-now
+        #expect(r.resolution == .declinedSoft)
+
+        r.markOutcomeManually(resolution: .declinedHard)           // Closed-no
+        #expect(r.resolution == .declinedHard)
+
+        r.markOutcomeManually(resolution: nil, bounced: true)      // Bounced
+        #expect(r.resolution == nil)
+        #expect(r.bounced == true)
+
+        r.markOutcomeManually(resolution: nil)                     // In conversation
+        #expect(r.resolution == nil)
+        #expect(r.bounced == false)
+        #expect(r.outcomeSource == .manual)                        // still stamped manual
+    }
+
+    // #418 B2↔A2 — a hand-marked contact is never overwritten by auto reply detection.
+    @MainActor
+    @Test func aManuallyMarkedContactIsNotOverwrittenByDetection() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.sentAt = Date()
+        ctx.insert(p)
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.gmailThreadId = "t1"; r.sendState = .sent
+        r.markOutcomeManually(resolution: .declinedHard)   // Dan judged: not interested
+        p.addRecipient(r)
+
+        let reply = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
+        let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
+                                           now: Date()) { _ in reply }
+        #expect(n == 0)                          // detection skips the hand-marked contact
+        #expect(r.resolution == .declinedHard)   // Dan's call stands
+        #expect(r.replied == false)
+    }
+
+    // #418 B1 — the conversation-surface action path: marking ONE contact locates exactly that
+    // recipient, applies the manual mark, persists it, and leaves the other contacts untouched (the
+    // substance of QueueView.markContact, which is `updateRecipient(id:) { markOutcomeManually }` + save).
+    @MainActor
+    @Test func markingOneContactLocatesPersistsAndLeavesOthersUntouched() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.sentAt = Date()
+        ctx.insert(p)
+        let a = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act); a.sendState = .sent
+        let b = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter); b.sendState = .sent
+        p.setRecipients([a, b])
+        try ctx.save()
+
+        // Mark only contact B booked (attribution).
+        p.updateRecipient(id: "b@present.example") { $0.markOutcomeManually(resolution: .booked) }
+        try ctx.save()
+
+        let back = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(back?.recipients.first { $0.id == "b@present.example" }?.resolution == .booked)
+        #expect(back?.recipients.first { $0.id == "b@present.example" }?.outcomeSource == .manual)
+        #expect(back?.recipients.first { $0.id == "a@act.example" }?.resolution == nil)   // others untouched
+        #expect(back?.recipients.first { $0.id == "a@act.example" }?.outcomeSource == nil)
+        // The lead booking is NOT set by a recipient attribution mark (decision g).
+        #expect(back?.outcome != .booked)
+    }
+
     // Per-recipient resolution (#389 derived-outcome model): an additive field capturing the
     // terminal commercial outcomes that aren't inferable from send/reply/bounce state. Phase 5
     // reads it to derive the performance status; here we only pin that it round-trips.

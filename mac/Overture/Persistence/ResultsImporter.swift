@@ -144,7 +144,15 @@ extension QueueItem {
             conversationStateSource: p.conversationStateSource,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
-            disappearedFromFeed: p.disappearedFromFeed
+            disappearedFromFeed: p.disappearedFromFeed,
+            contacts: p.recipients
+                .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+                .map { r in
+                    RecipientSnapshot(id: r.id, name: r.name, email: r.email, role: r.role,
+                                      provenance: r.provenance, sendState: r.sendState, replied: r.replied,
+                                      lastReplyText: r.lastReplyText, resolution: r.resolution,
+                                      bounced: r.bounced, outcomeSource: r.outcomeSource)
+                }
         )
     }
 }

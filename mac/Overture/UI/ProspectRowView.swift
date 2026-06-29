@@ -17,6 +17,8 @@ struct ProspectRowView: View {
     var onSetConversationState: (ConversationState) -> Void = { _ in }
     var onConfirmConversationState: () -> Void = {}
     var onDismissReply: () -> Void = {}
+    var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onMarkConfidenceReviewed: () -> Void = {}
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
     var onConfirmBooking: () -> Void = {}
@@ -76,6 +78,8 @@ struct ProspectRowView: View {
                     onSetConversationState: onSetConversationState,
                     onConfirmConversationState: onConfirmConversationState,
                     onDismissReply: onDismissReply,
+                    onMarkContact: onMarkContact,
+                    onDismissContactReply: onDismissContactReply,
                     gmailConnected: gmailConnected
                 )
                 .padding(.leading, 64 + OVSpacing.md)

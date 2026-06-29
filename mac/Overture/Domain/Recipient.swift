@@ -136,6 +136,24 @@ final class Recipient {
 
     var firstName: String { Salutation.firstName(name) }
 
+    // Manual-judge outcome marking (#418 B2). Dan hand-sets THIS contact's outcome from the
+    // conversation surface, after reading the reply in Gmail. Stamps `outcomeSource = .manual` so
+    // per-recipient detection (A2) never overwrites his call — including an "In conversation" mark,
+    // which sets the source flag even though it sets no resolution. The locked vocabulary maps onto
+    // existing fields with NO new enum: In conversation = (nil, false), Booked = (.booked, false),
+    // Closed-not-now = (.declinedSoft, false), Closed-no = (.declinedHard, false), Bounced = (nil, true).
+    //
+    // ATTRIBUTION ONLY for `.booked`: this attributes the single lead booking to the contact who
+    // landed it (`resolution` doc, #389). It does NOT create or count a lead booking and does NOT set
+    // `prospect.outcome` — the lead booking stays fully lead-level via DownbeatBooking.reconcileBooked
+    // (locked decision g). Phase F's derivation reads `resolution == .booked` for attribution display
+    // only; never wire this into the lead booking count.
+    func markOutcomeManually(resolution: RecipientResolution?, bounced: Bool = false) {
+        self.resolution = resolution
+        self.bounced = bounced
+        self.outcomeSource = .manual
+    }
+
     // Dan dismissed a wrong auto-detected reply for THIS contact (#219, per-recipient #418): revert
     // the replied state and remember the wrong reply's id so detection never re-flags that same one,
     // while a genuinely newer reply on the contact's thread still gets detected.

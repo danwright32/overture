@@ -54,6 +54,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
     var disappearedFromFeed: Bool = false
+    // The performance's recipients as flat snapshots for the per-contact conversation surface (#418 B1).
+    // Empty for a single-contact legacy view; built from prospect.recipients in send order.
+    var contacts: [RecipientSnapshot] = []
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
@@ -81,6 +84,51 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
+}
+
+// One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
+// status Dan reads is DERIVED from send/reply/resolution/bounced state; only the terminal resolutions
+// and bounce aren't otherwise knowable, which is why the model stores those, not a status enum.
+struct RecipientSnapshot: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String?
+    let email: String?
+    let role: String?
+    let provenance: RecipientProvenance
+    let sendState: SendState
+    let replied: Bool
+    let lastReplyText: String?
+    let resolution: RecipientResolution?
+    let bounced: Bool
+    let outcomeSource: OutcomeSource?
+
+    var displayName: String {
+        if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
+        if let email, !email.isEmpty { return email }
+        return "Unknown contact"
+    }
+
+    // A reply Overture auto-detected (not one Dan hand-marked): only these get a "not a real reply"
+    // dismiss control.
+    var isAutoReplied: Bool { replied && outcomeSource != .manual }
+
+    // The plain-language status line. Terminal marks win; then bounce; then reply; then send state.
+    var statusLabel: String {
+        if let resolution {
+            switch resolution {
+            case .booked: return "Booked"
+            case .declinedSoft: return "Closed (not now)"
+            case .declinedHard: return "Closed (not interested)"
+            }
+        }
+        if bounced { return "Bounced" }
+        if replied { return "In conversation" }
+        switch sendState {
+        case .sent: return "Awaiting reply"
+        case .pending: return (email?.isEmpty == false) ? "Not sent yet" : "No email yet"
+        case .suppressed: return "Paused (booked elsewhere)"
+        }
+    }
 }
 
 enum QueueModel {

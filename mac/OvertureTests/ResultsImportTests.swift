@@ -89,6 +89,59 @@ struct ResultsImportTests {
         #expect(QueueItem(p).hasPendingRecipient == false)
     }
 
+    // #418 B1 — QueueItem carries per-contact snapshots in send order (act before presenter) for the
+    // conversation surface, with each contact's reply text and a derived status.
+    @Test func queueItemBuildsContactSnapshotsInSendOrder() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        p.draftSubject = "S"; p.draftBody = "Hi"; p.sentAt = Date()
+        ctx.insert(p)
+        let presenter = Recipient(id: "b@present.example", email: "b@present.example", name: "Bo", provenance: .presenter)
+        presenter.sendState = .sent
+        let act = Recipient(id: "a@act.example", email: "a@act.example", name: "Ann Lee", provenance: .act)
+        act.sendState = .sent; act.replied = true; act.lastReplyText = "Yes, let's talk."
+        p.setRecipients([presenter, act])   // inserted out of send order on purpose
+
+        let item = QueueItem(p)
+        #expect(item.contacts.map(\.id) == ["a@act.example", "b@present.example"])  // act first
+        let ann = item.contacts.first!
+        #expect(ann.displayName == "Ann Lee")
+        #expect(ann.statusLabel == "In conversation")
+        #expect(ann.isAutoReplied == true)
+        #expect(ann.lastReplyText == "Yes, let's talk.")
+    }
+
+    // #418 B1 — the derived per-contact status line: terminal resolution wins, then bounce, then reply,
+    // then send state; and isAutoReplied is true only for an auto (not hand-marked) reply.
+    @Test func recipientSnapshotStatusLabelsAndAutoReplied() {
+        func s(_ sendState: SendState = .sent, replied: Bool = false, resolution: RecipientResolution? = nil,
+               bounced: Bool = false, email: String? = "a@act.example", source: OutcomeSource? = nil) -> RecipientSnapshot {
+            RecipientSnapshot(id: "x", name: "N", email: email, role: nil, provenance: .act,
+                              sendState: sendState, replied: replied, lastReplyText: nil,
+                              resolution: resolution, bounced: bounced, outcomeSource: source)
+        }
+        #expect(s(resolution: .booked).statusLabel == "Booked")
+        #expect(s(resolution: .declinedSoft).statusLabel == "Closed (not now)")
+        #expect(s(resolution: .declinedHard).statusLabel == "Closed (not interested)")
+        #expect(s(bounced: true).statusLabel == "Bounced")
+        #expect(s(replied: true).statusLabel == "In conversation")
+        #expect(s().statusLabel == "Awaiting reply")
+        #expect(s(.pending).statusLabel == "Not sent yet")
+        #expect(s(.pending, email: nil).statusLabel == "No email yet")
+        #expect(s(.suppressed).statusLabel == "Paused (booked elsewhere)")
+        #expect(s(replied: true).isAutoReplied == true)
+        #expect(s(replied: true, source: .manual).isAutoReplied == false)   // Dan's mark, not an auto reply
+        let noName = RecipientSnapshot(id: "x", name: nil, email: "e@e.example", role: nil, provenance: .act,
+                                       sendState: .pending, replied: false, lastReplyText: nil,
+                                       resolution: nil, bounced: false, outcomeSource: nil)
+        #expect(noName.displayName == "e@e.example")
+    }
+
     @Test func decodesFileAndRejectsWrongVersion() throws {
         let file = try ResultsFileDecoder.decode(Data(sampleJSON.utf8))
         #expect(file.version == 1)
