@@ -38,4 +38,38 @@ struct DraftCheckTests {
     @Test func flagsColdHedgeAtAWarmClient() {
         #expect(DraftCheck.findings(in: "If you haven't arranged a photographer yet, I'm available.").contains { $0 == .coldHedge })
     }
+
+    // #456: a draft must never ask the contact for a fact Overture already holds (the date or
+    // venue). The deterministic guard fires ONLY when that fact is known; asking is legitimate
+    // when Overture doesn't have it.
+    @Test func flagsAskingForADateOvertureAlreadyKnows() {
+        // The real #438 case that slipped through prompt-only enforcement.
+        #expect(DraftCheck.findings(in: "Sounds great. Let me know the date and I'll be there.",
+                                    knownsDate: true).contains { $0 == .asksForKnownFact })
+        #expect(DraftCheck.findings(in: "When is the show?", knownsDate: true).contains { $0 == .asksForKnownFact })
+        #expect(DraftCheck.findings(in: "What day works for you to have me there?", knownsDate: true).contains { $0 == .asksForKnownFact })
+    }
+
+    @Test func flagsAskingForAVenueOvertureAlreadyKnows() {
+        #expect(DraftCheck.findings(in: "Happy to come. What venue is it at?", knownsVenue: true).contains { $0 == .asksForKnownFact })
+        #expect(DraftCheck.findings(in: "Where is the performance being held?", knownsVenue: true).contains { $0 == .asksForKnownFact })
+    }
+
+    @Test func doesNotFlagAskingForAFactOvertureDoesNotHave() {
+        // No date on file: asking the contact for it is the right thing to do.
+        #expect(!DraftCheck.findings(in: "Let me know the date and I'll be there.", knownsDate: false).contains { $0 == .asksForKnownFact })
+        #expect(!DraftCheck.findings(in: "What venue is it at?", knownsVenue: false).contains { $0 == .asksForKnownFact })
+    }
+
+    @Test func doesNotFlagADraftThatStatesTheKnownFact() {
+        // Referencing the date/venue Overture knows is exactly what we want; only ASKING is wrong.
+        let good = "I'll be at the Cathedral of St. John the Divine on April 12 to photograph the concert."
+        #expect(!DraftCheck.findings(in: good, knownsDate: true, knownsVenue: true).contains { $0 == .asksForKnownFact })
+    }
+
+    @Test func knownFactCheckIsOffByDefault() {
+        // The legacy single-argument call site keeps its exact behavior: no known-fact context,
+        // so the new flag never fires for callers that don't opt in.
+        #expect(!DraftCheck.findings(in: "Let me know the date.").contains { $0 == .asksForKnownFact })
+    }
 }
