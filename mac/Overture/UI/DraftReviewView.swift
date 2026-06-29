@@ -16,6 +16,9 @@ struct DraftReviewView: View {
     var onSetConversationState: (ConversationState) -> Void = { _ in }
     var onConfirmConversationState: () -> Void = {}
     var onDismissReply: () -> Void = {}
+    // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
+    var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var gmailConnected: Bool = false
 
     @State private var editing = false
@@ -31,6 +34,7 @@ struct DraftReviewView: View {
             contactLine
             draftBlock
             actionRow
+            conversationContactsSection
             conversationSuggestionRow
             if item.isLost { lostReasonField }
         }
@@ -183,6 +187,74 @@ struct DraftReviewView: View {
             }
             if !isApproved { Spacer() }
         }
+    }
+
+    // Per-contact conversation surface (#418 B1): once a show is sent, list each contact with its
+    // status and the manual-judge controls. Dan reads the reply in Gmail, then marks the outcome here.
+    @ViewBuilder private var conversationContactsSection: some View {
+        if item.isSent && !item.contacts.isEmpty {
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                Text("Contacts")
+                    .font(OVType.tag).foregroundStyle(OVColor.inkFaint).tracking(0.6)
+                ForEach(item.contacts) { contactRow($0) }
+            }
+            .padding(.top, OVSpacing.xs)
+        }
+    }
+
+    @ViewBuilder private func contactRow(_ c: RecipientSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: OVSpacing.xs) {
+                Image(systemName: "person.crop.circle").foregroundStyle(OVColor.inkFaint)
+                Text(c.displayName).fontWeight(.medium).foregroundStyle(OVColor.ink)
+                Text(provenanceLabel(c.provenance)).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+                Spacer()
+                Text(c.statusLabel).font(OVType.meta).foregroundStyle(contactStatusColor(c))
+            }
+            .font(.system(size: 12))
+            if let reply = c.lastReplyText, !reply.isEmpty {
+                Text(reply)
+                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 20)
+            }
+            if c.sendState == .sent {
+                HStack(spacing: OVSpacing.xs) {
+                    Menu {
+                        Button("In conversation") { onMarkContact(c.id, nil, false) }
+                        Button("Booked") { onMarkContact(c.id, .booked, false) }
+                        Button("Closed (not now)") { onMarkContact(c.id, .declinedSoft, false) }
+                        Button("Closed (not interested)") { onMarkContact(c.id, .declinedHard, false) }
+                        Button("Bounced") { onMarkContact(c.id, nil, true) }
+                    } label: {
+                        Text("Mark…").font(OVType.meta).foregroundStyle(OVColor.forest)
+                            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
+                            .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    if c.isAutoReplied {
+                        Button("Not a real reply") { onDismissContactReply(c.id) }
+                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                            .help("This wasn't a genuine reply (an auto-reply or out of office). Revert it; a new reply still flags.")
+                    }
+                }
+                .padding(.leading, 20)
+            }
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, OVSpacing.sm)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surface.opacity(0.6)))
+    }
+
+    private func provenanceLabel(_ p: RecipientProvenance) -> String {
+        switch p { case .act: return "act"; case .presenter: return "presenter"; case .manual: return "added" }
+    }
+
+    private func contactStatusColor(_ c: RecipientSnapshot) -> Color {
+        if c.resolution == .booked { return OVColor.forest }
+        if c.bounced || c.resolution == .declinedHard { return OVColor.rust }
+        if c.replied { return OVColor.gold }
+        return OVColor.inkSoft
     }
 
     // Shown once sent: defaults to No response (most prospects), Dan marks exceptions.

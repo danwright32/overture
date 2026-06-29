@@ -400,6 +400,8 @@ struct QueueView: View {
             onSetConversationState: { state in setConversationState(item, state) },
             onConfirmConversationState: { confirmConversationState(item) },
             onDismissReply: { dismissReply(item) },
+            onMarkContact: { rid, resolution, bounced in markContact(item, rid, resolution, bounced) },
+            onDismissContactReply: { rid in dismissContactReply(item, rid) },
             onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
             onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
             onConfirmBooking: { confirmBooking(item) },
@@ -443,6 +445,22 @@ struct QueueView: View {
     private func dismissReply(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.dismissAutoReply(now: Date())
+        try? context.save()
+    }
+
+    // #418 B2 — Dan hand-marks one contact's outcome from the conversation surface (attribution only
+    // for Booked; never sets the lead booking). Stamps the manual source so detection won't overwrite.
+    private func markContact(_ item: QueueItem, _ recipientId: String,
+                             _ resolution: RecipientResolution?, _ bounced: Bool) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
+        try? context.save()
+    }
+
+    // #418 B1 — dismiss a wrongly auto-detected reply for ONE contact (#219, per-recipient).
+    private func dismissContactReply(_ item: QueueItem, _ recipientId: String) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
         try? context.save()
     }
 
