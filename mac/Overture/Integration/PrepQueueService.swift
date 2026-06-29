@@ -125,7 +125,8 @@ enum PrepQueueService {
         guard let script = runnerScriptURL(), FileManager.default.isExecutableFile(atPath: script.path) else {
             throw PrepLaunchError.runnerUnavailable
         }
-        try DetachedRunner.launch(scriptPath: script.path)   // detached; never waits
+        try DetachedRunner.launch(scriptPath: script.path,   // detached; never waits
+                                  supportDirectory: StoreLocation.handoffDirectory)
     }
 
     // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once via a string

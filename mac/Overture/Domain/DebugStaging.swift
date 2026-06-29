@@ -60,9 +60,20 @@ enum DebugStaging {
     // default). Left `.drafted` (not pre-approved) so Dan exercises the real approve + send clicks; its
     // performance date is inside the bookable window so it shows in the queue; keyed under the
     // "debug-of-" prefix so clearDebugLeads removes it.
+    static let defaultSelfSendAddress = "dan@danwrightphotography.com"
+
+    // #432: resolve the self-send test address from an optional override (the `selfSendTestAddress`
+    // user default), falling back to Dan's primary inbox when it is absent or blank. Pure so the
+    // precedence is unit-tested without driving the Debug menu.
+    static func resolvedSelfSendAddress(override: String?) -> String {
+        guard let trimmed = override?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return defaultSelfSendAddress }
+        return trimmed
+    }
+
     @discardableResult
     static func stageSelfSendLead(in context: ModelContext, now: Date,
-                                  address: String = "dan@danwrightphotography.com") -> Prospect {
+                                  address: String = defaultSelfSendAddress) -> Prospect {
         let key = "debug-of-selfsend-\(Int(now.timeIntervalSince1970))"
         let p = Prospect(naturalKey: key, groupName: "Self-send Test (debug)", discipline: "choral",
                          venue: "Weill Recital Hall",

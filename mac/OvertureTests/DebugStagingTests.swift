@@ -135,5 +135,15 @@ struct DebugStagingTests {
         #expect(p.recipients.first?.email == "self@example.com")
         #expect(p.recipients.first?.sendState == .pending)
     }
+
+    // #432: the self-send target is configurable (via the `selfSendTestAddress` default) so the
+    // reply-drafter path can be exercised against an alternate inbox without editing code. A blank
+    // or absent override falls back to Dan's primary address.
+    @Test func resolvesConfiguredSelfSendAddressOverDefault() {
+        #expect(DebugStaging.resolvedSelfSendAddress(override: nil) == DebugStaging.defaultSelfSendAddress)
+        #expect(DebugStaging.resolvedSelfSendAddress(override: "   ") == DebugStaging.defaultSelfSendAddress)
+        #expect(DebugStaging.resolvedSelfSendAddress(override: "daniel.wright33@icloud.com")
+                == "daniel.wright33@icloud.com")
+    }
 }
 #endif
