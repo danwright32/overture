@@ -173,6 +173,7 @@ enum SendService {
                 prospect.outcome = .lostSoft
                 prospect.outcomeSourceRaw = OutcomeSource.manual.rawValue
                 prospect.outcomeAt = now
+                prospect.resolveEngagedContacts(.declinedSoft)   // #448: close the engaged contacts too
             }
             return true
         } catch {
