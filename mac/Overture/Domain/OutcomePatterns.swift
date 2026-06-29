@@ -35,9 +35,13 @@ enum OutcomePatterns {
 
     static func samples(from prospects: [Prospect], by dimension: Dimension) -> [OutcomeSample] {
         prospects.map { p in
-            OutcomeSample(wasContacted: p.wasContacted, outcome: p.outcome,
-                          dimension: dimensionValue(of: p, by: dimension),
-                          outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
+            // Phase F: with the A3 rollup gone, a reply lives on the contact, not the lead outcome.
+            // Count an otherwise-unresolved lead as replied when a contact wrote back.
+            let effectiveOutcome: Outcome =
+                (p.outcome == .noResponse && p.recipients.contains(where: \.replied)) ? .replied : p.outcome
+            return OutcomeSample(wasContacted: p.wasContacted, outcome: effectiveOutcome,
+                                 dimension: dimensionValue(of: p, by: dimension),
+                                 outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
         }
     }
 

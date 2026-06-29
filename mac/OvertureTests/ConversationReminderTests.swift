@@ -18,8 +18,12 @@ struct ConversationReminderTests {
     private func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date? = nil,
                           event: String? = nil, outcome: Outcome = .replied,
                           source: OutcomeSource? = .manual) -> ConversationReminder.DueReminder? {
-        ConversationReminder.reminder(state: state, setAt: setAt, remindedAt: remindedAt,
-                                      performanceDate: event, outcome: outcome, source: source, now: now)
+        // Phase F: the timing function now takes the derived booleans; map the legacy outcome onto them.
+        let closed = outcome == .booked || outcome == .lostSoft || outcome == .lostHard
+        return ConversationReminder.reminder(state: state, setAt: setAt, remindedAt: remindedAt,
+                                             performanceDate: event, isClosed: closed,
+                                             hasUnhandledReply: outcome == .replied,
+                                             source: source, now: now)
     }
 
     @Test func anAutoSuggestedStateIsDueImmediately() {
@@ -112,6 +116,11 @@ struct ConversationReminderTests {
         p.outcome = outcome
         p.conversationState = state
         p.conversationStateSetAt = setAt
+        // Phase F: the derived reads come from contacts, so seed one whose standing matches `outcome`.
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        if outcome == .replied { r.replied = true }
+        p.setRecipients([r])
         return p
     }
 

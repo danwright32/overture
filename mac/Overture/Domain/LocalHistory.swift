@@ -27,7 +27,9 @@ enum LocalHistory {
                schedulingDismissals.contains(reason) {
                 return HistoryRecord(groupName: p.groupName, status: "declined")
             }
-            if p.outcome == .replied {
+            // Warm = they wrote back. Phase F: derive from a contact replying (the A3 lead rollup is
+            // gone); the legacy lead outcome is kept as a fallback for un-backfilled stores.
+            if p.outcome == .replied || p.recipients.contains(where: \.replied) {
                 return HistoryRecord(groupName: p.groupName, status: "warm")
             }
             if p.sentAt != nil {

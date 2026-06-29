@@ -23,8 +23,29 @@ private struct NoopNotifier: OmniFocusNotifier {
 @Suite("Reconcile scheduler (#265)")
 struct ReconcileSchedulerTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    @Test func hasNewReplyFollowsAContactNotJustTheLeadOutcome() throws {
+        // Phase F: the away-alert "new reply" diff reads a contact replying, not the (deleted) lead
+        // rollup. A replied contact counts even with the lead outcome still noResponse.
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        p.sentAt = Date(timeIntervalSince1970: 1)
+        ctx.insert(p)
+        #expect(ReconcileScheduler.hasNewReply(p) == false)
+
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        r.replied = true
+        p.setRecipients([r])
+        #expect(ReconcileScheduler.hasNewReply(p))
     }
 
     @Test func tickCreatesAnOmniFocusTaskForAReminderDueLead() throws {

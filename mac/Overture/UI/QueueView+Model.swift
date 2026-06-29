@@ -36,6 +36,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftBody: String? = nil
     var draftEditedByDan: Bool = false
     var outcome: Outcome = .noResponse
+    // Phase F (#424): the show's status derived from its contacts, snapshotted at build time.
+    var performanceStatus: PerformanceStatus = .new
     var sentAt: Date? = nil
     // At least one recipient is still pending with an address, so this performance can still send (#394).
     // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
@@ -77,10 +79,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }
     var hasDraft: Bool { draftBody != nil }
-    // Dan marked this lead lost (soft or hard); the row shows an editable reason note.
-    var isLost: Bool { outcome == .lostSoft || outcome == .lostHard }
+    // Lost: every contact resolved away (derived), or Dan marked the lead lost by hand / closing note.
+    // The row shows an editable reason note. (Phase F: derive from the contacts, not only the lead.)
+    var isLost: Bool {
+        performanceStatus == .lostDoorOpen || performanceStatus == .lostNotInterested
+            || outcome == .lostSoft || outcome == .lostHard
+    }
     // Confirmed booked (auto-detected or hand-marked); the row reads as Booked, not a lead to pitch.
-    var isBooked: Bool { outcome == .booked }
+    var isBooked: Bool { performanceStatus == .booked || outcome == .booked }
     // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }

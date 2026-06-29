@@ -132,11 +132,12 @@ enum ConversationReminder {
     // case (needs a state, an unconfirmed AI state, or the event has passed) returns `now`. Otherwise
     // the timed track: the earlier of (anchor + interval) and (event - lead buffer).
     static func nextReminderDate(state: ConversationState?, setAt: Date?, remindedAt: Date?,
-                                 performanceDate: String?, outcome: Outcome, source: OutcomeSource?,
+                                 performanceDate: String?, isClosed: Bool, hasUnhandledReply: Bool,
+                                 source: OutcomeSource?,
                                  now: Date, config: ConversationReminderConfig = .init()) -> Date? {
-        guard outcome != .booked, outcome != .lostSoft, outcome != .lostHard else { return nil }
+        guard !isClosed else { return nil }
         guard let state else {
-            return outcome == .replied ? now : nil   // replied but uncategorized: needs a state now
+            return hasUnhandledReply ? now : nil   // replied but uncategorized: needs a state now
         }
         guard state.isActive, let interval = config.intervalDays(for: state) else { return nil }
         if source == .auto { return now }             // unconfirmed AI state: surface immediately
@@ -153,10 +154,12 @@ enum ConversationReminder {
     }
 
     static func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date?,
-                         performanceDate: String?, outcome: Outcome, source: OutcomeSource?, now: Date,
+                         performanceDate: String?, isClosed: Bool, hasUnhandledReply: Bool,
+                         source: OutcomeSource?, now: Date,
                          config: ConversationReminderConfig = .init()) -> DueReminder? {
         guard let date = nextReminderDate(state: state, setAt: setAt, remindedAt: remindedAt,
-                                          performanceDate: performanceDate, outcome: outcome,
+                                          performanceDate: performanceDate, isClosed: isClosed,
+                                          hasUnhandledReply: hasUnhandledReply,
                                           source: source, now: now, config: config) else { return nil }
         guard now >= date else { return nil }   // scheduled, but not due yet
 
@@ -175,7 +178,8 @@ enum ConversationReminder {
             guard p.status != .dismissed else { return nil }   // #238: dismissed leads stop nagging
             return reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
                             remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                            outcome: p.outcome, source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
+                            isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
+                            source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
         }
         .sorted {
             let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)

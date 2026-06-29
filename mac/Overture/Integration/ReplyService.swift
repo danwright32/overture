@@ -17,9 +17,8 @@ enum ReplyService {
                               fetchFullThread: (String) -> Data? = { _ in nil }) -> Int {
         var count = 0
         for p in prospects {
-            // A hand-resolved or booked show is closed; stop watching ALL its recipients. (This is a
-            // lead-level guard on the MANUAL source only — the A3 auto rollup below never trips it, so
-            // one contact's auto reply can't blind another contact, the bug this phase fixes.)
+            // A hand-resolved or booked show is closed; stop watching ALL its recipients. This is a
+            // lead-level guard on the MANUAL source only, so one contact's reply can't blind another.
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
             if p.outcome == .booked { continue }
             for r in p.recipients {
@@ -36,32 +35,12 @@ enum ReplyService {
                 r.replied = true
                 r.repliedAt = now
                 r.lastReplyId = replyId
-                var body: String?
                 if let full = fetchFullThread(threadId) {
-                    body = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
-                    r.lastReplyText = body
+                    r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
                 }
-                rollUpToLead(p, replyId: replyId, body: body, now: now)
                 count += 1
             }
         }
         return count
-    }
-
-    // A3 — lead-level rollup bridge: keep the ~10 Prospect-level readers (reminders, the follow-up
-    // guard, OmniFocus, classify needsClassify) working unchanged during Phases A-E by rolling any
-    // recipient reply up to the lead. Never clobbers Dan's manual call or a booking. Writes lastReplyAt
-    // explicitly so ReplyClassifyService.needsClassify's "fresh reply after a hand-set state" re-queue
-    // keeps firing. Phase F's pure derivation replaces this temporary writer.
-    private static func rollUpToLead(_ p: Prospect, replyId: String?, body: String?, now: Date) {
-        if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { return }
-        p.outcome = .replied
-        p.outcomeSourceRaw = OutcomeSource.auto.rawValue
-        p.outcomeAt = now
-        p.lastReplyId = replyId
-        if let body {
-            p.lastReplyText = body
-            p.lastReplyAt = now
-        }
     }
 }

@@ -14,12 +14,12 @@ enum ReachedOutQueue {
         // #331: a real send always has a contact address; a sent timestamp without one is a
         // staged/corrupt record that was never actually emailed, so it doesn't belong here.
         guard p.contactEmail != nil else { return nil }
-        guard p.outcome != .booked, p.outcome != .lostSoft, p.outcome != .lostHard else { return nil }
+        guard !p.isClosed else { return nil }
 
         let reminderDate = ConversationReminder.nextReminderDate(
             state: p.conversationState, setAt: p.conversationStateSetAt, remindedAt: p.conversationRemindedAt,
-            performanceDate: p.performanceDate, outcome: p.outcome, source: p.conversationStateSource,
-            now: now, config: reminderConfig)
+            performanceDate: p.performanceDate, isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
+            source: p.conversationStateSource, now: now, config: reminderConfig)
         return [nextFollowUp(for: p, now: now, config: followUpConfig), reminderDate]
             .compactMap { $0 }
             .min()
@@ -59,7 +59,10 @@ enum ReachedOutQueue {
     // the last touch, up to maxFollowUps; nothing once it replied/booked/lost or the cap is reached.
     private static func nextFollowUp(for p: Prospect, now: Date, config: FollowUpConfig) -> Date? {
         guard let sentAt = p.sentAt else { return nil }
-        guard p.outcome == .noResponse else { return nil }
+        // Silent nudges apply only while the lead is still silent: no reply to handle and no
+        // conversation state yet (a reply or a set state hands off to the reminder track). Closed
+        // shows are already excluded by the isClosed guard in nextReachOut.
+        guard p.conversationState == nil, !p.hasUnhandledReply else { return nil }
         guard p.followUpCount < config.maxFollowUps else { return nil }
         let lastTouch = p.lastFollowUpAt ?? sentAt
         return lastTouch.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)

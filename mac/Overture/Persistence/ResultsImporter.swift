@@ -131,6 +131,7 @@ extension QueueItem {
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
             outcome: p.outcome,
+            performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
             sendError: p.sendError,

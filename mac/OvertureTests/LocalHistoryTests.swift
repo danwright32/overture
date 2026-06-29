@@ -10,7 +10,7 @@ import SwiftData
 @Suite("Local history from Overture activity")
 struct LocalHistoryTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -62,6 +62,19 @@ struct LocalHistoryTests {
         // They wrote back with interest: a real warm relationship, not a cold send.
         let ctx = ModelContext(try container())
         make(ctx, group: "Interested Ensemble", status: .approved, sentAt: Date(), outcome: .replied)
+        let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        #expect(records.first?.status == "warm")
+    }
+
+    @Test func aRepliedContactIsWarmEvenWithoutALeadReplyRollup() throws {
+        // Phase F: the A3 lead rollup is gone, so warmth derives from a contact replying. Lead
+        // outcome stays noResponse; a replied recipient still marks the relationship warm.
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "Replied Contact", status: .approved, sentAt: Date(), outcome: .noResponse)
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        r.replied = true
+        p.setRecipients([r])
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "warm")
     }
