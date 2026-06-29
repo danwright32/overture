@@ -80,6 +80,15 @@ final class Recipient {
     // fresh AI draft clears it again so warnings reappear on text he hasn't touched.
     var replyDraftEditedByDan: Bool = false
 
+    // The reply-draft voice-learning pair (#463), mirroring Prospect.originalDraft*/sentBody for the cold
+    // draft. originalReplyDraftBody is the AI's reply before Dan's first substantive edit; sentReplyBody
+    // is the exact text he committed (sent via Overture or copied out to Gmail), frozen at commit so a
+    // later re-draft can't rewrite the lesson. Reply subjects are auto ("Re: …"), never Dan-edited, so
+    // only the body is captured.
+    var originalReplyDraftBody: String?
+    var sentReplyBody: String?
+    var replySentAt: Date?
+
     // The performance this recipient belongs to (inverse of Prospect.recipients).
     var prospect: Prospect?
 
@@ -188,11 +197,26 @@ final class Recipient {
     // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
     // his text wins and the deterministic DraftCheck warnings stop nagging on it.
     func applyReplyDraftEdit(_ body: String) {
+        // Snapshot the AI reply as the learning baseline on the first substantive edit only, mirroring
+        // Prospect.applyEdit; trivial / whitespace saves never overwrite it (#463).
+        if originalReplyDraftBody == nil,
+           Prospect.isSubstantiveEdit(oldSubject: nil, oldBody: replyDraftBody, newSubject: "", newBody: body) {
+            originalReplyDraftBody = replyDraftBody
+        }
         replyDraftBody = body
         replyDraftEditedByDan = true
     }
 
+    // Freeze the exact reply body Dan committed (sent or copied out), immune to later re-drafts, as the
+    // "sent" side of the voice pair (#463). Mirrors Prospect.freezeSentCopy; only the first commit writes.
+    func freezeSentReply(now: Date) {
+        guard sentReplyBody == nil, let body = replyDraftBody, !body.isEmpty else { return }
+        sentReplyBody = body
+        replySentAt = now
+    }
+
     func recordRepliedInGmail(now: Date) {
+        freezeSentReply(now: now)   // capture the committed copy before consuming the draft (#463)
         replyDraftSubject = nil
         replyDraftBody = nil
         lastFollowUpAt = now
@@ -214,5 +238,9 @@ final class Recipient {
         replyDraftBody = nil
         replyDraftRequestedAt = nil
         replyDraftEditedByDan = false
+        // The reply was wrong, so any half-captured voice pair for it is bogus too (#463).
+        originalReplyDraftBody = nil
+        sentReplyBody = nil
+        replySentAt = nil
     }
 }

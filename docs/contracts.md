@@ -27,7 +27,7 @@ the workflow's runbook is its spec.
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
+| `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
 Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
@@ -126,6 +126,15 @@ transferable voice and must never leak into other drafts.
 
 Version 2 (#392) adds an optional `outcomeRecipientId` to each pair, attributing the outcome to the
 recipient who earned it (the booked one, else the first replier). The drafted body is shared across a
-performance's recipients, so there is still exactly ONE pair per show; the discriminator only credits
-the win, it does not duplicate the body. Additive: `v1.json` stays byte-identical (its
+performance's recipients, so there is still exactly ONE cold pair per show; the discriminator only
+credits the win, it does not duplicate the body. Additive: `v1.json` stays byte-identical (its
 `outcomeRecipientId` decodes to nil), `v2.json` is the new spec.
+
+Version 3 (#463) adds an optional `kind` to each pair: `"reply"` for an inbound-reply Dan rewrote and
+committed (sent via Overture or copied out to Gmail), absent/nil for a cold opener. Reply pairs are
+PER RECIPIENT (each contact's reply is its own lesson, so a show can contribute several), captured the
+same way as the cold path: `Recipient.originalReplyDraftBody` (snapshotted on the first substantive
+edit) versus `Recipient.sentReplyBody` (frozen at commit), gated on the same `minEditDistance`. Cold
+and reply pairs share the one `maxPairs` cap, winners first. The distiller should treat a reply pair's
+register (short, responsive) separately from a cold opener. Additive: `v1.json`/`v2.json` stay
+byte-identical (their `kind` decodes to nil = cold), `v3.json` is the new spec.

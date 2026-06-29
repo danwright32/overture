@@ -461,6 +461,21 @@ struct SendServiceTests {
         #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 10))   // clock re-anchored
     }
 
+    // #463 — sending a reply freezes the committed body as the "sent" side of the voice pair, before
+    // the draft is consumed, so a later re-draft can't rewrite the lesson.
+    @Test func sendReplyDraftFreezesTheSentReplyForVoiceLearning() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let r = p.recipients.first { $0.email == "emma@act.example" }!
+        r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
+        r.replyDraftBody = "Glad to help — July works for me."
+
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender()) == true)
+        #expect(r.sentReplyBody == "Glad to help — July works for me.")
+        #expect(r.replySentAt == Date(timeIntervalSince1970: 10))
+        #expect(r.replyDraftBody == nil)   // still consumed
+    }
+
     @Test func sendReplyDraftRefusesWithoutADraft() async throws {
         let ctx = ModelContext(try container())
         let p = twoRecipients(ctx, body: "x", ingested: Date(timeIntervalSince1970: 1))

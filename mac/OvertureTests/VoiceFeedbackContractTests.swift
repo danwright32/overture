@@ -59,5 +59,19 @@ struct VoiceFeedbackContractTests {
     @Test func theV1FixtureStillDecodesWithoutTheDiscriminator() throws {
         let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: try fixture("v1.json"))
         #expect(decoded.pairs.first?.outcomeRecipientId == nil)
+        #expect(decoded.pairs.first?.kind == nil)            // pre-v3 pairs carry no kind tag
+    }
+
+    // v3 (#463): a reply Dan edited and sent is its own lesson, tagged kind "reply", so the distiller
+    // learns the reply register apart from cold openers. The file may carry both kinds; a cold pair still
+    // omits the tag (nil = cold), keeping older readers and the v1/v2 fixtures byte-compatible.
+    @Test func theV3FixtureCarriesAReplyKindPairAlongsideACold() throws {
+        let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: try fixture("v3.json"))
+        #expect(decoded.version == 3)
+        let reply = decoded.pairs.first { $0.kind == "reply" }
+        let cold = decoded.pairs.first { $0.kind == nil }
+        #expect(reply?.outcomeRecipientId == "erobinson@aurorastrings.example")
+        #expect(reply?.outcome == "booked")
+        #expect(cold != nil)                                 // a kindless cold pair coexists
     }
 }
