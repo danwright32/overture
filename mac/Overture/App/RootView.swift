@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openWindow) private var openWindow
     @State private var isScanning = false
+    @State private var scoutStartedAt: Date?   // when the current scan began, for the live elapsed counter (#435)
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
     @State private var errorMessage: String?
@@ -78,10 +79,7 @@ struct RootView: View {
                         startPrep()
                     } label: {
                         if PrepQueueService.isRunning(now: Date()) {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Prepping…")
-                            }
+                            LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt)
                         } else {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
@@ -145,10 +143,7 @@ struct RootView: View {
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                     } label: {
                         if isScanning {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Scouting…")
-                            }
+                            LiveRunLabel(base: "Scouting", since: scoutStartedAt)
                         } else {
                             Label("Run scout", systemImage: "binoculars")
                         }
@@ -205,6 +200,12 @@ struct RootView: View {
                     ingestPrep()
                 }
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
+            }
+            .task {
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
+                // Follow every reply-classify run to completion so a finished draft clears the spinner
+                // and ingests at once instead of waiting for the next launch (#435).
+                await watchReplyClassifyRuns()
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -367,15 +368,52 @@ struct RootView: View {
         let started = PrepQueueService.lastRunStartedAt
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        switch PrepRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
+        switch DetachedRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             ingestPrep()
         case .finishedEmpty:
-            let tail = PrepLog.tail(8)
+            let tail = RunLog.tail(8, from: RunLog.prepURL)
             errorMessage = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
                 + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
         case .idle, .running:
             break
+        }
+    }
+
+    // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
+    // a finished draft only surfaced on the NEXT app launch (the bare spinner spun until then). Mirrors
+    // watchPrepRun — wait for the live run, then ingest immediately (clearing the per-recipient spinner)
+    // or report that it finished without a draft. A single continuous watcher (below) drives this so it
+    // covers every launch source: the at-launch auto run, an in-flight run, AND a "Draft a reply" click.
+    private func watchReplyClassifyRun() async {
+        while ReplyClassifyService.isRunning(now: Date()) {
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+        }
+        let started = ReplyClassifyService.lastRunStartedAt
+        let resultsMod = try? ReplyClassifyImporter.defaultURL
+            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        switch DetachedRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
+        case .producedResults:
+            ingestReplyClassifications()
+        case .finishedEmpty:
+            let tail = RunLog.tail(8, from: RunLog.replyClassifyURL)
+            errorMessage = "The reply drafter finished but didn't produce a draft. It may have hit an error."
+                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+        case .idle, .running:
+            break
+        }
+    }
+
+    // Continuously watch for a reply-classify run to begin (a click, the at-launch auto run, or one in
+    // flight at open) and follow it to completion. Polls the run marker; only enters watchReplyClassifyRun
+    // when a run is genuinely live, so an old failed run never re-nags on a normal open (#48). Cheap: a
+    // file stat every few seconds on a resident desktop app.
+    private func watchReplyClassifyRuns() async {
+        while !Task.isCancelled {
+            if ReplyClassifyService.isRunning(now: Date()) {
+                await watchReplyClassifyRun()
+            }
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
     }
 
@@ -410,6 +448,7 @@ struct RootView: View {
 
     private func runScout(auto: Bool = false) {
         isScanning = true
+        scoutStartedAt = Date()
         statusMessage = nil
         Task {
             do {
@@ -430,6 +469,7 @@ struct RootView: View {
                 if let status = p.status { statusMessage = status }
             }
             isScanning = false
+            scoutStartedAt = nil
         }
     }
 

@@ -308,10 +308,8 @@ struct DraftReviewView: View {
                         .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
                 }
             } else if c.isDraftingReply {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Drafting a reply…").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                }
+                LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
+                             font: OVType.meta, color: OVColor.inkSoft)
             } else {
                 Button("Draft a reply") { onDraftReply(c.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)

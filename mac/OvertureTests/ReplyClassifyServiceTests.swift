@@ -104,6 +104,17 @@ struct ReplyClassifyServiceTests {
         #expect(launches == 1)
     }
 
+    // #435 — a successful start records when the run began, so the completion watcher can ask
+    // DetachedRunOutcome whether the run produced a fresh result or finished empty (mirrors Prep).
+    @Test func startRecordsTheRunStartTime() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k8", replyText: "Yes")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)   // well past the plausibility floor
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: now,
+                                                   queueURL: tmp(), markerURL: tmp(), launch: {})
+        #expect(ReplyClassifyService.lastRunStartedAt == now)
+    }
+
     // #420 C5 — the stale window is 10 minutes (a cold merged classify+drafter run): a marker younger
     // than that still reads as running; older than it is stale and frees the run.
     @Test func theStaleWindowIsTenMinutes() throws {
