@@ -265,6 +265,39 @@ struct RecipientTests {
         #expect(r.replyDraftRequestedAt == nil)
     }
 
+    @Test func aPausedContactIsNotSendable() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.isSendablePending)          // pending with an email
+        r.pausedByReply = true
+        #expect(!r.isSendablePending)         // paused pending a reply triage (#430)
+    }
+
+    @MainActor
+    @Test func aReplyPausesTheShowsStillPendingContacts() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.sentAt = Date()
+        ctx.insert(p)
+        let sent = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        sent.gmailThreadId = "t1"; sent.sendState = .sent
+        let pending = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        pending.sendState = .pending   // never emailed yet
+        p.setRecipients([sent, pending])
+
+        let reply = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
+        let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
+                                           now: Date()) { _ in reply }
+        #expect(n == 1)                        // the act's reply detected
+        #expect(sent.replied == true)
+        #expect(pending.pausedByReply == true) // the still-unsent contact auto-paused (#430)
+        #expect(!pending.isSendablePending)    // so the drip/queue won't email it
+    }
+
     @Test func resolutionMapsThroughRawString() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.resolution == nil)

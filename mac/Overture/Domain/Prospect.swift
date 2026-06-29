@@ -375,6 +375,21 @@ final class Prospect {
         }
     }
 
+    // #430: a reply on a multi-contact show auto-pauses the still-unsent contacts (those that have an
+    // address and haven't gone yet) so the drip/queue won't email them while Dan triages the reply.
+    // Its own flag, distinct from the booking-freeze (sendState .suppressed).
+    func pausePendingForReply() {
+        for r in recipients where r.sendState == .pending && (r.email?.isEmpty == false) {
+            r.pausedByReply = true
+        }
+    }
+
+    // #430: Dan triaged the reply (set/confirmed a conversation state, marked a contact, or dismissed
+    // a false reply), so the paused contacts resume and are sendable again.
+    func resumePausedRecipients() {
+        for r in recipients where r.pausedByReply { r.pausedByReply = false }
+    }
+
     // Dan dismissed a wrong auto-detected reply (#219): revert to no-response and remember which
     // reply (its Gmail message id) was wrong so ReplyService never re-flags that same one, while a
     // genuinely newer reply on the thread still gets detected.
@@ -393,6 +408,7 @@ final class Prospect {
         for r in recipients where r.replied && r.lastReplyId == dismissed {
             r.dismissAutoReply()
         }
+        resumePausedRecipients()   // #430: a false reply shouldn't keep the other contacts paused
     }
 
     // Dan rejected a wrong auto-detected booking (#203): revert the outcome to no-response and
@@ -423,6 +439,7 @@ final class Prospect {
         conversationState = state
         conversationStateSetAt = now
         conversationStateSource = .manual
+        resumePausedRecipients()   // #430: hand-setting the conversation state is triage; resume the rest
         if state == .declined {
             markOutcomeManually(.lostSoft, now: now)
             resolveEngagedContacts(.declinedSoft)
@@ -452,6 +469,7 @@ final class Prospect {
         conversationStateSource = .manual
         conversationStateSetAt = now
         conversationRemindedAt = nil
+        resumePausedRecipients()   // #430: confirming the reply's read is triage; resume the rest
     }
 
     // True once the email was actually sent (approved-and-sent). Outcomes only count

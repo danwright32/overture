@@ -458,6 +458,7 @@ struct QueueView: View {
                              _ resolution: RecipientResolution?, _ bounced: Bool) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
+        model.resumePausedRecipients()   // #430: marking a contact is triage; resume the paused ones
         try? context.save()
     }
 
@@ -465,6 +466,7 @@ struct QueueView: View {
     private func dismissContactReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
+        model.resumePausedRecipients()   // #430: a false reply shouldn't keep the others paused
         try? context.save()
     }
 

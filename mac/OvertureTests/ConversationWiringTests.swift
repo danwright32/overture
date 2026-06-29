@@ -77,6 +77,35 @@ struct ConversationWiringTests {
         #expect(p.isClosed == true)                           // honest close despite an untried contact left
     }
 
+    @Test func triagingAReplyResumesTheShowsPausedContacts() {
+        // setting a conversation state, confirming an auto suggestion, and dismissing a false reply
+        // all count as triage and must un-pause the still-unsent contacts (#430).
+        func pausedShow() -> (Prospect, Recipient) {
+            let p = lead(outcome: .replied, source: .auto)
+            let paused = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+            paused.sendState = .pending
+            paused.pausedByReply = true
+            p.setRecipients([paused])
+            return (p, paused)
+        }
+
+        let (p1, r1) = pausedShow()
+        p1.setConversationState(.interested, now: now)
+        #expect(r1.pausedByReply == false)
+
+        let (p2, r2) = pausedShow()
+        p2.suggestConversationState(.wantsToBook, now: now)   // auto suggestion (still paused)
+        #expect(r2.pausedByReply == true)
+        p2.confirmConversationState(now: now)                 // Dan confirms -> triage
+        #expect(r2.pausedByReply == false)
+
+        let (p3, r3) = pausedShow()
+        p3.lastReplyId = "m1"
+        p3.outcome = .replied
+        p3.dismissAutoReply(now: now)                         // false reply -> resume
+        #expect(r3.pausedByReply == false)
+    }
+
     @Test func remindLaterStampsTheReanchor() {
         let p = lead()
         p.remindLater(now: now)
