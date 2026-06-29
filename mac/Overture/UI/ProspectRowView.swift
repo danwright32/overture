@@ -19,6 +19,9 @@ struct ProspectRowView: View {
     var onDismissReply: () -> Void = {}
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
+    var onDraftReply: (_ recipientId: String) -> Void = { _ in }
+    var onSendReply: (_ recipientId: String) -> Void = { _ in }
+    var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var onMarkConfidenceReviewed: () -> Void = {}
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
     var onConfirmBooking: () -> Void = {}
@@ -80,6 +83,9 @@ struct ProspectRowView: View {
                     onDismissReply: onDismissReply,
                     onMarkContact: onMarkContact,
                     onDismissContactReply: onDismissContactReply,
+                    onDraftReply: onDraftReply,
+                    onSendReply: onSendReply,
+                    onCopyReply: onCopyReply,
                     gmailConnected: gmailConnected
                 )
                 .padding(.leading, 64 + OVSpacing.md)

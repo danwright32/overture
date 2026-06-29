@@ -151,7 +151,9 @@ extension QueueItem {
                     RecipientSnapshot(id: r.id, name: r.name, email: r.email, role: r.role,
                                       provenance: r.provenance, sendState: r.sendState, replied: r.replied,
                                       lastReplyText: r.lastReplyText, resolution: r.resolution,
-                                      bounced: r.bounced, outcomeSource: r.outcomeSource)
+                                      bounced: r.bounced, outcomeSource: r.outcomeSource,
+                                      replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
+                                      replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint)
                 }
         )
     }

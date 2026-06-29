@@ -416,4 +416,42 @@ struct SendServiceTests {
         #expect(p.sentBody == "I document dance.")   // the BARE body, no greeting baked in
         #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
+
+    // MARK: - #421 recipient-scoped reply send + copy-out
+
+    @Test func sendReplyDraftSendsOnTheContactThreadAndConsumesTheDraft() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let r = p.recipients.first { $0.email == "emma@act.example" }!
+        r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
+        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help — July works."
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
+        #expect(sender.last?.to == "emma@act.example")
+        #expect(sender.last?.threadId == "rt")               // the CONTACT's thread, not the lead rollup
+        #expect(sender.last?.inReplyTo == "<rm>")
+        #expect(sender.last?.subject == "Re: Photographing you")
+        #expect(sender.last?.body == "Glad to help — July works.")
+        #expect(r.replyDraftBody == nil)                     // draft consumed (can't double-send)
+        #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 10))   // clock re-anchored
+    }
+
+    @Test func sendReplyDraftRefusesWithoutADraft() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "x", ingested: Date(timeIntervalSince1970: 1))
+        let r = p.recipients.first!
+        r.gmailThreadId = "rt"; r.sendState = .sent          // no replyDraftBody
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(), sender: CapturingSender()) == false)
+    }
+
+    // Copy-out path: Dan sent the reply from Gmail himself; consume the draft + re-anchor, no send.
+    @Test func recordRepliedInGmailConsumesTheDraftWithoutSending() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.replyDraftSubject = "Re"; r.replyDraftBody = "a draft"
+        r.recordRepliedInGmail(now: Date(timeIntervalSince1970: 7))
+        #expect(r.replyDraftBody == nil)
+        #expect(r.replyDraftSubject == nil)
+        #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 7))
+    }
 }

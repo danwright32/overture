@@ -14,6 +14,7 @@ SUPPORT="$HOME/Library/Application Support/Overture"
 QUEUE="$SUPPORT/overture-reply-classify-queue.json"
 RESULTS="$SUPPORT/overture-reply-classify-results.json"
 RUNBOOK="$PROJECT_DIR/docs/reply-classify-runbook.md"
+VOICE="$SUPPORT/overture-voice-guidance.md"
 MARKER="$SUPPORT/reply-classify-running"
 
 # Refuse to start if no work-list is present.
@@ -27,10 +28,15 @@ MARKER="$SUPPORT/reply-classify-running"
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
-PROMPT="You are the Overture reply-classify run. Follow $RUNBOOK exactly. Read the work-list at
-$QUEUE, and for every item read the reply text and classify its intent as exactly one of
-interested, wants_to_book, has_question, or declined. Copy each item's naturalKey verbatim. Write
-the complete ReplyClassifyResults JSON to $RESULTS and nothing else to that file."
+PROMPT="You are the Overture reply-classify + reply-drafter run (v3). Follow $RUNBOOK exactly. Read the
+work-list at $QUEUE. For EVERY item: (1) classify the reply's intent as exactly one of interested,
+wants_to_book, has_question, or declined; (2) DRAFT a short reply in Dan's voice that responds to what
+the contact actually wrote, emitting draftSubject and draftBody. Read Dan's distilled voice guidance at
+$VOICE and apply ONLY those distilled tendencies — NEVER quote or paraphrase raw past email pairs
+(the #119/#249 leak guard). Copy each item's naturalKey AND recipientId verbatim so each result attaches
+to the right contact. Write the complete v3 ReplyClassifyResults JSON (version 3; each result =
+{naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and nothing else to that file.
+If $VOICE is absent, draft from the runbook's voice rules alone."
 
 # Resolve the claude binary: the app launches us with a minimal PATH.
 CLAUDE=""

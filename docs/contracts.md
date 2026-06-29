@@ -25,8 +25,8 @@ the workflow's runbook is its spec.
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
-| `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify run (workflow) | 1, 2 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-reply-classify-results.json` | Classify run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
@@ -100,6 +100,14 @@ tied to the specific recipient on the show it came from (a presenter reply and a
 classified independently instead of collapsing to the first replier). It is additive: the tolerant
 gate (1 through 2) still accepts the v1 files (`queue.json` / `results.json`), where `recipientId`
 decodes to nil; `queue-v2.json` / `results-v2.json` are the discriminator spec.
+
+Version 3 (#420) folds the AI reply-DRAFTER into the same run: each result adds optional `draftSubject`
+and `draftBody` (the contextual reply drafted in Dan's voice for that recipient), and the queue now
+emits one item per replied recipient with `recipientId` populated. The run reads Dan's distilled voice
+guidance (`overture-voice-guidance.md`) and applies only distilled tendencies, never raw past pairs
+(#119/#249 leak guard). The `intent` is consumed as a NON-BINDING hint (it never sets a binding
+per-recipient outcome). Additive: the tolerant gate (1 through 3) still accepts v1/v2; `queue-v3.json`
+/ `results-v3.json` are the spec.
 
 ### `overture-voice-feedback.json`
 
