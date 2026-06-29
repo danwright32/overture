@@ -213,32 +213,57 @@ struct SendServiceTests {
         #expect(a.sentAt == nil)
     }
 
-    @Test func sendFollowUpRecordsTheNudgeAndCapsAtTheMax() async throws {
-        let ctx = ModelContext(try container())
-        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
-        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
-        a.sentAt = Date(timeIntervalSince1970: 100)   // already sent
-        let now = Date(timeIntervalSince1970: 2_000_000)
-
-        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
-        #expect(a.followUpCount == 1)
-        #expect(a.lastFollowUpAt == now)
-        #expect(a.sentAt == Date(timeIntervalSince1970: 100))   // original send untouched
-
-        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == true)
-        #expect(a.followUpCount == 2)
-        // Capped at 2: a third nudge is refused.
-        #expect(await SendService.sendFollowUp(a, now: now, sender: FakeSender()) == false)
-        #expect(a.followUpCount == 2)
+    // A performance with one SENT, still-silent contact (awaiting a reply), for the per-recipient
+    // follow-up tests (#418 D).
+    @discardableResult
+    private func sentContact(_ ctx: ModelContext, group: String, threadId: String? = "th",
+                             msgId: String? = "<m>") -> (Prospect, Recipient) {
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
+        p.draftSubject = "Photographs for \(group)"; p.draftBody = "Hi"; p.sentAt = Date(timeIntervalSince1970: 100)
+        ctx.insert(p)
+        let r = Recipient(id: group + "@act.example", email: group + "@act.example", name: "Emma", provenance: .act)
+        r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 100)
+        r.gmailThreadId = threadId; r.gmailMessageId = msgId
+        p.addRecipient(r)
+        try? ctx.save()
+        return (p, r)
     }
 
-    @Test func sendFollowUpStopsOnceReplied() async throws {
+    @Test func sendFollowUpRecordsTheNudgeAndCapsAtTheMax() async throws {
         let ctx = ModelContext(try container())
-        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
-        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
-        a.sentAt = Date(); a.outcome = .replied
-        #expect(await SendService.sendFollowUp(a, now: Date(), sender: FakeSender()) == false)
-        #expect(a.followUpCount == 0)
+        let (p, r) = sentContact(ctx, group: "A")
+        let now = Date(timeIntervalSince1970: 2_000_000)
+
+        #expect(await SendService.sendFollowUp(r, of: p, now: now, sender: FakeSender()) == true)
+        #expect(r.followUpCount == 1)
+        #expect(r.lastFollowUpAt == now)
+
+        #expect(await SendService.sendFollowUp(r, of: p, now: now, sender: FakeSender()) == true)
+        #expect(r.followUpCount == 2)
+        // Capped at 2: a third nudge is refused.
+        #expect(await SendService.sendFollowUp(r, of: p, now: now, sender: FakeSender()) == false)
+        #expect(r.followUpCount == 2)
+    }
+
+    @Test func sendFollowUpStopsOnceTheContactReplied() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        r.replied = true   // this contact replied -> no longer awaiting a follow-up
+        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: FakeSender()) == false)
+        #expect(r.followUpCount == 0)
+    }
+
+    // A contact Dan hand-marked (e.g. Closed) is never nudged, even though it's sent + silent.
+    @Test func sendFollowUpSkipsAHandMarkedContact() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        r.markOutcomeManually(resolution: .declinedSoft)
+        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: FakeSender()) == false)
     }
 
     // #194: sendOne must be able to drive the REAL GmailSender send chain (token acquisition +
@@ -298,15 +323,12 @@ struct SendServiceTests {
     }
 
     @Test func followUpRepliesOnTheOriginalThread() async throws {
-        // #74: the nudge goes out In-Reply-To the original Message-ID, on the same thread, as a Re:.
+        // #74: the nudge goes out In-Reply-To the contact's Message-ID, on its thread, as a Re:.
         let ctx = ModelContext(try container())
-        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
-        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
-        a.sentAt = Date(); a.gmailThreadId = "th-9"; a.gmailMessageId = "<orig@x.org>"
-        a.draftSubject = "Photographs for A"
+        let (p, r) = sentContact(ctx, group: "A", threadId: "th-9", msgId: "<orig@x.org>")
 
         let sender = CapturingSender()
-        #expect(await SendService.sendFollowUp(a, now: Date(), sender: sender) == true)
+        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: sender) == true)
         #expect(sender.last?.threadId == "th-9")
         #expect(sender.last?.inReplyTo == "<orig@x.org>")
         #expect(sender.last?.subject == "Re: Photographs for A")

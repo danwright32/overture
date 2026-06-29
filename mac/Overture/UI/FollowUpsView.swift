@@ -33,6 +33,7 @@ struct FollowUpsView: View {
 
     private struct PendingNudge: Identifiable {
         let id: String        // prospect naturalKey
+        let recipientId: String   // which contact on the show (#418 D)
         let recipient: String
         let preview: String
     }
@@ -44,9 +45,9 @@ struct FollowUpsView: View {
         let isClosing: Bool
     }
 
-    private var due: [Prospect] {
-        FollowUp.due(from: prospects, now: Date())
-            .sorted { ($0.sentAt ?? .distantPast) < ($1.sentAt ?? .distantPast) }
+    private var due: [FollowUp.DueRecipient] {
+        FollowUp.dueRecipients(from: prospects, now: Date())
+            .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) }
     }
 
     // Already ordered by urgency then soonest event in ConversationReminder.due (domain-owned).
@@ -87,7 +88,7 @@ struct FollowUpsView: View {
                         }
                         if !due.isEmpty {
                             section("Silent follow-ups") {
-                                ForEach(due) { p in row(p); Divider() }
+                                ForEach(Array(due.enumerated()), id: \.offset) { _, d in row(d); Divider() }
                             }
                         }
                     }
@@ -100,7 +101,7 @@ struct FollowUpsView: View {
         .alert("Send this follow-up now?",
                isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
                presenting: pending) { p in
-            Button("Send") { performNudge(p.id) }
+            Button("Send") { performNudge(p.id, p.recipientId) }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: { p in
             Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one follow-up right now, to this recipient only. Nothing else goes out.")
@@ -124,17 +125,20 @@ struct FollowUpsView: View {
         }
     }
 
-    // A silent follow-up (#45).
-    private func row(_ p: Prospect) -> some View {
-        HStack(alignment: .top, spacing: OVSpacing.md) {
+    // A silent follow-up to one contact (#45, per-recipient #418 D).
+    private func row(_ d: FollowUp.DueRecipient) -> some View {
+        let r = d.recipient
+        return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                Text("\(p.contactEmail ?? "no contact") · nudge \(p.followUpCount + 1) of \(FollowUpConfig().maxFollowUps)")
+                Text(d.prospect.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                Text("\(r.email ?? "no contact") · nudge \(r.followUpCount + 1) of \(FollowUpConfig().maxFollowUps)")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                sendFailureLine(p)
+                if let line = SendFailureLine.text(for: r.sendError) {
+                    Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
+                }
             }
             Spacer(minLength: OVSpacing.sm)
-            sendButton("Send nudge", enabled: gmailConnected && p.contactEmail != nil) { requestNudge(p) }
+            sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
         }
         .padding(.vertical, OVSpacing.xs)
     }
@@ -211,11 +215,12 @@ struct FollowUpsView: View {
         .font(OVType.meta)
     }
 
-    private func requestNudge(_ p: Prospect) {
-        guard let email = p.contactEmail else { return }
-        let preview = "Subject: \(FollowUp.nudgeSubject(groupName: p.groupName))\n\n"
-            + FollowUp.nudgeBody(contactName: p.contactName, groupName: p.groupName, venue: p.venue)
-        pending = PendingNudge(id: p.naturalKey, recipient: email, preview: preview)
+    private func requestNudge(_ d: FollowUp.DueRecipient) {
+        guard let email = d.recipient.email else { return }
+        let preview = "Subject: \(FollowUp.nudgeSubject(groupName: d.prospect.groupName))\n\n"
+            + FollowUp.nudgeBody(contactName: d.recipient.name, groupName: d.prospect.groupName,
+                                 venue: d.prospect.venue, attempt: d.recipient.followUpCount + 1)
+        pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, recipient: email, preview: preview)
     }
 
     private func requestConversationNudge(_ p: Prospect, kind: ConversationReminder.Kind) {
@@ -234,14 +239,16 @@ struct FollowUpsView: View {
         pendingConversation = PendingConversation(id: p.naturalKey, recipient: email, preview: body, isClosing: closing)
     }
 
-    private func performNudge(_ naturalKey: String) {
+    private func performNudge(_ naturalKey: String, _ recipientId: String) {
         pending = nil
-        guard let p = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        guard let p = prospects.first(where: { $0.naturalKey == naturalKey }),
+              let r = p.recipients.first(where: { $0.id == recipientId }) else { return }
         let org = p.groupName
         // Await off the synchronous button action so the main thread never blocks on the Gmail
         // token work (the old blocking send bridge deadlocked here).
         Task {
-            let sent = await SendService.sendFollowUp(p, now: Date(), sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let sent = await SendService.sendFollowUp(r, of: p, now: Date(),
+                                                      sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
             try? context.save()
             // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
             feedback.acknowledge(ActionAck.followUpSent(org: org, success: sent),

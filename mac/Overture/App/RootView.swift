@@ -38,7 +38,7 @@ struct RootView: View {
     @State private var showVoiceGuidance = false
 
     private var followUpsDue: Int {
-        FollowUp.due(from: allProspects, now: Date()).count
+        FollowUp.dueRecipients(from: allProspects, now: Date()).count
             + ConversationReminder.due(from: allProspects, now: Date(), config: .loaded()).count
     }
 

@@ -10,20 +10,47 @@ struct FollowUpConfig: Sendable {
 }
 
 enum FollowUp {
-    static func isDue(sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
-                      outcome: Outcome, now: Date, config: FollowUpConfig = .init()) -> Bool {
-        guard let sentAt else { return false }              // must have been sent first
-        guard outcome == .noResponse else { return false }  // auto-stop on reply/booked/lost
-        guard followUpCount < config.maxFollowUps else { return false } // stop after the max
+    // The pacing core (#418 D): eligible AND sent AND under the cap AND the gap has passed since the
+    // last touch. Eligibility differs by grain — see the two callers below.
+    static func isDue(eligible: Bool, sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
+                      now: Date, config: FollowUpConfig = .init()) -> Bool {
+        guard eligible, let sentAt else { return false }
+        guard followUpCount < config.maxFollowUps else { return false }
         let lastTouch = lastFollowUpAt ?? sentAt
         return now.timeIntervalSince(lastTouch) >= TimeInterval(config.gapDays) * 86_400
     }
 
+    // Lead-level (legacy / single-contact): eligible = outcome is still no-response (auto-stop on a
+    // reply/booking/loss). Delegates to the pacing core so there's one gap/cap implementation.
+    static func isDue(sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
+                      outcome: Outcome, now: Date, config: FollowUpConfig = .init()) -> Bool {
+        isDue(eligible: outcome == .noResponse, sentAt: sentAt, lastFollowUpAt: lastFollowUpAt,
+              followUpCount: followUpCount, now: now, config: config)
+    }
+
+    // Lead-level due filter (still used by the conversation/sequencer-standdown tests). The app's UI
+    // now uses dueRecipients (per-contact); this remains the lead-grain view of the same pacing.
     static func due(from prospects: [Prospect], now: Date, config: FollowUpConfig = .init()) -> [Prospect] {
         prospects.filter {
             isDue(sentAt: $0.sentAt, lastFollowUpAt: $0.lastFollowUpAt, followUpCount: $0.followUpCount,
                   outcome: $0.outcome, now: now, config: config)
         }
+    }
+
+    struct DueRecipient { let prospect: Prospect; let recipient: Recipient }
+
+    static func dueRecipients(from prospects: [Prospect], now: Date, config: FollowUpConfig = .init()) -> [DueRecipient] {
+        var due: [DueRecipient] = []
+        for p in prospects {
+            // A hand-resolved or booked show stops all its follow-ups (matches the lead-level auto-stop).
+            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
+            for r in p.recipients where isDue(eligible: r.isAwaitingFollowUp, sentAt: r.sentAt,
+                                              lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
+                                              now: now, config: config) {
+                due.append(DueRecipient(prospect: p, recipient: r))
+            }
+        }
+        return due
     }
 
     static func nudgeSubject(groupName: String) -> String {

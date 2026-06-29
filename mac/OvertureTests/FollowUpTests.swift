@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // #45: a gentle re-touch sequencer. Up to 2 nudges per lead, paced; auto-stops the moment
@@ -63,6 +64,54 @@ struct FollowUpTests {
 
     @Test func nudgeGreetsGenericallyWhenNoContactName() {
         #expect(FollowUp.nudgeBody(contactName: nil, groupName: "The Dessoff Choirs", venue: nil).contains("Hi there"))
+    }
+
+    // #418 D — per-contact eligibility: the pacing core gates on an `eligible` flag.
+    @Test func eligibleContactIsDueOnceTheGapPasses() {
+        #expect(FollowUp.isDue(eligible: true, sentAt: sent, lastFollowUpAt: nil, followUpCount: 0,
+                               now: sent.addingTimeInterval(7 * day)) == true)
+        #expect(FollowUp.isDue(eligible: false, sentAt: sent, lastFollowUpAt: nil, followUpCount: 0,
+                               now: sent.addingTimeInterval(7 * day)) == false)   // not eligible -> never due
+    }
+
+    @MainActor
+    @Test func dueRecipientsPicksOnlySilentUnresolvedContacts() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
+        p.sentAt = sent
+        ctx.insert(p)
+        let silent = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        silent.sendState = .sent; silent.sentAt = sent
+        let replied = Recipient(id: "b@p.example", email: "b@p.example", provenance: .presenter)
+        replied.sendState = .sent; replied.sentAt = sent; replied.replied = true
+        let closed = Recipient(id: "c@m.example", email: "c@m.example", provenance: .manual)
+        closed.sendState = .sent; closed.sentAt = sent; closed.markOutcomeManually(resolution: .declinedSoft)
+        p.setRecipients([silent, replied, closed])
+
+        let due = FollowUp.dueRecipients(from: [p], now: sent.addingTimeInterval(10 * day))
+        #expect(due.map(\.recipient.id) == ["a@act.example"])   // only the silent, un-resolved, gap-passed one
+    }
+
+    @MainActor
+    @Test func dueRecipientsExcludesABookedShow() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
+        p.sentAt = sent; p.outcome = .booked
+        ctx.insert(p)
+        let silent = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        silent.sendState = .sent; silent.sentAt = sent
+        p.setRecipients([silent])
+        #expect(FollowUp.dueRecipients(from: [p], now: sent.addingTimeInterval(10 * day)).isEmpty)
     }
 
     @Test func replySubjectPrefixesReExactlyOnceWithAFallback() {
