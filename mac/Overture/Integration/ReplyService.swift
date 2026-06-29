@@ -21,6 +21,7 @@ enum ReplyService {
             // lead-level guard on the MANUAL source only, so one contact's reply can't blind another.
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
             if p.outcome == .booked { continue }
+            var newReply = false
             for r in p.recipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 if r.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
@@ -39,7 +40,11 @@ enum ReplyService {
                     r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
                 }
                 count += 1
+                newReply = true
             }
+            // #430: a reply on this show auto-pauses its still-unsent contacts pending Dan's triage,
+            // so the drip/queue won't email them while he reads and responds to the reply.
+            if newReply { p.pausePendingForReply() }
         }
         return count
     }

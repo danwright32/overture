@@ -43,6 +43,7 @@ next-env.d.ts
 
 # Native macOS app build artifacts
 mac/build/
+mac/build-debug/
 mac/Overture.xcodeproj/xcuserdata/
 mac/Overture.xcodeproj/project.xcworkspace/xcuserdata/
 DerivedData/

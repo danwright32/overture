@@ -133,7 +133,9 @@ final class Recipient {
     // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
     // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
     // queue, the manual-send picker, and the "show fully sent?" rollup all read this one predicate.
-    var isSendablePending: Bool { sendState == .pending && (email?.isEmpty == false) }
+    // A contact auto-paused by a reply on the same show (#430) is held back until Dan triages, so it
+    // drops out of every send path that reads this predicate.
+    var isSendablePending: Bool { sendState == .pending && (email?.isEmpty == false) && !pausedByReply }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
