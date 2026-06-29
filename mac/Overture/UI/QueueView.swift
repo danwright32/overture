@@ -23,6 +23,10 @@ struct QueueView: View {
     @State private var pipeline: Pipeline = .toSend
     @State private var pendingConfirm: PendingConfirm?
     @State private var showReconnect = false
+    // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
+    // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
+    @State private var outboundSending: [String: Date] = [:]
+    @State private var replySending: [String: Date] = [:]
 
     // #236: a lead opened from an OmniFocus deep link. When it changes, the queue switches to the
     // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
@@ -415,6 +419,8 @@ struct QueueView: View {
             onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
             onRejectBooking: { rejectBooking(item) },
             gmailConnected: GmailAuthManager.shared.isConnected,
+            outboundSendSince: outboundSending[item.id],
+            replySendSince: { rid in replySending[rid] },
             reachOutLabel: reachOutLabel
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
@@ -488,9 +494,11 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
+        replySending[recipientId] = Date()   // #436: live "Sending reply…" until the await resolves
         Task {
             let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
             try? context.save()
+            replySending[recipientId] = nil
             if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
         }
     }
@@ -620,9 +628,11 @@ struct QueueView: View {
         let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
         // Await the send off the synchronous button action so the main thread is never
         // blocked waiting on the Gmail token work (the old blocking bridge deadlocked here).
+        outboundSending[naturalKey] = Date()   // #436: live "Sending…" until the await resolves
         Task {
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
             try? context.save()
+            outboundSending[naturalKey] = nil
             // If the send failed because the token was revoked/expired, sendOne cleared it;
             // surface a clear reconnect prompt rather than a silent per-row error (#50).
             if !sent && !GmailAuthManager.shared.isConnected {

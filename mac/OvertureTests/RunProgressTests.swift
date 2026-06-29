@@ -52,3 +52,40 @@ struct RunProgressSpinnerLabelTests {
         #expect(RunProgress.spinnerLabel("Prepping", since: nil, now: started) == "Prepping…")
     }
 }
+
+// #436: the one shared decision every long action routes through — given a start time, the current
+// instant, and the run's expected window, is the run idle, still working/alive, or past its timeout
+// (stalled → show an actionable failed state instead of an indefinite spinner). Pure so each surface
+// can render the same three-state story from a TimelineView tick.
+@Suite("Run progress liveness")
+struct RunProgressLivenessTests {
+    private let started = Date(timeIntervalSince1970: 1_000_000)
+    private let timeout: TimeInterval = 5 * 60
+
+    @Test func idleWithoutAStart() {
+        #expect(RunProgress.liveness(since: nil, now: started, timeout: timeout) == .idle)
+    }
+
+    @Test func runningBeforeTheTimeoutCarriesTheElapsedLabel() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(45),
+                                     timeout: timeout) == .running(elapsed: "0:45"))
+    }
+
+    @Test func stalledAtTheTimeoutBoundary() {
+        // At exactly the timeout the run is treated as stalled (>=), matching isReplyDraftStalled.
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(300),
+                                     timeout: timeout) == .stalled(elapsed: "5:00"))
+    }
+
+    @Test func stalledPastTheTimeoutStillReportsHowLong() {
+        // The stalled state keeps the elapsed counter so Dan sees how long it has been stuck.
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
+                                     timeout: timeout) == .stalled(elapsed: "7:05"))
+    }
+
+    @Test func clockSkewIsRunningNotStalled() {
+        // `now` before the start (clock change) clamps to 0:00 and must read as working, never stalled.
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(-30),
+                                     timeout: timeout) == .running(elapsed: "0:00"))
+    }
+}

@@ -49,7 +49,7 @@ enum ReplyClassifyService {
     // several recipients runs well past the old 3-minute ceiling, so a too-short stale window would let a
     // second run start and clobber the shared results file. The atomic marker lock below is the real
     // guard; this ceiling only frees a genuinely dead run.
-    static let markerStaleAfter: TimeInterval = 10 * 60
+    static let markerStaleAfter: TimeInterval = RunTimeouts.replyClassify
 
     static var defaultMarkerURL: URL {
         StoreLocation.handoffDirectory

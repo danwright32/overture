@@ -28,6 +28,9 @@ struct ProspectRowView: View {
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
     var gmailConnected: Bool = false
+    // #436: in-flight send timestamps so the row shows a live "Sending…" state (see DraftReviewView).
+    var outboundSendSince: Date? = nil
+    var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
     // #223: on the "Reached out" list, the plain-language next-reach-out time ("Reach out now",
     // "in 3 days"). nil on the to-send queue, where it does not apply.
     var reachOutLabel: String? = nil
@@ -86,7 +89,9 @@ struct ProspectRowView: View {
                     onSendReply: onSendReply,
                     onCopyReply: onCopyReply,
                     onEditReplyDraft: onEditReplyDraft,
-                    gmailConnected: gmailConnected
+                    gmailConnected: gmailConnected,
+                    outboundSendSince: outboundSendSince,
+                    replySendSince: replySendSince
                 )
                 .padding(.leading, 64 + OVSpacing.md)
             }

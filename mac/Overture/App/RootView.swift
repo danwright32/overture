@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var feedback = ActionFeedback()
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
+    @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
     @State private var warningMessage: String?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
@@ -79,7 +80,8 @@ struct RootView: View {
                         startPrep()
                     } label: {
                         if PrepQueueService.isRunning(now: Date()) {
-                            LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt)
+                            LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
+                                         timeout: RunTimeouts.prep)
                         } else {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
@@ -129,7 +131,8 @@ struct RootView: View {
                         if gmailConnected {
                             Label("Gmail connected", systemImage: "checkmark.circle.fill")
                         } else if isConnectingGmail {
-                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Connecting…") }
+                            LiveRunLabel(base: "Connecting", since: gmailConnectStartedAt,
+                                         timeout: RunTimeouts.gmailConnect)
                         } else {
                             Label("Connect Gmail", systemImage: "link")
                         }
@@ -143,7 +146,8 @@ struct RootView: View {
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                     } label: {
                         if isScanning {
-                            LiveRunLabel(base: "Scouting", since: scoutStartedAt)
+                            LiveRunLabel(base: "Scouting", since: scoutStartedAt,
+                                         timeout: RunTimeouts.scout)
                         } else {
                             Label("Run scout", systemImage: "binoculars")
                         }
@@ -333,7 +337,11 @@ struct RootView: View {
 
     private func connectGmail() {
         isConnectingGmail = true
+        gmailConnectStartedAt = Date()   // #436: drives the live elapsed counter + the "looks stuck" warning
         statusMessage = nil
+        // connect() self-aborts after a hard internal timeout (GmailAuthManager.timeoutTask, 120s) and
+        // throws, so the failure path below always resolves; the LiveRunLabel surfaces a "looks stuck"
+        // warning a bit earlier so Dan can check the browser sign-in window before it gives up.
         Task {
             do {
                 try await GmailAuthManager.shared.connect()
@@ -343,6 +351,7 @@ struct RootView: View {
                 errorMessage = error.localizedDescription
             }
             isConnectingGmail = false
+            gmailConnectStartedAt = nil
         }
     }
 

@@ -26,4 +26,25 @@ enum RunProgress {
         }
         return "\(base)…"
     }
+
+    // #436: the single three-state decision every long action routes through. Given the run's start,
+    // the current instant, and its expected window, report whether the run is idle, still working/alive
+    // (with the elapsed counter), or past its timeout and stalled (an actionable failed state, not an
+    // indefinite spinner). The boundary is `>=` so it matches Recipient.isReplyDraftStalled.
+    static func liveness(since start: Date?, now: Date, timeout: TimeInterval) -> RunLiveness {
+        guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
+        if now.timeIntervalSince(start) >= timeout {
+            return .stalled(elapsed: elapsed)
+        }
+        return .running(elapsed: elapsed)
+    }
+}
+
+// The three visibly-distinct states the saved UX principle requires of any non-instant action:
+// nothing in flight, working/still-alive, or stalled/failed. Carries the elapsed counter on both live
+// states so the stalled case still shows how long it has been stuck.
+enum RunLiveness: Equatable {
+    case idle
+    case running(elapsed: String)
+    case stalled(elapsed: String)
 }
