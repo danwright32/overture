@@ -72,4 +72,30 @@ struct DraftCheckTests {
         // so the new flag never fires for callers that don't opt in.
         #expect(!DraftCheck.findings(in: "Let me know the date.").contains { $0 == .asksForKnownFact })
     }
+
+    // #458: the #39 / Phase C concession rule, ported from prose in the runbook into code. A cold
+    // pitch must never offer a discount or free/complimentary work, and the rate must stay the
+    // canonical $250/hr + tax. Instruction-only enforcement is exactly what failed in #438/#456.
+    @Test func flagsConcessionLanguage() {
+        #expect(DraftCheck.findings(in: "I can offer a discount for this one.").contains { $0 == .concessionLanguage })
+        #expect(DraftCheck.findings(in: "Happy to do it for free.").contains { $0 == .concessionLanguage })
+        #expect(DraftCheck.findings(in: "I can throw in a complimentary print.").contains { $0 == .concessionLanguage })
+        #expect(DraftCheck.findings(in: "My pricing is flexible.").contains { $0 == .concessionLanguage })
+    }
+
+    @Test func doesNotFlagFeelFreeAsConcession() {
+        // "feel free" is natural warm phrasing, not an offer of free work.
+        #expect(!DraftCheck.findings(in: "Feel free to reach out with any questions.").contains { $0 == .concessionLanguage })
+    }
+
+    @Test func flagsANonCanonicalRate() {
+        #expect(DraftCheck.findings(in: "My rate is $200 an hour.").contains { $0 == .nonCanonicalRate })
+        #expect(DraftCheck.findings(in: "It would be $1,500 for the evening.").contains { $0 == .nonCanonicalRate })
+    }
+
+    @Test func doesNotFlagTheCanonicalRate() {
+        let good = "My rate is $250 an hour plus tax, with a one-hour minimum."
+        #expect(!DraftCheck.findings(in: good).contains { $0 == .nonCanonicalRate })
+        #expect(!DraftCheck.findings(in: good).contains { $0 == .concessionLanguage })
+    }
 }
