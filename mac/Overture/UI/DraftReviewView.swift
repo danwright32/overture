@@ -23,11 +23,14 @@ struct DraftReviewView: View {
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
+    var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     var gmailConnected: Bool = false
 
     @State private var editing = false
     @State private var draftSubject = ""
     @State private var draftBody = ""
+    @State private var editingReplyFor: String?    // recipient id whose reply draft is being edited (#423 E)
+    @State private var replyEditText = ""
     @State private var lostReason = ""
     @State private var lostReasonSeeded = false
 
@@ -260,7 +263,17 @@ struct DraftReviewView: View {
                 Text("AI read: \(QueueModel.replyIntentLabel(hint))")
                     .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
             }
-            if c.hasReplyDraft {
+            if editingReplyFor == c.id {
+                TextEditor(text: $replyEditText)
+                    .font(OVType.body).frame(minHeight: 90).padding(4)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
+                HStack(spacing: OVSpacing.xs) {
+                    Button("Save") { onEditReplyDraft(c.id, replyEditText); editingReplyFor = nil }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                    Button("Cancel") { editingReplyFor = nil }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+            } else if c.hasReplyDraft {
                 Text(c.replyDraftBody ?? "")
                     .font(OVType.body).foregroundStyle(OVColor.ink)
                     .fixedSize(horizontal: false, vertical: true)
@@ -275,6 +288,8 @@ struct DraftReviewView: View {
                     }
                     .buttonStyle(.plain).disabled(!gmailConnected)
                     .help(gmailConnected ? "Send this reply on the contact's thread" : "Connect Gmail first")
+                    Button("Edit") { replyEditText = c.replyDraftBody ?? ""; editingReplyFor = c.id }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                     Button("Copy") { onCopyReply(c.id) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                         .help("Copy the draft and mark it replied (paste it into Gmail yourself)")

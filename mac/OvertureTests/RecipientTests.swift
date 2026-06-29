@@ -131,6 +131,31 @@ struct RecipientTests {
         #expect(r.pausedByReply == true)
     }
 
+    // #423 E — editing one contact's AI reply draft persists to that contact and leaves others alone
+    // (the substance of QueueView.editReplyDraft: updateRecipient { replyDraftBody = ... } + save).
+    @MainActor
+    @Test func editingAReplyDraftPersistsAndIsolates() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let a = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act); a.replyDraftBody = "AI draft A"
+        let b = Recipient(id: "b@p.example", email: "b@p.example", provenance: .presenter); b.replyDraftBody = "AI draft B"
+        p.setRecipients([a, b])
+        try ctx.save()
+
+        p.updateRecipient(id: "a@act.example") { $0.replyDraftBody = "Dan's edit" }
+        try ctx.save()
+
+        let back = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(back?.recipients.first { $0.id == "a@act.example" }?.replyDraftBody == "Dan's edit")
+        #expect(back?.recipients.first { $0.id == "b@p.example" }?.replyDraftBody == "AI draft B")
+    }
+
     // #418 B2 — manual-judge marking stamps the manual source flag (so detection won't overwrite) and
     // maps the locked vocabulary onto resolution + bounced with no new enum.
     @Test func manualMarkingMapsTheLockedVocabularyAndStampsManualSource() {
