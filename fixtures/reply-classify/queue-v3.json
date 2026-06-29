@@ -1,0 +1,26 @@
+{
+  "version" : 3,
+  "generatedAt" : "2026-06-28T00:00:00.000Z",
+  "items" : [
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "groupName" : "Aurora Strings",
+      "venue" : "Carnegie Hall",
+      "replyText" : "Yes, we'd like to book.",
+      "recipientId" : "pres@presentingorg.example"
+    },
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "groupName" : "Aurora Strings",
+      "venue" : "Carnegie Hall",
+      "replyText" : "Thanks, but we already have a photographer.",
+      "recipientId" : "act@aurorastrings.example"
+    },
+    {
+      "naturalKey" : "lumen-dance|undated|none",
+      "groupName" : "Lumen Dance",
+      "replyText" : "Could you send your rate?",
+      "recipientId" : "info@lumendance.example"
+    }
+  ]
+}

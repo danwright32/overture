@@ -11,14 +11,15 @@ import SwiftData
 @Suite("Reply classify service")
 struct ReplyClassifyServiceTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // A show with one replied CONTACT carrying the reply/draft state the per-recipient queue reads (#420 C2).
     @discardableResult
-    private func lead(_ ctx: ModelContext, key: String, replyText: String? = "Yes, let's book.",
-                      source: OutcomeSource? = nil, state: ConversationState? = nil,
-                      replyAt: Date? = nil, setAt: Date? = nil) -> Prospect {
+    private func show(_ ctx: ModelContext, key: String, replied: Bool = true,
+                      replyText: String? = "Yes, let's book.", manual: Bool = false,
+                      draftBody: String? = nil, repliedAt: Date? = nil, draftRequestedAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "Carnegie Hall",
                          performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
@@ -26,11 +27,17 @@ struct ReplyClassifyServiceTests {
                          possibleMatchSource: nil, possibleMatchName: nil)
         p.outcome = .replied
         p.lastReplyText = replyText
-        p.lastReplyAt = replyAt
-        if let state { p.conversationState = state }
-        p.conversationStateSourceRaw = source?.rawValue
-        p.conversationStateSetAt = setAt
-        ctx.insert(p); try? ctx.save()
+        ctx.insert(p)
+        let r = Recipient(id: key + "@act.example", email: key + "@act.example", provenance: .act)
+        r.sendState = .sent
+        r.replied = replied
+        r.lastReplyText = replyText
+        r.repliedAt = repliedAt
+        r.replyDraftBody = draftBody
+        r.replyDraftRequestedAt = draftRequestedAt
+        if manual { r.outcomeSource = .manual }
+        p.addRecipient(r)
+        try? ctx.save()
         return p
     }
 
@@ -38,45 +45,46 @@ struct ReplyClassifyServiceTests {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
 
-    @Test func queuesARepliedLeadWithTextAndNoState() throws {
+    @Test func queuesARepliedContactWithTextAndNoDraft() throws {
         let ctx = ModelContext(try container())
-        lead(ctx, key: "k1", replyText: "Yes please")
+        show(ctx, key: "k1", replyText: "Yes please")
         let q = ReplyClassifyService.buildQueue(from: ctx, generatedAt: "x")
         #expect(q.items.map(\.naturalKey) == ["k1"])
         #expect(q.items.first?.replyText == "Yes please")
+        #expect(q.items.first?.recipientId == "k1@act.example")   // v3: discriminator populated
     }
 
-    @Test func skipsAHandSetState() throws {
+    @Test func skipsAHandMarkedContact() throws {
         let ctx = ModelContext(try container())
-        lead(ctx, key: "k2", source: .manual, state: .interested)
+        show(ctx, key: "k2", manual: true)
         #expect(ReplyClassifyService.buildQueue(from: ctx, generatedAt: "x").items.isEmpty)
     }
 
     @Test func skipsWhenThereIsNoReplyTextYet() throws {
         let ctx = ModelContext(try container())
-        lead(ctx, key: "k3", replyText: nil)
+        show(ctx, key: "k3", replyText: nil)
         #expect(ReplyClassifyService.buildQueue(from: ctx, generatedAt: "x").items.isEmpty)
     }
 
-    @Test func requeuesOnAFreshReplyAfterAStateWasSet() throws {
+    @Test func requeuesOnAFreshReplyAfterADraftWasMade() throws {
         let ctx = ModelContext(try container())
         let t = Date(timeIntervalSince1970: 1000)
-        lead(ctx, key: "k4", source: .auto, state: .interested,
-             replyAt: t.addingTimeInterval(100), setAt: t)   // reply AFTER the state was set
+        show(ctx, key: "k4", draftBody: "a prior draft",
+             repliedAt: t.addingTimeInterval(100), draftRequestedAt: t)   // reply AFTER the draft request
         #expect(ReplyClassifyService.buildQueue(from: ctx, generatedAt: "x").items.map(\.naturalKey) == ["k4"])
     }
 
-    @Test func doesNotRequeueWhenTheReplyPredatesTheState() throws {
+    @Test func doesNotRequeueWhenTheReplyPredatesTheDraft() throws {
         let ctx = ModelContext(try container())
         let t = Date(timeIntervalSince1970: 1000)
-        lead(ctx, key: "k5", source: .auto, state: .interested,
-             replyAt: t, setAt: t.addingTimeInterval(100))   // state set AFTER the reply
+        show(ctx, key: "k5", draftBody: "a prior draft",
+             repliedAt: t, draftRequestedAt: t.addingTimeInterval(100))   // draft requested AFTER the reply
         #expect(ReplyClassifyService.buildQueue(from: ctx, generatedAt: "x").items.isEmpty)
     }
 
     @Test func startWritesTheQueueLaunchesAndGuardsADoubleRun() throws {
         let ctx = ModelContext(try container())
-        lead(ctx, key: "k6", replyText: "Yes")
+        show(ctx, key: "k6", replyText: "Yes")
         let queueURL = tmp(); let markerURL = tmp()
         var launches = 0
 

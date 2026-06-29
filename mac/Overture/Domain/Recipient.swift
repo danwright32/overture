@@ -67,6 +67,14 @@ final class Recipient {
     // Reply-triage auto-pause (#418 A4): a reply on the show pauses this still-unsent recipient
     // pending Dan's triage. Its OWN flag, distinct from sendState .suppressed (the booking-freeze).
     var pausedByReply: Bool = false
+    // AI inbound-reply drafter outputs (#420 C0). `intentHint` is a NON-BINDING ReplyIntent hint shown
+    // beside the manual controls; it never auto-sets a RecipientResolution (#420 C4). `replyDraft*` is
+    // the drafted response Dan reviews; `replyDraftRequestedAt` stamps the request so the conversation
+    // view can show progress and a timeout can surface a dead run as needs-attention (#420 C6).
+    var replyDraftSubject: String?
+    var replyDraftBody: String?
+    var replyDraftRequestedAt: Date?
+    var intentHint: String?
 
     // The performance this recipient belongs to (inverse of Prospect.recipients).
     var prospect: Prospect?
