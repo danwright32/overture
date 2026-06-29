@@ -78,7 +78,9 @@ final class ReconcileScheduler {
         // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
         // reconcile names exactly what arrived this tick (each item reported once).
         let before = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let repliedBefore = Set(before.filter { $0.outcome == .replied }.map(\.naturalKey))
+        // Phase F: a new reply lives on a contact now (the A3 lead rollup is gone), so detect it via
+        // hasUnhandledReply; the legacy lead outcome is kept as a fallback for un-backfilled stores.
+        let repliedBefore = Set(before.filter { $0.hasUnhandledReply || $0.outcome == .replied }.map(\.naturalKey))
         let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
 
         reconcileBookings(now: now)
@@ -91,7 +93,7 @@ final class ReconcileScheduler {
         }
 
         let after = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let repliedAfter = after.filter { $0.outcome == .replied }.map { (key: $0.naturalKey, name: $0.groupName) }
+        let repliedAfter = after.filter { $0.hasUnhandledReply || $0.outcome == .replied }.map { (key: $0.naturalKey, name: $0.groupName) }
         let bookedAfter = after.filter { $0.outcome == .booked }.map { (key: $0.naturalKey, name: $0.groupName) }
         let newReplies = AwayAlert.newNames(before: repliedBefore, after: repliedAfter)
         let newBookings = AwayAlert.newNames(before: bookedBefore, after: bookedAfter)

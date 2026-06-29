@@ -10,7 +10,7 @@ import SwiftData
 @Suite("Outcome patterns")
 struct OutcomePatternsTests {
     private func container() throws -> ModelContainer {
-        try ModelContainer(for: Schema([Prospect.self]),
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
@@ -122,5 +122,19 @@ struct OutcomePatternsTests {
         let ranked = OutcomePatterns.rankedTallies(from: all, by: .production)
         #expect(ranked.map(\.name) == ["self", "band"])     // agency dropped (0 contacted), self first (booked)
         #expect(ranked.first?.tally.booked == 1)
+    }
+
+    @Test func aRepliedContactCountsAsRepliedInTheStats() throws {
+        // Phase F: with the A3 rollup gone, the replied tally derives from a contact replying, not the
+        // lead outcome (which stays noResponse).
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "R", production: "self", discipline: "choral", tier: "mid",
+                     status: .approved, outcome: .noResponse)
+        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
+        r.sendState = .sent
+        r.replied = true
+        p.setRecipients([r])
+        let samples = OutcomePatterns.samples(from: try ctx.fetch(FetchDescriptor<Prospect>()), by: .production)
+        #expect(samples.first?.outcome == .replied)
     }
 }
