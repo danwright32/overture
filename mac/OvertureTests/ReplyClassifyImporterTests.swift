@@ -91,14 +91,17 @@ struct ReplyClassifyImporterTests {
         #expect(ra?.resolution == nil && rp?.resolution == nil)   // hints are non-binding (decision f)
     }
 
-    // #459 — a fresh AI draft must reset Dan's "edited" mark on that contact, so the deterministic
-    // warnings reappear on text he hasn't touched (the flag means "the current draft is Dan's edit").
-    @Test func aFreshAIDraftClearsDansEditedFlag() throws {
+    // #462 — a fresh AI draft must NOT clobber a reply Dan hand-edited. His unsent text wins until he
+    // sends or dismisses it, mirroring the cold path (PrepImporter draftEditedByDan). The AI's intent
+    // read still refreshes (a non-binding hint, separate from his draft text). #459 stopped the warnings
+    // nagging his edit; this protects the text itself.
+    @Test func aFreshAIDraftDoesNotClobberDansEditedReply() throws {
         let ctx = ModelContext(try container())
         let p = lead(ctx, key: "show")
         let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
         act.sendState = .sent; act.replied = true
-        act.applyReplyDraftEdit("Dan's hand-edited reply.")   // edited; warnings suppressed
+        act.intentHint = "declined"
+        act.applyReplyDraftEdit("Dan's hand-edited reply.")   // edited; protected
         p.setRecipients([act])
         try ctx.save()
 
@@ -106,10 +109,36 @@ struct ReplyClassifyImporterTests {
             ReplyClassifyResult(naturalKey: "show", intent: "interested", recipientId: "act@a.example",
                                 draftSubject: "Re: A", draftBody: "A new AI draft."),
         ])
-        ReplyClassifyImporter.ingest(res, into: ctx)
+        let out = ReplyClassifyImporter.ingest(res, into: ctx)
 
         let ra = p.recipients.first { $0.id == "act@a.example" }
-        #expect(ra?.replyDraftBody == "A new AI draft.")
-        #expect(ra?.replyDraftEditedByDan == false)
+        #expect(ra?.replyDraftBody == "Dan's hand-edited reply.")   // his text survives
+        #expect(ra?.replyDraftEditedByDan == true)                  // flag stays set
+        #expect(ra?.intentHint == "interested")                     // hint still refreshes
+        #expect(out.skippedEdited == 1)
+    }
+
+    // #462 — the freeze guards on actual edited TEXT, not the marker alone: once Dan has sent his reply
+    // in Gmail (draft cleared, marker still set), a genuinely new reply must still get a fresh draft.
+    @Test func aClearedEditedDraftStillTakesAFreshDraft() throws {
+        let ctx = ModelContext(try container())
+        let p = lead(ctx, key: "show")
+        let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
+        act.sendState = .sent; act.replied = true
+        act.applyReplyDraftEdit("An earlier reply Dan sent.")
+        act.replyDraftBody = nil   // he sent it in Gmail; text gone, marker still set
+        p.setRecipients([act])
+        try ctx.save()
+
+        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
+            ReplyClassifyResult(naturalKey: "show", intent: "interested", recipientId: "act@a.example",
+                                draftSubject: "Re: A", draftBody: "A fresh draft for the new reply."),
+        ])
+        let out = ReplyClassifyImporter.ingest(res, into: ctx)
+
+        let ra = p.recipients.first { $0.id == "act@a.example" }
+        #expect(ra?.replyDraftBody == "A fresh draft for the new reply.")
+        #expect(ra?.replyDraftEditedByDan == false)   // stale marker reset; the fresh draft isn't protected
+        #expect(out.skippedEdited == 0)
     }
 }
