@@ -125,6 +125,11 @@ final class Recipient {
     // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
     var isSilent: Bool { sendState == .sent && !replied && !bounced }
 
+    // The contacts the follow-up sequencer may nudge (#418 D): silent AND not hand-resolved. A contact
+    // Dan marked Closed/Booked (resolution set) or otherwise judged by hand (outcomeSource == .manual)
+    // is still "silent" by the raw definition but must never be nudged again.
+    var isAwaitingFollowUp: Bool { isSilent && resolution == nil && outcomeSource != .manual }
+
     // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
     // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
     // queue, the manual-send picker, and the "show fully sent?" rollup all read this one predicate.

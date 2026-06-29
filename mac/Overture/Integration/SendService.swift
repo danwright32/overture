@@ -111,28 +111,29 @@ enum SendService {
     // timestamp) on success so the sequencer paces and caps it. Never resets sentAt or
     // the original outcome; one click = one nudge, never autonomous.
     @discardableResult
-    static func sendFollowUp(_ prospect: Prospect, now: Date, sender: MailSender,
+    static func sendFollowUp(_ recipient: Recipient, of prospect: Prospect, now: Date, sender: MailSender,
                              config: FollowUpConfig = .init()) async -> Bool {
-        guard let email = prospect.contactEmail, prospect.sentAt != nil,
-              prospect.outcome == .noResponse, prospect.followUpCount < config.maxFollowUps else { return false }
-        // Reply on the original conversation (#74): same threadId, In-Reply-To the first send's
-        // Message-ID, and a "Re:" subject. A reply to the nudge then lands on the thread the
-        // reply checker already watches, so that engagement isn't silently missed.
+        guard recipient.isAwaitingFollowUp, recipient.followUpCount < config.maxFollowUps,
+              let email = recipient.email, !email.isEmpty else { return false }
+        // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
+        // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
+        // thread reply detection already watches for this contact.
         let mail = OutgoingMail(
             to: email,
             subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
-            body: FollowUp.nudgeBody(contactName: prospect.contactName, groupName: prospect.groupName,
-                                     venue: prospect.venue, attempt: prospect.followUpCount + 1),
-            inReplyTo: prospect.gmailMessageId,
-            threadId: prospect.gmailThreadId)
+            body: FollowUp.nudgeBody(contactName: recipient.name, groupName: prospect.groupName,
+                                     venue: prospect.venue, attempt: recipient.followUpCount + 1),
+            inReplyTo: recipient.gmailMessageId,
+            threadId: recipient.gmailThreadId)
         do {
-            _ = try await sender.send(mail)
-            prospect.followUpCount += 1
-            prospect.lastFollowUpAt = now
-            prospect.sendError = nil
+            let receipt = try await sender.send(mail)
+            recipient.followUpCount += 1
+            recipient.lastFollowUpAt = now
+            if let m = receipt.messageID { recipient.gmailMessageId = m }   // thread the next reply off the nudge
+            recipient.sendError = nil
             return true
         } catch {
-            prospect.sendError = error.localizedDescription
+            recipient.sendError = error.localizedDescription
             return false
         }
     }
