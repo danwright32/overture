@@ -23,6 +23,7 @@ struct AgentInputs: Sendable {
     var sendErrors: Int      // approved sends that failed
     var followUpsDue: Int
     var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
+    var stuckSends: Int = 0   // #475/#476: claimed .sending, never resolved (outcome unknown)
 }
 
 enum AgentRoster {
@@ -46,6 +47,13 @@ enum AgentRoster {
     }
 
     private static func send(_ i: AgentInputs) -> AgentStatus {
+        // An interrupted send outranks even a confirmed failure (#475/#476): Dan doesn't yet know
+        // whether it actually went out, so it needs his eyes on Gmail, not just a retry.
+        if i.stuckSends > 0 {
+            let n = i.stuckSends
+            return AgentStatus(name: "Send", state: .error,
+                               detail: "\(n) send\(n == 1 ? "" : "s") unconfirmed: check Gmail")
+        }
         if i.sendErrors > 0 {
             return AgentStatus(name: "Send", state: .error, detail: "\(i.sendErrors) failed to send")
         }

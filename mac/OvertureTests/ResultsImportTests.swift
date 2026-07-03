@@ -155,6 +155,7 @@ struct ResultsImportTests {
         #expect(s(.pending).statusLabel == "Not sent yet")
         #expect(s(.pending, email: nil).statusLabel == "No email yet")
         #expect(s(.suppressed).statusLabel == "Paused (booked elsewhere)")
+        #expect(s(.sending).statusLabel == "Sending…")   // #475/#476: claimed, in flight
         #expect(s(replied: true).isAutoReplied == true)
         #expect(s(replied: true, source: .manual).isAutoReplied == false)   // Dan's mark, not an auto reply
         let noName = RecipientSnapshot(id: "x", name: nil, email: "e@e.example", role: nil, provenance: .act,

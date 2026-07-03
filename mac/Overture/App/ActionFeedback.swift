@@ -51,4 +51,10 @@ enum ActionAck {
     static func remindLater(org: String) -> String {
         "Snoozed \(org). I'll remind you later."
     }
+
+    // #477: the Gmail send can succeed while the local save of that fact fails; this must never
+    // look like nothing happened, so it always points Dan at Gmail to verify.
+    static func sendNotConfirmed(org: String) -> String {
+        "Couldn't save what happened sending to \(org): check Gmail to see if it went out."
+    }
 }

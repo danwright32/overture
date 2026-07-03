@@ -29,6 +29,30 @@ private struct AlwaysFailSender: MailSender {
 // was never reached when driving the real GmailSender through sendOne (#194).
 private final class Hit: @unchecked Sendable { var url: URL? }
 
+// Gated so a test can inspect state exactly while a send is suspended mid-flight (#475/#476):
+// ONLY the first call parks, on a continuation the test explicitly releases; any further call
+// (the exact case under test: a second attempt reaching the network while the first is still in
+// flight) returns immediately instead of also parking. That keeps a missing in-flight guard a
+// fast, clean assertion failure (callCount == 2) rather than a hung suite (a second parked call
+// with nothing left to release it).
+private final class GatedSender: MailSender, @unchecked Sendable {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var hasParked = false
+    private(set) var callCount = 0
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        callCount += 1
+        if !hasParked {
+            hasParked = true
+            await withCheckedContinuation { self.continuation = $0 }
+        }
+        return SentReceipt(threadId: "t-gated", messageID: "<gated@x.org>")
+    }
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 @MainActor
 @Suite("Send service")
 struct SendServiceTests {
@@ -311,6 +335,69 @@ struct SendServiceTests {
         let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
         #expect(p?.sentAt == nil)            // not marked sent
         #expect(p?.sendError != nil)         // failure recorded for retry
+    }
+
+    // MARK: - #475/#476 send-path claim (crash safety + concurrency guard)
+
+    @Test func deliverClaimsSendingAndPersistsItBeforeTheNetworkCallResolves() async throws {
+        let modelContainer = try container()
+        let ctx = ModelContext(modelContainer)
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
+                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+        let recipient = p.recipients.first!
+        let sender = GatedSender()
+
+        let task = Task { await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) }
+        while sender.callCount == 0 { await Task.yield() }
+
+        // Claimed in memory before the send resolves: not sent yet, not plain pending either.
+        #expect(recipient.sendState == .sending)
+        #expect(recipient.sendClaimedAt == Date(timeIntervalSince1970: 10))
+        // A SECOND, independent context on the same store proves it was actually persisted (not
+        // just mutated in memory) before the network call resolves: the crash-safety guarantee
+        // #475 needs: a relaunch right now would see .sending, never silently-still-pending.
+        let secondContext = ModelContext(modelContainer)
+        let persisted = try secondContext.fetch(FetchDescriptor<Recipient>()).first!
+        #expect(persisted.sendState == .sending)
+
+        sender.release()
+        #expect(await task.value == true)
+        #expect(recipient.sendState == .sent)
+        #expect(recipient.sendClaimedAt == nil)
+    }
+
+    @Test func aFailedSendRevertsTheRecipientToPendingNotStuckSending() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let recipient = a.recipients.first!
+
+        #expect(await SendService.sendOne(a, now: Date(), sender: AlwaysFailSender()) == false)
+
+        #expect(recipient.sendState == .pending)   // retryable, never stuck at .sending
+        #expect(recipient.sendClaimedAt == nil)
+        #expect(recipient.sendError != nil)
+    }
+
+    // The direct regression test for #476: while a send is in flight for a recipient, a second
+    // attempt on that SAME recipient (a fast double-click, or a drip-timer overlap) must be
+    // refused outright, never reaching the network a second time.
+    @Test func aSecondSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
+                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+        let sender = GatedSender()
+
+        let firstTask = Task { await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) }
+        while sender.callCount == 0 { await Task.yield() }   // the first call is now parked mid-send
+
+        let secondResult = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: sender)
+        #expect(secondResult == false)
+        #expect(sender.callCount == 1)   // the second attempt never reached the network at all
+
+        sender.release()
+        #expect(await firstTask.value == true)
+        #expect(p.recipients.first?.sendState == .sent)
     }
 
     @Test func firstSendStoresTheMessageIDForThreading() async throws {

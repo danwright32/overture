@@ -44,6 +44,21 @@ struct AgentRosterTests {
         #expect(status("Send", disconnected).detail.contains("connect Gmail"))
     }
 
+    // #475/#476: an interrupted send (crash, or a save that never landed) must outrank even a
+    // confirmed failure: Dan doesn't yet know whether it actually went out, so it needs his eyes
+    // on Gmail, not just a retry.
+    @Test func sendFlagsAStuckSendAheadOfAConfirmedFailure() {
+        var i = calm; i.stuckSends = 1
+        #expect(status("Send", i).state == .error)
+        #expect(status("Send", i).detail == "1 send unconfirmed: check Gmail")
+
+        i.stuckSends = 2
+        #expect(status("Send", i).detail == "2 sends unconfirmed: check Gmail")
+
+        i.sendErrors = 1   // a stuck send still wins even alongside a confirmed failure
+        #expect(status("Send", i).detail == "2 sends unconfirmed: check Gmail")
+    }
+
     @Test func followUpsNeedAttentionWhenDue() {
         var i = calm; i.followUpsDue = 4
         #expect(status("Follow-ups", i).state == .needsAttention)

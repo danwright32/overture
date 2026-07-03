@@ -9,8 +9,11 @@ enum RecipientProvenance: String, Codable, CaseIterable, Sendable {
 
 // A recipient's place in sending. Distinct from a performance's review status (ReviewStatus);
 // "suppressed" is an unsent send cancelled because the performance froze (any-yes rule).
+// "sending" is claimed synchronously right before the network call (#475/#476): it closes the
+// double-send race (a second call sees anything but .pending and backs off) and, persisted before
+// the await, survives a crash so an interrupted send is never silently re-queued as still-pending.
 enum SendState: String, Codable, CaseIterable, Sendable {
-    case pending, sent, suppressed
+    case pending, sending, sent, suppressed
 }
 
 // A recipient's terminal commercial outcome (#389 derived-outcome model). The active states
@@ -51,6 +54,9 @@ final class Recipient {
     var gmailThreadId: String?
     var gmailMessageId: String?
     var sendError: String?
+    // When the current .sending claim was made (#475/#476); cleared when it resolves to .sent or
+    // reverts to .pending. Only meaningful while sendState == .sending.
+    var sendClaimedAt: Date?
     var followUpCount: Int = 0
     var lastFollowUpAt: Date?
     var replied: Bool = false
@@ -192,6 +198,15 @@ final class Recipient {
     func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout) -> Bool {
         guard let requested = replyDraftRequestedAt, (replyDraftBody?.isEmpty != false) else { return false }
         return now.timeIntervalSince(requested) >= timeout
+    }
+
+    // True when a send was claimed and has run long enough to be considered stuck rather than a
+    // normal brief send (#475/#476): the app was interrupted (crash, or a save that never landed)
+    // between claiming the send and recording its outcome. Must be surfaced for Dan to check Gmail
+    // and resolve by hand: never auto-resent (still not .pending) and never auto-assumed sent.
+    func isSendStuck(now: Date, timeout: TimeInterval = RunTimeouts.send) -> Bool {
+        guard sendState == .sending, let claimed = sendClaimedAt else { return false }
+        return now.timeIntervalSince(claimed) >= timeout
     }
 
     // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
