@@ -2,9 +2,10 @@ import Foundation
 import SwiftData
 
 // Releases approved emails one at a time, respecting the throttle, via an injected
-// MailSender. The app calls releaseDueSends on a timer / on approve; each call sends
-// at most one email so a big approved batch drips out. Records sentAt + threadId on
-// success, or sendError on failure (surfaced for retry, never silently lost).
+// MailSender. releaseDueSends has no production caller yet (see #426, drip sender fate);
+// each call sends at most one email so a big approved batch would drip out once wired up.
+// Records sentAt + threadId on success, or sendError on failure (surfaced for retry, never
+// silently lost).
 
 @MainActor
 enum SendService {
@@ -71,12 +72,32 @@ enum SendService {
     private static func deliver(_ recipient: Recipient, of prospect: Prospect,
                                 now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, let body = prospect.draftBody else { return false }
+
+        // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
+        // MainActor this check-then-claim-then-persist is atomic with respect to any other call
+        // racing the same recipient: whichever call's synchronous prefix runs first flips the state,
+        // and any other call's guard sees anything but .pending and backs off immediately. Persisting
+        // the claim (not just mutating in memory) before the network call means a crash between here
+        // and the outcome leaves the recipient at .sending, surfaced for Dan to check Gmail and
+        // resolve by hand (Recipient.isSendStuck), never silently re-queued as still-pending.
+        guard recipient.sendState == .pending else { return false }
+        recipient.sendState = .sending
+        recipient.sendClaimedAt = now
+        guard (try? recipient.modelContext?.save()) != nil else {
+            // Couldn't even persist the claim: bail rather than race ahead uncertain whether a
+            // concurrent caller can see it.
+            recipient.sendState = .pending
+            recipient.sendClaimedAt = nil
+            return false
+        }
+
         let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
                                 body: Salutation.greeting(for: recipient.name) + "\n\n" + body)
         do {
             let receipt = try await sender.send(mail)
             recipient.sentAt = now
             recipient.sendState = .sent
+            recipient.sendClaimedAt = nil
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
             recipient.sendError = nil
@@ -100,6 +121,8 @@ enum SendService {
             }
             return true
         } catch {
+            recipient.sendState = .pending
+            recipient.sendClaimedAt = nil
             recipient.sendError = error.localizedDescription
             prospect.sendError = error.localizedDescription
             return false

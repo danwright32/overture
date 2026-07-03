@@ -378,6 +378,23 @@ struct RecipientTests {
         #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(3600)))  // no longer stalled
     }
 
+    // #475/#476: a send claims .sending before the network call; if the app never comes back to
+    // resolve it (crash, or a save that never landed), it must read as stuck after a timeout rather
+    // than sit invisibly forever or look like any other in-flight send.
+    @Test func aSendIsStuckOnlyAfterTheTimeoutWhileStillClaimed() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let claimed = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(!r.isSendStuck(now: claimed))   // never claimed
+
+        r.sendState = .sending
+        r.sendClaimedAt = claimed
+        #expect(!r.isSendStuck(now: claimed.addingTimeInterval(30)))   // still within the window
+        #expect(r.isSendStuck(now: claimed.addingTimeInterval(RunTimeouts.send)))   // stuck
+
+        r.sendState = .sent
+        #expect(!r.isSendStuck(now: claimed.addingTimeInterval(3600)))   // resolved, no longer stuck
+    }
+
     @Test func resolutionMapsThroughRawString() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.resolution == nil)

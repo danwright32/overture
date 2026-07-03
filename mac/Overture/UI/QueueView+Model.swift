@@ -151,6 +151,7 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
         case .sent: return "Awaiting reply"
         case .pending: return (email?.isEmpty == false) ? "Not sent yet" : "No email yet"
         case .suppressed: return "Paused (booked elsewhere)"
+        case .sending: return "Sending…"
         }
     }
 }

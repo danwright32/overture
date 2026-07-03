@@ -84,4 +84,12 @@ struct ActionAckTests {
         #expect(ActionAck.remindLater(org: "Aurora Strings")
                 == "Snoozed Aurora Strings. I'll remind you later.")
     }
+
+    // #477: a send (or reply send) can succeed at Gmail but fail to persist locally, which must
+    // never look like nothing happened.
+    @Test("a send-receipt save failure names the org and points at Gmail")
+    func sendNotConfirmed() {
+        #expect(ActionAck.sendNotConfirmed(org: "Aurora Strings")
+                == "Couldn't save what happened sending to Aurora Strings: check Gmail to see if it went out.")
+    }
 }

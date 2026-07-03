@@ -299,6 +299,9 @@ struct QueueView: View {
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: Date()).count,
             stalledReplyDrafts: prospects.reduce(0) { sum, p in
                 sum + p.recipients.filter { $0.isReplyDraftStalled(now: Date()) }.count
+            },
+            stuckSends: prospects.reduce(0) { sum, p in
+                sum + p.recipients.filter { $0.isSendStuck(now: Date()) }.count
             }
         )
     }
@@ -497,7 +500,13 @@ struct QueueView: View {
         replySending[recipientId] = Date()   // #436: live "Sending reply…" until the await resolves
         Task {
             let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                // #477: the reply may have sent while the local record of it did not; never let
+                // that look like nothing happened.
+                feedback.acknowledge(ActionAck.sendNotConfirmed(org: item.groupName), tone: .warning)
+            }
             replySending[recipientId] = nil
             if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
         }
@@ -631,7 +640,13 @@ struct QueueView: View {
         outboundSending[naturalKey] = Date()   // #436: live "Sending…" until the await resolves
         Task {
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                // #477: the email may have sent while the local record of it did not; never let
+                // that look like nothing happened.
+                feedback.acknowledge(ActionAck.sendNotConfirmed(org: model.groupName), tone: .warning)
+            }
             outboundSending[naturalKey] = nil
             // If the send failed because the token was revoked/expired, sendOne cleared it;
             // surface a clear reconnect prompt rather than a silent per-row error (#50).
