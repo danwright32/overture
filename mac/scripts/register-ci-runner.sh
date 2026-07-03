@@ -107,6 +107,7 @@ sed \
   -e "s|__CI_RUNNER_LOOP_SCRIPT__|${LOOP_SCRIPT}|g" \
   -e "s|__CI_RUNNER_LOG_DIR__|${LOG_DIR}|g" \
   -e "s|__CI_RUNNER_DIR__|${RUNNER_DIR}|g" \
+  -e "s|__CI_RUNNER_LABEL__|${RUNNER_LABEL}|g" \
   "${AGENT_SRC}" > "${AGENT_DEST}"
 
 launchctl bootstrap "${GUI_DOMAIN}" "${AGENT_DEST}" \

@@ -48,7 +48,7 @@
 		<key>OVERTURE_CI_RUNNER_DIR</key>
 		<string>__CI_RUNNER_DIR__</string>
 		<key>OVERTURE_CI_RUNNER_LABEL</key>
-		<string>overture-mac</string>
+		<string>__CI_RUNNER_LABEL__</string>
 	</dict>
 
 	<!-- Same rationale as com.danwright.overture: owner-only (0700) directory under the

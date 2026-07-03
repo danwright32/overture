@@ -31,6 +31,7 @@ RUN_PID=""
 stop() {
   log "received a stop signal, shutting down after the current job (if any)"
   [[ -n "${RUN_PID}" ]] && kill -TERM "${RUN_PID}" 2>/dev/null
+  [[ -n "${RUN_PID}" ]] && wait "${RUN_PID}" 2>/dev/null
   exit 0
 }
 trap stop TERM INT
