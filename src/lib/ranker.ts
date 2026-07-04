@@ -4,7 +4,14 @@
 
 export type Candidate = {
   reachable: boolean;
-  priorRelationship: "booked" | "contacted" | "none";
+  priorRelationship:
+    | "booked"
+    | "declined_by_you"
+    | "warm"
+    | "lost_soft"
+    | "contacted"
+    | "lost_hard"
+    | "none";
   production: "self" | "agency" | "unknown";
   profile: "strong" | "weak" | "neutral";
   coverage: "likely_uncovered" | "likely_covered" | "unknown";
@@ -32,12 +39,16 @@ export type FitResult = {
 // (a couple of positive signals) clears this; a flat-neutral or dead-zone one does not.
 const HIGH_TIER_THRESHOLD = 5;
 
-// Prior warm relationship is Dan's top weight. A prior booking is sized to
-// dominate every other signal combined, so a warm contact always outranks any
-// cold prospect. A prior cold contact is only a mild nudge.
+// Prior relationship is Dan's top weight, on the locked ladder (#70): a prior booking
+// is sized to dominate every other signal combined, so a warm contact always outranks
+// any cold prospect. A bare cold contact that got silence is neutral, not warm.
 const PRIOR_RELATIONSHIP_POINTS: Record<Candidate["priorRelationship"], number> = {
   booked: 20,
-  contacted: 3,
+  declined_by_you: 18,
+  warm: 10,
+  lost_soft: 3,
+  contacted: 0,
+  lost_hard: -20,
   none: 0,
 };
 

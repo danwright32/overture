@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { scoreFit, type Candidate } from "./ranker";
+
+type RankerFixtureCase = {
+  description: string;
+  candidate: Candidate;
+  expectedExcluded: boolean;
+  expectedScore: number;
+  expectedTier: "high" | "longshot";
+};
+
+const rankerCases: RankerFixtureCase[] = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("../../fixtures/ranker/cases.json", import.meta.url)),
+    "utf8",
+  ),
+);
 
 // A neutral baseline candidate. Each test overrides only the signal it exercises.
 function candidate(overrides: Partial<Candidate> = {}): Candidate {
@@ -37,12 +54,24 @@ describe("scoreFit prior relationship (top weight)", () => {
     expect(booked.score).toBeGreaterThan(none.score);
   });
 
-  it("ranks a previously cold-contacted group above none but below booked", () => {
+  it("treats a cold contact as neutral, not warm (#70): a bare send that got silence scores the same as a never contacted org", () => {
     const contacted = scoreFit(candidate({ priorRelationship: "contacted" }));
     const none = scoreFit(candidate({ priorRelationship: "none" }));
+    expect(contacted.score).toBe(none.score);
+  });
+
+  it("ranks declined_by_you, warm, and lost_soft on the locked ladder (#70): all below booked, contacted and lost_hard clearly separated at the bottom", () => {
     const booked = scoreFit(candidate({ priorRelationship: "booked" }));
-    expect(contacted.score).toBeGreaterThan(none.score);
-    expect(contacted.score).toBeLessThan(booked.score);
+    const declinedByYou = scoreFit(candidate({ priorRelationship: "declined_by_you" }));
+    const warm = scoreFit(candidate({ priorRelationship: "warm" }));
+    const lostSoft = scoreFit(candidate({ priorRelationship: "lost_soft" }));
+    const contacted = scoreFit(candidate({ priorRelationship: "contacted" }));
+    const lostHard = scoreFit(candidate({ priorRelationship: "lost_hard" }));
+    expect(booked.score).toBeGreaterThan(declinedByYou.score);
+    expect(declinedByYou.score).toBeGreaterThan(warm.score);
+    expect(warm.score).toBeGreaterThan(lostSoft.score);
+    expect(lostSoft.score).toBeGreaterThan(contacted.score);
+    expect(contacted.score).toBeGreaterThan(lostHard.score);
   });
 
   it("treats a prior booking as the dominant signal: a booked group outranks a cold group that is strong on every other signal", () => {
@@ -142,4 +171,21 @@ describe("scoreFit tier", () => {
   it("puts a flat neutral prospect in the longshot tier", () => {
     expect(scoreFit(candidate()).tier).toBe("longshot");
   });
+});
+
+// Shared cross-language scoring fixture (#490). Ranker.swift is a hand port of this file (the app
+// scouts natively; this engine is a reference mirror, see docs/scout-runbook.md), so the two pure
+// scoring functions need to agree even though neither reads the other's output at runtime. The
+// SAME cases decoded here are decoded by mac/OvertureTests/RankerTests.swift, so a one sided change
+// to either side's point table fails whichever suite did not make the matching change.
+describe("scoreFit shared ranker fixture", () => {
+  it.each(rankerCases.map((c) => [c.description, c] as const))(
+    "%s",
+    (_description, testCase) => {
+      const result = scoreFit(testCase.candidate);
+      expect(result.excluded).toBe(testCase.expectedExcluded);
+      expect(result.score).toBe(testCase.expectedScore);
+      expect(result.tier).toBe(testCase.expectedTier);
+    },
+  );
 });
