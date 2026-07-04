@@ -30,3 +30,13 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
 any cross-boundary file shape.
+
+## CI status before merging
+
+A pending check and a stuck one look identical in GitHub's PR view. Do not merge a PR on
+the strength of "the check hasn't failed yet"; the `swift-tests` check needs to have
+actually shown a pass, not just an absence of failure so far. Before merging, run
+`scripts/check-pr-ci.sh <pr-number>`. It reports every check's real state and, for
+`swift-tests` specifically, tells a check that is genuinely still working apart from one
+that is stalled because the self-hosted runner is unreachable or has stopped picking up
+jobs.
