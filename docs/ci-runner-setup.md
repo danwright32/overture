@@ -93,7 +93,9 @@ per-job logs should be forwarded to external storage for real fleets; at this re
 enough.
 
 Once Phase 3 lands, its job should target this runner with a label like
-`[self-hosted, macOS, overture-mac]` in the workflow's `runs-on`.
+`[self-hosted, macOS, overture-mac]` in the workflow's `runs-on`. Phase 3's test wrapper
+(`mac/scripts/run-tests-locked.sh`) also needs `flock` installed on this Mac
+(`brew install flock`; not present by default).
 
 ## Tearing it down
 

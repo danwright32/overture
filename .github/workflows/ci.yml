@@ -26,3 +26,13 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
+
+  swift-tests:
+    runs-on: [self-hosted, macOS, overture-mac]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: cd "${{ github.workspace }}/mac" && xcodegen generate
+
+      - run: ${{ github.workspace }}/mac/scripts/run-tests-locked.sh
