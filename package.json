@@ -11,7 +11,7 @@
     "import-history": "tsx scripts/import-history.ts"
   },
   "dependencies": {
-    "csv-parse": "^7.0.0"
+    "csv-parse": "^7.0.1"
   },
   "devDependencies": {
     "@types/node": "^20",
