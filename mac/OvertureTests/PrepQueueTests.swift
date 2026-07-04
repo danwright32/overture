@@ -110,6 +110,46 @@ struct PrepQueueTests {
         }
     }
 
+    // #480: the marker must be claimed atomically before launch, not written after, or two rapid
+    // presses can both pass the isRunning guard and both launch. The nested call inside `launch`
+    // simulates a second press landing while the first is still mid-flight, exactly the check-then-act
+    // window a plain post-launch marker write leaves open.
+    @Test func concurrentStartPrepCallsYieldExactlyOneLaunch() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Kept Choir", status: .queued)
+        let queueURL = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
+        let markerURL = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: queueURL); try? FileManager.default.removeItem(at: markerURL) }
+
+        var launches = 0
+        _ = try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL, launch: {
+            launches += 1
+            #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
+                try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
+                                               launch: { launches += 1 })
+            }
+        })
+
+        #expect(launches == 1)
+    }
+
+    // #480: mirrors ReplyClassifyService. If launch fails, the atomic lock must be released so a
+    // retry is not permanently blocked.
+    @Test func aFailedLaunchReleasesTheLock() throws {
+        struct LaunchFailed: Error {}
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Kept Choir", status: .queued)
+        let queueURL = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
+        let markerURL = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: queueURL); try? FileManager.default.removeItem(at: markerURL) }
+
+        #expect(throws: LaunchFailed.self) {
+            try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
+                                           launch: { throw LaunchFailed() })
+        }
+        #expect(FileManager.default.fileExists(atPath: markerURL.path) == false)   // lock released
+    }
+
     @Test func roundTripsThroughJSON() throws {
         let queue = PrepQueue(version: 1, generatedAt: "now", items: [
             PrepQueueItem(naturalKey: "k", groupName: "G", venue: "V", performanceDate: "2026-07-01",
