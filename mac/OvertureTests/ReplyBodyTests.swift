@@ -59,6 +59,21 @@ struct ReplyBodyTests {
         #expect(ReplyDetection.latestReplyBody(threadJSON: data, selfEmail: me) == "Confirmed, let's book.")
     }
 
+    // #482: array position 0 is chronologically newest here (internalDate "3000" beats "2000"),
+    // the opposite of the usual oldest-first shape, so picking by position would return the
+    // older text instead of the newer one.
+    @Test func picksTheNewestInboundMessageByInternalDateNotArrayPosition() {
+        let newer = b64url("Newest, by date.")
+        let older = b64url("Older, by date.")
+        let json = """
+        {"messages":[
+          {"internalDate":"3000","payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(newer)"}}},
+          {"internalDate":"2000","payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(older)"}}}
+        ]}
+        """
+        #expect(ReplyDetection.latestReplyBody(threadJSON: Data(json.utf8), selfEmail: me) == "Newest, by date.")
+    }
+
     @Test func skipsAutomatedSendersAndReturnsNilWhenNoRealReply() {
         let data = thread([(me, "text/plain", "Pitch."),
                            ("no-reply@org.example", "text/plain", "This is an automated response.")])

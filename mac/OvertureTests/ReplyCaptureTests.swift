@@ -65,6 +65,20 @@ struct ReplyCaptureTests {
         #expect(ReplyDetection.latestReplyId(threadJSON: json, selfEmail: me) == "m2")
     }
 
+    // #482: Gmail's array order for threads.get isn't guaranteed chronological. Here the
+    // chronologically newest message is array position 0, not the last, so a fix that just
+    // reverses the array must not be fooled into returning "older".
+    @Test func latestReplyIdUsesInternalDateNotArrayPosition() {
+        let json = Data(#"""
+        {"messages":[
+          {"id":"newest","internalDate":"3000","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}},
+          {"id":"self","internalDate":"1000","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},
+          {"id":"older","internalDate":"2000","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}
+        ]}
+        """#.utf8)
+        #expect(ReplyDetection.latestReplyId(threadJSON: json, selfEmail: me) == "newest")
+    }
+
     // #219: marking a reply "not real" reverts it and stops THAT reply re-detecting, but a genuinely
     // new reply on the thread still flags.
     @Test func dismissedReplyIsNotReDetectedButANewReplyIs() throws {

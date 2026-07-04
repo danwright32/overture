@@ -34,6 +34,25 @@ struct ReplyDetectionTests {
         #expect(ReplyDetection.hasReply(fromAddresses: ["no-reply@org.org", "Emma <emma@icchoir.org>"], selfEmail: me) == true)
     }
 
+    // #481: a token merely appearing inside a real local part (not as the whole address or a
+    // bounded prefix/suffix) must not be treated as automated.
+    @Test func aLocalPartThatMerelyContainsATokenIsNotAutomated() {
+        #expect(ReplyDetection.isAutomated("eleanoreply@gmail.com") == false)
+        #expect(ReplyDetection.isAutomated("bouncebackband@gmail.com") == false)
+        #expect(ReplyDetection.isAutomated("postmasterclass@school.com") == false)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["Eleanor <eleanoreply@gmail.com>"], selfEmail: me) == true)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["Bounce Back Band <bouncebackband@gmail.com>"], selfEmail: me) == true)
+    }
+
+    // #481: a token set off by a separator (a real automated address's usual shape) is still
+    // caught even though it's not the entire local part.
+    @Test func aTokenBoundedBySeparatorsIsStillAutomated() {
+        #expect(ReplyDetection.isAutomated("notifications-noreply@github.com") == true)
+        #expect(ReplyDetection.isAutomated("noreply-support@org.org") == true)
+        #expect(ReplyDetection.isAutomated("team.donotreply@org.org") == true)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["notifications-noreply@github.com"], selfEmail: me) == false)
+    }
+
     @Test func parsesFromHeadersOutOfAGmailThreadResponse() {
         let json = #"""
         {"messages":[
