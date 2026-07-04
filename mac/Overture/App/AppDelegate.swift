@@ -39,18 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // limit. Runs every launch (= every login for the resident agent); a no-op until a file is large.
         AgentLogLocation.capLogs()
         guard let container = AppDelegate.sharedContainer else { return }
-        // One-time, idempotent migration onto the recipients model (#391). Runs here on the
-        // window-independent launch path (not in a View's .task) so a windowless resident launch still
-        // migrates BEFORE the reconciler — and any later per-recipient send — can read the new model.
-        // Guarded by recipients.isEmpty, so it's a no-op on every launch after the first.
-        RecipientBackfill.run(in: container.mainContext)
-        // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
-        // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
-        // every contacted recipient carries its own thread.
-        RecipientBackfill.repairThreadDown(in: container.mainContext)
-        // Recover salutation-free bodies from legacy inline-greeting drafts (#393), so the app can
-        // render the greeting per recipient at send. Idempotent (a stripped body has nothing to strip).
-        DraftSalutationMigration.run(in: container.mainContext)
+        // Runs the one-time, idempotent recipients/thread/salutation backfills here on the
+        // window-independent launch path (not in a View's .task), so a windowless resident launch still
+        // migrates before the reconciler (and any later per-recipient send) can read the new model.
+        // #479: LaunchMigrations saves explicitly right after they run, so a short-lived launch can't
+        // lose the writes to autosave timing.
+        LaunchMigrations.run(in: container.mainContext)
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
         self.scheduler = scheduler
