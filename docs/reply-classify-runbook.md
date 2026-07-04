@@ -45,11 +45,22 @@ Dan confirms or corrects (#60), so a wrong read is recoverable, but aim for the 
 
 ## One-time setup
 
-Point the app at the runner script (so the app can launch it):
+If Overture is not installed yet, build and install the resident app first: `cd mac
+&& ./build-install.sh --launch` (builds Release, installs to `/Applications`, and
+starts it as a login agent).
+
+Point the app at the runner script (so the app can launch it). The defaults domain
+depends on which build reads it: the resident Release app reads
+`com.danwright.overture`; a Debug build launched from Xcode reads its own
+`com.danwright.overture.debug` domain and never sees the Release one. Set whichever
+domain matches the app you are actually running (both, if you switch between them):
 
 ```
 chmod +x mac/scripts/reply-classify-run.sh
+# Resident Release app (installed via build-install.sh):
 defaults write com.danwright.overture replyClassifyRunnerScriptPath "$(pwd)/mac/scripts/reply-classify-run.sh"
+# Debug build (run from Xcode):
+defaults write com.danwright.overture.debug replyClassifyRunnerScriptPath "$(pwd)/mac/scripts/reply-classify-run.sh"
 ```
 
 Until this is set, the app writes the work-list and the launch fails gracefully (no crash); the
@@ -93,3 +104,19 @@ Rules:
   `{naturalKey, recipientId, intent, draftSubject, draftBody}`) to the results file and nothing else.
 
 `fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape.
+
+## After classify: what the app does with the results (shipped)
+
+The drafted reply is not sent automatically. The app attaches `draftSubject` /
+`draftBody` to the replied recipient as a suggestion; Dan reads the actual reply in
+Gmail, reviews the AI draft in the app, edits it if needed, and sends it himself. The
+classified `intent` is the same kind of suggestion: it informs the state the app
+proposes, and Dan confirms or corrects it by hand. Neither the intent nor the draft
+changes anything on its own.
+
+Every show's overall status (New / Active / Booked / Closed) is derived, not
+hand-set: `PerformanceStatus.derive` (`mac/Overture/Domain/PerformanceStatus.swift`)
+rolls up all of a show's recipients' send and reply outcomes, with Booked taking
+precedence over Active, Active over Closed, and Closed over New. A reply classified
+here changes a recipient's resolution, which can move the derived status on its next
+read; this run never sets the status directly.

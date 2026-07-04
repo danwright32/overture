@@ -190,11 +190,22 @@ Reject or fix a draft body that:
 
 ## One-time setup
 
-Point the app at the runner script (so the "Prep kept" button can launch it):
+If Overture is not installed yet, build and install the resident app first: `cd mac
+&& ./build-install.sh --launch` (builds Release, installs to `/Applications`, and
+starts it as a login agent).
+
+Point the app at the runner script (so the "Prep kept" button can launch it). The
+defaults domain depends on which build reads it: the resident Release app reads
+`com.danwright.overture`; a Debug build launched from Xcode reads its own
+`com.danwright.overture.debug` domain and never sees the Release one. Set whichever
+domain matches the app you are actually running (both, if you switch between them):
 
 ```
 chmod +x mac/scripts/prep-run.sh
+# Resident Release app (installed via build-install.sh):
 defaults write com.danwright.overture prepRunnerScriptPath "$(pwd)/mac/scripts/prep-run.sh"
+# Debug build (run from Xcode):
+defaults write com.danwright.overture.debug prepRunnerScriptPath "$(pwd)/mac/scripts/prep-run.sh"
 ```
 
 Until this is set, the button writes the work-list and reports "couldn't find the
