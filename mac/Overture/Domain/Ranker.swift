@@ -4,10 +4,10 @@ import Foundation
 // scout scores exactly as the TypeScript tests specify). Pure, deterministic scoring
 // of an already-classified candidate. See PLAN.md section 4.
 
-enum Production: String, Sendable { case selfProduced = "self", agency, unknown }
-enum Profile: String, Sendable { case strong, neutral, weak }
-enum Coverage: String, Sendable { case likelyUncovered = "likely_uncovered", unknown, likelyCovered = "likely_covered" }
-enum PriorRelationship: String, Sendable {
+enum Production: String, Decodable, Sendable { case selfProduced = "self", agency, unknown }
+enum Profile: String, Decodable, Sendable { case strong, neutral, weak }
+enum Coverage: String, Decodable, Sendable { case likelyUncovered = "likely_uncovered", unknown, likelyCovered = "likely_covered" }
+enum PriorRelationship: String, Decodable, Sendable {
     case booked
     case declinedByYou = "declined_by_you"
     case warm
@@ -16,12 +16,12 @@ enum PriorRelationship: String, Sendable {
     case lostHard = "lost_hard"
     case none
 }
-enum Discipline: String, Sendable, CaseIterable {
+enum Discipline: String, Decodable, Sendable, CaseIterable {
     case dance, opera, theater, choral, music, band, comedy, other
 }
-enum Tier: String, Sendable { case high, longshot }
+enum Tier: String, Decodable, Sendable { case high, longshot }
 
-struct Candidate: Sendable {
+struct Candidate: Decodable, Sendable {
     var reachable: Bool
     var priorRelationship: PriorRelationship
     var production: Production

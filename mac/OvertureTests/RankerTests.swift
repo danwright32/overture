@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Overture
 
 private func candidate(
@@ -87,5 +88,39 @@ struct RankerTests {
         #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .music)).score == 4)
         #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .music)).tier == .longshot)
         #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .choral)).tier == .high)
+    }
+}
+
+// Shared cross-language scoring fixture (#490). Ranker.swift is a hand port of ranker.ts (the app
+// scouts natively; the TypeScript engine is a reference mirror, see docs/scout-runbook.md), so the
+// two pure scoring functions need to agree even though neither reads the other's output at
+// runtime. The SAME cases decoded here are decoded by src/lib/ranker.test.ts, so a one sided change
+// to either side's point table fails whichever suite did not make the matching change.
+@Suite("Ranker shared fixture")
+struct RankerFixtureTests {
+    private struct FixtureCase: Decodable {
+        let description: String
+        let candidate: Candidate
+        let expectedExcluded: Bool
+        let expectedScore: Int
+        let expectedTier: Tier
+    }
+
+    private func loadCases() throws -> [FixtureCase] {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests
+            .deletingLastPathComponent()   // mac
+            .deletingLastPathComponent()   // repo root
+        let data = try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/ranker/cases.json"))
+        return try JSONDecoder().decode([FixtureCase].self, from: data)
+    }
+
+    @Test func everyFixtureCaseMatchesTheSharedSpec() throws {
+        for testCase in try loadCases() {
+            let result = Ranker.scoreFit(testCase.candidate)
+            #expect(result.excluded == testCase.expectedExcluded, "\(testCase.description): excluded")
+            #expect(result.score == testCase.expectedScore, "\(testCase.description): score")
+            #expect(result.tier == testCase.expectedTier, "\(testCase.description): tier")
+        }
     }
 }
