@@ -7,9 +7,9 @@ set -euo pipefail
 #
 # Usage: scripts/merge-when-green.sh <pr-number> [max-wait-seconds]
 
-REPO="danwright32/overture"
-GH_IDENTITY="danwright32"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/ci-config.sh"
+
 POLL_INTERVAL_SECONDS=15
 DEFAULT_MAX_WAIT_SECONDS=900
 
@@ -22,10 +22,6 @@ usage() {
 PR_NUMBER="$1"
 [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || usage
 MAX_WAIT_SECONDS="${2:-${DEFAULT_MAX_WAIT_SECONDS}}"
-
-gh_as_danwright32() {
-  GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh "$@"
-}
 
 START="$(date -u +%s)"
 
