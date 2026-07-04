@@ -69,7 +69,7 @@ CHECK_RUNS="$(gh_as_danwright32 api "repos/${REPO}/commits/${SHA}/check-runs" \
 
 if [[ -z "${CHECK_RUNS}" ]]; then
   echo "No checks found yet for this commit."
-  exit 0
+  exit 1
 fi
 
 RUNNER_STATUS=""
@@ -80,7 +80,8 @@ fetch_runner_info() {
   RUNNER_CHECKED=1
   local line
   line="$(gh_as_danwright32 api "repos/${REPO}/actions/runners" \
-    --jq ".runners[] | select(.labels[].name == \"${SWIFT_RUNNER_LABEL}\") | [.status, .busy] | @tsv" | head -n1)"
+    --arg label "${SWIFT_RUNNER_LABEL}" \
+    --jq ".runners[] | select(.labels[].name == \$label) | [.status, .busy] | @tsv" | { head -n1 || true; })"
   if [[ -n "${line}" ]]; then
     IFS=$'\t' read -r RUNNER_STATUS RUNNER_BUSY <<< "${line}"
   fi
