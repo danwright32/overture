@@ -23,8 +23,9 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
 
 - Engine: `pnpm test`, `pnpm typecheck`. Scripts: `pnpm export` (write results handoff),
   `pnpm seed`, `pnpm import-history`.
-- Mac app: `cd mac && xcodegen generate`, then
-  `xcodebuild -scheme Overture -destination 'platform=macOS' test`.
+- Mac app: `cd mac && xcodegen generate`, then `./scripts/run-tests-locked.sh` (wraps
+  `xcodebuild -scheme Overture -destination 'platform=macOS' test` in a lock so it can't
+  collide with another test run on this Mac; use it instead of raw `xcodebuild test`).
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
