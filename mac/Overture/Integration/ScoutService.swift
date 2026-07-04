@@ -298,8 +298,9 @@ enum ScoutService {
         existing.ingestedAt = Date()
     }
 
-    // Local booking history the matcher reads (group name + status), produced from
-    // Downbeat/Supabase by scripts/export-history.ts. Absent file = no history yet.
+    // Local booking history the matcher reads (group name + status), produced by
+    // scripts/import-history.ts (pnpm import-history) from Dan's booking CSV.
+    // Absent file = no history yet.
     private static func loadLocalHistory() -> [HistoryRecord] {
         let url = appSupport("overture-history.json")
         guard let data = try? Data(contentsOf: url),
