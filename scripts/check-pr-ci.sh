@@ -11,8 +11,9 @@ set -euo pipefail
 #
 # Usage: scripts/check-pr-ci.sh <pr-number>
 
-REPO="danwright32/overture"
-GH_IDENTITY="danwright32"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/ci-config.sh"
+
 SWIFT_CHECK_NAME="swift-tests"
 SWIFT_RUNNER_LABEL="overture-mac"
 
@@ -32,10 +33,6 @@ PR_NUMBER="$1"
 [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || usage
 
 command -v gh >/dev/null || { echo "gh CLI not found; install it and run: gh auth login" >&2; exit 1; }
-
-gh_as_danwright32() {
-  GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh "$@"
-}
 
 format_duration() {
   local total=$1
