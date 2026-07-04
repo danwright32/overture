@@ -81,23 +81,36 @@ enum PrepQueueService {
         let queue = buildQueue(from: context, generatedAt: stamp)
         guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
 
-        let data = try PrepQueueBuilder.encode(queue)
-        try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: queueURL, options: .atomic)
+        // Take the lock ATOMICALLY (#480, mirrors ReplyClassifyService): clear any stale marker, then
+        // exclusive-create so two near-simultaneous starts can't both proceed and clobber the shared
+        // results file. If the exclusive create fails, a racer already holds the lock.
+        try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: markerURL)
+        do {
+            try Data().write(to: markerURL, options: .withoutOverwriting)
+        } catch {
+            throw PrepLaunchError.alreadyRunning
+        }
 
-        // Refresh the voice-learning handoff so the run drafts with Dan's latest edits (#241). Best
-        // effort: a feedback-write failure must never block the Prep run itself.
-        try? VoiceFeedbackService.export(from: context, generatedAt: stamp, url: voiceFeedbackURL)
+        do {
+            let data = try PrepQueueBuilder.encode(queue)
+            try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: queueURL, options: .atomic)
 
-        // Back up the voice-guidance file so Dan's notes can be restored if the run drops them (#251).
-        VoiceNotesProtector.backup(fileURL: VoiceGuidanceGuard.defaultURL,
-                                   backupURL: VoiceNotesProtector.defaultBackupURL)
+            // Refresh the voice-learning handoff so the run drafts with Dan's latest edits (#241). Best
+            // effort: a feedback-write failure must never block the Prep run itself.
+            try? VoiceFeedbackService.export(from: context, generatedAt: stamp, url: voiceFeedbackURL)
 
-        try launch()
-        // Mark in-flight immediately (the script also drops its own marker and clears
-        // it on exit); guards an instant second press before the script starts.
-        try? Data().write(to: markerURL)
-        UserDefaults.standard.set(now, forKey: lastRunKey)
+            // Back up the voice-guidance file so Dan's notes can be restored if the run drops them (#251).
+            VoiceNotesProtector.backup(fileURL: VoiceGuidanceGuard.defaultURL,
+                                       backupURL: VoiceNotesProtector.defaultBackupURL)
+
+            try launch()
+            UserDefaults.standard.set(now, forKey: lastRunKey)
+        } catch {
+            try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
+            throw error
+        }
         return queue.items.count
     }
 
