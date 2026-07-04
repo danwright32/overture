@@ -62,10 +62,10 @@ echo "PR #${PR_NUMBER} on ${REPO}, commit ${SHA:0:7}"
 echo
 
 # conclusion is last because it is null (empty after //) until a check completes, and
-# bash's `read` with a tab IFS collapses an empty middle field, shifting started_at into
-# conclusion's slot. An empty trailing field does not have that problem.
+# bash's `read` with a tab IFS collapses an empty middle field, shifting check_suite_id
+# into conclusion's slot. An empty trailing field does not have that problem.
 CHECK_RUNS="$(gh_as_danwright32 api "repos/${REPO}/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | [.name, .status, .started_at // "", .conclusion // ""] | @tsv')"
+  --jq '.check_runs[] | [.name, .status, .check_suite.id // "", .conclusion // ""] | @tsv')"
 
 if [[ -z "${CHECK_RUNS}" ]]; then
   echo "No checks found yet for this commit." >&2
@@ -87,10 +87,33 @@ fetch_runner_info() {
   fi
 }
 
+# A check run's own started_at is pickup time, populated only once a runner claims the
+# job; it stays null the whole time a job sits queued, which is exactly the stalled case
+# this script exists to catch. The job's created_at, one level down at
+# actions/runs/{run_id}/jobs, is the true queue time. check_suite.id on the check run row
+# is the correlation key back to the workflow run (workflow_runs[].check_suite_id), needed
+# because a same repo PR fires both a push and a pull_request run for the same commit, so
+# check_suite_id disambiguates which of the two the row actually belongs to.
+resolve_queue_created_at() {
+  local check_suite_id="$1"
+  local run_lookup run_id
+  run_lookup="$(CHECK_SUITE_ID="${check_suite_id}" GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh api "repos/${REPO}/actions/runs?head_sha=${SHA}" \
+    --jq '.workflow_runs[] | select(.check_suite_id == (env.CHECK_SUITE_ID | tonumber)) | .id')"
+  run_id="$(head -n1 <<< "${run_lookup}")"
+  if [[ -z "${run_id}" ]]; then
+    return
+  fi
+
+  local job_lookup
+  job_lookup="$(SWIFT_CHECK_NAME="${SWIFT_CHECK_NAME}" GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh api "repos/${REPO}/actions/runs/${run_id}/jobs" \
+    --jq '.jobs[] | select(.name == env.SWIFT_CHECK_NAME) | .created_at')"
+  head -n1 <<< "${job_lookup}"
+}
+
 NOW="$(date -u +%s)"
 EXIT_CODE=0
 
-while IFS=$'\t' read -r name status started_at conclusion; do
+while IFS=$'\t' read -r name status check_suite_id conclusion; do
   if [[ "${status}" == "completed" ]]; then
     case "${conclusion}" in
       success)
@@ -115,14 +138,20 @@ while IFS=$'\t' read -r name status started_at conclusion; do
     continue
   fi
 
-  if [[ -z "${started_at}" ]]; then
-    ELAPSED=0
-  else
-    ELAPSED=$(( NOW - $(to_epoch "${started_at}") ))
-    [[ ${ELAPSED} -lt 0 ]] && ELAPSED=0
-  fi
-  DURATION="$(format_duration "${ELAPSED}")"
   EXIT_CODE=1
+  PENDING_SINCE=""
+  if [[ -n "${check_suite_id}" ]]; then
+    PENDING_SINCE="$(resolve_queue_created_at "${check_suite_id}")"
+  fi
+
+  if [[ -z "${PENDING_SINCE}" ]]; then
+    echo "${name}: Stalled. Could not determine how long this has been queued."
+    continue
+  fi
+
+  ELAPSED=$(( NOW - $(to_epoch "${PENDING_SINCE}") ))
+  [[ ${ELAPSED} -lt 0 ]] && ELAPSED=0
+  DURATION="$(format_duration "${ELAPSED}")"
 
   if [[ ${ELAPSED} -lt ${STALL_THRESHOLD_SECONDS} ]]; then
     echo "${name}: Still working (pending ${DURATION})"
