@@ -32,6 +32,21 @@ the workflow's runbook is its spec.
 "Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
 Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
 
+## CI coverage
+
+Phases 1 and 3 of #478 run the TypeScript and Swift suites on every PR, but that only closes
+the core worry in #478 (a fixture-shape change merging green while silently breaking the
+other side) for a contract with an automated test on every side that is code. Of the 10
+contracts above, exactly 3 clear that bar: `downbeat-export.json`, `overture-history.json`,
+and `overture-results.json`. For those, CI now catches a side that has not caught up to a
+fixture change instead of letting it drift silently into production.
+
+The other 7 each have exactly one side that is a Claude Code workflow, not code, by design:
+the fixture plus its runbook is deliberately the whole spec for that half (see Per contract
+below). Running the existing suite for the code side in CI does not and cannot add coverage
+for a side that was never meant to have an automated test. Do not read Phases 1 and 3 as
+having closed the cross-language risk for anything beyond those 3 contracts.
+
 ## Per contract
 
 ### `downbeat-export.json`
