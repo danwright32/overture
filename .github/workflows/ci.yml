@@ -29,6 +29,7 @@ jobs:
 
   swift-tests:
     runs-on: [self-hosted, macOS, overture-mac]
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4

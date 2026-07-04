@@ -39,4 +39,6 @@ actually shown a pass, not just an absence of failure so far. Before merging, ru
 `scripts/check-pr-ci.sh <pr-number>`. It reports every check's real state and, for
 `swift-tests` specifically, tells a check that is genuinely still working apart from one
 that is stalled because the self-hosted runner is unreachable or has stopped picking up
-jobs.
+jobs. `scripts/merge-when-green.sh <pr-number>` wraps that same check in a poll loop and
+only merges once it reports a genuine pass; it stops without merging on a real failure, a
+stalled check, or its own timeout.
