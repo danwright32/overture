@@ -34,4 +34,34 @@ struct GmailCredentialsTests {
         #expect(client?.clientId == "cid")
         #expect(client?.clientSecret == "sec")
     }
+
+    // #486: the file must never be observable wider than 0600, not briefly wide-open before a
+    // separate narrowing step catches up.
+    @Test func saveTokensCreatesTheFileAtOwnerOnlyPermissions() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tok-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let tokens = StoredTokens(refreshToken: "r-1", accessToken: "a-1",
+                                  accessTokenExpiry: Date(timeIntervalSince1970: 5_000_000))
+        #expect(GmailCredentials.saveTokens(tokens, to: url) == true)
+
+        let permissions = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+        #expect(permissions?.intValue == 0o600)
+    }
+
+    // #484: a genuine write failure must be reported, not swallowed, so a caller that checks
+    // the return value can surface it instead of assuming success.
+    @Test func saveTokensReturnsFalseWhenTheDestinationDirectoryIsNotWritable() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+        let url = dir.appendingPathComponent("gmail-tokens.json")
+
+        let tokens = StoredTokens(refreshToken: "r-1", accessToken: "a-1", accessTokenExpiry: nil)
+        #expect(GmailCredentials.saveTokens(tokens, to: url) == false)
+    }
 }
