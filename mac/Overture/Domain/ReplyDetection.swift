@@ -21,7 +21,24 @@ enum ReplyDetection {
     ]
     static func isAutomated(_ email: String) -> Bool {
         let local = email.split(separator: "@").first.map(String.init) ?? email
-        return automatedLocalParts.contains { local.contains($0) }
+        return automatedLocalParts.contains { matchesToken(local, $0) }
+    }
+
+    // True when `local` is exactly `token`, or has it as a prefix or suffix set off by a
+    // separator (or the string's edge), rather than merely containing it as a substring, so a
+    // real address like "bouncebackband" or "eleanoreply" isn't caught while "noreply-support"
+    // or "notifications-noreply" still are.
+    private static func matchesToken(_ local: String, _ token: String) -> Bool {
+        guard local.count >= token.count else { return false }
+        if local.hasPrefix(token) {
+            let after = local.index(local.startIndex, offsetBy: token.count)
+            if after == local.endIndex || !(local[after].isLetter || local[after].isNumber) { return true }
+        }
+        if local.hasSuffix(token) {
+            let before = local.index(local.endIndex, offsetBy: -token.count - 1, limitedBy: local.startIndex)
+            if before == nil || !(local[before!].isLetter || local[before!].isNumber) { return true }
+        }
+        return false
     }
 
     // The bare email out of a From header ("Name <a@b.com>" or "a@b.com"), lowercased.
@@ -51,7 +68,7 @@ enum ReplyDetection {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
-        for m in messages.reversed() {
+        for m in newestFirst(messages) {
             guard let payload = m["payload"] as? [String: Any],
                   let headers = payload["headers"] as? [[String: Any]] else { continue }
             let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
@@ -70,7 +87,7 @@ enum ReplyDetection {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
-        for m in messages.reversed() {   // messages are oldest-first; walk back to the newest reply
+        for m in newestFirst(messages) {
             guard let payload = m["payload"] as? [String: Any],
                   let headers = payload["headers"] as? [[String: Any]] else { continue }
             let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
@@ -80,6 +97,24 @@ enum ReplyDetection {
             return String(text.prefix(maxLength))
         }
         return nil
+    }
+
+    // Newest-first by Gmail's internalDate (epoch ms), since threads.get's array order isn't
+    // guaranteed to be chronological. Ties, including messages with no internalDate at all, keep
+    // their original order reversed, the same newest-last shape a real thread's array normally has.
+    private static func newestFirst(_ messages: [[String: Any]]) -> [[String: Any]] {
+        messages.enumerated()
+            .sorted { a, b in
+                let (dateA, dateB) = (internalDateMillis(a.element), internalDateMillis(b.element))
+                return dateA != dateB ? dateA > dateB : a.offset > b.offset
+            }
+            .map(\.element)
+    }
+
+    private static func internalDateMillis(_ message: [String: Any]) -> Int64 {
+        if let raw = message["internalDate"] as? String, let value = Int64(raw) { return value }
+        if let raw = message["internalDate"] as? NSNumber { return raw.int64Value }
+        return 0
     }
 
     // Best text out of a message payload: prefer text/plain, fall back to stripped text/html.
