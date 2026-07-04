@@ -1,0 +1,156 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  assertUncertainEventsShape,
+  assertRefinedEventsShape,
+  assertPrepQueueShape,
+  assertPrepResultsShape,
+  assertReplyClassifyQueueShape,
+  assertReplyClassifyResultsShape,
+  assertVoiceFeedbackShape,
+  versionFromFilename,
+} from "./fixtureShape";
+
+// Shape-drift guard (#509) for the 7 contracts where one side is a Claude Code workflow with no
+// automated test (docs/contracts.md's "CI coverage" section): scout-refine, prep-queue,
+// prep-results, reply-classify, voice-feedback. This does not test behavior (the workflow side
+// isn't code); it only asserts every fixture actually committed under each directory still
+// matches its documented shape, so a format change on the workflow side that the fixture was
+// never updated for fails here instead of drifting silently (the #109 class of bug).
+
+const fixtureDir = (dir: string) => fileURLToPath(new URL(`../../fixtures/${dir}/`, import.meta.url));
+
+function readJson(dir: string, filename: string): unknown {
+  return JSON.parse(readFileSync(`${fixtureDir(dir)}${filename}`, "utf8"));
+}
+
+function jsonFilenames(dir: string): string[] {
+  return readdirSync(fixtureDir(dir)).filter((f) => f.endsWith(".json"));
+}
+
+describe("scout-refine fixture shapes", () => {
+  const files = jsonFilenames("scout-refine");
+
+  it("covers exactly the known scout-refine files (catches an unrecognized fixture silently added)", () => {
+    expect(files.sort()).toEqual(["refined.json", "uncertain.json"]);
+  });
+
+  it("uncertain.json matches the UncertainEvent[] shape", () => {
+    expect(() => assertUncertainEventsShape(readJson("scout-refine", "uncertain.json"), "uncertain.json")).not.toThrow();
+  });
+
+  it("refined.json matches the EventRefinement[] shape", () => {
+    expect(() => assertRefinedEventsShape(readJson("scout-refine", "refined.json"), "refined.json")).not.toThrow();
+  });
+});
+
+describe("prep-queue fixture shapes", () => {
+  const files = jsonFilenames("prep-queue");
+
+  it("covers exactly the known prep-queue files", () => {
+    expect(files.sort()).toEqual(["v1.json"]);
+  });
+
+  for (const file of files) {
+    it(`${file} matches the prep-queue shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertPrepQueueShape(readJson("prep-queue", file), file, version)).not.toThrow();
+    });
+  }
+});
+
+describe("prep-results fixture shapes", () => {
+  const files = jsonFilenames("prep-results");
+
+  it("covers exactly the known prep-results files", () => {
+    expect(files.sort()).toEqual(["v1.json", "v2.json"]);
+  });
+
+  for (const file of files) {
+    it(`${file} matches the prep-results shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertPrepResultsShape(readJson("prep-results", file), file, version)).not.toThrow();
+    });
+  }
+
+  it("rejects a v1 file that already carries the v2 contacts[] replacement field", () => {
+    const mutated = readJson("prep-results", "v1.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[0].contacts = [];
+    expect(() => assertPrepResultsShape(mutated, "v1.json", 1)).toThrow(/contacts.*must not be present/);
+  });
+
+  it("rejects a v2 file that regressed to the replaced singular contact field", () => {
+    const mutated = readJson("prep-results", "v2.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[0].contact = { method: "generic_inbox", confidence: "low" };
+    expect(() => assertPrepResultsShape(mutated, "v2.json", 2)).toThrow(/contact.*replaced by contacts/);
+  });
+});
+
+describe("reply-classify fixture shapes", () => {
+  const files = jsonFilenames("reply-classify");
+
+  it("covers exactly the known reply-classify files", () => {
+    expect(files.sort()).toEqual([
+      "queue-v2.json",
+      "queue-v3.json",
+      "queue.json",
+      "results-v2.json",
+      "results-v3.json",
+      "results.json",
+    ]);
+  });
+
+  for (const file of files.filter((f) => f.startsWith("queue"))) {
+    it(`${file} matches the reply-classify queue shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertReplyClassifyQueueShape(readJson("reply-classify", file), file, version)).not.toThrow();
+    });
+  }
+
+  for (const file of files.filter((f) => f.startsWith("results"))) {
+    it(`${file} matches the reply-classify results shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertReplyClassifyResultsShape(readJson("reply-classify", file), file, version)).not.toThrow();
+    });
+  }
+
+  it("rejects a results file whose intent is not one of the documented ReplyIntent values", () => {
+    const mutated = readJson("reply-classify", "results.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[0].intent = "maybe_interested";
+    expect(() => assertReplyClassifyResultsShape(mutated, "results.json", 1)).toThrow(/intent must be one of/);
+  });
+});
+
+describe("voice-feedback fixture shapes", () => {
+  const files = jsonFilenames("voice-feedback");
+
+  it("covers exactly the known voice-feedback files", () => {
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json"]);
+  });
+
+  for (const file of files) {
+    it(`${file} matches the voice-feedback shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertVoiceFeedbackShape(readJson("voice-feedback", file), file, version)).not.toThrow();
+    });
+  }
+
+  it("rejects a pair missing a required field (proves the check actually catches drift)", () => {
+    const mutated = readJson("voice-feedback", "v1.json") as { pairs: Array<Record<string, unknown>> };
+    delete mutated.pairs[0].sentBody;
+    expect(() => assertVoiceFeedbackShape(mutated, "v1.json", 1)).toThrow(/sentBody must be a non-empty string/);
+  });
+
+  it("rejects a kind value outside the documented reply/absent set", () => {
+    const mutated = readJson("voice-feedback", "v3.json") as { pairs: Array<Record<string, unknown>> };
+    mutated.pairs[0].kind = "forwarded";
+    expect(() => assertVoiceFeedbackShape(mutated, "v3.json", 3)).toThrow(/kind must be one of/);
+  });
+
+  it("rejects a version field that does not match what the filename encodes", () => {
+    const mutated = readJson("voice-feedback", "v2.json") as Record<string, unknown>;
+    mutated.version = 1;
+    expect(() => assertVoiceFeedbackShape(mutated, "v2.json", 2)).toThrow(/does not match filename version/);
+  });
+});
