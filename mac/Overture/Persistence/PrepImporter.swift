@@ -66,22 +66,34 @@ enum PrepImporter {
     // or form URL) first; failing that, match an existing still-pending recipient of the SAME
     // non-manual provenance, so a re-run that CORRECTS an act/presenter email updates that recipient
     // in place rather than duplicating it. A genuinely new provenance is appended as pending. An
-    // already-sent recipient is never rewritten (its address is locked). The primary act contact is
+    // already-sent recipient is never rewritten (its address is locked): a "corrected" contact for it
+    // is dropped rather than appended as a duplicate (#408, audit SUP-017). The primary act contact is
     // mirrored into the legacy singular fields for the current UI, removed in the Phase 8 cleanup.
     @MainActor
     private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect) {
+        // A batch that (unexpectedly) carries more than one contact of the same provenance cannot be
+        // matched to an existing recipient by provenance alone: the pending/sent fallbacks below would
+        // let a later contact in the batch grab and overwrite an earlier one's row (#408). When a
+        // provenance is ambiguous within this batch, every contact of it is always appended fresh.
+        let provenanceCounts = Dictionary(grouping: contacts) { $0.provenance ?? "" }.mapValues(\.count)
+
         for c in contacts {
             guard let id = Recipient.makeId(email: c.email, formURL: c.formUrl) else { continue }
             let provenance = RecipientProvenance(rawValue: c.provenance ?? "") ?? .act
             let email = (c.email?.isEmpty == false) ? c.email : nil
+            let provenanceIsUnambiguous = (provenanceCounts[c.provenance ?? ""] ?? 0) <= 1
 
             if let existing = p.recipients.first(where: { $0.id == id }) {
                 apply(c, email: email, provenance: provenance, to: existing)
-            } else if let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
+            } else if provenanceIsUnambiguous,
+                      let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
                 // A corrected email for an existing pending act/presenter (or a form-only recipient
                 // that just gained an email, matched by its form URL #408) updates the row in place.
                 existing.id = id
                 apply(c, email: email, provenance: provenance, to: existing)
+            } else if provenanceIsUnambiguous,
+                      alreadySent(in: p, provenance: provenance) {
+                continue
             } else {
                 p.addRecipient(Recipient(id: id, email: email, name: c.name, role: c.role,
                                          provenance: provenance, contactMethodRaw: c.method,
@@ -114,6 +126,15 @@ enum PrepImporter {
             return pending.first { $0.contactFormURL == formURL }
         }
         return pending.first
+    }
+
+    // True when a non-manual recipient of this provenance has already sent (#408, audit SUP-017): its
+    // address is locked, so a "corrected" contact of the same provenance found by a later run must be
+    // dropped rather than appended as a second recipient.
+    private static func alreadySent(in p: Prospect, provenance: RecipientProvenance) -> Bool {
+        p.recipients.contains {
+            $0.provenance == provenance && $0.provenance != .manual && $0.sendState == .sent
+        }
     }
 
     // Refresh a recipient row's contact fields from a found contact, preserving its send/engagement

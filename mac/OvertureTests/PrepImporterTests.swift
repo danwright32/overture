@@ -215,6 +215,58 @@ struct PrepImporterTests {
         #expect(p?.recipients.first?.email == "new@act.example")
     }
 
+    // #408: a batch that (unexpectedly) carries two contacts of the same provenance must not let the
+    // second one grab and overwrite the first's freshly created recipient through the pending-match
+    // fallback, which otherwise cannot tell the two apart and silently collapses them into one row.
+    @Test func twoSameProvenanceContactsInOneBatchDoNotMergeIntoOneRecipient() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: "Manager", email: "emma@act.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "act"),
+                PrepContact(name: "Understudy", role: "Manager", email: "understudy@act.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "act"),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 2)
+        let emails = Set(p?.recipients.compactMap(\.email) ?? [])
+        #expect(emails == ["emma@act.example", "understudy@act.example"])
+    }
+
+    // SUP-017: an already-sent recipient's address is locked (existing rule); a later Prep run that
+    // finds a "corrected" email for the same provenance must not append a second recipient either,
+    // since id match and pending match both miss a sent row and would otherwise fall through to create.
+    @Test func aCorrectedEmailForAnAlreadySentActNeverCreatesADuplicate() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: nil, email: "old@act.example", method: nil,
+                            confidence: nil, formUrl: nil, provenance: "act"),
+            ])
+        ]), into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        p?.recipients.first?.sendState = .sent
+        try ctx.save()
+
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: nil, email: "new@act.example", method: nil,
+                            confidence: nil, formUrl: nil, provenance: "act"),
+            ])
+        ]), into: ctx)
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(after?.recipients.count == 1)
+        #expect(after?.recipients.first?.email == "old@act.example")
+        #expect(after?.recipients.first?.sendState == .sent)
+    }
+
     @Test func recipientsEditedByDanFreezeIsNotClobberedByAReRun() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
