@@ -9,12 +9,34 @@ import Foundation
 // DownbeatExportContractTests.
 @Suite("Scout results contract fixtures")
 struct ResultsContractTests {
-    private func fixture(_ name: String) throws -> Data {
-        let repoRoot = URL(fileURLWithPath: #filePath)
+    private func fixtureDirectory() -> URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // OvertureTests
             .deletingLastPathComponent()   // mac
             .deletingLastPathComponent()   // repo root
-        return try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/scout-results/\(name)"))
+            .appendingPathComponent("fixtures/scout-results")
+    }
+
+    private func fixture(_ name: String) throws -> Data {
+        try Data(contentsOf: fixtureDirectory().appendingPathComponent(name))
+    }
+
+    private func fixtureFileNames() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: fixtureDirectory().path)
+            .filter { $0.hasSuffix(".json") }
+    }
+
+    // #491: enumerates whatever is actually committed, so a new fixture file with no matching
+    // decode case fails here instead of silently shipping with zero coverage on this side.
+    @Test func decodesEveryCommittedFixtureWithoutThrowing() throws {
+        let names = try fixtureFileNames()
+        #expect(!names.isEmpty)
+        for name in names {
+            let data = try fixture(name)
+            #expect(throws: Never.self) {
+                try ResultsFileDecoder.decode(data)
+            }
+        }
     }
 
     @Test func decodesTheV2FixtureToTheAgreedLogicalShape() throws {

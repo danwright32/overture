@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildResultsFile } from "./resultsContract";
 import type { ProspectRow } from "./assembleProspect";
@@ -8,11 +8,11 @@ import type { ProspectRow } from "./assembleProspect";
 // committed JSON the Swift reader decodes (mac/OvertureTests/ResultsContractTests.swift) is the
 // EXACT output buildResultsFile produces here, so a format change on the writer side fails this
 // test (or the Swift one) instead of silently breaking ingestion in production (the #109 trap).
-const fixture = (name: string) =>
-  readFileSync(
-    fileURLToPath(new URL(`../../fixtures/scout-results/${name}`, import.meta.url)),
-    "utf8",
-  );
+const FIXTURE_DIR = new URL("../../fixtures/scout-results/", import.meta.url);
+const fixture = (name: string) => readFileSync(new URL(name, FIXTURE_DIR), "utf8");
+const fixtureFiles = readdirSync(fileURLToPath(FIXTURE_DIR)).filter((name) =>
+  name.endsWith(".json"),
+);
 
 // The generatedAt the v2 fixture was baked with; passed in so the writer stays deterministic.
 const GENERATED_AT = "2026-06-25T00:00:00.000Z";
@@ -101,6 +101,22 @@ const SAMPLE_ROWS: ProspectRow[] = [
 ];
 
 describe("Scout results contract fixtures", () => {
+  // #491: this side only ever writes the current version, so there is no TS decoder to run
+  // against older fixtures (the Swift reader owns decoding, including the tolerant version
+  // gate). Enumerating the directory still catches a malformed or incomplete committed file,
+  // so a new fixture with no matching coverage on this side does not ship unnoticed.
+  it("has at least one committed fixture file", () => {
+    expect(fixtureFiles.length).toBeGreaterThan(0);
+  });
+
+  it.each(fixtureFiles)("has the documented top-level shape in %s", (name) => {
+    const parsed: unknown = JSON.parse(fixture(name));
+    expect(typeof parsed).toBe("object");
+    const file = parsed as { version?: unknown; prospects?: unknown };
+    expect(typeof file.version).toBe("number");
+    expect(Array.isArray(file.prospects)).toBe(true);
+  });
+
   it("writes exactly the committed v2 fixture from the sample rows", () => {
     const out = buildResultsFile(SAMPLE_ROWS, GENERATED_AT);
     expect(out).toEqual(JSON.parse(fixture("v2.json")));
