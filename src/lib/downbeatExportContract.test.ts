@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseDownbeatExport } from "./downbeatBridge";
 
@@ -7,13 +7,23 @@ import { parseDownbeatExport } from "./downbeatBridge";
 // here and by mac/OvertureTests/DownbeatExportContractTests.swift, and both assert the same
 // logical result. When the Downbeat export format changes, a reader that hasn't caught up
 // fails its test instead of silently treating clients as cold in production (the #109 trap).
-const fixture = (name: string) =>
-  readFileSync(
-    fileURLToPath(new URL(`../../fixtures/downbeat-export/${name}`, import.meta.url)),
-    "utf8",
-  );
+const FIXTURE_DIR = new URL("../../fixtures/downbeat-export/", import.meta.url);
+const fixture = (name: string) => readFileSync(new URL(name, FIXTURE_DIR), "utf8");
+const fixtureFiles = readdirSync(fileURLToPath(FIXTURE_DIR)).filter((name) =>
+  name.endsWith(".json"),
+);
 
 describe("Downbeat export contract fixtures", () => {
+  // #491: enumerates whatever is actually committed, so a new fixture file with no matching
+  // decode case fails here instead of silently shipping with zero coverage on this side.
+  it("has at least one committed fixture file", () => {
+    expect(fixtureFiles.length).toBeGreaterThan(0);
+  });
+
+  it.each(fixtureFiles)("decodes %s without throwing", (name) => {
+    expect(() => parseDownbeatExport(fixture(name))).not.toThrow();
+  });
+
   it("decodes the v2 fixture to the agreed logical shape", () => {
     const out = parseDownbeatExport(fixture("v2.json"));
     expect(out.clients).toHaveLength(2);
