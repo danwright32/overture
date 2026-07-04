@@ -47,6 +47,13 @@ below). Running the existing suite for the code side in CI does not and cannot a
 for a side that was never meant to have an automated test. Do not read Phases 1 and 3 as
 having closed the cross-language risk for anything beyond those 3 contracts.
 
+`src/lib/fixtureShape.test.ts` (#509) adds a lightweight structural check for those other 7: it
+decodes every version file committed under each fixture directory and asserts it still matches
+its documented shape above (required fields, and which fields are additive vs. a hard replacement
+between versions). This is not behavioral coverage, since the workflow side is not code to run,
+but it does fail CI the moment a fixture stops matching its own spec, rather than only when
+someone notices in production.
+
 ## Per contract
 
 ### `downbeat-export.json`
