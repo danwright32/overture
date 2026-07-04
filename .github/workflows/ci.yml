@@ -35,4 +35,4 @@ jobs:
 
       - run: cd "${{ github.workspace }}/mac" && xcodegen generate
 
-      - run: ${{ github.workspace }}/mac/scripts/run-tests-locked.sh
+      - run: "${{ github.workspace }}/mac/scripts/run-tests-locked.sh"
