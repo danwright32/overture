@@ -13,6 +13,14 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug subfolder).
 # Fall back to the live path for a hand-run from a terminal.
 SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
+
+# Open the run log before any guard below can exit: the launching Process() redirects this whole
+# invocation's stdout/stderr to /dev/null, so until now an early guard failure (no work-list, no
+# claude CLI) left zero trace anywhere, identical to "ran and found nothing" (#485).
+mkdir -p "$SUPPORT"
+LOG="$SUPPORT/reply-classify-run.log"
+exec >> "$LOG" 2>&1
+
 QUEUE="$SUPPORT/overture-reply-classify-queue.json"
 RESULTS="$SUPPORT/overture-reply-classify-results.json"
 RUNBOOK="$PROJECT_DIR/docs/reply-classify-runbook.md"
@@ -53,7 +61,6 @@ done
 # Headless Claude Code run; reading the reply text and writing the results is all it needs.
 cd "$PROJECT_DIR"
 "$CLAUDE" -p "$PROMPT" \
-  --allowedTools "Read,Write" \
-  >> "$SUPPORT/reply-classify-run.log" 2>&1
+  --allowedTools "Read,Write"
 
 echo "reply-classify run finished -> $RESULTS"
