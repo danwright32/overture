@@ -24,6 +24,7 @@ struct AgentInputs: Sendable {
     var followUpsDue: Int
     var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
     var stuckSends: Int = 0   // #475/#476: claimed .sending, never resolved (outcome unknown)
+    var degradedReplyTracking: Int = 0   // #483: sent, but no usable threadId so replies can't be auto-detected
 }
 
 enum AgentRoster {
@@ -56,6 +57,13 @@ enum AgentRoster {
         }
         if i.sendErrors > 0 {
             return AgentStatus(name: "Send", state: .error, detail: "\(i.sendErrors) failed to send")
+        }
+        // #483: the send went out fine, just with no usable threadId to watch for a reply. Not a
+        // failure, but silent otherwise, so it still has to surface.
+        if i.degradedReplyTracking > 0 {
+            let n = i.degradedReplyTracking
+            return AgentStatus(name: "Send", state: .needsAttention,
+                               detail: "\(n) sent but can't be watched for replies: check Gmail")
         }
         if i.readyToSend > 0 {
             let detail = i.gmailConnected

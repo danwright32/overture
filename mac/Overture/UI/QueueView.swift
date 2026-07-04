@@ -302,6 +302,9 @@ struct QueueView: View {
             },
             stuckSends: prospects.reduce(0) { sum, p in
                 sum + p.recipients.filter { $0.isSendStuck(now: Date()) }.count
+            },
+            degradedReplyTracking: prospects.reduce(0) { sum, p in
+                sum + p.recipients.filter(\.replyTrackingDegraded).count
             }
         )
     }

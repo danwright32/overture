@@ -59,6 +59,26 @@ struct AgentRosterTests {
         #expect(status("Send", i).detail == "2 sends unconfirmed: check Gmail")
     }
 
+    // #483: a send that went out but came back with no usable threadId can never be watched
+    // for a reply automatically. That must surface, never sit silent, but it is not itself a
+    // failed send, so it needs attention rather than reading as an error.
+    @Test func sendFlagsDegradedReplyTrackingWhenAThreadIdCouldNotBeRecovered() {
+        var i = calm; i.degradedReplyTracking = 1
+        #expect(status("Send", i).state == .needsAttention)
+        #expect(status("Send", i).detail == "1 sent but can't be watched for replies: check Gmail")
+
+        i.degradedReplyTracking = 2
+        #expect(status("Send", i).detail == "2 sent but can't be watched for replies: check Gmail")
+    }
+
+    @Test func stuckSendsAndSendErrorsOutrankDegradedReplyTracking() {
+        var stuck = calm; stuck.degradedReplyTracking = 1; stuck.stuckSends = 1
+        #expect(status("Send", stuck).detail.contains("unconfirmed"))
+
+        var failed = calm; failed.degradedReplyTracking = 1; failed.sendErrors = 1
+        #expect(status("Send", failed).detail == "1 failed to send")
+    }
+
     @Test func followUpsNeedAttentionWhenDue() {
         var i = calm; i.followUpsDue = 4
         #expect(status("Follow-ups", i).state == .needsAttention)

@@ -86,8 +86,13 @@ struct GmailSender: MailSender {
             throw GmailSendError.api(detail)
         }
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String) ?? ""
-        return SentReceipt(threadId: threadId, messageID: messageID)
+        if let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String), !threadId.isEmpty {
+            return SentReceipt(threadId: threadId, messageID: messageID)
+        }
+        // #483: the send itself succeeded, so this must never throw, but a body we can't read a
+        // threadId out of leaves reply watching with nothing to watch. Come back flagged rather
+        // than silently empty, so the recipient can be marked degraded instead of just dropped.
+        return SentReceipt(threadId: "", messageID: messageID, threadIdDegraded: true)
     }
 }
 
