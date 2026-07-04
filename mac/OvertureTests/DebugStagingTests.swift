@@ -145,5 +145,85 @@ struct DebugStagingTests {
         #expect(DebugStaging.resolvedSelfSendAddress(override: "daniel.wright33@icloud.com")
                 == "daniel.wright33@icloud.com")
     }
+
+    // #425: a self-addressed lead with TWO recipients (act + presenter), so the per-recipient send
+    // fan-out (#415) can be proven end to end by a live self-send: approve, then send twice, should
+    // produce two separate emails, each to its own address and greeting its own name, on their own
+    // Gmail threads. The single-recipient stager above cannot exercise the fan-out at all.
+    @Test func stagesAMultiRecipientSelfSendLead() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: now, address: "self@example.com")
+
+        #expect(p.status == .drafted)
+        #expect(p.sentAt == nil)
+        #expect(p.naturalKey.hasPrefix("debug-of-"))
+        #expect(p.recipients.count == 2)
+    }
+
+    @Test func multiRecipientLeadHasOneActAndOnePresenterBothPendingWithDistinctAddresses() throws {
+        let ctx = try makeInMemoryContext()
+
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+
+        let act = p.recipients.first { $0.provenance == .act }
+        let presenter = p.recipients.first { $0.provenance == .presenter }
+        #expect(act != nil)
+        #expect(presenter != nil)
+        #expect(act?.sendState == .pending)
+        #expect(presenter?.sendState == .pending)
+        // Both land in Dan's own inbox but must carry distinct ids (the canonicalized email), or the
+        // second recipient's row collides with the first's identity within this one performance.
+        #expect(act?.email != presenter?.email)
+        #expect(act?.id != presenter?.id)
+        #expect(act?.email?.hasSuffix("@example.com") == true)
+        #expect(presenter?.email?.hasSuffix("@example.com") == true)
+    }
+
+    @Test func multiRecipientLeadGreetsEachRecipientByItsOwnName() throws {
+        let ctx = try makeInMemoryContext()
+
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+
+        #expect(p.recipients.allSatisfy { $0.name != nil })
+        #expect(Set(p.recipients.map { $0.name }).count == 2)   // must not share a display name
+    }
+
+    // DraftReviewView disables Approve when contactEmail is nil, so the legacy singular field must
+    // stay in sync with the act recipient or a multi-recipient lead would be stuck un-approvable.
+    @Test func multiRecipientLeadKeepsLegacyContactFieldInSyncWithTheActRecipient() throws {
+        let ctx = try makeInMemoryContext()
+
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+
+        let act = p.recipients.first { $0.provenance == .act }
+        #expect(p.contactEmail != nil)
+        #expect(p.contactEmail == act?.email)
+    }
+
+    @Test @MainActor func multiRecipientLeadEntersTheSendQueueTwiceOnceApproved() throws {
+        let ctx = try makeInMemoryContext()
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+        p.status = .approved
+        try ctx.save()
+
+        // Both recipients are pending with real addresses, so the real send queue must offer both,
+        // act before presenter (the #366/#368 contact ladder), so two Send clicks reach two inboxes.
+        let queued = SendService.pending(in: ctx).filter { $0.prospect.naturalKey == p.naturalKey }
+        #expect(queued.count == 2)
+        #expect(queued.first?.recipient.provenance == .act)
+        #expect(queued.last?.recipient.provenance == .presenter)
+    }
+
+    @Test func clearDebugLeadsRemovesTheMultiRecipientSelfSendLead() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+        try ctx.save()
+
+        DebugStaging.clearDebugLeads(in: ctx)
+
+        #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
+    }
 }
 #endif

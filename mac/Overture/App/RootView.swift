@@ -177,6 +177,7 @@ struct RootView: View {
                         Button("Mark first as sent") { debugStageFirstAsSent() }
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
                         Button("Stage self-send test lead") { debugStageSelfSendLead() }
+                        Button("Stage multi-recipient self-send lead") { debugStageMultiRecipientSelfSendLead() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
                     } label: {
                         Label("DEBUG", systemImage: "ladybug")
@@ -325,6 +326,17 @@ struct RootView: View {
         let p = DebugStaging.stageSelfSendLead(in: context, now: Date(), address: address)
         try? context.save()
         statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
+    }
+
+    // DEBUG ONLY (#425): like debugStageSelfSendLead, but with two recipients (act + presenter) so the
+    // per-recipient send fan-out (#415) can be proven end to end: approve once, then Send twice, two
+    // separate emails should land in Dan's own inbox on their own threads.
+    private func debugStageMultiRecipientSelfSendLead() {
+        let address = DebugStaging.resolvedSelfSendAddress(
+            override: UserDefaults.standard.string(forKey: "selfSendTestAddress"))
+        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: context, now: Date(), address: address)
+        try? context.save()
+        statusMessage = "DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice"
     }
 
     private func debugClearDebugLeads() {
