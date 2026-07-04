@@ -28,12 +28,6 @@ usage() {
   exit 1
 }
 
-[[ $# -eq 1 ]] || usage
-PR_NUMBER="$1"
-[[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || usage
-
-command -v gh >/dev/null || { echo "gh CLI not found; install it and run: gh auth login" >&2; exit 1; }
-
 format_duration() {
   local total=$1
   local m=$((total / 60))
@@ -48,26 +42,6 @@ format_duration() {
 to_epoch() {
   date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s
 }
-
-SHA="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefOid --jq .headRefOid)"
-if [[ -z "${SHA}" || "${SHA}" == "null" ]]; then
-  echo "Error: could not resolve a head commit for PR #${PR_NUMBER} on ${REPO}." >&2
-  exit 1
-fi
-
-echo "PR #${PR_NUMBER} on ${REPO}, commit ${SHA:0:7}"
-echo
-
-# conclusion is last because it is null (empty after //) until a check completes, and
-# bash's `read` with a tab IFS collapses an empty middle field, shifting check_suite_id
-# into conclusion's slot. An empty trailing field does not have that problem.
-CHECK_RUNS="$(gh_as_danwright32 api "repos/${REPO}/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | [.name, .status, .check_suite.id // "", .conclusion // ""] | @tsv')"
-
-if [[ -z "${CHECK_RUNS}" ]]; then
-  echo "No checks found yet for this commit." >&2
-  exit 1
-fi
 
 RUNNER_STATUS=""
 RUNNER_BUSY=""
@@ -107,10 +81,13 @@ resolve_queue_created_at() {
   head -n1 <<< "${job_lookup}"
 }
 
-NOW="$(date -u +%s)"
-EXIT_CODE=0
+# Classifies one check-run row (the tab-separated fields produced by the check-runs
+# query in main) and prints its status line. Mutates the caller's EXIT_CODE, same as
+# when this was the inline body of the loop below.
+classify_check_run() {
+  local name="$1" status="$2" check_suite_id="$3" conclusion="$4"
+  local label PENDING_SINCE ELAPSED DURATION
 
-while IFS=$'\t' read -r name status check_suite_id conclusion; do
   if [[ "${status}" == "completed" ]]; then
     case "${conclusion}" in
       success)
@@ -126,13 +103,13 @@ while IFS=$'\t' read -r name status check_suite_id conclusion; do
         ;;
     esac
     echo "${name}: ${label}"
-    continue
+    return
   fi
 
   if [[ "${name}" != "${SWIFT_CHECK_NAME}" ]]; then
     echo "${name}: Pending"
     EXIT_CODE=1
-    continue
+    return
   fi
 
   EXIT_CODE=1
@@ -143,7 +120,7 @@ while IFS=$'\t' read -r name status check_suite_id conclusion; do
 
   if [[ -z "${PENDING_SINCE}" ]]; then
     echo "${name}: Stalled. Could not determine how long this has been queued."
-    continue
+    return
   fi
 
   ELAPSED=$(( NOW - $(to_epoch "${PENDING_SINCE}") ))
@@ -152,7 +129,7 @@ while IFS=$'\t' read -r name status check_suite_id conclusion; do
 
   if [[ ${ELAPSED} -lt ${STALL_THRESHOLD_SECONDS} ]]; then
     echo "${name}: Still working (pending ${DURATION})"
-    continue
+    return
   fi
 
   fetch_runner_info
@@ -166,13 +143,54 @@ while IFS=$'\t' read -r name status check_suite_id conclusion; do
   else
     echo "${name}: Still working, longer than usual, but the runner is online and busy (pending ${DURATION})."
   fi
-done <<< "${CHECK_RUNS}"
+}
 
-echo
-if [[ ${EXIT_CODE} -eq 0 ]]; then
-  echo "All checks have actually passed. Safe to merge on CI grounds."
-else
-  echo "Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
+main() {
+  [[ $# -eq 1 ]] || usage
+  PR_NUMBER="$1"
+  [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || usage
+
+  command -v gh >/dev/null || { echo "gh CLI not found; install it and run: gh auth login" >&2; exit 1; }
+
+  SHA="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefOid --jq .headRefOid)"
+  if [[ -z "${SHA}" || "${SHA}" == "null" ]]; then
+    echo "Error: could not resolve a head commit for PR #${PR_NUMBER} on ${REPO}." >&2
+    exit 1
+  fi
+
+  echo "PR #${PR_NUMBER} on ${REPO}, commit ${SHA:0:7}"
+  echo
+
+  # conclusion is last because it is null (empty after //) until a check completes, and
+  # bash's `read` with a tab IFS collapses an empty middle field, shifting check_suite_id
+  # into conclusion's slot. An empty trailing field does not have that problem.
+  CHECK_RUNS="$(gh_as_danwright32 api "repos/${REPO}/commits/${SHA}/check-runs" \
+    --jq '.check_runs[] | [.name, .status, .check_suite.id // "", .conclusion // ""] | @tsv')"
+
+  if [[ -z "${CHECK_RUNS}" ]]; then
+    echo "No checks found yet for this commit." >&2
+    exit 1
+  fi
+
+  NOW="$(date -u +%s)"
+  EXIT_CODE=0
+
+  while IFS=$'\t' read -r name status check_suite_id conclusion; do
+    classify_check_run "${name}" "${status}" "${check_suite_id}" "${conclusion}"
+  done <<< "${CHECK_RUNS}"
+
+  echo
+  if [[ ${EXIT_CODE} -eq 0 ]]; then
+    echo "All checks have actually passed. Safe to merge on CI grounds."
+  else
+    echo "Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
+  fi
+
+  exit "${EXIT_CODE}"
+}
+
+# Allow this file to be sourced (e.g. by check-pr-ci.test.sh) without running main,
+# so the classification logic can be exercised directly against stubbed gh responses.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
 fi
-
-exit "${EXIT_CODE}"
