@@ -1,0 +1,132 @@
+{
+  "normalize": [
+    {
+      "input": "Presented by Every Voice Choirs\nSpring Concert",
+      "expected": "every voice choirs"
+    },
+    {
+      "input": "  The   Royal   Gala  ",
+      "expected": "the royal gala"
+    },
+    {
+      "input": "Spring Gala Concert\nPresented by Every Voice Choirs",
+      "expected": "every voice choirs"
+    },
+    {
+      "input": "Brooklyn Youth Chorus\nProgram of Bach",
+      "expected": "brooklyn youth chorus"
+    },
+    {
+      "input": "Every Voice Choirs - Earth Day Jazz",
+      "expected": "every voice choirs"
+    },
+    {
+      "input": "Every Voice Choirs — Earth Day Jazz",
+      "expected": "every voice choirs"
+    },
+    {
+      "input": "Every Voice Choirs: Spring Concert",
+      "expected": "every voice choirs"
+    },
+    {
+      "input": "Jazz - Spring Gala",
+      "expected": "jazz spring gala"
+    },
+    {
+      "input": "New York Theatre Ballet",
+      "expected": "new york theatre ballet"
+    },
+    {
+      "input": "Presented by Jazzical Arts\nKomitas: Passion of Fire",
+      "expected": "jazzical arts"
+    },
+    {
+      "input": "Komitas: Passion of Fire\nPresented by Jazzical Arts",
+      "expected": "jazzical arts"
+    },
+    {
+      "input": "Indianapolis Children's Choir\nSpring Concert",
+      "expected": "indianapolis children s choir"
+    }
+  ],
+  "match": [
+    {
+      "a": "Every Voice Choirs - Earth Day Jazz",
+      "b": "Every Voice Choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Every Voice Choirs: Earth Day Jazz",
+      "b": "Every Voice Choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Jazz - Spring Gala",
+      "b": "Jazz - Winter Gala",
+      "confident": false,
+      "possible": true
+    },
+    {
+      "a": "Every Voice Choirs",
+      "b": "every voice choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Every Voice Choirs - Spring Concert",
+      "b": "Every Voice Choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Music Academy",
+      "b": "Larchmont Music",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "New York",
+      "b": "New York Theatre Ballet",
+      "confident": false,
+      "possible": true
+    },
+    {
+      "a": "art state",
+      "b": "smart statement",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "Royal Foundation Music Arts",
+      "b": "The Royal Music Arts",
+      "confident": false,
+      "possible": true
+    },
+    {
+      "a": "Every Voice Choirs",
+      "b": "Every Voice Choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Brooklyn Youth Chorus",
+      "b": "Manhattan Opera Guild",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "Jazzical Arts",
+      "b": "Komitas: Passion of Fire\nPresented by Jazzical Arts",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Riverside Chamber Players",
+      "b": "Riverside Chamber Players Youth",
+      "confident": true,
+      "possible": false
+    }
+  ]
+}
