@@ -70,4 +70,50 @@ struct GmailAuthExpiryTests {
         }
         #expect(GmailCredentials.loadTokens(from: tokenURL) != nil)   // kept for retry, not cleared
     }
+
+    // #484: a refresh that succeeds over the network but then fails to persist must not be
+    // reported as a success, or the app looks connected while running on a token it never saved.
+    @Test func aSuccessfulRefreshThatCannotBeSavedThrowsInsteadOfSilentlySucceeding() async throws {
+        let clientURL = tmp()
+        defer { try? FileManager.default.removeItem(at: clientURL) }
+        try writeClient(clientURL)
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let tokenURL = dir.appendingPathComponent("gmail-tokens.json")
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        GmailCredentials.saveTokens(StoredTokens(refreshToken: "r", accessToken: "old",
+                                                 accessTokenExpiry: now.addingTimeInterval(-60)), to: tokenURL)
+        // Remove write access on the directory only after seeding it, so the refresh can still
+        // load the stale token but the write-back of the refreshed one cannot land.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+
+        await #expect(throws: GmailAuthManager.AuthError.self) {
+            _ = try await GmailAuthManager.shared.validAccessToken(
+                now: now, clientURL: clientURL, tokenURL: tokenURL,
+                fetch: self.fetch(200, #"{"access_token":"fresh","expires_in":3600}"#))
+        }
+    }
+
+    // #484: the same save-failure handling applies to the fresh-consent path in connect(), split
+    // into persistExchangedTokens so it is testable without a live browser/network round trip.
+    @Test func persistExchangedTokensThrowsWhenTheSaveFails() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+        let tokenURL = dir.appendingPathComponent("gmail-tokens.json")
+
+        let tokens = OAuthTokens(accessToken: "a", refreshToken: "r", expiresIn: 3600)
+        #expect(throws: GmailAuthManager.AuthError.self) {
+            try GmailAuthManager.shared.persistExchangedTokens(tokens, to: tokenURL)
+        }
+    }
 }

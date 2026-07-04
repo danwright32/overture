@@ -13,7 +13,7 @@ final class GmailAuthManager {
     static let shared = GmailAuthManager()
 
     enum AuthError: LocalizedError {
-        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired
+        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired, tokenSaveFailed
         var errorDescription: String? {
             switch self {
             case .noClientConfig: return "Gmail client config is missing. Re-run the Google setup."
@@ -23,6 +23,7 @@ final class GmailAuthManager {
             case .exchangeFailed(let m): return "Login failed: \(m)"
             case .refreshFailed(let m): return "Gmail couldn't refresh right now (temporary): \(m)"
             case .authExpired: return "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
+            case .tokenSaveFailed: return "Couldn't save the Gmail credentials to disk. Check available storage and try Connect Gmail again."
             }
         }
     }
@@ -72,12 +73,20 @@ final class GmailAuthManager {
         stopListener()
 
         let tokens = try await exchange(config: config, code: code, pkce: pkce)
+        try persistExchangedTokens(tokens)
+    }
+
+    // Split from connect() so a failed save after a real consent grant is testable without the
+    // live browser/network round trip (#484): a save failure here must throw, not disappear,
+    // since Dan has already seen Google's consent screen and has no other signal something
+    // went wrong.
+    func persistExchangedTokens(_ tokens: OAuthTokens, to url: URL = GmailCredentials.tokenURL) throws {
         guard let refresh = tokens.refreshToken else {
             throw AuthError.exchangeFailed("Google did not return a refresh token. Revoke prior access and retry.")
         }
-        GmailCredentials.saveTokens(StoredTokens(
-            refreshToken: refresh, accessToken: tokens.accessToken,
-            accessTokenExpiry: tokens.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) }))
+        let stored = StoredTokens(refreshToken: refresh, accessToken: tokens.accessToken,
+                                  accessTokenExpiry: tokens.expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) })
+        guard GmailCredentials.saveTokens(stored, to: url) else { throw AuthError.tokenSaveFailed }
     }
 
     // A valid access token, refreshing via the stored refresh token if stale.
@@ -101,7 +110,7 @@ final class GmailAuthManager {
         case .success(let tokens):
             stored.accessToken = tokens.accessToken
             stored.accessTokenExpiry = tokens.expiresIn.map { now.addingTimeInterval(TimeInterval($0)) }
-            GmailCredentials.saveTokens(stored, to: tokenURL)
+            guard GmailCredentials.saveTokens(stored, to: tokenURL) else { throw AuthError.tokenSaveFailed }
             return tokens.accessToken
         case .failure(.authExpired):
             // The refresh token is dead (revoked/expired). Clear it so the app shows as
