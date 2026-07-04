@@ -35,6 +35,34 @@ struct GmailSenderTests {
         #expect(receipt.threadId == "m1")
     }
 
+    // #483: a 2xx response whose body cannot be parsed at all must never fall through as a
+    // silent empty threadId; it has to come back flagged so the recipient can be marked
+    // degraded instead of quietly dropped from reply watching forever.
+    @Test func unparseableBodyFlagsTheReceiptAsDegradedInsteadOfEmpty() async throws {
+        let receipt = try await GmailSender.performSend(
+            mail: mail, fromName: "Dan Wright", fromEmail: "dan@x.org", token: "tok",
+            fetch: fetch(200, "not json at all"), onAuthExpired: {})
+        #expect(receipt.threadId == "")
+        #expect(receipt.threadIdDegraded == true)
+    }
+
+    // A body that parses fine but carries neither key is the same failure mode: nothing to
+    // recover a threadId from, so it must be flagged too, not just silently emptied.
+    @Test func bodyWithNeitherThreadIdNorIdFlagsTheReceiptAsDegraded() async throws {
+        let receipt = try await GmailSender.performSend(
+            mail: mail, fromName: "Dan Wright", fromEmail: "dan@x.org", token: "tok",
+            fetch: fetch(200, #"{"labelIds":["SENT"]}"#), onAuthExpired: {})
+        #expect(receipt.threadId == "")
+        #expect(receipt.threadIdDegraded == true)
+    }
+
+    @Test func aNormalSuccessIsNeverFlaggedAsDegraded() async throws {
+        let receipt = try await GmailSender.performSend(
+            mail: mail, fromName: "Dan Wright", fromEmail: "dan@x.org", token: "tok",
+            fetch: fetch(200, #"{"threadId":"t123","id":"m1"}"#), onAuthExpired: {})
+        #expect(receipt.threadIdDegraded == false)
+    }
+
     @Test func apiErrorThrows() async {
         await #expect(throws: GmailSendError.self) {
             _ = try await GmailSender.performSend(

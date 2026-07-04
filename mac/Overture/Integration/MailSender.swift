@@ -19,6 +19,10 @@ struct OutgoingMail: Equatable, Sendable {
 struct SentReceipt: Equatable, Sendable {
     var threadId: String
     var messageID: String? = nil   // the Message-ID stamped on the sent message, for threading (#74)
+    // True when the send succeeded (2xx) but the response body had no parseable threadId (#483):
+    // threadId is "" in this case, never a guess, so the caller can flag it instead of leaving
+    // reply watching silently and permanently broken for that recipient.
+    var threadIdDegraded: Bool = false
 }
 
 protocol MailSender: Sendable {

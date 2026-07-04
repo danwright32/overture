@@ -53,6 +53,9 @@ final class Recipient {
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?
+    // #483: set when a send succeeded but Gmail's response had no parseable threadId, so this
+    // recipient's replies can never be auto-detected until Dan checks Gmail directly.
+    var replyTrackingDegraded: Bool = false
     var sendError: String?
     // When the current .sending claim was made (#475/#476); cleared when it resolves to .sent or
     // reverts to .pending. Only meaningful while sendState == .sending.

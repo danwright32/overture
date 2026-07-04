@@ -25,6 +25,14 @@ private struct AlwaysFailSender: MailSender {
     func send(_ mail: OutgoingMail) async throws -> SentReceipt { throw MailSenderError.notConfigured }
 }
 
+// #483: a real Gmail 2xx whose body had no parseable threadId. The send itself succeeded, so
+// this must never throw; it comes back flagged instead.
+private struct DegradedThreadIdSender: MailSender {
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        SentReceipt(threadId: "", messageID: "<mid-degraded@x.org>", threadIdDegraded: true)
+    }
+}
+
 // Records the URL the injected fetch was handed, so a test can prove the live network path
 // was never reached when driving the real GmailSender through sendOne (#194).
 private final class Hit: @unchecked Sendable { var url: URL? }
@@ -325,6 +333,23 @@ struct SendServiceTests {
         #expect(await SendService.sendOne(a, now: Date(), sender: AlwaysFailSender()) == false)
         #expect(a.sentAt == nil)
         #expect(a.sendError != nil)
+    }
+
+    // #483: a 2xx send with no parseable threadId must never leave reply watching silently
+    // broken. The send itself succeeded (never reverted to pending, never treated as a
+    // failure), but the recipient comes back flagged so Dan can see the gap.
+    @Test func aSendWithAnUnparseableThreadIdFlagsReplyTrackingDegraded() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        let a = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let recipient = a.recipients.first!
+
+        #expect(await SendService.sendOne(a, now: Date(), sender: DegradedThreadIdSender()) == true)
+
+        #expect(recipient.sendState == .sent)
+        #expect(recipient.gmailThreadId == "")
+        #expect(recipient.replyTrackingDegraded == true)
+        #expect(recipient.sendError == nil)   // this is a degraded success, not a failure
     }
 
     @Test func recordsSendErrorAndKeepsItPending() async throws {

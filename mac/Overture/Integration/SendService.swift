@@ -100,6 +100,7 @@ enum SendService {
             recipient.sendClaimedAt = nil
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
+            recipient.replyTrackingDegraded = receipt.threadIdDegraded
             recipient.sendError = nil
             // Lead-level first-send rollup (#389 Phase 1): set once, never overwritten, so the ~20
             // "was this performance contacted at all" readers keep working unchanged. The thread/
