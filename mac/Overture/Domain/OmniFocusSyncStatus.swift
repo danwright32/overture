@@ -12,11 +12,22 @@ enum OmniFocusSyncStatus {
     // by re-granting the grant, not by retrying, so the notification path can say exactly that, and
     // the flag drives the once-per-episode notify edge.
     static let permissionNeededKey = "omniFocusPermissionNeeded"
+    // #355: when the sync last actually succeeded, from either the manual button or the automatic
+    // background scheduler (both call recordSuccess), so the toolbar can show real freshness instead
+    // of just "enabled or not".
+    static let lastSuccessAtKey = "omniFocusLastSuccessAt"
 
-    static func recordSuccess(into defaults: UserDefaults = .standard) {
+    static func recordSuccess(at date: Date, into defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: failedAtKey)
         defaults.removeObject(forKey: errorKey)
         defaults.removeObject(forKey: permissionNeededKey)
+        defaults.set(date.timeIntervalSince1970, forKey: lastSuccessAtKey)
+    }
+
+    static func lastSuccessAt(from defaults: UserDefaults = .standard) -> Date? {
+        let t = defaults.double(forKey: lastSuccessAtKey)
+        guard t > 0 else { return nil }
+        return Date(timeIntervalSince1970: t)
     }
 
     // #268: record that OmniFocus Automation is not granted. Also lights the masthead failure key so
