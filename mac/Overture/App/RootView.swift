@@ -49,7 +49,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
+        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail)
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
