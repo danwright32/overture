@@ -50,6 +50,22 @@ struct RecipientTests {
         #expect(r.sendStateRaw == "suppressed")
     }
 
+    // #542: every suppression that predates this field (all of them were booking-freezes) has no raw
+    // value stored, so it must read as .bookedElsewhere rather than an unrepresentable nil, or the
+    // label for Dan's existing live data would break.
+    @Test func suppressionReasonDefaultsToBookedElsewhereWhenNeverSet() {
+        let r = Recipient(id: "p@present.example", email: "p@present.example", provenance: .presenter)
+        #expect(r.suppressionReasonRaw == nil)
+        #expect(r.suppressionReason == .bookedElsewhere)
+    }
+
+    @Test func suppressionReasonRoundTripsThroughRawStrings() {
+        var r = Recipient(id: "p@present.example", email: "p@present.example", provenance: .presenter)
+        r.suppressionReason = .declined
+        #expect(r.suppressionReason == .declined)
+        #expect(r.suppressionReasonRaw == "declined")
+    }
+
     // Recipient is now a SwiftData @Model (#409): state persists through the store, not a JSON blob.
     @Test func persistsThroughTheStore() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),

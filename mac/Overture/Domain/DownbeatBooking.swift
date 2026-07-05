@@ -49,9 +49,8 @@ enum DownbeatBooking {
                     // still-unsent recipient so Overture stops emailing the other contacts on a show
                     // that already landed. Uses .suppressed (its documented booking-freeze meaning);
                     // reply-triage auto-pause uses the separate recipient.pausedByReply flag instead.
-                    for r in p.recipients where r.sendState == .pending {
-                        r.sendState = .suppressed
-                    }
+                    // Shared with the manual booking/decline/closing paths (#542).
+                    p.suppressUntriedRecipients(reason: .bookedElsewhere)
                 } else {
                     // Tiebreak loser: suggest only if the prospect hasn't dismissed
                     if !p.bookingSuggestionDismissed { p.bookingSuggested = true }

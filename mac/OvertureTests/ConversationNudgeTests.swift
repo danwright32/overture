@@ -100,7 +100,7 @@ struct SendConversationNudgeTests {
         #expect(p.conversationRemindedAt == now)
     }
 
-    @Test func closingNudgeWritesThroughToEngagedContacts() async throws {
+    @Test func closingNudgeWritesThroughToEngagedContactsAndSuppressesTheUntriedOne() async throws {
         let ctx = ModelContext(try container())
         let p = sentLead(ctx, state: .wantsToBook)
         let engaged = Recipient(id: "to@org.org", email: "to@org.org", provenance: .act)
@@ -114,6 +114,8 @@ struct SendConversationNudgeTests {
         #expect(p.outcome == .lostSoft)
         #expect(engaged.resolution == .declinedSoft)   // engaged contact resolved on the closing note
         #expect(untried.resolution == nil)             // never emailed -> stays accurate
+        #expect(untried.sendState == .suppressed)      // #542: taken out of future sends too
+        #expect(untried.suppressionReason == .declined)
     }
 
     @Test func needsStateIsNotSendable() async throws {

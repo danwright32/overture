@@ -198,6 +198,7 @@ enum SendService {
                 prospect.outcomeSourceRaw = OutcomeSource.manual.rawValue
                 prospect.outcomeAt = now
                 prospect.resolveEngagedContacts(.declinedSoft)   // #448: close the engaged contacts too
+                prospect.suppressUntriedRecipients(reason: .declined)   // #542: and the untried one too
             }
             return true
         } catch {

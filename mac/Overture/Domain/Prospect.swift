@@ -367,11 +367,25 @@ final class Prospect {
     // engaged: an emailed, still-open, un-bounced contact (`standing.isInPlay`) resolves to the given
     // resolution as Dan's manual call. Deliberately leaves UNTRIED contacts (never emailed) and
     // already-terminal ones (resolved/bounced) untouched: a contact Dan never reached must not read as
-    // won or lost (Dan, 2026-06-29). Because an untried-but-reachable contact keeps the derived status
-    // Active, the show-level `isClosed` union (lead lostSoft/lostHard) stays the honest closed signal.
+    // won or lost (Dan, 2026-06-29). Callers pair this with suppressUntriedRecipients (#542) so the
+    // untried contact stops being reachable too, once the show itself is settled.
     func resolveEngagedContacts(_ resolution: RecipientResolution) {
         for r in recipients where r.standing.isInPlay {
             r.markOutcomeManually(resolution: resolution)
+        }
+    }
+
+    // Takes every still-untried recipient on this lead out of future sends once the lead itself has
+    // resolved, so a resolved show can't still generate a fresh cold email to a sibling contact it
+    // never reached. Originally only the auto-detected-booking freeze (DownbeatBooking); #542 shares
+    // it across every manual resolve path too (confirming a booking by hand, declining, closing).
+    // Mirrors the original freeze exactly: only still-.pending recipients move, already-sent or
+    // already-suppressed ones are untouched. Leaves resolution untouched (nil): an untried contact was
+    // never actually declined or booked, it is simply no longer being pursued.
+    func suppressUntriedRecipients(reason: RecipientSuppressionReason) {
+        for r in recipients where r.sendState == .pending {
+            r.sendState = .suppressed
+            r.suppressionReason = reason
         }
     }
 
@@ -443,6 +457,7 @@ final class Prospect {
         if state == .declined {
             markOutcomeManually(.lostSoft, now: now)
             resolveEngagedContacts(.declinedSoft)
+            suppressUntriedRecipients(reason: .declined)   // #542
         } else if outcome == .noResponse {
             markOutcomeManually(.replied, now: now)
         }

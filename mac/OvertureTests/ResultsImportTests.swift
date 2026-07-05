@@ -141,10 +141,12 @@ struct ResultsImportTests {
     // then send state; and isAutoReplied is true only for an auto (not hand-marked) reply.
     @Test func recipientSnapshotStatusLabelsAndAutoReplied() {
         func s(_ sendState: SendState = .sent, replied: Bool = false, resolution: RecipientResolution? = nil,
-               bounced: Bool = false, email: String? = "a@act.example", source: OutcomeSource? = nil) -> RecipientSnapshot {
+               bounced: Bool = false, email: String? = "a@act.example", source: OutcomeSource? = nil,
+               suppressionReason: RecipientSuppressionReason = .bookedElsewhere) -> RecipientSnapshot {
             RecipientSnapshot(id: "x", name: "N", email: email, role: nil, provenance: .act,
                               sendState: sendState, replied: replied, lastReplyText: nil,
-                              resolution: resolution, bounced: bounced, outcomeSource: source)
+                              resolution: resolution, bounced: bounced, outcomeSource: source,
+                              suppressionReason: suppressionReason)
         }
         #expect(s(resolution: .booked).statusLabel == "Booked")
         #expect(s(resolution: .declinedSoft).statusLabel == "Closed (not now)")
@@ -155,6 +157,9 @@ struct ResultsImportTests {
         #expect(s(.pending).statusLabel == "Not sent yet")
         #expect(s(.pending, email: nil).statusLabel == "No email yet")
         #expect(s(.suppressed).statusLabel == "Paused (booked elsewhere)")
+        // #542: the same suppressed sendState now carries a specific reason so the label doesn't lie
+        // about why the contact was taken out of play.
+        #expect(s(.suppressed, suppressionReason: .declined).statusLabel == "Paused (show declined)")
         #expect(s(.sending).statusLabel == "Sending…")   // #475/#476: claimed, in flight
         #expect(s(replied: true).isAutoReplied == true)
         #expect(s(replied: true, source: .manual).isAutoReplied == false)   // Dan's mark, not an auto reply

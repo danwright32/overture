@@ -131,6 +131,7 @@ struct DownbeatBookingTests {
                                                     health: .ok, now: Date(timeIntervalSince1970: 9_999))
         #expect(count == 1)
         #expect(p.recipients.first { $0.id == "b@present.example" }?.sendState == .suppressed)
+        #expect(p.recipients.first { $0.id == "b@present.example" }?.suppressionReason == .bookedElsewhere)
         #expect(p.recipients.first { $0.id == "a@act.example" }?.sendState == .sent)
     }
 
