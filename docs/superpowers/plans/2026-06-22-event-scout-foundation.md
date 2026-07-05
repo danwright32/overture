@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, Vitest, `@supabase/supabase-js`, `tsx`. Reuses `src/lib/ranker.ts` (`Candidate`, `scoreFit`) and `src/lib/bookingImport.ts` (`HistoryRecord`).
 
+> **This plan predates Overture's pivot away from Supabase; it is not a description of the shipped system.** Tasks 2 through 7 (`downbeatBridge.ts`, `groupNameMatch.ts`, `historyMatch.ts`, `venueResolve.ts`, `assembleProspect.ts`, `blockedDates.ts`) shipped in `src/lib/` largely as planned. Task 1's schema migration and Task 8's Supabase adapter (`prospectsRepo.ts`) did not: Overture shipped with a native macOS app's local SwiftData store instead, so no `prospectsRepo.ts` exists and the `supabase/` directory has been removed. For the current architecture, read `AGENTS.md`.
+
 ## Global Constraints
 
 - TypeScript everywhere; never use `any`.

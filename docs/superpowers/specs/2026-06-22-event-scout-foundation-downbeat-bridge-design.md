@@ -94,7 +94,7 @@ All pure logic is built test-first. The risky repeat-client matching gets full c
 3. **`venueResolve.ts`** — `resolveVenue(venueName, downbeatVenues)` returns a known venue's address and notes, or null. Feeds the classification/reachability step later.
 4. **`assembleProspect.ts`** — takes a raw event, its classification, and the match verdict; runs the ranker; returns a finished prospect row, or a "skip" for suppressed, blocked, or unreachable performances.
 5. **`blockedDates.ts`** — `isBlockedDate(date, blockedSet)`.
-6. **`prospectsRepo.ts`** — thin Supabase adapter: load history, load blocked dates, find an existing prospect (dedup), insert. Verified against the real database, the same pattern as the history importer. All access server-side via the service-role key (issue #14).
+6. **`prospectsRepo.ts`** — thin Supabase adapter: load history, load blocked dates, find an existing prospect (dedup), insert. Verified against the real database, the same pattern as the history importer. All access server-side via the service-role key (issue #14). (Superseded: Overture shipped with local file storage and a SwiftData store instead; `prospectsRepo.ts` and Supabase were never built.)
 
 ### Matching philosophy
 
