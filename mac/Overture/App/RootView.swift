@@ -18,6 +18,8 @@ struct RootView: View {
     @State private var warningMessage: String?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
+    // #355: the SAME key ReminderSettingsView binds, so toggling from either surface stays in sync.
+    @AppStorage(OmniFocusSyncConfig.Keys.enabled) private var omniFocusEnabled = OmniFocusSyncConfig().enabled
     // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
     // select and scroll to. Cleared by the queue once it has acted on it.
     @State private var deepLinkedKey: String?
@@ -48,6 +50,15 @@ struct RootView: View {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
     }
 
+    // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
+    // ScoutStatus already use in the masthead rather than introducing a second one.
+    private var omniFocusStatusLine: String {
+        if let last = OmniFocusSyncStatus.lastSuccessAt() {
+            return "Synced \(PrepStatus.relative(from: last, to: Date()))"
+        }
+        return "Not yet synced"
+    }
+
     var body: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail)
             .onOpenURL { url in
@@ -75,27 +86,46 @@ struct RootView: View {
                             .foregroundStyle(OVColor.inkFaint)
                     }
                 }
+                // #352: Scout and Prep are sequential steps in one flow (scout finds performances,
+                // then prep researches the ones kept), merged into one menu with Scout listed
+                // first. Each action keeps its own keyboard shortcut and its own disabled
+                // condition, even nested in the same Menu (a shortcut fires independent of whether
+                // the menu is open, same as any AppKit menu command).
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        startPrep()
+                    Menu {
+                        Button("Run scout now") { runScout() }
+                            .keyboardShortcut("r", modifiers: .command)
+                            .disabled(isScanning)
+                        Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
+                        Divider()
+                        Button {
+                            startPrep()
+                        } label: {
+                            Label("Prep kept", systemImage: "envelope.badge")
+                        }
+                        .keyboardShortcut("p", modifiers: .command)
+                        .disabled(!canStartPrep)
                     } label: {
-                        if PrepQueueService.isRunning(now: Date()) {
+                        if isScanning {
+                            LiveRunLabel(base: "Scouting", since: scoutStartedAt,
+                                         timeout: RunTimeouts.scout)
+                        } else if PrepQueueService.isRunning(now: Date()) {
                             LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
                                          timeout: RunTimeouts.prep)
                         } else {
-                            Label("Prep kept", systemImage: "envelope.badge")
+                            ToolbarHoverLabel(title: "Scout & Prep", systemImage: "binoculars")
                         }
+                    } primaryAction: {
+                        runScout()
                     }
-                    .disabled(!canStartPrep)
-                    .help(toPrep.isEmpty ? "Keep some prospects first" : "Find contacts and draft emails for the prospects you've kept")
-                    .keyboardShortcut("p", modifiers: .command)
+                    .help("Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily.")
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showDismissed = true
                     } label: {
-                        Label(dismissed.isEmpty ? "Dismissed" : "Dismissed (\(dismissed.count))",
-                              systemImage: "archivebox")
+                        ToolbarHoverLabel(title: dismissed.isEmpty ? "Dismissed" : "Dismissed (\(dismissed.count))",
+                                          systemImage: "archivebox")
                     }
                     .help("See dismissed prospects and restore any you cut by mistake")
                 }
@@ -103,8 +133,8 @@ struct RootView: View {
                     Button {
                         showFollowUps = true
                     } label: {
-                        Label(followUpsDue == 0 ? "Due" : "Due (\(followUpsDue))",
-                              systemImage: "arrow.uturn.right")
+                        ToolbarHoverLabel(title: followUpsDue == 0 ? "Due" : "Due (\(followUpsDue))",
+                                          systemImage: "arrow.uturn.right")
                     }
                     .help("Follow-ups and active conversations due for a touch")
                 }
@@ -112,7 +142,7 @@ struct RootView: View {
                     Button {
                         showPatterns = true
                     } label: {
-                        Label("What converts", systemImage: "chart.bar")
+                        ToolbarHoverLabel(title: "What converts", systemImage: "chart.bar")
                     }
                     .help("Booking and response rates by production, discipline, and fit tier")
                 }
@@ -120,51 +150,43 @@ struct RootView: View {
                     Button {
                         showVoiceGuidance = true
                     } label: {
-                        Label("Voice guidance", systemImage: "text.quote")
+                        ToolbarHoverLabel(title: "Voice guidance", systemImage: "text.quote")
                     }
                     .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
                 }
+                // #344: connected is the steady state Dan will see almost always, so it collapses to
+                // a bare icon; disconnected stays a prominent, labeled call to action since it
+                // blocks sending.
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         connectGmail()
                     } label: {
                         if gmailConnected {
-                            Label("Gmail connected", systemImage: "checkmark.circle.fill")
+                            Image(systemName: "checkmark.circle.fill")
                         } else if isConnectingGmail {
                             LiveRunLabel(base: "Connecting", since: gmailConnectStartedAt,
                                          timeout: RunTimeouts.gmailConnect)
                         } else {
-                            Label("Connect Gmail", systemImage: "link")
+                            ToolbarHoverLabel(title: "Connect Gmail", systemImage: "link")
                         }
                     }
                     .disabled(gmailConnected || isConnectingGmail)
                     .help(gmailConnected ? "Gmail is connected for sending" : "Authorize your photography Gmail so you can send approved emails")
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Run scout now") { runScout() }
-                        Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
-                    } label: {
-                        if isScanning {
-                            LiveRunLabel(base: "Scouting", since: scoutStartedAt,
-                                         timeout: RunTimeouts.scout)
-                        } else {
-                            Label("Run scout", systemImage: "binoculars")
-                        }
-                    } primaryAction: {
-                        runScout()
-                    }
-                    .disabled(isScanning)
-                    .help("Scout the venue calendars for new performances (⌘R). Auto-runs about daily.")
-                    .keyboardShortcut("r", modifiers: .command)
-                }
+                // #355: the automatic sync's enabled/last-synced state is now glanceable, and the
+                // rarely-needed manual force-run moves out of the prominent toolbar into this menu.
                 ToolbarItem(placement: .secondaryAction) {
-                    Button {
-                        syncOmniFocus(force: true)
+                    Menu {
+                        Toggle("Auto-sync to OmniFocus", isOn: $omniFocusEnabled)
+                        if omniFocusEnabled {
+                            Text(omniFocusStatusLine).foregroundStyle(OVColor.inkFaint)
+                        }
+                        Divider()
+                        Button("Sync now") { syncOmniFocus(force: true) }
                     } label: {
-                        Label("Sync to OmniFocus", systemImage: "checklist")
+                        ToolbarHoverLabel(title: "OmniFocus", systemImage: "checklist")
                     }
-                    .help("Push your due follow-ups into the OmniFocus Outreach project now. The first time, macOS will ask permission to control OmniFocus.")
+                    .help("Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus.")
                 }
                 #if DEBUG
                 // DEBUG ONLY (#196): test affordances, compiled out of release builds. Grouped into
@@ -514,7 +536,7 @@ struct RootView: View {
         Task { @MainActor in
             do {
                 let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
-                OmniFocusSyncStatus.recordSuccess()   // clears any prior failure warning (#239)
+                OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
                 if force {
                     statusMessage = "OmniFocus: \(desired.count) due · existing \(r.existing) · created \(r.created) · completed \(r.completed)"
                 }

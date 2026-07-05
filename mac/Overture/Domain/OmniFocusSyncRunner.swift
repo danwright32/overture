@@ -41,7 +41,7 @@ enum OmniFocusSyncRunner {
         let hadFailure = OmniFocusSyncStatus.lastFailure(from: defaults) != nil
         do {
             let r = try OmniFocusSync.apply(desired: desired, client: client)
-            OmniFocusSyncStatus.recordSuccess(into: defaults)
+            OmniFocusSyncStatus.recordSuccess(at: now, into: defaults)
             return r.created + r.completed
         } catch {
             OmniFocusSyncStatus.recordFailure("\(error)", at: now, into: defaults)
