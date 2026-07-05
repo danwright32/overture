@@ -21,6 +21,7 @@
 		0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */; };
 		0E4306B2FECBB993459C09B2 /* ScoutScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */; };
 		10E81F68130C8EB21253842E /* OmniFocusAutomationPermissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F17F7263541A45DD564327A /* OmniFocusAutomationPermissionTests.swift */; };
+		1154A5AB4544B39417A96897 /* SendReceiptSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A35B199EB33958EC197FF /* SendReceiptSaveGuardTests.swift */; };
 		1412FC939FC74701F566D9E8 /* StoreLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780FA66ADB1FB483CA9CAEAB /* StoreLock.swift */; };
 		15A7A60CCA0F4B04509F85BD /* VenueDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28247DC7A15C79A3B675E23 /* VenueDisplay.swift */; };
 		1622F4C853E61EB11D1DA49F /* AgentLogLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */; };
@@ -317,6 +318,7 @@
 		4ADBE3D77761E438E9AE8E2D /* VenueDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDisplayTests.swift; sourceTree = "<group>"; };
 		4C7C1703A7C49EFB8B8309E7 /* LocalHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalHistoryTests.swift; sourceTree = "<group>"; };
 		4CA74E69A3B5A93757627A5C /* ConversationReminderConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationReminderConfigTests.swift; sourceTree = "<group>"; };
+		4F6A35B199EB33958EC197FF /* SendReceiptSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendReceiptSaveGuardTests.swift; sourceTree = "<group>"; };
 		50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthTests.swift; sourceTree = "<group>"; };
 		50569449C10E9C4F6B69BD48 /* MatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchingTests.swift; sourceTree = "<group>"; };
 		506D734A84A056EAEF4C60B0 /* VoiceGuidanceGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceGuidanceGuardTests.swift; sourceTree = "<group>"; };
@@ -616,6 +618,7 @@
 				E7401013CA3A714300090BE7 /* SendConfirmationTests.swift */,
 				B2E8C30BA496E5958478D6FE /* SendDeadlockGuardTests.swift */,
 				6F74344AC7C3FDBB02A25E25 /* SendFailureLineTests.swift */,
+				4F6A35B199EB33958EC197FF /* SendReceiptSaveGuardTests.swift */,
 				DCA9CE13BE24FCCD1ED3BF39 /* SendServiceTests.swift */,
 				DA52A2DA17906C043DC938EF /* SendThrottleTests.swift */,
 				561B2AEA036704AD5AD5076B /* StoreLocationTests.swift */,
@@ -1101,6 +1104,7 @@
 				E82E5F721B14BDEB66C1CB9F /* SendConfirmationTests.swift in Sources */,
 				2F0E3B5CD3B7745B2347EEF4 /* SendDeadlockGuardTests.swift in Sources */,
 				4EAAA3BC6BEBD8539D544759 /* SendFailureLineTests.swift in Sources */,
+				1154A5AB4544B39417A96897 /* SendReceiptSaveGuardTests.swift in Sources */,
 				947B8AF36612B7183C02B452 /* SendServiceTests.swift in Sources */,
 				4FFA01E44380C4A3FC2C27AF /* SendThrottleTests.swift in Sources */,
 				93D7529C757F664D1C24F219 /* StoreLocationTests.swift in Sources */,
