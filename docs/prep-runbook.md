@@ -183,7 +183,7 @@ become "Carnegie Hall" in the email. Non-Carnegie venues (e.g. Thalia Spanish
 Theatre) stay as printed.
 
 **Gallery mapping** (discipline → the closest of the five site galleries):
-- choral / music / classical recital → danwrightphotography.com/music
+- music / classical recital → danwrightphotography.com/music
 - staged opera / theater → danwrightphotography.com/performing-arts
 - dance → danwrightphotography.com/dance
 - band → danwrightphotography.com/bands

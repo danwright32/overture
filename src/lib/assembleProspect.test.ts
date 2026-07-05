@@ -9,7 +9,7 @@ import type { MatchVerdict } from "./historyMatch";
 function event(over: Partial<DiscoveredEvent> = {}): DiscoveredEvent {
   return {
     group_name: "Every Voice Choirs",
-    discipline: "choral",
+    discipline: "music",
     venue: "Merkin Hall",
     performance_date: "2026-05-16",
     source_listing_url: null,

@@ -48,7 +48,8 @@ the app's own scout is the live one.
    - `coverage`: `likely_uncovered` for small self-produced shows (e.g. Weill
      recitals); `likely_covered` for Stern mainstage prestige / big touring acts; else
      `unknown`.
-   - `discipline`: dance > opera/theater > choral/band/comedy > music (baseline).
+   - `discipline`: dance > opera/theater > music/band/comedy > other (baseline, no signal).
+     Choral is not its own category; choir/chorus signals classify as music.
    - `reachable`: true for any venue Dan can reach by transit (section 8).
    - `fit_reason`: one plain sentence, in Dan's terms.
 

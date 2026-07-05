@@ -17,7 +17,7 @@ enum PriorRelationship: String, Decodable, Sendable {
     case none
 }
 enum Discipline: String, Decodable, Sendable, CaseIterable {
-    case dance, opera, theater, choral, music, band, comedy, other
+    case dance, opera, theater, music, band, comedy, other
 }
 enum Tier: String, Decodable, Sendable { case high, longshot }
 
@@ -62,13 +62,15 @@ enum Ranker {
     static func coveragePoints(_ c: Coverage) -> Int {
         switch c { case .likelyUncovered: return 2; case .unknown: return 0; case .likelyCovered: return -2 }
     }
-    // Music is the baseline; every other discipline is preferred. Dance highest.
+    // #350: Choral folded into Music, merged at Choral's former score (Dan's call) rather than
+    // demoting it to Music's old baseline. "other" (no discipline signal) is now the sole
+    // baseline. Dance highest.
     static func disciplinePoints(_ d: Discipline) -> Int {
         switch d {
         case .dance: return 3
         case .opera, .theater: return 2
-        case .choral, .band, .comedy: return 1
-        case .music, .other: return 0
+        case .music, .band, .comedy: return 1
+        case .other: return 0
         }
     }
 

@@ -132,7 +132,7 @@ struct OutcomePatternsView: View {
     }
 
     private func label(for name: String) -> String {
-        // Values are short slugs ("self", "agency", "choral", "high"); a readable cap is enough.
+        // Values are short slugs ("self", "agency", "music", "high"); a readable cap is enough.
         name.replacingOccurrences(of: "_", with: " ").capitalized
     }
 }

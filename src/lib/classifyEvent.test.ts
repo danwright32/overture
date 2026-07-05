@@ -39,7 +39,9 @@ describe("classifyEvent: clear dead-zone cases", () => {
 });
 
 describe("classifyEvent: clear strong-fit cases", () => {
-  it("classifies a self-produced children's choir as self / strong / choral", () => {
+  // #350: choir/chorus signals still detect a strong, self-produced profile; the resulting
+  // discipline is music (Choral was folded into it), not a separate choral bucket.
+  it("classifies a self-produced children's choir as self / strong / music", () => {
     const c = classifyEvent(
       ev({
         title: "Indianapolis Children's Choir",
@@ -49,7 +51,7 @@ describe("classifyEvent: clear strong-fit cases", () => {
     );
     expect(c.production).toBe("self");
     expect(c.profile).toBe("strong");
-    expect(c.discipline).toBe("choral");
+    expect(c.discipline).toBe("music");
     expect(c.coverage).toBe("likely_uncovered");
     expect(c.confidence).toBe("confident");
   });
@@ -82,10 +84,10 @@ describe("classifyEvent: clear strong-fit cases", () => {
 });
 
 describe("classifyEvent: discipline detection", () => {
-  it("detects dance, opera, choral, band from title keywords", () => {
+  it("detects dance, opera, choir-signal (now music), band from title keywords", () => {
     expect(classifyEvent(ev({ title: "Spring Ballet Gala" })).discipline).toBe("dance");
     expect(classifyEvent(ev({ title: "La Bohème: Opera in Concert" })).discipline).toBe("opera");
-    expect(classifyEvent(ev({ title: "Brooklyn Youth Chorus" })).discipline).toBe("choral");
+    expect(classifyEvent(ev({ title: "Brooklyn Youth Chorus" })).discipline).toBe("music");
     expect(classifyEvent(ev({ title: "Wind Ensemble Showcase" })).discipline).toBe("band");
   });
 

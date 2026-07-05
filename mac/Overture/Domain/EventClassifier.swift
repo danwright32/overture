@@ -42,7 +42,9 @@ enum EventClassifier {
         if matches(text, #"\b(opera|operetta)\b"#) { return .opera }
         // "play"/"musical" are too common in names to be reliable theater signals.
         if matches(text, #"\b(theatre|theater|drama|cabaret|playhouse)\b"#) { return .theater }
-        if matches(text, #"\b(choir|chorus|chorale|choral|voices|singers|cantata|vocal)\b"#) { return .choral }
+        // #350: Choral folded into Music; the keyword signal still disambiguates against
+        // band/comedy checks below, it just no longer produces a separate discipline bucket.
+        if matches(text, #"\b(choir|chorus|chorale|choral|voices|singers|cantata|vocal)\b"#) { return .music }
         if matches(text, #"\b(band|wind ensemble|brass|jazz band|marching)\b"#) { return .band }
         if matches(text, #"\b(comedy|comedian|stand.?up|improv)\b"#) { return .comedy }
         return .music
