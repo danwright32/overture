@@ -21,11 +21,19 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
 
 ## Working here
 
-- Engine: `pnpm test`, `pnpm typecheck`. Scripts: `pnpm export` (write results handoff),
-  `pnpm seed`, `pnpm import-history`.
+- Engine: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
+  history import, see `docs/import-history.md`). `pnpm scout [events.json]` mirrors the
+  live scout in TypeScript and writes a reference results file (see
+  `docs/scout-runbook.md`); the real scout runs natively in the Mac app.
 - Mac app: `cd mac && xcodegen generate`, then `./scripts/run-tests-locked.sh` (wraps
   `xcodebuild -scheme Overture -destination 'platform=macOS' test` in a lock so it can't
-  collide with another test run on this Mac; use it instead of raw `xcodebuild test`).
+  collide with another test run on this Mac; use it instead of raw `xcodebuild test`). A
+  scoped `-only-testing:OvertureTests/<Suite>/<test>` run can print
+  `** TEST SUCCEEDED **` with 0 tests executed if the path doesn't match anything (for
+  example a `@Suite("...")` display name that differs from its Swift type name),
+  indistinguishable at a glance from a real pass. Confirm a scoped run by grepping its
+  output for the specific test name, or just run the full suite via
+  `run-tests-locked.sh`, which completes in a few seconds.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
