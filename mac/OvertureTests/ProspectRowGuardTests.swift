@@ -23,3 +23,42 @@ struct ProspectRowGuardTests {
         #expect(prospectRow.contains(".symbolRenderingMode(.hierarchical)"))
     }
 }
+
+// #349: genre and production type are two independent classifications (a show has both, they
+// are never alternatives), so the confirm/fix menu must present them as two distinct labeled
+// sections instead of one flat single-select list with a bare divider.
+@Suite("Unsure-call menu separates genre from production type")
+struct UnsureCallMenuGuardTests {
+    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
+        SourceGuardHelper.source(relativeFromMac, file: file)
+    }
+
+    private var prospectRow: String { source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func genreAndProductionAreSeparatelyLabeledSubmenus() {
+        #expect(!prospectRow.isEmpty)
+        #expect(prospectRow.contains("Menu(\"Genre\")"))
+        #expect(prospectRow.contains("Menu(\"Production type\")"))
+    }
+
+    // The discipline choices belong inside the Genre submenu, the production choices inside the
+    // Production type submenu, not sitting flat in the outer menu alongside them.
+    @Test func disciplineChoicesAreNestedInsideTheGenreSubmenu() {
+        guard let genreRange = prospectRow.range(of: "Menu(\"Genre\")") else {
+            Issue.record("Genre submenu not found")
+            return
+        }
+        let after = prospectRow[genreRange.upperBound...].prefix(300)
+        #expect(after.contains("Discipline.allCases"))
+    }
+
+    @Test func productionChoicesAreNestedInsideTheProductionSubmenu() {
+        guard let productionRange = prospectRow.range(of: "Menu(\"Production type\")") else {
+            Issue.record("Production type submenu not found")
+            return
+        }
+        let after = prospectRow[productionRange.upperBound...].prefix(300)
+        #expect(after.contains("Self-produced"))
+        #expect(after.contains("Agency/presented"))
+    }
+}

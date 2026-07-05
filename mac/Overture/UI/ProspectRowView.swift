@@ -223,14 +223,20 @@ struct ProspectRowView: View {
             Menu {
                 Button("This looks right") { onMarkConfidenceReviewed() }
                 Divider()
-                ForEach(Discipline.allCases, id: \.self) { discipline in
-                    Button(QueueModel.disciplineLabel(discipline.rawValue)) {
-                        onCorrectClassification(discipline, nil)
+                // #349: genre and production type are independent classifications (a show has
+                // both; they're never alternatives), so each gets its own labeled submenu
+                // instead of sitting in one flat single-select list.
+                Menu("Genre") {
+                    ForEach(Discipline.allCases, id: \.self) { discipline in
+                        Button(QueueModel.disciplineLabel(discipline.rawValue)) {
+                            onCorrectClassification(discipline, nil)
+                        }
                     }
                 }
-                Divider()
-                Button("Self-produced") { onCorrectClassification(nil, .selfProduced) }
-                Button("Agency/presented") { onCorrectClassification(nil, .agency) }
+                Menu("Production type") {
+                    Button("Self-produced") { onCorrectClassification(nil, .selfProduced) }
+                    Button("Agency/presented") { onCorrectClassification(nil, .agency) }
+                }
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "questionmark.circle.fill")
