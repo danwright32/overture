@@ -16,6 +16,14 @@ enum SendState: String, Codable, CaseIterable, Sendable {
     case pending, sending, sent, suppressed
 }
 
+// Why a recipient carries sendState == .suppressed (#542): the original booking-freeze only ever
+// meant "the show got booked elsewhere," but the same freeze now also fires on a manual decline or
+// closing note, so the label shown for a suppressed contact needs to say which actually happened.
+// Only meaningful while sendState == .suppressed.
+enum RecipientSuppressionReason: String, Codable, CaseIterable, Sendable {
+    case bookedElsewhere, declined
+}
+
 // A recipient's terminal commercial outcome (#389 derived-outcome model). The active states
 // (pending / awaiting / in conversation) are inferred from sendState + replied + bounced; this
 // captures only the resolutions that aren't otherwise knowable. `booked` is the attribution of the
@@ -50,6 +58,9 @@ final class Recipient {
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
+    // Why sendState == .suppressed (#542). Only meaningful while sendState == .suppressed; nil for
+    // every other state and for any suppression that predates this field.
+    var suppressionReasonRaw: String?
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?
@@ -132,6 +143,13 @@ final class Recipient {
     var sendState: SendState {
         get { SendState(rawValue: sendStateRaw) ?? .pending }
         set { sendStateRaw = newValue.rawValue }
+    }
+
+    // Defaults to .bookedElsewhere so a suppression from before this field existed (every one of
+    // them was a booking-freeze) still reads correctly rather than as an unrepresentable nil (#542).
+    var suppressionReason: RecipientSuppressionReason {
+        get { suppressionReasonRaw.flatMap(RecipientSuppressionReason.init) ?? .bookedElsewhere }
+        set { suppressionReasonRaw = newValue.rawValue }
     }
 
     var resolution: RecipientResolution? {

@@ -153,6 +153,7 @@ extension QueueItem {
                                       provenance: r.provenance, sendState: r.sendState, replied: r.replied,
                                       lastReplyText: r.lastReplyText, resolution: r.resolution,
                                       bounced: r.bounced, outcomeSource: r.outcomeSource,
+                                      suppressionReason: r.suppressionReason,
                                       replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                                       replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                                       replyDraftEditedByDan: r.replyDraftEditedByDan)

@@ -614,6 +614,7 @@ struct QueueView: View {
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
         model.bookingSuggested = false
+        model.suppressUntriedRecipients(reason: .bookedElsewhere)   // #542
         try? context.save()
     }
 

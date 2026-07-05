@@ -50,13 +50,14 @@ struct ConversationWiringTests {
         #expect(p.outcomeSourceRaw == OutcomeSource.manual.rawValue)
     }
 
-    @Test func decliningWritesThroughToEngagedContactsButLeavesUntriedAccurate() {
+    @Test func decliningWritesThroughToEngagedContactsAndSuppressesTheUntriedOne() {
         let p = lead(outcome: .replied, source: .auto)
         // Emailed, still open: Dan engaged this contact, so a close resolves it.
         let engaged = Recipient(id: "act@x.org", email: "act@x.org", provenance: .act)
         engaged.sendState = .sent
-        // Never emailed but reachable (the act-then-presenter ladder): must stay accurate, NOT
-        // marked won or lost, because Dan never contacted them.
+        // Never emailed but reachable (the act-then-presenter ladder): must not read as a false
+        // "declined" outcome (Dan never contacted them), but the show is over, so #542 takes them out
+        // of future sends the same way an auto-detected booking already does.
         let untried = Recipient(id: "pres@x.org", email: "pres@x.org", provenance: .presenter)
         untried.sendState = .pending
         // Emailed but bounced: already terminal, not a Dan-declined contact.
@@ -71,10 +72,14 @@ struct ConversationWiringTests {
         #expect(engaged.resolution == .declinedSoft)          // engaged contact written through
         #expect(engaged.outcomeSource == .manual)
         #expect(untried.resolution == nil)                    // never contacted -> no false outcome
-        #expect(untried.sendState == .pending)
+        #expect(untried.sendState == .suppressed)             // #542: taken out of future sends
+        #expect(untried.suppressionReason == .declined)
         #expect(bounced.resolution == nil)                    // bounced left untouched
         #expect(bounced.bounced == true)
         #expect(p.isClosed == true)                           // honest close despite an untried contact left
+        // #542: with the untried contact out of play, nothing is left to pursue, so the displayed
+        // status now correctly reads Lost instead of staying Active.
+        #expect(p.performanceStatus == .lostDoorOpen)
     }
 
     @Test func triagingAReplyResumesTheShowsPausedContacts() {

@@ -107,6 +107,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     let resolution: RecipientResolution?
     let bounced: Bool
     let outcomeSource: OutcomeSource?
+    // Only meaningful when sendState == .suppressed (#542); defaulted so existing call sites that
+    // never touch a suppressed recipient don't need updating.
+    var suppressionReason: RecipientSuppressionReason = .bookedElsewhere
     var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
@@ -150,7 +153,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
         switch sendState {
         case .sent: return "Awaiting reply"
         case .pending: return (email?.isEmpty == false) ? "Not sent yet" : "No email yet"
-        case .suppressed: return "Paused (booked elsewhere)"
+        case .suppressed:
+            switch suppressionReason {
+            case .bookedElsewhere: return "Paused (booked elsewhere)"
+            case .declined: return "Paused (show declined)"
+            }
         case .sending: return "Sending…"
         }
     }
