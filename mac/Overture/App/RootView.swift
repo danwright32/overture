@@ -8,6 +8,9 @@ struct RootView: View {
     @State private var scoutStartedAt: Date?   // when the current scan began, for the live elapsed counter (#435)
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
+    // #346: the scout outcome ("N found · N unsure", or a failure status) gets its own state so
+    // it can render next to the Scout control instead of the unrelated center status slot.
+    @State private var scoutSummary: String?
     @State private var errorMessage: String?
     // #285: the shared acknowledgment surface for this window and its sheets, so a control whose
     // effect isn't otherwise visible still shows it ran.
@@ -119,6 +122,17 @@ struct RootView: View {
                     // No primaryAction: a plain click always opens the dropdown instead of
                     // guessing which of Scout or Prep was meant.
                     .help("Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily.")
+                }
+                // #346: rendered next to the Scout control that produced it, not the unrelated
+                // center status slot. #345: symmetric padding so the text doesn't crowd the pill.
+                if let scoutSummary {
+                    ToolbarItem(placement: .primaryAction) {
+                        Text(scoutSummary)
+                            .padding(.horizontal, OVSpacing.sm)
+                            .padding(.vertical, 2)
+                            .font(.system(size: 11))
+                            .foregroundStyle(OVColor.inkFaint)
+                    }
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
@@ -391,8 +405,10 @@ struct RootView: View {
 
     private func startPrep() {
         do {
-            let count = try PrepQueueService.startPrep(from: context, now: Date())
-            statusMessage = "Prep started for \(count) prospect\(count == 1 ? "" : "s")…"
+            // #353: no separate "started" message. The button's own "Prepping…" state and
+            // QueueView's masthead count already say a run is in progress; a second message
+            // saying the same thing was redundant.
+            _ = try PrepQueueService.startPrep(from: context, now: Date())
             // Watch this run so Dan sees the outcome (drafts ingested, or a clear notice
             // that it finished without producing anything) rather than silent waiting (#48).
             Task { await watchPrepRun() }
@@ -492,14 +508,14 @@ struct RootView: View {
     private func runScout(auto: Bool = false) {
         isScanning = true
         scoutStartedAt = Date()
-        statusMessage = nil
+        scoutSummary = nil
         Task {
             do {
                 let outcome = try await ScoutService.runScout(into: context)
                 var parts = ["\(outcome.found) found"]
                 if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
                 if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
-                statusMessage = parts.joined(separator: " · ")
+                scoutSummary = parts.joined(separator: " · ")
                 // Surface a scout warning if any: zero events extracted (#27) or a
                 // missing/stale past-client export (#22/#23). Silent degradation is the
                 // thing we are avoiding.
@@ -509,7 +525,7 @@ struct RootView: View {
                 // the modal Dan expects after clicking (#77).
                 let p = ScoutFailure.presentation(auto: auto, message: String(describing: error))
                 errorMessage = p.alert
-                if let status = p.status { statusMessage = status }
+                if let status = p.status { scoutSummary = status }
             }
             isScanning = false
             scoutStartedAt = nil
