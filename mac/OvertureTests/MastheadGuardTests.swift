@@ -34,4 +34,14 @@ struct MastheadGuardTests {
         #expect(!app.isEmpty)
         #expect(app.contains(".windowStyle(.hiddenTitleBar)"))
     }
+
+    // #377: a live app and a Debug build can be open side by side showing different data; the
+    // masthead must carry a marker that only compiles into Debug builds, so it can never leak
+    // into what Dan sees running live.
+    @Test func debugMarkerIsGatedOnDebugFlag() {  // #377
+        let queueView = source("Overture/UI/QueueView.swift")
+        #expect(!queueView.isEmpty)
+        #expect(queueView.contains("#if DEBUG"))
+        #expect(queueView.contains("\"Debug\""))
+    }
 }

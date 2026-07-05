@@ -253,7 +253,18 @@ struct QueueView: View {
         let priority = QueuePriorityBreakdown.summarize(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
+            HStack(spacing: OVSpacing.xs) {
+                Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
+                #if DEBUG
+                // #377: a live app and a Debug build can be open side by side showing different
+                // data, so the masthead must make it unmistakable which window this is.
+                Text("Debug")
+                    .font(OVType.tag)
+                    .foregroundStyle(OVColor.gold)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 2)
+                    .background(Capsule().fill(OVColor.gold.opacity(0.15)))
+                #endif
+            }
             Rectangle().fill(OVColor.gold.opacity(0.5)).frame(height: 1).frame(maxWidth: .infinity)
             HStack(spacing: OVSpacing.xs) {
                 Text("\(summary.total)").fontWeight(.semibold).foregroundStyle(OVColor.ink)
