@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Overture
 
 // #285: the no-silent-no-op sweep. Controls whose effect isn't otherwise visible (the voice-learning
@@ -91,5 +92,48 @@ struct ActionAckTests {
     func sendNotConfirmed() {
         #expect(ActionAck.sendNotConfirmed(org: "Aurora Strings")
                 == "Couldn't save what happened sending to Aurora Strings: check Gmail to see if it went out.")
+    }
+
+    // #487: confirming or correcting an unsure classification changes nothing else visible on
+    // the row once the chip clears, so both need their own acknowledgment copy.
+    @Test("confirming an unsure classification names the org")
+    func confidenceConfirmed() {
+        #expect(ActionAck.confidenceConfirmed(org: "Aurora Strings")
+                == "Confirmed Aurora Strings's classification")
+    }
+
+    @Test("correcting a classification names the org")
+    func classificationCorrected() {
+        #expect(ActionAck.classificationCorrected(org: "Aurora Strings")
+                == "Updated Aurora Strings's classification")
+    }
+}
+
+// #487: markConfidenceReviewed and correctClassification handle the "Unsure call" menu's
+// confirm/correct actions but didn't route through ActionFeedback like snooze/restore/voice
+// already do, so tapping "This looks right" on a lead whose score doesn't move gave no signal
+// it registered. Both live on QueueView, a SwiftUI View backed by @Environment/@Query, so they
+// can't be invoked directly in a unit test; scan their source bodies instead, the same guard
+// technique SendReceiptSaveGuardTests uses for #477.
+@Suite("Confidence-flag actions acknowledge (#487)")
+struct ConfidenceFeedbackGuardTests {
+    private func queueViewSource() throws -> String {
+        let queueView = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests/
+            .deletingLastPathComponent()   // mac/
+            .appendingPathComponent("Overture/UI/QueueView.swift")
+        return try String(contentsOf: queueView, encoding: .utf8)
+    }
+
+    @Test func markConfidenceReviewedAcknowledges() throws {
+        let body = try SourceGuard.functionBody(named: "markConfidenceReviewed", in: try queueViewSource())
+        #expect(body.contains("feedback.acknowledge("),
+                "markConfidenceReviewed must acknowledge via ActionFeedback so confirming a classification is never a silent no-op (#487).")
+    }
+
+    @Test func correctClassificationAcknowledges() throws {
+        let body = try SourceGuard.functionBody(named: "correctClassification", in: try queueViewSource())
+        #expect(body.contains("feedback.acknowledge("),
+                "correctClassification must acknowledge via ActionFeedback so correcting a classification is never a silent no-op (#487).")
     }
 }

@@ -571,6 +571,8 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.confidenceReviewedByDan = true
         try? context.save()
+        // #487: the chip just clears, which isn't visible enough on its own to prove the tap registered.
+        feedback.acknowledge(ActionAck.confidenceConfirmed(org: item.groupName))
     }
 
     // Dan corrected a wrong classification. Calls ClassificationOverride.correct which
@@ -579,6 +581,8 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
         try? context.save()
+        // #487: same silent-no-op risk as markConfidenceReviewed above.
+        feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
     }
 
     private func setConversationState(_ item: QueueItem, _ state: ConversationState) {
