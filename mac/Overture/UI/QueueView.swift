@@ -39,6 +39,10 @@ struct QueueView: View {
     @Binding var deepLinkedKeys: [String]?
     @State private var focusedKeys: [String]?
 
+    // #488: lets the Reconnect Gmail alert start the same OAuth flow the onboarding screen uses,
+    // instead of just telling Dan to go find the button himself.
+    var onConnectGmail: () -> Void = {}
+
     // The one email awaiting Dan's explicit confirm before it sends (#49).
     private struct PendingConfirm: Identifiable {
         let id: String   // prospect naturalKey
@@ -95,7 +99,8 @@ struct QueueView: View {
                 Text(sendConfirmMessage(pending))
             }
             .alert("Reconnect Gmail", isPresented: $showReconnect) {
-                Button("OK", role: .cancel) {}
+                Button("Connect Gmail") { onConnectGmail() }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
             }
