@@ -62,3 +62,40 @@ struct UnsureCallMenuGuardTests {
         #expect(after.contains("Agency/presented"))
     }
 }
+
+// #348: keeping a prospect whose classification is still unconfirmed surfaces the confirm/fix
+// choices right away (a popover, since a native Menu can't be opened programmatically), instead
+// of silently carrying the unconfirmed guess forward. Dan's call: don't block the keep itself.
+@Suite("Keeping an unconfirmed prospect surfaces classification confirm")
+struct AutoConfirmClassificationGuardTests {
+    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
+        SourceGuardHelper.source(relativeFromMac, file: file)
+    }
+
+    private var prospectRow: String { source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func keepChecksUncertaintyBeforeShowingTheConfirmPopover() {
+        #expect(!prospectRow.isEmpty)
+        #expect(prospectRow.contains("showConfirmClassification"))
+        #expect(prospectRow.contains("item.isClassificationUncertain"))
+    }
+
+    @Test func aPopoverIsWiredToThatState() {
+        #expect(prospectRow.contains(".popover(isPresented: $showConfirmClassification)"))
+    }
+
+    @Test func thePopoverOffersTheSameThreeResolutions() {
+        guard let popoverRange = prospectRow.range(of: ".popover(isPresented: $showConfirmClassification)") else {
+            Issue.record("Confirm popover not wired")
+            return
+        }
+        // The popover's content view is defined nearby; search the whole file for the three
+        // resolution actions it must offer (reusing the same closures as the manual menu).
+        let content = prospectRow[popoverRange.lowerBound...]
+        #expect(content.contains("This looks right"))
+        #expect(content.contains("onMarkConfidenceReviewed"))
+        #expect(content.contains("Self-produced"))
+        #expect(content.contains("Agency/presented"))
+        #expect(content.contains("Discipline.allCases"))
+    }
+}

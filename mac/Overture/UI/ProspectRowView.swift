@@ -3,6 +3,10 @@ import SwiftUI
 // One editorial "call sheet" entry. High-fit prospects carry a gold edge; the fit
 // score reads like a grade. Keep and Dismiss act on the local store directly.
 struct ProspectRowView: View {
+    // #348: pulled forward right after Keep on a still-unconfirmed prospect, instead of leaving
+    // an unresolved guess to carry silently forward.
+    @State private var showConfirmClassification = false
+
     let item: QueueItem
     let today: String
     let onKeep: () -> Void
@@ -333,12 +337,17 @@ struct ProspectRowView: View {
                     .padding(.vertical, 6)
                     .background(Capsule().fill(OVColor.forest.opacity(0.10)))
             } else {
-                Button(action: onKeep) {
+                Button {
+                    let wasUncertain = item.isClassificationUncertain
+                    onKeep()
+                    if wasUncertain { showConfirmClassification = true }
+                } label: {
                     Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
                         .background(Capsule().fill(OVColor.forest))
                 }
                 .buttonStyle(.plain)
+                .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
             }
             Menu {
                 ForEach(DismissReason.allCases, id: \.self) { reason in
@@ -352,6 +361,39 @@ struct ProspectRowView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
+    }
+
+    // #348: the same three resolutions the manual "Unsure call" menu offers (This looks right,
+    // pick a genre, pick a production type), reusing the same closures, surfaced automatically
+    // right after Keep instead of requiring Dan to notice and click the badge himself.
+    private var confirmClassificationPopover: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            Text("Confirm classification").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            Button("This looks right") {
+                onMarkConfidenceReviewed()
+                showConfirmClassification = false
+            }
+            Divider()
+            Text("Genre").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            ForEach(Discipline.allCases, id: \.self) { discipline in
+                Button(QueueModel.disciplineLabel(discipline.rawValue)) {
+                    onCorrectClassification(discipline, nil)
+                    showConfirmClassification = false
+                }
+            }
+            Divider()
+            Text("Production type").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            Button("Self-produced") {
+                onCorrectClassification(nil, .selfProduced)
+                showConfirmClassification = false
+            }
+            Button("Agency/presented") {
+                onCorrectClassification(nil, .agency)
+                showConfirmClassification = false
+            }
+        }
+        .padding(OVSpacing.lg)
+        .frame(width: 260)
     }
 }
 
