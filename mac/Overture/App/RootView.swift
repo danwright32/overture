@@ -115,9 +115,9 @@ struct RootView: View {
                         } else {
                             ToolbarHoverLabel(title: "Scout & Prep", systemImage: "binoculars")
                         }
-                    } primaryAction: {
-                        runScout()
                     }
+                    // No primaryAction: a plain click always opens the dropdown instead of
+                    // guessing which of Scout or Prep was meant.
                     .help("Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily.")
                 }
                 ToolbarItem(placement: .secondaryAction) {

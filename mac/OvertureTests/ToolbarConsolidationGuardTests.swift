@@ -42,6 +42,14 @@ struct ToolbarConsolidationGuardTests {
         #expect(count == 1)
     }
 
+    // Dan's call: clicking the merged icon should never guess which of Scout or Prep he meant.
+    // A Menu's `primaryAction:` trailing closure is what gives a plain click a default action
+    // instead of always opening the dropdown; the control must not have one.
+    @Test func scoutAndPrepMenuHasNoDefaultClickAction() {
+        #expect(!rootView.isEmpty)
+        #expect(!rootView.contains("primaryAction: {"))
+    }
+
     // #344: the connected state collapses to a bare icon (no visible "Gmail connected" text
     // wrapper), only the disconnected/connecting states stay prominent.
     @Test func gmailConnectedStateIsABareIconNotALabel() {
