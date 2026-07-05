@@ -114,8 +114,11 @@ struct RootView: View {
                             LiveRunLabel(base: "Scouting", since: scoutStartedAt,
                                          timeout: RunTimeouts.scout)
                         } else if PrepQueueService.isRunning(now: Date()) {
+                            // #354: real "N of M" progress from the run's own progress file,
+                            // instead of a bare indefinite spinner.
                             LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
-                                         timeout: RunTimeouts.prep)
+                                         timeout: RunTimeouts.prep,
+                                         progressDetail: PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()))
                         } else {
                             ToolbarHoverLabel(title: "Scout & Prep", systemImage: "binoculars")
                         }

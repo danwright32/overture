@@ -46,6 +46,13 @@ function requireVersion(v: unknown, file: string, allowed: readonly number[]): n
   return v;
 }
 
+function requireNonNegativeInt(v: unknown, file: string, path: string): number {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    fail(file, `${path} must be a non-negative integer`);
+  }
+  return v;
+}
+
 const PRODUCTION: readonly Candidate["production"][] = ["self", "agency", "unknown"];
 const PROFILE: readonly Candidate["profile"][] = ["strong", "weak", "neutral"];
 const COVERAGE: readonly Candidate["coverage"][] = ["likely_uncovered", "likely_covered", "unknown"];
@@ -157,6 +164,17 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
       }
     }
   });
+}
+
+// overture-prep-progress.json (version 1 only): mac/scripts/prep-run.sh seeds {total, completed:0},
+// the Prep workflow updates completed as it finishes each item (#354)
+export function assertPrepProgressShape(data: unknown, file: string, expectedVersion: number): void {
+  const root = requireObject(data, file, "(root)");
+  const version = requireVersion(root.version, file, [1]);
+  if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
+  const total = requireNonNegativeInt(root.total, file, "total");
+  const completed = requireNonNegativeInt(root.completed, file, "completed");
+  if (completed > total) fail(file, `completed (${completed}) must not exceed total (${total})`);
 }
 
 // overture-reply-classify-queue.json (versions 1-3, additive: recipientId at v2+, performanceDate at v3+)

@@ -25,6 +25,7 @@ the workflow's runbook is its spec.
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
@@ -36,16 +37,18 @@ Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, no
 
 Phases 1 and 3 of #478 run the TypeScript and Swift suites on every PR, but that only closes
 the core worry in #478 (a fixture-shape change merging green while silently breaking the
-other side) for a contract with an automated test on every side that is code. Of the 10
+other side) for a contract with an automated test on every side that is code. Of the 11
 contracts above, exactly 3 clear that bar: `downbeat-export.json`, `overture-history.json`,
 and `overture-results.json`. For those, CI now catches a side that has not caught up to a
 fixture change instead of letting it drift silently into production.
 
-The other 7 each have exactly one side that is a Claude Code workflow, not code, by design:
-the fixture plus its runbook is deliberately the whole spec for that half (see Per contract
-below). Running the existing suite for the code side in CI does not and cannot add coverage
-for a side that was never meant to have an automated test. Do not read Phases 1 and 3 as
-having closed the cross-language risk for anything beyond those 3 contracts.
+The other 8 each have at least one side that is not code, by design: a Claude Code workflow
+for all of them, plus `mac/scripts/prep-run.sh` (a shell script) on the writing side of
+`overture-prep-progress.json`: the fixture plus the runbook (and, for that one, the script)
+is deliberately the whole spec for that half (see Per contract below). Running the existing
+suite for the code side in CI does not and cannot add coverage for a side that was never
+meant to have an automated test. Do not read Phases 1 and 3 as having closed the
+cross-language risk for anything beyond those 3 contracts.
 
 `src/lib/fixtureShape.test.ts` (#509) adds a lightweight structural check for those other 7: it
 decodes every version file committed under each fixture directory and asserts it still matches

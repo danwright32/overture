@@ -19,12 +19,14 @@ enum RunProgress {
 
     // The full spinner caption: "Drafting a reply… 0:45" while a start time is known, or the plain
     // "Drafting a reply…" when it isn't. The trailing ellipsis stays so a counter-less run still reads
-    // as in-progress.
-    static func spinnerLabel(_ base: String, since start: Date?, now: Date) -> String {
+    // as in-progress. `detail` (#354, e.g. "3 of 9" from a run's own progress file) inserts before the
+    // ellipsis when present: "Prepping 3 of 9… 0:45".
+    static func spinnerLabel(_ base: String, since start: Date?, now: Date, detail: String? = nil) -> String {
+        let label = detail.map { "\(base) \($0)" } ?? base
         if let elapsed = elapsedLabel(since: start, now: now) {
-            return "\(base)… \(elapsed)"
+            return "\(label)… \(elapsed)"
         }
-        return "\(base)…"
+        return "\(label)…"
     }
 
     // #436: the single three-state decision every long action routes through. Given the run's start,

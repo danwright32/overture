@@ -17,6 +17,9 @@ struct LiveRunLabel: View {
     var color: Color? = nil
     // Shown alongside the stalled state when provided; tapping it re-launches the run.
     var onRetry: (() -> Void)? = nil
+    // #354: real "N of M" progress (e.g. from a run's own progress file), inserted before the
+    // ellipsis. nil when the run has no progress data to show.
+    var progressDetail: String? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -31,7 +34,7 @@ struct LiveRunLabel: View {
         case .running, .idle:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                styled(Text(RunProgress.spinnerLabel(base, since: since, now: now)))
+                styled(Text(RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail)))
             }
         }
     }
