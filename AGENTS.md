@@ -34,6 +34,15 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
   indistinguishable at a glance from a real pass. Confirm a scoped run by grepping its
   output for the specific test name, or just run the full suite via
   `run-tests-locked.sh`, which completes in a few seconds.
+- Running multiple Claude agents on this repo at once: give each agent its own git
+  worktree so file edits and branches never collide, but xcodebuild itself must stay
+  serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
+  path outside any checkout, so every worktree (and CI) contends for the same lock
+  instead of each locking its own copy. The current verification model is a hybrid:
+  each agent builds and tests its own worktree under that shared lock and stops after
+  opening a PR (it never merges and never launches the live app); the coordinating
+  session then independently re-runs the full suite on every branch under the same
+  lock before merging, rather than trusting each agent's self report.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
