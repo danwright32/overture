@@ -13,6 +13,14 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug subfolder).
 # Fall back to the live path for a hand-run from a terminal.
 SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
+
+# Open the run log before any guard below can exit: the launching Process() redirects this whole
+# invocation's stdout/stderr to /dev/null, so until now an early guard failure (no work-list, no
+# claude CLI) left zero trace anywhere, identical to "ran and found nothing" (#485).
+mkdir -p "$SUPPORT"
+LOG="$SUPPORT/prep-run.log"
+exec >> "$LOG" 2>&1
+
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
@@ -52,7 +60,6 @@ done
 # Headless Claude Code run. Tools limited to what the run needs.
 cd "$PROJECT_DIR"
 "$CLAUDE" -p "$PROMPT" \
-  --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill" \
-  >> "$SUPPORT/prep-run.log" 2>&1
+  --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill"
 
 echo "prep run finished -> $RESULTS"
