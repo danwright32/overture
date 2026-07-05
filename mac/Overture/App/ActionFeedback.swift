@@ -57,4 +57,13 @@ enum ActionAck {
     static func sendNotConfirmed(org: String) -> String {
         "Couldn't save what happened sending to \(org): check Gmail to see if it went out."
     }
+
+    // #487: the unsure-call chip clears itself, so confirming or correcting it needs its own ack.
+    static func confidenceConfirmed(org: String) -> String {
+        "Confirmed \(org)'s classification"
+    }
+
+    static func classificationCorrected(org: String) -> String {
+        "Updated \(org)'s classification"
+    }
 }
