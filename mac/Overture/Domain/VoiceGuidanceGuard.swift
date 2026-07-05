@@ -6,7 +6,7 @@ import Foundation
 // auto-generated section of overture-voice-guidance.md against the real names in the store, and if any
 // leak through it quarantines that section (so a contaminated guidance can never feed a future draft)
 // and reports the leaked names so the app can warn Dan. Dan's own notes section is never inspected or
-// touched — a name he writes there is his call, not a leak.
+// touched; a name he writes there is his call, not a leak.
 
 enum VoiceGuidanceGuard {
     // Names shorter than this are dropped: too likely to be common words that would false-positive

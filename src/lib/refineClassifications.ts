@@ -1,6 +1,6 @@
 // The second half of the chosen hybrid classifier (#30). The rules in classifyEvent flag
 // genuinely ambiguous events as `confidence: "uncertain"`; an AI refine pass (the Claude Code
-// scout agent, on Dan's Max plan — no paid API) re-judges only those, and this folds the
+// scout agent, on Dan's Max plan, no paid API) re-judges only those, and this folds the
 // result back over the rules output. Keeping the refine slice small keeps cost near zero while
 // recovering the nuance rules miss (e.g. a self-presented orchestra that is actually covered).
 

@@ -60,7 +60,7 @@ enum DownbeatBooking {
                 // Soft signal: don't re-suggest if dismissed
                 if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
             case .none:
-                // Fall back to old client-list org match — downgraded to suggestion
+                // Fall back to old client-list org match, downgraded to suggestion
                 let orgMatch = clients.contains { client in
                     GroupNameMatch.isConfident(client.displayName, p.groupName)
                         || (client.shortName.map { GroupNameMatch.isConfident($0, p.groupName) } ?? false)

@@ -2,8 +2,8 @@ import Foundation
 
 // The "reached out" pipeline (#217): contacted prospects Dan is still working, ordered by when he
 // should next reach out. Combines the silent follow-up sequence (FollowUp) and the conversation
-// reminder track (ConversationReminder), taking whichever is sooner. Returns nil — the prospect
-// drops off the list — once outreach should stop: booked, lost, or nothing left scheduled.
+// reminder track (ConversationReminder), taking whichever is sooner. Returns nil: the prospect
+// drops off the list, once outreach should stop: booked, lost, or nothing left scheduled.
 enum ReachedOutQueue {
     // The soonest moment Dan should next reach out to this prospect, or nil if outreach has stopped.
     // A past date (overdue) is returned as-is so it sorts to the top of the list.

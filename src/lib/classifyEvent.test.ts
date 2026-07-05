@@ -12,7 +12,7 @@ function ev(over: Partial<ExtractedEvent> = {}): ExtractedEvent {
   };
 }
 
-describe("classifyEvent — clear dead-zone cases", () => {
+describe("classifyEvent: clear dead-zone cases", () => {
   it("flags a competition-winners Weill rental as agency / weak / uncovered, confidently", () => {
     const c = classifyEvent(
       ev({
@@ -38,7 +38,7 @@ describe("classifyEvent — clear dead-zone cases", () => {
   });
 });
 
-describe("classifyEvent — clear strong-fit cases", () => {
+describe("classifyEvent: clear strong-fit cases", () => {
   it("classifies a self-produced children's choir as self / strong / choral", () => {
     const c = classifyEvent(
       ev({
@@ -81,7 +81,7 @@ describe("classifyEvent — clear strong-fit cases", () => {
   });
 });
 
-describe("classifyEvent — discipline detection", () => {
+describe("classifyEvent: discipline detection", () => {
   it("detects dance, opera, choral, band from title keywords", () => {
     expect(classifyEvent(ev({ title: "Spring Ballet Gala" })).discipline).toBe("dance");
     expect(classifyEvent(ev({ title: "La Bohème: Opera in Concert" })).discipline).toBe("opera");
@@ -101,7 +101,7 @@ describe("classifyEvent — discipline detection", () => {
   });
 });
 
-describe("classifyEvent — ambiguity is flagged, not guessed", () => {
+describe("classifyEvent: ambiguity is flagged, not guessed", () => {
   it("marks an established self-presented orchestra as uncertain for the AI to refine", () => {
     const c = classifyEvent(
       ev({

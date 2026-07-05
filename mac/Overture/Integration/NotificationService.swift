@@ -4,7 +4,7 @@ import UserNotifications
 // #289: the ONE place notifications are delivered and authorization is requested. Previously two
 // shims (LocalNotifier #285, OmniFocusUserNotifier #268) each called requestAuthorization on every
 // post, which is redundant once granted and uncoordinated with the #270 onboarding grant. Here the
-// grant is requested once, up front (by onboarding), and posts just deliver — they never re-prompt.
+// grant is requested once, up front (by onboarding), and posts just deliver; they never re-prompt.
 // Per-action identifiers live in one enum so a repeat replaces its predecessor instead of stacking.
 // Delivery and the auth request both take an injected closure so the id mapping and request building
 // are unit-testable without the live notification center.
@@ -50,7 +50,7 @@ enum NotificationService {
         let permission = UNNotificationCategory(identifier: Action.omniFocusPermission.rawValue,
                                                 actions: [openSettings], intentIdentifiers: [],
                                                 options: [])
-        // #306: Retry runs the reconcile quietly in the resident process — no .foreground, so it doesn't
+        // #306: Retry runs the reconcile quietly in the resident process (no .foreground), so it doesn't
         // yank the windowless app to the front. The reconcile acks itself with a result notification.
         let retrySync = UNNotificationAction(identifier: Button.retrySync.rawValue,
                                              title: "Retry sync", options: [])
@@ -61,8 +61,8 @@ enum NotificationService {
     }
 
     // #301/#308: the pure tap router. The Open Settings button routes to settings; the Retry sync button
-    // (#306) forces a reconcile; a default tap deep-links to the lead(s) that rode along — one lead opens
-    // it directly, several open the filtered new-leads view — else just opens the app; a dismiss routes
+    // (#306) forces a reconcile; a default tap deep-links to the lead(s) that rode along: one lead opens
+    // it directly, several open the filtered new-leads view, otherwise it just opens the app; a dismiss routes
     // nowhere.
     static func route(actionIdentifier: String, userInfo: [AnyHashable: Any]) -> Route? {
         if actionIdentifier == Button.openSettings.rawValue { return .openSettings }

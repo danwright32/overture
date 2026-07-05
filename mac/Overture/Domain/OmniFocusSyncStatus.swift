@@ -8,8 +8,8 @@ import Foundation
 enum OmniFocusSyncStatus {
     static let failedAtKey = "omniFocusLastSyncFailedAt"
     static let errorKey = "omniFocusLastSyncError"
-    // #268: a denied/not-yet-granted Automation permission is a distinct kind of failure — it is fixed
-    // by re-granting the grant, not by retrying — so the notification path can say exactly that, and
+    // #268: a denied/not-yet-granted Automation permission is a distinct kind of failure; it is fixed
+    // by re-granting the grant, not by retrying, so the notification path can say exactly that, and
     // the flag drives the once-per-episode notify edge.
     static let permissionNeededKey = "omniFocusPermissionNeeded"
 

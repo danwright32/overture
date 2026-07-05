@@ -2,7 +2,7 @@ import Foundation
 
 // The work-list the app hands to the Prep run: which kept prospects need a contact
 // and a draft. `naturalKey` is an OPAQUE token the run must echo back verbatim into
-// PrepResults (never reconstruct it — that is what caused the silent-mismatch risk).
+// PrepResults (never reconstruct it; that is what caused the silent-mismatch risk).
 // The human-readable fields are for the run's research only.
 
 struct PrepQueue: Codable, Equatable, Sendable {
@@ -12,7 +12,7 @@ struct PrepQueue: Codable, Equatable, Sendable {
 }
 
 struct PrepQueueItem: Codable, Equatable, Sendable {
-    var naturalKey: String        // opaque — echo verbatim, do NOT rebuild
+    var naturalKey: String        // opaque; echo verbatim, do NOT rebuild
     var groupName: String         // research only
     var venue: String?
     var performanceDate: String?

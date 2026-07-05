@@ -178,8 +178,8 @@ struct FollowUpsView: View {
     }
 
     // #316: the durable failure surface. A real send failure is persisted on the prospect
-    // (SendService sets sendError), so it stays visible here until the next successful send clears it
-    // — unlike the fading banner, which a later success can overwrite before Dan sees it.
+    // (SendService sets sendError), so it stays visible here until the next successful send clears it,
+    // unlike the fading banner, which a later success can overwrite before Dan sees it.
     @ViewBuilder private func sendFailureLine(_ p: Prospect) -> some View {
         if let line = SendFailureLine.text(for: p.sendError) {
             Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
@@ -274,7 +274,7 @@ struct FollowUpsView: View {
     private func remindLater(_ p: Prospect) {
         p.remindLater(now: Date())
         try? context.save()
-        // #285: the row drops off the due list, which could read as "sent" — say it was snoozed.
+        // #285: the row drops off the due list, which could read as "sent"; say it was snoozed.
         feedback.acknowledge(ActionAck.remindLater(org: p.groupName))
     }
 

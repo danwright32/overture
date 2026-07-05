@@ -131,7 +131,7 @@ final class Prospect {
 
     // Set when Dan explicitly dismisses a booking suggestion ("Not a booking").
     // Once set, reconcileBooked suppresses soft re-suggestions (possible/client-list/
-    // tiebreak), but an exact Downbeat booking STILL auto-books — dismissal silences
+    // tiebreak), but an exact Downbeat booking STILL auto-books: dismissal silences
     // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
     var bookingSuggestionDismissed: Bool = false
 
@@ -147,7 +147,7 @@ final class Prospect {
 
     // The performance's recipients as their own rows (#409). Cascade-deleted with the performance.
     // (Recipients briefly lived in a JSON blob, #391; that column was dropped once the live store was
-    // migrated to rows — Dan's store never carried blob data, so there was nothing to migrate from it.)
+    // migrated to rows; Dan's store never carried blob data, so there was nothing to migrate from it.)
     @Relationship(deleteRule: .cascade, inverse: \Recipient.prospect)
     var recipients: [Recipient] = []
 

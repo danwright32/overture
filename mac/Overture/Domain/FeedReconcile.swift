@@ -7,7 +7,7 @@ import Foundation
 // run's feed; a prospect that reappears resets to 0. Two consecutive misses
 // (`goneThreshold`) mark it gone, so a one-off partial feed never wrongly cancels a real show.
 //
-// Deliberately NEVER touches Dan's keep/dismiss/outcome state — `disappearedFromFeed` is an
+// Deliberately NEVER touches Dan's keep/dismiss/outcome state; `disappearedFromFeed` is an
 // orthogonal scout-owned signal the queue reads to hide untouched ones and flag pursued ones.
 enum FeedReconcile {
     // Consecutive misses before a prospect is treated as gone. Two, so a single partial/empty
@@ -72,7 +72,7 @@ enum FeedReconcile {
 
     // `seenSourceURLs` is the set of listing URLs in this run's RAW feed (before our own
     // blocked-date / DNC / unreachable filtering). A prospect is "still listed" if it was
-    // upserted (seenKeys) OR any of its listing URLs is in the raw feed — so a show we merely
+    // upserted (seenKeys) OR any of its listing URLs is in the raw feed, so a show we merely
     // filtered out this run is NOT mistaken for one the venue cancelled.
     //
     // `currentFeedCount`/`baselineFeedCount` gate on feed health: a degraded (suspiciously small)

@@ -1,7 +1,7 @@
 import Foundation
 
 // #268 / Phase 4: the decision layer for the unattended OmniFocus push. Splitting it out of the
-// scheduler keeps it pure and testable — the native permission probe and the real notifier are thin
+// scheduler keeps it pure and testable; the native permission probe and the real notifier are thin
 // untestable shims injected in. The rule: if Automation is not already granted, NEVER fire the
 // AppleScript (a windowless process can't answer the TCC modal it would post); record the
 // permission-needed state and notify ONCE per episode. When granted, run the apply and notify once on

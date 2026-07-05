@@ -71,7 +71,7 @@ enum VoiceFeedbackBuilder {
                     rank: outcomeRank(outcome), date: sentAt))
             }
         }
-        // Winners first (#245), then newest first within a tier — so an email that landed a reply or
+        // Winners first (#245), then newest first within a tier, so an email that landed a reply or
         // booking survives the cap even when older than recent no-response edits.
         let pairs = entries
             .sorted { $0.rank != $1.rank ? $0.rank > $1.rank : $0.date > $1.date }

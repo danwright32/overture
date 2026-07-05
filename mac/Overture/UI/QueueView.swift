@@ -194,7 +194,7 @@ struct QueueView: View {
         }
     }
 
-    // #308: the focused new-leads view a tapped multi-lead away alert lands on — exactly the leads named
+    // #308: the focused new-leads view a tapped multi-lead away alert lands on, exactly the leads named
     // in the alert, as a flat list (booked leads that drop out of both pipelines still appear because it
     // filters all non-dismissed prospects, not the windowed queue). "Show all" returns to the queue.
     @ViewBuilder private func focusedSection(_ keys: [String]) -> some View {
@@ -228,7 +228,7 @@ struct QueueView: View {
         }
     }
 
-    // #236: land on a deep-linked lead — switch to the pipeline holding it, clear filters that would
+    // #236: land on a deep-linked lead: switch to the pipeline holding it, clear filters that would
     // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
         focusedKeys = nil   // #308: leave any focused new-leads view so the row is reachable in the queue
@@ -467,7 +467,7 @@ struct QueueView: View {
         try? context.save()
     }
 
-    // #418 B2 — Dan hand-marks one contact's outcome from the conversation surface (attribution only
+    // #418 B2: Dan hand-marks one contact's outcome from the conversation surface (attribution only
     // for Booked; never sets the lead booking). Stamps the manual source so detection won't overwrite.
     private func markContact(_ item: QueueItem, _ recipientId: String,
                              _ resolution: RecipientResolution?, _ bounced: Bool) {
@@ -477,7 +477,7 @@ struct QueueView: View {
         try? context.save()
     }
 
-    // #418 B1 — dismiss a wrongly auto-detected reply for ONE contact (#219, per-recipient).
+    // #418 B1: dismiss a wrongly auto-detected reply for ONE contact (#219, per-recipient).
     private func dismissContactReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
@@ -485,7 +485,7 @@ struct QueueView: View {
         try? context.save()
     }
 
-    // #420 C6 — request an AI-drafted reply for ONE contact: stamp the request (drives the progress +
+    // #420 C6. Request an AI-drafted reply for ONE contact: stamp the request (drives the progress +
     // needs-attention timeout) and launch the detached classify+drafter run. Request-response feel.
     private func draftReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
@@ -494,7 +494,7 @@ struct QueueView: View {
         _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
     }
 
-    // #421 — send Dan's approved AI reply on the contact's own thread, off the main thread (same
+    // #421: send Dan's approved AI reply on the contact's own thread, off the main thread (same
     // non-blocking pattern as performSend); surface a reconnect prompt if the token was revoked.
     private func sendReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
@@ -515,14 +515,14 @@ struct QueueView: View {
         }
     }
 
-    // #423 (E) — Dan edits the AI reply draft before sending, the same affordance as an outbound draft.
+    // #423 (E): Dan edits the AI reply draft before sending, the same affordance as an outbound draft.
     private func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
         try? context.save()
     }
 
-    // #421 copy-out — copy the draft to the clipboard for Dan to paste into the Gmail thread he's
+    // #421 copy-out: copy the draft to the clipboard for Dan to paste into the Gmail thread he's
     // reading, and mark the contact replied-in-Gmail (consumes the draft, re-anchors the clock).
     private func copyReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),

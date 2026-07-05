@@ -2,20 +2,20 @@ import Foundation
 import SwiftData
 
 // The app-owned scheduler for the safe deterministic reconciles (#265 / Phase 1 of #237). It runs the
-// while-away work — booking detection, reply detection, conversation-reminder evaluation → OmniFocus —
+// while-away work (booking detection, reply detection, conversation-reminder evaluation → OmniFocus)
 // from an owner whose lifetime is the PROCESS (started by AppDelegate at launch), not a window, so
 // closing the window can't stop it. It runs at launch, on a configurable timer (30-min default), and
 // whenever the Downbeat export changes.
 //
 // It runs ONLY the safe reconciles. It deliberately NEVER triggers a Prep run, a reply-classify run,
-// or a scout — every `claude -p` / AI path stays attended (window-only), per the #237 plan.
+// or a scout: every `claude -p` / AI path stays attended (window-only), per the #237 plan.
 @MainActor
 final class ReconcileScheduler {
     private let context: ModelContext
     private var timerTask: Task<Void, Never>?
     private var watcherTask: Task<Void, Never>?
 
-    // When the last reconcile finished — surfaced in the menu-bar status line (#266). Mirrored to
+    // When the last reconcile finished: surfaced in the menu-bar status line (#266). Mirrored to
     // UserDefaults so the menu can read it reactively without holding the scheduler instance.
     nonisolated static let lastReconcileKey = "lastReconcileAt"
     private(set) var lastReconcileAt: Date?
@@ -25,7 +25,7 @@ final class ReconcileScheduler {
     }
 
     // Trigger one reconcile on demand (the menu's "Run reconcile now"). Unlike the silent timer ticks,
-    // a manual run ALWAYS acknowledges itself with a notification — even when nothing was due — so the
+    // a manual run ALWAYS acknowledges itself with a notification, even when nothing was due, so the
     // click never appears to do nothing (#285).
     func runNow(notify: @escaping (String) -> Void = { NotificationService.post(.reconcile, title: "Overture", body: $0) }) {
         Task { @MainActor in
@@ -123,7 +123,7 @@ final class ReconcileScheduler {
                                   NotificationService.post(.away, title: "Overture", body: $0, leadKeys: $1)
                               }) {
         guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
-        // #308: carry every new-lead key — a tap deep-links to the sole lead when one is new, or to the
+        // #308: carry every new-lead key: a tap deep-links to the sole lead when one is new, or to the
         // filtered new-leads view when several are.
         post(body, summary.newLeadKeys)
     }

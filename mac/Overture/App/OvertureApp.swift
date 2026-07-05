@@ -4,8 +4,8 @@ import SwiftData
 @main
 struct OvertureApp: App {
     // Optional now (#264): nil means the store couldn't be opened (another copy holds the lock, or
-    // open failed). The app degrades instead of crashing — a fatalError under the future launchd
-    // agent would become a crash-respawn loop on a transiently locked store.
+    // open failed). The app degrades instead of crashing (a fatalError under the future launchd
+    // agent would become a crash-respawn loop on a transiently locked store).
     let modelContainer: ModelContainer?
     private let storeLock: StoreLock?      // held for the process lifetime to keep the single-writer lock
     private let degradedReason: String?

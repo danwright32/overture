@@ -32,7 +32,7 @@ enum DraftCheck {
     private static let coldHedges = ["if you haven't arranged", "if you haven't booked", "if you haven't found", "if you haven't hired", "in case you still need", "if you still need a photographer"]
 
     // Phrases that ask the CONTACT to supply the date/venue (#456 / #438). Curated to be specific
-    // enough that merely stating the fact ("I'll be there on April 12") never trips them — only a
+    // enough that merely stating the fact ("I'll be there on April 12") never trips them; only a
     // request does. Matched as lowercased substrings, like the lists above.
     private static let dateRequests = ["let me know the date", "let me know when", "what date", "what's the date", "what is the date", "which date", "what day", "when is the show", "when's the show", "when is the performance", "when's the performance", "when is the concert", "when's the concert", "when is the event", "when's the event", "confirm the date", "send me the date", "send over the date", "remind me of the date", "remind me when"]
     // Concession language banned in a cold pitch (#39/#458). "free" is handled separately with a

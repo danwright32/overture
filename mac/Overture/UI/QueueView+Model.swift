@@ -117,7 +117,7 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
 
     // The deterministic self-check findings to surface on the reply draft (#456), or none once Dan has
-    // edited it — it's his text then, the same suppression the cold path applies via draftEditedByDan
+    // edited it: it's his text then, the same suppression the cold path applies via draftEditedByDan
     // (#459). Lives here, not in the view, so the suppression is unit-testable.
     func replyDraftFindings(knownsDate: Bool, knownsVenue: Bool) -> [DraftIssue] {
         guard !replyDraftEditedByDan, let body = replyDraftBody else { return [] }
@@ -227,7 +227,7 @@ enum QueueModel {
         return nil
     }
 
-    // Today, as a "yyyy-MM-dd" string in New York time — Overture's canonical zone, so
+    // Today, as a "yyyy-MM-dd" string in New York time (Overture's canonical zone), so
     // "is this in the past / within the booking window" never drifts a day off UTC or the
     // Mac's local zone wherever Dan happens to be.
     static func easternToday(_ now: Date = Date()) -> String {
@@ -278,7 +278,7 @@ enum QueueModel {
     }
 
     // Orders the queue for display: hide past performances and anything beyond the lead-time
-    // window, keep everything else, and demote the too-close events to the bottom — graded so
+    // window, keep everything else, and demote the too-close events to the bottom, graded so
     // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).
     // Computed live against `today` so it stays correct as days pass between scout runs.
     static func queueOrder(_ items: [QueueItem], today: String) -> [QueueItem] {

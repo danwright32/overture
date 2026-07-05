@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // reopens its window; the settings route jumps to the Automation privacy pane.
     // nonisolated because UNUserNotificationCenterDelegate isn't main-actor-isolated; the routing
     // decision is pure, and the side effects hop to the main actor (NSWorkspace/NSApp). The completion
-    // handler is called immediately — the routing work is fire-and-forget.
+    // handler is called immediately; the routing work is fire-and-forget.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {

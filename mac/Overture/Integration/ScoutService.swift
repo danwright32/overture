@@ -18,7 +18,7 @@ enum ScoutService {
         var clientListWarning: String? = nil
 
         // The single warning to show after a run, if any. Zero events here means the feed was
-        // reached and parsed but nothing matched — distinct from a connection failure (the
+        // reached and parsed but nothing matched, distinct from a connection failure (the
         // thrown-error path, see ScoutFailure). For a 90-day window that's unusual and usually
         // means the feed's data format changed. Takes precedence over a client-list warning
         // (with no events there is nothing to match) (#27, #126).
@@ -209,7 +209,7 @@ enum ScoutService {
             }
         }
         // Reconcile stored prospects against this run's feed: mark ones that dropped out (#133).
-        // Only when the feed actually returned events — an empty feed is a broken/glitching feed,
+        // Only when the feed actually returned events: an empty feed is a broken/glitching feed,
         // not "every show cancelled", so it must never accrue misses.
         if !events.isEmpty {
             let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -277,8 +277,8 @@ enum ScoutService {
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
-        // NOTE: never touch confidenceReviewedByDan here — Dan owns that acknowledgement.
-        // NOTE: never touch classificationOverriddenByDan here — Dan owns that flag.
+        // NOTE: never touch confidenceReviewedByDan here; Dan owns that acknowledgement.
+        // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
         if existing.classificationOverriddenByDan {
             // Dan corrected the classification: keep his discipline/production values and
             // re-score from them (plus the freshly-updated profile/coverage/priorRelationship)

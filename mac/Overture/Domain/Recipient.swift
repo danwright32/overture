@@ -37,7 +37,7 @@ final class Recipient {
     // Identity + contact. `id` is the canonicalized email when there is one, otherwise the contact
     // form URL (a form-only act, #368), so the SAME recipient is kept when Dan fills in an email
     // later. `email` is nil for a form-only contact until Dan adds one. NOTE: `id` is deliberately
-    // NOT @Attribute(.unique) — the same act emailed for two performances shares an id, and a unique
+    // NOT @Attribute(.unique): the same act emailed for two performances shares an id, and a unique
     // constraint would merge those rows across prospects.
     var id: String = ""
     var email: String?
@@ -175,14 +175,14 @@ final class Recipient {
 
     // Manual-judge outcome marking (#418 B2). Dan hand-sets THIS contact's outcome from the
     // conversation surface, after reading the reply in Gmail. Stamps `outcomeSource = .manual` so
-    // per-recipient detection (A2) never overwrites his call — including an "In conversation" mark,
+    // per-recipient detection (A2) never overwrites his call, including an "In conversation" mark,
     // which sets the source flag even though it sets no resolution. The locked vocabulary maps onto
     // existing fields with NO new enum: In conversation = (nil, false), Booked = (.booked, false),
     // Closed-not-now = (.declinedSoft, false), Closed-no = (.declinedHard, false), Bounced = (nil, true).
     //
     // ATTRIBUTION ONLY for `.booked`: this attributes the single lead booking to the contact who
     // landed it (`resolution` doc, #389). It does NOT create or count a lead booking and does NOT set
-    // `prospect.outcome` — the lead booking stays fully lead-level via DownbeatBooking.reconcileBooked
+    // `prospect.outcome`; the lead booking stays fully lead-level via DownbeatBooking.reconcileBooked
     // (locked decision g). Phase F's derivation reads `resolution == .booked` for attribution display
     // only; never wire this into the lead booking count.
     func markOutcomeManually(resolution: RecipientResolution?, bounced: Bool = false) {

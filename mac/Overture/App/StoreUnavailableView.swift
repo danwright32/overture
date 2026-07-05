@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Shown instead of the queue when Overture can't open its data (#264 / Phase 0): another copy holds
-// the single-writer lock, or the store failed to open. This REPLACES the old fatalError — under the
+// the single-writer lock, or the store failed to open. This REPLACES the old fatalError: under the
 // future launchd agent a crash would become a respawn loop on a transiently locked store.
 struct StoreUnavailableView: View {
     let reason: String

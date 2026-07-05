@@ -249,7 +249,7 @@ struct ProspectRowView: View {
     }
 
     // A possible booking that needs Dan's explicit sign-off before it locks (#114).
-    // Gold tone — positive, not a warning — mirroring the confidenceFlag capsule idiom.
+    // Gold tone (positive, not a warning), mirroring the confidenceFlag capsule idiom.
     @ViewBuilder private var bookingSuggestionFlag: some View {
         if item.bookingSuggested {
             Menu {

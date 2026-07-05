@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 // Live reply watcher (#40): fetches the Gmail threads of already-sent prospects and marks
-// any that received a reply. Read-only Gmail access — never sends. Skips silently when
+// any that received a reply. Read-only Gmail access; never sends. Skips silently when
 // Gmail isn't connected or the token can't refresh (auth handling lives in
 // GmailAuthManager, #50). The marking decision is the tested ReplyService/ReplyDetection.
 @MainActor

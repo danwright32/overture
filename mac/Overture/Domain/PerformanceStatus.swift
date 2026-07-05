@@ -14,7 +14,7 @@ struct RecipientStanding: Sendable, Equatable {
     let hasContactPath: Bool
 
     // In play = an emailed contact still being pursued: a send went out, it hasn't resolved, and it
-    // didn't bounce. Covers both "awaiting reply" and "in conversation" — both keep the show Active.
+    // didn't bounce. Covers both "awaiting reply" and "in conversation", both keep the show Active.
     var isInPlay: Bool { sendState == .sent && resolution == nil && !bounced }
 
     // Contacted = an email actually went out.

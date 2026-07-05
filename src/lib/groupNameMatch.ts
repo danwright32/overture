@@ -4,7 +4,7 @@
 // only confident matches drive scoring, possibles are flagged for review.
 
 // Drop a trailing program/subtitle after a clear separator (space-dash-space, en/em
-// dash, or colon), keeping the presenter — but only when the presenter is >= 2 words,
+// dash, or colon), keeping the presenter, but only when the presenter is >= 2 words,
 // so a generic one-word prefix (e.g. "Jazz - ...") isn't collapsed. Booking-sheet names
 // are "Presenter - Program"; the venue lists just the presenter, so this lets them match.
 function stripProgramSubtitle(s: string): string {
@@ -53,7 +53,7 @@ function containsTokenRun(long: string[], short: string[]): boolean {
 // A confident match is exact, or one name's whole-token sequence sits contiguously
 // inside the other AND makes up a meaningful fraction of it. The fraction guard
 // stops a short name (e.g. "New York") confidently matching an unrelated larger
-// one ("New York Theatre Ballet") — the false positive we must avoid.
+// one ("New York Theatre Ballet"), the false positive we must avoid.
 const MIN_CONTAINMENT_FRACTION = 0.6;
 
 export function isConfidentMatch(a: string, b: string): boolean {

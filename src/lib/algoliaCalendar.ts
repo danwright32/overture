@@ -15,7 +15,7 @@ export const WINDOW_DAYS = 90;
 export const HITS_PER_PAGE = 1000;
 const MAX_PAGES = 5;
 
-// Milliseconds between a UTC instant and the same wall-clock read in `tz` — used to pin a
+// Milliseconds between a UTC instant and the same wall-clock read in `tz`, used to pin a
 // New York midnight to its true UTC instant without a date library.
 function tzOffsetMs(tz: string, date: Date): number {
   const dtf = new Intl.DateTimeFormat("en-US", {

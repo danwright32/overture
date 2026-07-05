@@ -4,12 +4,12 @@ import Foundation
 // on-disk state live (#264 / Phase 0 and #267 / Phase 3 of #237).
 //
 // Release (the resident /Applications copy): the data directory stays EXACTLY SwiftData's historical
-// default — the Application Support root — so Dan's live prospects, Gmail token, and Downbeat export
+// default (the Application Support root), so Dan's live prospects, Gmail token, and Downbeat export
 // are never orphaned.
 //
 // Debug (a development run from Xcode): the data directory is an isolated `Overture-Debug` subfolder,
 // and the bundle identity carries a `.debug` suffix (project.yml). Together these guarantee a dev run
-// can never share a store/WAL — or a TCC grant, Gmail login, or export file — with the resident copy.
+// can never share a store/WAL (or a TCC grant, Gmail login, or export file) with the resident copy.
 //
 // The Debug/Release decision is factored into a pure function so both branches are testable from the
 // (always-Debug) test bundle; the live build wires `#if DEBUG` to it.

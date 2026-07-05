@@ -12,7 +12,7 @@ enum DebugSeed {
     // The handoff files the app INGESTS (per docs/contracts.md): scout results, the Downbeat export,
     // booking/warm history, drafted emails, and reply intents, plus the optional blocked-dates
     // override. Deliberately excludes the files the app WRITES (prep/classify queues, voice
-    // feedback) — copying those from live would clobber dev work product — and Gmail tokens
+    // feedback), copying those from live would clobber dev work product, and Gmail tokens
     // (out of scope, and sensitive).
     static let inputFileNames = [
         "downbeat-export.json",
