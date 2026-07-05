@@ -46,7 +46,7 @@ enum ReplyClassifyImporter {
                         outcome.skippedEdited += 1
                     } else {
                         if let s = r.draftSubject { rec.replyDraftSubject = s }
-                        // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker —
+                        // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker:
                         // otherwise this AI body would be wrongly protected on the next run.
                         if let b = r.draftBody { rec.replyDraftBody = b; rec.replyDraftEditedByDan = false }
                     }

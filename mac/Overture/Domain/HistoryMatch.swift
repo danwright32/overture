@@ -72,7 +72,7 @@ enum HistoryMatch {
         }
         // Resolve the history signals to the strongest relationship by fit weight, so a real
         // relationship (warm) beats a lost outcome on the same org, and a booked history beats
-        // everything below it. A bare cold send is `contacted` (neutral, 0) — not warm (#70).
+        // everything below it. A bare cold send is `contacted` (neutral, 0), not warm (#70).
         let signals = confidentHistory.map { relationship(forStatus: $0.status) }
         if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }) {
             return MatchVerdict(relationship: best, suppressed: false,

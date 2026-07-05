@@ -47,17 +47,17 @@ async function main() {
     `Loaded ${history.length} history records and ${blocked.size} blocked dates.`,
   );
   if (history.length === 0) {
-    console.warn("No local history found — repeat-client matching and DNC suppression are inactive.");
+    console.warn("No local history found: repeat-client matching and DNC suppression are inactive.");
   }
   if (blocked.size === 0) {
-    console.warn("No blocked dates in the Downbeat export — date-blocking is inactive (needs downbeat#52).");
+    console.warn("No blocked dates in the Downbeat export: date-blocking is inactive (needs downbeat#52).");
   }
 
   // Pass 1: rule-classify every event (free, instant), keyed by title.
   const byTitle = new Map<string, EventClassification>();
   for (const e of events) byTitle.set(e.title, classifyEvent(e));
 
-  // Hand the uncertain slice to the AI refine pass — the Claude Code scout agent (#30), on
+  // Hand the uncertain slice to the AI refine pass: the Claude Code scout agent (#30), on
   // Dan's Max plan, not a paid API. It reads this file, re-judges each event, and writes
   // overture-refined.json; the next run merges those in. Refining only the uncertain slice
   // keeps cost near zero.
@@ -110,7 +110,7 @@ async function main() {
     rows.push(decision.row);
   }
 
-  // Serialize, collapse multi-night runs, and sort — the whole writer contract lives in
+  // Serialize, collapse multi-night runs, and sort; the whole writer contract lives in
   // buildResultsFile (src/lib/resultsContract.ts), pinned by resultsContract.test.ts and the
   // Swift ResultsContractTests against the shared fixtures (#157).
   const resultsFile = buildResultsFile(rows, new Date().toISOString());

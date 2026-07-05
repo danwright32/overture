@@ -25,7 +25,7 @@ struct RootView: View {
     // to filter down to exactly them. Cleared by the queue once it has acted on it.
     @State private var deepLinkedKeys: [String]?
 
-    // Kept prospects with no draft yet — what a Prep run would work on.
+    // Kept prospects with no draft yet: what a Prep run would work on.
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
     private var toPrep: [Prospect]
 
@@ -185,8 +185,8 @@ struct RootView: View {
                 #endif
             }
             .task {
-                // The ATTENDED launch work (window present). The SAFE reconciles — booking detection,
-                // reply detection, and the OmniFocus push — and the Downbeat-export watcher now live on
+                // The ATTENDED launch work (window present). The SAFE reconciles (booking detection,
+                // reply detection, and the OmniFocus push) and the Downbeat-export watcher now live on
                 // the app-owned ReconcileScheduler (#265) so they run independent of this window. What
                 // stays here is the AI/scout work, which must stay attended (never run unattended).
                 // Skip it entirely when running only as the unit suite's test host (#195).
@@ -284,7 +284,7 @@ struct RootView: View {
             : "DEBUG: copied \(result.copied.count) file(s) but Gmail still reads as not connected"
     }
 
-    // DEBUG ONLY (#318): targeted reset of the isolated Overture-Debug dev environment — empties the
+    // DEBUG ONLY (#318): targeted reset of the isolated Overture-Debug dev environment: empties the
     // store and removes the seeded handoff inputs, so seed/test/reset is repeatable. Only ever
     // touches the Debug location; leaves the dev Gmail login intact.
     private func debugClearDevData() {
@@ -391,7 +391,7 @@ struct RootView: View {
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
     // a finished draft only surfaced on the NEXT app launch (the bare spinner spun until then). Mirrors
-    // watchPrepRun — wait for the live run, then ingest immediately (clearing the per-recipient spinner)
+    // watchPrepRun: wait for the live run, then ingest immediately (clearing the per-recipient spinner)
     // or report that it finished without a draft. A single continuous watcher (below) drives this so it
     // covers every launch source: the at-launch auto run, an in-flight run, AND a "Draft a reply" click.
     private func watchReplyClassifyRun() async {
@@ -484,7 +484,7 @@ struct RootView: View {
 
     // Reconcile bookings on launch (#41/#99): auto-book on an exact Downbeat booking match,
     // suggest otherwise, so a booking made in Downbeat shows up without running a scout first.
-    // Not gated on a non-empty client list — bookings are an independent array, so an export
+    // Not gated on a non-empty client list: bookings are an independent array, so an export
     // with bookings but no clients must still reconcile; reconcileBooked gates on export health.
     // Push due conversation reminders into OmniFocus (#176/#231). The desired set is computed here
     // on the main actor (it reads prospects); the slow AppleScript I/O runs off-main in a detached
@@ -535,7 +535,7 @@ struct RootView: View {
         if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
-        // #249: fail closed if the distiller leaked a real name into the voice guidance — quarantine
+        // #249: fail closed if the distiller leaked a real name into the voice guidance; quarantine
         // the contaminated section so it can't feed a future draft, and warn Dan.
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,
                                              prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [])

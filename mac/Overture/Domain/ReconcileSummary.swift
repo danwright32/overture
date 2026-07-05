@@ -18,7 +18,7 @@ struct ReconcileSummary: Equatable, Sendable {
     // those leads. deepLinkKey is just the count==1 special case of this.
     var newLeadKeys: [String] { newReplyKeys + newBookingKeys }
 
-    // #301: the deep-link target for the away alert — the sole new lead's key when exactly one lead is
+    // #301: the deep-link target for the away alert: the sole new lead's key when exactly one lead is
     // new this tick (a reply OR a booking). nil when zero or several are new; the multi-lead case routes
     // to the filtered new-leads view via newLeadKeys instead (#308).
     var deepLinkKey: String? {

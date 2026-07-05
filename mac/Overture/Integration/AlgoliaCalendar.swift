@@ -4,7 +4,7 @@ import Foundation
 // (prod_Events). The visible page only renders ~3 days at a time, but the index holds the
 // whole season, so the scout queries Algolia directly for the next 90 days in one call
 // instead of scraping the paginated DOM. These are the same public, search-only credentials
-// the website ships in its own client JS — not secrets — captured from a live request. If
+// the website ships in its own client JS (not secrets), captured from a live request. If
 // Carnegie rotates the key or restructures the index, this is the spot to update.
 enum AlgoliaCalendar {
     static let appID = "Q0TMLOPF1J"

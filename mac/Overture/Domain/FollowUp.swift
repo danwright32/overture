@@ -2,8 +2,8 @@ import Foundation
 
 // The gentle re-touch sequencer (#45): decides who is DUE for a nudge and writes the nudge
 // text. Up to maxFollowUps per lead, paced by gapDays; auto-stops the moment the outcome
-// is anything but no-response (a reply or booking ends the sequence). Pure: it never sends
-// — sending stays an explicit click (Dan's hard rule).
+// is anything but no-response (a reply or booking ends the sequence). Pure: it never sends:
+// sending stays an explicit click (Dan's hard rule).
 struct FollowUpConfig: Sendable {
     var gapDays: Int = 6
     var maxFollowUps: Int = 2
@@ -11,7 +11,7 @@ struct FollowUpConfig: Sendable {
 
 enum FollowUp {
     // The pacing core (#418 D): eligible AND sent AND under the cap AND the gap has passed since the
-    // last touch. Eligibility differs by grain — see the two callers below.
+    // last touch. Eligibility differs by grain; see the two callers below.
     static func isDue(eligible: Bool, sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
                       now: Date, config: FollowUpConfig = .init()) -> Bool {
         guard eligible, let sentAt else { return false }

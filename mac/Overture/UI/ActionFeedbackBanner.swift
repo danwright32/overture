@@ -3,7 +3,7 @@ import SwiftUI
 // #285: the shared acknowledgment surface. Overlays a brief, auto-dismissing pill at the bottom of
 // whatever it's attached to, reading the window-scoped ActionFeedback. Applied to the main queue and
 // to each sheet (sheets are separate windows on macOS, so an overlay on the main view can't cover
-// them) — all reading the one inherited ActionFeedback object.
+// them), all reading the one inherited ActionFeedback object.
 private struct ActionFeedbackBanner: ViewModifier {
     @Environment(ActionFeedback.self) private var feedback
 

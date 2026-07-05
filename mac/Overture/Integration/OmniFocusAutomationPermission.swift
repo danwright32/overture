@@ -39,7 +39,7 @@ enum OmniFocusAutomationPermission {
 
     // Resolve the installed OmniFocus's real bundle id the same way `tell application "OmniFocus"`
     // does. Reads live system state, so (like probe) it can't be unit-tested. nil means "couldn't
-    // find it" — callers fall back to the candidate list.
+    // find it"; callers fall back to the candidate list.
     static func resolvedBundleID(named name: String = "OmniFocus") -> String? {
         // A running instance is authoritative: it is literally the process Apple events reach.
         if let running = NSWorkspace.shared.runningApplications.lazy

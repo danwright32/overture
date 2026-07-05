@@ -17,7 +17,7 @@ enum OvertureDeepLink {
         url.scheme == scheme && url.host == showHost
     }
 
-    // #301: the inverse of leadKey(from:) — build the deep link a tapped notification opens to jump to
+    // #301: the inverse of leadKey(from:): build the deep link a tapped notification opens to jump to
     // a lead. URLComponents percent-encodes the key in the query, so leadKey(from:) recovers it exactly.
     // nil for an empty key (no lead to route to).
     static func leadURL(forKey key: String) -> URL? {

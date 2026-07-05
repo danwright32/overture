@@ -2,7 +2,7 @@ import Foundation
 
 // #92 diagnostic: with relationship weights now dominant (warm +10, declined +18, booked +20),
 // a prior relationship can clear high tier regardless of the event. This splits the high-tier
-// queue by what lifted each item — a relationship vs the event's own merit — so the masthead
+// queue by what lifted each item (a relationship vs the event's own merit), so the masthead
 // can show whether "high" is over-filled with warm orgs (the cue to recalibrate, with data).
 enum QueuePriorityBreakdown {
     struct Counts: Equatable {

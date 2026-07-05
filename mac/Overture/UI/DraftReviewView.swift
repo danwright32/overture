@@ -128,7 +128,7 @@ struct DraftReviewView: View {
     }
 
     // Self-check findings (#11): voice / AI-tells / stance issues in the draft, surfaced so
-    // Dan's review is judgment, not cleanup. Only on an unedited draft from the run — once
+    // Dan's review is judgment, not cleanup. Only on an unedited draft from the run: once
     // Dan edits it, it's his.
     @ViewBuilder private var draftCheckFlags: some View {
         if !item.draftEditedByDan, let body = item.draftBody {
@@ -300,7 +300,7 @@ struct DraftReviewView: View {
                     Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
                 }
                 // #456 / #459: flag a reply draft that asks for the date/venue this show already carries,
-                // same as the cold path — but suppressed once Dan edits (logic in replyDraftFindings).
+                // same as the cold path, but suppressed once Dan edits (logic in replyDraftFindings).
                 issueFlags(c.replyDraftFindings(knownsDate: item.performanceDate != nil,
                                                 knownsVenue: item.venue != nil))
                 if let since = replySendSince(c.id) {

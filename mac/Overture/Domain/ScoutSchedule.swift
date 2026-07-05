@@ -1,7 +1,7 @@
 import Foundation
 
 // Decides whether an automatic scout is due (#33): about once a day. The app checks this
-// on launch and periodically while open, and runs the scout itself when due — the scout
+// on launch and periodically while open, and runs the scout itself when due; the scout
 // is read-only (no sending), so auto-running it is safe.
 enum ScoutSchedule {
     static let defaultInterval: TimeInterval = 24 * 3600  // daily

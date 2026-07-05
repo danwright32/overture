@@ -30,6 +30,28 @@ struct UserFacingDashGuardTests {
         #expect(offenders.isEmpty, "Forbidden em/en dash in user-facing string(s):\n\(report)")
     }
 
+    // #380: Dan's writing rule bans dashes in code comments too, not just string literals.
+    // Typography.swift's own definition is the sole exception, since it has to show the literal
+    // character it names.
+    @Test func appSourceHasNoForbiddenDashInComments() throws {
+        let allowlistedLines: Set<String> = ["Typography.swift:8", "Typography.swift:9"]
+        let appDir = Self.appSourceDirectory()
+        let files = Self.swiftFiles(under: appDir)
+        #expect(!files.isEmpty)
+
+        var offenders: [String] = []
+        for file in files {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            for hit in Self.dashesInComments(text) {
+                let key = "\(file.lastPathComponent):\(hit.line)"
+                guard !allowlistedLines.contains(key) else { continue }
+                offenders.append("\(file.lastPathComponent):\(hit.line)  …\(hit.context)…")
+            }
+        }
+        let report = offenders.joined(separator: "\n")
+        #expect(offenders.isEmpty, "Forbidden em/en dash in comment(s):\n\(report)")
+    }
+
     // MARK: - Source location
 
     private static func appSourceDirectory(file: StaticString = #filePath) -> URL {
@@ -52,25 +74,34 @@ struct UserFacingDashGuardTests {
     // MARK: - Scanner
 
     struct Hit { let line: Int; let context: String }
+    private enum DashLocation { case stringLiteral, comment }
+
+    static func dashesInStringLiterals(_ source: String) -> [Hit] {
+        allDashHits(source).filter { $0.location == .stringLiteral }.map { $0.hit }
+    }
+
+    static func dashesInComments(_ source: String) -> [Hit] {
+        allDashHits(source).filter { $0.location == .comment }.map { $0.hit }
+    }
 
     // A small state machine: walk the source character by character, tracking whether we're in code,
-    // a // or /* */ comment, or a "…" / """…""" string literal, and report any forbidden dash that
-    // occurs inside a string. Tracking string vs comment state is what keeps URLs (// inside a
-    // string) and dash-laden comments from triggering false hits.
-    static func dashesInStringLiterals(_ source: String) -> [Hit] {
+    // a // or /* */ comment, or a "…" / """…""" string literal, and tag any forbidden dash by which
+    // of the two it sits in. Tracking string vs comment state is what keeps a URL's // inside a
+    // string from ever being mistaken for the start of a comment.
+    private static func allDashHits(_ source: String) -> [(location: DashLocation, hit: Hit)] {
         enum State { case code, line, block, string, multiline }
         let chars = Array(source)
         var state: State = .code
         var i = 0, lineNo = 1
-        var hits: [Hit] = []
+        var hits: [(location: DashLocation, hit: Hit)] = []
         func starts(_ s: String, at idx: Int) -> Bool {
             let t = Array(s)
             guard idx + t.count <= chars.count else { return false }
             return Array(chars[idx..<idx + t.count]) == t
         }
-        func record() {
+        func record(_ location: DashLocation) {
             let lo = max(0, i - 12), hi = min(chars.count, i + 13)
-            hits.append(Hit(line: lineNo, context: String(chars[lo..<hi])))
+            hits.append((location, Hit(line: lineNo, context: String(chars[lo..<hi]))))
         }
         while i < chars.count {
             let c = chars[i]
@@ -83,19 +114,20 @@ struct UserFacingDashGuardTests {
                 else if c == "\"" { state = .string; i += 1 }
                 else { i += 1 }
             case .line:
-                if c == "\n" { state = .code }
-                i += 1
+                if c == "\n" { state = .code; i += 1 }
+                else { if Typography.forbiddenDashes.contains(c) { record(.comment) }; i += 1 }
             case .block:
-                if starts("*/", at: i) { state = .code; i += 2 } else { i += 1 }
+                if starts("*/", at: i) { state = .code; i += 2 }
+                else { if Typography.forbiddenDashes.contains(c) { record(.comment) }; i += 1 }
             case .string:
-                if starts("\\u{2014}", at: i) || starts("\\u{2013}", at: i) { record(); i += 8 }
+                if starts("\\u{2014}", at: i) || starts("\\u{2013}", at: i) { record(.stringLiteral); i += 8 }
                 else if c == "\\" { i += 2 }                  // skip an escaped character
                 else if c == "\"" { state = .code; i += 1 }
-                else { if Typography.forbiddenDashes.contains(c) { record() }; i += 1 }
+                else { if Typography.forbiddenDashes.contains(c) { record(.stringLiteral) }; i += 1 }
             case .multiline:
                 if starts("\"\"\"", at: i) { state = .code; i += 3 }
-                else if starts("\\u{2014}", at: i) || starts("\\u{2013}", at: i) { record(); i += 8 }
-                else { if Typography.forbiddenDashes.contains(c) { record() }; i += 1 }
+                else if starts("\\u{2014}", at: i) || starts("\\u{2013}", at: i) { record(.stringLiteral); i += 8 }
+                else { if Typography.forbiddenDashes.contains(c) { record(.stringLiteral) }; i += 1 }
             }
         }
         return hits

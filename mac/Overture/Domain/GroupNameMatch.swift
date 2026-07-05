@@ -17,7 +17,7 @@ enum GroupNameMatch {
     }
 
     // Drop a trailing program/subtitle after a clear separator (space-dash-space, en/em
-    // dash, or colon), keeping the presenter — but only when the presenter is >= 2 words,
+    // dash, or colon), keeping the presenter, but only when the presenter is >= 2 words,
     // so a generic one-word prefix (e.g. "Jazz - ...") isn't collapsed. Booking-sheet names
     // are "Presenter - Program"; the venue lists just the presenter, so this lets them match (#105).
     private static func stripProgramSubtitle(_ s: String) -> String {

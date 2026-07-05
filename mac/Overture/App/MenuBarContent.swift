@@ -3,7 +3,7 @@ import AppKit
 
 // The resident menu-bar menu (#266 / Phase 2). Reads the reconcile status reactively from
 // UserDefaults (so it needs no reference to the scheduler), and offers the three actions: open the
-// window, run a reconcile now, quit. Closing the window no longer quits — this menu is how Dan
+// window, run a reconcile now, quit. Closing the window no longer quits: this menu is how Dan
 // reopens or quits once the app runs headless.
 struct MenuBarContent: View {
     @AppStorage(ReconcileScheduler.lastReconcileKey) private var lastReconcileEpoch: Double = 0

@@ -80,7 +80,7 @@ enum OmniFocusSync {
         let cutoff = now.addingTimeInterval(TimeInterval(horizonDays) * 86_400)
         return prospects.compactMap { p in
             guard p.status != .dismissed else { return nil }   // #238: a no-go lead never nags via OmniFocus
-            // Closed shows drop out — UNLESS a fresh reply still needs triage (a late reply on a
+            // Closed shows drop out, UNLESS a fresh reply still needs triage (a late reply on a
             // closed show still deserves a task, #424).
             guard !p.isClosed || p.hasUnhandledReply else { return nil }
 
@@ -103,13 +103,13 @@ enum OmniFocusSync {
             }
 
             // #271 / Phase 7: a reply Dan hasn't categorized (no confirmed active state) would otherwise
-            // leave NO trace in OmniFocus while he's away — only an in-app badge he can't see. Emit a
+            // leave NO trace in OmniFocus while he's away; only an in-app badge he can't see. Emit a
             // triage task due today, keyed by the SAME naturalKey so reconcile dedupes it against the
             // follow-up once Dan confirms the state (the in-app badge and this task never compete: one
             // OmniFocus task per lead, and confirming the state re-anchors it via the due-day diff).
             if p.hasUnhandledReply {
                 // Anchor the triage due to a STABLE date on the lead (when its state was last
-                // touched, else when Dan first reached out), NOT `now` — otherwise the day-token diff
+                // touched, else when Dan first reached out), NOT `now`; otherwise the day-token diff
                 // would complete+recreate the task on every new calendar day until Dan triages it.
                 let anchor = p.conversationStateSetAt ?? p.sentAt ?? now
                 let dueDate = easternTime(hour: dueHour, onDayOf: anchor)

@@ -3,7 +3,7 @@ import Foundation
 // Protects Dan's hand-written notes in overture-voice-guidance.md (#251 / #119). The "## Dan's notes"
 // section is authoritative and the #242 workflow is told never to touch it, but that is only a prompt
 // instruction. This makes the app the safety net: back the file up before a Prep run, and after the
-// run restore the notes section from the backup if the run altered or dropped it — while keeping the
+// run restore the notes section from the backup if the run altered or dropped it, while keeping the
 // freshly regenerated auto section. A misbehaving run can therefore never silently wipe Dan's notes.
 
 enum VoiceNotesProtector {
@@ -39,7 +39,7 @@ enum VoiceNotesProtector {
         let backupNotes = notesSection(of: backup)
         guard hasSubstantiveBody(backupNotes) else { return (current, false) }
         // #254: only restore an actual WIPE (the notes section missing, or emptied to its heading). If
-        // the section is still present with content — even if changed — treat it as Dan's own edit,
+        // the section is still present with content (even if changed), treat it as Dan's own edit,
         // possibly made during an in-flight run, and leave it. (Time-based detection can't help: the
         // run rewrites the whole file every time, so the file is always "modified after run start".)
         guard !hasSubstantiveBody(notesSection(of: current)) else { return (current, false) }

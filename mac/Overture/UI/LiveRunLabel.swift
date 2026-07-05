@@ -5,7 +5,7 @@ import SwiftUI
 // (#435). Shared across every long-action surface so they tell the same working-vs-hung story (#436).
 //
 // When a `timeout` is supplied and the run passes it, the label flips to a visually distinct "looks
-// stuck" state with an optional Retry, so the three required states — working, still-alive, stalled —
+// stuck" state with an optional Retry, so the three required states (working, still-alive, stalled)
 // are all distinguishable instead of one identical spinner (saved UX principle). The counter advances
 // every second via TimelineView; `since` nil falls back to the plain "<base>…" caption.
 struct LiveRunLabel: View {

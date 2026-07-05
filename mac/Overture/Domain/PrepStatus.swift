@@ -5,7 +5,7 @@ import Foundation
 // Pure so it is unit-testable; the view formats the relative time.
 
 struct PrepStatus: Equatable, Sendable {
-    var kept: Int          // kept (.queued) with no draft yet — waiting on a Prep run
+    var kept: Int          // kept (.queued) with no draft yet, waiting on a Prep run
     var drafted: Int       // have a draft awaiting Dan's review (.drafted)
     var approved: Int      // approved to send (.approved)
     var lastRunStartedAt: Date?

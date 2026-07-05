@@ -1,7 +1,7 @@
 import Foundation
 
 // Per-stage status so Dan can see at a glance where he's needed, without digging into
-// each agent (#15). Only the stages that can wait on him are here — Prep, Review, Send,
+// each agent (#15). Only the stages that can wait on him are here: Prep, Review, Send,
 // Follow-ups; the scout is automatic (#33) and never blocks on a decision. Pure.
 enum AgentState: String, Equatable, Sendable {
     case idle, working, needsAttention, error
@@ -15,7 +15,7 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
 }
 
 struct AgentInputs: Sendable {
-    var keptToPrep: Int      // kept, no draft yet — waiting on a Prep run
+    var keptToPrep: Int      // kept, no draft yet, waiting on a Prep run
     var prepRunning: Bool
     var toReview: Int        // drafted, awaiting Dan's review/approval
     var readyToSend: Int     // approved, not yet sent

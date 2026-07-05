@@ -72,9 +72,9 @@ export function mapBookingRow(row: Record<string, string>): HistoryRecord {
 export type AppHistoryRecord = { groupName: string; status: string };
 
 // Maps a booking row's outcome (Status) and relationship (First Contact) onto the app's
-// ranking vocabulary, or null for a cold pitch that got silence (neutral — no record kept).
+// ranking vocabulary, or null for a cold pitch that got silence (neutral, no record kept).
 // Precedence: DNC suppresses; then a booking; then a Dan-declined (date conflict); then a
-// warm relationship, which beats a lost outcome (relationship wins); then lost — all lost
+// warm relationship, which beats a lost outcome (relationship wins); then lost: all lost
 // rows are treated soft for now, until a "Lost reason" column distinguishes hard nos (#90).
 export function appStatus(record: HistoryRecord): string | null {
   const status = (record.status ?? "").trim().toLowerCase();

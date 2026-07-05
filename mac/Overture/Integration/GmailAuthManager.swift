@@ -6,7 +6,7 @@ import CryptoKit
 // Runs the live OAuth desktop flow: opens Google's consent page in the browser,
 // catches the redirect on a loopback listener, exchanges the code for tokens, and
 // persists them. Also vends a fresh access token (refreshing when stale). Sending
-// nothing here — this only obtains permission.
+// nothing here; this only obtains permission.
 
 @MainActor
 final class GmailAuthManager {

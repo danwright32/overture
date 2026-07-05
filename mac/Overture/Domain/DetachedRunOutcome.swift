@@ -1,8 +1,8 @@
 import Foundation
 
 // Where a detached run stands, so a finished-but-empty run can be surfaced instead of looking
-// identical to "still waiting" (#48). Shared by every detached AI run — Prep and the reply-classify
-// drafter (#435) — since the rule is the same: started? still live? did this run refresh its results?
+// identical to "still waiting" (#48). Shared by every detached AI run (Prep and the reply-classify
+// drafter, #435), since the rule is the same: started? still live? did this run refresh its results?
 // Pure: the view reads the marker and the results file's timestamp and asks here what to show.
 enum DetachedRunPhase: Equatable, Sendable {
     case idle              // no run has been started

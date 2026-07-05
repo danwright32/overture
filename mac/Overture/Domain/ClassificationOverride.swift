@@ -37,7 +37,7 @@ enum ClassificationOverride {
     // Applies Dan's classification correction to a prospect in place.
     // Non-nil discipline/production replace the stored raw value; nil leaves it unchanged.
     // Sets both override flags (classificationOverriddenByDan and confidenceReviewedByDan),
-    // then recomputes fitScore and tier. Does NOT save the context — caller owns that.
+    // then recomputes fitScore and tier. Does NOT save the context; caller owns that.
     static func correct(_ p: Prospect, discipline: Discipline?, production: Production?, now: Date) {
         if let d = discipline { p.discipline = d.rawValue }
         if let pr = production { p.production = pr.rawValue }

@@ -3,7 +3,7 @@ import Foundation
 // The single-writer guard for the local SwiftData store (#264 / Phase 0 of #237). A BSD `flock` on a
 // lockfile beside the store: because flock conflicts across separate open file descriptions (even
 // within one machine), a second Overture process that tries to acquire it is refused. This is the
-// REAL guarantee that two processes never open the same store file — LaunchServices bundle-id dedup is
+// REAL guarantee that two processes never open the same store file; LaunchServices bundle-id dedup is
 // not trusted. The descriptor is held for the process lifetime; releasing frees the lock.
 final class StoreLock {
     private let fd: Int32

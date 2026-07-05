@@ -4,7 +4,7 @@ import AppKit
 // Canonical home for the resident login agent's stdout/stderr (#279). Lives under the user's own
 // Library/Logs (owner-only 0700) instead of world-readable /tmp, so the captured diagnostics stay
 // private and survive reboots (/tmp is cleared on restart). build-install.sh substitutes this same
-// path into the LaunchAgent plist at install time — launchd opens these files at spawn, before any
+// path into the LaunchAgent plist at install time; launchd opens these files at spawn, before any
 // app code runs, so the directory must already exist; the app also (re)creates it at startup as a
 // safety net. Keep the directory name and file names in sync with launchd/com.danwright.overture.plist.
 enum AgentLogLocation {
@@ -40,7 +40,7 @@ enum AgentLogLocation {
     }
 
     // #302: true when the error log has gained at least `threshold` bytes of new stderr since the
-    // recorded `viewedSize` — the menu-bar nudge's signal. capLogs (#295) truncates the file, so a log
+    // recorded `viewedSize` (the menu-bar nudge's signal). capLogs (#295) truncates the file, so a log
     // now SMALLER than the recorded size is wholly new: count all of it, never a negative growth.
     // Missing file → false (nothing to flag). Pure read; best-effort.
     static func hasUnreadErrors(viewedSize: Int, threshold: Int = unreadErrorThresholdBytes,

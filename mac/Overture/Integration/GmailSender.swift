@@ -4,7 +4,7 @@ import Foundation
 // photography account. Called only from Dan's explicit Send action (never
 // autonomously). Fully async: it awaits the access token then the send, so a caller on
 // the main actor (the Send button) never blocks the main thread. An earlier
-// synchronous semaphore bridge deadlocked here — the blocked main thread could not
+// synchronous semaphore bridge deadlocked here: the blocked main thread could not
 // service the @MainActor token work it was waiting on.
 
 struct GmailSender: MailSender {

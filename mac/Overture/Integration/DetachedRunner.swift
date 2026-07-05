@@ -22,7 +22,7 @@ enum DetachedRunner {
     // The inherited environment plus OVERTURE_SUPPORT_DIR, which tells the script which handoff folder
     // to read/write. Without it the script falls back to the live path and a Debug build (whose handoff
     // dir is the isolated Overture-Debug subfolder) reads the wrong folder, finds no work-list, and dies
-    // silently — the Debug/Release leak class #317 warns about. Pure so the contract is unit-tested.
+    // silently: the Debug/Release leak class #317 warns about. Pure so the contract is unit-tested.
     static func runnerEnvironment(base: [String: String], supportDirectory: URL) -> [String: String] {
         var env = base
         env["OVERTURE_SUPPORT_DIR"] = supportDirectory.path

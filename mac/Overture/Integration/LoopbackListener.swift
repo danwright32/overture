@@ -6,7 +6,7 @@ import Network
 //   1. IPv4: Google redirects the browser to http://127.0.0.1; without forcing IPv4
 //      NWListener can bind IPv6 and the redirect never arrives.
 //   2. The real port is only valid once the listener reaches .ready. Reading it before
-//      then returns 0, which produced redirect_uri=http://127.0.0.1:0 — an address the
+//      then returns 0, which produced redirect_uri=http://127.0.0.1:0, an address the
 //      browser can't connect to, so the consent page never redirects back.
 enum LoopbackListener {
     enum LoopbackError: LocalizedError {
