@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Darwin
 @testable import Overture
 
 @Suite("Agent log location (#279)")
@@ -173,5 +174,41 @@ struct AgentLogLocationTests {
 
         let perms = (try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? NSNumber)?.intValue
         #expect(perms == 0o700)
+    }
+
+    @Test func prepareReportsSuccessWhenTheDirectoryEndsUpOwnerOnly() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        let dir = base.appendingPathComponent("Overture", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let result = AgentLogLocation.prepareDirectory(at: dir)
+
+        #expect(result.isOwnerOnly)
+    }
+
+    // #524: the old best-effort `try? setAttributes` silently swallowed a failure to narrow an
+    // already-existing directory an earlier run left too permissive, so nothing could ever tell a
+    // genuinely-still-wide-open directory apart from a successfully-repaired one. Flagging the
+    // directory immutable makes chmod fail deterministically (confirmed: chmod itself errors
+    // "Operation not permitted" against a uchg-flagged directory even for its owner), so this is a
+    // real failure, not a simulated one.
+    @Test func prepareReportsFailureWhenAnExistingDirectoryCannotBeNarrowed() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        let dir = base.appendingPathComponent("Overture", isDirectory: true)
+        defer {
+            _ = chflags(dir.path, 0)
+            try? FileManager.default.removeItem(at: base)
+        }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        #expect(chflags(dir.path, UInt32(UF_IMMUTABLE)) == 0)
+
+        let result = AgentLogLocation.prepareDirectory(at: dir)
+
+        #expect(result.isOwnerOnly == false)
+        let perms = (try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? NSNumber)?.intValue
+        #expect(perms == 0o755)   // truly unchanged, not silently "fixed"
     }
 }

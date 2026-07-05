@@ -165,6 +165,23 @@ struct DebugSeedTests {
         #expect((attrs[.posixPermissions] as? NSNumber)?.intValue == 0o600)
     }
 
+    // #524: a plain copyItem preserves the SOURCE file's mode, so a live token file that is ever
+    // wider than 0600 (a stale pre-#523 file, say) must not carry that wider mode into the debug
+    // copy even momentarily. The copy always lands at exactly 0600 regardless of the source's mode.
+    @Test func seedGmailNeverLeavesTheTokenCopyWiderThanOwnerOnlyEvenWhenTheSourceIsWider() throws {
+        let live = try makeTempDir()
+        let debug = try makeTempDir()
+        let liveToken = live.appendingPathComponent("gmail-tokens.json")
+        try "{\"refreshToken\":\"r\"}".write(to: liveToken, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: liveToken.path)
+
+        _ = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
+
+        let attrs = try FileManager.default.attributesOfItem(
+            atPath: debug.appendingPathComponent("gmail-tokens.json").path)
+        #expect((attrs[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+    }
+
     @Test func seedGmailOverwritesAStaleDestination() throws {
         let live = try makeTempDir()
         let debug = try makeTempDir()

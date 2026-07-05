@@ -41,17 +41,24 @@ enum DebugSeed {
 
     // Shared copy loop for both the dev-data seed and the #325 Gmail seed: copy each present source
     // over any stale destination, report copied vs missing. The token file carries a real refresh
-    // token, so it is tightened to owner-only (0600) on arrival, matching GmailCredentials.saveTokens.
+    // token, so it goes through SecureFileWrite (#524) instead of copyItem: a plain copy preserves
+    // the SOURCE's permission bits, which could be wider than 0600 (a stale pre-#523 file, say),
+    // and narrowing it afterward the way this used to is exactly the best-effort-chmod pattern
+    // #523 replaced for the real token file, with the same silently-swallowed-failure risk.
     private static func copyPresent(_ items: [(name: String, src: URL, dest: URL)],
                                     fileManager: FileManager) throws -> (copied: [String], missing: [String]) {
         var copied: [String] = []
         var missing: [String] = []
         for item in items {
             guard fileManager.fileExists(atPath: item.src.path) else { missing.append(item.name); continue }
-            if fileManager.fileExists(atPath: item.dest.path) { try fileManager.removeItem(at: item.dest) }
-            try fileManager.copyItem(at: item.src, to: item.dest)
             if item.name == "gmail-tokens.json" {
-                try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: item.dest.path)
+                let data = try Data(contentsOf: item.src)
+                guard SecureFileWrite.writeOwnerOnly(data, to: item.dest) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+            } else {
+                if fileManager.fileExists(atPath: item.dest.path) { try fileManager.removeItem(at: item.dest) }
+                try fileManager.copyItem(at: item.src, to: item.dest)
             }
             copied.append(item.name)
         }

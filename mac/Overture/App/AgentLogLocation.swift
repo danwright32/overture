@@ -79,16 +79,20 @@ enum AgentLogLocation {
     }
 
     // Create the log directory owner-only (0700) if missing, and tighten it if an earlier run left it
-    // more permissive. Idempotent; best-effort (a failure just means launchd's redirect is lost, the
-    // app still runs). Returns the directory.
+    // more permissive. Idempotent; best-effort at the one real call site (a failure just means
+    // launchd's redirect is lost, the app still runs) but the outcome is reported rather than
+    // silently swallowed (#524): isOwnerOnly reflects the directory's ACTUAL permissions after the
+    // attempt, so a repair that can't succeed (an already-existing directory this process can't
+    // chmod) is distinguishable from one that worked, instead of both looking identical.
     @discardableResult
-    static func prepareDirectory(at directory: URL = AgentLogLocation.directory) -> URL {
+    static func prepareDirectory(at directory: URL = AgentLogLocation.directory) -> (url: URL, isOwnerOnly: Bool) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
         // createDirectory only applies posixPermissions to directories it actually creates, so enforce
         // the mode on an already-existing directory too.
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-        return directory
+        let mode = (try? FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? NSNumber)?.intValue
+        return (directory, mode == 0o700)
     }
 
     // #296: reveal the agent's log directory in Finder so the now-private, out-of-the-way diagnostics
@@ -98,7 +102,7 @@ enum AgentLogLocation {
     @discardableResult
     static func revealInFinder(directory: URL = AgentLogLocation.directory,
                               open: (URL) -> Void = { NSWorkspace.shared.open($0) }) -> URL {
-        let dir = prepareDirectory(at: directory)
+        let dir = prepareDirectory(at: directory).url
         open(dir)
         return dir
     }
