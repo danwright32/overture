@@ -233,7 +233,9 @@ struct ProspectRowView: View {
                 Button("Agency/presented") { onCorrectClassification(nil, .agency) }
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "questionmark.diamond.fill")
+                    Image(systemName: "questionmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.system(size: 13, weight: .semibold))
                     Text("Unsure call, tap to confirm or fix")
                 }
                 .font(OVType.tag)

@@ -8,12 +8,7 @@ import Foundation
 @Suite("Masthead header is free of the QA-flagged clutter")
 struct MastheadGuardTests {
     private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
-        // #filePath -> .../mac/OvertureTests/MastheadGuardTests.swift; climb to mac/.
-        let mac = URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-        let url = mac.appendingPathComponent(relativeFromMac)
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        SourceGuardHelper.source(relativeFromMac, file: file)
     }
 
     @Test func subheadingCopyIsGone() {  // #330
@@ -43,5 +38,19 @@ struct MastheadGuardTests {
         #expect(!queueView.isEmpty)
         #expect(queueView.contains("#if DEBUG"))
         #expect(queueView.contains("\"Debug\""))
+    }
+
+    // #339: the status line listed "last prep" before "Scouted", reversing the order Dan
+    // actually reads events in (scout finds them, then prep works the ones he kept).
+    @Test func statusLineShowsScoutedBeforePrepped() {  // #339
+        let queueView = source("Overture/UI/QueueView.swift")
+        #expect(!queueView.isEmpty)
+        let scoutedRange = queueView.range(of: "ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt())")
+        let prepRange = queueView.range(of: "prepStatus.summary(now: Date())")
+        #expect(scoutedRange != nil)
+        #expect(prepRange != nil)
+        if let scoutedRange, let prepRange {
+            #expect(scoutedRange.lowerBound < prepRange.lowerBound)
+        }
     }
 }

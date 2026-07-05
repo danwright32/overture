@@ -292,9 +292,9 @@ struct QueueView: View {
                     .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
             }
             HStack(spacing: OVSpacing.xs) {
-                Text(prepStatus.summary(now: Date()))
-                Text("·").foregroundStyle(OVColor.lineStrong)
                 Text(ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt()).summary(now: Date()))
+                Text("·").foregroundStyle(OVColor.lineStrong)
+                Text(prepStatus.summary(now: Date()))
             }
             .font(.system(size: 11))
             .foregroundStyle(OVColor.inkFaint)
