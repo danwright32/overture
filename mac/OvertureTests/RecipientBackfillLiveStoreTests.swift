@@ -55,16 +55,23 @@ struct RecipientBackfillLiveStoreTests {
         let container = try openContainer(at: storeCopy)
         let context = ModelContext(container)
         let all = try context.fetch(FetchDescriptor<Prospect>())
+        // RecipientBackfill.run is guarded by recipients.isEmpty (never re-seeds or clobbers), so on
+        // real, lived-in data some emailed prospects may already carry a recipient from earlier send
+        // activity. Capture that BEFORE running so the newly-seeded count below reflects who still
+        // needed seeding, distinct from the total who simply qualify by having an email.
+        let neededSeeding = Dictionary(uniqueKeysWithValues: all.map { ($0.naturalKey, $0.recipients.isEmpty) })
 
         let seeded = RecipientBackfill.run(in: context)
         try context.save()
 
         // Every prospect with a real contact email now has exactly one act recipient mirroring it;
         // a scout-only prospect (no email) has none.
-        var expectedSeed = 0
+        var totalQualifying = 0
+        var newlySeededExpected = 0
         for p in all {
             if let email = p.contactEmail, !email.isEmpty {
-                expectedSeed += 1
+                totalQualifying += 1
+                if neededSeeding[p.naturalKey] == true { newlySeededExpected += 1 }
                 #expect(p.recipients.count == 1)
                 let r = p.recipients.first
                 #expect(r?.provenance == .act)
@@ -74,14 +81,14 @@ struct RecipientBackfillLiveStoreTests {
                 #expect(p.recipients.isEmpty)
             }
         }
-        #expect(seeded == expectedSeed)
+        #expect(seeded == newlySeededExpected)
 
         // Idempotent across a relaunch: reopen the saved copy in a fresh container and re-run.
         let reopened = try openContainer(at: storeCopy)
         let reContext = ModelContext(reopened)
         #expect(RecipientBackfill.run(in: reContext) == 0)
         let reAll = try reContext.fetch(FetchDescriptor<Prospect>())
-        #expect(reAll.filter { !$0.recipients.isEmpty }.count == expectedSeed)
+        #expect(reAll.filter { !$0.recipients.isEmpty }.count == totalQualifying)
     }
 
     // #418 A0 — prove the #416 thread-down repair is safe and idempotent against a COPY of Dan's real,
