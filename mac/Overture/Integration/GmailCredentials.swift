@@ -1,5 +1,4 @@
 import Foundation
-import Darwin
 
 // Loads the OAuth client config (gmail-oauth.json, written outside git) and persists
 // the tokens. Tokens live in a 0600 file in Application Support rather than the
@@ -41,30 +40,12 @@ enum GmailCredentials {
         return try? JSONDecoder().decode(StoredTokens.self, from: data)
     }
 
+    // Goes through SecureFileWrite (#524) so the file is never briefly world-default-readable the
+    // way a plain atomic write followed by a separate best-effort chmod would leave it (#486).
     @discardableResult
     static func saveTokens(_ tokens: StoredTokens, to url: URL = tokenURL) -> Bool {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(tokens)
-            // Written to a 0600 temp file next to the destination, then renamed into place, so the
-            // file is never briefly world-default-readable the way a plain atomic write followed
-            // by a separate best-effort chmod would leave it (#486). rename() preserves the temp
-            // file's own permissions across the swap, and a failure at either step is reported
-            // instead of leaving a wider-than-0600 file behind.
-            let tempURL = url.deletingLastPathComponent()
-                .appendingPathComponent(url.lastPathComponent + ".tmp-\(UUID().uuidString)")
-            guard FileManager.default.createFile(atPath: tempURL.path, contents: data,
-                                                 attributes: [.posixPermissions: 0o600]) else {
-                return false
-            }
-            guard rename(tempURL.path, url.path) == 0 else {
-                try? FileManager.default.removeItem(at: tempURL)
-                return false
-            }
-            return true
-        } catch {
-            return false
-        }
+        guard let data = try? JSONEncoder().encode(tokens) else { return false }
+        return SecureFileWrite.writeOwnerOnly(data, to: url)
     }
 
     static func clearTokens(at url: URL = tokenURL) {
