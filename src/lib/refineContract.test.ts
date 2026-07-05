@@ -69,8 +69,8 @@ describe("Scout refine contract fixtures", () => {
     expect(a.production).toBe("self");
     expect(a.profile).toBe("strong");
     expect(a.coverage).toBe("likely_uncovered");
-    expect(a.discipline).toBe("choral");
-    expect(a.fit_reason).toBe("Self-presented choral ensemble; likely uncovered.");
+    expect(a.discipline).toBe("music");
+    expect(a.fit_reason).toBe("Self-presented vocal ensemble; likely uncovered.");
 
     // Refinement that omits fit_reason keeps the rules' original reason (the ?? fallback).
     const b = out.get("Winter Concert")!;

@@ -8,7 +8,7 @@ private func candidate(
     production: Production = .unknown,
     profile: Profile = .neutral,
     coverage: Coverage = .unknown,
-    discipline: Discipline = .music
+    discipline: Discipline = .other
 ) -> Candidate {
     Candidate(reachable: reachable, priorRelationship: prior, production: production,
               profile: profile, coverage: coverage, discipline: discipline)
@@ -70,12 +70,17 @@ struct RankerTests {
         #expect(r.tier == .high)
     }
 
+    // #350: Choral folded into Music, merged at Choral's former score (Dan's call) so
+    // already-preferred disciplines aren't demoted; "other" (no discipline signal) is now the
+    // sole baseline.
     @Test func disciplinePreferenceOrder() {
         #expect(Ranker.disciplinePoints(.dance) == 3)
         #expect(Ranker.disciplinePoints(.opera) == 2)
         #expect(Ranker.disciplinePoints(.theater) == 2)
-        #expect(Ranker.disciplinePoints(.choral) == 1)
-        #expect(Ranker.disciplinePoints(.music) == 0)
+        #expect(Ranker.disciplinePoints(.music) == 1)
+        #expect(Ranker.disciplinePoints(.band) == 1)
+        #expect(Ranker.disciplinePoints(.comedy) == 1)
+        #expect(Ranker.disciplinePoints(.other) == 0)
     }
 
     @Test func unreachableIsExcludedRegardlessOfScore() {
@@ -85,9 +90,9 @@ struct RankerTests {
 
     @Test func highTierThresholdBoundary() {
         // Exactly 5 is high; 4 is longshot.
-        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .music)).score == 4)
-        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .music)).tier == .longshot)
-        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .choral)).tier == .high)
+        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .other)).score == 4)
+        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .other)).tier == .longshot)
+        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong, discipline: .music)).tier == .high)
     }
 }
 

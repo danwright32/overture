@@ -10,7 +10,7 @@ private func classification(
     production: Production = .selfProduced,
     profile: Profile = .strong,
     coverage: Coverage = .likelyUncovered,
-    discipline: Discipline = .choral
+    discipline: Discipline = .music
 ) -> EventClassification {
     EventClassification(discipline: discipline, reachable: reachable, production: production,
                         profile: profile, coverage: coverage, fitReason: "reason", confidence: .confident)
@@ -49,10 +49,10 @@ struct ProspectAssemblerTests {
             event: event(), classification: classification(),
             verdict: verdict(), blocked: [])
         guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
-        // self(2) + strong(2) + uncovered(2) + choral(1) = 7
+        // self(2) + strong(2) + uncovered(2) + music(1, #350 merged Choral's score) = 7
         #expect(p.fitScore == 7)
         #expect(p.tier == "high")
-        #expect(p.discipline == "choral")
+        #expect(p.discipline == "music")
         #expect(p.priorRelationship == "none")
     }
 

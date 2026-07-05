@@ -79,6 +79,13 @@ struct QueueLabelTests {
         #expect(QueueModel.disciplineLabel("nonsense") == "Performance")
     }
 
+    // #350: Choral is no longer its own category (folded into Music). A leftover raw "choral"
+    // string (a legacy value the migration missed, or unmigrated history data) degrades
+    // gracefully to the generic fallback rather than a dedicated label.
+    @Test func legacyChoralStringFallsBackToPerformance() {
+        #expect(QueueModel.disciplineLabel("choral") == "Performance")
+    }
+
     @Test func productionBadgeOnlyWithSignal() {
         #expect(QueueModel.productionLabel("self") == "Self-produced")
         #expect(QueueModel.productionLabel("agency") == "Agency-routed")

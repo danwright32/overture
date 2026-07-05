@@ -44,7 +44,9 @@ function detectDiscipline(text: string): Candidate["discipline"] {
   // "play" / "musical" are too common in names (e.g. "Play It Forward School of
   // Music") to be reliable theater signals; rely on unambiguous words.
   if (/\b(theatre|theater|drama|cabaret|playhouse)\b/i.test(text)) return "theater";
-  if (/\b(choir|chorus|chorale|choral|voices|singers|cantata|vocal)\b/i.test(text)) return "choral";
+  // #350: Choral folded into Music; the keyword signal still disambiguates against the
+  // band/comedy checks below, it just no longer produces a separate discipline bucket.
+  if (/\b(choir|chorus|chorale|choral|voices|singers|cantata|vocal)\b/i.test(text)) return "music";
   if (/\b(band|wind ensemble|brass|jazz band|marching)\b/i.test(text)) return "band";
   if (/\b(comedy|comedian|stand.?up|improv)\b/i.test(text)) return "comedy";
   return "music";

@@ -175,12 +175,13 @@ enum QueueModel {
         }
     }
 
+    // #350: Choral is no longer its own category (folded into Music); a leftover raw "choral"
+    // string degrades to the generic fallback below rather than a dedicated label.
     static func disciplineLabel(_ discipline: String) -> String {
         switch discipline {
         case "dance": return "Dance"
         case "opera": return "Opera"
         case "theater": return "Theater"
-        case "choral": return "Choral"
         case "music": return "Music"
         case "band": return "Band"
         case "comedy": return "Comedy"

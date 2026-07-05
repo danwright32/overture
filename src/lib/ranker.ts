@@ -19,7 +19,6 @@ export type Candidate = {
     | "dance"
     | "opera"
     | "theater"
-    | "choral"
     | "music"
     | "band"
     | "comedy"
@@ -75,18 +74,17 @@ const COVERAGE_POINTS: Record<Candidate["coverage"], number> = {
   likely_covered: -2,
 };
 
-// Music is the baseline Dan keeps steady. Every other discipline is preferred
-// and boosted: dance highest (his portfolio there is nearly empty), opera and
-// theater explicitly above music, the rest a modest boost. "other"/unknown
-// stays at baseline since there is no discipline signal to act on.
+// "other" (no discipline signal) is the sole baseline. Dance highest (his portfolio there is
+// nearly empty), opera and theater explicitly above it. Choral was folded into Music (#350),
+// merged at Choral's former score rather than demoted to Music's old baseline, so music now
+// sits alongside band and comedy at a modest boost above the baseline.
 const DISCIPLINE_POINTS: Record<Candidate["discipline"], number> = {
   dance: 3,
   opera: 2,
   theater: 2,
-  choral: 1,
+  music: 1,
   band: 1,
   comedy: 1,
-  music: 0,
   other: 0,
 };
 

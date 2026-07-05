@@ -36,7 +36,7 @@ enum DebugStaging {
     @discardableResult
     static func stageReminderDueLead(in context: ModelContext, now: Date) -> Prospect {
         let key = "debug-of-\(Int(now.timeIntervalSince1970))"
-        let p = Prospect(naturalKey: key, groupName: "Test Choir (debug)", discipline: "choral",
+        let p = Prospect(naturalKey: key, groupName: "Test Choir (debug)", discipline: "music",
                          venue: "Weill Recital Hall",
                          performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
@@ -75,7 +75,7 @@ enum DebugStaging {
     static func stageSelfSendLead(in context: ModelContext, now: Date,
                                   address: String = defaultSelfSendAddress) -> Prospect {
         let key = "debug-of-selfsend-\(Int(now.timeIntervalSince1970))"
-        let p = Prospect(naturalKey: key, groupName: "Self-send Test (debug)", discipline: "choral",
+        let p = Prospect(naturalKey: key, groupName: "Self-send Test (debug)", discipline: "music",
                          venue: "Weill Recital Hall",
                          performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
@@ -106,7 +106,7 @@ enum DebugStaging {
         let actEmail = plusTaggedAddress(address, tag: "act")
         let presenterEmail = plusTaggedAddress(address, tag: "presenter")
 
-        let p = Prospect(naturalKey: key, groupName: "Self-send Multi Test (debug)", discipline: "choral",
+        let p = Prospect(naturalKey: key, groupName: "Self-send Multi Test (debug)", discipline: "music",
                          venue: "Weill Recital Hall",
                          performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",

@@ -60,7 +60,6 @@ const DISCIPLINE: readonly Candidate["discipline"][] = [
   "dance",
   "opera",
   "theater",
-  "choral",
   "music",
   "band",
   "comedy",

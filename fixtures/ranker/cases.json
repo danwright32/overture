@@ -1,56 +1,56 @@
 [
   {
     "description": "booked is the dominant top tier",
-    "candidate": { "reachable": true, "priorRelationship": "booked", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "booked", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 20,
     "expectedTier": "high"
   },
   {
     "description": "declined_by_you is nearly as hot as booked",
-    "candidate": { "reachable": true, "priorRelationship": "declined_by_you", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "declined_by_you", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 18,
     "expectedTier": "high"
   },
   {
     "description": "warm is a strong boost",
-    "candidate": { "reachable": true, "priorRelationship": "warm", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "warm", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 10,
     "expectedTier": "high"
   },
   {
     "description": "lost_soft ranks just above a stranger",
-    "candidate": { "reachable": true, "priorRelationship": "lost_soft", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "lost_soft", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 3,
     "expectedTier": "longshot"
   },
   {
     "description": "contacted is neutral, not warm (#70)",
-    "candidate": { "reachable": true, "priorRelationship": "contacted", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "contacted", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 0,
     "expectedTier": "longshot"
   },
   {
     "description": "lost_hard is heavily penalized but still visible",
-    "candidate": { "reachable": true, "priorRelationship": "lost_hard", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "lost_hard", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": -20,
     "expectedTier": "longshot"
   },
   {
     "description": "none is the neutral baseline",
-    "candidate": { "reachable": true, "priorRelationship": "none", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "none", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 0,
     "expectedTier": "longshot"
   },
   {
     "description": "dead zone: agency, weak profile, likely covered",
-    "candidate": { "reachable": true, "priorRelationship": "none", "production": "agency", "profile": "weak", "coverage": "likely_covered", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "none", "production": "agency", "profile": "weak", "coverage": "likely_covered", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": -6,
     "expectedTier": "longshot"
@@ -64,21 +64,21 @@
   },
   {
     "description": "high tier threshold boundary: one point below stays longshot",
-    "candidate": { "reachable": true, "priorRelationship": "none", "production": "self", "profile": "strong", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": true, "priorRelationship": "none", "production": "self", "profile": "strong", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
     "expectedScore": 4,
     "expectedTier": "longshot"
   },
   {
     "description": "high tier threshold boundary: exactly five clears high",
-    "candidate": { "reachable": true, "priorRelationship": "none", "production": "self", "profile": "strong", "coverage": "unknown", "discipline": "choral" },
+    "candidate": { "reachable": true, "priorRelationship": "none", "production": "self", "profile": "strong", "coverage": "unknown", "discipline": "music" },
     "expectedExcluded": false,
     "expectedScore": 5,
     "expectedTier": "high"
   },
   {
     "description": "unreachable excludes regardless of an otherwise high score",
-    "candidate": { "reachable": false, "priorRelationship": "booked", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "music" },
+    "candidate": { "reachable": false, "priorRelationship": "booked", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": true,
     "expectedScore": 20,
     "expectedTier": "high"

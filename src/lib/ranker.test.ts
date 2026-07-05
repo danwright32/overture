@@ -18,7 +18,9 @@ const rankerCases: RankerFixtureCase[] = JSON.parse(
   ),
 );
 
-// A neutral baseline candidate. Each test overrides only the signal it exercises.
+// A neutral baseline candidate. Each test overrides only the signal it exercises. discipline
+// defaults to "other" (#350: Choral folded into Music, so "other", no discipline signal, is now
+// the sole zero-point baseline; music itself is boosted).
 function candidate(overrides: Partial<Candidate> = {}): Candidate {
   return {
     reachable: true,
@@ -26,7 +28,7 @@ function candidate(overrides: Partial<Candidate> = {}): Candidate {
     production: "unknown",
     profile: "neutral",
     coverage: "unknown",
-    discipline: "music",
+    discipline: "other",
     ...overrides,
   };
 }
@@ -119,12 +121,14 @@ describe("scoreFit coverage", () => {
   });
 });
 
+// #350: Choral folded into Music, merged at Choral's former score (Dan's call) rather than
+// demoting it to Music's old baseline. "other" (no discipline signal) is now the sole baseline.
 describe("scoreFit discipline preference", () => {
   const score = (d: Candidate["discipline"]) =>
     scoreFit(candidate({ discipline: d })).score;
 
-  it("keeps music as the baseline (no boost or penalty)", () => {
-    expect(score("music")).toBe(0);
+  it("keeps other as the sole baseline (no boost or penalty)", () => {
+    expect(score("other")).toBe(0);
   });
 
   it("ranks dance highest, above the explicitly boosted opera and theater", () => {
@@ -137,10 +141,10 @@ describe("scoreFit discipline preference", () => {
     expect(score("theater")).toBeGreaterThan(score("music"));
   });
 
-  it("boosts every other discipline above the music baseline", () => {
-    expect(score("choral")).toBeGreaterThan(score("music"));
-    expect(score("band")).toBeGreaterThan(score("music"));
-    expect(score("comedy")).toBeGreaterThan(score("music"));
+  it("boosts music, band, and comedy equally above the baseline", () => {
+    expect(score("music")).toBeGreaterThan(score("other"));
+    expect(score("band")).toBe(score("music"));
+    expect(score("comedy")).toBe(score("music"));
   });
 });
 

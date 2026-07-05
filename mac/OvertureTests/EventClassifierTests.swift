@@ -31,13 +31,15 @@ struct ClassifierDeadZoneTests {
 
 @Suite("Event classifier — strong-fit cases")
 struct ClassifierStrongTests {
-    @Test func childrensChoirIsSelfStrongChoral() {
+    // #350: choir/chorus signals still detect a strong, self-produced profile; the resulting
+    // discipline is Music (Choral was folded into it), not a separate Choral bucket.
+    @Test func childrensChoirIsSelfStrongMusic() {
         let c = EventClassifier.classify(ev(
             title: "Indianapolis Children's Choir", presenter: "Indianapolis Children's Choir",
             venue: "Stern Auditorium / Perelman Stage"))
         #expect(c.production == .selfProduced)
         #expect(c.profile == .strong)
-        #expect(c.discipline == .choral)
+        #expect(c.discipline == .music)
         #expect(c.coverage == .likelyUncovered)
         #expect(c.confidence == .confident)
     }
@@ -58,7 +60,7 @@ struct ClassifierMiscTests {
     @Test func disciplineFromKeywords() {
         #expect(EventClassifier.classify(ev(title: "Spring Ballet Gala")).discipline == .dance)
         #expect(EventClassifier.classify(ev(title: "La Bohème: Opera in Concert")).discipline == .opera)
-        #expect(EventClassifier.classify(ev(title: "Brooklyn Youth Chorus")).discipline == .choral)
+        #expect(EventClassifier.classify(ev(title: "Brooklyn Youth Chorus")).discipline == .music)
         #expect(EventClassifier.classify(ev(title: "Wind Ensemble Showcase")).discipline == .band)
     }
 

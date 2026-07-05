@@ -24,7 +24,7 @@ const refinement = (over: Partial<EventRefinement> = {}): EventRefinement => ({
   production: "self",
   profile: "strong",
   coverage: "likely_uncovered",
-  discipline: "choral",
+  discipline: "theater",
   ...over,
 });
 
@@ -36,7 +36,7 @@ describe("applyRefinements", () => {
     expect(c.production).toBe("self");
     expect(c.profile).toBe("strong");
     expect(c.coverage).toBe("likely_uncovered");
-    expect(c.discipline).toBe("choral");
+    expect(c.discipline).toBe("theater");
     expect(c.confidence).toBe("confident");
   });
 

@@ -21,6 +21,9 @@ enum LaunchMigrations {
         // Recover salutation-free bodies from legacy inline-greeting drafts (#393), so the app can
         // render the greeting per recipient at send. Idempotent (a stripped body has nothing to strip).
         DraftSalutationMigration.run(in: context)
+        // Choral folded into Music (#350), an editorial taxonomy decision. Idempotent: guarded by
+        // "any prospect still stored as choral". Does not touch fitScore/tier (Dan's call).
+        DisciplineMigration.run(in: context)
         do {
             try context.save()
             return true
