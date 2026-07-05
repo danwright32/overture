@@ -91,6 +91,54 @@ enum DebugStaging {
         return p
     }
 
+    // #425: like stageSelfSendLead but with TWO recipients (an act and a presenter) instead of one, so
+    // a real approve -> send -> send sequence can prove the per-recipient fan-out (#415) sends two
+    // separate emails, each to its own address and greeting its own name, on their own Gmail threads.
+    // Both addresses derive from Dan's own inbox via a +tag so a live send still reaches him, but the
+    // two recipients keep distinct ids (Recipient.id is the canonicalized email) within this one lead.
+    // The legacy contactName/contactEmail fields mirror the act recipient (same pattern seedRecipient
+    // establishes for the single-recipient stager) since DraftReviewView's Approve button is disabled
+    // when contactEmail is nil.
+    @discardableResult
+    static func stageMultiRecipientSelfSendLead(in context: ModelContext, now: Date,
+                                                address: String = defaultSelfSendAddress) -> Prospect {
+        let key = "debug-of-selfsend-multi-\(Int(now.timeIntervalSince1970))"
+        let actEmail = plusTaggedAddress(address, tag: "act")
+        let presenterEmail = plusTaggedAddress(address, tag: "presenter")
+
+        let p = Prospect(naturalKey: key, groupName: "Self-send Multi Test (debug)", discipline: "choral",
+                         venue: "Weill Recital Hall",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "debug multi-recipient self-send",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted)
+        p.contactName = "Dan (test act)"
+        p.contactEmail = actEmail
+        p.draftSubject = "Overture self-send test"
+        p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
+
+        let act = Recipient(id: Recipient.makeId(email: actEmail, formURL: nil) ?? actEmail, email: actEmail,
+                            name: "Dan (test act)", role: "Act", provenance: .act)
+        let presenter = Recipient(id: Recipient.makeId(email: presenterEmail, formURL: nil) ?? presenterEmail,
+                                  email: presenterEmail, name: "Dan (test presenter)", role: "Presenter",
+                                  provenance: .presenter)
+        p.setRecipients([act, presenter])
+        context.insert(p)
+        return p
+    }
+
+    // Inserts a +tag before the @ so the same inbox receives a distinguishable address per recipient
+    // (e.g. dan+act@x.com), keeping Recipient.id (the canonicalized email) unique per role even though
+    // both ultimately land in Dan's one inbox.
+    private static func plusTaggedAddress(_ address: String, tag: String) -> String {
+        guard let atIndex = address.firstIndex(of: "@") else { return address }
+        let local = address[address.startIndex..<atIndex]
+        let domain = address[atIndex...]
+        return "\(local)+\(tag)\(domain)"
+    }
+
     // Remove every debug-staged lead (naturalKey prefix "debug-of-"). After this, a sync completes
     // their now-orphaned OmniFocus tasks (they leave the desired set). Cleans up after testing.
     static func clearDebugLeads(in context: ModelContext) {
