@@ -64,6 +64,9 @@ struct OvertureApp: App {
         // can reopen the queue or quit.
         // #276: Overture's own brand mark (the "O" formed by a paper plane's trail) as a monochrome
         // template image, so macOS tints it for light/dark instead of the earlier SF Symbol stand-in.
+        // #474: swapped the hand-drawn placeholder vector for a raster rendering of the real designed
+        // mark, trimmed to its bounding box and downsampled straight from the source art rather than
+        // re-traced, since the artwork's layered trail strokes are too intricate to approximate by hand.
         MenuBarExtra("Overture", image: "MenuBarGlyph") {
             MenuBarContent()
         }
