@@ -1,0 +1,54 @@
+import Testing
+import Foundation
+@testable import Overture
+
+// The Swift reader half of the Prep progress contract (#354). The WRITERS are
+// mac/scripts/prep-run.sh (seeds total/completed:0) and the Prep Claude Code workflow
+// (docs/prep-runbook.md, updates completed as it finishes each item), neither of which is
+// Swift, so there is no second programmatic side to assert. This fixture pins the Swift
+// decode and is the canonical example the runbook points the workflow at.
+@Suite("Prep progress contract fixtures")
+struct PrepProgressContractTests {
+    private func fixture(_ name: String) throws -> Data {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests
+            .deletingLastPathComponent()   // mac
+            .deletingLastPathComponent()   // repo root
+        return try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/prep-progress/\(name)"))
+    }
+
+    @Test func decodesTheV1Fixture() throws {
+        let progress = try PrepProgressDecoder.decode(try fixture("v1.json"))
+        #expect(progress.version == 1)
+        #expect(progress.total == 9)
+        #expect(progress.completed == 3)
+    }
+
+    @Test func labelFormatsAsNOfM() throws {
+        let progress = try PrepProgressDecoder.decode(try fixture("v1.json"))
+        #expect(PrepProgressDecoder.label(for: progress) == "3 of 9")
+    }
+
+    @Test func labelIsNilWhenTotalIsZero() {
+        let progress = PrepProgress(version: 1, total: 0, completed: 0)
+        #expect(PrepProgressDecoder.label(for: progress) == nil)
+    }
+
+    @Test func labelIsNilForNoProgress() {
+        #expect(PrepProgressDecoder.label(for: nil) == nil)
+    }
+
+    // Best-effort: a missing or malformed file reads as "nothing to show", never a crash or
+    // thrown error surfaced to the toolbar (the workflow may be mid-write when the app polls).
+    @Test func loadCurrentReturnsNilForAMissingFile() {
+        let missing = URL(fileURLWithPath: "/tmp/overture-prep-progress-does-not-exist-\(UUID()).json")
+        #expect(PrepProgressDecoder.loadCurrent(from: missing) == nil)
+    }
+
+    @Test func loadCurrentReturnsNilForMalformedJSON() throws {
+        let url = URL(fileURLWithPath: "/tmp/overture-prep-progress-malformed-\(UUID()).json")
+        try Data("{not valid json".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(PrepProgressDecoder.loadCurrent(from: url) == nil)
+    }
+}

@@ -30,14 +30,24 @@ before this was codified.
   `~/Library/Application Support/Overture/overture-voice-guidance.md` — the distilled,
   anonymized voice tendencies, an editable artifact. You regenerate ONLY its
   auto-generated section; Dan's own notes section is preserved untouched.
+- **Update as you go (#354):**
+  `~/Library/Application Support/Overture/overture-prep-progress.json` (`PrepProgress`
+  version `1`: `{ version, total, completed }`). The launcher script already created this
+  file with `completed: 0` and the correct `total` before starting you; after you finish
+  EACH item (contact found or not, draft written or not, "finish" means you have moved on
+  from it), overwrite the WHOLE file with `completed` incremented by one, `total` and
+  `version` unchanged. This drives the app's live "N of M" progress display, so a stale or
+  skipped update just makes that count wrong, not a crash, but update it every item, not
+  just at the end. Never touch `total`.
 
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result
 byte-for-byte. NEVER rebuild it from group/date/venue — that is the silent-mismatch
 trap. The human-readable fields are for research only.
 
-Canonical samples of both files (the cross-language contract guard, #157) live in
-`fixtures/prep-queue/` and `fixtures/prep-results/`. Match those shapes exactly; if the
-format ever changes, update the fixture and the Swift contract test in the same change.
+Canonical samples of the queue, results, and progress files (the cross-language contract
+guard, #157 / #354) live in `fixtures/prep-queue/`, `fixtures/prep-results/`, and
+`fixtures/prep-progress/`. Match those shapes exactly; if the format ever changes, update
+the fixture and the Swift contract test in the same change.
 
 ## Once per run: learn from Dan's recent edits (#119 / #242)
 
@@ -187,6 +197,14 @@ Reject or fix a draft body that:
 - states a rate that is not the canonical "$250 an hour plus tax, one-hour minimum";
 - contains performative enthusiasm: "love to", "thrilled", "excited", "can't wait",
   "delighted", or any exclamation point. Rephrase level before writing.
+
+### 4. Update progress (#354)
+
+Before moving to the next item in the work-list, overwrite
+`overture-prep-progress.json` with `completed` incremented by one (see "Input / output"
+above for the exact shape). Do this for every item, including one where you found no
+contact or wrote no draft, "finished" means you are done working it, not that it
+succeeded.
 
 ## One-time setup
 

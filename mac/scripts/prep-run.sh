@@ -23,6 +23,7 @@ exec >> "$LOG" 2>&1
 
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
+PROGRESS="$SUPPORT/overture-prep-progress.json"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
 MARKER="$SUPPORT/prep-running"
 
@@ -31,6 +32,12 @@ MARKER="$SUPPORT/prep-running"
 
 # In-flight marker the app can watch (issue #44); removed on exit no matter what.
 : > "$MARKER"
+
+# #354: seed a fresh progress file every run (never trust a leftover one from a prior run) so
+# the app's "N of M" display starts correct even if the agent below never updates it again.
+JQ="$(command -v jq 2>/dev/null || echo /usr/bin/jq)"
+TOTAL="$("$JQ" '.items | length' "$QUEUE" 2>/dev/null || echo 0)"
+printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 
 # Heartbeat: keep the marker fresh while genuinely working so a long multi-prospect
 # batch is never mistaken for a crashed run (#47). The app treats a marker untouched
@@ -46,8 +53,10 @@ the anonymized auto-generated section of overture-voice-guidance.md (strip all o
 specifics; never carry them into other drafts). Then read the work-list at $QUEUE, and for every
 item find the contact (waterfall, strict verification) and draft the email in Dan's voice (invoke
 the dan-wright-brand-voice skill; apply the voice guidance only as secondary nudges, the skill
-wins). Copy each item's naturalKey verbatim. Write the complete PrepResults JSON to $RESULTS and
-nothing else to that file. Do the web research needed to find real, verifiable contacts."
+wins). Copy each item's naturalKey verbatim. After finishing each item, overwrite $PROGRESS with
+its completed count incremented by one, per the runbook's 'Update progress' step (total is already
+seeded, never change it). Write the complete PrepResults JSON to $RESULTS and nothing else to that
+file. Do the web research needed to find real, verifiable contacts."
 
 # Resolve the claude binary: the app launches us with a minimal PATH, so look in the
 # usual install spots rather than relying on PATH.

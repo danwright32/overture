@@ -6,18 +6,19 @@ import {
   assertRefinedEventsShape,
   assertPrepQueueShape,
   assertPrepResultsShape,
+  assertPrepProgressShape,
   assertReplyClassifyQueueShape,
   assertReplyClassifyResultsShape,
   assertVoiceFeedbackShape,
   versionFromFilename,
 } from "./fixtureShape";
 
-// Shape-drift guard (#509) for the 7 contracts where one side is a Claude Code workflow with no
+// Shape-drift guard (#509) for the 8 contracts where at least one side is not code with no
 // automated test (docs/contracts.md's "CI coverage" section): scout-refine, prep-queue,
-// prep-results, reply-classify, voice-feedback. This does not test behavior (the workflow side
-// isn't code); it only asserts every fixture actually committed under each directory still
-// matches its documented shape, so a format change on the workflow side that the fixture was
-// never updated for fails here instead of drifting silently (the #109 class of bug).
+// prep-results, prep-progress, reply-classify, voice-feedback. This does not test behavior (the
+// non-code side isn't code); it only asserts every fixture actually committed under each
+// directory still matches its documented shape, so a format change on the non-code side that the
+// fixture was never updated for fails here instead of drifting silently (the #109 class of bug).
 
 const fixtureDir = (dir: string) => fileURLToPath(new URL(`../../fixtures/${dir}/`, import.meta.url));
 
@@ -84,6 +85,33 @@ describe("prep-results fixture shapes", () => {
     const mutated = readJson("prep-results", "v2.json") as { results: Array<Record<string, unknown>> };
     mutated.results[0].contact = { method: "generic_inbox", confidence: "low" };
     expect(() => assertPrepResultsShape(mutated, "v2.json", 2)).toThrow(/contact.*replaced by contacts/);
+  });
+});
+
+describe("prep-progress fixture shapes", () => {
+  const files = jsonFilenames("prep-progress");
+
+  it("covers exactly the known prep-progress files", () => {
+    expect(files.sort()).toEqual(["v1.json"]);
+  });
+
+  for (const file of files) {
+    it(`${file} matches the prep-progress shape`, () => {
+      const version = versionFromFilename(file);
+      expect(() => assertPrepProgressShape(readJson("prep-progress", file), file, version)).not.toThrow();
+    });
+  }
+
+  it("rejects completed exceeding total (proves the check actually catches drift)", () => {
+    const mutated = readJson("prep-progress", "v1.json") as Record<string, unknown>;
+    mutated.completed = (mutated.total as number) + 1;
+    expect(() => assertPrepProgressShape(mutated, "v1.json", 1)).toThrow(/completed.*must not exceed total/);
+  });
+
+  it("rejects a negative total", () => {
+    const mutated = readJson("prep-progress", "v1.json") as Record<string, unknown>;
+    mutated.total = -1;
+    expect(() => assertPrepProgressShape(mutated, "v1.json", 1)).toThrow(/total must be a non-negative integer/);
   });
 });
 

@@ -51,6 +51,23 @@ struct RunProgressSpinnerLabelTests {
         // No start time (e.g. the counter source isn't known): the plain "working" label, no counter.
         #expect(RunProgress.spinnerLabel("Prepping", since: nil, now: started) == "Prepping…")
     }
+
+    // #354: real "N of M" progress, e.g. from the Prep run's progress file, inserted before the
+    // ellipsis so the label reads "Prepping 3 of 9… 0:45" instead of a bare elapsed counter.
+    @Test func insertsProgressDetailBeforeTheEllipsis() {
+        #expect(RunProgress.spinnerLabel("Prepping", since: started, now: started.addingTimeInterval(45),
+                                         detail: "3 of 9") == "Prepping 3 of 9… 0:45")
+    }
+
+    @Test func detailShowsEvenWithoutAStart() {
+        #expect(RunProgress.spinnerLabel("Prepping", since: nil, now: started, detail: "3 of 9")
+                == "Prepping 3 of 9…")
+    }
+
+    @Test func noDetailIsUnaffected() {
+        #expect(RunProgress.spinnerLabel("Prepping", since: started, now: started.addingTimeInterval(45),
+                                         detail: nil) == "Prepping… 0:45")
+    }
 }
 
 // #436: the one shared decision every long action routes through — given a start time, the current
