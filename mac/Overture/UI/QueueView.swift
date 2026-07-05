@@ -38,10 +38,16 @@ struct QueueView: View {
     // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
     @Binding var deepLinkedKeys: [String]?
     @State private var focusedKeys: [String]?
+    // #338: the heading focusedSection shows while focused. nil falls back to the #308
+    // away-leads phrasing; a stage-pill tap sets an explicit one instead.
+    @State private var focusedHeading: String?
 
     // #488: lets the Reconnect Gmail alert start the same OAuth flow the onboarding screen uses,
     // instead of just telling Dan to go find the button himself.
     var onConnectGmail: () -> Void = {}
+    // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
+    // instead of a second filtered-list implementation of the same thing.
+    var onShowFollowUps: () -> Void = {}
 
     // The one email awaiting Dan's explicit confirm before it sends (#49).
     private struct PendingConfirm: Identifiable {
@@ -207,10 +213,10 @@ struct QueueView: View {
         let rows = items.filter { wanted.contains($0.id) }
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text("\(rows.count) new lead\(rows.count == 1 ? "" : "s") while you were away")
+                Text(focusedHeading ?? "\(rows.count) new lead\(rows.count == 1 ? "" : "s") while you were away")
                     .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
-                Button("Show all") { focusedKeys = nil }
+                Button("Show all") { focusedKeys = nil; focusedHeading = nil }
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -231,6 +237,13 @@ struct QueueView: View {
         DispatchQueue.main.async {
             if let first = keys.first { withAnimation { proxy.scrollTo(first, anchor: .top) } }
         }
+    }
+
+    // #338: tapping a stage pill (Prep/Review/Send) focuses the queue on exactly the prospects in
+    // that stage, reusing the same #308 focused-list view instead of a second filtering mechanism.
+    private func focusOnStage(_ status: AgentStatus) {
+        focusedHeading = "\(status.name): \(status.detail)"
+        focusedKeys = StageNavigation.naturalKeys(forStage: status.name, in: prospects)
     }
 
     // #236: land on a deep-linked lead: switch to the pipeline holding it, clear filters that would
@@ -306,10 +319,12 @@ struct QueueView: View {
     // a label (never colour alone), with a roll-up so needs-attention is unmissable.
     private var agentInputs: AgentInputs {
         AgentInputs(
-            keptToPrep: prospects.filter { $0.status == .queued && !$0.hasDraft }.count,
+            // #338: the SAME criteria StageNavigation uses to pick which prospects a pill's tap
+            // focuses on, so the count shown always matches what tapping it navigates to.
+            keptToPrep: StageNavigation.naturalKeys(forStage: "Prep", in: prospects).count,
             prepRunning: PrepQueueService.isRunning(now: Date()),
-            toReview: prospects.filter { $0.status == .drafted }.count,
-            readyToSend: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
+            toReview: StageNavigation.naturalKeys(forStage: "Review", in: prospects).count,
+            readyToSend: StageNavigation.naturalKeys(forStage: "Send", in: prospects).count,
             gmailConnected: GmailAuthManager.shared.isConnected,
             sendErrors: prospects.filter { $0.sendError != nil }.count,
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: Date()).count,
@@ -340,18 +355,29 @@ struct QueueView: View {
         .padding(.top, OVSpacing.xxs)
     }
 
+    // #338: real navigation, not just a status indicator. Follow-ups reuses the existing
+    // FollowUpsView sheet; Prep/Review/Send focus the queue on that stage's prospects.
     private func agentChip(_ s: AgentStatus) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(agentColor(s.state)).frame(width: 6, height: 6)
-            Text(s.name).font(OVType.tag)
-                .foregroundStyle(s.state == .idle ? OVColor.inkFaint : OVColor.ink)
-            if s.state != .idle {
-                Text(s.detail).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
+        Button {
+            if s.name == "Follow-ups" {
+                onShowFollowUps()
+            } else {
+                focusOnStage(s)
             }
+        } label: {
+            HStack(spacing: 5) {
+                Circle().fill(agentColor(s.state)).frame(width: 6, height: 6)
+                Text(s.name).font(OVType.tag)
+                    .foregroundStyle(s.state == .idle ? OVColor.inkFaint : OVColor.ink)
+                if s.state != .idle {
+                    Text(s.detail).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+            .background(Capsule().fill(s.state == .idle ? Color.clear : agentColor(s.state).opacity(0.12)))
+            .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: s.state == .idle ? 1 : 0))
         }
-        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-        .background(Capsule().fill(s.state == .idle ? Color.clear : agentColor(s.state).opacity(0.12)))
-        .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: s.state == .idle ? 1 : 0))
+        .buttonStyle(.plain)
         .help(s.detail)
     }
 
