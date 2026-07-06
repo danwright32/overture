@@ -341,7 +341,12 @@ struct DraftReviewView: View {
     }
 
     private func provenanceLabel(_ p: RecipientProvenance) -> String {
-        switch p { case .act: return "act"; case .presenter: return "presenter"; case .manual: return "added" }
+        switch p {
+        case .act: return "act"
+        case .performer: return "performer"
+        case .presenter: return "presenter"
+        case .manual: return "added"
+        }
     }
 
     private func contactStatusColor(_ c: RecipientSnapshot) -> Color {

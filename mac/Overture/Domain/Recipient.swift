@@ -1,10 +1,12 @@
 import Foundation
 import SwiftData
 
-// Where a recipient came from. `act` = the performers; `presenter` = a real presenting org (never
-// the host venue); `manual` = an address Dan typed in at approval.
+// Where a recipient came from. `act` = a single-act waterfall result; `performer` = a named
+// individual performer on a self-produced show (#587, #366 Phase 2), mutually exclusive with `act`
+// per performance (never both used at once); `presenter` = a real presenting org (never the host
+// venue); `manual` = an address Dan typed in at approval.
 enum RecipientProvenance: String, Codable, CaseIterable, Sendable {
-    case act, presenter, manual
+    case act, performer, presenter, manual
 }
 
 // A recipient's place in sending. Distinct from a performance's review status (ReviewStatus);
@@ -179,11 +181,12 @@ final class Recipient {
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
-    // click sends) would vary run to run. Act contacts go first, then a presenter, then a manual add
-    // (the #366/#368 contact ladder: target the act; the presenter only after), ties broken by id.
+    // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per
+    // performance, so they tie), then a presenter, then a manual add (the #366/#368 contact ladder:
+    // target the act or performer; the presenter only after), ties broken by id.
     var sendOrderRank: Int {
         switch provenance {
-        case .act: return 0
+        case .act, .performer: return 0
         case .presenter: return 1
         case .manual: return 2
         }
