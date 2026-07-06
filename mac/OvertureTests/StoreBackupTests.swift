@@ -130,4 +130,50 @@ struct StoreBackupTests {
         let remaining = try FileManager.default.contentsOfDirectory(atPath: backupsDirectory.path).sorted()
         #expect(remaining == ["20260101-090000", "20260102-090000"])
     }
+
+    // #602: the launch-time policy. Generic over whatever "open the store" returns, so the
+    // sequencing/conditional-prune decision is testable without touching a real ModelContainer.
+    @Test func performLaunchBackupPrunesOldBackupsWhenOpenSucceeds() throws {
+        let dataDirectory = try makeSandboxDataDirectory()
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+                                atomically: true, encoding: .utf8)
+        try makeDatedBackupFolders(["20200101-090000", "20200102-090000"],
+                                   in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
+        let now = Date(timeIntervalSince1970: 1_700_000_000)  // "20231114-171320", after both of the above
+
+        let result = StoreBackup.performLaunchBackup(dataDirectory: dataDirectory, now: now, keep: 1) {
+            "opened"
+        }
+
+        #expect(result == "opened")
+        let remaining = try FileManager.default
+            .contentsOfDirectory(atPath: StoreBackup.backupsDirectory(dataDirectory: dataDirectory).path)
+            .filter { $0 != "backup.log" }
+        #expect(remaining == ["20231114-171320"])
+    }
+
+    // #602 red-team fix: an undetected corrupted store must never cause its own last-good
+    // backups to be pruned away just because this launch's open attempt failed.
+    @Test func performLaunchBackupSkipsPruningWhenOpenFails() throws {
+        let dataDirectory = try makeSandboxDataDirectory()
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+                                atomically: true, encoding: .utf8)
+        try makeDatedBackupFolders(["20260101-090000", "20260102-090000"],
+                                   in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
+        let now = Date(timeIntervalSince1970: 1_700_000_000)  // "20231114-171320"
+
+        let result = StoreBackup.performLaunchBackup(dataDirectory: dataDirectory, now: now, keep: 1) {
+            () -> String? in nil
+        }
+
+        #expect(result == nil)
+        // The new backup still happened (a failed open doesn't mean don't-back-up-what's-there),
+        // but nothing got pruned: both old folders plus the new one are all still present.
+        let remaining = try FileManager.default
+            .contentsOfDirectory(atPath: StoreBackup.backupsDirectory(dataDirectory: dataDirectory).path)
+            .filter { $0 != "backup.log" }.sorted()
+        #expect(remaining == ["20231114-171320", "20260101-090000", "20260102-090000"])
+    }
 }
