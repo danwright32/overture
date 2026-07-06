@@ -71,6 +71,31 @@ struct QueueItemLifecycleTests {
     }
 }
 
+// #596: a quick-glance hint on the main queue row when a prospect carries more than one
+// recipient (e.g. 2 named performers found for a self-produced show, #366), so Dan doesn't have
+// to expand every row to see when multiple people were found.
+@Suite("Queue item contact count")
+struct QueueItemContactCountTests {
+    private func recipient(_ id: String) -> RecipientSnapshot {
+        RecipientSnapshot(id: id, name: id, email: "\(id)@example.com", role: nil,
+                          provenance: .performer, sendState: .sent, replied: false,
+                          lastReplyText: nil, resolution: nil, bounced: false, outcomeSource: nil)
+    }
+
+    @Test func noLabelForZeroOrOneContact() {
+        var q = item()
+        #expect(q.contactCountLabel == nil)
+        q.contacts = [recipient("a")]
+        #expect(q.contactCountLabel == nil)
+    }
+
+    @Test func labelsMultipleContacts() {
+        var q = item()
+        q.contacts = [recipient("a"), recipient("b")]
+        #expect(q.contactCountLabel == "2 contacts")
+    }
+}
+
 @Suite("Queue label helpers")
 struct QueueLabelTests {
     @Test func disciplineFallsBackToPerformance() {

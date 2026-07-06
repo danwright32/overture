@@ -215,6 +215,9 @@ struct ProspectRowView: View {
             QueueModel.productionLabel(item.production).map { Tag(text: $0, tone: item.production == "self" ? .good : .warn) },
             QueueModel.coverageLabel(item.coverage).map { Tag(text: $0, tone: item.coverage == "likely_uncovered" ? .good : .warn) },
             history.map { Tag(text: $0, tone: .history) },
+            // #596: surface at a glance when more than one recipient was found (e.g. 2 named
+            // performers, #366), so Dan doesn't have to expand the row to notice.
+            item.contactCountLabel.map { Tag(text: $0, tone: .info) },
         ].compactMap { $0 })
         .padding(.top, 2)
     }
@@ -397,7 +400,7 @@ struct ProspectRowView: View {
     }
 }
 
-private enum TagTone { case good, warn, history }
+private enum TagTone { case good, warn, history, info }
 private struct Tag { let text: String; let tone: TagTone }
 
 private struct FlowTags: View {
@@ -420,12 +423,27 @@ private struct FlowTags: View {
     }
 
     private func color(_ t: TagTone) -> Color {
-        switch t { case .good: return OVColor.forest; case .warn: return OVColor.inkSoft; case .history: return OVColor.gold }
+        switch t {
+        case .good: return OVColor.forest
+        case .warn: return OVColor.inkSoft
+        case .history: return OVColor.gold
+        case .info: return OVColor.inkSoft
+        }
     }
     private func fill(_ t: TagTone) -> Color {
-        switch t { case .good: return OVColor.forest.opacity(0.08); case .warn: return OVColor.surfaceSunk; case .history: return OVColor.gold.opacity(0.12) }
+        switch t {
+        case .good: return OVColor.forest.opacity(0.08)
+        case .warn: return OVColor.surfaceSunk
+        case .history: return OVColor.gold.opacity(0.12)
+        case .info: return OVColor.surfaceSunk
+        }
     }
     private func border(_ t: TagTone) -> Color {
-        switch t { case .good: return OVColor.forest.opacity(0.2); case .warn: return OVColor.lineStrong; case .history: return OVColor.gold.opacity(0.4) }
+        switch t {
+        case .good: return OVColor.forest.opacity(0.2)
+        case .warn: return OVColor.lineStrong
+        case .history: return OVColor.gold.opacity(0.4)
+        case .info: return OVColor.lineStrong
+        }
     }
 }
