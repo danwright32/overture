@@ -33,10 +33,15 @@ enum RunProgress {
     // the current instant, and its expected window, report whether the run is idle, still working/alive
     // (with the elapsed counter), or past its timeout and stalled (an actionable failed state, not an
     // indefinite spinner). The boundary is `>=` so it matches Recipient.isReplyDraftStalled.
-    static func liveness(since start: Date?, now: Date, timeout: TimeInterval) -> RunLiveness {
+    //
+    // #471: a fixed wall-clock timeout alone can't tell a genuinely dead run from one that's just
+    // slower than usual. `runAlive`, when supplied, is the run's real heartbeat (e.g. a marker-freshness
+    // check); `true` overrides a past-timeout result to `.running` instead of `.stalled`. Default nil
+    // keeps every existing caller's behavior (wall-clock only) unchanged.
+    static func liveness(since start: Date?, now: Date, timeout: TimeInterval, runAlive: Bool? = nil) -> RunLiveness {
         guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
         if now.timeIntervalSince(start) >= timeout {
-            return .stalled(elapsed: elapsed)
+            return runAlive == true ? .running(elapsed: elapsed) : .stalled(elapsed: elapsed)
         }
         return .running(elapsed: elapsed)
     }

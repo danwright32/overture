@@ -219,9 +219,12 @@ final class Recipient {
     static let replyDraftStallTimeout: TimeInterval = RunTimeouts.replyDraft
 
     // True when a reply draft was requested, none has landed, and the timeout has elapsed (#431).
-    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout) -> Bool {
+    // #471: `runAlive` is the classify run's real heartbeat (ReplyClassifyService.isRunning); when it's
+    // still alive, past-timeout no longer counts as stalled, since the wall clock alone can't tell a
+    // genuinely dead run from one that's just slower than usual.
+    func isReplyDraftStalled(now: Date, timeout: TimeInterval = Recipient.replyDraftStallTimeout, runAlive: Bool = false) -> Bool {
         guard let requested = replyDraftRequestedAt, (replyDraftBody?.isEmpty != false) else { return false }
-        return now.timeIntervalSince(requested) >= timeout
+        return !runAlive && now.timeIntervalSince(requested) >= timeout
     }
 
     // True when a send was claimed and has run long enough to be considered stuck rather than a

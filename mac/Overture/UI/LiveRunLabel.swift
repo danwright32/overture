@@ -20,6 +20,11 @@ struct LiveRunLabel: View {
     // #354: real "N of M" progress (e.g. from a run's own progress file), inserted before the
     // ellipsis. nil when the run has no progress data to show.
     var progressDetail: String? = nil
+    // #471: the run's real heartbeat (e.g. marker freshness), re-checked on every tick so a past-timeout
+    // run that's still genuinely alive never flips to the misleading "looks stuck" state. A closure
+    // (not a plain Bool) so it re-evaluates each second alongside the TimelineView tick. nil keeps the
+    // wall-clock-only behavior.
+    var runAlive: (() -> Bool)? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -44,7 +49,7 @@ struct LiveRunLabel: View {
             // No timeout configured: never stalls, just reflect whether a counter is running.
             return since == nil ? .idle : .running(elapsed: "")
         }
-        return RunProgress.liveness(since: since, now: now, timeout: timeout)
+        return RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: runAlive?())
     }
 
     @ViewBuilder private func stalled(elapsed: String) -> some View {

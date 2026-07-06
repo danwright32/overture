@@ -105,4 +105,22 @@ struct RunProgressLivenessTests {
         #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(-30),
                                      timeout: timeout) == .running(elapsed: "0:00"))
     }
+
+    // #471: a fixed wall-clock timeout alone can't tell a genuinely dead run from a slow-but-alive one.
+    // `runAlive` is the real heartbeat (e.g. a marker-freshness check); when it says the run is still
+    // going, past-timeout must never read as stalled.
+    @Test func pastTimeoutWithRunAliveTrueStillReportsRunning() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
+                                     timeout: timeout, runAlive: true) == .running(elapsed: "7:05"))
+    }
+
+    @Test func pastTimeoutWithRunAliveFalseReportsStalled() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
+                                     timeout: timeout, runAlive: false) == .stalled(elapsed: "7:05"))
+    }
+
+    @Test func withinTimeoutIsRunningRegardlessOfRunAlive() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(45),
+                                     timeout: timeout, runAlive: false) == .running(elapsed: "0:45"))
+    }
 }

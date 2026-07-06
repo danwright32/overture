@@ -394,6 +394,18 @@ struct RecipientTests {
         #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(3600)))  // no longer stalled
     }
 
+    // #471: the fixed wall-clock timeout alone can't distinguish a genuinely dead run from a slow one
+    // still working; `runAlive` (the classify run's real heartbeat) must override it.
+    @Test func aReplyDraftPastTimeoutIsNotStalledWhileTheRunIsAlive() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let requested = Date(timeIntervalSince1970: 1_700_000_000)
+        r.replyDraftRequestedAt = requested
+
+        #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(6 * 60), runAlive: true))
+        #expect(r.isReplyDraftStalled(now: requested.addingTimeInterval(6 * 60), runAlive: false))
+        #expect(!r.isReplyDraftStalled(now: requested.addingTimeInterval(3 * 60), runAlive: false))
+    }
+
     // #475/#476: a send claims .sending before the network call; if the app never comes back to
     // resolve it (crash, or a save that never landed), it must read as stuck after a timeout rather
     // than sit invisibly forever or look like any other in-flight send.
