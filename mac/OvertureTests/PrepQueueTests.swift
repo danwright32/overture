@@ -46,6 +46,8 @@ struct PrepQueueTests {
         let expectedKey = Prospect.makeNaturalKey(groupName: "Kept Choir", performanceDate: "2026-07-01", venue: "Weill Recital Hall")
         #expect(item.naturalKey == expectedKey)
         #expect(item.websiteURL == "https://site")
+        // #366 Phase 1: the AI research step needs to know if a show is self-produced.
+        #expect(item.production == "self")
     }
 
     @Test func startPrepWritesWorkListThenReportsRunnerUnavailable() throws {
@@ -151,10 +153,10 @@ struct PrepQueueTests {
     }
 
     @Test func roundTripsThroughJSON() throws {
-        let queue = PrepQueue(version: 1, generatedAt: "now", items: [
+        let queue = PrepQueue(version: 2, generatedAt: "now", items: [
             PrepQueueItem(naturalKey: "k", groupName: "G", venue: "V", performanceDate: "2026-07-01",
                           discipline: "choral", websiteURL: nil, sourceListingURL: nil,
-                          possibleMatchName: nil, priorRelationship: "none")
+                          possibleMatchName: nil, priorRelationship: "none", production: "self")
         ])
         let data = try PrepQueueBuilder.encode(queue)
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: data)

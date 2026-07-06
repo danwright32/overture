@@ -12,9 +12,10 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  (`PrepQueue` version `2`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `discipline`, `websiteURL`, `sourceListingURL`,
-  `possibleMatchName`, `priorRelationship`).
+  `possibleMatchName`, `priorRelationship`, `production`). `production` is
+  `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `2`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
   Each entry in `contacts[]` is one party to email for the performance, carrying a

@@ -19,7 +19,8 @@ struct PrepQueueContractTests {
     }
 
     // The exact model the v1 fixture encodes: one fully-populated item and one with every optional
-    // omitted (decodes to nil), exercising both ends of the contract.
+    // omitted (decodes to nil), exercising both ends of the contract. v1 predates `production`
+    // (#586), so it decodes to nil under the current model — the byte-identical backward-decode proof.
     private let expected = PrepQueue(
         version: 1,
         generatedAt: "2026-06-25T00:00:00.000Z",
@@ -33,7 +34,8 @@ struct PrepQueueContractTests {
                 websiteURL: "https://aurorastrings.example",
                 sourceListingURL: "https://example.org/aurora-10",
                 possibleMatchName: "Aurora Strings",
-                priorRelationship: "warm"
+                priorRelationship: "warm",
+                production: nil
             ),
             PrepQueueItem(
                 naturalKey: "lumen-dance|undated|none",
@@ -44,7 +46,8 @@ struct PrepQueueContractTests {
                 websiteURL: nil,
                 sourceListingURL: nil,
                 possibleMatchName: nil,
-                priorRelationship: "cold"
+                priorRelationship: "cold",
+                production: nil
             ),
         ]
     )
@@ -60,5 +63,21 @@ struct PrepQueueContractTests {
         let data = try PrepQueueBuilder.encode(expected)
         let roundTripped = try JSONDecoder().decode(PrepQueue.self, from: data)
         #expect(roundTripped == expected)
+    }
+
+    @Test func theBuilderNowStampsVersion2() {
+        let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
+        #expect(q.version == 2)
+    }
+
+    // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
+    // `Prospect.production`/#349), so the Prep research step knows whether a show is self-produced
+    // before deciding whether to pursue a named performer directly (#366 Phase 3). Additive, so the
+    // v1 fixture above still decodes with `production` absent (nil).
+    @Test func theV2FixtureCarriesTheProductionType() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v2.json"))
+        #expect(decoded.version == 2)
+        #expect(decoded.items[0].production == "self")
+        #expect(decoded.items[1].production == "agency")
     }
 }

@@ -100,11 +100,11 @@ export function assertRefinedEventsShape(data: unknown, file: string): void {
   });
 }
 
-// overture-prep-queue.json (version 1 only)
+// overture-prep-queue.json (versions 1-2, additive: production at v2+, #586)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  requireVersion(root.version, file, [1]);
-  if (root.version !== expectedVersion) fail(file, `version ${root.version} does not match filename version ${expectedVersion}`);
+  const version = requireVersion(root.version, file, [1, 2]);
+  if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const items = requireArray(root.items, file, "items");
   items.forEach((item, i) => {
@@ -118,6 +118,7 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
     optionalString(o.websiteURL, file, `items[${i}].websiteURL`);
     optionalString(o.sourceListingURL, file, `items[${i}].sourceListingURL`);
     optionalString(o.possibleMatchName, file, `items[${i}].possibleMatchName`);
+    if (o.production !== undefined) requireEnum(o.production, file, `items[${i}].production`, PRODUCTION);
   });
 }
 

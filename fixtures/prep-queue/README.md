@@ -14,3 +14,9 @@ of the workflow silently reading a work-list it no longer understands (the #109 
 The fixture exercises both ends of the contract: one fully-populated item and one with every
 optional (`venue`, `performanceDate`, `websiteURL`, `sourceListingURL`, `possibleMatchName`)
 omitted. `naturalKey` is an opaque token the workflow must echo back verbatim into the results file.
+
+`v1.json` is kept byte-identical as the backward-decode proof. `v2.json` (#586) adds an optional
+`production` (`self` / `agency` / `unknown`, from `Prospect.production`/#349) to each item, so the
+Prep research step knows whether a show is self-produced before deciding whether to pursue a named
+performer directly (#366 Phase 3). Additive, so `v1.json` still decodes with `production` absent
+(nil). Both are asserted by `PrepQueueContractTests`.

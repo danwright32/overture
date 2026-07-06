@@ -21,10 +21,11 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     var sourceListingURL: String?
     var possibleMatchName: String?
     var priorRelationship: String
+    var production: String?       // v2 (#586): self | agency | unknown, from Prospect.production/#349
 }
 
 enum PrepQueueBuilder {
-    static let version = 1
+    static let version = 2
 
     // A prospect is "to prep" when Dan kept it (.queued) and it has no draft yet.
     // Already-drafted/approved ones are left alone so a re-run does not redo work.
