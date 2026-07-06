@@ -17,11 +17,12 @@ before this was codified.
   `possibleMatchName`, `priorRelationship`, `production`). `production` is
   `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `2`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
+  (`PrepResults` version `3`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
   Each entry in `contacts[]` is one party to email for the performance, carrying a
-  `provenance` of `act` or `presenter` (never the host venue). Emit the act, plus at most
-  one real presenting org; the app sends one separate email per contact. (The legacy v1
-  shape carried a single `contact` object; the app still reads it, but new runs MUST write
+  `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
+  the act OR its named lead performer(s) — never both, see §1 below — plus at most one
+  real presenting org; the app sends one separate email per contact. (The legacy v1 shape
+  carried a single `contact` object; the app still reads it, but new runs MUST write
   `contacts[]`.)
 - **Read (optional, #119 voice learning):**
   `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
@@ -100,46 +101,79 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
 
 ### 1. Find the contact (waterfall, PLAN.md §5)
 
-**Who you are reaching: the performing ACT, never the host venue (#366 / #368).** The
-target is the act named in `groupName` (the performers / ensemble / company putting on
-the show). The `venue` field is only WHERE the show happens, never who Dan is pitching.
+**Who you are reaching: the performing ACT (or, for a self-produced show, its named
+lead performer(s)) — never the host venue (#366 / #368).** The default target is the
+act named in `groupName` (the performers / ensemble / company putting on the show). The
+`venue` field is only WHERE the show happens, never who Dan is pitching.
 
-**Hard venue-disqualify rule (#368).** Any address belonging to the host venue is
-DISQUALIFIED, not a low-confidence fallback. Treat the `venue` value as the host: its
-own inbox and its staff addresses (e.g. `publicrelations@carnegiehall.org` for a show
-at Carnegie Hall) are off the table entirely. Returning a venue address is a wrong
-result, not a weak one. Better to return a form/DM, or no contact at all, than the
-venue. (Interim source for "what counts as the venue": the queue's `venue` field and
-its domain; a curated venue map will replace this, #342.)
+**Decide the target: act, or named performer(s)? (#366 Phase 3)** Check the queue
+item's `production` field first:
+
+- **`production == "self"`:** look at the listing/the act's own site for whether it
+  names 1-2 individual lead performers (a soloist or duo) as the identifiable face(s)
+  of the show.
+  - If it does, pursue EACH named performer directly: run the SAME waterfall below once
+    per performer, emitting one `contacts[]` entry per performer actually found, with
+    `provenance: "performer"` and `name` set to that person. Never emit `act` for this
+    show.
+  - If the show is a bigger ensemble/group with no clear individual lead (3+ named
+    members, or no performer names available at all), fall through to the standard
+    single-act waterfall below with `provenance: "act"`, exactly as for a non-self-produced
+    show. This is a judgment call from what the listing actually shows, not a hardcoded
+    headcount — when genuinely unsure, prefer the act waterfall.
+  - Partial results are fine: emit whichever performers you actually found (0, 1, or 2);
+    never block trying to find every one. Dan reviews every draft and can hand-add anyone
+    missed via the manual-recipient path.
+- **`production != "self"`** (agency-produced or unknown): the waterfall below runs
+  exactly as it does today, targeting the act with `provenance: "act"`. Nothing changes.
+
+**Hard venue-disqualify rule (#368), unchanged regardless of target.** Any address
+belonging to the host venue is DISQUALIFIED, not a low-confidence fallback. Treat the
+`venue` value as the host: its own inbox and its staff addresses (e.g.
+`publicrelations@carnegiehall.org` for a show at Carnegie Hall) are off the table
+entirely. Returning a venue address is a wrong result, not a weak one. Better to return
+a form/DM, or no contact at all, than the venue. (Interim source for "what counts as
+the venue": the queue's `venue` field and its domain; a curated venue map will replace
+this, #342.)
 
 **`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
-site, do NOT harvest a contact from it; find the act's OWN site (search the
-`groupName`). Landing on the venue's staff page is exactly the bug this rule prevents.
+site, do NOT harvest a contact from it; find the act's (or the named performer's) OWN
+site. Landing on the venue's staff page is exactly the bug this rule prevents.
 
-Walk in order, stop at the first that works:
+**The waterfall.** Run this once for the act, or once per named performer when pursuing
+performers individually (the target below is whichever of those this run is for). Walk
+in order, stop at the first that works:
 
-1. **The act's named decision-maker / direct email.** Whoever owns the act's
-   photography/marketing, read off the ACT's own staff/contact page.
-2. **The act's generic inbox** (info@, the ensemble's published address). A real email
-   for the act, even a generic one, is PREFERRED over a contact form.
-3. **The act's contact form / Instagram DM** when the act publishes no email. Record it
+1. **The target's named decision-maker / direct email.** For the act, whoever owns its
+   photography/marketing, read off its own staff/contact page. For a named performer,
+   their own published email, read off their own site/bio/contact page.
+2. **The target's generic inbox** (info@, the ensemble's published address; a solo
+   performer rarely has one of these). A real email for the target, even a generic one,
+   is PREFERRED over a contact form.
+3. **The target's contact form / Instagram DM** when it publishes no email. Record it
    as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
    tappable link). This outranks any venue inbox.
 4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Emit
-   the presenter as a SECOND entry in `contacts[]` with `provenance: "presenter"`, in
-   addition to the act, when you find a real presenting org for the show. At most one
-   presenter, and never the host venue. The act stays the primary contact (`provenance:
-   "act"`); the presenter is additive, not a fallback.
+   the presenter as an ADDITIONAL entry in `contacts[]` with `provenance: "presenter"`,
+   alongside the act or performer entries, when you find a real presenting org for the
+   show. At most one presenter, and never the host venue. This step is unchanged and
+   still runs regardless of `production`; the presenter is always additive, never a
+   fallback for a missing act/performer contact.
 
 Each contact you emit becomes its own entry in `contacts[]` with its own `provenance`. If
-none of the above yields a non-venue contact, return the result with the key echoed and
-`contacts` absent rather than reaching for the venue.
+none of the above yields a non-venue contact for a given target, omit that target from
+`contacts[]` rather than reaching for the venue (if that leaves nothing at all, return the
+result with the key echoed and `contacts` absent).
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an
 address actually READ from a real page; set `formUrl` to that source URL. NEVER emit
 a pattern-guessed address (e.g. firstname@org) as high — if you only inferred it, use
 `low` and say so. Confidence mapping: named+read = high, generic inbox = medium,
-form/DM or inferred = low.
+form/DM or inferred = low. **For a named performer specifically**, only use `high` if
+the source page corroborates that person against THIS SPECIFIC performance (name plus
+instrument/role/context match, e.g. their own site lists this date/venue or names this
+group) — a bare name match with no such corroboration is a misidentification risk, so
+mark it `low` instead, same as any other unverified guess.
 
 ### 2. Draft the email (PLAN.md §7 + the dan-wright-brand-voice skill)
 
