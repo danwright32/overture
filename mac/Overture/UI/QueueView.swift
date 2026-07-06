@@ -495,10 +495,14 @@ struct QueueView: View {
     private func toggleVoiceLearning(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.excludedFromVoiceLearning.toggle()
-        try? context.save()
-        // #285: a context-menu toggle changes nothing visible on the row, so say it ran.
-        feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning,
-                                                     org: item.groupName))
+        do {
+            try context.save()
+            // #285: a context-menu toggle changes nothing visible on the row, so say it ran.
+            feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning,
+                                                         org: item.groupName))
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that reply
@@ -506,7 +510,11 @@ struct QueueView: View {
     private func dismissReply(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.dismissAutoReply(now: Date())
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // #418 B2: Dan hand-marks one contact's outcome from the conversation surface (attribution only
@@ -516,7 +524,11 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
         model.resumePausedRecipients()   // #430: marking a contact is triage; resume the paused ones
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // #418 B1: dismiss a wrongly auto-detected reply for ONE contact (#219, per-recipient).
@@ -524,7 +536,11 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
         model.resumePausedRecipients()   // #430: a false reply shouldn't keep the others paused
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // #420 C6. Request an AI-drafted reply for ONE contact: stamp the request (drives the progress +
@@ -532,7 +548,11 @@ struct QueueView: View {
     private func draftReply(_ item: QueueItem, _ recipientId: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
         _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
     }
 
@@ -561,7 +581,11 @@ struct QueueView: View {
     private func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // #421 copy-out: copy the draft to the clipboard for Dan to paste into the Gmail thread he's
@@ -573,7 +597,11 @@ struct QueueView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(body, forType: .string)
         model.updateRecipient(id: recipientId) { $0.recordRepliedInGmail(now: Date()) }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private var emptyState: some View {
@@ -598,13 +626,21 @@ struct QueueView: View {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.status = status
         model.dismissReasonRaw = reason?.rawValue
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func saveDraft(_ item: QueueItem, _ subject: String, _ body: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.applyEdit(subject: subject, body: body)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // Dan eyeballed a rules-uncertain classification and it's fine: clear the flag so it
@@ -612,9 +648,13 @@ struct QueueView: View {
     private func markConfidenceReviewed(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.confidenceReviewedByDan = true
-        try? context.save()
-        // #487: the chip just clears, which isn't visible enough on its own to prove the tap registered.
-        feedback.acknowledge(ActionAck.confidenceConfirmed(org: item.groupName))
+        do {
+            try context.save()
+            // #487: the chip just clears, which isn't visible enough on its own to prove the tap registered.
+            feedback.acknowledge(ActionAck.confidenceConfirmed(org: item.groupName))
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // Dan corrected a wrong classification. Calls ClassificationOverride.correct which
@@ -622,21 +662,33 @@ struct QueueView: View {
     private func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
-        try? context.save()
-        // #487: same silent-no-op risk as markConfidenceReviewed above.
-        feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
+        do {
+            try context.save()
+            // #487: same silent-no-op risk as markConfidenceReviewed above.
+            feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func setConversationState(_ item: QueueItem, _ state: ConversationState) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.setConversationState(state, now: Date())
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func confirmConversationState(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.confirmConversationState(now: Date())
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func confirmBooking(_ item: QueueItem) {
@@ -646,14 +698,22 @@ struct QueueView: View {
         model.outcomeAt = Date()
         model.bookingSuggested = false
         model.suppressUntriedRecipients(reason: .bookedElsewhere)   // #542
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func dismissBookingSuggestion(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.bookingSuggested = false
         model.bookingSuggestionDismissed = true
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // Dan rejected a wrong auto-detected booking (#203): revert it to no-response and remember the
@@ -661,13 +721,21 @@ struct QueueView: View {
     private func rejectBooking(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     private func setLostReason(_ item: QueueItem, _ reason: String) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.lostReason = QueueModel.normalizedLostReason(reason)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: item.groupName), tone: .warning)
+        }
     }
 
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his

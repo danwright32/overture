@@ -16,6 +16,8 @@ enum PrepImporter {
         var skippedEdited = 0
         var skippedRecipientEdits = 0
         var unmatchedKeys: [String] = []
+        // #499: set when a context.save() failed, so this run's matches/drafts may not persist.
+        var saveFailed = false
     }
 
     @MainActor
@@ -58,7 +60,11 @@ enum PrepImporter {
                 }
             }
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            outcome.saveFailed = true
+        }
         return outcome
     }
 

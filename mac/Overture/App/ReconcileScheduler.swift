@@ -88,9 +88,9 @@ final class ReconcileScheduler {
         let repliedBefore = Set(before.filter(Self.hasNewReply).map(\.naturalKey))
         let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
 
-        reconcileBookings(now: now)
+        let bookingResult = reconcileBookings(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
-        await GmailReplyChecker().checkReplies(in: context)
+        let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
         var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {
@@ -110,7 +110,8 @@ final class ReconcileScheduler {
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings,
-                                newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys)
+                                newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,
+                                saveFailed: bookingResult.saveFailed || replyCheckSaveFailed)
     }
 
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
@@ -122,6 +123,12 @@ final class ReconcileScheduler {
                               post: (_ body: String, _ leadKeys: [String]) -> Void = {
                                   NotificationService.post(.away, title: "Overture", body: $0, leadKeys: $1)
                               }) {
+        // #499: a save failure is worth waking Dan for even with no new leads this tick, since it
+        // is more actionable than "nothing was due" and would otherwise never surface unattended.
+        if summary.saveFailed {
+            post(summary.message, summary.newLeadKeys)
+            return
+        }
         guard let body = AwayAlert.message(newReplies: summary.newReplies, newBookings: summary.newBookings) else { return }
         // #308: carry every new-lead key: a tap deep-links to the sole lead when one is new, or to the
         // filtered new-leads view when several are.
@@ -129,14 +136,21 @@ final class ReconcileScheduler {
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
+    // #499: saveFailed reports a persistence failure back to the caller so it can surface via
+    // ReconcileSummary instead of failing silently.
     @discardableResult
-    func reconcileBookings(now: Date) -> Int {
+    func reconcileBookings(now: Date) -> (count: Int, saveFailed: Bool) {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let n = DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)
-        if n > 0 { try? context.save() }
-        return n
+        guard n > 0 else { return (0, false) }
+        do {
+            try context.save()
+            return (n, false)
+        } catch {
+            return (n, true)
+        }
     }
 
     // Push due conversation reminders into OmniFocus and record the result so a failure stays visible

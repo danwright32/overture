@@ -330,7 +330,12 @@ struct RootView: View {
     // touches the Debug location; leaves the dev Gmail login intact.
     private func debugClearDevData() {
         DebugSeed.clearStore(in: context)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            return
+        }
         let removed: [String]
         do {
             removed = try DebugSeed.clearHandoffInputs(debugBase: DebugSeed.debugHandoffDirectory)
@@ -348,14 +353,22 @@ struct RootView: View {
             return
         }
         DebugStaging.stageAsSent(target, now: Date())
-        try? context.save()
-        statusMessage = "DEBUG: staged \(target.groupName) as sent"
+        do {
+            try context.save()
+            statusMessage = "DEBUG: staged \(target.groupName) as sent"
+        } catch {
+            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+        }
     }
 
     private func debugStageReminderLead() {
         let p = DebugStaging.stageReminderDueLead(in: context, now: Date())
-        try? context.save()
-        statusMessage = "DEBUG: staged \(p.groupName) as reminder-due"
+        do {
+            try context.save()
+            statusMessage = "DEBUG: staged \(p.groupName) as reminder-due"
+        } catch {
+            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+        }
     }
 
     // DEBUG ONLY (#325): stage a self-addressed lead so the real approve -> send path can be verified
@@ -364,8 +377,12 @@ struct RootView: View {
         let address = DebugStaging.resolvedSelfSendAddress(
             override: UserDefaults.standard.string(forKey: "selfSendTestAddress"))
         let p = DebugStaging.stageSelfSendLead(in: context, now: Date(), address: address)
-        try? context.save()
-        statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
+        do {
+            try context.save()
+            statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
+        } catch {
+            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+        }
     }
 
     // DEBUG ONLY (#425): like debugStageSelfSendLead, but with two recipients (act + presenter) so the
@@ -375,13 +392,22 @@ struct RootView: View {
         let address = DebugStaging.resolvedSelfSendAddress(
             override: UserDefaults.standard.string(forKey: "selfSendTestAddress"))
         let p = DebugStaging.stageMultiRecipientSelfSendLead(in: context, now: Date(), address: address)
-        try? context.save()
-        statusMessage = "DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice"
+        do {
+            try context.save()
+            statusMessage = "DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice"
+        } catch {
+            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+        }
     }
 
     private func debugClearDebugLeads() {
         DebugStaging.clearDebugLeads(in: context)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            return
+        }
         syncOmniFocus(force: true)   // completes the now-orphaned OmniFocus tasks
         statusMessage = "DEBUG: cleared debug leads"
     }
@@ -493,7 +519,9 @@ struct RootView: View {
     // Ingest classifications a prior reply-classify run wrote (suggests states, auto). No-op if the
     // results file isn't there yet.
     private func ingestReplyClassifications() {
-        _ = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context)
+        guard let outcome = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context) else { return }
+        // #499: this run's intent hints/drafts were written in memory but never persisted.
+        if outcome.saveFailed { statusMessage = "Reply-classify results couldn't save. Try again." }
     }
 
     // Launch a reply-classify run for replies still needing an intent. Throws (and is swallowed)
@@ -589,6 +617,7 @@ struct RootView: View {
         if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
+        if outcome.saveFailed { notes.append("couldn't save, try again") }
         // #249: fail closed if the distiller leaked a real name into the voice guidance; quarantine
         // the contaminated section so it can't feed a future draft, and warn Dan.
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,

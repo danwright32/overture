@@ -94,4 +94,19 @@ struct ReconcileSummaryTests {
     @Test func newLeadKeysIsEmptyWhenNothingIsNew() {
         #expect(ReconcileSummary(omniFocusChanged: 0).newLeadKeys.isEmpty)
     }
+
+    // #499: a save failure is the most actionable outcome of a tick, since whatever this pass found
+    // may not have persisted; it must take precedence over every other message, including a "nothing
+    // was due" no-op or a genuine new booking/reply this same tick.
+    @Test func saveFailedTakesPrecedenceOverNothingWasDue() {
+        let m = ReconcileSummary(omniFocusChanged: 0, saveFailed: true).message
+        #expect(m.contains("couldn't save"))
+        #expect(!m.contains("nothing was due"))
+    }
+
+    @Test func saveFailedTakesPrecedenceOverNewBookings() {
+        let m = ReconcileSummary(omniFocusChanged: 0, newBookings: ["Joe's Pub"], saveFailed: true).message
+        #expect(m.contains("couldn't save"))
+        #expect(!m.contains("Joe's Pub"))
+    }
 }

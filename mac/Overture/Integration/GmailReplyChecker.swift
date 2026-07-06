@@ -9,21 +9,25 @@ import SwiftData
 struct GmailReplyChecker {
     var fromEmail: String = "dan@danwrightphotography.com"
 
-    func checkReplies(in context: ModelContext, now: Date = Date()) async {
+    // #499: returns whether a detected reply's context.save() failed, so the caller can surface
+    // it instead of it failing silently. false covers both "nothing to save" and "not connected".
+    @discardableResult
+    func checkReplies(in context: ModelContext, now: Date = Date()) async -> Bool {
         guard GmailAuthManager.shared.isConnected,
-              let token = try? await GmailAuthManager.shared.validAccessToken() else { return }
-        await markReplies(in: context, token: token, now: now)
+              let token = try? await GmailAuthManager.shared.validAccessToken() else { return false }
+        return await markReplies(in: context, token: token, now: now)
     }
 
     // The testable core: with a token in hand and an injected fetch, pull each unresolved
     // sent prospect's thread and mark replies via the tested ReplyService. No auth/connection
     // gating here, so a fake thread response can drive the marking without network (#84).
+    @discardableResult
     func markReplies(
         in context: ModelContext,
         token: String,
         now: Date = Date(),
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
-    ) async {
+    ) async -> Bool {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         // Watch EVERY sent recipient's own thread (#418 A2), not just the lead's first-send thread,
         // so a reply to any contact is seen. Skip a show only on a MANUAL lead resolution or a booking
@@ -38,7 +42,7 @@ struct GmailReplyChecker {
                 threadIds.insert(t)
             }
         }
-        guard !threadIds.isEmpty else { return }
+        guard !threadIds.isEmpty else { return false }
 
         var threads: [String: Data] = [:]
         for id in threadIds {
@@ -53,7 +57,14 @@ struct GmailReplyChecker {
         }
         let marked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now,
                                                 fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
-        if marked > 0 { try? context.save() }
+        guard marked > 0 else { return false }
+        do {
+            try context.save()
+            return false
+        } catch {
+            // #499: replies were detected in memory but couldn't persist.
+            return true
+        }
     }
 
     private func fetchThread(

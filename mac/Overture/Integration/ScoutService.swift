@@ -16,13 +16,21 @@ enum ScoutService {
         // Set when the Downbeat past-client export was missing, unreadable, or stale, so
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
+        // #499: set when a context.save() failed during this run, so some or all of what the
+        // scout found or reconciled may not have persisted.
+        var saveFailed: Bool = false
 
-        // The single warning to show after a run, if any. Zero events here means the feed was
-        // reached and parsed but nothing matched, distinct from a connection failure (the
-        // thrown-error path, see ScoutFailure). For a 90-day window that's unusual and usually
-        // means the feed's data format changed. Takes precedence over a client-list warning
-        // (with no events there is nothing to match) (#27, #126).
+        // The single warning to show after a run, if any. A save failure takes precedence over
+        // everything else: the run may have found and processed events that never persisted, the
+        // most actionable problem. Zero events here means the feed was reached and parsed but
+        // nothing matched, distinct from a connection failure (the thrown-error path, see
+        // ScoutFailure). For a 90-day window that's unusual and usually means the feed's data
+        // format changed. Takes precedence over a client-list warning (with no events there is
+        // nothing to match) (#27, #126).
         var warning: String? {
+            if saveFailed {
+                return "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
+            }
             if found == 0 {
                 return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
             }
@@ -51,7 +59,12 @@ enum ScoutService {
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         if DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                // #499: the booking reconcile mutated prospects in memory but couldn't persist them.
+                outcome.saveFailed = true
+            }
         }
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date())
@@ -222,7 +235,13 @@ enum ScoutService {
                                     currentFeedCount: events.count, baselineFeedCount: baselineFeedCount,
                                     today: QueueModel.easternToday())
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // #499: everything above was classified/upserted in memory but never persisted.
+            return Outcome(found: events.count, inserted: inserted, updated: updated,
+                           skipped: skipped, uncertain: uncertain, saveFailed: true)
+        }
         return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)
     }
 

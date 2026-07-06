@@ -12,6 +12,9 @@ struct ReconcileSummary: Equatable, Sendable {
     // deep-link to one when exactly one lead is new.
     var newReplyKeys: [String] = []
     var newBookingKeys: [String] = []
+    // #499: set when a context.save() failed during this tick, so whatever it found may not
+    // have persisted. The most actionable outcome, so it takes precedence in message below.
+    var saveFailed: Bool = false
 
     // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
     // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
@@ -26,6 +29,9 @@ struct ReconcileSummary: Equatable, Sendable {
     }
 
     var message: String {
+        if saveFailed {
+            return "Reconcile ran but couldn't save its results. Try again; if this keeps happening, something's wrong with the local store."
+        }
         var parts: [String] = []
         // #287 / #297: a reply or booking found this pass is the headline event, so lead with it and name
         // the org (Dan works by name). Both go through OutreachEventPhrasing so the manual ack and the

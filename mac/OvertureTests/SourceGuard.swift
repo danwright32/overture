@@ -15,22 +15,38 @@ enum SourceGuard {
         guard let signatureRange = src.range(of: "func \(name)(") else {
             throw GuardError.functionNotFound(name)
         }
-        guard let openBrace = src[signatureRange.upperBound...].firstIndex(of: "{") else {
+        // Balance parens across the parameter list first, so a default parameter value that is
+        // itself a closure literal (with its own "{"/"(") can't be mistaken for the function
+        // body's opening brace: naively taking the first "{" after the signature would land
+        // inside that closure literal instead, silently scanning the wrong (and usually much
+        // smaller) span.
+        var parenDepth = 1
+        var index = signatureRange.upperBound
+        while index < src.endIndex, parenDepth > 0 {
+            switch src[index] {
+            case "(": parenDepth += 1
+            case ")": parenDepth -= 1
+            default: break
+            }
+            index = src.index(after: index)
+        }
+        guard parenDepth == 0 else { throw GuardError.functionNotFound(name) }
+        guard let openBrace = src[index...].firstIndex(of: "{") else {
             throw GuardError.functionNotFound(name)
         }
         var depth = 0
-        var index = openBrace
-        while index < src.endIndex {
-            switch src[index] {
+        var bodyIndex = openBrace
+        while bodyIndex < src.endIndex {
+            switch src[bodyIndex] {
             case "{": depth += 1
             case "}":
                 depth -= 1
                 if depth == 0 {
-                    return src[openBrace...index]
+                    return src[openBrace...bodyIndex]
                 }
             default: break
             }
-            index = src.index(after: index)
+            bodyIndex = src.index(after: bodyIndex)
         }
         throw GuardError.unbalancedBraces(name)
     }
