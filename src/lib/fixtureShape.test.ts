@@ -50,7 +50,7 @@ describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
   it("covers exactly the known prep-queue files", () => {
-    expect(files.sort()).toEqual(["v1.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json"]);
   });
 
   for (const file of files) {
