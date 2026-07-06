@@ -23,10 +23,11 @@ struct OvertureDeepLinkTests {
     }
 
     @Test func rejectsOtherSchemesHostsAndMissingKeys() throws {
+        let scheme = OvertureDeepLink.scheme
         #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "https://example.com/lead?key=x"))) == nil)
-        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://other?key=x"))) == nil)
-        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://lead?notkey=x"))) == nil)
-        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "overture://lead?key="))) == nil)
+        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "\(scheme)://other?key=x"))) == nil)
+        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "\(scheme)://lead?notkey=x"))) == nil)
+        #expect(OvertureDeepLink.leadKey(from: try #require(URL(string: "\(scheme)://lead?key="))) == nil)
     }
 
     // #308: a coalesced multi-lead away alert routes to overture://leads?key=k1&key=k2…, carrying the
@@ -48,17 +49,41 @@ struct OvertureDeepLinkTests {
     }
 
     @Test func leadKeysRejectsOtherSchemesAndHosts() throws {
+        let scheme = OvertureDeepLink.scheme
         #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "https://example.com/leads?key=x"))) == nil)
-        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "overture://lead?key=x"))) == nil)
-        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "overture://leads?notkey=x"))) == nil)
+        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "\(scheme)://lead?key=x"))) == nil)
+        #expect(OvertureDeepLink.leadKeys(from: try #require(URL(string: "\(scheme)://leads?notkey=x"))) == nil)
     }
 
     // #282: `overture://show` surfaces the resident copy's window. The build script opens this URL
     // instead of re-launching the bundle, which routes to the already-running instance rather than
     // spawning a second copy that the store lock then refuses.
     @Test func recognizesTheShowWindowCommand() throws {
-        #expect(OvertureDeepLink.isShowCommand(try #require(URL(string: "overture://show"))))
-        #expect(!OvertureDeepLink.isShowCommand(try #require(URL(string: "overture://lead?key=x"))))
+        let scheme = OvertureDeepLink.scheme
+        #expect(OvertureDeepLink.isShowCommand(try #require(URL(string: "\(scheme)://show"))))
+        #expect(!OvertureDeepLink.isShowCommand(try #require(URL(string: "\(scheme)://lead?key=x"))))
         #expect(!OvertureDeepLink.isShowCommand(try #require(URL(string: "https://example.com/show"))))
+    }
+
+    // #568: Debug and Release must never claim the same overture:// scheme with LaunchServices, or
+    // opening the link always resolves to whichever build LaunchServices prefers (in practice, always
+    // Release), so a Debug-only deep link can never reach the running Debug instance.
+    @Test func schemeIsDistinctPerBuildConfiguration() {
+        #if DEBUG
+        #expect(OvertureDeepLink.scheme == "overture-debug")
+        #else
+        #expect(OvertureDeepLink.scheme == "overture")
+        #endif
+    }
+
+    // Guards against the Swift constant and the Info.plist's CFBundleURLTypes drifting apart, which
+    // would silently reintroduce #568: the app would still build and run, but LaunchServices would
+    // register a scheme this code never generates or recognizes.
+    @Test func schemeMatchesTheAppsOwnInfoPlistRegistration() throws {
+        let urlTypes = try #require(
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        )
+        let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+        #expect(registeredSchemes.contains(OvertureDeepLink.scheme))
     }
 }

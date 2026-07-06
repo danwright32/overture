@@ -1379,6 +1379,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				OVERTURE_URL_SCHEME = overture;
 				PRODUCT_BUNDLE_IDENTIFIER = com.danwright.overture;
 				SDKROOT = macosx;
 			};
@@ -1395,6 +1396,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				OVERTURE_URL_SCHEME = "overture-debug";
 				PRODUCT_BUNDLE_IDENTIFIER = com.danwright.overture.debug;
 				SDKROOT = macosx;
 			};

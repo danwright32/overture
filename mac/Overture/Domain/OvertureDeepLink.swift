@@ -5,7 +5,16 @@ import Foundation
 // to the matching prospect. URLComponents percent-decodes the query value, so the returned key is the
 // exact stored naturalKey.
 enum OvertureDeepLink {
+    // #568: Debug and Release must never claim the same scheme with LaunchServices, or opening a
+    // deep link always resolves to whichever build LaunchServices prefers (in practice, always
+    // Release) instead of the one that's actually running. Kept in lockstep with the
+    // OVERTURE_URL_SCHEME build setting in project.yml, which drives the same value into Info.plist's
+    // CFBundleURLTypes.
+    #if DEBUG
+    static let scheme = "overture-debug"
+    #else
     static let scheme = "overture"
+    #endif
     static let leadHost = "lead"
     static let leadsHost = "leads"
     static let showHost = "show"

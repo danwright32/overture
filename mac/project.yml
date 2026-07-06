@@ -27,11 +27,16 @@ targets:
         # .debug suffix so an Xcode dev run is a distinct app to macOS — its own TCC grants and its
         # own data directory (StoreLocation), so it can never collide with the resident copy (#267).
         PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture
+        # #568: same reasoning as PRODUCT_BUNDLE_IDENTIFIER above. Debug needs its own URL scheme so
+        # LaunchServices can't route an `overture://` open() to the wrong build. Read into
+        # OvertureDeepLink.scheme and Info.plist's CFBundleURLTypes.
+        OVERTURE_URL_SCHEME: overture
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.debug
+          OVERTURE_URL_SCHEME: overture-debug
   OvertureTests:
     type: bundle.unit-test
     platform: macOS
