@@ -90,6 +90,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
+
+    // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
+    // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
+    // to see when multiple people were found. nil for the common single-contact case (no clutter).
+    var contactCountLabel: String? {
+        contacts.count > 1 ? "\(contacts.count) contacts" : nil
+    }
 }
 
 // One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
