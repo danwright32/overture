@@ -25,7 +25,8 @@ enum PrepQueueService {
                     websiteURL: p.websiteURL,
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
-                    priorRelationship: p.priorRelationship
+                    priorRelationship: p.priorRelationship,
+                    production: p.production
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)

@@ -23,7 +23,7 @@ the workflow's runbook is its spec.
 | `overture-results.json` | Scout (`buildResultsFile`) | App (`ResultsFileDecoder.decode`) | 1, 2 | `fixtures/scout-results/` | `resultsContract.test.ts`, `ResultsContractTests.swift` |
 | `overture-uncertain.json` | Scout (`buildUncertainPayload`) | Scout refine agent (workflow) | none (plain array) | `fixtures/scout-refine/uncertain.json` | `refineContract.test.ts` (writer) |
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -102,6 +102,11 @@ does the research and drafting, and writes `prep-results.json`; the app ingests 
 key the run must echo back verbatim, never rebuild. The Prep run is the counterpart side with no
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
+
+Queue version 2 (#586, #366 Phase 1) adds an optional `production` (`self` / `agency` / `unknown`,
+from `Prospect.production`/#349) to each item, so the research step knows whether a show is
+self-produced before deciding whether to pursue a named performer directly (#366 Phase 3). Additive;
+`v1.json` stays byte-identical and still decodes with `production` absent (nil).
 
 Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
 the run found for the performance: the act plus at most one real presenting org, each labelled with a
