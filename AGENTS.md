@@ -21,6 +21,12 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
 
 ## Working here
 
+- Before pushing anything that touches a cross-language contract (`fixtures/`,
+  `docs/contracts.md`) — or really, before pushing anything — run `scripts/test-all.sh`
+  from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
+  command (#595): the repo's two independent CI jobs (`typecheck-and-test`, `swift-tests`)
+  make it easy to run only the Mac app's tests locally, see them pass, and push, only
+  learning the TypeScript side would have failed once CI reports it minutes later.
 - Engine: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). `pnpm scout [events.json]` mirrors the
   live scout in TypeScript and writes a reference results file (see
