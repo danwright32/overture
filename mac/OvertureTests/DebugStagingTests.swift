@@ -86,8 +86,8 @@ struct DebugStagingTests {
         p.status = .approved
         try ctx.save()
 
-        // The whole point: after approval the real send queue accepts it, so a live send goes to self.
-        #expect(SendService.pending(in: ctx).contains { $0.prospect.naturalKey == p.naturalKey })
+        // The whole point: after approval the real Send button has a target, so a live send goes to self.
+        #expect(SendService.nextPendingRecipient(for: p) != nil)
     }
 
     @Test func clearDebugLeadsRemovesTheSelfSendLead() throws {
@@ -246,12 +246,11 @@ struct DebugStagingTests {
         p.status = .approved
         try ctx.save()
 
-        // Both recipients are pending with real addresses, so the real send queue must offer both,
-        // act before presenter (the #366/#368 contact ladder), so two Send clicks reach two inboxes.
-        let queued = SendService.pending(in: ctx).filter { $0.prospect.naturalKey == p.naturalKey }
-        #expect(queued.count == 2)
-        #expect(queued.first?.recipient.provenance == .act)
-        #expect(queued.last?.recipient.provenance == .presenter)
+        // Both recipients are pending with real addresses, so the real Send button must offer both in
+        // turn, act before presenter (the #366/#368 contact ladder), so two Send clicks reach two inboxes.
+        #expect(SendService.nextPendingRecipient(for: p)?.provenance == .act)
+        SendService.nextPendingRecipient(for: p)?.sendState = .sent
+        #expect(SendService.nextPendingRecipient(for: p)?.provenance == .presenter)
     }
 
     @Test func clearDebugLeadsRemovesTheMultiRecipientSelfSendLead() throws {
