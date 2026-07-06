@@ -84,6 +84,10 @@ struct RecipientBackfillLiveStoreTests {
                 if let act = p.recipients.first(where: { $0.provenance == .act }) {
                     #expect(act.email == email)
                     #expect(act.sendState == (p.sentAt != nil ? .sent : .pending))
+                } else {
+                    // No .act mirror: prove the org's contact email is not silently lost, just
+                    // represented by whichever #366 recipient (performer/presenter) carries it.
+                    #expect(p.recipients.contains { $0.email == email })
                 }
             } else {
                 #expect(p.recipients.allSatisfy { $0.provenance != .act })
