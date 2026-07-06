@@ -101,9 +101,14 @@ enum PrepImporter {
             }
         }
 
-        // Transitional legacy mirror: track the act contact (or the first recipient) so the current
-        // single-contact UI keeps working until Phase 7 reads recipients directly.
-        if let primary = p.recipients.first(where: { $0.provenance == .act }) ?? p.recipients.first {
+        // Transitional legacy mirror: track the act/performer contact (or the first recipient) so the
+        // current single-contact UI keeps working until Phase 7 reads recipients directly. Act and
+        // performer are mutually exclusive per performance (#587), so either one is "the" primary
+        // contact; without this, a performer-only show that also carries a presenter could fall
+        // through to `.first` and mirror an arbitrary recipient (SwiftData to-many order isn't
+        // guaranteed), mislabeling the presenter as primary.
+        if let primary = p.recipients.first(where: { $0.provenance == .act || $0.provenance == .performer })
+            ?? p.recipients.first {
             p.contactName = primary.name
             p.contactRole = primary.role
             p.contactEmail = primary.email

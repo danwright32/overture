@@ -19,6 +19,10 @@ keeps the legacy single-`contact` shape as the proof that the custom `init(from:
 singular `contact` to a one-element `contacts[]`. Its draft body is salutation-free (#393): the app
 owns the greeting at send, so no fixture body carries an inline "Hi <name>,".
 
-`v2.json` (version 2, #392) is the current shape new runs MUST write: `contacts[]`, one entry per
-party to email, each with a `provenance` (`act` / `presenter`, never the host venue). It exercises a
-performance with both an act and a presenter, plus a form-only act with no email.
+`v2.json` (version 2, #392) exercises `contacts[]`, one entry per party to email, each with a
+`provenance` (`act` / `presenter`, never the host venue). It exercises a performance with both an act
+and a presenter, plus a form-only act with no email.
+
+`v3.json` (version 3, #587) is the current shape new runs MUST write: adds `performer` to the
+`provenance` vocabulary, a named individual performer on a self-produced show, distinct from `act` (a
+single-act waterfall result). It exercises a performer-only self-produced show.

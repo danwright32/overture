@@ -86,4 +86,18 @@ struct PrepResultsContractTests {
         #expect(formOnly.contacts?.first?.email == nil)
         #expect(formOnly.contacts?.first?.formUrl == "https://www.ivalasquartet.com/contact")
     }
+
+    // v3 (#587, #366 Phase 2): a named individual performer on a self-produced show carries a
+    // `performer` provenance, distinct from `act` (a single-act waterfall result). The tolerant gate
+    // (1...3) still accepts the v1/v2 fixtures above.
+    @Test func decodesTheV3FixtureWithPerformerProvenance() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v3.json"))
+        #expect(results.version == 3)
+
+        let performerOnly = results.results[0]
+        #expect(performerOnly.contacts?.count == 1)
+        #expect(performerOnly.contacts?.first?.provenance == "performer")
+        #expect(performerOnly.contacts?.first?.name == "Maya Chen")
+        #expect(performerOnly.contacts?.first?.email == "maya@midnightquartet.example")
+    }
 }

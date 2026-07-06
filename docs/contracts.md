@@ -24,7 +24,7 @@ the workflow's runbook is its spec.
 | `overture-uncertain.json` | Scout (`buildUncertainPayload`) | Scout refine agent (workflow) | none (plain array) | `fixtures/scout-refine/uncertain.json` | `refineContract.test.ts` (writer) |
 | `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -114,6 +114,12 @@ the run found for the performance: the act plus at most one real presenting org,
 prospect's recipients (one separate email per recipient). The reader's tolerant gate (1 through 2)
 still accepts the v1 single-`contact` file, which a custom `init(from:)` maps to a one-element
 `contacts[]`; `v1.json` stays byte-identical as that proof, `v2.json` is the multi-contact spec.
+
+Version 3 (#587, #366 Phase 2) adds `performer` to the `provenance` vocabulary: a named individual
+performer on a self-produced show, distinct from `act` (a single-act waterfall result). Performer and
+act are mutually exclusive per performance (never both used at once) and tie for first send position.
+Purely additive to the `provenance` string; the reader's tolerant gate (1 through 3) still accepts
+`v1.json`/`v2.json` unchanged, `v3.json` is the performer-contact spec.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

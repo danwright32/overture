@@ -292,6 +292,48 @@ struct PrepImporterTests {
         #expect(after?.draftBody == "B")
     }
 
+    // #587 (#366 Phase 2): a named individual performer on a self-produced show becomes its own
+    // recipient with `.performer` provenance, distinct from the act-waterfall `.act` case.
+    @Test func ingestsAPerformerContactAsItsOwnRecipient() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+
+        let results = PrepResults(version: 3, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma Robinson", role: nil, email: "emma@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "performer"),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 1)
+        #expect(p?.recipients.first?.provenance == .performer)
+        #expect(p?.recipients.first?.email == "emma@performer.example")
+    }
+
+    // The legacy single-contact mirror must treat `.performer` as primary too, the same as `.act`: a
+    // performer-only self-produced show that also carries a presenter must mirror the PERFORMER into
+    // the legacy contact fields, never fall through to an arbitrary recipient (SwiftData to-many order
+    // isn't guaranteed) and mislabel the presenter as the primary contact.
+    @Test func legacyMirrorPrefersPerformerOverPresenterWhenNoAct() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+
+        let results = PrepResults(version: 3, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Lou", role: "Presenting Director", email: "lou@presenter.example",
+                            method: "named_decision_maker", confidence: "medium", formUrl: nil, provenance: "presenter"),
+                PrepContact(name: "Emma Robinson", role: nil, email: "emma@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "performer"),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.contactEmail == "emma@performer.example")
+    }
+
     @Test func decodesAndVersionGates() throws {
         let json = """
         {"version":1,"generatedAt":"now","results":[{"naturalKey":"k","contact":null,"draft":{"subject":"s","body":"b"}}]}

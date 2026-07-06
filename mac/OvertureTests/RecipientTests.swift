@@ -419,4 +419,23 @@ struct RecipientTests {
         r.resolutionRaw = "booked"
         #expect(r.resolution == .booked)
     }
+
+    // #587 (#366 Phase 2): a named individual performer, distinct from `.act` (a single-act waterfall
+    // result), gets its own provenance so the UI never mislabels a named person as "the act".
+    @Test func performerProvenanceRoundTripsThroughRawStrings() {
+        var r = Recipient(id: "p@performer.example", email: "p@performer.example", provenance: .performer)
+        #expect(r.provenance == .performer)
+        #expect(r.provenanceRaw == "performer")
+        r.provenanceRaw = "performer"
+        #expect(r.provenance == .performer)
+    }
+
+    // Performer and the single-act waterfall result are mutually exclusive per performance (never
+    // both used at once), so they tie for first send position.
+    @Test func performerTiesWithActForFirstSendOrder() {
+        let performer = Recipient(id: "p@performer.example", email: "p@performer.example", provenance: .performer)
+        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(performer.sendOrderRank == act.sendOrderRank)
+        #expect(performer.sendOrderRank == 0)
+    }
 }

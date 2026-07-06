@@ -66,7 +66,7 @@ const DISCIPLINE: readonly Candidate["discipline"][] = [
   "other",
 ];
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
-const PROVENANCE = ["act", "presenter"] as const;
+const PROVENANCE = ["act", "performer", "presenter"] as const;
 
 // overture-uncertain.json: UncertainEvent[] (src/lib/refineContract.ts)
 export function assertUncertainEventsShape(data: unknown, file: string): void {
@@ -137,10 +137,11 @@ function assertPrepContact(data: unknown, file: string, path: string, provenance
   }
 }
 
-// overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it)
+// overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it;
+// version 3: adds "performer" to the provenance vocabulary, #587)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2]);
+  const version = requireVersion(root.version, file, [1, 2, 3]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
