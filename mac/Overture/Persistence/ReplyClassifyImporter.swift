@@ -15,6 +15,8 @@ enum ReplyClassifyImporter {
         var skippedManual = 0          // matched but Dan had set the lead state by hand
         var skippedEdited = 0          // draft left untouched because Dan had hand-edited the reply (#462)
         var unmatchedKeys: [String] = []
+        // #499: set when a context.save() failed, so this run's hints/drafts may not persist.
+        var saveFailed = false
     }
 
     @MainActor
@@ -63,7 +65,11 @@ enum ReplyClassifyImporter {
             p.suggestConversationState(chosen.conversationState, now: Date())
             outcome.suggested += 1
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            outcome.saveFailed = true
+        }
         return outcome
     }
 

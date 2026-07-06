@@ -66,4 +66,10 @@ enum ActionAck {
     static func classificationCorrected(org: String) -> String {
         "Updated \(org)'s classification"
     }
+
+    // #499: a non-send mutation (keep/dismiss, draft edit, manual outcome, booking confirm, ...)
+    // whose local save fails must say so instead of looking like nothing happened.
+    static func saveFailed(org: String) -> String {
+        "Couldn't save the change for \(org)"
+    }
 }

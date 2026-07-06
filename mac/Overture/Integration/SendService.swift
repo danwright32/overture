@@ -13,6 +13,8 @@ enum SendService {
         var sent: Int
         var failed: Int
         var throttled: Bool   // there were pending sends but the throttle held them
+        // #499: set when a context.save() failed, so a send's local record may not have persisted.
+        var saveFailed: Bool = false
     }
 
     // One queued email: a specific recipient of a specific performance. Fan-out (#394) means a show
@@ -258,7 +260,12 @@ enum SendService {
         }
 
         let ok = await deliver(next.recipient, of: next.prospect, now: now, sender: sender)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // #499: the send may have gone out while the local record of it did not persist.
+            return Outcome(sent: ok ? 1 : 0, failed: ok ? 0 : 1, throttled: false, saveFailed: true)
+        }
         if ok { return Outcome(sent: 1, failed: 0, throttled: queue.count > 1) }
         return Outcome(sent: 0, failed: 1, throttled: false)
     }
