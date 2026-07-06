@@ -54,6 +54,29 @@ The pieces hand off through fixed-shape JSON files, not direct calls. `docs/cont
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
 any cross-boundary file shape.
 
+## Restoring Overture from a backup
+
+The live SwiftData store (every prospect, contact, and outreach record) lives at
+`~/Library/Application Support/default.store` for the Release build, or
+`~/Library/Application Support/Overture-Debug/default.store` for a Debug run. It is NOT at
+`~/Library/Application Support/Overture/default.store`: that legacy path predates the
+#264/#267 Debug/Release split and isn't used by the current app, since `Overture/` today only
+holds the JSON handoff files, never the store.
+
+As of #601/#602, every launch first copies the store into a dated subfolder under
+`overture-store-backups/` next to the live one (for example
+`~/Library/Application Support/overture-store-backups/20260706-101800/`), keeping the last 10.
+Each backup's outcome is logged to `overture-store-backups/backup.log`. Separately, a handful of
+older, ONE-OFF manual backups made by hand before risky migrations already sit loose directly in
+`~/Library/Application Support/` (for example `overture-store-backup-20260628-*/`,
+`default.store.phasef-backup-*`, `default.store.435-backup-*`); those predate the automatic
+mechanism and aren't rotated or pruned, so check their timestamps if a launch-time backup isn't
+recent enough.
+
+To restore: quit Overture (including from the menu bar), copy the desired backup's
+`default.store` (+ `-wal`/`-shm`, if present) over the live files at the path above, then
+relaunch.
+
 ## CI status before merging
 
 A pending check and a stuck one look identical in GitHub's PR view. Do not merge a PR on
