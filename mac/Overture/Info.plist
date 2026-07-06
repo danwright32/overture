@@ -31,7 +31,7 @@
 			<string>com.danwright.overture.callback</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>overture</string>
+				<string>$(OVERTURE_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
