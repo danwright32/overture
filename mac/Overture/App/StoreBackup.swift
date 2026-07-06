@@ -22,6 +22,7 @@ enum StoreBackup {
 
     // Copies the live store (+ its -wal/-shm sidecars, when present) into a new dated subfolder.
     // Returns nil when there's nothing to back up yet (a fresh install with no store).
+    @discardableResult
     static func makeBackup(dataDirectory: URL, now: Date, fileManager: FileManager = .default) -> URL? {
         let storeURL = dataDirectory.appendingPathComponent("default.store")
         guard fileManager.fileExists(atPath: storeURL.path) else { return nil }
@@ -71,5 +72,22 @@ enum StoreBackup {
         for old in dated.dropLast(keep) {
             try? fileManager.removeItem(at: old)
         }
+    }
+
+    // The launch-time policy, generic over whatever "open the store" returns so it's testable
+    // without a real ModelContainer. Always backs up first (the window before `open()` runs is
+    // the safe one: nothing has the store open yet). Only prunes old backups when `open`
+    // succeeds: an undetected corrupted store must never cause its own last-good backups to be
+    // rotated away just because this launch's open attempt failed (#602 red-team finding).
+    static func performLaunchBackup<Container>(
+        dataDirectory: URL, now: Date, keep: Int, fileManager: FileManager = .default,
+        open: () -> Container?
+    ) -> Container? {
+        makeBackup(dataDirectory: dataDirectory, now: now, fileManager: fileManager)
+        let result = open()
+        if result != nil {
+            pruneOldBackups(in: backupsDirectory(dataDirectory: dataDirectory), keep: keep, fileManager: fileManager)
+        }
+        return result
     }
 }

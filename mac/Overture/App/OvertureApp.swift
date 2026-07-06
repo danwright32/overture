@@ -26,12 +26,23 @@ struct OvertureApp: App {
         } else if let acquired = StoreLock.acquire(at: StoreLocation.lockURL) {
             // Single-writer guard taken BEFORE opening the store (#264): flock is the real guard.
             lock = acquired
-            do {
-                container = try ModelContainer(for: schema,
-                    configurations: [ModelConfiguration(schema: schema, url: StoreLocation.storeURL,
-                                                        cloudKitDatabase: .none)])
-            } catch {
-                reason = "Couldn't open Overture's data: \(error.localizedDescription)"
+            // #602: back up the store right here, holding the exclusive lock but before anything
+            // (including this process) has it open. That's the one moment it's guaranteed
+            // quiescent; SQLite's WAL format is self-describing and crash-safe, so even a
+            // snapshot from a not-cleanly-closed prior session is a valid, restorable copy. Only
+            // prune old backups once the open below actually succeeds, so an undetected
+            // corrupted store never causes its own last-good backups to be rotated away.
+            container = StoreBackup.performLaunchBackup(
+                dataDirectory: StoreLocation.dataDirectory, now: Date(), keep: 10
+            ) {
+                do {
+                    return try ModelContainer(for: schema,
+                        configurations: [ModelConfiguration(schema: schema, url: StoreLocation.storeURL,
+                                                            cloudKitDatabase: .none)])
+                } catch {
+                    reason = "Couldn't open Overture's data: \(error.localizedDescription)"
+                    return nil
+                }
             }
         } else {
             reason = "Another copy of Overture is already using its data."
