@@ -7,14 +7,20 @@ import SwiftData
 // irreplaceable live store (~/Library/Application Support/default.store, ZPROSPECT) — not just an
 // in-memory fixture. Opening the copy under the current schema also exercises the additive,
 // defaulted-attribute migration the whole storage decision rests on. Gated on the live store
-// existing, so it is a silent no-op on CI and other machines.
+// existing, so it reports as a SKIP (not a silent pass) on CI and other machines (#416).
 @Suite("Recipient backfill — live store")
 struct RecipientBackfillLiveStoreTests {
     // The Release data directory explicitly (isDebugBuild: false): the test bundle is always a Debug
     // build, but we want the resident copy's store, not the isolated Overture-Debug one.
-    private var liveStoreURL: URL {
+    private static var liveStoreURL: URL {
         StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
             .appendingPathComponent("default.store")
+    }
+
+    // SUP-042: both tests below are gated on the live store existing, so a run on a machine without
+    // one (CI, another Mac) must show as a visible SKIP, not a silent pass that asserted nothing.
+    private static var liveStoreExists: Bool {
+        FileManager.default.fileExists(atPath: liveStoreURL.path)
     }
 
     // Copy the store and its SQLite sidecars (-wal, -shm) to a fresh scratch dir so the consistent
@@ -24,7 +30,7 @@ struct RecipientBackfillLiveStoreTests {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent("default.store")
         for suffix in ["", "-wal", "-shm"] {
-            let src = URL(fileURLWithPath: liveStoreURL.path + suffix)
+            let src = URL(fileURLWithPath: Self.liveStoreURL.path + suffix)
             guard fm.fileExists(atPath: src.path) else { continue }
             try fm.copyItem(at: src, to: URL(fileURLWithPath: dest.path + suffix))
         }
@@ -42,10 +48,9 @@ struct RecipientBackfillLiveStoreTests {
                                                                       url: url, cloudKitDatabase: .none)])
     }
 
-    @Test func backfillsEveryContactedProspectInACopyOfTheLiveStore() throws {
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func backfillsEveryContactedProspectInACopyOfTheLiveStore() throws {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: liveStoreURL.path) else { return }  // no live store here: skip
-
         let scratch = fm.temporaryDirectory
             .appendingPathComponent("overture-backfill-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: scratch) }
@@ -64,21 +69,24 @@ struct RecipientBackfillLiveStoreTests {
         let seeded = RecipientBackfill.run(in: context)
         try context.save()
 
-        // Every prospect with a real contact email now has exactly one act recipient mirroring it;
-        // a scout-only prospect (no email) has none.
+        // Every prospect with a real contact email has at least one recipient. Where backfill's
+        // isEmpty guard actually ran (#409), that recipient is an .act mirror of the legacy fields.
+        // A prospect the #366 performer-targeting flow already seeded with a performer/presenter
+        // recipient before backfill ever saw it correctly gets no redundant .act copy (the guard's
+        // job is to never duplicate, not to force exactly one recipient of a fixed provenance).
         var totalQualifying = 0
         var newlySeededExpected = 0
         for p in all {
             if let email = p.contactEmail, !email.isEmpty {
                 totalQualifying += 1
                 if neededSeeding[p.naturalKey] == true { newlySeededExpected += 1 }
-                #expect(p.recipients.count == 1)
-                let r = p.recipients.first
-                #expect(r?.provenance == .act)
-                #expect(r?.email == email)
-                #expect(r?.sendState == (p.sentAt != nil ? .sent : .pending))
+                #expect(!p.recipients.isEmpty)
+                if let act = p.recipients.first(where: { $0.provenance == .act }) {
+                    #expect(act.email == email)
+                    #expect(act.sendState == (p.sentAt != nil ? .sent : .pending))
+                }
             } else {
-                #expect(p.recipients.isEmpty)
+                #expect(p.recipients.allSatisfy { $0.provenance != .act })
             }
         }
         #expect(seeded == newlySeededExpected)
@@ -94,10 +102,9 @@ struct RecipientBackfillLiveStoreTests {
     // #418 A0 — prove the #416 thread-down repair is safe and idempotent against a COPY of Dan's real,
     // irreplaceable store BEFORE it runs at launch. Robust to the exact row counts (which can't be
     // queried while the resident app holds the live store): asserts invariants, not fixed numbers.
-    @Test func threadDownRepairOnACopyOfTheLiveStoreIsSafeAndIdempotent() throws {
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func threadDownRepairOnACopyOfTheLiveStoreIsSafeAndIdempotent() throws {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: liveStoreURL.path) else { return }  // no live store here: skip
-
         let scratch = fm.temporaryDirectory
             .appendingPathComponent("overture-threaddown-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: scratch) }
