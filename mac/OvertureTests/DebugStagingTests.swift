@@ -136,6 +136,44 @@ struct DebugStagingTests {
         #expect(p.recipients.first?.sendState == .pending)
     }
 
+    // #564: the live app's queue is driven by a `@Query`, which re-hydrates `Prospect` from the
+    // persisted store as its OWN Swift instances, distinct from the one `stageSelfSendLead` returns.
+    // Reading `p.recipients` on that original instance (as the test above does) proves nothing about
+    // what actually got saved. Approve then re-fetch, the way the real Approve click + queue refresh
+    // would see it, and check the same `hasPendingRecipient` gate `DraftReviewView` uses for Send.
+    @Test func selfSendLeadKeepsItsPendingRecipientAfterApproveAndRefetch() throws {
+        let ctx = try makeInMemoryContext()
+        let p = DebugStaging.stageSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
+        p.status = .approved
+        try ctx.save()
+
+        let refetched = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first)
+        #expect(refetched.recipients.count == 1)
+        #expect(QueueItem(refetched).hasPendingRecipient == true)
+    }
+
+    // Same as above but against a real FILE-BACKED store, read back through a SECOND, independent
+    // ModelContext on the same container (mimicking the live app: staging happens on one context,
+    // the queue's `@Query` re-reads through its own). An in-memory store or a same-context refetch
+    // could both mask a real persistence gap that only a genuinely separate read surfaces.
+    @Test func selfSendLeadKeepsItsPendingRecipientInAFileBackedStoreAcrossContexts() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("overture-test-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                           configurations: [ModelConfiguration(url: storeURL)])
+
+        let writeContext = ModelContext(container)
+        let p = DebugStaging.stageSelfSendLead(in: writeContext, now: Date(), address: "self@example.com")
+        p.status = .approved
+        try writeContext.save()
+
+        let readContext = ModelContext(container)
+        let refetched = try #require(try readContext.fetch(FetchDescriptor<Prospect>()).first)
+        #expect(refetched.recipients.count == 1)
+        #expect(QueueItem(refetched).hasPendingRecipient == true)
+    }
+
     // #432: the self-send target is configurable (via the `selfSendTestAddress` default) so the
     // reply-drafter path can be exercised against an alternate inbox without editing code. A blank
     // or absent override falls back to Dan's primary address.
