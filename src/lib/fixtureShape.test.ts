@@ -65,7 +65,7 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json"]);
   });
 
   for (const file of files) {
