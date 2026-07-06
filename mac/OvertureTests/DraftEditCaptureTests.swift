@@ -82,9 +82,7 @@ struct DraftEditCaptureTests {
         if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
         try ctx.save()
 
-        let sent = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 1),
-                                                     sender: FixedSender())
-        #expect(sent.sent == 1)
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 1), sender: FixedSender()) == true)
         #expect(p.sentBody == "The exact body that went out.")
         #expect(p.sentSubject == "Sent subject")
 

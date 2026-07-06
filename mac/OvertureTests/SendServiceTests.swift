@@ -137,26 +137,6 @@ struct SendServiceTests {
         #expect(sender.last?.body == "Hi there,\n\nI document dance unobtrusively.")
     }
 
-    @Test func releaseDueSendsComposesTheGreetingAndFreezesTheBareBody() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Lumen", name: "Lou Park", email: "lou@act.example",
-                              body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
-        let sender = CapturingSender()
-
-        _ = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 10), sender: sender)
-
-        #expect(sender.last?.body == "Hi Lou,\n\nI document dance.")
-        #expect(p.sentBody == "I document dance.")
-    }
-
-    @Test func pendingExcludesUnsendable() async throws {
-        let ctx = ModelContext(try container())
-        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        approved(ctx, group: "No Email", email: nil, ingested: Date(timeIntervalSince1970: 2))
-        approved(ctx, group: "No Draft", draft: nil, ingested: Date(timeIntervalSince1970: 3))
-        #expect(SendService.pending(in: ctx).map(\.prospect.groupName) == ["Ready"])
-    }
-
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
         // match can tell a genuine new booking from a pre-existing client.
@@ -173,23 +153,6 @@ struct SendServiceTests {
         let sent = await SendService.sendOne(p, now: Date(), sender: FakeSender())
         #expect(sent)
         #expect(p.priorRelationshipAtSend == "booked")
-    }
-
-    @Test func sendsOneAndRecordsReceipt() async throws {
-        let ctx = ModelContext(try container())
-        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        let now = Date(timeIntervalSince1970: 2_000_000)
-
-        let outcome = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
-        #expect(outcome.sent == 1)
-
-        let p = SendService.pending(in: ctx).first
-        #expect(p == nil) // no longer pending (it has sentAt)
-        let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        #expect(all.first?.sentAt == now)
-        #expect(all.first?.gmailThreadId == "t-123")
-        // #200: sending advances the lifecycle to an explicit contacted state, not just a date.
-        #expect(all.first?.status == .contacted)
     }
 
     // #200: "contacted" means the pitch went out, not merely that Dan approved it. An approved
@@ -210,24 +173,18 @@ struct SendServiceTests {
         #expect(p.wasContacted == true)
     }
 
-    @Test func dripsOneAtATimeAndThrottlesTheRest() async throws {
+    @Test func sendOneRecordsReceiptAndAdvancesToContacted() async throws {
         let ctx = ModelContext(try container())
-        approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
-        approved(ctx, group: "B", ingested: Date(timeIntervalSince1970: 2))
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         let now = Date(timeIntervalSince1970: 2_000_000)
 
-        let first = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
-        #expect(first.sent == 1)
-        #expect(first.throttled == true) // B still waiting
+        #expect(await SendService.sendOne(p, now: now, sender: FakeSender()) == true)
 
-        // Immediately after, the min-gap holds B back.
-        let second = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(10), sender: FakeSender())
-        #expect(second.sent == 0)
-        #expect(second.throttled == true)
-
-        // After the gap, B sends.
-        let third = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(200), sender: FakeSender())
-        #expect(third.sent == 1)
+        #expect(p.sentAt == now)
+        #expect(p.gmailThreadId == "t-123")
+        // #200: sending advances the lifecycle to an explicit contacted state, not just a date.
+        #expect(p.status == .contacted)
     }
 
     @Test func sendOneSendsThatSpecificProspectImmediately() async throws {
@@ -352,16 +309,6 @@ struct SendServiceTests {
         #expect(recipient.sendError == nil)   // this is a degraded success, not a failure
     }
 
-    @Test func recordsSendErrorAndKeepsItPending() async throws {
-        let ctx = ModelContext(try container())
-        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        let outcome = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: AlwaysFailSender())
-        #expect(outcome.failed == 1)
-        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
-        #expect(p?.sentAt == nil)            // not marked sent
-        #expect(p?.sendError != nil)         // failure recorded for retry
-    }
-
     // MARK: - #475/#476 send-path claim (crash safety + concurrency guard)
 
     @Test func deliverClaimsSendingAndPersistsItBeforeTheNetworkCallResolves() async throws {
@@ -429,9 +376,9 @@ struct SendServiceTests {
         // #74: the first send's Message-ID is kept so a later follow-up can reply to it.
         let ctx = ModelContext(try container())
         approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
-        _ = await SendService.releaseDueSends(in: ctx, now: Date(timeIntervalSince1970: 2_000_000), sender: FakeSender())
-        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
-        #expect(p?.gmailMessageId == "<mid-1@x.org>")
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 2_000_000), sender: FakeSender())
+        #expect(p.gmailMessageId == "<mid-1@x.org>")
     }
 
     @Test func followUpRepliesOnTheOriginalThread() async throws {
@@ -508,35 +455,6 @@ struct SendServiceTests {
         _ = await SendService.sendOne(p, now: t2, sender: FakeSender())
         // The lead rollup reflects the FIRST send only, never overwritten by the second recipient.
         #expect(p.sentAt == t1)
-    }
-
-    @Test func recentSendDatesCountsEmailsNotLeads() async throws {
-        let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "Hi", ingested: Date(timeIntervalSince1970: 1))
-
-        // One show, two recipients sent -> the throttle must see TWO send dates, not one.
-        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 100), sender: FakeSender())
-        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 500), sender: FakeSender())
-        #expect(SendService.recentSendDates(in: ctx).count == 2)
-    }
-
-    @Test func dripFansOutOneRecipientPerReleaseForOneShow() async throws {
-        let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "Hi", ingested: Date(timeIntervalSince1970: 1))
-        let now = Date(timeIntervalSince1970: 2_000_000)
-
-        let first = await SendService.releaseDueSends(in: ctx, now: now, sender: FakeSender())
-        #expect(first.sent == 1)
-        #expect(first.throttled == true)   // the second recipient is still queued
-
-        // The min-gap holds the second recipient back until the throttle allows it.
-        let held = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(10), sender: FakeSender())
-        #expect(held.sent == 0)
-
-        let second = await SendService.releaseDueSends(in: ctx, now: now.addingTimeInterval(200), sender: FakeSender())
-        #expect(second.sent == 1)
-        #expect(SendService.pending(in: ctx).isEmpty)
-        #expect(p.status == .contacted)
     }
 
     // #395: under fan-out, freezeSentCopy fires once per recipient, but the captured voice pair is

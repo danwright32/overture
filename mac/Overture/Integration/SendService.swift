@@ -1,47 +1,8 @@
 import Foundation
 import SwiftData
 
-// Releases approved emails one at a time, respecting the throttle, via an injected
-// MailSender. releaseDueSends has no production caller yet (see #426, drip sender fate);
-// each call sends at most one email so a big approved batch would drip out once wired up.
-// Records sentAt + threadId on success, or sendError on failure (surfaced for retry, never
-// silently lost).
-
 @MainActor
 enum SendService {
-    struct Outcome: Equatable, Sendable {
-        var sent: Int
-        var failed: Int
-        var throttled: Bool   // there were pending sends but the throttle held them
-        // #499: set when a context.save() failed, so a send's local record may not have persisted.
-        var saveFailed: Bool = false
-    }
-
-    // One queued email: a specific recipient of a specific performance. Fan-out (#394) means a show
-    // with two acts plus a presenter contributes one PendingSend per pending recipient, not one per show.
-    struct PendingSend {
-        let prospect: Prospect
-        let recipient: Recipient
-    }
-
-    // The send queue: one item per still-to-send recipient of an approved, drafted performance,
-    // oldest-approved first (FIFO by the performance's ingestedAt as a stand-in for approval order).
-    // Reads recipient state, NOT the lead `sentAt` rollup, so a partially-sent show still surfaces its
-    // remaining recipients (closes the duplicate-send / stranded-recipient hole, #389).
-    static func pending(in context: ModelContext) -> [PendingSend] {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let drafted = all
-            .filter { $0.status == .approved && $0.draftBody != nil }
-            .sorted { $0.ingestedAt < $1.ingestedAt }
-        var queue: [PendingSend] = []
-        for prospect in drafted {
-            for recipient in sendOrdered(prospect.recipients) where recipient.isSendablePending {
-                queue.append(PendingSend(prospect: prospect, recipient: recipient))
-            }
-        }
-        return queue
-    }
-
     // A performance's recipients in deterministic send order (SwiftData to-many is unordered).
     private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
         recipients.sorted {
@@ -209,8 +170,6 @@ enum SendService {
         }
     }
 
-    // Throttle input: the timestamp of every recipient email already sent, across all performances,
-    // so the drip counts EMAILS, not leads (#389). A two-recipient show contributes two send dates.
     // Sends Dan's approved AI-drafted reply to ONE recipient, on THAT recipient's own Gmail thread
     // (#421): threads on recipient.gmailMessageId/gmailThreadId, NOT the lead rollup (the rollup is the
     // first contact's thread, so replying to a second contact on it would land on the wrong
@@ -239,34 +198,5 @@ enum SendService {
             recipient.sendError = error.localizedDescription
             return false
         }
-    }
-
-    static func recentSendDates(in context: ModelContext) -> [Date] {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all.flatMap { $0.recipients.compactMap(\.sentAt) }
-    }
-
-    // Sends the next due recipient email if the throttle allows. At most one per call, so an
-    // N-recipient approval drips out one address at a time and never bursts past SendThrottle.
-    @discardableResult
-    static func releaseDueSends(in context: ModelContext, now: Date, sender: MailSender,
-                                config: SendThrottleConfig = .default) async -> Outcome {
-        let queue = pending(in: context)
-        guard let next = queue.first else { return Outcome(sent: 0, failed: 0, throttled: false) }
-
-        let recent = recentSendDates(in: context)
-        guard SendThrottle.canSendNow(recentSends: recent, now: now, config: config) else {
-            return Outcome(sent: 0, failed: 0, throttled: true)
-        }
-
-        let ok = await deliver(next.recipient, of: next.prospect, now: now, sender: sender)
-        do {
-            try context.save()
-        } catch {
-            // #499: the send may have gone out while the local record of it did not persist.
-            return Outcome(sent: ok ? 1 : 0, failed: ok ? 0 : 1, throttled: false, saveFailed: true)
-        }
-        if ok { return Outcome(sent: 1, failed: 0, throttled: queue.count > 1) }
-        return Outcome(sent: 0, failed: 1, throttled: false)
     }
 }
