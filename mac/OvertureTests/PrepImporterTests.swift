@@ -238,6 +238,29 @@ struct PrepImporterTests {
         #expect(emails == ["emma@act.example", "understudy@act.example"])
     }
 
+    // #597 (#366 Phase 2/3): the same #408 guard, but for two named performers instead of two act
+    // contacts — a self-produced show with a soloist/duo is exactly the case a batch of two
+    // same-provenance contacts is now expected, not just an unexpected act-batch edge case.
+    @Test func twoPerformerContactsInOneBatchDoNotMergeIntoOneRecipient() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 3, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: "Founder & Artistic Director", email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "performer"),
+                PrepContact(name: "Jules Ortiz", role: nil, email: "jules@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "performer"),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 2)
+        let emails = Set(p?.recipients.compactMap(\.email) ?? [])
+        #expect(emails == ["maya@performer.example", "jules@performer.example"])
+    }
+
     // SUP-017: an already-sent recipient's address is locked (existing rule); a later Prep run that
     // finds a "corrected" email for the same provenance must not append a second recipient either,
     // since id match and pending match both miss a sent row and would otherwise fall through to create.
