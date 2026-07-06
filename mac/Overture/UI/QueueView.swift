@@ -329,7 +329,8 @@ struct QueueView: View {
             sendErrors: prospects.filter { $0.sendError != nil }.count,
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: Date()).count,
             stalledReplyDrafts: prospects.reduce(0) { sum, p in
-                sum + p.recipients.filter { $0.isReplyDraftStalled(now: Date()) }.count
+                let runAlive = ReplyClassifyService.isRunning(now: Date())
+                return sum + p.recipients.filter { $0.isReplyDraftStalled(now: Date(), runAlive: runAlive) }.count
             },
             stuckSends: prospects.reduce(0) { sum, p in
                 sum + p.recipients.filter { $0.isSendStuck(now: Date()) }.count

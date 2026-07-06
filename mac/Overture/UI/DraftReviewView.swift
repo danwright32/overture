@@ -329,7 +329,8 @@ struct DraftReviewView: View {
                 LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
                              timeout: RunTimeouts.replyDraft,
                              font: OVType.meta, color: OVColor.inkSoft,
-                             onRetry: { onDraftReply(c.id) })
+                             onRetry: { onDraftReply(c.id) },
+                             runAlive: { ReplyClassifyService.isRunning(now: Date()) })
             } else {
                 Button("Draft a reply") { onDraftReply(c.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
