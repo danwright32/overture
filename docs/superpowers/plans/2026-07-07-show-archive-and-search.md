@@ -406,25 +406,31 @@ Replace the `actions` computed property with:
                 }
                 .buttonStyle(.plain)
                 .help("Put this prospect back in the queue as undecided")
-            } else if item.isKept {
-                Label("Kept", systemImage: "checkmark.seal.fill")
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.forest)
-                    .padding(.horizontal, OVSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.forest.opacity(0.10)))
             } else {
-                Button {
-                    let wasUncertain = item.isClassificationUncertain
-                    onKeep()
-                    if wasUncertain { showConfirmClassification = true }
-                } label: {
-                    Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                        .background(Capsule().fill(OVColor.forest))
+                if item.isKept {
+                    Label("Kept", systemImage: "checkmark.seal.fill")
+                        .font(OVType.meta)
+                        .foregroundStyle(OVColor.forest)
+                        .padding(.horizontal, OVSpacing.sm)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(OVColor.forest.opacity(0.10)))
+                } else {
+                    Button {
+                        let wasUncertain = item.isClassificationUncertain
+                        onKeep()
+                        if wasUncertain { showConfirmClassification = true }
+                    } label: {
+                        Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                            .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                            .background(Capsule().fill(OVColor.forest))
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
                 }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
+                // #499 regression check (caught in Task 1 review, 2026-07-07): the Dismiss menu must stay a
+                // sibling of Kept/Keep, exactly as it was before this task, not nested only inside a branch
+                // that excludes the Kept case. Nesting it inside "else if item.isKept { } else { Dismiss }"
+                // silently removed Dismiss for every already-kept prospect in the live Queue.
                 Menu {
                     ForEach(DismissReason.allCases, id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
