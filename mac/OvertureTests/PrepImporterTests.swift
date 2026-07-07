@@ -373,4 +373,28 @@ struct PrepImporterTests {
             try PrepResultsDecoder.decode(Data(#"{"version":0,"generatedAt":"x","results":[]}"#.utf8))
         }
     }
+
+    // #617: a real save() failure (not just the source-scan guard in ImporterSaveGuardTests),
+    // via ImmutableStoreFixture.
+    @Test func ingestReportsSaveFailedOnAGenuineSaveFailure() async throws {
+        let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
+                                          performanceDate: "2026-06-24", venue: "Stern Auditorium / Perelman Stage")
+        let outcome = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Prospect.self]),
+            seed: { _ = self.keptProspect($0, group: "Indianapolis Children's Choir",
+                                          date: "2026-06-24", venue: "Stern Auditorium / Perelman Stage") },
+            body: { ctx in
+                let results = PrepResults(version: 2, generatedAt: "now", results: [
+                    PrepResult(naturalKey: key,
+                              contacts: [PrepContact(name: "Jane Doe", role: "Artistic Director", email: "jane@choir.org",
+                                                     method: "named_decision_maker", confidence: "high", formUrl: nil,
+                                                     provenance: "act")],
+                              draft: PrepDraft(subject: "s", body: "b", variant: "A"))
+                ])
+                return PrepImporter.ingest(results, into: ctx)
+            })
+
+        #expect(outcome.matched == 1)
+        #expect(outcome.saveFailed)
+    }
 }

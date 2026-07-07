@@ -137,10 +137,11 @@ final class ReconcileScheduler {
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
     // #499: saveFailed reports a persistence failure back to the caller so it can surface via
-    // ReconcileSummary instead of failing silently.
+    // ReconcileSummary instead of failing silently. #617: `from` mirrors DownbeatBridge.loadWithHealth's
+    // own injectable URL, so a test can drive a real booking match without touching Dan's real export.
     @discardableResult
-    func reconcileBookings(now: Date) -> (count: Int, saveFailed: Bool) {
-        let loaded = DownbeatBridge.loadWithHealth(now: now)
+    func reconcileBookings(now: Date, from url: URL = DownbeatBridge.defaultURL) -> (count: Int, saveFailed: Bool) {
+        let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let n = DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)

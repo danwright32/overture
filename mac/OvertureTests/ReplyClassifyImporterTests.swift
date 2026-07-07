@@ -141,4 +141,18 @@ struct ReplyClassifyImporterTests {
         #expect(ra?.replyDraftEditedByDan == false)   // stale marker reset; the fresh draft isn't protected
         #expect(out.skippedEdited == 0)
     }
+
+    // #617: a real save() failure (not just the source-scan guard in ImporterSaveGuardTests),
+    // via ImmutableStoreFixture.
+    @Test func ingestReportsSaveFailedOnAGenuineSaveFailure() async throws {
+        let outcome = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Prospect.self, Recipient.self]),
+            seed: { _ = self.lead($0, key: "k1") },
+            body: { ctx in
+                ReplyClassifyImporter.ingest(self.results([("k1", "wants_to_book")]), into: ctx)
+            })
+
+        #expect(outcome.matched == 1)
+        #expect(outcome.saveFailed)
+    }
 }

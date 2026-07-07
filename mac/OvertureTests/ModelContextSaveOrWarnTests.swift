@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-import Darwin
 import SwiftData
 @testable import Overture
 
@@ -38,37 +37,18 @@ struct ModelContextSaveOrWarnTests {
         #expect(feedback.message == nil)
     }
 
-    // #618: forces a genuine save() throw (not a simulated one) by writing the store to disk,
-    // flagging it immutable (the same chflags/UF_IMMUTABLE technique #524 used to force a real
-    // chmod failure), then opening a FRESH container against that now-immutable store: SwiftData
-    // reuses the first container's already-open file handle across saves, so only a save from a
-    // newly opened container actually observes the permission failure.
+    // #618: forces a genuine save() throw (not a simulated one) via ImmutableStoreFixture (#617).
     @Test("a failing save returns false and warns via ActionAck.saveFailed")
-    func failure() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("saveorwarn-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let storeURL = dir.appendingPathComponent("default.store")
-        defer {
-            for suffix in ["", "-wal", "-shm"] { _ = chflags(storeURL.path + suffix, 0) }
-            try? FileManager.default.removeItem(at: dir)
-        }
-
-        let firstContext = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self]), configurations: [ModelConfiguration(url: storeURL)]))
-        make(firstContext, naturalKey: "a")
-        try firstContext.save()   // creates default.store(+wal/shm) on disk
-
-        for suffix in ["", "-wal", "-shm"] {
-            #expect(chflags(storeURL.path + suffix, UInt32(UF_IMMUTABLE)) == 0)
-        }
-
-        let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self]), configurations: [ModelConfiguration(url: storeURL)]))
+    func failure() async throws {
         let feedback = ActionFeedback()
-        make(ctx, naturalKey: "b")
 
-        let saved = ctx.saveOrWarn(org: "Aurora Strings", feedback: feedback)
+        let saved = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Prospect.self]),
+            seed: { self.make($0, naturalKey: "a") },
+            body: { ctx in
+                self.make(ctx, naturalKey: "b")
+                return ctx.saveOrWarn(org: "Aurora Strings", feedback: feedback)
+            })
 
         #expect(!saved)
         #expect(feedback.message == "Couldn't save the change for Aurora Strings")

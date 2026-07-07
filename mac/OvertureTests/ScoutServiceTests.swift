@@ -263,4 +263,19 @@ struct ScoutServiceTests {
         #expect(all.first?.status == .dismissed)                         // Dan's decision carried forward
         #expect(all.first?.groupName == "Acme Festival Chorus — Summer Concert") // refreshed to new title
     }
+
+    // #617: a real save() failure (not just the source-scan guard in ScoutServiceSaveGuardTests),
+    // via ImmutableStoreFixture.
+    @Test func applyReportsSaveFailedOnAGenuineSaveFailure() async throws {
+        let outcome = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Prospect.self]),
+            seed: { _ in },
+            body: { ctx in
+                ScoutService.apply(events: self.liveEvents, clients: [], history: [], blocked: [], into: ctx)
+            })
+
+        #expect(outcome.found == 2)
+        #expect(outcome.inserted == 2)
+        #expect(outcome.saveFailed)
+    }
 }
