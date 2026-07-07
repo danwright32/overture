@@ -120,4 +120,18 @@ struct ProspectRowRestoreGuardTests {
         #expect(body.contains("item.status == .dismissed"))
         #expect(body.contains("Restore"))
     }
+
+    @Test func dismissMenuIsNotNestedInElseIfKept() {  // #499 regression
+        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+            Issue.record("actions view not found")
+            return
+        }
+        // The regression would show up as "} else if item.isKept {" at the top level of
+        // the action's if-else tree, which would scope the Dismiss menu only to the final
+        // else block (keeping it from dismissed and kept prospects alike). The fixed
+        // structure uses a nested "if item.isKept { } else { }" inside a single outer
+        // else, which does not contain that fragment at the method level.
+        let body = prospectRow[actionsRange.lowerBound...]
+        #expect(!body.contains("} else if item.isKept {"))
+    }
 }
