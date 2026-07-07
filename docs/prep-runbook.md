@@ -17,13 +17,16 @@ before this was codified.
   `possibleMatchName`, `priorRelationship`, `production`). `production` is
   `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `3`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
+  (`PrepResults` version `4`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
   Each entry in `contacts[]` is one party to email for the performance, carrying a
   `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
-  the act OR its named lead performer(s) — never both, see §1 below — plus at most one
-  real presenting org; the app sends one separate email per contact. (The legacy v1 shape
-  carried a single `contact` object; the app still reads it, but new runs MUST write
-  `contacts[]`.)
+  the act OR its named lead performer(s), never both, see §1 below, plus at most one
+  real presenting org; the app sends one separate email per contact. A `provenance:
+  "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
+  draft for that specific contact (see §2's "Drafting for a performer contact directly"),
+  used instead of the shared `draft.body` when the app sends to them. (The legacy v1
+  shape carried a single `contact` object; the app still reads it, but new runs MUST
+  write `contacts[]`.)
 - **Read (optional, #119 voice learning):**
   `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
@@ -115,7 +118,9 @@ item's `production` field first:
   - If it does, pursue EACH named performer directly: run the SAME waterfall below once
     per performer, emitting one `contacts[]` entry per performer actually found, with
     `provenance: "performer"` and `name` set to that person. Never emit `act` for this
-    show.
+    show. Each performer entry ALSO gets its own `overrideBody` (see §2's "Drafting for a
+    performer contact directly"), since you are emailing them directly, not describing
+    them to a third party.
   - If the show is a bigger ensemble/group with no clear individual lead (3+ named
     members, or no performer names available at all), fall through to the standard
     single-act waterfall below with `provenance: "act"`, exactly as for a non-self-produced
@@ -224,9 +229,29 @@ Theatre) stay as printed.
 - band → danwrightphotography.com/bands
 - comedy → danwrightphotography.com/comedy
 
+**Drafting for a performer contact directly (#634, #639-643).** The shared `draft.body`
+above is written in the third person because it was designed for a third party being
+told about the act (the act's own marketing contact, a presenter), and it still serves
+that audience unchanged. A `provenance: "performer"` contact is different: the email
+goes directly to the person the draft would otherwise be describing, so writing about
+them in the third person ("I saw Virgile Roche and Anna Pierre are making their
+debut...") reads like a mail-merge mistake to the one person reading it. For every
+`provenance: "performer"` contact, ALSO write that contact's own `overrideBody`,
+addressing them directly in second person ("you"/"your") instead: "I saw you and Anna
+Pierre are making your U.S. debut..." not "I saw Virgile Roche and Anna Pierre are
+making their debut...". Everything else about it follows the SAME rules as the shared
+body above: no greeting token (the app still injects the greeting separately at send),
+no performative enthusiasm, no em dashes, the same canonical rate and A/B offer
+handling, the same discipline-matched gallery link, and the same "never ask for a known
+fact" rule. The subject line stays shared and unchanged, third-person subjects read
+fine regardless of recipient. When two named performers are pursued for the same
+show (§1), each gets their OWN `overrideBody` naming their co-performer correctly,
+never a copy-pasted version naming the wrong person.
+
 ### 3. Validate before writing (deterministic guard, Phase C / #39)
 
-Reject or fix a draft body that:
+Applies to the shared `draft.body` AND every contact's `overrideBody`, if any. Reject or
+fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);
 - states a rate that is not the canonical "$250 an hour plus tax, one-hour minimum";
