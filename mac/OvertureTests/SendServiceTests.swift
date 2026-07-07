@@ -471,6 +471,78 @@ struct SendServiceTests {
         #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
 
+    // MARK: - #641 (#634 Phase C): a performer's overrideBody wins over the shared draft, everywhere
+
+    // A performance where the ONLY recipient is a directly-addressed named performer, carrying their
+    // own overrideBody distinct from the shared (third-person) draftBody.
+    private func performerWithOverride(_ ctx: ModelContext, overrideBody: String,
+                                       sharedBody: String, ingested: Date) -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: "Midnight Quartet", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
+        let p = Prospect(naturalKey: key, groupName: "Midnight Quartet", discipline: "choral", venue: "Weill Recital Hall",
+                         performanceDate: "2026-08-15", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
+        p.draftSubject = "S"; p.draftBody = sharedBody
+        ctx.insert(p)
+        let performer = Recipient(id: "maya@performer.example", email: "maya@performer.example",
+                                  name: "Maya Chen", provenance: .performer)
+        performer.overrideBody = overrideBody
+        p.setRecipients([performer])
+        try? ctx.save()
+        return p
+    }
+
+    @Test func sendOneUsesThePerformersOverrideBodyInsteadOfTheSharedDraft() async throws {
+        let ctx = ModelContext(try container())
+        let p = performerWithOverride(ctx, overrideBody: "I saw you're self-presenting Midnight Quartet.",
+                                      sharedBody: "I saw Midnight Quartet is self-presenting.",
+                                      ingested: Date(timeIntervalSince1970: 1))
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
+
+        #expect(sender.last?.body == "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.")
+    }
+
+    // The bug the red-team caught: the voice-learning snapshot (#119) must freeze what was ACTUALLY
+    // sent, not the shared draft the override replaced, or a later run learns from text nobody read.
+    @Test func sendOneFreezesTheOverrideBodyForVoiceLearningNotTheSharedDraft() async throws {
+        let ctx = ModelContext(try container())
+        let p = performerWithOverride(ctx, overrideBody: "I saw you're self-presenting Midnight Quartet.",
+                                      sharedBody: "I saw Midnight Quartet is self-presenting.",
+                                      ingested: Date(timeIntervalSince1970: 1))
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
+
+        #expect(p.sentBody == "I saw you're self-presenting Midnight Quartet.")
+    }
+
+    // Defense in depth: even a .performer recipient with NO overrideBody set falls back to the
+    // shared draft, exactly like an act/presenter recipient always has.
+    @Test func aPerformerWithNoOverrideBodyStillGetsTheSharedDraft() async throws {
+        let ctx = ModelContext(try container())
+        let key = Prospect.makeNaturalKey(groupName: "Solo Act", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
+        let p = Prospect(naturalKey: key, groupName: "Solo Act", discipline: "choral", venue: "Weill Recital Hall",
+                         performanceDate: "2026-08-15", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved,
+                         ingestedAt: Date(timeIntervalSince1970: 1))
+        p.draftSubject = "S"; p.draftBody = "The shared third-person body."
+        ctx.insert(p)
+        let performer = Recipient(id: "solo@performer.example", email: "solo@performer.example",
+                                  name: "Solo Performer", provenance: .performer)
+        p.setRecipients([performer])
+        try? ctx.save()
+
+        let sender = CapturingSender()
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
+
+        #expect(sender.last?.body == "Hi Solo,\n\nThe shared third-person body.")
+        #expect(p.sentBody == "The shared third-person body.")
+    }
+
     // MARK: - #421 recipient-scoped reply send + copy-out
 
     @Test func sendReplyDraftSendsOnTheContactThreadAndConsumesTheDraft() async throws {
