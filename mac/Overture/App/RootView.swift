@@ -34,12 +34,11 @@ struct RootView: View {
     @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
     private var toPrep: [Prospect]
 
-    // Dismissed prospects, for the restore-from-dismissed view (#28).
-    @Query(filter: #Predicate<Prospect> { $0.statusRaw == "dismissed" })
-    private var dismissed: [Prospect]
     // All prospects, for the time-based follow-up due count (#45).
     @Query private var allProspects: [Prospect]
-    @State private var showDismissed = false
+    @State private var showArchive = false
+    @State private var archiveJumpKey: String?
+    @State private var searchQuery: String = ""
     @State private var showPatterns = false
     @State private var showFollowUps = false
     @State private var showVoiceGuidance = false
@@ -47,6 +46,24 @@ struct RootView: View {
     private var followUpsDue: Int {
         FollowUp.dueRecipients(from: allProspects, now: Date()).count
             + ConversationReminder.due(from: allProspects, now: Date(), config: .loaded()).count
+    }
+
+    private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
+
+    private var searchableItems: [QueueItem] { allProspects.map(QueueItem.init) }
+
+    // #NEW: whether picking a global search result should jump into the Queue (#236's existing
+    // deep link mechanism) or open Archive with that row forced into view instead. A dismissed
+    // show never renders in the Queue at all, so it always routes to Archive.
+    private func handleSearchSelection(_ item: QueueItem) {
+        let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.naturalKey))
+        if item.status != .dismissed,
+           QueueModel.isReachableInQueue(item, reachedOutKeys: reachedOutKeys, today: QueueModel.easternToday()) {
+            deepLinkedKey = item.id
+        } else {
+            archiveJumpKey = item.id
+            showArchive = true
+        }
     }
 
     private var canStartPrep: Bool {
@@ -88,6 +105,11 @@ struct RootView: View {
                         Text(statusMessage)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkFaint)
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    ShowSearchField(query: $searchQuery, allItems: searchableItems) { result in
+                        handleSearchSelection(result)
                     }
                 }
                 // #352: Scout and Prep are sequential steps in one flow (scout finds performances,
@@ -140,12 +162,12 @@ struct RootView: View {
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        showDismissed = true
+                        archiveJumpKey = nil
+                        showArchive = true
                     } label: {
-                        ToolbarHoverLabel(title: dismissed.isEmpty ? "Dismissed" : "Dismissed (\(dismissed.count))",
-                                          systemImage: "archivebox")
+                        ToolbarHoverLabel(title: "Archive", systemImage: "archivebox")
                     }
-                    .help("See dismissed prospects and restore any you cut by mistake")
+                    .help("Every show Overture has ever tracked: past its window, booked, closed, or dismissed")
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
@@ -206,9 +228,12 @@ struct RootView: View {
                     }
                     .help("Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus.")
                 }
+            }
+            .toolbar {
                 #if DEBUG
-                // DEBUG ONLY (#196): test affordances, compiled out of release builds. Grouped into
-                // one menu to stay under SwiftUI's toolbar item limit.
+                // DEBUG ONLY (#196): test affordances, compiled out of release builds. Split into its
+                // own .toolbar block (rather than the main one above) because the new global search
+                // field pushed the main block past SwiftUI's toolbar item limit.
                 ToolbarItem(placement: .secondaryAction) {
                     Menu {
                         Button("Seed dev data from live") { debugSeedFromLive() }
@@ -270,7 +295,9 @@ struct RootView: View {
             } message: {
                 Text(warningMessage ?? "")
             }
-            .sheet(isPresented: $showDismissed) { DismissedView() }
+            .sheet(isPresented: $showArchive) {
+                ArchiveView(initialHighlightKey: archiveJumpKey, onConnectGmail: connectGmail)
+            }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showFollowUps) { FollowUpsView() }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
