@@ -110,5 +110,44 @@ struct ReconcileSchedulerTests {
         #expect(captured?.keys == ["a|2026|v", "b|2026|v"])       // carrying the whole set
     }
 
+    // #617: a real save() failure (not just the source-scan guard in
+    // ReconcileSchedulerSaveGuardTests), via ImmutableStoreFixture. reconcileBookings takes its
+    // own injectable `from url:` (mirroring DownbeatBridge.loadWithHealth's existing `from url:`
+    // parameter) so a real export file drives a genuine n>0 booking match without touching Dan's
+    // actual Downbeat export path.
+    @Test func reconcileBookingsReportsSaveFailedOnAGenuineSaveFailure() async throws {
+        let exportURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("downbeat-export-\(UUID().uuidString).json")
+        let json = """
+        {"version":2,"clients":[],"venues":[],"bookings":[
+          {"id":"B1","clientId":"C1","clientDisplayName":"Acme Festival Chorus","shootName":"Gala",
+           "startDate":"2026-07-01","endDate":"2026-07-01","venueName":"V"}
+        ],"blockedDates":[]}
+        """
+        try json.write(to: exportURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: exportURL) }
+
+        let result = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Prospect.self, Recipient.self]),
+            seed: { ctx in
+                let p = Prospect(naturalKey: "k", groupName: "Acme Festival Chorus", discipline: "choral",
+                                 venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                                 priorRelationship: "none", production: "self", profile: "strong",
+                                 coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                 status: .approved)
+                p.sentAt = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01, well before the booking
+                p.downbeatClientId = "C1"
+                ctx.insert(p)
+            },
+            body: { ctx in
+                let scheduler = ReconcileScheduler(context: ctx)
+                return scheduler.reconcileBookings(now: Date(), from: exportURL)
+            })
+
+        #expect(result.count == 1)
+        #expect(result.saveFailed)
+    }
+
     private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "sched-\(UUID().uuidString)")! }
 }
