@@ -49,6 +49,6 @@ struct SaveOrWarnConsolidationGuardTests {
     }
 
     @Test func dismissedViewHandlerUsesSaveOrWarn() throws {
-        try assertHandlersUseSaveOrWarn(file: "Overture/UI/DismissedView.swift", functions: Self.dismissedViewFunctions)
+        try assertHandlersUseSaveOrWarn(file: "Overture/UI/ArchiveView.swift", functions: Self.dismissedViewFunctions)
     }
 }
