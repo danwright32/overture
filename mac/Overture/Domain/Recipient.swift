@@ -57,6 +57,10 @@ final class Recipient {
     var contactMethodRaw: String?
     var contactConfidenceRaw: String?
     var contactFormURL: String?
+    // v4 (#640, #634 Phase B): only ever meaningful when provenance == .performer, a direct,
+    // second-person draft for THIS recipient, preferred over the shared Prospect.draftBody at send.
+    // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
+    var overrideBody: String?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
