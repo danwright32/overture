@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 
 // #285: a single app-wide "this ran" acknowledgment. Controls whose effect isn't otherwise visible
 // (a context-menu toggle, a restore that lands offscreen behind a sheet, an async send) call
@@ -71,5 +72,23 @@ enum ActionAck {
     // whose local save fails must say so instead of looking like nothing happened.
     static func saveFailed(org: String) -> String {
         "Couldn't save the change for \(org)"
+    }
+}
+
+extension ModelContext {
+    // #618: roughly two dozen call sites in QueueView, FollowUpsView, and DismissedView each
+    // hand-rolled this same do/catch (#499) to warn Dan when a non-send mutation's save failed.
+    // Collapses every one of those to a single call; the caller only needs its own follow-up
+    // logic on success, gated on the returned Bool.
+    @MainActor
+    @discardableResult
+    func saveOrWarn(org: String, feedback: ActionFeedback) -> Bool {
+        do {
+            try save()
+            return true
+        } catch {
+            feedback.acknowledge(ActionAck.saveFailed(org: org), tone: .warning)
+            return false
+        }
     }
 }

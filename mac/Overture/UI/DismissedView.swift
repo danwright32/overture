@@ -76,12 +76,9 @@ struct DismissedView: View {
 
     private func restore(_ p: Prospect) {
         DismissedProspects.restore(p)
-        do {
-            try context.save()
+        if context.saveOrWarn(org: p.groupName, feedback: feedback) {
             // #285: the row leaves this sheet, but it lands back in the queue offscreen; confirm that.
             feedback.acknowledge(ActionAck.restored(org: p.groupName))
-        } catch {
-            feedback.acknowledge(ActionAck.saveFailed(org: p.groupName), tone: .warning)
         }
     }
 }
