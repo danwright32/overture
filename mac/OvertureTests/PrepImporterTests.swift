@@ -335,6 +335,82 @@ struct PrepImporterTests {
         #expect(p?.recipients.first?.email == "emma@performer.example")
     }
 
+    // v4 (#640, #634 Phase B): a performer contact's own direct-address `overrideBody` lands on its
+    // matching recipient, so a send to them can prefer it over the shared third-person draft body.
+    @Test func ingestsAPerformerContactWithOverrideBodyOntoItsRecipient() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 4, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil,
+                            provenance: "performer", overrideBody: "I saw you're self-presenting..."),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.overrideBody == "I saw you're self-presenting...")
+    }
+
+    // A re-run that doesn't repeat overrideBody for the same still-performer contact must not erase
+    // the existing one (the normal "never clobber on a nil field" convention), same as name/role.
+    @Test func reIngestWithoutOverrideBodyPreservesTheExistingOneForAStillPerformerContact() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
+
+        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil,
+                            provenance: "performer", overrideBody: "First draft, direct address."),
+            ])
+        ]), into: ctx)
+        // Second run corrects the role only, omitting overrideBody.
+        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: "Founder", email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil,
+                            provenance: "performer", overrideBody: nil),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.role == "Founder")
+        #expect(p?.recipients.first?.overrideBody == "First draft, direct address.")
+    }
+
+    // A contact reclassified AWAY from `.performer` on a later run (a research correction, or the
+    // show's `production` field changing) must have any stale overrideBody CLEARED, not preserved:
+    // overrideBody is only ever meaningful for a `.performer` recipient, so leftover second-person
+    // text on a now-generic act/presenter contact would be the same mail-merge-style mistake this
+    // whole fix exists to prevent, just triggered by a reclassification instead of the first draft.
+    @Test func reclassifyingAwayFromPerformerClearsAnyStaleOverrideBody() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Midnight Quartet", date: "2026-08-15", venue: "Weill Recital Hall")
+
+        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil,
+                            provenance: "performer", overrideBody: "I saw you're self-presenting..."),
+            ])
+        ]), into: ctx)
+        // A later run decides this is really the act's own contact, not a directly-addressed performer.
+        _ = PrepImporter.ingest(PrepResults(version: 4, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Maya Chen", role: nil, email: "maya@performer.example",
+                            method: "named_decision_maker", confidence: "high", formUrl: nil,
+                            provenance: "act", overrideBody: nil),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.provenance == .act)
+        #expect(p?.recipients.first?.overrideBody == nil)
+    }
+
     // The legacy single-contact mirror must treat `.performer` as primary too, the same as `.act`: a
     // performer-only self-produced show that also carries a presenter must mirror the PERFORMER into
     // the legacy contact fields, never fall through to an arbitrary recipient (SwiftData to-many order
