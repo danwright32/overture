@@ -40,7 +40,7 @@ struct ArchiveView: View {
             Divider()
             filterBar
             ShowSearchField(query: $query, allItems: items) { result in
-                highlightedKey = result.id
+                reveal(result.id)
             }
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
             Divider()
@@ -62,10 +62,19 @@ struct ArchiveView: View {
             Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
         }
         .onAppear {
-            guard let key = initialHighlightKey, let target = items.first(where: { $0.id == key }) else { return }
-            activeStatuses.insert(ArchiveStatus.of(target))
-            highlightedKey = key
+            guard let key = initialHighlightKey else { return }
+            reveal(key)
         }
+    }
+
+    // Widens the filter to include the target's status and marks it highlighted, so jumping to a
+    // show (from the global search bar's onAppear, or from this screen's own search field) always
+    // lands on a visible, scrolled to row instead of silently doing nothing when the target's
+    // status is not among the currently active filter chips.
+    private func reveal(_ key: String) {
+        guard let target = items.first(where: { $0.id == key }) else { return }
+        activeStatuses.insert(ArchiveStatus.of(target))
+        highlightedKey = key
     }
 
     private var header: some View {
@@ -104,8 +113,11 @@ struct ArchiveView: View {
                     }
                     .padding(OVSpacing.lg)
                 }
-                .task {
-                    guard let key = initialHighlightKey else { return }
+                // task(id:) restarts whenever highlightedKey changes, so this covers both the
+                // initial appearance (a jump from the global search bar) and every later reveal
+                // from this screen's own search field, not just the first one.
+                .task(id: highlightedKey) {
+                    guard let key = highlightedKey else { return }
                     try? await Task.sleep(nanoseconds: 50_000_000)
                     withAnimation { proxy.scrollTo(key, anchor: .center) }
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
