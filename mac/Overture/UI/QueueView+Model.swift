@@ -122,6 +122,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
+    // #642 (#634 Phase D): a performer's direct-address draft, so the review screen can show Dan
+    // exactly what this specific contact will receive instead of the shared draft body. Only ever
+    // set when provenance == .performer; defaulted so existing call sites don't need updating.
+    var overrideBody: String? = nil
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }

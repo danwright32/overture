@@ -116,6 +116,28 @@ struct ResultsImportTests {
         #expect(ann.lastReplyText == "Yes, let's talk.")
     }
 
+    // #642 (#634 Phase D): a performer recipient's overrideBody must reach the snapshot the review
+    // screen reads, or there is no text for it to show Dan before he approves/sends.
+    @Test func queueItemCarriesAPerformersOverrideBody() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "Midnight Quartet", discipline: "music", venue: "Weill Recital Hall",
+                         performanceDate: "2026-08-15", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let performer = Recipient(id: "maya@performer.example", email: "maya@performer.example",
+                                  name: "Maya Chen", provenance: .performer)
+        performer.overrideBody = "I saw you're self-presenting Midnight Quartet."
+        let presenter = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        p.setRecipients([performer, presenter])
+
+        let item = QueueItem(p)
+        #expect(item.contacts.first { $0.id == "maya@performer.example" }?.overrideBody
+                == "I saw you're self-presenting Midnight Quartet.")
+        #expect(item.contacts.first { $0.id == "b@present.example" }?.overrideBody == nil)
+    }
+
     // #459 — the per-recipient "Dan edited this reply draft" flag must reach the snapshot the view reads,
     // so the deterministic warnings can be suppressed on his edited text.
     @Test func queueItemCarriesTheReplyDraftEditedFlag() throws {
