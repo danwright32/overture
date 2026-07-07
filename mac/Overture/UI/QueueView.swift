@@ -547,13 +547,7 @@ struct QueueView: View {
         replySending[recipientId] = Date()   // #436: live "Sending reply…" until the await resolves
         Task {
             let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
-            do {
-                try context.save()
-            } catch {
-                // #477: the reply may have sent while the local record of it did not; never let
-                // that look like nothing happened.
-                feedback.acknowledge(ActionAck.sendNotConfirmed(org: item.groupName), tone: .warning)
-            }
+            context.saveOrWarnSendNotConfirmed(org: item.groupName, feedback: feedback)
             replySending[recipientId] = nil
             if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
         }
@@ -694,13 +688,7 @@ struct QueueView: View {
         outboundSending[naturalKey] = Date()   // #436: live "Sending…" until the await resolves
         Task {
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
-            do {
-                try context.save()
-            } catch {
-                // #477: the email may have sent while the local record of it did not; never let
-                // that look like nothing happened.
-                feedback.acknowledge(ActionAck.sendNotConfirmed(org: model.groupName), tone: .warning)
-            }
+            context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             outboundSending[naturalKey] = nil
             // If the send failed because the token was revoked/expired, sendOne cleared it;
             // surface a clear reconnect prompt rather than a silent per-row error (#50).
