@@ -65,7 +65,7 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json"]);
   });
 
   for (const file of files) {
@@ -85,6 +85,14 @@ describe("prep-results fixture shapes", () => {
     const mutated = readJson("prep-results", "v2.json") as { results: Array<Record<string, unknown>> };
     mutated.results[0].contact = { method: "generic_inbox", confidence: "low" };
     expect(() => assertPrepResultsShape(mutated, "v2.json", 2)).toThrow(/contact.*replaced by contacts/);
+  });
+
+  it("rejects a v3 file whose contact already carries the v4 overrideBody field", () => {
+    const mutated = readJson("prep-results", "v3.json") as {
+      results: Array<{ contacts?: Array<Record<string, unknown>> }>;
+    };
+    mutated.results[0].contacts![0].overrideBody = "I saw you...";
+    expect(() => assertPrepResultsShape(mutated, "v3.json", 3)).toThrow(/overrideBody.*before version 4/);
   });
 });
 

@@ -23,6 +23,11 @@ owns the greeting at send, so no fixture body carries an inline "Hi <name>,".
 `provenance` (`act` / `presenter`, never the host venue). It exercises a performance with both an act
 and a presenter, plus a form-only act with no email.
 
-`v3.json` (version 3, #587) is the current shape new runs MUST write: adds `performer` to the
+`v3.json` (version 3, #587) exercises a performer-only self-produced show: adds `performer` to the
 `provenance` vocabulary, a named individual performer on a self-produced show, distinct from `act` (a
-single-act waterfall result). It exercises a performer-only self-produced show.
+single-act waterfall result).
+
+`v4.json` (version 4, #639) is the current shape new runs MUST write: adds an optional `overrideBody`
+to a `contacts[]` entry, a direct second-person draft for that specific contact, meaningful only when
+its `provenance` is `performer`. It exercises a performer contact carrying an `overrideBody` alongside
+a presenter contact with none, under one shared third-person `draft.body`.

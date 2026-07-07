@@ -100,4 +100,22 @@ struct PrepResultsContractTests {
         #expect(performerOnly.contacts?.first?.name == "Maya Chen")
         #expect(performerOnly.contacts?.first?.email == "maya@midnightquartet.example")
     }
+
+    // v4 (#639, #634 Phase A): a performer contact may carry its own `overrideBody`, addressing them
+    // directly in second person, distinct from the shared third-person `draft.body` still used for
+    // any act/presenter contact on the same performance. The tolerant gate (1...4) still accepts the
+    // v1/v2/v3 fixtures above.
+    @Test func decodesTheV4FixtureWithAPerformerOverrideBody() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v4.json"))
+        #expect(results.version == 4)
+
+        let multi = results.results[0]
+        #expect(multi.contacts?.count == 2)
+        #expect(multi.contacts?[0].provenance == "performer")
+        #expect(multi.contacts?[0].overrideBody?.contains("you're self-presenting") == true)
+        #expect(multi.contacts?[1].provenance == "presenter")
+        #expect(multi.contacts?[1].overrideBody == nil)
+        // The shared draft stays third-person, unaffected by the performer's override.
+        #expect(multi.draft?.body.contains("Midnight Quartet is self-presenting") == true)
+    }
 }

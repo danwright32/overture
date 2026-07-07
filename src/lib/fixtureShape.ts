@@ -122,7 +122,13 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   });
 }
 
-function assertPrepContact(data: unknown, file: string, path: string, provenanceRequired: boolean): void {
+function assertPrepContact(
+  data: unknown,
+  file: string,
+  path: string,
+  provenanceRequired: boolean,
+  overrideBodyAllowed: boolean,
+): void {
   const o = requireObject(data, file, path);
   optionalString(o.name, file, `${path}.name`);
   optionalString(o.role, file, `${path}.role`);
@@ -135,16 +141,22 @@ function assertPrepContact(data: unknown, file: string, path: string, provenance
   } else if (o.provenance !== undefined) {
     fail(file, `${path}.provenance must not be present before version 2`);
   }
+  if (overrideBodyAllowed) {
+    optionalString(o.overrideBody, file, `${path}.overrideBody`);
+  } else if (o.overrideBody !== undefined) {
+    fail(file, `${path}.overrideBody must not be present before version 4`);
+  }
 }
 
 // overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it;
 // version 3: adds "performer" to the provenance vocabulary, #587)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
+  const overrideBodyAllowed = version >= 4;
   results.forEach((item, i) => {
     const o = requireObject(item, file, `results[${i}]`);
     requireString(o.naturalKey, file, `results[${i}].naturalKey`);
@@ -156,12 +168,12 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
     }
     if (version === 1) {
       if (o.contacts !== undefined) fail(file, `results[${i}].contacts must not be present before version 2`);
-      if (o.contact !== undefined) assertPrepContact(o.contact, file, `results[${i}].contact`, false);
+      if (o.contact !== undefined) assertPrepContact(o.contact, file, `results[${i}].contact`, false, overrideBodyAllowed);
     } else {
       if (o.contact !== undefined) fail(file, `results[${i}].contact was replaced by contacts[] in version 2`);
       if (o.contacts !== undefined) {
         const contacts = requireArray(o.contacts, file, `results[${i}].contacts`);
-        contacts.forEach((c, j) => assertPrepContact(c, file, `results[${i}].contacts[${j}]`, true));
+        contacts.forEach((c, j) => assertPrepContact(c, file, `results[${i}].contacts[${j}]`, true, overrideBodyAllowed));
       }
     }
   });

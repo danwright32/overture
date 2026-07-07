@@ -121,6 +121,14 @@ act are mutually exclusive per performance (never both used at once) and tie for
 Purely additive to the `provenance` string; the reader's tolerant gate (1 through 3) still accepts
 `v1.json`/`v2.json` unchanged, `v3.json` is the performer-contact spec.
 
+Version 4 (#639, #634 Phase A) adds an optional `overrideBody` to a `contacts[]` entry: a direct,
+second-person draft for that specific contact, meaningful only when its `provenance` is `performer`.
+The shared `draft.body` stays third-person and keeps serving any act/presenter contact on the same
+performance; a performer contact's own `overrideBody` is what actually gets sent to them instead
+(`SendService`), so a named performer is addressed directly rather than described in the third person
+they'd otherwise read about themselves in. Purely additive; the reader's tolerant gate (1 through 4)
+still accepts `v1.json`/`v2.json`/`v3.json` unchanged, `v4.json` is the override-body spec.
+
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 
 The app's round trip with the reply-classify run (#112). The app writes the queue (kept replies, each

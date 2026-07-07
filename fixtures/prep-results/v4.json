@@ -1,0 +1,31 @@
+{
+  "version": 4,
+  "generatedAt": "2026-07-07T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "midnight-quartet|2026-08-15|weill-recital-hall",
+      "contacts": [
+        {
+          "name": "Maya Chen",
+          "role": "Founder & Artistic Director",
+          "email": "maya@midnightquartet.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "performer",
+          "overrideBody": "I photograph performing arts in New York and saw you're self-presenting Midnight Quartet at Weill Recital Hall on August 15. I shoot unobtrusive, no-flash documentary coverage and think it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands."
+        },
+        {
+          "email": "tickets@presentingorg.example",
+          "method": "generic_inbox",
+          "confidence": "medium",
+          "provenance": "presenter"
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Midnight Quartet at Weill Recital Hall.",
+        "body": "I photograph performing arts in New York and saw Midnight Quartet is self-presenting at Weill Recital Hall on August 15. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+        "variant": "rate_stated"
+      }
+    }
+  ]
+}

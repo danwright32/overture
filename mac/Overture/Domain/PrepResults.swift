@@ -57,6 +57,10 @@ struct PrepContact: Codable, Equatable, Sendable {
     var confidence: String?   // high | medium | low
     var formUrl: String?
     var provenance: String?   // v2 (#392): act | presenter (never the host venue); v3 (#587) adds performer
+    // v4 (#639, #634 Phase A): only meaningful when provenance == "performer", a direct, second-person
+    // draft body for THIS contact, used instead of the shared (third-person) PrepResult.draft.body when
+    // emailing a named performer directly rather than a third party describing them.
+    var overrideBody: String?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -74,7 +78,7 @@ enum PrepResultsDecoder {
     // gate was the brittle pattern that broke the results reader when its version bumped (#132):
     // bumping the contract leaves a closed range that still accepts older files, so a format
     // change can't silently make the reader reject the new (or old) shape (#140).
-    static let supportedVersion = 3
+    static let supportedVersion = 4
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {
