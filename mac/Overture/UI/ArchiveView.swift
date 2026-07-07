@@ -1,11 +1,11 @@
 import SwiftUI
 import SwiftData
 
-// Every show Overture has ever tracked (#NEW), for the cases the day to day Queue intentionally
+// Every show Overture has ever tracked, for the cases the day to day Queue intentionally
 // hides: past its bookable window, booked, closed either way, or dismissed at triage. Replaces
 // DismissedView (Dismissed is now one of six independent status filters here, instead of its own
-// separate screen). Reuses ProspectRowView and ProspectMutations exactly as the Queue does, so
-// every row action (Mark menu, booking confirm, restore) behaves identically here.
+// separate screen). Reuses ProspectRowFactory exactly as the Queue does, so every row action
+// (Mark menu, booking confirm, restore) behaves identically here.
 struct ArchiveView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
