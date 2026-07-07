@@ -99,3 +99,25 @@ struct AutoConfirmClassificationGuardTests {
         #expect(content.contains("Discipline.allCases"))
     }
 }
+
+// #NEW: a dismissed prospect (only ever shown in Archive; the Queue never renders one) reads as
+// Dismissed with a Restore action, not as an undecided new prospect with Keep/Dismiss.
+@Suite("Dismissed rows show Restore instead of Keep/Dismiss")
+struct ProspectRowRestoreGuardTests {
+    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func onRestoreParameterExists() {
+        #expect(!prospectRow.isEmpty)
+        #expect(prospectRow.contains("var onRestore: (() -> Void)?"))
+    }
+
+    @Test func actionsBranchesOnDismissedStatusBeforeKeepDismiss() {
+        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+            Issue.record("actions view not found")
+            return
+        }
+        let body = prospectRow[actionsRange.lowerBound...].prefix(600)
+        #expect(body.contains("item.status == .dismissed"))
+        #expect(body.contains("Restore"))
+    }
+}

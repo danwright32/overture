@@ -31,6 +31,9 @@ struct ProspectRowView: View {
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
+    // #NEW: only ever passed non nil by Archive (the Queue never shows a dismissed prospect), so
+    // this has zero effect on any existing Queue row.
+    var onRestore: (() -> Void)? = nil
     var gmailConnected: Bool = false
     // #436: in-flight send timestamps so the row shows a live "Sending…" state (see DraftReviewView).
     var outboundSendSince: Date? = nil
@@ -332,7 +335,21 @@ struct ProspectRowView: View {
 
     private var actions: some View {
         HStack(spacing: OVSpacing.xs) {
-            if item.isKept {
+            if item.status == .dismissed, let onRestore {
+                Label("Dismissed", systemImage: "archivebox")
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.inkFaint)
+                    .padding(.horizontal, OVSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
+                Button { onRestore() } label: {
+                    Text("Restore").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                .help("Put this prospect back in the queue as undecided")
+            } else if item.isKept {
                 Label("Kept", systemImage: "checkmark.seal.fill")
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.forest)
@@ -351,18 +368,18 @@ struct ProspectRowView: View {
                 }
                 .buttonStyle(.plain)
                 .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
-            }
-            Menu {
-                ForEach(DismissReason.allCases, id: \.self) { reason in
-                    Button(reason.label) { onDismiss(reason) }
+                Menu {
+                    ForEach(DismissReason.allCases, id: \.self) { reason in
+                        Button(reason.label) { onDismiss(reason) }
+                    }
+                } label: {
+                    Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                        .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
                 }
-            } label: {
-                Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                    .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
     }
 

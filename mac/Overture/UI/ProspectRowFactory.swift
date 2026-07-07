@@ -1,0 +1,70 @@
+import SwiftUI
+import SwiftData
+
+// The one place that builds a fully wired ProspectRowView (#NEW), so QueueView and ArchiveView
+// share this construction instead of each repeating the same ~20 line callback list. onSend and
+// onSendReply stay as caller supplied closures (not routed through ProspectMutations here) because
+// they trigger a screen local confirm dialog and live "Sending..." state; everything else needs
+// nothing screen specific and is wired directly to ProspectMutations.
+@MainActor
+enum ProspectRowFactory {
+    static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                    highlightedKey: String?, outboundSendSince: Date?, replySendSince: @escaping (String) -> Date?,
+                    reachOutLabel: String? = nil, onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
+                    onRestore: (() -> Void)? = nil) -> AnyView {
+        let model = prospects.first(where: { $0.naturalKey == item.id })
+        let row = ProspectRowView(
+            item: item,
+            today: today,
+            onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback) },
+            onDismiss: { reason in ProspectMutations.setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback) },
+            onApprove: { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
+            onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
+            onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
+            onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
+            onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
+            onSend: onSend,
+            onSetConversationState: { state in ProspectMutations.setConversationState(item, state, prospects: prospects, context: context, feedback: feedback) },
+            onConfirmConversationState: { ProspectMutations.confirmConversationState(item, prospects: prospects, context: context, feedback: feedback) },
+            onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
+            onMarkContact: { rid, resolution, bounced in
+                ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
+            },
+            onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            onSendReply: onSendReply,
+            onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects, context: context, feedback: feedback) },
+            onMarkConfidenceReviewed: { ProspectMutations.markConfidenceReviewed(item, prospects: prospects, context: context, feedback: feedback) },
+            onCorrectClassification: { d, p in
+                ProspectMutations.correctClassification(item, discipline: d, production: p, prospects: prospects, context: context, feedback: feedback)
+            },
+            onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
+            onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
+            onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
+            onRestore: onRestore,
+            gmailConnected: GmailAuthManager.shared.isConnected,
+            outboundSendSince: outboundSendSince,
+            replySendSince: replySendSince,
+            reachOutLabel: reachOutLabel
+        )
+        // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
+        let highlighted = highlightedKey == item.id
+        let framed = row
+            .padding(highlighted ? OVSpacing.sm : 0)
+            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8))
+            .id(item.id)
+        // #244: a sent draft Dan hand edited is a voice learning candidate. Let him opt a poor
+        // example out (or back in) from a right click, so the loop never learns from a rushed send.
+        if let model, model.sentAt != nil, model.originalDraftBody != nil {
+            return AnyView(framed.contextMenu {
+                Button(model.excludedFromVoiceLearning ? "Learn from this email again"
+                                                       : "Don't learn from this email") {
+                    ProspectMutations.toggleVoiceLearning(item, prospects: prospects, context: context, feedback: feedback)
+                }
+            })
+        }
+        return AnyView(framed)
+    }
+}
