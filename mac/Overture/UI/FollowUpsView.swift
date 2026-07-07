@@ -285,31 +285,20 @@ struct FollowUpsView: View {
 
     private func remindLater(_ p: Prospect) {
         p.remindLater(now: Date())
-        do {
-            try context.save()
+        if context.saveOrWarn(org: p.groupName, feedback: feedback) {
             // #285: the row drops off the due list, which could read as "sent"; say it was snoozed.
             feedback.acknowledge(ActionAck.remindLater(org: p.groupName))
-        } catch {
-            feedback.acknowledge(ActionAck.saveFailed(org: p.groupName), tone: .warning)
         }
     }
 
     private func setState(_ p: Prospect, _ state: ConversationState) {
         p.setConversationState(state, now: Date())
-        do {
-            try context.save()
-        } catch {
-            feedback.acknowledge(ActionAck.saveFailed(org: p.groupName), tone: .warning)
-        }
+        context.saveOrWarn(org: p.groupName, feedback: feedback)
     }
 
     private func confirm(_ p: Prospect) {
         p.confirmConversationState(now: Date())
-        do {
-            try context.save()
-        } catch {
-            feedback.acknowledge(ActionAck.saveFailed(org: p.groupName), tone: .warning)
-        }
+        context.saveOrWarn(org: p.groupName, feedback: feedback)
     }
 }
 
