@@ -434,7 +434,7 @@ struct BookedQueueTests {
     }
 }
 
-// #NEW: whether clicking a global search result would land on a real, visible row in the Queue,
+// Whether clicking a global search result would land on a real, visible row in the Queue,
 // as opposed to a show the Queue hides (past its bookable window, or no longer active).
 @Suite("Queue reachability")
 struct QueueReachabilityTests {

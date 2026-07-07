@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The shared search UI (#NEW) for finding any show Overture has ever tracked, whether it is still
+// The shared search UI for finding any show Overture has ever tracked, whether it is still
 // in the Queue's date window or has since gone past, booked, closed, or dismissed. Used both as
 // the persistent bar in the main window and inside Archive's own narrowing field, so the matching
 // behavior and the dropdown look identical everywhere Dan searches.

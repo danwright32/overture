@@ -52,7 +52,7 @@ struct RootView: View {
 
     private var searchableItems: [QueueItem] { allProspects.map(QueueItem.init) }
 
-    // #NEW: whether picking a global search result should jump into the Queue (#236's existing
+    // Whether picking a global search result should jump into the Queue (#236's existing
     // deep link mechanism) or open Archive with that row forced into view instead. A dismissed
     // show never renders in the Queue at all, so it always routes to Archive.
     private func handleSearchSelection(_ item: QueueItem) {

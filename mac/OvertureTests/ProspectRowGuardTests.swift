@@ -100,7 +100,7 @@ struct AutoConfirmClassificationGuardTests {
     }
 }
 
-// #NEW: a dismissed prospect (only ever shown in Archive; the Queue never renders one) reads as
+// A dismissed prospect (only ever shown in Archive; the Queue never renders one) reads as
 // Dismissed with a Restore action, not as an undecided new prospect with Keep/Dismiss.
 @Suite("Dismissed rows show Restore instead of Keep/Dismiss")
 struct ProspectRowRestoreGuardTests {

@@ -376,7 +376,7 @@ enum QueueModel {
         queueOrder(items.filter { !reachedOutKeys.contains($0.id) }, today: today)
     }
 
-    // #NEW: whether a single show would actually render somewhere in the Queue right now, reusing
+    // Whether a single show would actually render somewhere in the Queue right now, reusing
     // the exact same reached-out/toSendQueue rules the Queue itself renders with (on a one item
     // array), so this can never drift from what Dan would actually see if he looked.
     static func isReachableInQueue(_ item: QueueItem, reachedOutKeys: Set<String>, today: String) -> Bool {

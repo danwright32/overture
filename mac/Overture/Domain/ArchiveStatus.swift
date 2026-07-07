@@ -1,6 +1,6 @@
 import Foundation
 
-// Where a show sits for the Archive lookup (#NEW). Mirrors PerformanceStatus's five outcomes, plus
+// Where a show sits for the Archive lookup. Mirrors PerformanceStatus's five outcomes, plus
 // Dismissed (a triage stage cut, ReviewStatus.dismissed) as a sixth, mutually exclusive bucket.
 // Dismissed takes precedence: a cut prospect is always performanceStatus .new (it was never
 // contacted), but that is not the useful lens once Dan has cut it.

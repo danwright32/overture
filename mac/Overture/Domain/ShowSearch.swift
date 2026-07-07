@@ -1,6 +1,6 @@
 import Foundation
 
-// Matches a show against a free text query (#NEW), shared by the global search bar and Archive's
+// Matches a show against a free text query, shared by the global search bar and Archive's
 // own search field: org/act name, venue, and every recipient's name/email, so Dan can find a show
 // whether he remembers who he pitched, where it was, or who replied. Case insensitive substring
 // match; an empty (or all whitespace) query matches everything.

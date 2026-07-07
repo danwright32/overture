@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-// The one place that builds a fully wired ProspectRowView (#NEW), so QueueView and ArchiveView
+// The one place that builds a fully wired ProspectRowView, so QueueView and ArchiveView
 // share this construction instead of each repeating the same ~20 line callback list. onSend and
 // onSendReply stay as caller supplied closures (not routed through ProspectMutations here) because
 // they trigger a screen local confirm dialog and live "Sending..." state; everything else needs

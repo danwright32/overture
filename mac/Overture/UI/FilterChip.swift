@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The pill shaped toggle Archive's status filter row uses (#NEW), matching the Queue's existing
+// The pill shaped toggle Archive's status filter row uses, matching the Queue's existing
 // discipline chip look without touching QueueFilterBar's already reviewed, working code.
 struct FilterChip: View {
     let label: String
