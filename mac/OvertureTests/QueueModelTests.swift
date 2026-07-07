@@ -433,3 +433,23 @@ struct BookedQueueTests {
         #expect(order.map(\.id).contains("auto"))
     }
 }
+
+// #NEW: whether clicking a global search result would land on a real, visible row in the Queue,
+// as opposed to a show the Queue hides (past its bookable window, or no longer active).
+@Suite("Queue reachability")
+struct QueueReachabilityTests {
+    @Test func aShowInTheReachedOutSetIsReachableEvenIfLongPast() {
+        let a = item(performanceDate: "2020-01-01", key: "a")
+        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: ["a"], today: "2026-07-07"))
+    }
+
+    @Test func aShowWithinTheBookableWindowIsReachable() {
+        let a = item(performanceDate: "2026-08-01", key: "a")
+        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: [], today: "2026-07-07"))
+    }
+
+    @Test func aPastShowNotInTheReachedOutSetIsUnreachable() {
+        let a = item(performanceDate: "2020-01-01", key: "a")
+        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: [], today: "2026-07-07") == false)
+    }
+}
