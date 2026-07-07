@@ -249,15 +249,10 @@ struct FollowUpsView: View {
         Task {
             let sent = await SendService.sendFollowUp(r, of: p, now: Date(),
                                                       sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
-            do {
-                try context.save()
+            if context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback) {
                 // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
                 feedback.acknowledge(ActionAck.followUpSent(org: org, success: sent),
                                      tone: sent ? .info : .warning)
-            } catch {
-                // #499: same risk as #477, the follow-up may have sent while the local record
-                // of it did not; never let that look like nothing happened.
-                feedback.acknowledge(ActionAck.sendNotConfirmed(org: org), tone: .warning)
             }
         }
     }
@@ -270,15 +265,10 @@ struct FollowUpsView: View {
         Task {
             let sent = await SendService.sendConversationNudge(p, kind: kind, now: Date(),
                                                         sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
-            do {
-                try context.save()
+            if context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback) {
                 // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
                 feedback.acknowledge(ActionAck.conversationNudge(org: org, closing: isClosing, success: sent),
                                      tone: sent ? .info : .warning)
-            } catch {
-                // #499: same risk as #477, the nudge may have sent while the local record of it
-                // did not; never let that look like nothing happened.
-                feedback.acknowledge(ActionAck.sendNotConfirmed(org: org), tone: .warning)
             }
         }
     }

@@ -91,4 +91,21 @@ extension ModelContext {
             return false
         }
     }
+
+    // #623: the sendNotConfirmed sibling of saveOrWarn. Four call sites in QueueView (sendReply,
+    // performSend) and FollowUpsView (the follow-up send and conversation nudge) each hand-rolled
+    // this same do/catch (#477/#499) to warn Dan when a Gmail send succeeded but the local record
+    // of it failed to save. The caller still owns any success-path follow-up, gated on the
+    // returned Bool, same as saveOrWarn.
+    @MainActor
+    @discardableResult
+    func saveOrWarnSendNotConfirmed(org: String, feedback: ActionFeedback) -> Bool {
+        do {
+            try save()
+            return true
+        } catch {
+            feedback.acknowledge(ActionAck.sendNotConfirmed(org: org), tone: .warning)
+            return false
+        }
+    }
 }
