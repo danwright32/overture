@@ -35,6 +35,10 @@ enum SendService {
     private static func deliver(_ recipient: Recipient, of prospect: Prospect,
                                 now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, let body = prospect.draftBody else { return false }
+        // #641 (#634 Phase C): a directly-addressed performer's own second-person draft wins over the
+        // shared third-person body, for BOTH the actual outgoing mail and the voice-learning snapshot
+        // below (freezeSentCopy), computed once so neither can drift from what was really sent.
+        let effectiveBody = (recipient.provenance == .performer ? recipient.overrideBody : nil) ?? body
 
         // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
         // MainActor this check-then-claim-then-persist is atomic with respect to any other call
@@ -55,7 +59,7 @@ enum SendService {
         }
 
         let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
-                                body: Salutation.greeting(for: recipient.name) + "\n\n" + body)
+                                body: Salutation.greeting(for: recipient.name) + "\n\n" + effectiveBody)
         do {
             let receipt = try await sender.send(mail)
             recipient.sentAt = now
@@ -75,7 +79,7 @@ enum SendService {
                 prospect.gmailThreadId = receipt.threadId
                 prospect.gmailMessageId = receipt.messageID
             }
-            prospect.freezeSentCopy(subject: mail.subject, body: body)
+            prospect.freezeSentCopy(subject: mail.subject, body: effectiveBody)
             prospect.sendError = nil
             // Per-click only (no autonomous drip): the show stays approved while any recipient is still
             // sendable, so the Send button persists for the next one. Once the last one goes, it is
