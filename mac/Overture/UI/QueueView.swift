@@ -138,7 +138,7 @@ struct QueueView: View {
         Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
     }
 
-    private func sendConfirmMessage(_ pending: PendingConfirm) -> String {
+    private func sendConfirmMessage(_ pending: PendingSend) -> String {
         "To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out."
     }
 

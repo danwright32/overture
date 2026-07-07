@@ -121,7 +121,7 @@ struct ConfidenceFeedbackGuardTests {
         let queueView = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // OvertureTests/
             .deletingLastPathComponent()   // mac/
-            .appendingPathComponent("Overture/UI/QueueView.swift")
+            .appendingPathComponent("Overture/UI/ProspectMutations.swift")
         return try String(contentsOf: queueView, encoding: .utf8)
     }
 
