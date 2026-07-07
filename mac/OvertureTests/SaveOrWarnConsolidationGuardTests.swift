@@ -41,7 +41,7 @@ struct SaveOrWarnConsolidationGuardTests {
     }
 
     @Test func queueViewHandlersUseSaveOrWarn() throws {
-        try assertHandlersUseSaveOrWarn(file: "Overture/UI/QueueView.swift", functions: Self.queueViewFunctions)
+        try assertHandlersUseSaveOrWarn(file: "Overture/UI/ProspectMutations.swift", functions: Self.queueViewFunctions)
     }
 
     @Test func followUpsViewHandlersUseSaveOrWarn() throws {

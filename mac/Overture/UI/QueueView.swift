@@ -21,7 +21,7 @@ struct QueueView: View {
     @State private var highOnly = false
     @State private var showPendingBookingsOnly = false
     @State private var pipeline: Pipeline = .toSend
-    @State private var pendingConfirm: PendingConfirm?
+    @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
@@ -48,12 +48,6 @@ struct QueueView: View {
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
-
-    // The one email awaiting Dan's explicit confirm before it sends (#49).
-    private struct PendingConfirm: Identifiable {
-        let id: String   // prospect naturalKey
-        let confirmation: SendConfirmation
-    }
 
     private var items: [QueueItem] { prospects.map(QueueItem.init) }
 
@@ -441,135 +435,10 @@ struct QueueView: View {
     }
 
     private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
-        let model = prospects.first(where: { $0.naturalKey == item.id })
-        let row = ProspectRowView(
-            item: item,
-            today: today,
-            onKeep: { setStatus(item, .queued, nil) },
-            onDismiss: { reason in setStatus(item, .dismissed, reason) },
-            onApprove: { setStatus(item, .approved, nil) },
-            onUnapprove: { setStatus(item, .drafted, nil) },
-            onSkipDraft: { setStatus(item, .dismissed, .notInterested) },
-            onSaveDraft: { subject, body in saveDraft(item, subject, body) },
-            onSetLostReason: { reason in setLostReason(item, reason) },
-            onSend: { requestSend(item) },
-            onSetConversationState: { state in setConversationState(item, state) },
-            onConfirmConversationState: { confirmConversationState(item) },
-            onDismissReply: { dismissReply(item) },
-            onMarkContact: { rid, resolution, bounced in markContact(item, rid, resolution, bounced) },
-            onDismissContactReply: { rid in dismissContactReply(item, rid) },
-            onDraftReply: { rid in draftReply(item, rid) },
-            onSendReply: { rid in sendReply(item, rid) },
-            onCopyReply: { rid in copyReply(item, rid) },
-            onEditReplyDraft: { rid, body in editReplyDraft(item, rid, body) },
-            onMarkConfidenceReviewed: { markConfidenceReviewed(item) },
-            onCorrectClassification: { d, p in correctClassification(item, discipline: d, production: p) },
-            onConfirmBooking: { confirmBooking(item) },
-            onDismissBookingSuggestion: { dismissBookingSuggestion(item) },
-            onRejectBooking: { rejectBooking(item) },
-            gmailConnected: GmailAuthManager.shared.isConnected,
-            outboundSendSince: outboundSending[item.id],
-            replySendSince: { rid in replySending[rid] },
-            reachOutLabel: reachOutLabel
-        )
-        // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
-        let highlighted = highlightedKey == item.id
-        let framed = row
-            .padding(highlighted ? OVSpacing.sm : 0)
-            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 8))
-            .id(item.id)
-        // #244: a sent draft Dan hand-edited is a voice-learning candidate. Let him opt a poor
-        // example out (or back in) from a right-click, so the loop never learns from a rushed send.
-        if let model, model.sentAt != nil, model.originalDraftBody != nil {
-            return AnyView(framed.contextMenu {
-                Button(model.excludedFromVoiceLearning ? "Learn from this email again"
-                                                       : "Don't learn from this email") {
-                    toggleVoiceLearning(item)
-                }
-            })
-        }
-        return AnyView(framed)
-    }
-
-    // #244: flip whether this prospect's edited-and-sent draft feeds the voice-learning loop.
-    private func toggleVoiceLearning(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.excludedFromVoiceLearning.toggle()
-        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
-            // #285: a context-menu toggle changes nothing visible on the row, so say it ran.
-            feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning,
-                                                         org: item.groupName))
-        }
-    }
-
-    // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that reply
-    // so it does not re-flag, while a genuinely new reply still will.
-    private func dismissReply(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.dismissAutoReply(now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // #418 B2: Dan hand-marks one contact's outcome from the conversation surface (attribution only
-    // for Booked; never sets the lead booking). Stamps the manual source so detection won't overwrite.
-    private func markContact(_ item: QueueItem, _ recipientId: String,
-                             _ resolution: RecipientResolution?, _ bounced: Bool) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
-        model.resumePausedRecipients()   // #430: marking a contact is triage; resume the paused ones
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // #418 B1: dismiss a wrongly auto-detected reply for ONE contact (#219, per-recipient).
-    private func dismissContactReply(_ item: QueueItem, _ recipientId: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
-        model.resumePausedRecipients()   // #430: a false reply shouldn't keep the others paused
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // #420 C6. Request an AI-drafted reply for ONE contact: stamp the request (drives the progress +
-    // needs-attention timeout) and launch the detached classify+drafter run. Request-response feel.
-    private func draftReply(_ item: QueueItem, _ recipientId: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-        _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
-    }
-
-    // #421: send Dan's approved AI reply on the contact's own thread, off the main thread (same
-    // non-blocking pattern as performSend); surface a reconnect prompt if the token was revoked.
-    private func sendReply(_ item: QueueItem, _ recipientId: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
-        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
-        replySending[recipientId] = Date()   // #436: live "Sending reply…" until the await resolves
-        Task {
-            let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
-            context.saveOrWarnSendNotConfirmed(org: item.groupName, feedback: feedback)
-            replySending[recipientId] = nil
-            if !sent && !GmailAuthManager.shared.isConnected { showReconnect = true }
-        }
-    }
-
-    // #423 (E): Dan edits the AI reply draft before sending, the same affordance as an outbound draft.
-    private func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // #421 copy-out: copy the draft to the clipboard for Dan to paste into the Gmail thread he's
-    // reading, and mark the contact replied-in-Gmail (consumes the draft, re-anchors the clock).
-    private func copyReply(_ item: QueueItem, _ recipientId: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let recipient = model.recipients.first(where: { $0.id == recipientId }),
-              let body = recipient.replyDraftBody, !body.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(body, forType: .string)
-        model.updateRecipient(id: recipientId) { $0.recordRepliedInGmail(now: Date()) }
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
+        ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                              highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                              replySendSince: { rid in replySending[rid] }, reachOutLabel: reachOutLabel,
+                              onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
     }
 
     private var emptyState: some View {
@@ -590,112 +459,26 @@ struct QueueView: View {
         )
     }
 
-    private func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.status = status
-        model.dismissReasonRaw = reason?.rawValue
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    private func saveDraft(_ item: QueueItem, _ subject: String, _ body: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.applyEdit(subject: subject, body: body)
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // Dan eyeballed a rules-uncertain classification and it's fine: clear the flag so it
-    // stays cleared even across re-scouts (#32). Scout-owned confidence is untouched.
-    private func markConfidenceReviewed(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confidenceReviewedByDan = true
-        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
-            // #487: the chip just clears, which isn't visible enough on its own to prove the tap registered.
-            feedback.acknowledge(ActionAck.confidenceConfirmed(org: item.groupName))
-        }
-    }
-
-    // Dan corrected a wrong classification. Calls ClassificationOverride.correct which
-    // re-scores the prospect in place; the row's fit-reason line then hides (#60).
-    private func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
-        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
-            // #487: same silent-no-op risk as markConfidenceReviewed above.
-            feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
-        }
-    }
-
-    private func setConversationState(_ item: QueueItem, _ state: ConversationState) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.setConversationState(state, now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    private func confirmConversationState(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confirmConversationState(now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    private func confirmBooking(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.outcome = .booked
-        model.outcomeSourceRaw = OutcomeSource.manual.rawValue
-        model.outcomeAt = Date()
-        model.bookingSuggested = false
-        model.suppressUntriedRecipients(reason: .bookedElsewhere)   // #542
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    private func dismissBookingSuggestion(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.bookingSuggested = false
-        model.bookingSuggestionDismissed = true
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // Dan rejected a wrong auto-detected booking (#203): revert it to no-response and remember the
-    // booking id so reconcileBooked never re-books from that exact match.
-    private func rejectBooking(_ item: QueueItem) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    private func setLostReason(_ item: QueueItem, _ reason: String) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.lostReason = QueueModel.normalizedLostReason(reason)
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // Step 1 of an explicit send: show Dan exactly what will go out and wait for his
-    // confirm (#49). Building the confirmation also re-checks sendability, so the dialog
-    // only appears for an email that would actually send.
+    // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
               let confirmation = SendConfirmation(prospect: model) else { return }
-        pendingConfirm = PendingConfirm(id: item.id, confirmation: confirmation)
+        pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 
-    // Step 2: Dan confirmed. Send this one approved email via Gmail. One confirm,
-    // one email. Never autonomous.
     private func performSend(_ naturalKey: String) {
         pendingConfirm = nil
-        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
-        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
-        // Await the send off the synchronous button action so the main thread is never
-        // blocked waiting on the Gmail token work (the old blocking bridge deadlocked here).
-        outboundSending[naturalKey] = Date()   // #436: live "Sending…" until the await resolves
-        Task {
-            let sent = await SendService.sendOne(model, now: Date(), sender: sender)
-            context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
-            outboundSending[naturalKey] = nil
-            // If the send failed because the token was revoked/expired, sendOne cleared it;
-            // surface a clear reconnect prompt rather than a silent per-row error (#50).
-            if !sent && !GmailAuthManager.shared.isConnected {
-                showReconnect = true
-            }
-        }
+        ProspectMutations.performSend(naturalKey, prospects: prospects, context: context, feedback: feedback,
+                                      markSending: { outboundSending[$0] = Date() },
+                                      clearSending: { outboundSending[$0] = nil },
+                                      onNeedsReconnect: { showReconnect = true })
+    }
+
+    private func sendReply(_ item: QueueItem, _ recipientId: String) {
+        ProspectMutations.sendReply(item, recipientId, prospects: prospects, context: context, feedback: feedback,
+                                    markSending: { replySending[$0] = Date() },
+                                    clearSending: { replySending[$0] = nil },
+                                    onNeedsReconnect: { showReconnect = true })
     }
 }
 

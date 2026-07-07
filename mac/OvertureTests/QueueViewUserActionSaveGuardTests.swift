@@ -23,7 +23,7 @@ struct QueueViewUserActionSaveGuardTests {
         let queueView = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // OvertureTests/
             .deletingLastPathComponent()   // mac/
-            .appendingPathComponent("Overture/UI/QueueView.swift")
+            .appendingPathComponent("Overture/UI/ProspectMutations.swift")
         let src = try String(contentsOf: queueView, encoding: .utf8)
 
         for name in Self.guardedFunctions {
