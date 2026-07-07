@@ -58,6 +58,7 @@ mac/OvertureTests/ProspectRowGuardTests.swift            (MODIFY, append a suite
 mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift (MODIFY, path only)
 mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift (MODIFY, path only)
 mac/OvertureTests/ActionFeedbackTests.swift              (MODIFY, path only, ConfidenceFeedbackGuardTests suite)
+mac/OvertureTests/SendReceiptSaveGuardTests.swift        (MODIFY, path only)
 mac/OvertureTests/QueueModelTests.swift                 (MODIFY, append a suite)
 mac/OvertureTests/ArchiveStatusTests.swift               (NEW)
 mac/OvertureTests/ShowSearchTests.swift                  (NEW)
@@ -550,6 +551,7 @@ cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wrigh
 - Modify: `mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift`
 - Modify: `mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift`
 - Modify: `mac/OvertureTests/ActionFeedbackTests.swift`
+- Modify: `mac/OvertureTests/SendReceiptSaveGuardTests.swift`
 
 **Interfaces:**
 - Consumes: `ProspectMutations`, `PendingSend`, and `ProspectRowFactory.row(...)` (Task 1, `mac/Overture/UI/ProspectMutations.swift` and `mac/Overture/UI/ProspectRowFactory.swift`).
@@ -662,18 +664,30 @@ In `mac/OvertureTests/ActionFeedbackTests.swift`, change the `ConfidenceFeedback
 
 (Only the `.appendingPathComponent` argument changes, from `"Overture/UI/QueueView.swift"` to `"Overture/UI/ProspectMutations.swift"`. `markConfidenceReviewed` and `correctClassification` both still call `feedback.acknowledge(...)` in their new home, so the tests' own assertions do not change, only where they look.)
 
+A FOURTH existing SourceGuard test was found only during a task review of this task's implementation (also missed during planning): `mac/OvertureTests/SendReceiptSaveGuardTests.swift` (regression guard for #477) scans `Overture/UI/QueueView.swift` for `sendReply` and `performSend` bodies, checking neither contains a bare `try? context.save()`. Since the real send logic is now in `ProspectMutations.performSend`/`sendReply`, this guard had gone silently vacuous (it only ever scans the two thin wrappers left in `QueueView.swift`, which trivially never contain that string). In `mac/OvertureTests/SendReceiptSaveGuardTests.swift`, change:
+
+```swift
+        let queueView = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests/
+            .deletingLastPathComponent()   // mac/
+            .appendingPathComponent("Overture/UI/ProspectMutations.swift")
+        let src = try String(contentsOf: queueView, encoding: .utf8)
+```
+
+(Only the `.appendingPathComponent` argument changes, from `"Overture/UI/QueueView.swift"` to `"Overture/UI/ProspectMutations.swift"`.)
+
 - [ ] **Step 5: Run the full suite**
 
 Run:
 ```bash
 cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && ./scripts/run-tests-locked.sh
 ```
-Expected: full suite green, no behavior change. `QueueViewUserActionSaveGuardTests`, `SaveOrWarnConsolidationGuardTests.queueViewHandlersUseSaveOrWarn`, and `ConfidenceFeedbackGuardTests` now scan `ProspectMutations.swift` and still pass.
+Expected: full suite green, no behavior change. `QueueViewUserActionSaveGuardTests`, `SaveOrWarnConsolidationGuardTests.queueViewHandlersUseSaveOrWarn`, `ConfidenceFeedbackGuardTests`, and `SendReceiptSaveGuardTests` now scan `ProspectMutations.swift` and still pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/QueueView.swift mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift mac/OvertureTests/ActionFeedbackTests.swift && git commit -m "Refactor QueueView to delegate row actions to ProspectMutations"
+cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/QueueView.swift mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift mac/OvertureTests/ActionFeedbackTests.swift mac/OvertureTests/SendReceiptSaveGuardTests.swift && git commit -m "Refactor QueueView to delegate row actions to ProspectMutations"
 ```
 
 ---
