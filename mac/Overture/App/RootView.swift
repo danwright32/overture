@@ -80,6 +80,22 @@ struct RootView: View {
     }
 
     var body: some View {
+        // The search bar lives here in the window body, not the toolbar: confirmed against the
+        // running app that a native NSToolbar item cannot anchor a SwiftUI .popover at all (the
+        // results dropdown silently never appeared), while the identical field embedded in
+        // Archive's own body works correctly. This still reads as "persistent" per the design
+        // (always visible above the Queue, not tucked into a menu), just not toolbar-hosted.
+        VStack(spacing: 0) {
+            ShowSearchField(query: $searchQuery, allItems: searchableItems) { result in
+                handleSearchSelection(result)
+            }
+            .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
+            Divider()
+            queueContent
+        }
+    }
+
+    private var queueContent: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   onShowFollowUps: { showFollowUps = true })
             .onOpenURL { url in
@@ -105,11 +121,6 @@ struct RootView: View {
                         Text(statusMessage)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkFaint)
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    ShowSearchField(query: $searchQuery, allItems: searchableItems) { result in
-                        handleSearchSelection(result)
                     }
                 }
                 // #352: Scout and Prep are sequential steps in one flow (scout finds performances,
