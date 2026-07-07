@@ -26,18 +26,25 @@
 mac/Overture/UI/ProspectMutations.swift   (NEW)  Every SwiftData mutation a row can trigger, extracted
                                                    from QueueView so QueueView and the new ArchiveView
                                                    share one implementation.
-mac/Overture/UI/QueueView.swift           (MODIFY) Delegates its row actions to ProspectMutations
-                                                   instead of its own private methods. No behavior change.
+mac/Overture/UI/ProspectRowView.swift     (MODIFY) Adds an onRestore action and a Dismissed/Restore
+                                                   row state, used only by Archive (the Queue never
+                                                   shows a dismissed prospect, so its behavior there
+                                                   is unchanged).
+mac/Overture/UI/ProspectRowFactory.swift  (NEW)  Builds a fully wired ProspectRowView (every callback,
+                                                   the highlight overlay, the voice learning context
+                                                   menu) from just the shared inputs. QueueView and
+                                                   ArchiveView both call this instead of each
+                                                   constructing ProspectRowView by hand, so the ~20
+                                                   line wiring block exists exactly once.
+mac/Overture/UI/QueueView.swift           (MODIFY) Delegates its row rendering to ProspectRowFactory
+                                                   instead of building ProspectRowView itself. No
+                                                   behavior change.
 mac/Overture/UI/QueueView+Model.swift     (MODIFY) Adds QueueModel.isReachableInQueue, the pure check
                                                    that decides whether a search result should jump
                                                    into the Queue or open Archive instead.
 mac/Overture/Domain/ArchiveStatus.swift   (NEW)  The six mutually exclusive buckets Archive filters by.
 mac/Overture/Domain/ShowSearch.swift      (NEW)  The shared org/venue/contact text match, used by the
                                                    global search bar and Archive's own search field.
-mac/Overture/UI/ProspectRowView.swift     (MODIFY) Adds an onRestore action and a Dismissed/Restore
-                                                   row state, used only by Archive (the Queue never
-                                                   shows a dismissed prospect, so its behavior there
-                                                   is unchanged).
 mac/Overture/UI/FilterChip.swift          (NEW)  The pill toggle used by Archive's status filter row.
 mac/Overture/UI/ShowSearchField.swift     (NEW)  The reusable search field plus results dropdown.
 mac/Overture/UI/ArchiveView.swift         (NEW)  The new "every show ever" screen, replacing DismissedView.
@@ -47,12 +54,12 @@ mac/Overture/App/RootView.swift           (MODIFY) Swaps the Dismissed toolbar b
                                                    reachability check that decides where a click lands.
 
 mac/OvertureTests/ProspectMutationsTests.swift          (NEW)
+mac/OvertureTests/ProspectRowGuardTests.swift            (MODIFY, append a suite)
 mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift (MODIFY, path only)
 mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift (MODIFY, path only)
 mac/OvertureTests/QueueModelTests.swift                 (MODIFY, append a suite)
 mac/OvertureTests/ArchiveStatusTests.swift               (NEW)
 mac/OvertureTests/ShowSearchTests.swift                  (NEW)
-mac/OvertureTests/ProspectRowGuardTests.swift            (MODIFY, append a suite)
 mac/OvertureTests/ShowSearchFieldGuardTests.swift        (NEW)
 mac/OvertureTests/ArchiveViewRestoreSaveGuardTests.swift (NEW, replaces DismissedViewRestoreSaveGuardTests.swift)
 mac/OvertureTests/DismissedViewRestoreSaveGuardTests.swift (DELETE)
@@ -60,15 +67,18 @@ mac/OvertureTests/DismissedViewRestoreSaveGuardTests.swift (DELETE)
 
 ---
 
-### Task 1: Extract ProspectMutations
+### Task 1: Extract ProspectMutations, add ProspectRowView.onRestore, and build ProspectRowFactory
 
 **Files:**
 - Create: `mac/Overture/UI/ProspectMutations.swift`
+- Modify: `mac/Overture/UI/ProspectRowView.swift`
+- Create: `mac/Overture/UI/ProspectRowFactory.swift`
 - Test: `mac/OvertureTests/ProspectMutationsTests.swift`
+- Modify: `mac/OvertureTests/ProspectRowGuardTests.swift`
 
 **Interfaces:**
 - Consumes: `QueueItem` (existing, `mac/Overture/UI/QueueView+Model.swift`), `Prospect`/`Recipient` (existing, `mac/Overture/Domain/`), `ModelContext.saveOrWarn(org:feedback:)` / `saveOrWarnSendNotConfirmed(org:feedback:)` (existing, `mac/Overture/App/ActionFeedback.swift`).
-- Produces: `enum ProspectMutations` with static functions `toggleVoiceLearning`, `dismissReply`, `markContact`, `dismissContactReply`, `draftReply`, `editReplyDraft`, `copyReply`, `setStatus`, `saveDraft`, `markConfidenceReviewed`, `correctClassification`, `setConversationState`, `confirmConversationState`, `confirmBooking`, `dismissBookingSuggestion`, `rejectBooking`, `setLostReason`, `performSend`, `sendReply`; and `struct PendingSend: Identifiable` (`id: String`, `confirmation: SendConfirmation`). Task 2 (QueueView) and Task 7 (ArchiveView) call these directly.
+- Produces: `enum ProspectMutations` with static functions `toggleVoiceLearning`, `dismissReply`, `markContact`, `dismissContactReply`, `draftReply`, `editReplyDraft`, `copyReply`, `setStatus`, `saveDraft`, `markConfidenceReviewed`, `correctClassification`, `setConversationState`, `confirmConversationState`, `confirmBooking`, `dismissBookingSuggestion`, `rejectBooking`, `setLostReason`, `performSend`, `sendReply`; `struct PendingSend: Identifiable` (`id: String`, `confirmation: SendConfirmation`); `ProspectRowView.onRestore: (() -> Void)?` (new optional parameter, `nil` everywhere used today so no behavior change); and `enum ProspectRowFactory { static func row(...) -> AnyView }`, the single place that constructs a fully wired `ProspectRowView`. Task 2 (QueueView) and Task 7 (ArchiveView) both call `ProspectRowFactory.row(...)` instead of constructing `ProspectRowView` themselves, so the ~20 line callback wiring block exists exactly once.
 
 - [ ] **Step 1: Write failing tests for three representative mutations**
 
@@ -334,51 +344,124 @@ struct PendingSend: Identifiable {
 }
 ```
 
-- [ ] **Step 4: Regenerate the Xcode project and run tests**
+- [ ] **Step 4: Write the failing guard tests for the Dismissed/Restore row state**
 
-Run:
-```bash
-cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && xcodegen generate && ./scripts/run-tests-locked.sh
-```
-Expected: `ProspectMutationsTests` passes (3 tests). The rest of the suite is unaffected since QueueView has not been touched yet.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/ProspectMutations.swift mac/OvertureTests/ProspectMutationsTests.swift mac/Overture.xcodeproj && git commit -m "Add ProspectMutations, extracted row action logic shared by Queue and Archive"
-```
-
----
-
-### Task 2: Refactor QueueView to use ProspectMutations
-
-**Files:**
-- Modify: `mac/Overture/UI/QueueView.swift`
-- Modify: `mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift`
-- Modify: `mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift`
-
-**Interfaces:**
-- Consumes: `ProspectMutations` and `PendingSend` (Task 1, `mac/Overture/UI/ProspectMutations.swift`).
-- Produces: no new interface; `QueueView`'s public surface (`deepLinkedKey`, `deepLinkedKeys`, `onConnectGmail`, `onShowFollowUps`) is unchanged. Task 7 (ArchiveView) follows the same call pattern established here.
-
-This is a pure refactor: the 17 private mutation methods and the private `PendingConfirm` struct move out of `QueueView.swift`; every call site becomes a one line call into `ProspectMutations`. No test asserts on QueueView's private methods directly (the guard tests scan source text by file path, updated below), so behavior is verified by the existing full suite passing unchanged.
-
-- [ ] **Step 1: Remove the 17 moved private methods and the PendingConfirm struct from QueueView.swift**
-
-In `mac/Overture/UI/QueueView.swift`, delete the `private struct PendingConfirm` declaration (lines 53 to 56) and delete these private methods in their entirety: `toggleVoiceLearning`, `dismissReply`, `markContact`, `dismissContactReply`, `draftReply`, `sendReply`, `editReplyDraft`, `copyReply`, `setStatus`, `saveDraft`, `markConfidenceReviewed`, `correctClassification`, `setConversationState`, `confirmConversationState`, `confirmBooking`, `dismissBookingSuggestion`, `rejectBooking`, `setLostReason`, `performSend` (everything from the `toggleVoiceLearning` method down to the end of `performSend`, immediately before the closing brace of `struct QueueView`).
-
-Change the `@State private var pendingConfirm: PendingConfirm?` declaration to:
+Append to `mac/OvertureTests/ProspectRowGuardTests.swift`:
 
 ```swift
-    @State private var pendingConfirm: PendingSend?
+// #NEW: a dismissed prospect (only ever shown in Archive; the Queue never renders one) reads as
+// Dismissed with a Restore action, not as an undecided new prospect with Keep/Dismiss.
+@Suite("Dismissed rows show Restore instead of Keep/Dismiss")
+struct ProspectRowRestoreGuardTests {
+    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func onRestoreParameterExists() {
+        #expect(!prospectRow.isEmpty)
+        #expect(prospectRow.contains("var onRestore: (() -> Void)?"))
+    }
+
+    @Test func actionsBranchesOnDismissedStatusBeforeKeepDismiss() {
+        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+            Issue.record("actions view not found")
+            return
+        }
+        let body = prospectRow[actionsRange.lowerBound...].prefix(600)
+        #expect(body.contains("item.status == .dismissed"))
+        #expect(body.contains("Restore"))
+    }
+}
 ```
 
-- [ ] **Step 2: Rewrite prospectRow(_:reachOutLabel:) to delegate to ProspectMutations**
+- [ ] **Step 5: Run to verify the new guard tests fail**
 
-Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
+Run: `cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && ./scripts/run-tests-locked.sh`
+Expected: FAIL. `onRestore` does not exist on `ProspectRowView` yet.
+
+- [ ] **Step 6: Add onRestore and the Dismissed/Restore branch to ProspectRowView**
+
+In `mac/Overture/UI/ProspectRowView.swift`, add the new parameter alongside the other `var on...` declarations (after `var onRejectBooking: () -> Void = {}`):
 
 ```swift
-    private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
+    // #NEW: only ever passed non nil by Archive (the Queue never shows a dismissed prospect), so
+    // this has zero effect on any existing Queue row.
+    var onRestore: (() -> Void)? = nil
+```
+
+Replace the `actions` computed property with:
+
+```swift
+    private var actions: some View {
+        HStack(spacing: OVSpacing.xs) {
+            if item.status == .dismissed, let onRestore {
+                Label("Dismissed", systemImage: "archivebox")
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.inkFaint)
+                    .padding(.horizontal, OVSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
+                Button { onRestore() } label: {
+                    Text("Restore").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                .help("Put this prospect back in the queue as undecided")
+            } else if item.isKept {
+                Label("Kept", systemImage: "checkmark.seal.fill")
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.forest)
+                    .padding(.horizontal, OVSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.forest.opacity(0.10)))
+            } else {
+                Button {
+                    let wasUncertain = item.isClassificationUncertain
+                    onKeep()
+                    if wasUncertain { showConfirmClassification = true }
+                } label: {
+                    Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
+                Menu {
+                    ForEach(DismissReason.allCases, id: \.self) { reason in
+                        Button(reason.label) { onDismiss(reason) }
+                    }
+                } label: {
+                    Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                        .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+        }
+    }
+```
+
+(The `else` branch's Keep/Dismiss content is unchanged from today; only the new `if item.status == .dismissed` branch and the previously bare `if item.isKept` are now an `if`/`else if`/`else` chain.)
+
+- [ ] **Step 7: Create ProspectRowFactory.swift**
+
+This is the single place that builds a fully wired `ProspectRowView`: every mutation callback forwarded to `ProspectMutations`, the `#236` highlight overlay, and the voice learning context menu, so `QueueView` (Task 2) and `ArchiveView` (Task 7) each call one function instead of each carrying their own copy of this construction.
+
+```swift
+import SwiftUI
+import SwiftData
+
+// The one place that builds a fully wired ProspectRowView (#NEW), so QueueView and ArchiveView
+// share this construction instead of each repeating the same ~20 line callback list. onSend and
+// onSendReply stay as caller supplied closures (not routed through ProspectMutations here) because
+// they trigger a screen local confirm dialog and live "Sending…" state; everything else needs
+// nothing screen specific and is wired directly to ProspectMutations.
+@MainActor
+enum ProspectRowFactory {
+    static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                    highlightedKey: String?, outboundSendSince: Date?, replySendSince: @escaping (String) -> Date?,
+                    reachOutLabel: String? = nil, onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
+                    onRestore: (() -> Void)? = nil) -> AnyView {
         let model = prospects.first(where: { $0.naturalKey == item.id })
         let row = ProspectRowView(
             item: item,
@@ -390,7 +473,7 @@ Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
-            onSend: { requestSend(item) },
+            onSend: onSend,
             onSetConversationState: { state in ProspectMutations.setConversationState(item, state, prospects: prospects, context: context, feedback: feedback) },
             onConfirmConversationState: { ProspectMutations.confirmConversationState(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
@@ -399,7 +482,7 @@ Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
             },
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
-            onSendReply: { rid in sendReply(item, rid) },
+            onSendReply: onSendReply,
             onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects, context: context, feedback: feedback) },
             onMarkConfidenceReviewed: { ProspectMutations.markConfidenceReviewed(item, prospects: prospects, context: context, feedback: feedback) },
@@ -410,9 +493,10 @@ Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
             gmailConnected: GmailAuthManager.shared.isConnected,
-            outboundSendSince: outboundSending[item.id],
-            replySendSince: { rid in replySending[rid] },
-            reachOutLabel: reachOutLabel
+            outboundSendSince: outboundSendSince,
+            replySendSince: replySendSince,
+            reachOutLabel: reachOutLabel,
+            onRestore: onRestore
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
         let highlighted = highlightedKey == item.id
@@ -421,6 +505,8 @@ Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
             .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8))
             .id(item.id)
+        // #244: a sent draft Dan hand edited is a voice learning candidate. Let him opt a poor
+        // example out (or back in) from a right click, so the loop never learns from a rushed send.
         if let model, model.sentAt != nil, model.originalDraftBody != nil {
             return AnyView(framed.contextMenu {
                 Button(model.excludedFromVoiceLearning ? "Learn from this email again"
@@ -430,6 +516,59 @@ Replace the `prospectRow` function's `ProspectRowView(...)` construction with:
             })
         }
         return AnyView(framed)
+    }
+}
+```
+
+- [ ] **Step 8: Regenerate the Xcode project and run tests**
+
+Run:
+```bash
+cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && xcodegen generate && ./scripts/run-tests-locked.sh
+```
+Expected: `ProspectMutationsTests` and the new `ProspectRowRestoreGuardTests` both pass. The rest of the suite is unaffected since QueueView has not been touched yet.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/ProspectMutations.swift mac/Overture/UI/ProspectRowView.swift mac/Overture/UI/ProspectRowFactory.swift mac/OvertureTests/ProspectMutationsTests.swift mac/OvertureTests/ProspectRowGuardTests.swift mac/Overture.xcodeproj && git commit -m "Add ProspectMutations and ProspectRowFactory, extracted row logic shared by Queue and Archive"
+```
+
+---
+
+### Task 2: Refactor QueueView to use ProspectRowFactory
+
+**Files:**
+- Modify: `mac/Overture/UI/QueueView.swift`
+- Modify: `mac/OvertureTests/QueueViewUserActionSaveGuardTests.swift`
+- Modify: `mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift`
+
+**Interfaces:**
+- Consumes: `ProspectMutations`, `PendingSend`, and `ProspectRowFactory.row(...)` (Task 1, `mac/Overture/UI/ProspectMutations.swift` and `mac/Overture/UI/ProspectRowFactory.swift`).
+- Produces: no new interface; `QueueView`'s public surface (`deepLinkedKey`, `deepLinkedKeys`, `onConnectGmail`, `onShowFollowUps`) is unchanged. Task 7 (ArchiveView) follows the same call pattern established here.
+
+This is a pure refactor: the 18 private mutation methods (including `toggleVoiceLearning`, now handled inside `ProspectRowFactory`) and the private `PendingConfirm` struct move out of `QueueView.swift`; `prospectRow` becomes a thin call into `ProspectRowFactory.row(...)`. No test asserts on QueueView's private methods directly (the guard tests scan source text by file path, updated below), so behavior is verified by the existing full suite passing unchanged.
+
+- [ ] **Step 1: Remove the 18 moved private methods and the PendingConfirm struct from QueueView.swift**
+
+In `mac/Overture/UI/QueueView.swift`, delete the `private struct PendingConfirm` declaration (lines 53 to 56) and delete these private methods in their entirety: `toggleVoiceLearning`, `dismissReply`, `markContact`, `dismissContactReply`, `draftReply`, `sendReply`, `editReplyDraft`, `copyReply`, `setStatus`, `saveDraft`, `markConfidenceReviewed`, `correctClassification`, `setConversationState`, `confirmConversationState`, `confirmBooking`, `dismissBookingSuggestion`, `rejectBooking`, `setLostReason`, `performSend` (everything from the `toggleVoiceLearning` method down to the end of `performSend`, immediately before the closing brace of `struct QueueView`).
+
+Change the `@State private var pendingConfirm: PendingConfirm?` declaration to:
+
+```swift
+    @State private var pendingConfirm: PendingSend?
+```
+
+- [ ] **Step 2: Rewrite prospectRow(_:reachOutLabel:) to call ProspectRowFactory**
+
+Replace the entire `prospectRow` function with:
+
+```swift
+    private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
+        ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                              highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                              replySendSince: { rid in replySending[rid] }, reachOutLabel: reachOutLabel,
+                              onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
     }
 ```
 
@@ -791,48 +930,20 @@ cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wrigh
 
 ---
 
-### Task 6: ProspectRowView restore action, FilterChip, ShowSearchField
+### Task 6: FilterChip and ShowSearchField
 
 **Files:**
-- Modify: `mac/Overture/UI/ProspectRowView.swift`
-- Modify: `mac/OvertureTests/ProspectRowGuardTests.swift`
 - Create: `mac/Overture/UI/FilterChip.swift`
 - Create: `mac/Overture/UI/ShowSearchField.swift`
 - Test: `mac/OvertureTests/ShowSearchFieldGuardTests.swift`
 
 **Interfaces:**
 - Consumes: `ShowSearch.matches` (Task 5), `QueueItem` (existing).
-- Produces: `ProspectRowView.onRestore: (() -> Void)?` (new optional parameter; `nil` everywhere it is used today, so no behavior change for `QueueView`). `FilterChip: View` (`label: String, active: Bool, action: () -> Void`). `ShowSearchField: View` (`query: Binding<String>, allItems: [QueueItem], placeholder: String, onSelect: (QueueItem) -> Void`). Task 7 (ArchiveView) and Task 8 (RootView) use all three.
+- Produces: `FilterChip: View` (`label: String, active: Bool, action: () -> Void`). `ShowSearchField: View` (`query: Binding<String>, allItems: [QueueItem], placeholder: String, onSelect: (QueueItem) -> Void`). Task 7 (ArchiveView) and Task 8 (RootView) use both.
 
-This task has no new SwiftData behavior to unit test (it is pure SwiftUI view code), so it uses the repo's established `SourceGuard` pattern (see `ProspectRowGuardTests.swift`) instead of a runtime test, consistent with every other view only change in this codebase.
+This task has no new SwiftData behavior to unit test (it is pure SwiftUI view code), so it uses the repo's established `SourceGuard` pattern instead of a runtime test, consistent with every other view only change in this codebase.
 
-- [ ] **Step 1: Write the failing guard tests**
-
-Append to `mac/OvertureTests/ProspectRowGuardTests.swift`:
-
-```swift
-// #NEW: a dismissed prospect (only ever shown in Archive; the Queue never renders one) reads as
-// Dismissed with a Restore action, not as an undecided new prospect with Keep/Dismiss.
-@Suite("Dismissed rows show Restore instead of Keep/Dismiss")
-struct ProspectRowRestoreGuardTests {
-    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
-
-    @Test func onRestoreParameterExists() {
-        #expect(!prospectRow.isEmpty)
-        #expect(prospectRow.contains("var onRestore: (() -> Void)?"))
-    }
-
-    @Test func actionsBranchesOnDismissedStatusBeforeKeepDismiss() {
-        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
-            Issue.record("actions view not found")
-            return
-        }
-        let body = prospectRow[actionsRange.lowerBound...].prefix(600)
-        #expect(body.contains("item.status == .dismissed"))
-        #expect(body.contains("Restore"))
-    }
-}
-```
+- [ ] **Step 1: Write the failing guard test**
 
 Create `mac/OvertureTests/ShowSearchFieldGuardTests.swift`:
 
@@ -853,78 +964,12 @@ struct ShowSearchFieldGuardTests {
 }
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [ ] **Step 2: Run to verify it fails**
 
 Run: `cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && ./scripts/run-tests-locked.sh`
-Expected: FAIL. `onRestore` does not exist on `ProspectRowView`; `ShowSearchField.swift` does not exist.
+Expected: FAIL. `ShowSearchField.swift` does not exist.
 
-- [ ] **Step 3: Add onRestore and the Dismissed/Restore branch to ProspectRowView**
-
-In `mac/Overture/UI/ProspectRowView.swift`, add the new parameter alongside the other `var on...` declarations (after `var onRejectBooking: () -> Void = {}`):
-
-```swift
-    // #NEW: only ever passed non nil by Archive (the Queue never shows a dismissed prospect), so
-    // this has zero effect on any existing Queue row.
-    var onRestore: (() -> Void)? = nil
-```
-
-Replace the `actions` computed property with:
-
-```swift
-    private var actions: some View {
-        HStack(spacing: OVSpacing.xs) {
-            if item.status == .dismissed, let onRestore {
-                Label("Dismissed", systemImage: "archivebox")
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.inkFaint)
-                    .padding(.horizontal, OVSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
-                Button { onRestore() } label: {
-                    Text("Restore").font(OVType.meta).foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                        .background(Capsule().fill(OVColor.forest))
-                }
-                .buttonStyle(.plain)
-                .help("Put this prospect back in the queue as undecided")
-            } else if item.isKept {
-                Label("Kept", systemImage: "checkmark.seal.fill")
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.forest)
-                    .padding(.horizontal, OVSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.forest.opacity(0.10)))
-            } else {
-                Button {
-                    let wasUncertain = item.isClassificationUncertain
-                    onKeep()
-                    if wasUncertain { showConfirmClassification = true }
-                } label: {
-                    Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                        .background(Capsule().fill(OVColor.forest))
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
-                Menu {
-                    ForEach(DismissReason.allCases, id: \.self) { reason in
-                        Button(reason.label) { onDismiss(reason) }
-                    }
-                } label: {
-                    Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                        .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-        }
-    }
-```
-
-(The `else` branch's Keep/Dismiss content is unchanged from today; only the new `if item.status == .dismissed` branch and the previously bare `if item.isKept` are now an `if`/`else if`/`else` chain.)
-
-- [ ] **Step 4: Create FilterChip.swift**
+- [ ] **Step 3: Create FilterChip.swift**
 
 ```swift
 import SwiftUI
@@ -948,7 +993,7 @@ struct FilterChip: View {
 }
 ```
 
-- [ ] **Step 5: Create ShowSearchField.swift**
+- [ ] **Step 4: Create ShowSearchField.swift**
 
 ```swift
 import SwiftUI
@@ -1021,18 +1066,18 @@ struct ShowSearchField: View {
 }
 ```
 
-- [ ] **Step 6: Regenerate the Xcode project and run tests**
+- [ ] **Step 5: Regenerate the Xcode project and run tests**
 
 Run:
 ```bash
 cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac" && xcodegen generate && ./scripts/run-tests-locked.sh
 ```
-Expected: full suite green, including the two new guard suites.
+Expected: full suite green, including the new guard suite.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/ProspectRowView.swift mac/Overture/UI/FilterChip.swift mac/Overture/UI/ShowSearchField.swift mac/OvertureTests/ProspectRowGuardTests.swift mac/OvertureTests/ShowSearchFieldGuardTests.swift mac/Overture.xcodeproj && git commit -m "Add restore action to ProspectRowView, add FilterChip and ShowSearchField"
+cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture" && git add mac/Overture/UI/FilterChip.swift mac/Overture/UI/ShowSearchField.swift mac/OvertureTests/ShowSearchFieldGuardTests.swift mac/Overture.xcodeproj && git commit -m "Add FilterChip and ShowSearchField"
 ```
 
 ---
@@ -1047,7 +1092,7 @@ cd "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wrigh
 - Modify: `mac/OvertureTests/SaveOrWarnConsolidationGuardTests.swift`
 
 **Interfaces:**
-- Consumes: `ProspectMutations`, `PendingSend` (Task 1), `QueueModel.isReachableInQueue` is not needed here (ArchiveView shows everything regardless of Queue reachability), `ArchiveStatus` (Task 4), `ShowSearch` via `ShowSearchField` (Task 5, Task 6), `FilterChip` (Task 6), `ProspectRowView.onRestore` (Task 6), `DismissedProspects.restore(_:)` (existing, `mac/Overture/Domain/DismissedProspects.swift`).
+- Consumes: `ProspectMutations`, `PendingSend`, `ProspectRowFactory.row(...)` (Task 1), `QueueModel.isReachableInQueue` is not needed here (ArchiveView shows everything regardless of Queue reachability), `ArchiveStatus` (Task 4), `ShowSearch` via `ShowSearchField` (Task 5, Task 6), `FilterChip` (Task 6), `DismissedProspects.restore(_:)` (existing, `mac/Overture/Domain/DismissedProspects.swift`).
 - Produces: `ArchiveView: View` with `init(initialHighlightKey: String? = nil, onConnectGmail: @escaping () -> Void = {})`. Task 8 (RootView) presents this as a sheet.
 
 - [ ] **Step 1: Write the failing regression guard test for restore's save path**
@@ -1238,56 +1283,11 @@ struct ArchiveView: View {
     }
 
     private func row(_ item: QueueItem) -> some View {
-        let model = prospects.first(where: { $0.naturalKey == item.id })
-        let row = ProspectRowView(
-            item: item,
-            today: today,
-            onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback) },
-            onDismiss: { reason in ProspectMutations.setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback) },
-            onApprove: { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
-            onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
-            onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
-            onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
-            onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
-            onSend: { requestSend(item) },
-            onSetConversationState: { state in ProspectMutations.setConversationState(item, state, prospects: prospects, context: context, feedback: feedback) },
-            onConfirmConversationState: { ProspectMutations.confirmConversationState(item, prospects: prospects, context: context, feedback: feedback) },
-            onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
-            onMarkContact: { rid, resolution, bounced in
-                ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
-            },
-            onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
-            onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
-            onSendReply: { rid in sendReply(item, rid) },
-            onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
-            onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects, context: context, feedback: feedback) },
-            onMarkConfidenceReviewed: { ProspectMutations.markConfidenceReviewed(item, prospects: prospects, context: context, feedback: feedback) },
-            onCorrectClassification: { d, p in
-                ProspectMutations.correctClassification(item, discipline: d, production: p, prospects: prospects, context: context, feedback: feedback)
-            },
-            onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
-            onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
-            onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
-            gmailConnected: GmailAuthManager.shared.isConnected,
-            outboundSendSince: outboundSending[item.id],
-            replySendSince: { rid in replySending[rid] },
-            onRestore: item.status == .dismissed ? { restore(item) } : nil
-        )
-        let highlighted = highlightedKey == item.id
-        let framed = row
-            .padding(highlighted ? OVSpacing.sm : 0)
-            .background(highlighted ? OVColor.gold.opacity(0.18) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 8))
-            .id(item.id)
-        if let model, model.sentAt != nil, model.originalDraftBody != nil {
-            return AnyView(framed.contextMenu {
-                Button(model.excludedFromVoiceLearning ? "Learn from this email again"
-                                                       : "Don't learn from this email") {
-                    ProspectMutations.toggleVoiceLearning(item, prospects: prospects, context: context, feedback: feedback)
-                }
-            })
-        }
-        return AnyView(framed)
+        ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                              highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                              replySendSince: { rid in replySending[rid] },
+                              onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
+                              onRestore: item.status == .dismissed ? { restore(item) } : nil)
     }
 
     private func restore(_ item: QueueItem) {
@@ -1491,11 +1491,11 @@ Manually confirm, in the launched app:
 - Persistent search bar, matches org/act name, venue, contact name/email, across every show: Task 5 (`ShowSearch`), Task 6 (`ShowSearchField`), Task 8 (wired into RootView's toolbar).
 - Dropdown of matches, click jumps to Queue if visible there, else opens Archive highlighted: Task 3 (`isReachableInQueue`), Task 6 (`ShowSearchField`'s dropdown), Task 8 (`handleSearchSelection`), Task 7 (`ArchiveView.onAppear`/`.task` highlight and scroll).
 - Archive replaces Dismissed, independent status checkboxes defaulting to New + Active, sorted by most recent event date: Task 4 (`ArchiveStatus`), Task 7 (`ArchiveView`'s `activeStatuses`/`filtered`).
-- Archive rows are the exact same expandable row as the Queue (Mark menu, Restore, etc.): Task 1 (`ProspectMutations`), Task 2 (Queue refactor to prove no behavior change), Task 6 (`ProspectRowView.onRestore`), Task 7 (`ArchiveView.row`).
+- Archive rows are the exact same expandable row as the Queue (Mark menu, Restore, etc.), with the wiring itself shared, not duplicated between the two screens: Task 1 (`ProspectMutations`, `ProspectRowView.onRestore`, `ProspectRowFactory`), Task 2 (`QueueView.prospectRow` calls the factory), Task 7 (`ArchiveView.row` calls the same factory). This resolves a duplication concern raised before execution (Dan's decision, 2026-07-07): the plan originally had each screen build its own `ProspectRowView(...)` call with the same ~20 line callback list; `ProspectRowFactory` now holds that construction exactly once.
 - Archive has its own search field reusing the same matcher: Task 7 (`ArchiveView` embeds `ShowSearchField`).
 - Queue's own behavior unchanged: Task 2 is a pure refactor verified by the existing suite; no windowing/filter logic in `QueueView.swift` changes.
 - No new data model or backend changes: confirmed throughout; every new file is either pure domain logic (`ArchiveStatus`, `ShowSearch`) or SwiftUI/UI glue over existing `Prospect`/`Recipient`/`QueueItem` fields.
 
 **Placeholder scan:** every step contains complete code; no TBD/TODO, no "add appropriate handling," no bare descriptions without code.
 
-**Type consistency:** `ProspectMutations`'s function signatures (Task 1) match exactly what `QueueView` (Task 2) and `ArchiveView` (Task 7) call. `PendingSend` (Task 1) replaces `QueueView`'s private `PendingConfirm` (Task 2) and is reused as is by `ArchiveView` (Task 7). `ArchiveStatus.of(_:)` (Task 4) takes a `QueueItem`, matching what `ArchiveView.filtered` (Task 7) and the guard test both pass. `ShowSearch.matches(_:query:)` (Task 5) takes a `QueueItem`, matching `ShowSearchField` (Task 6) and `ArchiveView` (Task 7). `ProspectRowView.onRestore` (Task 6) is `(() -> Void)?`, matching how `ArchiveView.row` (Task 7) constructs it (`item.status == .dismissed ? { restore(item) } : nil`).
+**Type consistency:** `ProspectMutations`'s function signatures (Task 1) match exactly what `ProspectRowFactory` (Task 1) calls. `PendingSend` (Task 1) replaces `QueueView`'s private `PendingConfirm` (Task 2) and is reused as is by `ArchiveView` (Task 7). `ProspectRowView.onRestore` (Task 1) is `(() -> Void)?`, matching `ProspectRowFactory.row(...)`'s own `onRestore` parameter (Task 1) and how `ArchiveView.row` (Task 7) passes it (`item.status == .dismissed ? { restore(item) } : nil`) versus `QueueView.prospectRow` (Task 2) which always passes `nil` implicitly (the parameter defaults). `ArchiveStatus.of(_:)` (Task 4) takes a `QueueItem`, matching what `ArchiveView.filtered` (Task 7) and the guard test both pass. `ShowSearch.matches(_:query:)` (Task 5) takes a `QueueItem`, matching `ShowSearchField` (Task 6) and `ArchiveView` (Task 7).
