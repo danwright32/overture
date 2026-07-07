@@ -28,8 +28,30 @@ struct ShowSearchFieldPopoverGuardTests {
                 "the results list must render via .popover, not an inline VStack row, or it will not appear at all when this field is hosted in a native toolbar.")
     }
 
-    @Test func popoverPresentationIsDrivenByFocusAndMatches() {
-        #expect(src.contains("showDropdown = focused && !matches.isEmpty"))
-        #expect(src.contains("showDropdown = isFocused && !matches.isEmpty"))
+    @Test func popoverPresentationIsDrivenByFocusAndAQuery() {
+        #expect(src.contains("showDropdown = focused && !trimmedQuery.isEmpty"))
+        #expect(src.contains("showDropdown = isFocused && !trimmedQuery.isEmpty"))
+    }
+}
+
+// Regression guard: Dan typed a real query into the live search bar and, because the search
+// genuinely found zero matches, saw no feedback at all ("the search doesn't seem to be doing
+// anything"). A true zero-result search must look different from the field simply not responding,
+// so the popover has to keep showing (with an explicit "no matches" message) even when the match
+// list itself is empty, as long as there's something typed.
+@Suite("ShowSearchField shows explicit feedback when a search finds nothing")
+struct ShowSearchFieldNoResultsGuardTests {
+    private var src: String { SourceGuardHelper.source("Overture/UI/ShowSearchField.swift") }
+
+    @Test func popoverOpensEvenWithZeroMatchesSoANoResultsMessageCanShow() {
+        #expect(!src.isEmpty)
+        #expect(!src.contains("showDropdown = focused && !matches.isEmpty"),
+                "gating purely on matches.isEmpty means a real zero-result search looks identical to a broken one; it must open on a non-empty query instead.")
+        #expect(!src.contains("showDropdown = isFocused && !matches.isEmpty"))
+    }
+
+    @Test func popoverContentShowsANoMatchesMessageWhenEmpty() {
+        #expect(src.contains("matches.isEmpty"))
+        #expect(src.contains("No matches"))
     }
 }

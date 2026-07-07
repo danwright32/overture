@@ -17,8 +17,10 @@ struct ShowSearchField: View {
     @FocusState private var isFocused: Bool
     @State private var showDropdown = false
 
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     private var matches: [QueueItem] {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        guard !trimmedQuery.isEmpty else { return [] }
         return Array(
             allItems
                 .filter { ShowSearch.matches($0, query: query) }
@@ -45,29 +47,37 @@ struct ShowSearchField: View {
         .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: 1))
         .frame(maxWidth: 280)
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(matches) { result in
-                    Button {
-                        onSelect(result)
-                        query = ""
-                        isFocused = false
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.groupName).font(OVType.body).foregroundStyle(OVColor.ink)
-                            Text([result.venue, result.performanceDate].compactMap { $0 }.joined(separator: " "))
-                                .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+            Group {
+                if matches.isEmpty {
+                    Text("No matches for \"\(trimmedQuery)\"")
+                        .font(OVType.body).foregroundStyle(OVColor.inkFaint)
+                        .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.sm)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(matches) { result in
+                            Button {
+                                onSelect(result)
+                                query = ""
+                                isFocused = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(result.groupName).font(OVType.body).foregroundStyle(OVColor.ink)
+                                    Text([result.venue, result.performanceDate].compactMap { $0 }.joined(separator: " "))
+                                        .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                                }
+                                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            if result.id != matches.last?.id { Divider() }
                         }
-                        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    if result.id != matches.last?.id { Divider() }
+                    .padding(.vertical, OVSpacing.xs)
                 }
             }
-            .padding(.vertical, OVSpacing.xs)
             .frame(minWidth: 280, maxWidth: 320)
         }
-        .onChange(of: isFocused) { _, focused in showDropdown = focused && !matches.isEmpty }
-        .onChange(of: query) { _, _ in showDropdown = isFocused && !matches.isEmpty }
+        .onChange(of: isFocused) { _, focused in showDropdown = focused && !trimmedQuery.isEmpty }
+        .onChange(of: query) { _, _ in showDropdown = isFocused && !trimmedQuery.isEmpty }
     }
 }
