@@ -23,6 +23,14 @@ struct ArchiveStatusTests {
         #expect(ArchiveStatus.of(i) == .dismissed)
     }
 
+    // Precedence must hold regardless of performanceStatus, not only when it happens to be .new
+    // (the case a scout-cut prospect always carries). Pairing .dismissed with .active and .booked
+    // rules out an implementation that only special cases dismissed alongside .new.
+    @Test func dismissedTakesPrecedenceEvenWithNonNewPerformanceStatus() {
+        #expect(ArchiveStatus.of(item(status: .dismissed, performanceStatus: .active)) == .dismissed)
+        #expect(ArchiveStatus.of(item(status: .dismissed, performanceStatus: .booked)) == .dismissed)
+    }
+
     @Test func nonDismissedMapsDirectlyFromPerformanceStatus() {
         #expect(ArchiveStatus.of(item(status: .new, performanceStatus: .new)) == .new)
         #expect(ArchiveStatus.of(item(status: .contacted, performanceStatus: .active)) == .active)

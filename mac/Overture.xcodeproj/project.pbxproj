@@ -141,6 +141,7 @@
 		7ABE14E04C880198900CDC7D /* Recipient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851955E2042FB535C5037580 /* Recipient.swift */; };
 		7B4E721B2BC1ECCAFD669A5F /* DownbeatExportContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */; };
 		7B5E3BD6D27415B37DF35C25 /* PrepProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA25BB391444D3451B7292A /* PrepProgress.swift */; };
+		7BC5B33A416CB6C87F8AB3D5 /* ArchiveStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */; };
 		7DCE1D8F9E0C5ABEBB5C7745 /* SecureFileWrite.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BB37DB5C4FB298BF64EED8 /* SecureFileWrite.swift */; };
 		7E190456B52B9E5C862DBDE5 /* GroupNameMatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE40D9C39DD8B70A715F0F2 /* GroupNameMatch.swift */; };
 		7E7B8A744D25F28D54DFFDB2 /* OmniFocusSyncRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3904520A713106DFBD49967F /* OmniFocusSyncRunner.swift */; };
@@ -151,6 +152,7 @@
 		81795147A6E8C5854E031D72 /* ToolbarConsolidationGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F78419A9875BDFF7B38D2C /* ToolbarConsolidationGuardTests.swift */; };
 		8286F3607DE7936DF7F88F3D /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F518441FAAA42A56D2E5A00 /* OnboardingStateTests.swift */; };
 		82AFA3A6E9C7B19BAB79DB6B /* UserFacingDashGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA120609CBBC531A750DB1A /* UserFacingDashGuardTests.swift */; };
+		82B254040A491EBEDC7A9EE3 /* ArchiveStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A324C48EDE7DCAAE747171E2 /* ArchiveStatus.swift */; };
 		8341B1DFE8F45CBC43A70A1E /* Salutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203E7EFE8858ADA4E9B22FBD /* Salutation.swift */; };
 		846186C80D80177CB1D018BF /* ImmutableStoreFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E60541FE78401BC8EE977C /* ImmutableStoreFixture.swift */; };
 		84698B6D976E1FB64693FDB6 /* SalutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA9EBB5447C9A70DAF4D8E2 /* SalutationTests.swift */; };
@@ -388,6 +390,7 @@
 		5CC8C3FF6F444021E825CFBE /* DownbeatExportWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportWatcherTests.swift; sourceTree = "<group>"; };
 		5D6A768536BCBD7F7BBA2452 /* GmailMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailMessageTests.swift; sourceTree = "<group>"; };
 		5D786A37D92F867863061D6A /* OutcomePatterns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatterns.swift; sourceTree = "<group>"; };
+		5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveStatusTests.swift; sourceTree = "<group>"; };
 		612B38A4015CC81015D5D0B9 /* PrepStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatusTests.swift; sourceTree = "<group>"; };
 		61BFE4E6528A1F2DB7FA5E67 /* GroupNameDriftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNameDriftTests.swift; sourceTree = "<group>"; };
 		629B1479E6AF604949EB439B /* QueuePriorityBreakdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePriorityBreakdown.swift; sourceTree = "<group>"; };
@@ -454,6 +457,7 @@
 		9F9FA214954DF8B841BFFADB /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
 		A04976ED97928B91FDE4C573 /* PrepImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepImporter.swift; sourceTree = "<group>"; };
 		A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutScheduleTests.swift; sourceTree = "<group>"; };
+		A324C48EDE7DCAAE747171E2 /* ArchiveStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveStatus.swift; sourceTree = "<group>"; };
 		A545056FEEAA77E0FFA0D2E6 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		A84298B6C8EA1E8A89770772 /* OmniFocusSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSync.swift; sourceTree = "<group>"; };
 		A845FED20A605560CC21DB4A /* EventClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifier.swift; sourceTree = "<group>"; };
@@ -587,6 +591,7 @@
 				881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */,
 				CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */,
 				BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */,
+				5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */,
 				E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */,
 				694D5E32D7521B59A78C9414 /* BackgroundServicesGateTests.swift */,
 				1942D70A38A419E78AF4D91D /* BookingMatchTests.swift */,
@@ -778,6 +783,7 @@
 			isa = PBXGroup;
 			children = (
 				222C952AB1A28F9E5785EFA9 /* AgentRoster.swift */,
+				A324C48EDE7DCAAE747171E2 /* ArchiveStatus.swift */,
 				7898067DFDC5D9F853011C60 /* AwayAlert.swift */,
 				84AE10D36682E3684202FBBE /* BookingMatch.swift */,
 				21465867C8C8C91EB41B9F68 /* ClassificationOverride.swift */,
@@ -984,6 +990,7 @@
 				DDE9A993CA6F315D1BBB4F1F /* AlgoliaCalendar.swift in Sources */,
 				736DC21DB32A83706102E1FB /* AppDelegate.swift in Sources */,
 				A5AD8D5BA082FC4CA9E2F5AB /* AppleScriptOmniFocusClient.swift in Sources */,
+				82B254040A491EBEDC7A9EE3 /* ArchiveStatus.swift in Sources */,
 				344BE667D62BDDA954D3C079 /* AwayAlert.swift in Sources */,
 				1AA5848075651F3A40AEBDAD /* BookingMatch.swift in Sources */,
 				E953E2F9A05320E3CF28DD80 /* CarnegieExtractor.swift in Sources */,
@@ -1110,6 +1117,7 @@
 				D002F4FC4262FE11122CB75C /* AgentLogLocationTests.swift in Sources */,
 				FBB014F565369838DFA38489 /* AgentRosterTests.swift in Sources */,
 				DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */,
+				7BC5B33A416CB6C87F8AB3D5 /* ArchiveStatusTests.swift in Sources */,
 				0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */,
 				3487AC4739F6C400D59C5D37 /* BackgroundServicesGateTests.swift in Sources */,
 				5AD1245BE8998703FD5283CE /* BookingMatchTests.swift in Sources */,
