@@ -134,12 +134,22 @@ item's `production` field first:
 
 **Hard venue-disqualify rule (#368), unchanged regardless of target.** Any address
 belonging to the host venue is DISQUALIFIED, not a low-confidence fallback. Treat the
-`venue` value as the host: its own inbox and its staff addresses (e.g.
-`publicrelations@carnegiehall.org` for a show at Carnegie Hall) are off the table
+`venue` value as the host: its own inbox and its staff addresses are off the table
 entirely. Returning a venue address is a wrong result, not a weak one. Better to return
 a form/DM, or no contact at all, than the venue. (Interim source for "what counts as
 the venue": the queue's `venue` field and its domain; a curated venue map will replace
 this, #342.)
+
+**Hard press/media-disqualify rule (#635), unchanged regardless of target.** Any
+address that reads as a press/media/PR contact (e.g. `publicrelations@`, `press@`,
+`media@`, or a staff-page listing under a "Media" or "Press" heading) is DISQUALIFIED,
+for the SAME reason the venue is disqualified above: it is the wrong department to
+pitch photography to, not a low-confidence version of the right one. This applies no
+matter whose domain the press inbox sits on, whether that is the venue's (e.g.
+`publicrelations@carnegiehall.org` for a show at Carnegie Hall, also caught by the
+venue rule above), the act's, or the presenter's. Never offer a press/media/PR address
+as a contact at any confidence level; fall through to the next waterfall step
+(contact form/DM) instead, or omit the contact entirely if nothing else is found.
 
 **`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
 site, do NOT harvest a contact from it; find the act's (or the named performer's) OWN
@@ -153,7 +163,8 @@ in order, stop at the first that works:
    photography/marketing, read off its own staff/contact page. For a named performer,
    their own published email, read off their own site/bio/contact page.
 2. **The target's generic inbox** (info@, the ensemble's published address; a solo
-   performer rarely has one of these). A real email for the target, even a generic one,
+   performer rarely has one of these), never a press/media/PR inbox, see the hard
+   press/media-disqualify rule above. A real email for the target, even a generic one,
    is PREFERRED over a contact form.
 3. **The target's contact form / Instagram DM** when it publishes no email. Record it
    as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
