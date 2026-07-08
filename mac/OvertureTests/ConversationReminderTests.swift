@@ -235,6 +235,40 @@ struct ConversationReminderTests {
         #expect(due[1].reminder.kind == .needsState)
     }
 
+    // #652: FollowUpsView renders dueRecipients directly (no view-side re-sort), so the domain must
+    // pre-sort it exactly like due(from:) already does: urgency first, soonest event breaks ties.
+    @Test func dueRecipientsIsSortedByUrgencyThenEvent() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = self.now   // the suite's fixed "now" (2026-06-15), so "2020-01-01" is genuinely past
+        func show(_ key: String, state: ConversationState?, event: String?) -> Prospect {
+            let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "V",
+                             performanceDate: event, sourceListingURL: nil, websiteURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+            context.insert(p)
+            let r = Recipient(id: "\(key)@e.com", email: "\(key)@e.com", provenance: .act)
+            r.sendState = .sent
+            if let state { r.setConversationState(state, now: now.addingTimeInterval(-30 * 86_400)) }
+            else { r.replied = true }
+            p.setRecipients([r])
+            return p
+        }
+        let shows = [
+            show("closing", state: .interested, event: "2020-01-01"),
+            show("needsState", state: nil, event: "2026-12-01"),
+            show("interested", state: .interested, event: "2026-12-01"),
+            show("hasQuestion", state: .hasQuestion, event: "2026-12-01"),
+            show("wantsToBook", state: .wantsToBook, event: "2026-12-01"),
+        ]
+        let kinds = ConversationReminder.dueRecipients(from: shows, now: now).map(\.reminder.kind)
+        #expect(kinds == [
+            .active(.wantsToBook), .active(.hasQuestion), .active(.interested), .needsState, .closing,
+        ])
+    }
+
     @Test func dueRecipientsExcludesABookedShow() throws {
         let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                      configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])

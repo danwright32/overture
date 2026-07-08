@@ -215,7 +215,11 @@ enum ConversationReminder {
                 due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
             }
         }
-        return due
+        return due.sorted {
+            let ra = urgencyRank($0.reminder.kind), rb = urgencyRank($1.reminder.kind)
+            if ra != rb { return ra < rb }
+            return ($0.prospect.performanceDate ?? "9999") < ($1.prospect.performanceDate ?? "9999")
+        }
     }
 
     // The pre-written, reviewable nudge per active state, in Dan's level voice (no performative
