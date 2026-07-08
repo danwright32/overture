@@ -73,6 +73,30 @@ enum ActionAck {
     static func saveFailed(org: String) -> String {
         "Couldn't save the change for \(org)"
     }
+
+    // #399: the manual add/remove confirmations. Never blocking, matches the ActionFeedback banner
+    // firing after the change already happened.
+    static func recipientAdded(name: String?, org: String, totalCount: Int, warnings: [String]) -> String {
+        let who = (name?.isEmpty == false) ? name! : "the contact"
+        let base = "Added \(who). \(totalCount) recipient\(totalCount == 1 ? "" : "s") on \(org) now."
+        guard !warnings.isEmpty else { return base }
+        return base + " " + warnings.joined(separator: " ")
+    }
+
+    static func recipientAlreadyExists(name: String?, org: String) -> String {
+        let who = (name?.isEmpty == false) ? name! : "That contact"
+        return "\(who) is already a recipient on \(org)."
+    }
+
+    static func recipientResumed(name: String?, org: String) -> String {
+        let who = (name?.isEmpty == false) ? name! : "the contact"
+        return "Resumed pursuing \(who) on \(org)."
+    }
+
+    static func recipientRemoved(name: String?, org: String) -> String {
+        let who = (name?.isEmpty == false) ? name! : "the contact"
+        return "Removed \(who) from \(org)."
+    }
 }
 
 extension ModelContext {
