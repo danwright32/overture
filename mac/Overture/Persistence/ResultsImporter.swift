@@ -157,7 +157,10 @@ extension QueueItem {
                                       replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                                       replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                                       replyDraftEditedByDan: r.replyDraftEditedByDan,
-                                      overrideBody: r.overrideBody)
+                                      overrideBody: r.overrideBody,
+                                      conversationState: r.conversationState,
+                                      conversationStateSource: r.conversationStateSource,
+                                      conversationRemindedAt: r.conversationRemindedAt)
                 }
         )
     }

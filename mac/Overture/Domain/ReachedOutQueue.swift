@@ -1,49 +1,54 @@
 import Foundation
 
-// The "reached out" pipeline (#217): contacted prospects Dan is still working, ordered by when he
-// should next reach out. Combines the silent follow-up sequence (FollowUp) and the conversation
-// reminder track (ConversationReminder), taking whichever is sooner. Returns nil: the prospect
-// drops off the list, once outreach should stop: booked, lost, or nothing left scheduled.
+// The "reached out" pipeline (#217, per-recipient since #652): contacted RECIPIENTS Dan is still
+// working, ordered by when he should next reach out to that specific contact. Combines the silent
+// follow-up sequence (FollowUp) and the conversation reminder track (ConversationReminder), taking
+// whichever is sooner. Returns nil: the recipient drops off the list, once outreach to them should
+// stop: booked, lost, bounced, or nothing left scheduled.
 enum ReachedOutQueue {
-    // The soonest moment Dan should next reach out to this prospect, or nil if outreach has stopped.
-    // A past date (overdue) is returned as-is so it sorts to the top of the list.
-    static func nextReachOut(for p: Prospect, now: Date,
+    // The soonest moment Dan should next reach out to this recipient, or nil if outreach to them has
+    // stopped. A past date (overdue) is returned as-is so it sorts to the top of the list.
+    static func nextReachOut(for r: Recipient, of p: Prospect, now: Date,
                              followUpConfig: FollowUpConfig = .init(),
                              reminderConfig: ConversationReminderConfig = .init()) -> Date? {
-        guard p.sentAt != nil else { return nil }                 // only contacted prospects
+        guard r.sentAt != nil else { return nil }                 // only contacted recipients
         // #331: a real send always has a contact address; a sent timestamp without one is a
         // staged/corrupt record that was never actually emailed, so it doesn't belong here.
-        guard p.contactEmail != nil else { return nil }
-        guard !p.isClosed else { return nil }
+        guard let email = r.email, !email.isEmpty else { return nil }
+        let standing = r.standing
+        guard standing.isInPlay else { return nil }
 
+        let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
         let reminderDate = ConversationReminder.nextReminderDate(
-            state: p.conversationState, setAt: p.conversationStateSetAt, remindedAt: p.conversationRemindedAt,
-            performanceDate: p.performanceDate, isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
-            source: p.conversationStateSource, now: now, config: reminderConfig)
-        return [nextFollowUp(for: p, now: now, config: followUpConfig), reminderDate]
+            state: r.conversationState, setAt: r.conversationStateSetAt, remindedAt: r.conversationRemindedAt,
+            performanceDate: p.performanceDate, isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
+            source: r.conversationStateSource, now: now, config: reminderConfig)
+        return [nextFollowUp(for: r, now: now, config: followUpConfig), reminderDate]
             .compactMap { $0 }
             .min()
     }
 
-    // Contacted prospects with outreach still active, each paired with its next-reach-out date,
+    // Contacted recipients with outreach still active, each paired with its own next-reach-out date,
     // soonest first. The view formats the date with timingLabel.
     static func activeWithDates(from prospects: [Prospect], now: Date,
                                 followUpConfig: FollowUpConfig = .init(),
-                                reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, next: Date)] {
+                                reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
         prospects
-            .compactMap { p -> (prospect: Prospect, next: Date)? in
-                nextReachOut(for: p, now: now, followUpConfig: followUpConfig,
-                             reminderConfig: reminderConfig).map { (prospect: p, next: $0) }
+            .flatMap { p in
+                p.recipients.compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+                    nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig,
+                                 reminderConfig: reminderConfig).map { (prospect: p, recipient: r, next: $0) }
+                }
             }
             .sorted { $0.next < $1.next }
     }
 
-    // Contacted prospects with outreach still active, soonest next-reach-out first.
+    // Contacted recipients with outreach still active, soonest next-reach-out first.
     static func active(from prospects: [Prospect], now: Date,
                        followUpConfig: FollowUpConfig = .init(),
-                       reminderConfig: ConversationReminderConfig = .init()) -> [Prospect] {
-        activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig,
-                        reminderConfig: reminderConfig).map(\.prospect)
+                       reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient)] {
+        activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig, reminderConfig: reminderConfig)
+            .map { (prospect: $0.prospect, recipient: $0.recipient) }
     }
 
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
@@ -55,17 +60,15 @@ enum ReachedOutQueue {
         return days == 1 ? "in 1 day" : "in \(days) days"
     }
 
-    // The next silent nudge for a no-response lead, mirroring FollowUp.isDue: paced by gapDays from
-    // the last touch, up to maxFollowUps; nothing once it replied/booked/lost or the cap is reached.
-    private static func nextFollowUp(for p: Prospect, now: Date, config: FollowUpConfig) -> Date? {
-        guard let sentAt = p.sentAt else { return nil }
-        // Silent nudges apply only while the lead is still silent: no reply to handle and no
-        // conversation state yet (a reply or a set state hands off to the reminder track). Closed
-        // shows are already excluded by the isClosed guard in nextReachOut.
-        guard p.conversationState == nil, !p.hasUnhandledReply else { return nil }
-        guard p.followUpCount < config.maxFollowUps else { return nil }
-        let lastTouch = p.lastFollowUpAt ?? sentAt
+    // The next silent nudge for a still-silent recipient, mirroring FollowUp.dueRecipients' own
+    // eligibility check (r.isAwaitingFollowUp) rather than reimplementing it: paced by gapDays from
+    // the last touch, up to maxFollowUps; nothing once this recipient replied/resolved or the cap is
+    // reached. Closed recipients are already excluded by the standing.isInPlay guard in nextReachOut.
+    private static func nextFollowUp(for r: Recipient, now: Date, config: FollowUpConfig) -> Date? {
+        guard let sentAt = r.sentAt else { return nil }
+        guard r.isAwaitingFollowUp else { return nil }
+        guard r.followUpCount < config.maxFollowUps else { return nil }
+        let lastTouch = r.lastFollowUpAt ?? sentAt
         return lastTouch.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
-
 }

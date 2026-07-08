@@ -138,6 +138,33 @@ struct ResultsImportTests {
         #expect(item.contacts.first { $0.id == "b@present.example" }?.overrideBody == nil)
     }
 
+    // #652: each contact's OWN conversation state must reach the snapshot the per-contact review
+    // controls read, not just the lead-level QueueItem field.
+    @Test func queueItemCarriesEachContactsOwnConversationState() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let interested = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        interested.sendState = .sent
+        interested.setConversationState(.interested, now: now)
+        let untouched = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        untouched.sendState = .sent
+        p.setRecipients([interested, untouched])
+
+        let item = QueueItem(p)
+        let a = item.contacts.first { $0.id == "a@act.example" }
+        #expect(a?.conversationState == .interested)
+        #expect(a?.conversationStateSource == .manual)
+        let b = item.contacts.first { $0.id == "b@present.example" }
+        #expect(b?.conversationState == nil)
+        #expect(b?.conversationRemindedAt == nil)
+    }
+
     // #459 — the per-recipient "Dan edited this reply draft" flag must reach the snapshot the view reads,
     // so the deterministic warnings can be suppressed on his edited text.
     @Test func queueItemCarriesTheReplyDraftEditedFlag() throws {

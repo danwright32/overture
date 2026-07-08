@@ -3,9 +3,10 @@ import Foundation
 import SwiftData
 @testable import Overture
 
-// #217: the "reached out" pipeline lists contacted prospects Dan is still working, ordered by
-// when he should next reach out, and drops anyone off once outreach should stop (booked, lost,
-// or nothing scheduled). Covers the next-reach-out computation and the sorted active list.
+// #217/#652: the "reached out" pipeline lists contacted RECIPIENTS Dan is still working, ordered by
+// when he should next reach out, and drops a recipient off once outreach to THAT contact should stop
+// (booked, lost, or nothing scheduled). Per-recipient so a multi-contact show can have one contact
+// due for a touch while another has already gone quiet for good.
 @MainActor
 @Suite("Reached-out queue")
 struct ReachedOutQueueTests {
@@ -14,36 +15,38 @@ struct ReachedOutQueueTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func make(_ ctx: ModelContext, group: String, sentAt: Date?,
-                      outcome: Outcome = .noResponse,
-                      contactEmail: String? = "contact@example.com") -> Prospect {
+    private func makeShow(_ ctx: ModelContext, group: String) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)
-        p.sentAt = sentAt
-        p.outcome = outcome
-        p.contactEmail = contactEmail
         ctx.insert(p)
-        // Phase F: the derived reads come from contacts, so seed one whose standing matches `outcome`.
-        if let contactEmail {
-            let r = Recipient(id: contactEmail, email: contactEmail, provenance: .act)
-            r.sendState = .sent
-            if outcome == .replied { r.replied = true }
-            if outcome == .lostSoft { r.resolution = .declinedSoft }
-            if outcome == .lostHard { r.resolution = .declinedHard }
-            ctx.insert(r)
-            p.setRecipients([r])
-        }
         return p
+    }
+
+    // A single recipient on its own show, sent/outcome-shaped like the old lead-level `make` helper,
+    // so each scenario below can still be expressed as one recipient's own standing.
+    private func makeRecipient(_ ctx: ModelContext, on p: Prospect, id: String = "contact@example.com",
+                               sentAt: Date?, outcome: Outcome = .noResponse,
+                               hasEmail: Bool = true) -> Recipient {
+        let r = Recipient(id: id, email: hasEmail ? id : nil, provenance: .act)
+        r.sentAt = sentAt
+        r.sendState = sentAt != nil ? .sent : .pending
+        if outcome == .replied { r.replied = true }
+        if outcome == .lostSoft { r.resolution = .declinedSoft }
+        if outcome == .lostHard { r.resolution = .declinedHard }
+        if outcome == .booked { r.resolution = .booked }
+        p.setRecipients(p.recipients + [r])
+        return r
     }
 
     @Test func notContactedHasNoNextReachOut() throws {
         let ctx = ModelContext(try container())
-        let p = make(ctx, group: "A", sentAt: nil)
-        #expect(ReachedOutQueue.nextReachOut(for: p, now: Date(timeIntervalSince1970: 1_000_000)) == nil)
+        let p = makeShow(ctx, group: "A")
+        let r = makeRecipient(ctx, on: p, sentAt: nil)
+        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: Date(timeIntervalSince1970: 1_000_000)) == nil)
     }
 
     // #331: a record with a sent timestamp but no contact address was never really emailed
@@ -51,18 +54,20 @@ struct ReachedOutQueueTests {
     @Test func sentWithoutAContactIsNotReachedOut() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_000_000)
-        let ghost = make(ctx, group: "Ghost", sentAt: now.addingTimeInterval(-86_400),
-                         outcome: .noResponse, contactEmail: nil)
-        #expect(ReachedOutQueue.nextReachOut(for: ghost, now: now) == nil)
-        #expect(ReachedOutQueue.active(from: [ghost], now: now).isEmpty)
+        let p = makeShow(ctx, group: "Ghost")
+        let ghost = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-86_400), hasEmail: false)
+        #expect(ReachedOutQueue.nextReachOut(for: ghost, of: p, now: now) == nil)
+        #expect(ReachedOutQueue.active(from: [p], now: now).isEmpty)
     }
 
     @Test func bookedOrLostDropsOff() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_000_000)
         for oc: Outcome in [.booked, .lostSoft, .lostHard] {
-            let p = make(ctx, group: "g-\(oc.rawValue)", sentAt: now.addingTimeInterval(-86_400), outcome: oc)
-            #expect(ReachedOutQueue.nextReachOut(for: p, now: now) == nil)
+            let p = makeShow(ctx, group: "g-\(oc.rawValue)")
+            let r = makeRecipient(ctx, on: p, id: "c-\(oc.rawValue)@example.com",
+                                  sentAt: now.addingTimeInterval(-86_400), outcome: oc)
+            #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
         }
     }
 
@@ -70,25 +75,28 @@ struct ReachedOutQueueTests {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_000_000)
         let sent = now.addingTimeInterval(-2 * 86_400)
-        let p = make(ctx, group: "A", sentAt: sent, outcome: .noResponse)
+        let p = makeShow(ctx, group: "A")
+        let r = makeRecipient(ctx, on: p, sentAt: sent, outcome: .noResponse)
         // gapDays default 6: next nudge is sent + 6 days.
-        #expect(ReachedOutQueue.nextReachOut(for: p, now: now) == sent.addingTimeInterval(6 * 86_400))
+        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == sent.addingTimeInterval(6 * 86_400))
     }
 
     @Test func exhaustedFollowUpsWithNoReplyDropsOff() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_000_000)
-        let p = make(ctx, group: "A", sentAt: now.addingTimeInterval(-30 * 86_400), outcome: .noResponse)
-        p.followUpCount = 2 // maxFollowUps default 2: exhausted, nothing scheduled
-        #expect(ReachedOutQueue.nextReachOut(for: p, now: now) == nil)
+        let p = makeShow(ctx, group: "A")
+        let r = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-30 * 86_400), outcome: .noResponse)
+        r.followUpCount = 2 // maxFollowUps default 2: exhausted, nothing scheduled
+        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
     }
 
     @Test func repliedWithoutStateNeedsAttentionNow() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_000_000)
-        let p = make(ctx, group: "A", sentAt: now.addingTimeInterval(-86_400), outcome: .replied)
+        let p = makeShow(ctx, group: "A")
+        let r = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-86_400), outcome: .replied)
         // Replied but uncategorized: needs a state, so it should surface now.
-        #expect(ReachedOutQueue.nextReachOut(for: p, now: now) == now)
+        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == now)
     }
 
     // #223: a plain-language label for when to next reach out, shown on each reached-out row.
@@ -103,10 +111,31 @@ struct ReachedOutQueueTests {
     @Test func activeListIsSortedSoonestFirstAndExcludesStopped() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        let overdue = make(ctx, group: "Overdue", sentAt: now.addingTimeInterval(-30 * 86_400), outcome: .noResponse)
-        let fresh = make(ctx, group: "Fresh", sentAt: now, outcome: .noResponse)
-        let booked = make(ctx, group: "Booked", sentAt: now.addingTimeInterval(-86_400), outcome: .booked)
-        let list = ReachedOutQueue.active(from: [fresh, booked, overdue], now: now)
-        #expect(list.map(\.groupName) == ["Overdue", "Fresh"]) // booked excluded; overdue first
+        let overdueShow = makeShow(ctx, group: "Overdue")
+        _ = makeRecipient(ctx, on: overdueShow, sentAt: now.addingTimeInterval(-30 * 86_400), outcome: .noResponse)
+        let freshShow = makeShow(ctx, group: "Fresh")
+        _ = makeRecipient(ctx, on: freshShow, sentAt: now, outcome: .noResponse)
+        let bookedShow = makeShow(ctx, group: "Booked")
+        _ = makeRecipient(ctx, on: bookedShow, sentAt: now.addingTimeInterval(-86_400), outcome: .booked)
+
+        let list = ReachedOutQueue.active(from: [freshShow, bookedShow, overdueShow], now: now)
+        #expect(list.map(\.prospect.groupName) == ["Overdue", "Fresh"]) // booked excluded; overdue first
+    }
+
+    // #652: the actual behavior change from the lead-level version. A show with two contacts, one
+    // overdue and one not yet due, must produce TWO separate entries (not one row for the whole
+    // show), each carrying its own recipient and its own next-reach-out date.
+    @Test func aMultiContactShowProducesOneEntryPerDueRecipient() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        let p = makeShow(ctx, group: "Aurora Strings")
+        let overdue = makeRecipient(ctx, on: p, id: "overdue@example.com",
+                                    sentAt: now.addingTimeInterval(-30 * 86_400), outcome: .noResponse)
+        let fresh = makeRecipient(ctx, on: p, id: "fresh@example.com", sentAt: now, outcome: .noResponse)
+
+        let list = ReachedOutQueue.activeWithDates(from: [p], now: now)
+        #expect(list.count == 2)
+        #expect(list.map(\.recipient.id) == [overdue.id, fresh.id])   // soonest (overdue) first
+        #expect(list[0].next < list[1].next)
     }
 }

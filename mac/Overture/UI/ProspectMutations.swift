@@ -171,16 +171,31 @@ enum ProspectMutations {
         }
     }
 
-    static func setConversationState(_ item: QueueItem, _ state: ConversationState,
-                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+    // #652: Dan sets ONE contact's conversation state by hand from the per-contact review controls.
+    // Mirrors markContact's exact pattern: setting a state is Dan actively engaging with this contact,
+    // the same signal that already resumes any sibling recipient a reply had auto-paused.
+    static func setRecipientConversationState(_ item: QueueItem, _ recipientId: String, _ state: ConversationState,
+                                              prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.setConversationState(state, now: Date())
+        model.updateRecipient(id: recipientId) { $0.setConversationState(state, now: Date()) }
+        model.resumePausedRecipients()
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func confirmConversationState(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+    // Dan accepts THIS contact's AI-suggested state: it becomes his (manual) and that contact's
+    // reminder clock restarts from now.
+    static func confirmRecipientConversationState(_ item: QueueItem, _ recipientId: String,
+                                                  prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confirmConversationState(now: Date())
+        model.updateRecipient(id: recipientId) { $0.confirmConversationState(now: Date()) }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
+    // "Remind me later" for ONE contact: steps just that contact's reminder forward, without sending.
+    static func remindRecipientLater(_ item: QueueItem, _ recipientId: String,
+                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.remindLater(now: Date()) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 

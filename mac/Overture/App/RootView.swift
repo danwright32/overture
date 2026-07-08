@@ -45,7 +45,7 @@ struct RootView: View {
 
     private var followUpsDue: Int {
         FollowUp.dueRecipients(from: allProspects, now: Date()).count
-            + ConversationReminder.due(from: allProspects, now: Date(), config: .loaded()).count
+            + ConversationReminder.dueRecipients(from: allProspects, now: Date(), config: .loaded()).count
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
@@ -56,7 +56,7 @@ struct RootView: View {
     // deep link mechanism) or open Archive with that row forced into view instead. A dismissed
     // show never renders in the Queue at all, so it always routes to Archive.
     private func handleSearchSelection(_ item: QueueItem) {
-        let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.naturalKey))
+        let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
         if item.status != .dismissed,
            QueueModel.isReachableInQueue(item, reachedOutKeys: reachedOutKeys, today: QueueModel.easternToday()) {
             deepLinkedKey = item.id

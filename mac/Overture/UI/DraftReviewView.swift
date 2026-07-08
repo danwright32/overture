@@ -12,11 +12,13 @@ struct DraftReviewView: View {
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
-    var onSetConversationState: (ConversationState) -> Void = { _ in }
-    var onConfirmConversationState: () -> Void = {}
     var onDismissReply: () -> Void = {}
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    // Per-contact conversation state (#652): a distinct vocabulary from onMarkContact's terminal
+    // outcomes, mirroring FollowUpsView's own set/confirm split.
+    var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
+    var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
@@ -54,7 +56,6 @@ struct DraftReviewView: View {
             performerOverridePreviews
             actionRow
             conversationContactsSection
-            conversationSuggestionRow
             if item.isLost { lostReasonField }
         }
         .padding(OVSpacing.sm)
@@ -191,7 +192,6 @@ struct DraftReviewView: View {
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                         .help("This was not a genuine reply (an auto-reply or out of office). Revert it; a new reply will still flag.")
                 }
-                if item.conversationStateSource != .auto { conversationStatePicker }   // auto -> own row below
                 derivedStatusLabel
             } else if isApproved {
                 if let since = outboundSendSince {
@@ -332,6 +332,7 @@ struct DraftReviewView: View {
                             .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
+                    stateControl(for: c)
                     if c.isAutoReplied {
                         Button("Not a real reply") { onDismissContactReply(c.id) }
                             .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -463,62 +464,38 @@ struct DraftReviewView: View {
         .help("The show's status, read from its contacts. Mark a contact below to change it.")
     }
 
-    // Where the conversation stands once the lead has replied (#111): Dan tags it so the right
-    // event-aware reminder fires. Setting an active state also marks the lead replied; declined
-    // resolves it to lost-soft. Shown beside the outcome once sent.
-    // The plain set/change picker, used in the action row for a lead with no state or a hand-set one.
-    private var conversationStatePicker: some View {
-        conversationStateMenu(label: nil).help("Where this conversation stands")
-    }
-
-    // The AI's read of the reply, on its own line so it reads as a sentence: what the reply looks
-    // like, then a clear Confirm (accept onto the timed reminder track) or Change (correct it).
-    @ViewBuilder private var conversationSuggestionRow: some View {
-        if let state = item.conversationState, item.conversationStateSource == .auto {
-            HStack(spacing: OVSpacing.xs) {
-                Text("Their reply looks like").foregroundStyle(OVColor.inkSoft)
-                Text(state.label).fontWeight(.semibold).foregroundStyle(state.accent.color)
-                Spacer()
-                Button { onConfirmConversationState() } label: {
-                    Text("Confirm").foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
-                        .background(Capsule().fill(OVColor.forest))
-                }
-                .buttonStyle(.plain)
-                conversationStateMenu(label: "Change")
+    // Where THIS CONTACT's conversation stands once they've replied (#111/#652): Dan tags it so the
+    // right event-aware reminder fires. A distinct control from the "Mark…" menu beside it (a
+    // different vocabulary: terminal outcomes there, in-flight conversation state here), mirroring
+    // FollowUpsView's own set/confirm split for the same per-recipient state.
+    @ViewBuilder private func stateControl(for c: RecipientSnapshot) -> some View {
+        if let state = c.conversationState, c.conversationStateSource == .auto {
+            // An unconfirmed AI read: say what it looks like, offer Confirm (accept it) or Change.
+            HStack(spacing: 4) {
+                Text("Looks like \(state.label.lowercased())").foregroundStyle(OVColor.inkSoft)
+                Button("Confirm") { onConfirmRecipientConversationState(c.id) }
+                    .buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                stateMenu(for: c, label: "Change")
             }
             .font(OVType.meta)
-            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(state.accent.color.opacity(0.08)))
+        } else {
+            stateMenu(for: c, label: c.conversationState == nil ? "Set a state" : "Change")
         }
     }
 
-    private func conversationStateMenu(label: String?) -> some View {
-        Menu {
+    private func stateMenu(for c: RecipientSnapshot, label: String) -> some View {
+        Menu(label) {
             ForEach(ConversationState.allCases, id: \.self) { s in
                 Button {
-                    onSetConversationState(s)
+                    onSetRecipientConversationState(c.id, s)
                 } label: {
-                    if item.conversationState == s { Label(s.label, systemImage: "checkmark") }
+                    if s == c.conversationState { Label(s.label, systemImage: "checkmark") }
                     else { Text(s.label) }
                 }
             }
-        } label: {
-            HStack(spacing: 4) {
-                if let label {
-                    Text(label)
-                } else if let state = item.conversationState {
-                    Circle().fill(state.accent.color).frame(width: 6, height: 6)
-                    Text(state.label).foregroundStyle(OVColor.ink)
-                } else {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                    Text("Set conversation").foregroundStyle(OVColor.inkSoft)
-                }
-            }
-            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .menuStyle(.borderlessButton).fixedSize()
+        .font(OVType.meta)
     }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
