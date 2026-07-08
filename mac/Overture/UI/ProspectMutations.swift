@@ -53,7 +53,7 @@ enum ProspectMutations {
             return
         case .resume(let existingId):
             model.updateRecipient(id: existingId) { r in
-                r.sendState = .sent
+                r.sendState = (r.sentAt != nil) ? .sent : .pending
                 r.suppressionReasonRaw = nil
                 r.resolutionRaw = nil
                 r.outcomeSourceRaw = nil

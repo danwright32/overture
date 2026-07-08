@@ -100,6 +100,7 @@ struct ProspectMutationsTests {
         let removed = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
         removed.sendState = .suppressed
         removed.suppressionReason = .removedByDan
+        removed.sentAt = Date()
         p.recipients = [removed]
         try? ctx.save()
         let feedback = ActionFeedback()
@@ -110,6 +111,25 @@ struct ProspectMutationsTests {
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.sendState == .sent)
         #expect(p.recipients.first?.suppressionReasonRaw == nil)
+        #expect(feedback.message == "Resumed pursuing Jane Doe on Aurora Strings.")
+    }
+
+    @Test func addRecipientManuallyResumesAnUntriedDeclinedContactAsStillPending() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let untried = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        untried.sendState = .suppressed
+        untried.suppressionReason = .declined
+        p.recipients = [untried]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
+                                                prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.sendState == .pending)
+        #expect(p.recipients.first?.sentAt == nil)
         #expect(feedback.message == "Resumed pursuing Jane Doe on Aurora Strings.")
     }
 
