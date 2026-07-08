@@ -24,11 +24,15 @@ enum ProspectRowFactory {
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,
-            onSetConversationState: { state in ProspectMutations.setConversationState(item, state, prospects: prospects, context: context, feedback: feedback) },
-            onConfirmConversationState: { ProspectMutations.confirmConversationState(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
             onMarkContact: { rid, resolution, bounced in
                 ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
+            },
+            onSetRecipientConversationState: { rid, state in
+                ProspectMutations.setRecipientConversationState(item, rid, state, prospects: prospects, context: context, feedback: feedback)
+            },
+            onConfirmRecipientConversationState: { rid in
+                ProspectMutations.confirmRecipientConversationState(item, rid, prospects: prospects, context: context, feedback: feedback)
             },
             onAddRecipient: { email, name in
                 ProspectMutations.addRecipientManually(item, email: email, name: name,

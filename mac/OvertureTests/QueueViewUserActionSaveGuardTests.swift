@@ -13,9 +13,9 @@ struct QueueViewUserActionSaveGuardTests {
     private static let guardedFunctions = [
         "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
-        "markConfidenceReviewed", "correctClassification", "setConversationState",
-        "confirmConversationState", "confirmBooking", "dismissBookingSuggestion",
-        "rejectBooking", "setLostReason",
+        "markConfidenceReviewed", "correctClassification", "setRecipientConversationState",
+        "confirmRecipientConversationState", "remindRecipientLater", "confirmBooking",
+        "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]
     private static let forbidden = "try? context.save()"
 

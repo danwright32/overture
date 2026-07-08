@@ -171,19 +171,6 @@ enum ProspectMutations {
         }
     }
 
-    static func setConversationState(_ item: QueueItem, _ state: ConversationState,
-                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.setConversationState(state, now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    static func confirmConversationState(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confirmConversationState(now: Date())
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
     // #652: Dan sets ONE contact's conversation state by hand from the per-contact review controls.
     // Mirrors markContact's exact pattern: setting a state is Dan actively engaging with this contact,
     // the same signal that already resumes any sibling recipient a reply had auto-paused.

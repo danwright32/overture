@@ -17,10 +17,10 @@ struct ProspectRowView: View {
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
-    var onSetConversationState: (ConversationState) -> Void = { _ in }
-    var onConfirmConversationState: () -> Void = {}
     var onDismissReply: () -> Void = {}
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
+    var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
@@ -90,10 +90,10 @@ struct ProspectRowView: View {
                     onSaveDraft: onSaveDraft,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,
-                    onSetConversationState: onSetConversationState,
-                    onConfirmConversationState: onConfirmConversationState,
                     onDismissReply: onDismissReply,
                     onMarkContact: onMarkContact,
+                    onSetRecipientConversationState: onSetRecipientConversationState,
+                    onConfirmRecipientConversationState: onConfirmRecipientConversationState,
                     onDismissContactReply: onDismissContactReply,
                     onDismissContactBounce: onDismissContactBounce,
                     onAddRecipient: onAddRecipient,
