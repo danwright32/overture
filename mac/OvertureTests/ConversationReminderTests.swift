@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // The pure conversation-reminder calculator (#111), mirroring FollowUp: decides who is due and why,
@@ -178,5 +179,70 @@ struct ConversationReminderTests {
         for r in kinds { #expect(r != nil && !(r!.reason.isEmpty)) }
         // Distinct reasons across the three kinds so the queue can tag them apart.
         #expect(Set(kinds.compactMap { $0?.reason }).count == 3)
+    }
+
+    // #650 Phase 1: the per-recipient due calculation mirrors FollowUp.dueRecipients' shape exactly,
+    // reusing the same pure reminder() calculator with per-recipient inputs.
+    @Test func dueRecipientsPicksOnlyThisRecipientsOwnActiveState() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        context.insert(p)
+        let overdue = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        overdue.sendState = .sent
+        overdue.setConversationState(.interested, now: now.addingTimeInterval(-20 * 86_400))
+        let notDueYet = Recipient(id: "b@act.example", email: "b@act.example", provenance: .act)
+        notDueYet.sendState = .sent
+        notDueYet.setConversationState(.interested, now: now)
+        p.setRecipients([overdue, notDueYet])
+
+        let due = ConversationReminder.dueRecipients(from: [p], now: now)
+        #expect(due.map(\.recipient.id) == ["a@act.example"])
+    }
+
+    @Test func dueRecipientsExcludesABookedShow() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.outcome = .booked
+        context.insert(p)
+        let overdue = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        overdue.sendState = .sent
+        overdue.setConversationState(.interested, now: now.addingTimeInterval(-20 * 86_400))
+        p.setRecipients([overdue])
+
+        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+    }
+
+    @Test func dueRecipientsSkipsAResolvedOrBouncedRecipient() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        context.insert(p)
+        let resolved = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        resolved.sendState = .sent
+        resolved.setConversationState(.interested, now: now.addingTimeInterval(-20 * 86_400))
+        resolved.markOutcomeManually(resolution: .declinedSoft)
+        p.setRecipients([resolved])
+
+        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
     }
 }
