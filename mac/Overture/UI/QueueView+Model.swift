@@ -126,6 +126,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // exactly what this specific contact will receive instead of the shared draft body. Only ever
     // set when provenance == .performer; defaulted so existing call sites don't need updating.
     var overrideBody: String? = nil
+    // #652: this contact's OWN conversation state, mirroring what QueueItem carries lead-level today,
+    // so the per-contact review controls can read and act on it directly.
+    var conversationState: ConversationState? = nil
+    var conversationStateSource: OutcomeSource? = nil
+    var conversationRemindedAt: Date? = nil
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
