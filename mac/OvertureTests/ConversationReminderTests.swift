@@ -206,6 +206,35 @@ struct ConversationReminderTests {
         #expect(due.map(\.recipient.id) == ["a@act.example"])
     }
 
+    // #652: the UI needs the CLASSIFIED reminder (kind + reason), same as the lead-level due(from:)
+    // already returns, not just which recipients are due. Each DueRecipient carries its own reminder.
+    @Test func dueRecipientsCarriesTheClassifiedReminderPerRecipient() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        context.insert(p)
+        let wantsToBook = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        wantsToBook.sendState = .sent
+        wantsToBook.setConversationState(.wantsToBook, now: now.addingTimeInterval(-40 * 86_400))
+        let needsState = Recipient(id: "b@act.example", email: "b@act.example", provenance: .act)
+        needsState.sendState = .sent
+        needsState.replied = true   // replied but never categorized: needsState is due immediately
+        p.setRecipients([wantsToBook, needsState])
+
+        let due = ConversationReminder.dueRecipients(from: [p], now: now)
+            .sorted { $0.recipient.id < $1.recipient.id }
+        #expect(due.map(\.recipient.id) == ["a@act.example", "b@act.example"])
+        #expect(due[0].reminder.kind == .active(.wantsToBook))
+        #expect(due[0].reminder.reason == ConversationReminder.reason(for: .active(.wantsToBook)))
+        #expect(due[1].reminder.kind == .needsState)
+    }
+
     @Test func dueRecipientsExcludesABookedShow() throws {
         let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                      configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])

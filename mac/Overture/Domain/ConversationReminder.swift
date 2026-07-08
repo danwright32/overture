@@ -188,7 +188,10 @@ enum ConversationReminder {
         }
     }
 
-    struct DueRecipient { let prospect: Prospect; let recipient: Recipient }
+    // #652: carries the classified reminder (kind + reason) alongside the recipient, mirroring what
+    // due(from:) already returns at the lead level, so the UI can render the pill/reason and pick the
+    // right action without re-deriving it.
+    struct DueRecipient { let prospect: Prospect; let recipient: Recipient; let reminder: DueReminder }
 
     // Per-recipient due calculation (#650 Phase 1), mirroring FollowUp.dueRecipients' shape exactly:
     // a hand-resolved or booked show stops ALL its reminders (matches the lead-level auto-stop), then
@@ -204,12 +207,12 @@ enum ConversationReminder {
             for r in p.recipients {
                 let standing = r.standing
                 let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
-                guard reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
-                              remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
-                              isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
-                              source: r.conversationStateSource, now: now, config: config) != nil
+                guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
+                                         remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
+                                         isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
+                                         source: r.conversationStateSource, now: now, config: config)
                 else { continue }
-                due.append(DueRecipient(prospect: p, recipient: r))
+                due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
             }
         }
         return due
