@@ -356,6 +356,20 @@ final class Prospect {
         recipients.removeAll { $0.id == id }
     }
 
+    // Dan removes a recipient by hand (#399). A never-sent contact is truly gone, nothing to lose.
+    // An already-sent contact is never deleted: it just stops being pursued (no more follow-ups or
+    // reminders) without recording a decline, so reply/decline stats stay honest. Distinct from the
+    // real "Closed (not now)" mark (markOutcomeManually), which DOES mean Dan read an actual no.
+    func removeOrSuppressRecipient(id: String) {
+        guard let r = recipients.first(where: { $0.id == id }) else { return }
+        if r.sendState == .pending {
+            removeRecipient(id: id)
+        } else {
+            r.sendState = .suppressed
+            r.suppressionReason = .removedByDan
+        }
+    }
+
     // Mutate exactly one recipient in place (it is a managed row, so the change persists on save).
     // A no-op for an unknown id, so callers needn't pre-check membership.
     func updateRecipient(id: String, _ mutate: (Recipient) -> Void) {
