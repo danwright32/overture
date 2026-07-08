@@ -60,16 +60,40 @@ struct RecipientConversationStateMigrationTests {
         #expect(r.conversationState == nil)
     }
 
-    @Test func isANoOpWhenNoRecipientEverReplied() throws {
+    // #652: widened from the original #650 seed. A single-recipient show can have its state set by
+    // hand (via the still-live lead-level picker) without an auto-detected reply ever firing, so
+    // gating strictly on `replied` left it unseeded forever. The lone recipient is the only sensible
+    // target when there's no reply to attribute it to.
+    @Test func seedsTheLoneRecipientOfASingleContactShowEvenWithoutAReply() throws {
         let ctx = ModelContext(try container())
         let p = prospect(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
         p.conversationState = .interested
-        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        p.setRecipients([r])
+        p.conversationStateSetAt = now
+        p.conversationStateSource = .manual
+        let onlyContact = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        p.setRecipients([onlyContact])
 
         RecipientConversationStateMigration.run(in: ctx)
 
-        #expect(r.conversationState == nil)   // nothing to seed onto: no replier exists
+        #expect(onlyContact.conversationState == .interested)
+        #expect(onlyContact.conversationStateSetAt == now)
+    }
+
+    // A never-replied MULTI-contact show stays ambiguous: there's no reply to attribute the lead-level
+    // state to and more than one plausible recipient, so it's never guessed.
+    @Test func isANoOpWhenAMultiContactShowNeverReplied() throws {
+        let ctx = ModelContext(try container())
+        let p = prospect(ctx)
+        p.conversationState = .interested
+        let a = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let b = Recipient(id: "b@presenter.example", email: "b@presenter.example", provenance: .presenter)
+        p.setRecipients([a, b])
+
+        RecipientConversationStateMigration.run(in: ctx)
+
+        #expect(a.conversationState == nil)
+        #expect(b.conversationState == nil)
     }
 
     @Test func isIdempotentOnceARecipientAlreadyHasAConversationState() throws {
@@ -84,5 +108,45 @@ struct RecipientConversationStateMigrationTests {
         RecipientConversationStateMigration.run(in: ctx)
 
         #expect(already.conversationState == .wantsToBook)   // untouched, never re-seeded or clobbered
+    }
+
+    // #652: self-correcting. If Dan changes the lead-level state a SECOND time (a real, newer
+    // timestamp) after the first seed already ran, the recipient-level copy would otherwise be
+    // permanently stale once the UI stops reading the lead-level field. Re-seed the SAME target when
+    // the lead's own timestamp is genuinely newer.
+    @Test func reseedsTheSameTargetWhenTheLeadStateChangedAgainMoreRecently() throws {
+        let ctx = ModelContext(try container())
+        let p = prospect(ctx)
+        let firstSeed = Date(timeIntervalSince1970: 1_000_000)
+        let secondChange = Date(timeIntervalSince1970: 2_000_000)
+        let target = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        target.replied = true
+        target.conversationState = .interested
+        target.conversationStateSetAt = firstSeed
+        p.setRecipients([target])
+        p.conversationState = .wantsToBook           // Dan changed his mind on the lead-level picker...
+        p.conversationStateSetAt = secondChange       // ...more recently than the first seed
+
+        RecipientConversationStateMigration.run(in: ctx)
+
+        #expect(target.conversationState == .wantsToBook)
+        #expect(target.conversationStateSetAt == secondChange)
+    }
+
+    // Never seeded and never re-seeded when the lead-level state has no timestamp to prove it's
+    // actually newer (both original #650 idempotency and this widened self-correction stay
+    // conservative rather than guessing from absent data).
+    @Test func doesNotReseedWhenTheLeadHasNoTimestampToCompare() throws {
+        let ctx = ModelContext(try container())
+        let p = prospect(ctx)
+        let target = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        target.replied = true
+        target.conversationState = .wantsToBook
+        p.setRecipients([target])
+        p.conversationState = .interested   // no conversationStateSetAt set at all
+
+        RecipientConversationStateMigration.run(in: ctx)
+
+        #expect(target.conversationState == .wantsToBook)   // untouched
     }
 }
