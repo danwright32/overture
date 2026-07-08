@@ -202,11 +202,11 @@ enum ConversationReminder {
         for p in prospects {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             for r in p.recipients {
-                let closed = r.resolution != nil || r.bounced
-                let unhandledReply = r.replied && r.resolution == nil && !r.bounced
+                let standing = r.standing
+                let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
                 guard reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
                               remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
-                              isClosed: closed, hasUnhandledReply: unhandledReply,
+                              isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
                               source: r.conversationStateSource, now: now, config: config) != nil
                 else { continue }
                 due.append(DueRecipient(prospect: p, recipient: r))

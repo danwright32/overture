@@ -245,4 +245,27 @@ struct ConversationReminderTests {
 
         #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
     }
+
+    // A never-sent recipient (sendState still .pending) must never read as due, even if it somehow
+    // carries a conversation state: standing.isInPlay requires sendState == .sent, so a pending
+    // recipient is not in play and therefore closed. No real code path sets a conversation state on
+    // a pending recipient yet (that lands in a later phase), so this is constructed directly to prove
+    // dueRecipients uses r.standing rather than an inline check that misses the sendState condition.
+    @Test func dueRecipientsExcludesANeverSentRecipientEvenWithAConversationState() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        context.insert(p)
+        let neverSent = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        neverSent.setConversationState(.interested, now: now.addingTimeInterval(-20 * 86_400))
+        p.setRecipients([neverSent])
+
+        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+    }
 }
