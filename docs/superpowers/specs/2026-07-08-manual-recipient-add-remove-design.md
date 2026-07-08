@@ -107,9 +107,12 @@ enum ManualRecipientCheck {
   unresolved (`sendState != .suppressed && resolution == nil`) or when the show is already
   settled through that contact (`resolution == .booked`) or suppressed because another contact
   got the booking (`suppressionReason == .bookedElsewhere`), none of which make sense to
-  re-pursue. `.resume` for every other match, i.e. `suppressionReason == .removedByDan` or
-  `resolution == .declinedSoft`/`.declinedHard`: all cases where pursuit stopped while the
-  outcome was still genuinely open, so re-adding is Dan explicitly deciding to try again.
+  re-pursue. `.resume` for every other match: `suppressionReason == .removedByDan`,
+  `suppressionReason == .declined` (an untried contact swept up when the show closed via a
+  decline, `Prospect.suppressUntriedRecipients(reason: .declined)`), or
+  `resolution == .declinedSoft`/`.declinedHard` (an engaged contact who personally declined).
+  All four are cases where pursuit stopped while the outcome was still genuinely open (a decline
+  leaves the door open, unlike a booking), so re-adding is Dan explicitly deciding to try again.
 - **Duplicate-org**: any OTHER existing recipient (not the exact match case) sharing the new
   email's domain (case-insensitive).
 - **Venue-domain**: strip common venue words from `venue`, reusing `VenueParser.venueWords`

@@ -264,6 +264,17 @@ struct ManualRecipientCheckTests {
         #expect(result.action == .resume(existingId: "jane@example.com"))
     }
 
+    @Test func resumesADeclinedSuppressionMatch() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        p.setRecipients([recipient("jane@example.com", sendState: .suppressed, suppressionReason: .declined)])
+
+        let result = ManualRecipientCheck.evaluate(email: "jane@example.com",
+                                                    existingRecipients: p.recipients, venue: nil)
+
+        #expect(result.action == .resume(existingId: "jane@example.com"))
+    }
+
     @Test func resumesADeclinedSoftMatch() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
@@ -391,10 +402,11 @@ enum ManualRecipientCheck {
         if let match = existingRecipients.first(where: { $0.id == canonical }) {
             let bookedElsewhere = match.sendState == .suppressed && match.suppressionReason == .bookedElsewhere
             let removedByDan = match.sendState == .suppressed && match.suppressionReason == .removedByDan
+            let declinedSuppression = match.sendState == .suppressed && match.suppressionReason == .declined
             let action: Action
             if match.resolution == .booked || bookedElsewhere {
                 action = .blocked(existingId: match.id)
-            } else if removedByDan || match.resolution == .declinedSoft || match.resolution == .declinedHard {
+            } else if removedByDan || declinedSuppression || match.resolution == .declinedSoft || match.resolution == .declinedHard {
                 action = .resume(existingId: match.id)
             } else {
                 action = .blocked(existingId: match.id)   // still active and unresolved
