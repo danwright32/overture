@@ -24,6 +24,10 @@ enum LaunchMigrations {
         // Choral folded into Music (#350), an editorial taxonomy decision. Idempotent: guarded by
         // "any prospect still stored as choral". Does not touch fitScore/tier (Dan's call).
         DisciplineMigration.run(in: context)
+        // #650: seed an in-flight show-level conversation onto the recipient who actually replied, so
+        // it keeps generating reminders once state moves to per-recipient. Idempotent, guarded inside
+        // the migration itself.
+        RecipientConversationStateMigration.run(in: context)
         do {
             try context.save()
             return true

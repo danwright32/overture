@@ -188,6 +188,33 @@ enum ConversationReminder {
         }
     }
 
+    struct DueRecipient { let prospect: Prospect; let recipient: Recipient }
+
+    // Per-recipient due calculation (#650 Phase 1), mirroring FollowUp.dueRecipients' shape exactly:
+    // a hand-resolved or booked show stops ALL its reminders (matches the lead-level auto-stop), then
+    // each recipient is evaluated independently through the same pure reminder() calculator, using
+    // Recipient.standing (already-established in PerformanceStatus.swift) for the per-recipient
+    // "closed" and "unhandled reply" inputs that Prospect.isClosed/hasUnhandledReply provide at the
+    // lead level.
+    static func dueRecipients(from prospects: [Prospect], now: Date,
+                             config: ConversationReminderConfig = .init()) -> [DueRecipient] {
+        var due: [DueRecipient] = []
+        for p in prospects {
+            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
+            for r in p.recipients {
+                let standing = r.standing
+                let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
+                guard reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
+                              remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
+                              isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
+                              source: r.conversationStateSource, now: now, config: config) != nil
+                else { continue }
+                due.append(DueRecipient(prospect: p, recipient: r))
+            }
+        }
+        return due
+    }
+
     // The pre-written, reviewable nudge per active state, in Dan's level voice (no performative
     // enthusiasm, no em dashes, contractions throughout). Dan edits before sending; the hasQuestion
     // copy is deliberately generic since it cannot know the specific question. Follows the
