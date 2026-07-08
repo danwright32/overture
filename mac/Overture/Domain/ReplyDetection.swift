@@ -28,7 +28,9 @@ enum ReplyDetection {
     // separator (or the string's edge), rather than merely containing it as a substring, so a
     // real address like "bouncebackband" or "eleanoreply" isn't caught while "noreply-support"
     // or "notifications-noreply" still are.
-    private static func matchesToken(_ local: String, _ token: String) -> Bool {
+    // Internal (not private): BounceDetection (#398) reuses this same separator-aware token
+    // match instead of duplicating it.
+    static func matchesToken(_ local: String, _ token: String) -> Bool {
         guard local.count >= token.count else { return false }
         if local.hasPrefix(token) {
             let after = local.index(local.startIndex, offsetBy: token.count)
