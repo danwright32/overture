@@ -93,6 +93,13 @@ final class Recipient {
     // positive never re-flags while a genuinely new bounce still does.
     var lastBounceId: String?
     var dismissedBounceId: String?
+    // Per-recipient conversation state (#650, Phase 1 of milestone #19), mirroring the four fields
+    // already on Prospect exactly. The per-recipient conversation surface that sets these is a later
+    // phase; for now this is a pure domain addition plus the migration in Task 3.
+    var conversationStateRaw: String? = nil
+    var conversationStateSetAt: Date? = nil
+    var conversationRemindedAt: Date? = nil
+    var conversationStateSourceRaw: String? = nil
     var resolutionRaw: String?
     // Whether Dan hand-set this recipient's state (#418 A1b), mirroring Prospect.outcomeSourceRaw:
     // nil = no manual mark, OutcomeSource.manual = Dan judged this contact by hand. Per-recipient
@@ -176,6 +183,16 @@ final class Recipient {
         set { outcomeSourceRaw = newValue?.rawValue }
     }
 
+    var conversationState: ConversationState? {
+        get { conversationStateRaw.flatMap(ConversationState.init) }
+        set { conversationStateRaw = newValue?.rawValue }
+    }
+
+    var conversationStateSource: OutcomeSource? {
+        get { conversationStateSourceRaw.flatMap(OutcomeSource.init) }
+        set { conversationStateSourceRaw = newValue?.rawValue }
+    }
+
     // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
     var isSilent: Bool { sendState == .sent && !replied && !bounced }
 
@@ -222,6 +239,48 @@ final class Recipient {
         self.resolution = resolution
         self.bounced = bounced
         self.outcomeSource = .manual
+    }
+
+    // Dan sets THIS recipient's conversation state by hand (#650). Also stamps outcomeSource =
+    // .manual so isAwaitingFollowUp excludes this recipient from the separate silent follow-up track
+    // (mirrors how the lead-level version marks the whole lead .replied to stand down FollowUp's
+    // lead-grain sequencer; the per-recipient standdown already exists via that same flag). Declining
+    // resolves ONLY this recipient: no cascading suppression of siblings (Dan's 2026-07-08 decision).
+    // Orchestrating a resume of this show's other paused-by-reply recipients is Phase 3's job, at the
+    // UI-mutation layer, mirroring how ProspectMutations already does that for markContact today; this
+    // domain method never reaches into the Prospect or its other recipients.
+    func setConversationState(_ state: ConversationState, now: Date) {
+        conversationState = state
+        conversationStateSetAt = now
+        conversationStateSource = .manual
+        outcomeSource = .manual
+        if state == .declined {
+            resolution = .declinedSoft
+        }
+    }
+
+    // "Remind me later" for this recipient: step its reminder forward by re-anchoring it, without
+    // sending.
+    func remindLater(now: Date) {
+        conversationRemindedAt = now
+    }
+
+    // The AI's auto-classification suggests a state for this recipient (source = auto). Never
+    // overwrites a state Dan set by hand.
+    func suggestConversationState(_ state: ConversationState, now: Date) {
+        guard conversationStateSource != .manual else { return }
+        conversationState = state
+        conversationStateSetAt = now
+        conversationStateSource = .auto
+    }
+
+    // Dan accepts a suggestion for this recipient: it becomes his (manual) and the timed reminder
+    // clock restarts from now.
+    func confirmConversationState(now: Date) {
+        guard conversationState != nil else { return }
+        conversationStateSource = .manual
+        conversationStateSetAt = now
+        conversationRemindedAt = nil
     }
 
     // Copy-out path (#421): Dan pasted the draft into the Gmail thread he's reading and sent it there
