@@ -174,6 +174,49 @@ enum SendService {
         }
     }
 
+    // Sends ONE conversation re-touch or closing note for a specific recipient's ACTIVE conversation
+    // (#651/#652), not the lead-level rollup: threads on recipient.gmailMessageId/gmailThreadId (that
+    // contact's own conversation), same as sendReplyDraft, so a multi-recipient show's nudge lands on
+    // the RIGHT contact instead of whichever recipient sent first. The closing variant resolves ONLY
+    // this recipient (markOutcomeManually, mirroring what resolveEngagedContacts does per engaged
+    // contact) with no cascade to a sibling recipient or the show's own outcome (Dan's 2026-07-08
+    // decision, already locked in on Recipient.setConversationState). Re-anchors this recipient's own
+    // reminder clock. One click = one nudge, never autonomous.
+    @discardableResult
+    static func sendConversationNudge(_ recipient: Recipient, of prospect: Prospect,
+                                      kind: ConversationReminder.Kind, now: Date, sender: MailSender) async -> Bool {
+        guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
+        let body: String
+        switch kind {
+        case .active(let state):
+            body = ConversationReminder.nudgeBody(for: state, contactName: recipient.name,
+                                                  groupName: prospect.groupName, venue: prospect.venue)
+        case .closing:
+            body = ConversationReminder.closingNudgeBody(contactName: recipient.name,
+                                                         groupName: prospect.groupName, venue: prospect.venue)
+        case .needsState, .suggested:
+            return false   // a prompt to categorize/confirm, not a sendable email
+        }
+        let mail = OutgoingMail(
+            to: email,
+            subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
+            body: body,
+            inReplyTo: recipient.gmailMessageId,
+            threadId: recipient.gmailThreadId)
+        do {
+            _ = try await sender.send(mail)
+            recipient.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
+            recipient.sendError = nil
+            if case .closing = kind {
+                recipient.markOutcomeManually(resolution: .declinedSoft)
+            }
+            return true
+        } catch {
+            recipient.sendError = error.localizedDescription
+            return false
+        }
+    }
+
     // Sends Dan's approved AI-drafted reply to ONE recipient, on THAT recipient's own Gmail thread
     // (#421): threads on recipient.gmailMessageId/gmailThreadId, NOT the lead rollup (the rollup is the
     // first contact's thread, so replying to a second contact on it would land on the wrong
