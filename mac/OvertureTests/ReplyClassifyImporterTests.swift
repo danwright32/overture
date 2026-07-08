@@ -79,7 +79,7 @@ struct ReplyClassifyImporterTests {
         #expect(out.suggested == 0)
     }
 
-    // #420 C3/C4, #653 — v3: two contacts on one show route their OWN intent hint + AI draft AND their
+    // #420 C3/C4, #653: v3, two contacts on one show route their OWN intent hint + AI draft AND their
     // OWN conversation-state suggestion to their own recipient row (the old "prefer active over
     // decline" lead-level compromise is gone entirely: each contact suggests off its own reply). The
     // per-contact hints/suggestions are NON-BINDING (no RecipientResolution is set by the importer).
