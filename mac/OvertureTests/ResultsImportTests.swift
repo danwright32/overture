@@ -138,7 +138,7 @@ struct ResultsImportTests {
         #expect(item.contacts.first { $0.id == "b@present.example" }?.overrideBody == nil)
     }
 
-    // #652 — each contact's OWN conversation state must reach the snapshot the per-contact review
+    // #652: each contact's OWN conversation state must reach the snapshot the per-contact review
     // controls read, not just the lead-level QueueItem field.
     @Test func queueItemCarriesEachContactsOwnConversationState() throws {
         let ctx = ModelContext(try makeContainer())
