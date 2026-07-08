@@ -45,7 +45,7 @@ struct RootView: View {
 
     private var followUpsDue: Int {
         FollowUp.dueRecipients(from: allProspects, now: Date()).count
-            + ConversationReminder.due(from: allProspects, now: Date(), config: .loaded()).count
+            + ConversationReminder.dueRecipients(from: allProspects, now: Date(), config: .loaded()).count
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
