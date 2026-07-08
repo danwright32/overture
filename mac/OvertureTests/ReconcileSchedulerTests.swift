@@ -11,7 +11,7 @@ private final class CapturingOmniFocusClient: OmniFocusClient, @unchecked Sendab
     var created: [OmniFocusSync.DesiredTask] = []
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
     func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
-    func complete(naturalKey: String) throws {}
+    func complete(naturalKey: String, recipientId: String) throws {}
 }
 
 private struct NoopNotifier: OmniFocusNotifier {
@@ -59,11 +59,16 @@ struct ReconcileSchedulerTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)
         p.sentAt = Date(timeIntervalSince1970: 1)
-        p.outcome = .replied
-        p.conversationState = .wantsToBook
-        p.conversationStateSource = .manual
-        p.conversationStateSetAt = now.addingTimeInterval(-30 * 86_400)
         ctx.insert(p)
+        // #653: the conversation state lives on the recipient, not the lead.
+        let r = Recipient(id: "contact@warm-lead.example", email: "contact@warm-lead.example", provenance: .act)
+        r.sendState = .sent
+        r.sentAt = Date(timeIntervalSince1970: 1)
+        r.replied = true
+        r.conversationState = .wantsToBook
+        r.conversationStateSource = .manual
+        r.conversationStateSetAt = now.addingTimeInterval(-30 * 86_400)
+        p.setRecipients([r])
         try ctx.save()
 
         let fake = CapturingOmniFocusClient()

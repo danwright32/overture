@@ -23,7 +23,7 @@ struct OmniFocusSyncRunnerTests {
             return []
         }
         func create(_ task: OmniFocusSync.DesiredTask) throws {}
-        func complete(naturalKey: String) throws {}
+        func complete(naturalKey: String, recipientId: String) throws {}
     }
 
     private final class FakeNotifier: OmniFocusNotifier {

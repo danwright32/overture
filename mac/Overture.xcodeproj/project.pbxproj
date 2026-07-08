@@ -92,6 +92,7 @@
 		461D1DDCF415D650208911E6 /* ResultsContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD1F0E60FDB8C47C99DBDF3 /* ResultsContractTests.swift */; };
 		46547F0746C4A035670849CF /* VoiceGuidanceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A5557CED5338E486C41325 /* VoiceGuidanceStoreTests.swift */; };
 		47FA186561E1912A18BA28BD /* StageNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF653614208C0E600D652C5 /* StageNavigationTests.swift */; };
+		482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */; };
 		48B098CAC4B814F245E3ADB4 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */; };
 		4A125A73DBC9E95E9B806451 /* PrepStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */; };
 		4A9031E5AE33243B77A5A3E3 /* ScoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637CE6DCB47850272BCB073A /* ScoutService.swift */; };
@@ -378,6 +379,7 @@
 		48833E92062362801EA65D62 /* OvertureTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OvertureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		49F5F8AA3F96586760B26AC8 /* OvertureDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertureDeepLink.swift; sourceTree = "<group>"; };
 		4ADBE3D77761E438E9AE8E2D /* VenueDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDisplayTests.swift; sourceTree = "<group>"; };
+		4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptOmniFocusClientTests.swift; sourceTree = "<group>"; };
 		4C7C1703A7C49EFB8B8309E7 /* LocalHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalHistoryTests.swift; sourceTree = "<group>"; };
 		4CA74E69A3B5A93757627A5C /* ConversationReminderConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationReminderConfigTests.swift; sourceTree = "<group>"; };
 		4EA25BB391444D3451B7292A /* PrepProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepProgress.swift; sourceTree = "<group>"; };
@@ -617,6 +619,7 @@
 				881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */,
 				CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */,
 				BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */,
+				4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */,
 				5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */,
 				E9FD33A4882802D6484467A5 /* ArchiveViewRestoreSaveGuardTests.swift */,
 				E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */,
@@ -1163,6 +1166,7 @@
 				D002F4FC4262FE11122CB75C /* AgentLogLocationTests.swift in Sources */,
 				FBB014F565369838DFA38489 /* AgentRosterTests.swift in Sources */,
 				DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */,
+				482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */,
 				7BC5B33A416CB6C87F8AB3D5 /* ArchiveStatusTests.swift in Sources */,
 				6AEC0102718EBDFC950BB826 /* ArchiveViewRestoreSaveGuardTests.swift in Sources */,
 				0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */,

@@ -11,17 +11,25 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     private let projectId = "bAdQ9GQXfWn"
     private let tagNames = ["Overture", "1Important", "B. Medium Time Commitment"]
     private let ownerTag = "Overture"
-    private let notePrefix = OmniFocusSync.notePrefix      // "Overture lead: "  (paragraph 1)
-    private let duePrefix = OmniFocusSync.dueNotePrefix    // "Due: "            (paragraph 2)
+    private let notePrefix = OmniFocusSync.notePrefix          // "Overture lead: "     (paragraph 1)
+    private let contactPrefix = OmniFocusSync.contactNotePrefix // "Overture contact: "  (paragraph 2, #653)
+    private let duePrefix = OmniFocusSync.dueNotePrefix         // "Due: "               (paragraph 3)
     private let fieldSep = "|||"
     private let recordSep = "@@@"
+    // #653: a pre-existing task written before this shipped has no contact line at all (the old
+    // 2-paragraph format). Tag it with a recipientId that can never match a real desired task, so
+    // reconcile always treats it as stale -- the one-time transition: it completes and the correct
+    // new per-recipient task gets created fresh on the first sync after this ships.
+    static let legacyRecipientId = "__legacy-pre-653__"
 
     enum OmniFocusError: Error { case scriptFailed(String), notPermitted }
 
-    // Incomplete Overture-tagged tasks, each as (naturalKey, due day rebuilt to the canonical 6pm
-    // Eastern) so the due compares exactly against OmniFocusSync.desired. Reads the key and due day
-    // from the note's first two paragraphs (text reads are reliable; AppleScript date-component
-    // reads are not). Records are separated by a token, not newlines, since notes contain newlines.
+    // Incomplete Overture-tagged tasks, each as (naturalKey, recipientId, due day rebuilt to the
+    // canonical 6pm Eastern) so the due compares exactly against OmniFocusSync.desired. Reads the key,
+    // contact, and due day from the note's paragraphs (text reads are reliable; AppleScript
+    // date-component reads are not). Records are separated by a token, not newlines, since notes
+    // contain newlines. A legacy 2-paragraph note (pre-#653) has no contact line; it's tagged with
+    // legacyRecipientId instead of failing to parse.
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] {
         let src = """
         tell application "OmniFocus" to tell default document
@@ -29,24 +37,49 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
           set out to ""
           repeat with t in (tasks of ovt whose completed is false)
             set nt to note of t
-            if (count of paragraphs of nt) is greater than or equal to 2 and (paragraph 1 of nt) starts with "\(esc(notePrefix))" then
-              set out to out & (paragraph 1 of nt) & "\(fieldSep)" & (paragraph 2 of nt) & "\(recordSep)"
+            set pCount to count of paragraphs of nt
+            if pCount >= 2 and (paragraph 1 of nt) starts with "\(esc(notePrefix))" then
+              if pCount >= 3 then
+                set out to out & (paragraph 1 of nt) & "\(fieldSep)" & (paragraph 2 of nt) & "\(fieldSep)" & (paragraph 3 of nt) & "\(recordSep)"
+              else
+                set out to out & (paragraph 1 of nt) & "\(fieldSep)" & "\(Self.legacyRecipientId)" & "\(fieldSep)" & (paragraph 2 of nt) & "\(recordSep)"
+              end if
             end if
           end repeat
           return out
         end tell
         """
         let raw = try run(src)
-        return raw.components(separatedBy: recordSep).compactMap { record in
+        return Self.parseExistingTasks(raw, notePrefix: notePrefix, contactPrefix: contactPrefix, duePrefix: duePrefix,
+                                       fieldSep: fieldSep, recordSep: recordSep)
+    }
+
+    // Pure parsing, unit-testable without any AppleScript/live-OmniFocus dependency: decodes the raw
+    // field/record-separated string the script above emits into ExistingTask values. A legacy
+    // (pre-#653) 2-paragraph note has no contact line, so its middle field is legacyRecipientId
+    // instead of a real "Overture contact: " line; that's tagged with legacyRecipientId rather than
+    // failing to parse, so OmniFocusSync.reconcile always treats it as stale.
+    static func parseExistingTasks(_ raw: String, notePrefix: String, contactPrefix: String, duePrefix: String,
+                                   fieldSep: String, recordSep: String) -> [OmniFocusSync.ExistingTask] {
+        raw.components(separatedBy: recordSep).compactMap { record in
             let fields = record.components(separatedBy: fieldSep)
-            guard fields.count == 2 else { return nil }
+            guard fields.count == 3 else { return nil }
             let line1 = fields[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            let line2 = fields[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            guard line1.hasPrefix(notePrefix), line2.hasPrefix(duePrefix) else { return nil }
+            let contactField = fields[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let line3 = fields[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line1.hasPrefix(notePrefix), line3.hasPrefix(duePrefix) else { return nil }
             let key = String(line1.dropFirst(notePrefix.count))
-            let ymd = line2.dropFirst(duePrefix.count).split(separator: "-").compactMap { Int($0) }
+            let recipientId: String
+            if contactField == legacyRecipientId {
+                recipientId = legacyRecipientId
+            } else if contactField.hasPrefix(contactPrefix) {
+                recipientId = String(contactField.dropFirst(contactPrefix.count))
+            } else {
+                return nil   // unrecognized shape: skip rather than guess
+            }
+            let ymd = line3.dropFirst(duePrefix.count).split(separator: "-").compactMap { Int($0) }
             guard ymd.count == 3, let due = easternDue(year: ymd[0], month: ymd[1], day: ymd[2]) else { return nil }
-            return OmniFocusSync.ExistingTask(naturalKey: key, dueDate: due)
+            return OmniFocusSync.ExistingTask(naturalKey: key, recipientId: recipientId, dueDate: due)
         }
     }
 
@@ -74,12 +107,20 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         _ = try run(src)
     }
 
-    func complete(naturalKey: String) throws {
+    // #653: scoped to the specific recipient's task, not every task on the show. A legacy (pre-#653)
+    // task carries no contact line at all; matched by its ABSENCE rather than a literal sentinel
+    // string, since the sentinel never actually appears in a real note.
+    func complete(naturalKey: String, recipientId: String) throws {
+        let matchClause = recipientId == Self.legacyRecipientId
+            ? "note of t does not contain \"\(esc(contactPrefix))\""
+            : "note of t contains \"\(esc(contactPrefix + recipientId))\""
         let src = """
         tell application "OmniFocus" to tell default document
           set ovt to first flattened tag whose name is "\(ownerTag)"
-          repeat with t in (tasks of ovt whose note contains "\(esc(notePrefix + naturalKey))")
-            mark complete t
+          repeat with t in (tasks of ovt whose completed is false and note contains "\(esc(notePrefix + naturalKey))")
+            if \(matchClause) then
+              mark complete t
+            end if
           end repeat
         end tell
         """
@@ -124,7 +165,7 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         """
     }
 
-    private func easternDue(year: Int, month: Int, day: Int) -> Date? {
+    private static func easternDue(year: Int, month: Int, day: Int) -> Date? {
         var comps = DateComponents()
         comps.year = year; comps.month = month; comps.day = day
         comps.hour = OmniFocusSync.dueHour; comps.minute = 0; comps.second = 0
