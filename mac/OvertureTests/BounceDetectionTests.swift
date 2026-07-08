@@ -67,4 +67,25 @@ struct BounceDetectionTests {
         let data = threadJSON(from: "manager@bachsociety.org", subject: "Re: opportunity")
         #expect(BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: "dan@danwrightphotography.com") == nil)
     }
+
+    // #398 review finding: a dismissed bounce (bounce-1) must not silently block a genuinely
+    // NEWER bounce (bounce-2) landing on the same thread later, since Gmail's threads.get array
+    // order isn't guaranteed chronological (the #482 precedent for replies). Array position 0
+    // here is the OLDER message, so a fix that just returns the first array match would wrongly
+    // return "bounce-1" instead of the newest, "bounce-2".
+    @Test func returnsTheNewestHardBounceNotArrayPosition() {
+        let json = Data(#"""
+        {"messages":[
+          {"id":"bounce-1","internalDate":"1000","payload":{"headers":[
+            {"name":"From","value":"mailer-daemon@googlemail.com"},
+            {"name":"Subject","value":"Delivery Status Notification (Failure)"}
+          ]}},
+          {"id":"bounce-2","internalDate":"2000","payload":{"headers":[
+            {"name":"From","value":"mailer-daemon@googlemail.com"},
+            {"name":"Subject","value":"Delivery Status Notification (Failure)"}
+          ]}}
+        ]}
+        """#.utf8)
+        #expect(BounceDetection.hardBounceMessageId(threadJSON: json, selfEmail: "dan@danwrightphotography.com") == "bounce-2")
+    }
 }

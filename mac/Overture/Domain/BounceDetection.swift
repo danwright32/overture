@@ -25,13 +25,16 @@ enum BounceDetection {
         return s.contains("failure") || s.contains("undelivered") || s.contains("delivery failed")
     }
 
-    // The Gmail message id of a hard bounce in a threads.get (metadata, From + Subject headers)
-    // response, or nil if there is none. A recipient's own thread is expected to carry at most
-    // one bounce notification, so the first match is returned.
+    // The Gmail message id of the newest hard bounce in a threads.get (metadata, From + Subject
+    // headers) response, or nil if there is none. A recipient can carry more than one bounce
+    // notification on the same thread (a dismissed false positive followed by a genuinely new
+    // bounce, #398), and threads.get's array order isn't guaranteed to be chronological, so this
+    // sorts by internalDate (ReplyDetection.newestFirst, the same precedent latestReplyId uses)
+    // rather than returning whichever bounce happens to come first in the array.
     static func hardBounceMessageId(threadJSON data: Data, selfEmail: String) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
-        for m in messages {
+        for m in ReplyDetection.newestFirst(messages) {
             guard let payload = m["payload"] as? [String: Any],
                   let headers = payload["headers"] as? [[String: Any]] else { continue }
             let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
