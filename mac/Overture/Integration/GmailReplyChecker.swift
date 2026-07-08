@@ -55,9 +55,11 @@ struct GmailReplyChecker {
             fromAddresses: ReplyDetection.fromAddresses(threadJSON: data), selfEmail: fromEmail) {
             if let full = await fetchThread(id: id, token: token, format: "full", fetch: fetch) { fullThreads[id] = full }
         }
-        let marked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now,
-                                                fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
-        guard marked > 0 else { return false }
+        let repliesMarked = ReplyService.detectReplies(in: all, selfEmail: fromEmail, now: now,
+                                                       fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
+        let bouncesMarked = BounceService.detectBounces(in: all, selfEmail: fromEmail, now: now,
+                                                        fetchThread: { threads[$0] })
+        guard repliesMarked > 0 || bouncesMarked > 0 else { return false }
         do {
             try context.save()
             return false
@@ -71,7 +73,9 @@ struct GmailReplyChecker {
         id: String, token: String, format: String = "metadata",
         fetch: (URLRequest) async throws -> (Data, URLResponse)
     ) async -> Data? {
-        let query = format == "metadata" ? "format=metadata&metadataHeaders=From" : "format=full"
+        // Subject is included alongside From (#398) so a hard-bounce notification can be told
+        // apart from a temporary delay purely from metadata, no full-body fetch needed.
+        let query = format == "metadata" ? "format=metadata&metadataHeaders=From&metadataHeaders=Subject" : "format=full"
         guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/\(id)?\(query)") else { return nil }
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
