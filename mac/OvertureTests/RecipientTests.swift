@@ -211,6 +211,19 @@ struct RecipientTests {
         #expect(r.dismissedBounceId == nil)
     }
 
+    @Test func isAutoBouncedIsTrueOnlyForAnAutoDetectedBounce() {
+        // RecipientSnapshot's core fields are `let`, so this builds two snapshots (one per
+        // outcomeSource) rather than mutating a single instance in place.
+        func snapshot(source: OutcomeSource?) -> RecipientSnapshot {
+            RecipientSnapshot(id: "a@act.example", name: nil, email: "a@act.example",
+                              role: nil, provenance: .act, sendState: .sent,
+                              replied: false, lastReplyText: nil, resolution: nil,
+                              bounced: true, outcomeSource: source)
+        }
+        #expect(snapshot(source: nil).isAutoBounced == true)
+        #expect(snapshot(source: .manual).isAutoBounced == false)
+    }
+
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
     // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
     // a later re-draft can't rewrite the lesson.

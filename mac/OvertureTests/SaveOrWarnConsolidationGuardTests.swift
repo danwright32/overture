@@ -16,7 +16,7 @@ struct SaveOrWarnConsolidationGuardTests {
     private static let forbidden = "ActionAck.saveFailed(org:"
 
     private static let queueViewFunctions = [
-        "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply",
+        "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
         "markConfidenceReviewed", "correctClassification", "setConversationState",
         "confirmConversationState", "confirmBooking", "dismissBookingSuggestion",
