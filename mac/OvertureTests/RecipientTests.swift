@@ -193,6 +193,24 @@ struct RecipientTests {
         #expect(r.replyDraftEditedByDan == false)
     }
 
+    // #398: dismissing a wrongly auto-detected bounce reverts it and remembers the wrong
+    // bounce message's id, mirroring dismissAutoReply, so a genuinely new bounce still flags.
+    @Test func dismissingAnAutoBounceRevertsItAndRemembersTheMessageId() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.bounced = true
+        r.lastBounceId = "bounce-1"
+        r.dismissAutoBounce()
+        #expect(r.bounced == false)
+        #expect(r.dismissedBounceId == "bounce-1")
+    }
+
+    @Test func dismissingWhenNotBouncedIsANoOp() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.dismissAutoBounce()
+        #expect(r.bounced == false)
+        #expect(r.dismissedBounceId == nil)
+    }
+
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
     // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
     // a later re-draft can't rewrite the lesson.

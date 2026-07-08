@@ -88,6 +88,11 @@ final class Recipient {
     var dismissedReplyId: String?
     var lastReplyText: String?
     var bounced: Bool = false
+    // The Gmail message id of the auto-detected hard bounce that set `bounced` (#398), and the
+    // one Dan said was wrong, mirroring lastReplyId/dismissedReplyId so a dismissed false
+    // positive never re-flags while a genuinely new bounce still does.
+    var lastBounceId: String?
+    var dismissedBounceId: String?
     var resolutionRaw: String?
     // Whether Dan hand-set this recipient's state (#418 A1b), mirroring Prospect.outcomeSourceRaw:
     // nil = no manual mark, OutcomeSource.manual = Dan judged this contact by hand. Per-recipient
@@ -291,5 +296,14 @@ final class Recipient {
         originalReplyDraftBody = nil
         sentReplyBody = nil
         replySentAt = nil
+    }
+
+    // Dan dismissed a wrong auto-detected bounce for THIS contact (#398): revert bounced and
+    // remember the wrong bounce message's id so detection never re-flags that same one, while
+    // a genuinely new bounce on the contact's thread still gets detected. Mirrors dismissAutoReply.
+    func dismissAutoBounce() {
+        guard bounced else { return }
+        bounced = false
+        dismissedBounceId = lastBounceId
     }
 }
