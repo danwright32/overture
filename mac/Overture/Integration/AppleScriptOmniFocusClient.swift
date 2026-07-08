@@ -20,7 +20,7 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     // 2-paragraph format). Tag it with a recipientId that can never match a real desired task, so
     // reconcile always treats it as stale -- the one-time transition: it completes and the correct
     // new per-recipient task gets created fresh on the first sync after this ships.
-    private static let legacyRecipientId = "__legacy-pre-653__"
+    static let legacyRecipientId = "__legacy-pre-653__"
 
     enum OmniFocusError: Error { case scriptFailed(String), notPermitted }
 
@@ -50,7 +50,18 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         end tell
         """
         let raw = try run(src)
-        return raw.components(separatedBy: recordSep).compactMap { record in
+        return Self.parseExistingTasks(raw, notePrefix: notePrefix, contactPrefix: contactPrefix, duePrefix: duePrefix,
+                                       fieldSep: fieldSep, recordSep: recordSep)
+    }
+
+    // Pure parsing, unit-testable without any AppleScript/live-OmniFocus dependency: decodes the raw
+    // field/record-separated string the script above emits into ExistingTask values. A legacy
+    // (pre-#653) 2-paragraph note has no contact line, so its middle field is legacyRecipientId
+    // instead of a real "Overture contact: " line; that's tagged with legacyRecipientId rather than
+    // failing to parse, so OmniFocusSync.reconcile always treats it as stale.
+    static func parseExistingTasks(_ raw: String, notePrefix: String, contactPrefix: String, duePrefix: String,
+                                   fieldSep: String, recordSep: String) -> [OmniFocusSync.ExistingTask] {
+        raw.components(separatedBy: recordSep).compactMap { record in
             let fields = record.components(separatedBy: fieldSep)
             guard fields.count == 3 else { return nil }
             let line1 = fields[0].trimmingCharacters(in: .whitespacesAndNewlines)
@@ -59,8 +70,8 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
             guard line1.hasPrefix(notePrefix), line3.hasPrefix(duePrefix) else { return nil }
             let key = String(line1.dropFirst(notePrefix.count))
             let recipientId: String
-            if contactField == Self.legacyRecipientId {
-                recipientId = Self.legacyRecipientId
+            if contactField == legacyRecipientId {
+                recipientId = legacyRecipientId
             } else if contactField.hasPrefix(contactPrefix) {
                 recipientId = String(contactField.dropFirst(contactPrefix.count))
             } else {
@@ -154,7 +165,7 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         """
     }
 
-    private func easternDue(year: Int, month: Int, day: Int) -> Date? {
+    private static func easternDue(year: Int, month: Int, day: Int) -> Date? {
         var comps = DateComponents()
         comps.year = year; comps.month = month; comps.day = day
         comps.hour = OmniFocusSync.dueHour; comps.minute = 0; comps.second = 0
