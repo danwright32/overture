@@ -111,4 +111,56 @@ struct GmailReplyCheckerTests {
 
         #expect(saveFailed)
     }
+
+    private func bounceThreadFetch(from: String, subject: String) -> (URLRequest) async throws -> (Data, URLResponse) {
+        let json = #"{"messages":[{"id":"bounce-1","payload":{"headers":["#
+            + #"{"name":"From","value":""# + from + #""},"#
+            + #"{"name":"Subject","value":""# + subject + #""}"#
+            + #"]}}]}"#
+        return { req in
+            (Data(json.utf8),
+             HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    // #398: a hard bounce on the recipient's own thread marks it bounced, auto-sourced so Dan's
+    // dismiss control still applies, and the save actually runs even though no reply was found.
+    @Test func marksBouncedWhenTheThreadCarriesAHardBounce() async throws {
+        let ctx = ModelContext(try container())
+        let p = sentProspect(ctx, group: "Dead Inbox Trio", threadId: "t4")
+        let checker = GmailReplyChecker(fromEmail: "dan@danwrightphotography.com")
+
+        await checker.markReplies(in: ctx, token: "tok", now: Date(),
+                                  fetch: bounceThreadFetch(from: "mailer-daemon@googlemail.com",
+                                                           subject: "Delivery Status Notification (Failure)"))
+
+        #expect(p.recipients.first?.bounced == true)
+        #expect(p.recipients.first?.lastBounceId == "bounce-1")
+        #expect(p.recipients.first?.outcomeSource != .manual)
+    }
+
+    @Test func leavesUnbouncedOnASoftBounce() async throws {
+        let ctx = ModelContext(try container())
+        let p = sentProspect(ctx, group: "Slow Mailbox Quartet", threadId: "t5")
+        let checker = GmailReplyChecker(fromEmail: "dan@danwrightphotography.com")
+
+        await checker.markReplies(in: ctx, token: "tok", now: Date(),
+                                  fetch: bounceThreadFetch(from: "mailer-daemon@googlemail.com",
+                                                           subject: "Delivery Status Notification (Delay)"))
+
+        #expect(p.recipients.first?.bounced == false)
+    }
+
+    @Test func neverReflagsABounceDanDismissed() async throws {
+        let ctx = ModelContext(try container())
+        let p = sentProspect(ctx, group: "Reconsidered Ensemble", threadId: "t6")
+        p.recipients.first?.dismissedBounceId = "bounce-1"
+        let checker = GmailReplyChecker(fromEmail: "dan@danwrightphotography.com")
+
+        await checker.markReplies(in: ctx, token: "tok", now: Date(),
+                                  fetch: bounceThreadFetch(from: "mailer-daemon@googlemail.com",
+                                                           subject: "Delivery Status Notification (Failure)"))
+
+        #expect(p.recipients.first?.bounced == false)
+    }
 }

@@ -28,7 +28,9 @@ enum ReplyDetection {
     // separator (or the string's edge), rather than merely containing it as a substring, so a
     // real address like "bouncebackband" or "eleanoreply" isn't caught while "noreply-support"
     // or "notifications-noreply" still are.
-    private static func matchesToken(_ local: String, _ token: String) -> Bool {
+    // Internal (not private): BounceDetection (#398) reuses this same separator-aware token
+    // match instead of duplicating it.
+    static func matchesToken(_ local: String, _ token: String) -> Bool {
         guard local.count >= token.count else { return false }
         if local.hasPrefix(token) {
             let after = local.index(local.startIndex, offsetBy: token.count)
@@ -102,7 +104,9 @@ enum ReplyDetection {
     // Newest-first by Gmail's internalDate (epoch ms), since threads.get's array order isn't
     // guaranteed to be chronological. Ties, including messages with no internalDate at all, keep
     // their original order reversed, the same newest-last shape a real thread's array normally has.
-    private static func newestFirst(_ messages: [[String: Any]]) -> [[String: Any]] {
+    // Internal (not private): BounceDetection (#398) reuses this same chronological ordering so a
+    // genuinely newer hard bounce is found instead of whichever bounce comes first in the array.
+    static func newestFirst(_ messages: [[String: Any]]) -> [[String: Any]] {
         messages.enumerated()
             .sorted { a, b in
                 let (dateA, dateB) = (internalDateMillis(a.element), internalDateMillis(b.element))

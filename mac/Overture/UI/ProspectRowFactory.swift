@@ -40,6 +40,7 @@ enum ProspectRowFactory {
                                                           prospects: prospects, context: context, feedback: feedback)
             },
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onSendReply: onSendReply,
             onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },

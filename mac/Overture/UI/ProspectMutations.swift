@@ -106,6 +106,15 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // Dan marked an auto-detected bounce as wrong (#398): revert it and remember that bounce
+    // message so it does not re-flag, while a genuinely new bounce still will.
+    static func dismissContactBounce(_ item: QueueItem, _ recipientId: String,
+                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.dismissAutoBounce() }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }

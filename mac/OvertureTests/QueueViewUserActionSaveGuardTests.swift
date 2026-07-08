@@ -11,7 +11,7 @@ import Foundation
 struct QueueViewUserActionSaveGuardTests {
 
     private static let guardedFunctions = [
-        "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply",
+        "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
         "markConfidenceReviewed", "correctClassification", "setConversationState",
         "confirmConversationState", "confirmBooking", "dismissBookingSuggestion",

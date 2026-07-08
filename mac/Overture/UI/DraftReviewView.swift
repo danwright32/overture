@@ -18,6 +18,7 @@ struct DraftReviewView: View {
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
+    var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -335,6 +336,11 @@ struct DraftReviewView: View {
                         Button("Not a real reply") { onDismissContactReply(c.id) }
                             .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                             .help("This wasn't a genuine reply (an auto-reply or out of office). Revert it; a new reply still flags.")
+                    }
+                    if c.isAutoBounced {
+                        Button("Not really bounced") { onDismissContactBounce(c.id) }
+                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                            .help("This wasn't a genuine bounce. Revert it; a new bounce still flags.")
                     }
                 }
                 .padding(.leading, 20)

@@ -150,6 +150,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // dismiss control.
     var isAutoReplied: Bool { replied && outcomeSource != .manual }
 
+    // A bounce Overture auto-detected (not one Dan hand-marked): only these get a "not really
+    // bounced" dismiss control (#398).
+    var isAutoBounced: Bool { bounced && outcomeSource != .manual }
+
     // The plain-language status line. Terminal marks win; then bounce; then reply; then send state.
     var statusLabel: String {
         if let resolution {
