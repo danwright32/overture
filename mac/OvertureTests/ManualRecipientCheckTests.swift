@@ -53,6 +53,17 @@ struct ManualRecipientCheckTests {
         #expect(result.action == .resume(existingId: "jane@example.com"))
     }
 
+    @Test func resumesADeclinedSuppressionMatch() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        p.setRecipients([recipient("jane@example.com", sendState: .suppressed, suppressionReason: .declined)])
+
+        let result = ManualRecipientCheck.evaluate(email: "jane@example.com",
+                                                    existingRecipients: p.recipients, venue: nil)
+
+        #expect(result.action == .resume(existingId: "jane@example.com"))
+    }
+
     @Test func resumesADeclinedSoftMatch() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
