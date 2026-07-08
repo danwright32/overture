@@ -35,6 +35,69 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // Dan manually adds a contact by hand (#399): runs the exact-duplicate/org/venue check first,
+    // then creates a fresh Recipient, resumes one pursuit had stopped on, or is blocked if the
+    // email already belongs to an active or settled contact. The venue/org flags never block; they
+    // only ride along in the confirmation banner.
+    static func addRecipientManually(_ item: QueueItem, email: String, name: String?,
+                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = ManualRecipientCheck.evaluate(email: trimmedEmail, existingRecipients: model.recipients,
+                                                    venue: model.venue)
+
+        switch result.action {
+        case .blocked:
+            feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
+            return
+        case .resume(let existingId):
+            model.updateRecipient(id: existingId) { r in
+                r.sendState = (r.sentAt != nil) ? .sent : .pending
+                r.suppressionReasonRaw = nil
+                r.resolutionRaw = nil
+                r.outcomeSourceRaw = nil
+            }
+        case .create:
+            let canonical = ReplyDetection.email(from: trimmedEmail)
+            model.addRecipient(Recipient(id: canonical, email: trimmedEmail,
+                                         name: (trimmedName?.isEmpty == false) ? trimmedName : nil,
+                                         provenance: .manual))
+        }
+
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
+        switch result.action {
+        case .resume:
+            feedback.acknowledge(ActionAck.recipientResumed(name: trimmedName, org: model.groupName))
+        default:
+            feedback.acknowledge(ActionAck.recipientAdded(name: trimmedName, org: model.groupName,
+                                                           totalCount: model.recipients.count,
+                                                           warnings: warningLines(for: result)))
+        }
+    }
+
+    private static func warningLines(for result: ManualRecipientCheck.Result) -> [String] {
+        var lines: [String] = []
+        if result.sharesOrgWith != nil {
+            lines.append("Heads up: shares a domain with another contact already on this show.")
+        }
+        if result.looksLikeVenue {
+            lines.append("Heads up: looks like the venue's own domain.")
+        }
+        return lines
+    }
+
+    // Dan removes a recipient by hand (#399): Prospect.removeOrSuppressRecipient decides delete
+    // versus stop-pursuing by that recipient's current send state.
+    static func removeRecipientManually(_ item: QueueItem, _ recipientId: String, _ name: String?,
+                                        prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.removeOrSuppressRecipient(id: recipientId)
+        if context.saveOrWarn(org: model.groupName, feedback: feedback) {
+            feedback.acknowledge(ActionAck.recipientRemoved(name: name, org: model.groupName))
+        }
+    }
+
     static func dismissContactReply(_ item: QueueItem, _ recipientId: String,
                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }

@@ -182,6 +182,7 @@ struct ResultsImportTests {
         // #542: the same suppressed sendState now carries a specific reason so the label doesn't lie
         // about why the contact was taken out of play.
         #expect(s(.suppressed, suppressionReason: .declined).statusLabel == "Paused (show declined)")
+        #expect(s(.suppressed, suppressionReason: .removedByDan).statusLabel == "Removed")
         #expect(s(.sending).statusLabel == "Sending…")   // #475/#476: claimed, in flight
         #expect(s(replied: true).isAutoReplied == true)
         #expect(s(replied: true, source: .manual).isAutoReplied == false)   // Dan's mark, not an auto reply

@@ -22,8 +22,11 @@ enum SendState: String, Codable, CaseIterable, Sendable {
 // meant "the show got booked elsewhere," but the same freeze now also fires on a manual decline or
 // closing note, so the label shown for a suppressed contact needs to say which actually happened.
 // Only meaningful while sendState == .suppressed.
+// #399: a third reason, distinct from an actual outcome. removedByDan means Dan hand-removed an
+// already-sent contact without recording a decline (reply/decline stats stay honest); the other
+// two cases both reflect a real event (the show booked elsewhere, or this contact declined).
 enum RecipientSuppressionReason: String, Codable, CaseIterable, Sendable {
-    case bookedElsewhere, declined
+    case bookedElsewhere, declined, removedByDan
 }
 
 // A recipient's terminal commercial outcome (#389 derived-outcome model). The active states

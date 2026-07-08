@@ -168,6 +168,7 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
             switch suppressionReason {
             case .bookedElsewhere: return "Paused (booked elsewhere)"
             case .declined: return "Paused (show declined)"
+            case .removedByDan: return "Removed"
             }
         case .sending: return "Sending…"
         }

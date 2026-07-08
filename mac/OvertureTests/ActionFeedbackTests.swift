@@ -86,6 +86,33 @@ struct ActionAckTests {
                 == "Snoozed Aurora Strings. I'll remind you later.")
     }
 
+    @Test("recipientAdded reports the total count and any warnings")
+    func recipientAddedMessage() {
+        #expect(ActionAck.recipientAdded(name: "Jane Doe", org: "Aurora Strings", totalCount: 3, warnings: [])
+                == "Added Jane Doe. 3 recipients on Aurora Strings now.")
+        #expect(ActionAck.recipientAdded(name: nil, org: "Aurora Strings", totalCount: 1, warnings: [])
+                == "Added the contact. 1 recipient on Aurora Strings now.")
+        #expect(ActionAck.recipientAdded(name: "Jane Doe", org: "Aurora Strings", totalCount: 2,
+                                         warnings: ["Heads up: looks like the venue's own domain."])
+                == "Added Jane Doe. 2 recipients on Aurora Strings now. Heads up: looks like the venue's own domain.")
+    }
+
+    @Test("recipientAlreadyExists names who and the show")
+    func recipientAlreadyExistsMessage() {
+        #expect(ActionAck.recipientAlreadyExists(name: "Jane Doe", org: "Aurora Strings")
+                == "Jane Doe is already a recipient on Aurora Strings.")
+        #expect(ActionAck.recipientAlreadyExists(name: nil, org: "Aurora Strings")
+                == "That contact is already a recipient on Aurora Strings.")
+    }
+
+    @Test("recipientResumed and recipientRemoved name who and the show")
+    func recipientResumedAndRemovedMessages() {
+        #expect(ActionAck.recipientResumed(name: "Jane Doe", org: "Aurora Strings")
+                == "Resumed pursuing Jane Doe on Aurora Strings.")
+        #expect(ActionAck.recipientRemoved(name: "Jane Doe", org: "Aurora Strings")
+                == "Removed Jane Doe from Aurora Strings.")
+    }
+
     // #477: a send (or reply send) can succeed at Gmail but fail to persist locally, which must
     // never look like nothing happened.
     @Test("a send-receipt save failure names the org and points at Gmail")

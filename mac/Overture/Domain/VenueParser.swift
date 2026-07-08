@@ -13,9 +13,9 @@ enum VenueParser {
 
     // Conservative venue words: common enough to catch real venues, but avoiding ones that
     // frequently appear in group names (e.g. "School", "Conservatory", "Stage").
-    private static let venueWords = ["Hall", "Theatre", "Theater", "Center", "Centre",
-                                     "Auditorium", "Church", "Cathedral", "Chapel", "Park",
-                                     "Museum", "Library", "Playhouse"]
+    static let venueWords = ["Hall", "Theatre", "Theater", "Center", "Centre",
+                             "Auditorium", "Church", "Cathedral", "Chapel", "Park",
+                             "Museum", "Library", "Playhouse"]
 
     static func parse(context: String) -> String? {
         for v in carnegieHalls + knownVenues where context.contains(v) { return v }

@@ -63,4 +63,106 @@ struct ProspectMutationsTests {
         #expect(p.outcomeSourceRaw == OutcomeSource.manual.rawValue)
         #expect(p.recipients.first?.sendState == .suppressed)
     }
+
+    @Test func addRecipientManuallyCreatesAFreshRecipient() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let feedback = ActionFeedback()
+
+        ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@newcontact.example", name: "Jane Doe",
+                                                prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.map(\.id) == ["jane@newcontact.example"])
+        #expect(p.recipients.first?.name == "Jane Doe")
+        #expect(p.recipients.first?.provenance == .manual)
+        #expect(feedback.message == "Added Jane Doe. 1 recipient on Aurora Strings now.")
+    }
+
+    @Test func addRecipientManuallyBlocksAnActiveDuplicate() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let existing = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        existing.sendState = .sent
+        p.recipients = [existing]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
+                                                prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.count == 1)
+        #expect(feedback.message == "Jane Doe is already a recipient on Aurora Strings.")
+    }
+
+    @Test func addRecipientManuallyResumesARemovedContact() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let removed = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        removed.sendState = .suppressed
+        removed.suppressionReason = .removedByDan
+        removed.sentAt = Date()
+        p.recipients = [removed]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
+                                                prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.sendState == .sent)
+        #expect(p.recipients.first?.suppressionReasonRaw == nil)
+        #expect(feedback.message == "Resumed pursuing Jane Doe on Aurora Strings.")
+    }
+
+    @Test func addRecipientManuallyResumesAnUntriedDeclinedContactAsStillPending() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let untried = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        untried.sendState = .suppressed
+        untried.suppressionReason = .declined
+        p.recipients = [untried]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
+                                                prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.sendState == .pending)
+        #expect(p.recipients.first?.sentAt == nil)
+        #expect(feedback.message == "Resumed pursuing Jane Doe on Aurora Strings.")
+    }
+
+    @Test func removeRecipientManuallyDeletesAPendingOneAndAcknowledges() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let pending = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        p.recipients = [pending]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.removeRecipientManually(QueueItem(p), "jane@example.com", "Jane Doe",
+                                                   prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.isEmpty)
+        #expect(feedback.message == "Removed Jane Doe from Aurora Strings.")
+    }
+
+    @Test func removeRecipientManuallySuppressesASentOneAndAcknowledges() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let sent = Recipient(id: "jane@example.com", email: "jane@example.com", provenance: .act)
+        sent.sendState = .sent
+        p.recipients = [sent]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.removeRecipientManually(QueueItem(p), "jane@example.com", "Jane Doe",
+                                                   prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.sendState == .suppressed)
+        #expect(p.recipients.first?.suppressionReason == .removedByDan)
+        #expect(feedback.message == "Removed Jane Doe from Aurora Strings.")
+    }
 }

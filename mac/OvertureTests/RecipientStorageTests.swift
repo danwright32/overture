@@ -66,6 +66,43 @@ struct RecipientStorageTests {
         #expect(p.recipients.map(\.id) == ["b@example.com"])
     }
 
+    @Test func removeOrSuppressRecipientDeletesAPendingOne() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
+        p.setRecipients([recipient("a@example.com"), recipient("b@example.com")])
+
+        p.removeOrSuppressRecipient(id: "a@example.com")
+
+        #expect(p.recipients.map(\.id) == ["b@example.com"])
+    }
+
+    @Test func removeOrSuppressRecipientSuppressesAnAlreadySentOne() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
+        let sent = recipient("a@example.com")
+        sent.sendState = .sent
+        sent.sentAt = Date()
+        p.setRecipients([sent])
+
+        p.removeOrSuppressRecipient(id: "a@example.com")
+
+        #expect(p.recipients.map(\.id) == ["a@example.com"])
+        #expect(sent.sendState == .suppressed)
+        #expect(sent.suppressionReason == .removedByDan)
+        #expect(sent.resolution == nil)
+        #expect(sent.outcomeSource == nil)
+    }
+
+    @Test func removeOrSuppressRecipientIgnoresAnUnknownId() throws {
+        let ctx = try context()
+        let p = makeProspect(ctx)
+        p.setRecipients([recipient("a@example.com")])
+
+        p.removeOrSuppressRecipient(id: "nope@example.com")
+
+        #expect(p.recipients.map(\.id) == ["a@example.com"])
+    }
+
     @Test func updateRecipientMutatesOneRow() throws {
         let ctx = try context()
         let p = makeProspect(ctx)
