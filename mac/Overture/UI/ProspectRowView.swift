@@ -21,6 +21,8 @@ struct ProspectRowView: View {
     var onConfirmConversationState: () -> Void = {}
     var onDismissReply: () -> Void = {}
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
+    var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
@@ -92,6 +94,8 @@ struct ProspectRowView: View {
                     onDismissReply: onDismissReply,
                     onMarkContact: onMarkContact,
                     onDismissContactReply: onDismissContactReply,
+                    onAddRecipient: onAddRecipient,
+                    onRemoveRecipient: onRemoveRecipient,
                     onDraftReply: onDraftReply,
                     onSendReply: onSendReply,
                     onCopyReply: onCopyReply,

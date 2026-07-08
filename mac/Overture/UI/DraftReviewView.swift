@@ -18,6 +18,8 @@ struct DraftReviewView: View {
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
+    var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
+    var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
@@ -38,6 +40,9 @@ struct DraftReviewView: View {
     @State private var replyEditText = ""
     @State private var lostReason = ""
     @State private var lostReasonSeeded = false
+    @State private var showAddContact = false
+    @State private var addContactEmail = ""
+    @State private var addContactName = ""
 
     private var isApproved: Bool { item.status == .approved }
 
@@ -215,7 +220,11 @@ struct DraftReviewView: View {
                         .background(Capsule().fill(OVColor.forest))
                 }
                 .buttonStyle(.plain)
-                .disabled(item.contactEmail == nil)
+                // #399: was item.contactEmail == nil, the legacy singular field a separate in-flight
+                // milestone (#650-654) is slated to delete. hasPendingRecipient already means "at
+                // least one recipient still pending with a real address", the same thing this gate
+                // needs, so nothing new had to be added.
+                .disabled(!item.hasPendingRecipient)
                 Button("Edit") {
                     draftSubject = item.draftSubject ?? ""
                     draftBody = item.draftBody ?? ""
@@ -232,13 +241,50 @@ struct DraftReviewView: View {
     // Per-contact conversation surface (#418 B1): once a show is sent, list each contact with its
     // status and the manual-judge controls. Dan reads the reply in Gmail, then marks the outcome here.
     @ViewBuilder private var conversationContactsSection: some View {
-        if item.isSent && !item.contacts.isEmpty {
-            VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                Text("Contacts")
-                    .font(OVType.tag).foregroundStyle(OVColor.inkFaint).tracking(0.6)
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            Text("Contacts")
+                .font(OVType.tag).foregroundStyle(OVColor.inkFaint).tracking(0.6)
+            if item.contacts.isEmpty {
+                Text("No contacts yet.").font(OVType.body).foregroundStyle(OVColor.inkFaint)
+            } else {
                 ForEach(item.contacts) { contactRow($0) }
             }
-            .padding(.top, OVSpacing.xs)
+            addContactButton
+        }
+        .padding(.top, OVSpacing.xs)
+    }
+
+    // #399: opens a small popover to type an email (required) and name (optional). The add itself
+    // runs the duplicate/venue check (ManualRecipientCheck via ProspectMutations); this view never
+    // blocks the add on its own, it only requires a plausible email before enabling the button.
+    private var addContactButton: some View {
+        Button { showAddContact = true } label: {
+            Label("Add contact", systemImage: "plus.circle")
+                .font(OVType.meta).foregroundStyle(OVColor.forest)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showAddContact, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: OVSpacing.sm) {
+                Text("Add a contact").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                TextField("Email", text: $addContactEmail)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Name (optional)", text: $addContactName)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Add") {
+                        onAddRecipient(addContactEmail, addContactName.isEmpty ? nil : addContactName)
+                        addContactEmail = ""
+                        addContactName = ""
+                        showAddContact = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!addContactEmail.contains("@"))
+                    Button("Cancel") { showAddContact = false }
+                        .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+            .padding(OVSpacing.md)
+            .frame(width: 260)
         }
     }
 
@@ -275,6 +321,10 @@ struct DraftReviewView: View {
                         Button("Closed (not now)") { onMarkContact(c.id, .declinedSoft, false) }
                         Button("Closed (not interested)") { onMarkContact(c.id, .declinedHard, false) }
                         Button("Bounced") { onMarkContact(c.id, nil, true) }
+                        Divider()
+                        // #399: distinct from every option above, none of which mean "stop pursuing
+                        // without recording an outcome".
+                        Button("Remove", role: .destructive) { onRemoveRecipient(c.id) }
                     } label: {
                         Text("Mark…").font(OVType.meta).foregroundStyle(OVColor.forest)
                             .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
@@ -288,6 +338,19 @@ struct DraftReviewView: View {
                     }
                 }
                 .padding(.leading, 20)
+            } else if c.sendState == .pending {
+                // #399: a never-sent contact can be removed outright (Prospect.removeOrSuppressRecipient
+                // hard-deletes a still-pending row), so this is a plain delete, not a menu of outcomes.
+                Button { onRemoveRecipient(c.id) } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "xmark.circle").font(.system(size: 10))
+                        Text("Remove").font(OVType.meta)
+                    }
+                    .foregroundStyle(OVColor.inkSoft)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 20)
+                .help("Remove this contact")
             }
             if c.replied { replyDraftBlock(c) }
         }

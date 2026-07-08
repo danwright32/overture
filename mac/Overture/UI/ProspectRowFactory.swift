@@ -30,6 +30,15 @@ enum ProspectRowFactory {
             onMarkContact: { rid, resolution, bounced in
                 ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
             },
+            onAddRecipient: { email, name in
+                ProspectMutations.addRecipientManually(item, email: email, name: name,
+                                                        prospects: prospects, context: context, feedback: feedback)
+            },
+            onRemoveRecipient: { rid in
+                let name = item.contacts.first(where: { $0.id == rid })?.displayName
+                ProspectMutations.removeRecipientManually(item, rid, name,
+                                                          prospects: prospects, context: context, feedback: feedback)
+            },
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onSendReply: onSendReply,
