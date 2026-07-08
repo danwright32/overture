@@ -35,12 +35,15 @@ struct OmniFocusSyncConfig: Sendable {
 protocol OmniFocusClient {
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
     func create(_ task: OmniFocusSync.DesiredTask) throws
-    func complete(naturalKey: String) throws
+    func complete(naturalKey: String, recipientId: String) throws
 }
 
 enum OmniFocusSync {
+    // #653: one task per (show, recipient), not per show, so a multi-contact show can have one
+    // contact's follow-up due while another's isn't.
     struct DesiredTask: Equatable, Sendable {
         let naturalKey: String
+        let recipientId: String
         let title: String
         let note: String
         let deferDate: Date   // 11am Eastern on the due day: when the task surfaces
@@ -49,6 +52,7 @@ enum OmniFocusSync {
 
     struct ExistingTask: Equatable, Sendable {
         let naturalKey: String
+        let recipientId: String
         let dueDate: Date
     }
 
@@ -71,59 +75,69 @@ enum OmniFocusSync {
         var toComplete: [ExistingTask]
     }
 
-    // Tasks that should exist now: a confirmed (manual) active conversation state to chase, or a
-    // closing note after the event, whose next-reach-out date falls within the horizon. Excludes
-    // unconfirmed AI suggestions and replied-but-uncategorized leads (those need Dan IN Overture),
-    // and anything booked/lost. The due is the OmniFocus defer date so the task stays hidden until due.
+    // Tasks that should exist now, one per RECIPIENT (#653): a confirmed (manual) active conversation
+    // state to chase, or a closing note after the event, whose next-reach-out date falls within the
+    // horizon. Excludes unconfirmed AI suggestions and replied-but-uncategorized contacts (those need
+    // Dan IN Overture), and anything booked/lost. The due is the OmniFocus defer date so the task
+    // stays hidden until due.
     static func desired(from prospects: [Prospect], now: Date, horizonDays: Int,
                         reminderConfig: ConversationReminderConfig = .init()) -> [DesiredTask] {
         let cutoff = now.addingTimeInterval(TimeInterval(horizonDays) * 86_400)
-        return prospects.compactMap { p in
-            guard p.status != .dismissed else { return nil }   // #238: a no-go lead never nags via OmniFocus
-            // Closed shows drop out, UNLESS a fresh reply still needs triage (a late reply on a
-            // closed show still deserves a task, #424).
-            guard !p.isClosed || p.hasUnhandledReply else { return nil }
+        var tasks: [DesiredTask] = []
+        for p in prospects {
+            guard p.status != .dismissed else { continue }   // #238: a no-go lead never nags via OmniFocus
+            for r in p.recipients {
+                let standing = r.standing
+                let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
+                    && r.conversationStateSource != .manual
+                // A closed contact drops out, UNLESS a fresh reply still needs triage (a late reply on
+                // an otherwise-closed contact still deserves a task, #424).
+                guard standing.isInPlay || unhandledReply else { continue }
 
-            // A CONFIRMED (manual, active) conversation state is the normal follow-up: chase it on its
-            // next reach-out date, if that falls within the horizon. A confirmed lead never triages.
-            let hasConfirmedActiveState = (p.conversationState?.isActive ?? false) && p.conversationStateSource != .auto
-            if hasConfirmedActiveState {
-                guard let due = ConversationReminder.nextReminderDate(
-                    state: p.conversationState, setAt: p.conversationStateSetAt,
-                    remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                    isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
-                    source: p.conversationStateSource, now: now, config: reminderConfig),
-                    due <= cutoff
-                else { return nil }
-                let dueDate = easternTime(hour: dueHour, onDayOf: due)
-                return DesiredTask(naturalKey: p.naturalKey, title: title(for: p),
-                                   note: note(for: p, dueDate: dueDate),
-                                   deferDate: easternTime(hour: deferHour, onDayOf: due),
-                                   dueDate: dueDate)
-            }
+                // A CONFIRMED (manual, active) conversation state is the normal follow-up: chase it on
+                // its next reach-out date, if that falls within the horizon. A confirmed contact never
+                // triages.
+                let hasConfirmedActiveState = (r.conversationState?.isActive ?? false) && r.conversationStateSource != .auto
+                if hasConfirmedActiveState {
+                    guard let due = ConversationReminder.nextReminderDate(
+                        state: r.conversationState, setAt: r.conversationStateSetAt,
+                        remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
+                        isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
+                        source: r.conversationStateSource, now: now, config: reminderConfig),
+                        due <= cutoff
+                    else { continue }
+                    let dueDate = easternTime(hour: dueHour, onDayOf: due)
+                    tasks.append(DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
+                                             note: note(for: p, r, dueDate: dueDate),
+                                             deferDate: easternTime(hour: deferHour, onDayOf: due),
+                                             dueDate: dueDate))
+                    continue
+                }
 
-            // #271 / Phase 7: a reply Dan hasn't categorized (no confirmed active state) would otherwise
-            // leave NO trace in OmniFocus while he's away; only an in-app badge he can't see. Emit a
-            // triage task due today, keyed by the SAME naturalKey so reconcile dedupes it against the
-            // follow-up once Dan confirms the state (the in-app badge and this task never compete: one
-            // OmniFocus task per lead, and confirming the state re-anchors it via the due-day diff).
-            if p.hasUnhandledReply {
-                // Anchor the triage due to a STABLE date on the lead (when its state was last
-                // touched, else when Dan first reached out), NOT `now`; otherwise the day-token diff
-                // would complete+recreate the task on every new calendar day until Dan triages it.
-                let anchor = p.conversationStateSetAt ?? p.sentAt ?? now
-                let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
-                return DesiredTask(naturalKey: p.naturalKey, title: triageTitle(for: p),
-                                   note: note(for: p, dueDate: dueDate),
-                                   deferDate: easternTime(hour: deferHour, onDayOf: anchor),
-                                   dueDate: dueDate)
+                // #271 / Phase 7: a reply Dan hasn't categorized (no confirmed active state) would
+                // otherwise leave NO trace in OmniFocus while he's away; only an in-app badge he can't
+                // see. Emit a triage task due today, keyed by the SAME (naturalKey, recipientId) so
+                // reconcile dedupes it against the follow-up once Dan confirms the state (the in-app
+                // badge and this task never compete: one OmniFocus task per contact, and confirming the
+                // state re-anchors it via the due-day diff).
+                if unhandledReply {
+                    // Anchor the triage due to a STABLE date on the recipient (when its state was last
+                    // touched, else when Dan first reached out), NOT `now`; otherwise the day-token diff
+                    // would complete+recreate the task on every new calendar day until Dan triages it.
+                    let anchor = r.conversationStateSetAt ?? r.sentAt ?? now
+                    let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
+                    tasks.append(DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
+                                             note: note(for: p, r, dueDate: dueDate),
+                                             deferDate: easternTime(hour: deferHour, onDayOf: anchor),
+                                             dueDate: dueDate))
+                }
             }
-            return nil
         }
+        return tasks
     }
 
-    // The Eastern day token written into the task note as paragraph 2, read back verbatim by the
-    // client (avoids reading date components out of AppleScript, which is unreliable).
+    // The Eastern day token written into the task note, read back verbatim by the client (avoids
+    // reading date components out of AppleScript, which is unreliable).
     static let dueNotePrefix = "Due: "
 
     // Read what OmniFocus holds, diff against what should exist, then create/complete via the client.
@@ -142,41 +156,54 @@ enum OmniFocusSync {
         let existing = try client.existingOvertureTasks()
         let plan = reconcile(desired: desired, existing: existing)
         for task in plan.toCreate { try client.create(task) }
-        for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey) }
+        for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey, recipientId: task.recipientId) }
         return (existing.count, plan.toCreate.count, plan.toComplete.count)
     }
 
-    // Diff the desired set against what OmniFocus currently holds (by naturalKey). Complete any
-    // existing task whose lead is no longer desired (resolved) OR whose due no longer matches the
-    // lead's current due (Model A: the nudge re-anchored it, so that task is stale). Create any
-    // desired task with no matching existing task at the right due.
+    // Diff the desired set against what OmniFocus currently holds (by naturalKey + recipientId, #653:
+    // two contacts on one show are distinct tasks). Complete any existing task whose contact is no
+    // longer desired (resolved) OR whose due no longer matches the contact's current due (Model A: the
+    // nudge re-anchored it, so that task is stale). Create any desired task with no matching existing
+    // task at the right due.
+    private struct TaskKey: Hashable { let naturalKey: String; let recipientId: String }
     static func reconcile(desired: [DesiredTask], existing: [ExistingTask]) -> Plan {
-        let desiredByKey = Dictionary(desired.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
+        func key(_ naturalKey: String, _ recipientId: String) -> TaskKey { TaskKey(naturalKey: naturalKey, recipientId: recipientId) }
+        let desiredByKey = Dictionary(desired.map { (key($0.naturalKey, $0.recipientId), $0) }, uniquingKeysWith: { a, _ in a })
         let toComplete = existing.filter { e in
-            guard let d = desiredByKey[e.naturalKey] else { return true }   // lead resolved / no longer desired
-            return d.dueDate != e.dueDate                                  // stale due (re-anchored)
+            guard let d = desiredByKey[key(e.naturalKey, e.recipientId)] else { return true }   // resolved / no longer desired
+            return d.dueDate != e.dueDate                                                       // stale due (re-anchored)
         }
         let liveByKey = Dictionary(
-            existing.filter { e in desiredByKey[e.naturalKey]?.dueDate == e.dueDate }.map { ($0.naturalKey, $0) },
+            existing.filter { e in desiredByKey[key(e.naturalKey, e.recipientId)]?.dueDate == e.dueDate }
+                .map { (key($0.naturalKey, $0.recipientId), $0) },
             uniquingKeysWith: { a, _ in a })
-        let toCreate = desired.filter { liveByKey[$0.naturalKey] == nil }
+        let toCreate = desired.filter { liveByKey[key($0.naturalKey, $0.recipientId)] == nil }
         return Plan(toCreate: toCreate, toComplete: toComplete)
     }
 
-    private static func title(for p: Prospect) -> String {
-        "Follow up with \(p.groupName)"
+    private static func displayName(_ r: Recipient) -> String {
+        if let name = r.name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
+        return r.email ?? "the contact"
+    }
+
+    // #653 (Dan's requirement): every task title carries both the show and the specific contact.
+    private static func title(for p: Prospect, _ r: Recipient) -> String {
+        "\(p.groupName), follow up with \(displayName(r))"
     }
 
     // #271: an uncategorized reply needs Dan to read it and set the conversation state in Overture.
-    private static func triageTitle(for p: Prospect) -> String {
-        "Triage reply from \(p.groupName)"
+    private static func triageTitle(for p: Prospect, _ r: Recipient) -> String {
+        "\(p.groupName), reply to \(displayName(r))"
     }
 
-    // Note layout is load-bearing: paragraph 1 is the lead key, paragraph 2 is the due day. The
-    // client reads those two lines back verbatim, so their order must not change.
+    // Note layout is load-bearing: paragraph 1 is the lead key, paragraph 2 is the recipient id
+    // (#653), paragraph 3 is the due day. The client reads those lines back verbatim, so their order
+    // must not change.
     static let notePrefix = "Overture lead: "
-    private static func note(for p: Prospect, dueDate: Date) -> String {
-        var parts = ["\(notePrefix)\(p.naturalKey)", "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
+    static let contactNotePrefix = "Overture contact: "
+    private static func note(for p: Prospect, _ r: Recipient, dueDate: Date) -> String {
+        var parts = ["\(notePrefix)\(p.naturalKey)", "\(contactNotePrefix)\(r.id)",
+                     "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
         // #231 / #307: a clickable link back to Overture, built by the single OvertureDeepLink builder
