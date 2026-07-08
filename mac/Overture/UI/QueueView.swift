@@ -59,8 +59,15 @@ struct QueueView: View {
 
     // Contacted prospects Dan is still working, ordered by when to next reach out (soonest first).
     // Booked, lost, and finished-sequence leads drop off (ReachedOutQueue returns no next date).
+    // ReachedOutQueue.active is per-recipient; dedupe to one row per show (soonest recipient wins)
+    // pending the one-row-per-recipient reachedOutList redesign.
     private var reachedOutItems: [QueueItem] {
-        ReachedOutQueue.active(from: prospects, now: Date()).map(QueueItem.init)
+        var seen = Set<String>()
+        return ReachedOutQueue.active(from: prospects, now: Date())
+            .compactMap { pair -> QueueItem? in
+                guard seen.insert(pair.prospect.naturalKey).inserted else { return nil }
+                return QueueItem(pair.prospect)
+            }
     }
     private var reachedOutKeys: Set<String> { Set(reachedOutItems.map(\.id)) }
 
