@@ -57,19 +57,14 @@ struct QueueView: View {
         var label: String { self == .toSend ? "To send" : "Reached out" }
     }
 
-    // Contacted prospects Dan is still working, ordered by when to next reach out (soonest first).
-    // Booked, lost, and finished-sequence leads drop off (ReachedOutQueue returns no next date).
-    // ReachedOutQueue.active is per-recipient; dedupe to one row per show (soonest recipient wins)
-    // pending the one-row-per-recipient reachedOutList redesign.
-    private var reachedOutItems: [QueueItem] {
-        var seen = Set<String>()
-        return ReachedOutQueue.active(from: prospects, now: Date())
-            .compactMap { pair -> QueueItem? in
-                guard seen.insert(pair.prospect.naturalKey).inserted else { return nil }
-                return QueueItem(pair.prospect)
-            }
+    // Contacted RECIPIENTS Dan is still working, ordered by when to next reach out to that contact
+    // (soonest first). Booked, lost, and finished-sequence recipients drop off (ReachedOutQueue
+    // returns no next date). #652: one entry per recipient, so a multi-contact show can appear more
+    // than once here, each with its own contact and its own timing.
+    private var reachedOutRecipients: [(prospect: Prospect, recipient: Recipient, next: Date)] {
+        ReachedOutQueue.activeWithDates(from: prospects, now: Date())
     }
-    private var reachedOutKeys: Set<String> { Set(reachedOutItems.map(\.id)) }
+    private var reachedOutKeys: Set<String> { Set(reachedOutRecipients.map(\.prospect.naturalKey)) }
 
     private var filtered: [QueueItem] {
         items.filter { item in
@@ -182,7 +177,7 @@ struct QueueView: View {
         Picker("Pipeline", selection: $pipeline) {
             ForEach(Pipeline.allCases, id: \.self) { p in
                 Text(p == .toSend ? "To send (\(visible.count))"
-                                  : "Reached out (\(reachedOutItems.count))").tag(p)
+                                  : "Reached out (\(reachedOutRecipients.count))").tag(p)
             }
         }
         .pickerStyle(.segmented)
@@ -417,11 +412,13 @@ struct QueueView: View {
         }
     }
 
-    // #217: people Dan has already pitched, ordered by when to next reach out (soonest first).
-    // A flat list rather than date groups, since the next-reach-out order is what matters here.
+    // #217/#652: contacts Dan has already pitched, ordered by when to next reach out to each one
+    // (soonest first). A flat list rather than date groups, since the next-reach-out order is what
+    // matters here. One row per RECIPIENT: a multi-contact show with two contacts due at different
+    // times appears twice, each labeled with that contact's own timing.
     @ViewBuilder private var reachedOutList: some View {
-        let rows = reachedOutItems
-        if rows.isEmpty {
+        let dated = reachedOutRecipients
+        if dated.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Text("Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out.")
@@ -432,11 +429,10 @@ struct QueueView: View {
             .padding(.horizontal, OVSpacing.xl)
         } else {
             let now = Date()
-            let dated = ReachedOutQueue.activeWithDates(from: prospects, now: now)
-            let labels = Dictionary(dated.map { ($0.prospect.naturalKey, ReachedOutQueue.timingLabel(next: $0.next, now: now)) },
-                                    uniquingKeysWith: { a, _ in a })
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
-                ForEach(rows) { item in prospectRow(item, reachOutLabel: labels[item.id]) }
+                ForEach(dated, id: \.recipient.id) { pair in
+                    prospectRow(QueueItem(pair.prospect), reachOutLabel: ReachedOutQueue.timingLabel(next: pair.next, now: now))
+                }
             }
         }
     }
