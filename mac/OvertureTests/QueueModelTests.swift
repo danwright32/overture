@@ -518,3 +518,26 @@ struct DeepLinkReachabilityTests {
         #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07"))
     }
 }
+
+// #674: a multi-lead OmniFocus alert's initial auto-scroll must land on a lead that's actually
+// still in the focused list, not blindly the first key named in the (possibly stale) notification,
+// so a lead dismissed between the notification firing and Dan tapping it doesn't leave the list
+// scrolled to nowhere in particular.
+@Suite("Focused leads scroll target")
+struct FocusedLeadsScrollTargetTests {
+    @Test func picksTheFirstKeyThatIsStillVisible() {
+        let visible = [item(key: "a"), item(key: "b")]
+        #expect(QueueModel.firstVisibleKey(["a", "b"], among: visible) == "a")
+    }
+
+    @Test func skipsAKeyNoLongerVisibleAndFallsBackToTheNextOne() {
+        // "a" was dismissed since the notification fired and no longer appears in the queue.
+        let visible = [item(key: "b")]
+        #expect(QueueModel.firstVisibleKey(["a", "b"], among: visible) == "b")
+    }
+
+    @Test func returnsNilWhenNoneOfTheKeysAreVisible() {
+        let visible = [item(key: "c")]
+        #expect(QueueModel.firstVisibleKey(["a", "b"], among: visible) == nil)
+    }
+}

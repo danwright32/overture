@@ -225,13 +225,17 @@ struct QueueView: View {
         }
     }
 
-    // #308: enter the focused new-leads view and scroll its first lead into view. Clears the request
-    // once handled, mirroring navigateToLead (#236).
+    // #308: enter the focused new-leads view and scroll its first (still-visible) lead into view.
+    // Clears the request once handled, mirroring navigateToLead (#236). #674: a lead dismissed
+    // between the notification firing and Dan tapping it is no longer in `items` at all, so this
+    // scrolls to the first key that's actually there instead of blindly the first key named in the
+    // (possibly stale) notification.
     private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
         focusedKeys = keys
         deepLinkedKeys = nil
+        let target = QueueModel.firstVisibleKey(keys, among: items)
         DispatchQueue.main.async {
-            if let first = keys.first { withAnimation { proxy.scrollTo(first, anchor: .top) } }
+            if let target { withAnimation { proxy.scrollTo(target, anchor: .top) } }
         }
     }
 
