@@ -21,7 +21,7 @@ struct GmailSender: MailSender {
     func send(_ mail: OutgoingMail) async throws -> SentReceipt {
         try await send(mail,
                        token: token ?? { try await GmailAuthManager.shared.validAccessToken() },
-                       fetch: fetch ?? { try await URLSession.shared.data(for: $0) },
+                       fetch: fetch ?? { try await GmailNetworking.session.data(for: $0) },
                        onAuthExpired: onAuthExpired ?? { await GmailAuthManager.shared.signalAuthExpired() })
     }
 
@@ -33,7 +33,7 @@ struct GmailSender: MailSender {
     // nonisolated method); the production caller above passes the real hook explicitly.
     func send(_ mail: OutgoingMail,
               token: @Sendable () async throws -> String,
-              fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) },
+              fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) },
               onAuthExpired: @Sendable () async -> Void = {}) async throws -> SentReceipt {
         let resolved = try await token()
         return try await GmailSender.performSend(
@@ -50,7 +50,7 @@ struct GmailSender: MailSender {
         fromName: String,
         fromEmail: String,
         token: String,
-        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) },
+        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) },
         onAuthExpired: () async -> Void = { await GmailAuthManager.shared.signalAuthExpired() }
     ) async throws -> SentReceipt {
         // Always stamp a Message-ID (use a caller-supplied one, else mint one) so the receipt can
