@@ -144,7 +144,7 @@ struct QueueView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead
+                    masthead(visible: visible, items: items)
                     // #308: a tapped multi-lead away alert focuses the queue on exactly those leads;
                     // otherwise the normal pipeline view shows.
                     if let focused = focusedKeys {
@@ -262,7 +262,11 @@ struct QueueView: View {
     }
 
 
-    private var masthead: some View {
+    // #379: visible/items threaded explicitly (not read from self.visible/self.items internally)
+    // so ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of
+    // needing a real populated store, the same prop-threading fix used repeatedly for
+    // FollowUpsView/ArchiveView/QueueView's other retrofits this cycle.
+    func masthead(visible: [QueueItem], items: [QueueItem]) -> some View {
         let summary = QueueModel.summary(visible)
         let priority = QueuePriorityBreakdown.summarize(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
