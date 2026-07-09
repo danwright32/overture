@@ -57,6 +57,7 @@ enum ProspectRowFactory {
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
+            onDismissAlreadyCoveredFlag: { ProspectMutations.dismissAlreadyCoveredFlag(item, prospects: prospects, context: context, feedback: feedback) },
             onRestore: onRestore,
             gmailConnected: GmailAuthManager.shared.isConnected,
             outboundSendSince: outboundSendSince,

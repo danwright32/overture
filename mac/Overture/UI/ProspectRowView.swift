@@ -34,6 +34,8 @@ struct ProspectRowView: View {
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
+    // #611: dismisses the "already has its own photographer" fit-risk flag as a false positive.
+    var onDismissAlreadyCoveredFlag: () -> Void = {}
     // Only ever passed non nil by Archive (the Queue never shows a dismissed prospect), so
     // this has zero effect on any existing Queue row.
     var onRestore: (() -> Void)? = nil
@@ -66,6 +68,7 @@ struct ProspectRowView: View {
                     relatedRunNote
                     confidenceFlag
                     bookingSuggestionFlag
+                    alreadyCoveredFlag
                     autoBookedTag
                     links
                 }
@@ -284,6 +287,30 @@ struct ProspectRowView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("A booking was detected that needs your confirmation. Tap to confirm or dismiss.")
+            .padding(.top, 2)
+        }
+    }
+
+    // #611: a fit-risk Prep's own research found, e.g. the org's site names its own photographer.
+    // Rust tone (a caution, not an opportunity), mirroring bookingSuggestionFlag's capsule idiom.
+    // Never changes fitScore/tier; Dan decides himself whether to deprioritize or skip.
+    @ViewBuilder private var alreadyCoveredFlag: some View {
+        if let note = item.alreadyCoveredNote, !item.alreadyCoveredDismissed {
+            Menu {
+                Button("Not actually covered") { onDismissAlreadyCoveredFlag() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(note)
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.rust)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Prep's research found this show may already have its own photographer. Tap if that's wrong.")
             .padding(.top, 2)
         }
     }

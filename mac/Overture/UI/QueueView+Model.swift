@@ -45,6 +45,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var confidenceReviewedByDan: Bool = false
     var classificationOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
+    // #611: a fit-risk Prep's own research found (the org's site names its own photographer),
+    // dismissible without changing fitScore/tier or the whole prospect's status.
+    var alreadyCoveredNote: String? = nil
+    var alreadyCoveredDismissed: Bool = false
     var outcomeSourceRaw: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
@@ -510,6 +514,8 @@ extension QueueItem {
             confidenceReviewedByDan: p.confidenceReviewedByDan,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
+            alreadyCoveredNote: p.alreadyCoveredNote,
+            alreadyCoveredDismissed: p.alreadyCoveredDismissed,
             outcomeSourceRaw: p.outcomeSourceRaw,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
