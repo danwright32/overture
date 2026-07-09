@@ -102,13 +102,15 @@ struct FollowUpsView: View {
                             if !conversationDue.isEmpty {
                                 section("Conversations") {
                                     ForEach(conversationDue, id: \.recipient.id) { d in
-                                        conversationRow(d); Divider()
+                                        conversationRow(d, since: sending[d.recipient.id]); Divider()
                                     }
                                 }
                             }
                             if !due.isEmpty {
                                 section("Silent follow-ups") {
-                                    ForEach(Array(due.enumerated()), id: \.offset) { _, d in row(d); Divider() }
+                                    ForEach(Array(due.enumerated()), id: \.offset) { _, d in
+                                        row(d, since: sending[d.recipient.id]); Divider()
+                                    }
                                 }
                             }
                         }
@@ -163,7 +165,10 @@ struct FollowUpsView: View {
     }
 
     // A silent follow-up to one contact (#45, per-recipient #418 D).
-    private func row(_ d: FollowUp.DueRecipient) -> some View {
+    // #710: `since` is threaded explicitly (not read from `self.sending[r.id]` internally) so this
+    // is directly testable with ViewInspector, the same prop-threading shape DraftReviewView and
+    // ProspectRowView already use, rather than fighting an owned @State from outside a view instance.
+    func row(_ d: FollowUp.DueRecipient, since: Date?) -> some View {
         let r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
@@ -176,7 +181,7 @@ struct FollowUpsView: View {
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
-                if let since = sending[r.id] {
+                if let since {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
@@ -195,8 +200,9 @@ struct FollowUpsView: View {
     }
 
     // A conversation reminder (#111, per-recipient #652): tagged by reason, with the action its kind
-    // calls for, scoped to ONE contact on the show.
-    private func conversationRow(_ d: ConversationReminder.DueRecipient) -> some View {
+    // calls for, scoped to ONE contact on the show. #710: see row(_:since:) above for why `since`
+    // is an explicit parameter instead of an internal `self.sending[r.id]` read.
+    func conversationRow(_ d: ConversationReminder.DueRecipient, since: Date?) -> some View {
         let p = d.prospect, r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
@@ -212,7 +218,7 @@ struct FollowUpsView: View {
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
-                if let since = sending[r.id] {
+                if let since {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
