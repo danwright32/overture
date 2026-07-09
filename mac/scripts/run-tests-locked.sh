@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 # Runs the Mac app's tests under an exclusive flock, so a CI run on the self-hosted
 # runner and a local or Claude session run never execute xcodebuild at the same time on
