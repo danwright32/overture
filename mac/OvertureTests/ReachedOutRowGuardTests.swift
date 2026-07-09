@@ -15,4 +15,15 @@ struct ReachedOutRowGuardTests {
         #expect(body.contains("OVColor.rust"),
                 "reachedOutRow lost the rust urgency color for an overdue reach-out (#661).")
     }
+
+    // #675: the lightweight row (#661) dropped the delivery-delay hint the embedded DraftReviewView
+    // used to show (#656) for a recipient in this same pipeline. Must reuse hasRecentDeliveryDelay
+    // rather than reimplementing the fade-window check, so the two can't drift apart (#656/#675).
+    @Test func rowReusesTheSharedDeliveryDelayCheck() throws {
+        let src = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(!src.isEmpty)
+        let body = try SourceGuard.functionBody(named: "reachedOutRow", in: src)
+        #expect(body.contains("hasRecentDeliveryDelay("),
+                "reachedOutRow doesn't surface the soft-delay hint via the shared hasRecentDeliveryDelay check (#675).")
+    }
 }

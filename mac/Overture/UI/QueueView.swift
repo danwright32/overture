@@ -453,6 +453,12 @@ struct QueueView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
                 Text(r.email ?? r.name ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
+                // the only signal worth restoring here is the soft-delay hint (#656) the embedded
+                // DraftReviewView used to show before the lightweight row (#661) replaced it.
+                if RecipientSnapshot(r).hasRecentDeliveryDelay(now: now) {
+                    Text("Delivery delayed").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                }
                 if let line = SendFailureLine.text(for: r.sendError) {
                     Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
                 }
