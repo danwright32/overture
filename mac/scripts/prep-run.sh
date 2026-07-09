@@ -10,16 +10,11 @@
 set -eu
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
-# The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug subfolder).
-# Fall back to the live path for a hand-run from a terminal.
-SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
 
-# Open the run log before any guard below can exit: the launching Process() redirects this whole
-# invocation's stdout/stderr to /dev/null, so until now an early guard failure (no work-list, no
-# claude CLI) left zero trace anywhere, identical to "ran and found nothing" (#485).
-mkdir -p "$SUPPORT"
-LOG="$SUPPORT/prep-run.log"
-exec >> "$LOG" 2>&1
+# See lib/runner-setup.sh (#552): shared support-dir resolution, log redirection, and early-guard
+# structure with reply-classify-run.sh.
+. "$(dirname "$0")/lib/runner-setup.sh"
+open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
@@ -30,8 +25,7 @@ PROGRESS="$SUPPORT/overture-prep-progress.json"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
 MARKER="$SUPPORT/prep-running"
 
-# Refuse to start if no work-list is present.
-[ -f "$QUEUE" ] || { echo "no prep queue at $QUEUE" >&2; exit 1; }
+require_queue "$QUEUE" "prep"
 
 # In-flight marker the app can watch (issue #44); removed on exit no matter what.
 : > "$MARKER"
@@ -61,13 +55,7 @@ its completed count incremented by one, per the runbook's 'Update progress' step
 seeded, never change it). Write the complete PrepResults JSON to $RESULTS and nothing else to that
 file. Do the web research needed to find real, verifiable contacts."
 
-# Resolve the claude binary: the app launches us with a minimal PATH, so look in the
-# usual install spots rather than relying on PATH.
-CLAUDE=""
-for c in "$HOME/.local/bin/claude" "/usr/local/bin/claude" "/opt/homebrew/bin/claude" "$(command -v claude 2>/dev/null || true)"; do
-  if [ -n "$c" ] && [ -x "$c" ]; then CLAUDE="$c"; break; fi
-done
-[ -n "$CLAUDE" ] || { echo "claude CLI not found" >&2; exit 1; }
+resolve_claude
 
 # Headless Claude Code run. Tools limited to what the run needs.
 cd "$PROJECT_DIR"

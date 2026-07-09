@@ -43,11 +43,20 @@ struct HandoffPathGuardTests {
     }
 
     @Test func runnerScriptsReadTheSupportDirEnvVarInsteadOfHardcoding() throws {
+        // As of #552, SUPPORT= resolution lives in lib/runner-setup.sh, sourced by both runner
+        // scripts, rather than duplicated inline in each one. Check the shared source of truth
+        // instead of the callers, so this guard still means something after that refactor.
+        let src = try String(contentsOf: Self.scriptsRoot.appendingPathComponent("lib/runner-setup.sh"), encoding: .utf8)
+        let supportLine = src.split(separator: "\n").first { $0.hasPrefix("SUPPORT=") }
+        #expect(supportLine?.contains("${OVERTURE_SUPPORT_DIR:-") == true,
+                "lib/runner-setup.sh must read $OVERTURE_SUPPORT_DIR (with a fallback for a hand-run from a terminal), not hardcode the live Application Support path. A hardcoded path made a Debug self-send spin forever with no work found.")
+
         for script in ["prep-run.sh", "reply-classify-run.sh"] {
-            let src = try String(contentsOf: Self.scriptsRoot.appendingPathComponent(script), encoding: .utf8)
-            let supportLine = src.split(separator: "\n").first { $0.hasPrefix("SUPPORT=") }
-            #expect(supportLine?.contains("${OVERTURE_SUPPORT_DIR:-") == true,
-                    "\(script) must read $OVERTURE_SUPPORT_DIR (with a fallback for a hand-run from a terminal), not hardcode the live Application Support path. A hardcoded path made a Debug self-send spin forever with no work found.")
+            let scriptSrc = try String(contentsOf: Self.scriptsRoot.appendingPathComponent(script), encoding: .utf8)
+            #expect(scriptSrc.contains("lib/runner-setup.sh"),
+                    "\(script) must source lib/runner-setup.sh for its SUPPORT resolution rather than reintroducing its own inline copy.")
+            #expect(!scriptSrc.split(separator: "\n").contains { $0.hasPrefix("SUPPORT=") },
+                    "\(script) must not redefine SUPPORT= inline; that duplication is exactly what #552 removed.")
         }
     }
 }

@@ -10,16 +10,11 @@
 set -eu
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
-# The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug subfolder).
-# Fall back to the live path for a hand-run from a terminal.
-SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
 
-# Open the run log before any guard below can exit: the launching Process() redirects this whole
-# invocation's stdout/stderr to /dev/null, so until now an early guard failure (no work-list, no
-# claude CLI) left zero trace anywhere, identical to "ran and found nothing" (#485).
-mkdir -p "$SUPPORT"
-LOG="$SUPPORT/reply-classify-run.log"
-exec >> "$LOG" 2>&1
+# See lib/runner-setup.sh (#552): shared support-dir resolution, log redirection, and early-guard
+# structure with prep-run.sh.
+. "$(dirname "$0")/lib/runner-setup.sh"
+open_run_log "reply-classify-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
@@ -30,8 +25,7 @@ RUNBOOK="$PROJECT_DIR/docs/reply-classify-runbook.md"
 VOICE="$SUPPORT/overture-voice-guidance.md"
 MARKER="$SUPPORT/reply-classify-running"
 
-# Refuse to start if no work-list is present.
-[ -f "$QUEUE" ] || { echo "no reply-classify queue at $QUEUE" >&2; exit 1; }
+require_queue "$QUEUE" "reply-classify"
 
 # In-flight marker the app watches; removed on exit no matter what.
 : > "$MARKER"
@@ -54,12 +48,7 @@ to the right contact. Write the complete v3 ReplyClassifyResults JSON (version 3
 {naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and nothing else to that file.
 If $VOICE is absent, draft from the runbook's voice rules alone."
 
-# Resolve the claude binary: the app launches us with a minimal PATH.
-CLAUDE=""
-for c in "$HOME/.local/bin/claude" "/usr/local/bin/claude" "/opt/homebrew/bin/claude" "$(command -v claude 2>/dev/null || true)"; do
-  if [ -n "$c" ] && [ -x "$c" ]; then CLAUDE="$c"; break; fi
-done
-[ -n "$CLAUDE" ] || { echo "claude CLI not found" >&2; exit 1; }
+resolve_claude
 
 # Headless Claude Code run; reading the reply text and writing the results is all it needs.
 cd "$PROJECT_DIR"
