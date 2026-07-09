@@ -66,8 +66,9 @@ struct DraftReviewView: View {
     }
 
     @ViewBuilder private var contactLine: some View {
-        let display = ContactDisplay.from(name: item.contactName, role: item.contactRole,
-                                          email: item.contactEmail, formURL: item.contactFormURL)
+        let primary = item.primaryContact
+        let display = ContactDisplay.from(name: primary?.name, role: primary?.role,
+                                          email: primary?.email, formURL: primary?.contactFormURL)
         HStack(spacing: OVSpacing.xs) {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(OVColor.inkFaint)
@@ -83,7 +84,7 @@ struct DraftReviewView: View {
             case .none:
                 Text("No contact found").foregroundStyle(OVColor.inkFaint)
             }
-            if let conf = item.contactConfidence {
+            if let conf = primary?.contactConfidence {
                 ConfidencePip(confidence: conf)
             }
             Spacer()
@@ -221,10 +222,8 @@ struct DraftReviewView: View {
                         .background(Capsule().fill(OVColor.forest))
                 }
                 .buttonStyle(.plain)
-                // #399: was item.contactEmail == nil, the legacy singular field a separate in-flight
-                // milestone (#650-654) is slated to delete. hasPendingRecipient already means "at
-                // least one recipient still pending with a real address", the same thing this gate
-                // needs, so nothing new had to be added.
+                // #399: hasPendingRecipient means "at least one recipient still pending with a real
+                // address", exactly what this gate needs.
                 .disabled(!item.hasPendingRecipient)
                 Button("Edit") {
                     draftSubject = item.draftSubject ?? ""
@@ -537,14 +536,17 @@ struct DraftReviewView: View {
         priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
         fitScore: 8, tier: "high", fitReason: "Repeat-client-adjacent ensemble at a flagship venue.",
         matchedClientName: "Aurora Strings", possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
-    item.contactName = "Emma Robinson"
-    item.contactRole = "Marketing & Communications Manager"
-    item.contactEmail = "emma@aurorastrings.example"
-    item.contactConfidence = .high
+    var emma = RecipientSnapshot(id: "emma@aurorastrings.example", name: "Emma Robinson",
+                                 email: "emma@aurorastrings.example", role: "Marketing & Communications Manager",
+                                 provenance: .act, sendState: .sent, replied: true, lastReplyText: nil,
+                                 resolution: nil, bounced: false, outcomeSource: .manual)
+    emma.contactConfidence = .high
+    emma.conversationState = .wantsToBook
+    emma.conversationStateSource = .manual
+    item.contacts = [emma]
     item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
     item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."
     item.sentAt = Date()
-    item.conversationState = .wantsToBook
     return DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
         .padding(OVSpacing.lg)
         .frame(width: 480)

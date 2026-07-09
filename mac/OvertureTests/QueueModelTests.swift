@@ -96,6 +96,44 @@ struct QueueItemContactCountTests {
     }
 }
 
+// #654: the single "primary contact" a show-level display (DraftReviewView's contactLine) reads,
+// now derived from `contacts` instead of a lead-level mirror field. Mirrors PrepImporter's own
+// selection rule exactly: act or performer preferred (mutually exclusive per performance, #587),
+// else the first contact.
+@Suite("Queue item primary contact")
+struct QueueItemPrimaryContactTests {
+    private func recipient(_ id: String, provenance: RecipientProvenance) -> RecipientSnapshot {
+        RecipientSnapshot(id: id, name: id, email: "\(id)@example.com", role: nil,
+                          provenance: provenance, sendState: .sent, replied: false,
+                          lastReplyText: nil, resolution: nil, bounced: false, outcomeSource: nil)
+    }
+
+    @Test func nilWhenThereAreNoContacts() {
+        #expect(item().primaryContact == nil)
+    }
+
+    @Test func prefersTheActContactOverOthers() {
+        var q = item()
+        q.contacts = [recipient("presenter", provenance: .presenter), recipient("act", provenance: .act)]
+        #expect(q.primaryContact?.id == "act")
+    }
+
+    // A performer-only self-produced show that also carries a presenter must prefer the PERFORMER,
+    // never fall through to an arbitrary contact (SwiftData to-many order isn't guaranteed) and
+    // mislabel the presenter as primary.
+    @Test func prefersPerformerOverPresenterWhenNoAct() {
+        var q = item()
+        q.contacts = [recipient("presenter", provenance: .presenter), recipient("performer", provenance: .performer)]
+        #expect(q.primaryContact?.id == "performer")
+    }
+
+    @Test func fallsBackToTheFirstContactWhenNoActOrPerformer() {
+        var q = item()
+        q.contacts = [recipient("presenter", provenance: .presenter), recipient("manual", provenance: .manual)]
+        #expect(q.primaryContact?.id == "presenter")
+    }
+}
+
 @Suite("Queue label helpers")
 struct QueueLabelTests {
     @Test func disciplineFallsBackToPerformance() {

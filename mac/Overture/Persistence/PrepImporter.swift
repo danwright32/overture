@@ -73,8 +73,7 @@ enum PrepImporter {
     // non-manual provenance, so a re-run that CORRECTS an act/presenter email updates that recipient
     // in place rather than duplicating it. A genuinely new provenance is appended as pending. An
     // already-sent recipient is never rewritten (its address is locked): a "corrected" contact for it
-    // is dropped rather than appended as a duplicate (#408, audit SUP-017). The primary act contact is
-    // mirrored into the legacy singular fields for the current UI, removed in the Phase 8 cleanup.
+    // is dropped rather than appended as a duplicate (#408, audit SUP-017).
     @MainActor
     private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect) {
         // A batch that (unexpectedly) carries more than one contact of the same provenance cannot be
@@ -109,22 +108,6 @@ enum PrepImporter {
                 recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
                 p.addRecipient(recipient)
             }
-        }
-
-        // Transitional legacy mirror: track the act/performer contact (or the first recipient) so the
-        // current single-contact UI keeps working until Phase 7 reads recipients directly. Act and
-        // performer are mutually exclusive per performance (#587), so either one is "the" primary
-        // contact; without this, a performer-only show that also carries a presenter could fall
-        // through to `.first` and mirror an arbitrary recipient (SwiftData to-many order isn't
-        // guaranteed), mislabeling the presenter as primary.
-        if let primary = p.recipients.first(where: { $0.provenance == .act || $0.provenance == .performer })
-            ?? p.recipients.first {
-            p.contactName = primary.name
-            p.contactRole = primary.role
-            p.contactEmail = primary.email
-            p.contactMethodRaw = primary.contactMethodRaw
-            p.contactConfidenceRaw = primary.contactConfidenceRaw
-            p.contactFormURL = primary.contactFormURL
         }
     }
 

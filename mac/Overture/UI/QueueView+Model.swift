@@ -25,13 +25,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let possibleMatchName: String?
     let status: ReviewStatus
 
-    // Trigger 2: the found contact and drafted email, when present.
-    var contactName: String? = nil
-    var contactRole: String? = nil
-    var contactEmail: String? = nil
-    var contactConfidence: ContactConfidence? = nil
-    var contactMethod: ContactMethod? = nil
-    var contactFormURL: String? = nil
+    // Trigger 2: the drafted email, when present. Contact identity (name/role/email/confidence/
+    // method/form URL) lives per-recipient on `contacts` now (#654); see `primaryContact`.
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftEditedByDan: Bool = false
@@ -50,8 +45,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
     var outcomeSourceRaw: String? = nil
-    var conversationState: ConversationState? = nil
-    var conversationStateSource: OutcomeSource? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
@@ -97,6 +90,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var contactCountLabel: String? {
         contacts.count > 1 ? "\(contacts.count) contacts" : nil
     }
+
+    // #654: the single contact a show-level display (the review card's contactLine) shows, replacing
+    // the old lead-level mirror fields. Mirrors PrepImporter's own selection rule exactly: act or
+    // performer preferred (mutually exclusive per performance, #587), else the first contact.
+    var primaryContact: RecipientSnapshot? {
+        contacts.first(where: { $0.provenance == .act || $0.provenance == .performer }) ?? contacts.first
+    }
 }
 
 // One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
@@ -131,6 +131,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var conversationState: ConversationState? = nil
     var conversationStateSource: OutcomeSource? = nil
     var conversationRemindedAt: Date? = nil
+    // #654: moved from the now-deleted lead-level QueueItem fields, since contact confidence/method/
+    // form-URL are genuinely per-recipient data.
+    var contactConfidence: ContactConfidence? = nil
+    var contactMethod: ContactMethod? = nil
+    var contactFormURL: String? = nil
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
