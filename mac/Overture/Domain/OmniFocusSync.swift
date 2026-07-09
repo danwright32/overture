@@ -88,8 +88,7 @@ enum OmniFocusSync {
             guard p.status != .dismissed else { continue }   // #238: a no-go lead never nags via OmniFocus
             for r in p.recipients {
                 let standing = r.standing
-                let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
-                    && r.conversationStateSource != .manual
+                let unhandledReply = r.hasUnhandledReply && r.conversationStateSource != .manual
                 // A closed contact drops out, UNLESS a fresh reply still needs triage (a late reply on
                 // an otherwise-closed contact still deserves a task, #424).
                 guard standing.isInPlay || unhandledReply else { continue }

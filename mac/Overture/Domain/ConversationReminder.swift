@@ -190,7 +190,7 @@ enum ConversationReminder {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             for r in p.recipients {
                 let standing = r.standing
-                let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
+                let unhandledReply = r.hasUnhandledReply
                 guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
                                          remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
                                          isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,

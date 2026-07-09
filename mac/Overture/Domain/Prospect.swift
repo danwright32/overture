@@ -280,7 +280,7 @@ final class Prospect {
     // Dan's call) so a late reply on a closed show still surfaces for triage.
     var hasUnhandledReply: Bool {
         performanceStatus != .booked
-            && recipients.contains { $0.replied && $0.resolution == nil && !$0.bounced && $0.conversationStateSource != .manual }
+            && recipients.contains { $0.hasUnhandledReply && $0.conversationStateSource != .manual }
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion
