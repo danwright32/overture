@@ -12,6 +12,10 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
     let name: String
     let state: AgentState
     let detail: String
+    // #565: true only for the Send status's "N approved, connect Gmail to send" case, so a tap on
+    // the chip can route to the actual Gmail-connect flow (#488) instead of just filtering the
+    // queue. A structured flag, not a text match on `detail`, which is prose meant to change freely.
+    var needsGmailConnect: Bool = false
 }
 
 struct AgentInputs: Sendable {
@@ -69,7 +73,8 @@ enum AgentRoster {
             let detail = i.gmailConnected
                 ? "\(i.readyToSend) approved, ready to send"
                 : "\(i.readyToSend) approved, connect Gmail to send"
-            return AgentStatus(name: "Send", state: .needsAttention, detail: detail)
+            return AgentStatus(name: "Send", state: .needsAttention, detail: detail,
+                               needsGmailConnect: !i.gmailConnected)
         }
         return AgentStatus(name: "Send", state: .idle, detail: "Nothing to send")
     }

@@ -356,7 +356,12 @@ struct QueueView: View {
     // FollowUpsView sheet; Prep/Review/Send focus the queue on that stage's prospects.
     private func agentChip(_ s: AgentStatus) -> some View {
         Button {
-            if s.name == "Follow-ups" {
+            // #565: the "connect Gmail to send" detail read as an instruction with nothing behind
+            // it to click; route straight to the same Gmail-connect flow #488 wires up elsewhere,
+            // instead of just filtering the queue to prospects Dan still can't send to.
+            if s.needsGmailConnect {
+                onConnectGmail()
+            } else if s.name == "Follow-ups" {
                 onShowFollowUps()
             } else {
                 focusOnStage(s)
