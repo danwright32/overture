@@ -26,6 +26,10 @@ struct FollowUpsView: View {
     // click (with no specific recipient) doesn't re-highlight a stale one.
     var onHighlightConsumed: () -> Void = {}
     @State private var highlightedRecipientId: String?
+    // #468 (SUP-006): a nudge/closing-note send in flight, keyed by recipient id, same shape as
+    // QueueView/ArchiveView's outboundSending/replySending, so this sheet's Send buttons get the
+    // same live "Sending…" feedback instead of staying clickable during the send.
+    @State private var sending: [String: Date] = [:]
 
     // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
     // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
@@ -172,7 +176,12 @@ struct FollowUpsView: View {
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
-                sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
+                if let since = sending[r.id] {
+                    LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else {
+                    sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
+                }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
                 Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey, r.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -203,23 +212,28 @@ struct FollowUpsView: View {
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
-                switch d.reminder.kind {
-                case .active(let state):
-                    sendButton("Send nudge", enabled: gmailConnected && r.email != nil) {
-                        requestConversationNudge(d, kind: .active(state))
+                if let since = sending[r.id] {
+                    LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else {
+                    switch d.reminder.kind {
+                    case .active(let state):
+                        sendButton("Send nudge", enabled: gmailConnected && r.email != nil) {
+                            requestConversationNudge(d, kind: .active(state))
+                        }
+                        Button("Remind me later") { remindLater(d) }
+                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    case .closing:
+                        sendButton("Send closing note", enabled: gmailConnected && r.email != nil) {
+                            requestConversationNudge(d, kind: .closing)
+                        }
+                    case .suggested:
+                        // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
+                        sendButton("Confirm", enabled: true) { confirm(d) }
+                        setStateMenu(d, label: "Change")
+                    case .needsState:
+                        setStateMenu(d, label: "Set a state")
                     }
-                    Button("Remind me later") { remindLater(d) }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                case .closing:
-                    sendButton("Send closing note", enabled: gmailConnected && r.email != nil) {
-                        requestConversationNudge(d, kind: .closing)
-                    }
-                case .suggested:
-                    // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
-                    sendButton("Confirm", enabled: true) { confirm(d) }
-                    setStateMenu(d, label: "Change")
-                case .needsState:
-                    setStateMenu(d, label: "Set a state")
                 }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
                 Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey, r.id) }
@@ -282,39 +296,22 @@ struct FollowUpsView: View {
                                                   preview: body, isClosing: closing)
     }
 
+    // #468 (SUP-006): routed through ProspectMutations so this sheet's send gets the same
+    // in-flight LiveRunLabel every other send surface already shows, instead of a bare Task with
+    // the button left clickable.
     private func performNudge(_ naturalKey: String, _ recipientId: String) {
         pending = nil
-        guard let p = prospects.first(where: { $0.naturalKey == naturalKey }),
-              let r = p.recipients.first(where: { $0.id == recipientId }) else { return }
-        let org = p.groupName
-        // Await off the synchronous button action so the main thread never blocks on the Gmail
-        // token work (the old blocking send bridge deadlocked here).
-        Task {
-            let sent = await SendService.sendFollowUp(r, of: p, now: Date(),
-                                                      sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
-            if context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback) {
-                // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
-                feedback.acknowledge(ActionAck.followUpSent(org: org, success: sent),
-                                     tone: sent ? .info : .warning)
-            }
-        }
+        ProspectMutations.sendFollowUp(naturalKey, recipientId, prospects: prospects, context: context, feedback: feedback,
+                                       markSending: { sending[$0] = Date() },
+                                       clearSending: { sending[$0] = nil })
     }
 
     private func performConversationNudge(_ naturalKey: String, _ recipientId: String, isClosing: Bool) {
         pendingConversation = nil
-        guard let p = prospects.first(where: { $0.naturalKey == naturalKey }),
-              let r = p.recipients.first(where: { $0.id == recipientId }) else { return }
-        let org = p.groupName
-        let kind: ConversationReminder.Kind = isClosing ? .closing : .active(r.conversationState ?? .wantsToBook)
-        Task {
-            let sent = await SendService.sendConversationNudge(r, of: p, kind: kind, now: Date(),
-                                                        sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
-            if context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback) {
-                // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
-                feedback.acknowledge(ActionAck.conversationNudge(org: org, closing: isClosing, success: sent),
-                                     tone: sent ? .info : .warning)
-            }
-        }
+        ProspectMutations.sendConversationNudge(naturalKey, recipientId, isClosing: isClosing,
+                                                prospects: prospects, context: context, feedback: feedback,
+                                                markSending: { sending[$0] = Date() },
+                                                clearSending: { sending[$0] = nil })
     }
 
     private func remindLater(_ d: ConversationReminder.DueRecipient) {

@@ -31,7 +31,11 @@ struct DraftReviewView: View {
     var gmailConnected: Bool = false
     // #436: when this outbound draft is mid-send, the instant it was launched (nil = not sending), so the
     // Send button is replaced by a live "Sending… m:ss" indicator that flips to "looks stuck" past the
-    // send timeout. No retry here: a second click could double-send, so recovery is the await resolving.
+    // send timeout. #468: a retry IS safe here (unlike when this comment was written): both sendOne and
+    // sendReplyDraft below now claim a persisted "in flight" field before their network await, so a
+    // second call while the first is still live is refused rather than reaching the network again. No
+    // runAlive check on either LiveRunLabel, unlike the reply-draft one further down: this is an
+    // in-process network await with no external heartbeat to check, so since + timeout is all there is.
     var outboundSendSince: Date? = nil
     // Same, keyed per recipient for an in-flight reply send.
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
@@ -200,7 +204,7 @@ struct DraftReviewView: View {
             } else if isApproved {
                 if let since = outboundSendSince {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
-                                 font: OVType.meta, color: OVColor.inkSoft)
+                                 font: OVType.meta, color: OVColor.inkSoft, onRetry: { onSend() })
                 } else {
                     Button { onSend() } label: {
                         Label("Send", systemImage: "paperplane")
@@ -410,7 +414,7 @@ struct DraftReviewView: View {
                                                 knownsVenue: item.venue != nil))
                 if let since = replySendSince(c.id) {
                     LiveRunLabel(base: "Sending reply", since: since, timeout: RunTimeouts.send,
-                                 font: OVType.meta, color: OVColor.inkSoft)
+                                 font: OVType.meta, color: OVColor.inkSoft, onRetry: { onSendReply(c.id) })
                 } else {
                     HStack(spacing: OVSpacing.xs) {
                         Button { onSendReply(c.id) } label: {

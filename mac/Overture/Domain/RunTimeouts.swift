@@ -25,7 +25,9 @@ enum RunTimeouts {
     // self-aborts and surfaces its failure alert.
     static let gmailConnect: TimeInterval = 90
 
-    // Outbound / reply send: a single Gmail API call. A send taking longer than this is almost
-    // certainly stuck and should offer a retry rather than an open-ended "Sending…".
+    // Outbound / reply send: a token refresh plus a single Gmail API call, both bounded at 30s
+    // each by GmailNetworking's timeout (#468), so 60s covers the real worst case of a
+    // well-behaved failure surfacing on its own. Past this, something is genuinely wedged (not
+    // just slow), so it should offer a retry rather than an open-ended "Sending…".
     static let send: TimeInterval = 60
 }

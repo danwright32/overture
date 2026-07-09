@@ -26,7 +26,7 @@ struct GmailReplyChecker {
         in context: ModelContext,
         token: String,
         now: Date = Date(),
-        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
+        fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Bool {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         // Watch EVERY sent recipient's own thread (#418 A2), not just the lead's first-send thread,

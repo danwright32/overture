@@ -80,6 +80,17 @@ final class Recipient {
     // When the current .sending claim was made (#475/#476); cleared when it resolves to .sent or
     // reverts to .pending. Only meaningful while sendState == .sending.
     var sendClaimedAt: Date?
+    // #468 (SUP-005): the same claim-before-await pattern as sendClaimedAt, for a reply send.
+    // Kept on its OWN field (not shared with nudgeSendClaimedAt below) because a replied
+    // recipient can legitimately be due for a conversation nudge at the same time (two different
+    // open surfaces), so sharing would cause spurious refusals rather than catching a real race.
+    var replySendClaimedAt: Date?
+    // #468 (SUP-005): shared by sendFollowUp and sendConversationNudge. Safe to share: a
+    // recipient eligible for a follow-up (isAwaitingFollowUp, which requires outcomeSourceRaw ==
+    // nil) and one eligible for a conversation nudge (which requires a conversationState, and
+    // setConversationState always pairs that with outcomeSourceRaw = .manual) are mutually
+    // exclusive by construction, so a recipient can never legitimately want both at once.
+    var nudgeSendClaimedAt: Date?
     var followUpCount: Int = 0
     var lastFollowUpAt: Date?
     var replied: Bool = false

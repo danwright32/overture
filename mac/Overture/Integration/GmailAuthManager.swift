@@ -95,7 +95,7 @@ final class GmailAuthManager {
     func validAccessToken(now: Date = Date(),
                           clientURL: URL = GmailCredentials.clientConfigURL,
                           tokenURL: URL = GmailCredentials.tokenURL,
-                          fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
+                          fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async throws -> String {
         guard let client = GmailCredentials.loadClient(from: clientURL) else { throw AuthError.noClientConfig }
         guard var stored = GmailCredentials.loadTokens(from: tokenURL) else { throw AuthError.notConnected }
@@ -132,7 +132,9 @@ final class GmailAuthManager {
 
     private func exchange(config: OAuthConfig, code: String, pkce: PKCE) async throws -> OAuthTokens {
         let req = GoogleOAuth.tokenExchangeRequest(config: config, code: code, pkce: pkce)
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        // #468: not covered by connect()'s own 120s browser-redirect timeout (that timer is
+        // cancelled right before this call runs), so this genuinely had no bound before.
+        let (data, resp) = try await GmailNetworking.session.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200,
               let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) else {
             throw AuthError.exchangeFailed(String(data: data, encoding: .utf8) ?? "unknown")
