@@ -32,7 +32,10 @@ struct LiveRunLabel: View {
         }
     }
 
-    @ViewBuilder private func content(now: Date) -> some View {
+    // #470: internal (not private) so LiveRunLabelViewStateTests can call this directly with a
+    // fixed `now`, inspecting the result with ViewInspector, instead of driving the real
+    // TimelineView `body` wraps this in asynchronously.
+    @ViewBuilder func content(now: Date) -> some View {
         switch liveness(now: now) {
         case .stalled(let elapsed):
             stalled(elapsed: elapsed)

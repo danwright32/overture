@@ -4,6 +4,12 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+packages:
+  # #470: SwiftUI view-state tests (does this render a Retry button, what text is showing)
+  # instead of only being checkable by eye. Test-only dependency, not linked into Overture itself.
+  ViewInspector:
+    url: https://github.com/nalexn/ViewInspector
+    from: "0.10.0"
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -48,6 +54,7 @@ targets:
       - path: OvertureTests
     dependencies:
       - target: Overture
+      - package: ViewInspector
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
