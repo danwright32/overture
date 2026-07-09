@@ -591,7 +591,7 @@ struct SendServiceTests {
         let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
-        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help — July works."
+        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help, July works."
         let sender = GatedSender()
 
         let firstTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
