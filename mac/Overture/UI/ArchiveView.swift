@@ -72,18 +72,12 @@ struct ArchiveView: View {
         .frame(minWidth: 640, idealWidth: 780, maxWidth: 960, minHeight: 520, idealHeight: 720, maxHeight: 900)
         .background(OVColor.canvas)
         .actionFeedbackBanner()
-        .alert("Send this email now?", isPresented: sendConfirmBinding, presenting: pendingConfirm) { pending in
-            Button("Send") { performSend(pending.id) }
-            Button("Cancel", role: .cancel) { pendingConfirm = nil }
-        } message: { pending in
-            Text("To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out.")
-        }
-        .alert("Reconnect Gmail", isPresented: $showReconnect) {
-            Button("Connect Gmail") { onConnectGmail() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
-        }
+        .sendConfirmAndReconnectAlerts(
+            pendingConfirm: $pendingConfirm,
+            showReconnect: $showReconnect,
+            onSend: performSend,
+            onConnectGmail: onConnectGmail
+        )
         .onAppear {
             guard let key = initialHighlightKey else { return }
             reveal(key, recipientId: initialHighlightRecipientId)
@@ -184,10 +178,6 @@ struct ArchiveView: View {
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.restored(org: item.groupName))
         }
-    }
-
-    private var sendConfirmBinding: Binding<Bool> {
-        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
     }
 
     private func requestSend(_ item: QueueItem) {
