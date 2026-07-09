@@ -300,7 +300,6 @@ struct RootView: View {
                 // stays here is the AI/scout work, which must stay attended (never run unattended).
                 // Skip it entirely when running only as the unit suite's test host (#195).
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
-                ingestIfEmpty()
                 // Ingest any classifications from a prior run, then launch a classify run for replies
                 // still needing an intent (#112). Both no-op when there's nothing to do.
                 ingestReplyClassifications()
@@ -363,8 +362,9 @@ struct RootView: View {
     // post-send lifecycle can be exercised end to end without a real send or store surgery.
     // DEBUG ONLY (#281): copy the live handoff inputs into the isolated Overture-Debug folder, then
     // force a fresh re-ingest so scout/booking/reply features show realistic data without a relaunch.
-    // ResultsImporter is idempotent (keep/dismiss decisions survive a re-run), so this is safe to run
-    // repeatedly; booking reconcile reads the now-seeded Downbeat export on its next cycle.
+    // PrepImporter/ReplyClassifyImporter are idempotent (keep/dismiss decisions survive a re-run), so
+    // this is safe to run repeatedly; booking reconcile reads the now-seeded Downbeat export on its
+    // next cycle.
     private func debugSeedFromLive() {
         let result: (copied: [String], missing: [String])
         do {
@@ -372,10 +372,6 @@ struct RootView: View {
         } catch {
             statusMessage = "DEBUG seed failed: \(error.localizedDescription)"
             return
-        }
-        let resultsURL = ResultsImporter.defaultResultsURL
-        if FileManager.default.fileExists(atPath: resultsURL.path) {
-            _ = try? ResultsImporter.ingestFile(at: resultsURL, into: context)
         }
         ingestPrep()
         ingestReplyClassifications()
@@ -673,16 +669,6 @@ struct RootView: View {
                 if force { errorMessage = "OmniFocus sync failed: \(error)" }
             }
         }
-    }
-
-    // First launch with an empty store: ingest a results file if one is present, so
-    // there is something to see before the first live scout.
-    private func ingestIfEmpty() {
-        let count = (try? context.fetchCount(FetchDescriptor<Prospect>())) ?? 0
-        guard count == 0 else { return }
-        let url = ResultsImporter.defaultResultsURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        _ = try? ResultsImporter.ingestFile(at: url, into: context)
     }
 
     // Ingest a Prep results file (found contacts + drafts) if one is present, filling

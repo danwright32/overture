@@ -34,7 +34,6 @@ struct DebugSeedTests {
         // Inputs the app READS (per docs/contracts.md) are seeded; outputs/queues the app WRITES
         // are not, or seeding would clobber live work product into the dev folder.
         #expect(DebugSeed.inputFileNames.contains("downbeat-export.json"))
-        #expect(DebugSeed.inputFileNames.contains("overture-results.json"))
         #expect(DebugSeed.inputFileNames.contains("overture-prep-results.json"))
         #expect(DebugSeed.inputFileNames.contains("overture-reply-classify-results.json"))
         #expect(!DebugSeed.inputFileNames.contains("overture-prep-queue.json"))
@@ -45,7 +44,7 @@ struct DebugSeedTests {
     @Test func seedCopiesPresentInputsAndReportsMissingOnes() throws {
         let live = try makeTempDir()
         let debug = try makeTempDir()
-        let present = "overture-results.json"
+        let present = "overture-prep-results.json"
         try "{\"hello\":1}".write(to: live.appendingPathComponent(present), atomically: true, encoding: .utf8)
 
         let result = try DebugSeed.seed(liveBase: live, debugBase: debug)
@@ -71,7 +70,7 @@ struct DebugSeedTests {
 
     @Test func clearRemovesSeededInputsAndReportsThem() throws {
         let debug = try makeTempDir()
-        let present = ["overture-results.json", "downbeat-export.json"]
+        let present = ["overture-prep-results.json", "downbeat-export.json"]
         for name in present {
             try "x".write(to: debug.appendingPathComponent(name), atomically: true, encoding: .utf8)
         }
@@ -90,7 +89,7 @@ struct DebugSeedTests {
         let debug = try makeTempDir()
         let token = debug.appendingPathComponent("gmail-tokens.json")
         try "secret".write(to: token, atomically: true, encoding: .utf8)
-        try "x".write(to: debug.appendingPathComponent("overture-results.json"), atomically: true, encoding: .utf8)
+        try "x".write(to: debug.appendingPathComponent("overture-prep-results.json"), atomically: true, encoding: .utf8)
 
         let removed = try DebugSeed.clearHandoffInputs(debugBase: debug)
 

@@ -1,8 +1,7 @@
 import Foundation
 
 // The Prep handoff: for each kept prospect, the found contact and the drafted email
-// the Prep run produces. The app ingests this and matches by natural key, exactly
-// like the scout results file. Sibling format to ResultsFile.
+// the Prep run produces. The app ingests this and matches by natural key.
 
 struct PrepResults: Codable, Equatable, Sendable {
     var version: Int
@@ -74,8 +73,8 @@ enum PrepResultsError: Error, Equatable {
 }
 
 enum PrepResultsDecoder {
-    // Tolerant version gate (min...supported), mirroring ResultsFileDecoder. An exact-match
-    // gate was the brittle pattern that broke the results reader when its version bumped (#132):
+    // Tolerant version gate (min...supported). An exact-match gate was the brittle pattern
+    // that broke the results reader when its version bumped (#132):
     // bumping the contract leaves a closed range that still accepts older files, so a format
     // change can't silently make the reader reject the new (or old) shape (#140).
     static let supportedVersion = 4

@@ -26,7 +26,6 @@ the workflow's runbook is its spec.
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
-| `overture-results.json` | none, retired #493 | App (`ResultsFileDecoder.decode`) | 1, 2 | `fixtures/scout-results/` | `ResultsContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
@@ -49,10 +48,13 @@ the core worry in #478 (a fixture-shape change merging green while silently brea
 other side) for a contract with an automated test on every side that is code. Before #493,
 exactly 3 contracts cleared that bar: `downbeat-export.json`, `overture-history.json`, and
 `overture-results.json`, each with both a TypeScript and a Swift reader/writer. #493 retired
-the TypeScript side of all three (confirmed unused and drifting), so none of the 9 contracts
-above now has two independent code implementations to drift apart from; the cross-language
-risk Phases 1 and 3 guarded against for those 3 no longer exists, there is nothing left to
-drift from. Each still has its own Swift XCTest against the shared fixture.
+the TypeScript side of all three (confirmed unused and drifting); #669 went further for
+`overture-results.json` and retired its Swift side too, once it was confirmed the native scout
+writes straight to SwiftData and nothing has ever produced a file for the app to ingest, so that
+contract no longer exists at all. `downbeat-export.json` and `overture-history.json` each still
+has its own Swift XCTest against the shared fixture; none of the 8 contracts above now has two
+independent code implementations to drift apart from, the cross-language risk Phases 1 and 3
+guarded against for those no longer exists, there is nothing left to drift from.
 
 The remaining 6 each have at least one side that is not code, by design: a Claude Code workflow
 for all of them, plus `mac/scripts/prep-run.sh` (a shell script) on the writing side of
@@ -91,16 +93,15 @@ read `undefined` and match nothing (the core of #104), which is why the shared f
 both readers (#166). That TypeScript reader was retired in #493; the app is now the only one.
 `status` may be null; an unrecognized status reads as cold.
 
-### `overture-results.json`
+### `overture-results.json` (retired)
 
-The ranked prospects the native scout upserts directly into SwiftData; there is no longer an
+The ranked prospects the native scout upserts directly into SwiftData; there was never an
 intermediate results file in the live path (`ScoutService.apply` writes straight to the store). The
 TypeScript writer (`buildResultsFile`, `src/lib/resultsContract.ts`) that used to produce this file
-for the app's `ResultsFileDecoder.decode` / `ResultsImporter` to ingest was retired in #493 once it
-was confirmed to be a reference mirror only, never the live path. The app's decoder and importer
-remain in place (harmless if nothing writes a file to ingest) in case a file is ever produced by
-hand; version 2 added the run-collapse fields, and the reader's tolerant version gate (1 through 2)
-still accepts the older shape.
+for the app to ingest was retired in #493 once it was confirmed to be a reference mirror only, never
+the live path. The app's own decoder and importer (`ResultsFileDecoder.decode` / `ResultsImporter`)
+were kept in place afterward in case a file was ever produced by hand, but nothing ever did; #669
+removed them too, since permanently dead code with no live writer anywhere isn't worth carrying.
 
 ### `overture-uncertain.json` and `overture-refined.json` (retired)
 
