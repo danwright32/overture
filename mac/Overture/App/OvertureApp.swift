@@ -30,8 +30,13 @@ struct OvertureApp: App {
             // exist yet) BEFORE anything below touches it. A foreign app's store landing at this
             // exact path (the Downbeat collision incident) wouldn't make ModelContainer throw.
             // It would silently create Overture's missing tables fresh and "succeed" as an empty
-            // store. Refuse outright instead: no backup, no open, nothing written.
-            if StoreSchemaGuard.hasExpectedSchema(at: StoreLocation.storeURL) {
+            // store. Refuse outright instead, after snapshotting the suspicious file (see
+            // StoreSchemaGuard.refusalReason): no open, nothing written beyond that snapshot.
+            if let refusal = StoreSchemaGuard.refusalReason(
+                storeURL: StoreLocation.storeURL, dataDirectory: StoreLocation.dataDirectory, now: Date()
+            ) {
+                reason = refusal
+            } else {
                 // #602: back up the store right here, holding the exclusive lock but before
                 // anything (including this process) has it open. That's the one moment it's
                 // guaranteed quiescent; SQLite's WAL format is self-describing and crash-safe, so
@@ -51,10 +56,6 @@ struct OvertureApp: App {
                         return nil
                     }
                 }
-            } else {
-                reason = "Overture's data file doesn't look like Overture's own database. Another "
-                    + "app may have written to \(StoreLocation.storeURL.path). Nothing has been "
-                    + "opened or changed. Check that file before reopening Overture."
             }
         } else {
             reason = "Another copy of Overture is already using its data."

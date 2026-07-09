@@ -22,6 +22,25 @@ enum StoreSchemaGuard {
         return tableExists(expectedTable, inSQLiteFileAt: storeURL.path)
     }
 
+    // #663 follow-up: OvertureApp.init() can never be unit-tested directly (the test host always
+    // takes the isRunningUnderTests branch under XCTest, so this decision never runs there), so
+    // the refusal-with-backup decision lives here instead, mirroring how StoreBackup.
+    // performLaunchBackup was already extracted out of the same initializer for testability.
+    // Returns nil when it's safe to proceed. Returns a reason (after snapshotting the file, the
+    // same way #602 always snapshots before opening, but without pruning old backups, matching
+    // the existing failed-open behavior since nothing here succeeded either) when it isn't.
+    static func refusalReason(
+        storeURL: URL, dataDirectory: URL, now: Date, fileManager: FileManager = .default
+    ) -> String? {
+        guard !hasExpectedSchema(at: storeURL, fileManager: fileManager) else { return nil }
+        _ = StoreBackup.performLaunchBackup(
+            dataDirectory: dataDirectory, now: now, keep: 10, fileManager: fileManager
+        ) { () -> Bool? in nil }
+        return "Overture's data file doesn't look like Overture's own database. Another app may "
+            + "have written to \(storeURL.path). Nothing has been opened or changed. Check that "
+            + "file before reopening Overture."
+    }
+
     private static func tableExists(_ table: String, inSQLiteFileAt path: String) -> Bool {
         var db: OpaquePointer?
         // Read-only, no implicit creation: a missing/foreign/corrupt file must never be silently
