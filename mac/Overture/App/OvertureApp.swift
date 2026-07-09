@@ -52,6 +52,15 @@ struct OvertureApp: App {
                     }
                 }
             } else {
+                // Snapshot the suspicious file before refusing it, the same way #602 always
+                // snapshots before opening: a foreign schema found once could be found again, and
+                // this is the only moment before Overture ever touches it. Reusing
+                // performLaunchBackup with an open() that always returns nil gets the exact
+                // don't-open, don't-prune behavior already proven for a failed open (#602
+                // red-team): nothing here succeeded, so no backups get rotated away either.
+                _ = StoreBackup.performLaunchBackup(
+                    dataDirectory: StoreLocation.dataDirectory, now: Date(), keep: 10
+                ) { () -> ModelContainer? in nil }
                 reason = "Overture's data file doesn't look like Overture's own database. Another "
                     + "app may have written to \(StoreLocation.storeURL.path). Nothing has been "
                     + "opened or changed. Check that file before reopening Overture."
