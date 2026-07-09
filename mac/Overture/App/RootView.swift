@@ -41,6 +41,9 @@ struct RootView: View {
     @State private var searchQuery: String = ""
     @State private var showPatterns = false
     @State private var showFollowUps = false
+    // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, handed to
+    // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
+    @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
 
     private var followUpsDue: Int {
@@ -111,6 +114,10 @@ struct RootView: View {
     private var queueContent: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   onShowFollowUps: { showFollowUps = true },
+                  onShowFollowUpsFor: { recipientId in
+                      followUpsHighlightRecipientId = recipientId
+                      showFollowUps = true
+                  },
                   onOpenInArchive: { key in archiveJumpKey = key; showArchive = true })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
@@ -330,7 +337,8 @@ struct RootView: View {
                     showFollowUps = false
                     archiveJumpKey = key
                     showArchive = true
-                })
+                }, initialHighlightRecipientId: followUpsHighlightRecipientId,
+                onHighlightConsumed: { followUpsHighlightRecipientId = nil })
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             .actionFeedbackBanner()

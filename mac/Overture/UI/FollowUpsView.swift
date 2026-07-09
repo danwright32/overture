@@ -18,6 +18,13 @@ struct FollowUpsView: View {
     // still has them, dismissing this sheet first since Archive opens as a sibling sheet on the
     // same RootView.
     var onOpenInArchive: (_ key: String) -> Void = { _ in }
+    // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, so this
+    // sheet scrolls to and highlights that same entry instead of leaving him to find it again.
+    var initialHighlightRecipientId: String? = nil
+    // Clears RootView's own copy of the target once captured, so a later plain "Follow-ups" pill
+    // click (with no specific recipient) doesn't re-highlight a stale one.
+    var onHighlightConsumed: () -> Void = {}
+    @State private var highlightedRecipientId: String?
 
     // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
     // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
@@ -84,22 +91,35 @@ struct FollowUpsView: View {
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                        if !conversationDue.isEmpty {
-                            section("Conversations") {
-                                ForEach(conversationDue, id: \.recipient.id) { d in
-                                    conversationRow(d); Divider()
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                            if !conversationDue.isEmpty {
+                                section("Conversations") {
+                                    ForEach(conversationDue, id: \.recipient.id) { d in
+                                        conversationRow(d); Divider()
+                                    }
+                                }
+                            }
+                            if !due.isEmpty {
+                                section("Silent follow-ups") {
+                                    ForEach(Array(due.enumerated()), id: \.offset) { _, d in row(d); Divider() }
                                 }
                             }
                         }
-                        if !due.isEmpty {
-                            section("Silent follow-ups") {
-                                ForEach(Array(due.enumerated()), id: \.offset) { _, d in row(d); Divider() }
-                            }
-                        }
+                        .padding(OVSpacing.lg)
                     }
-                    .padding(OVSpacing.lg)
+                    // #682: reuses ArchiveReveal's cancellation-safe scroll-after-delay timing
+                    // (the same one ArchiveView uses for its own search/deep-link jumps) instead
+                    // of a second copy of that logic.
+                    .task(id: highlightedRecipientId) {
+                        guard let key = highlightedRecipientId else { return }
+                        await ArchiveReveal.scrollAfterDelay(key: key) { key in
+                            withAnimation { proxy.scrollTo(key, anchor: .center) }
+                        }
+                        try? await Task.sleep(nanoseconds: 2_500_000_000)
+                        if highlightedRecipientId == key { highlightedRecipientId = nil }
+                    }
                 }
             }
         }
@@ -123,6 +143,11 @@ struct FollowUpsView: View {
                 + (p.isClosing ? " It also closes the lead out (kept warm for next time)." : ""))
         }
         .actionFeedbackBanner()
+        .onAppear {
+            guard let key = initialHighlightRecipientId else { return }
+            highlightedRecipientId = key
+            onHighlightConsumed()
+        }
     }
 
     @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -153,6 +178,10 @@ struct FollowUpsView: View {
             }
         }
         .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.xs)
+        .background(highlightedRecipientId == r.id ? OVColor.gold.opacity(0.18) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8))
+        .id(r.id)
     }
 
     // A conversation reminder (#111, per-recipient #652): tagged by reason, with the action its kind
@@ -197,6 +226,10 @@ struct FollowUpsView: View {
             }
         }
         .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.xs)
+        .background(highlightedRecipientId == r.id ? OVColor.gold.opacity(0.18) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8))
+        .id(r.id)
     }
 
     private func reasonPill(_ text: String, color: Color) -> some View {
