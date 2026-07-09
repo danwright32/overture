@@ -21,6 +21,9 @@ mkdir -p "$SUPPORT"
 LOG="$SUPPORT/prep-run.log"
 exec >> "$LOG" 2>&1
 
+# See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
+. "$(dirname "$0")/lib/resolve-node.sh"
+
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
 PROGRESS="$SUPPORT/overture-prep-progress.json"
