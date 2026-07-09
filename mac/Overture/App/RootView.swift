@@ -544,14 +544,14 @@ struct RootView: View {
         let started = PrepQueueService.lastRunStartedAt
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        switch DetachedRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
+        switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             ingestPrep()
         case .finishedEmpty:
             let tail = RunLog.tail(8, from: RunLog.prepURL)
             errorMessage = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
                 + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
-        case .idle, .running:
+        case .idle:
             break
         }
     }
@@ -568,14 +568,14 @@ struct RootView: View {
         let started = ReplyClassifyService.lastRunStartedAt
         let resultsMod = try? ReplyClassifyImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        switch DetachedRunOutcome.phase(runStartedAt: started, running: false, resultsModifiedAt: resultsMod ?? nil) {
+        switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             ingestReplyClassifications()
         case .finishedEmpty:
             let tail = RunLog.tail(8, from: RunLog.replyClassifyURL)
             errorMessage = "The reply drafter finished but didn't produce a draft. It may have hit an error."
                 + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
-        case .idle, .running:
+        case .idle:
             break
         }
     }

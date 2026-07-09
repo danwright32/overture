@@ -50,6 +50,14 @@ enum RunProgress {
 // The three visibly-distinct states the saved UX principle requires of any non-instant action:
 // nothing in flight, working/still-alive, or stalled/failed. Carries the elapsed counter on both live
 // states so the stalled case still shows how long it has been stuck.
+//
+// #472: a deliberately different, narrower vocabulary from DetachedRunPhase
+// (DetachedRunOutcome.swift), not an oversight. This answers "what should the UI show right now
+// while something might still be in flight" (a continuous, per-second question, driving
+// LiveRunLabel); DetachedRunPhase answers "the moment a detached run stopped, what did it
+// produce" (a one-shot terminal question). Evaluated folding them into one vocabulary per #472
+// and deliberately didn't: the two are used in disjoint call sites for different lifecycle
+// moments, so a single flat enum would just give each side dead cases it can never see.
 enum RunLiveness: Equatable {
     case idle
     case running(elapsed: String)
