@@ -104,18 +104,12 @@ struct QueueView: View {
     // single expression sits near the SwiftUI type-checker's complexity threshold (#122).
     var body: some View {
         mainContent
-            .alert("Send this email now?", isPresented: sendConfirmBinding, presenting: pendingConfirm) { pending in
-                Button("Send") { performSend(pending.id) }
-                Button("Cancel", role: .cancel) { pendingConfirm = nil }
-            } message: { pending in
-                Text(sendConfirmMessage(pending))
-            }
-            .alert("Reconnect Gmail", isPresented: $showReconnect) {
-                Button("Connect Gmail") { onConnectGmail() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
-            }
+            .sendConfirmAndReconnectAlerts(
+                pendingConfirm: $pendingConfirm,
+                showReconnect: $showReconnect,
+                onSend: performSend,
+                onConnectGmail: onConnectGmail
+            )
     }
 
     private var mainContent: some View {
@@ -144,14 +138,6 @@ struct QueueView: View {
                       : "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one")
             }
         }
-    }
-
-    private var sendConfirmBinding: Binding<Bool> {
-        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
-    }
-
-    private func sendConfirmMessage(_ pending: PendingSend) -> String {
-        "To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out."
     }
 
     private var queueScroll: some View {
