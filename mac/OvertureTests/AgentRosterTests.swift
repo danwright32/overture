@@ -35,13 +35,19 @@ struct AgentRosterTests {
     @Test func sendNeedsAttentionErrorsAndDisconnected() {
         var ready = calm; ready.readyToSend = 1
         #expect(status("Send", ready).state == .needsAttention)
+        #expect(status("Send", ready).needsGmailConnect == false)
 
         var failed = calm; failed.readyToSend = 1; failed.sendErrors = 1
         #expect(status("Send", failed).state == .error)
+        #expect(status("Send", failed).needsGmailConnect == false)
 
         var disconnected = calm; disconnected.readyToSend = 1; disconnected.gmailConnected = false
         #expect(status("Send", disconnected).state == .needsAttention)
         #expect(status("Send", disconnected).detail.contains("connect Gmail"))
+        // #565: a structured flag, not a text match on `detail`, so the chip can route a tap to
+        // the actual Gmail-connect flow (#488) instead of just filtering the queue, which read as
+        // an instruction ("connect Gmail to send") with nothing behind it to act on.
+        #expect(status("Send", disconnected).needsGmailConnect == true)
     }
 
     // #475/#476: an interrupted send (crash, or a save that never landed) must outrank even a
