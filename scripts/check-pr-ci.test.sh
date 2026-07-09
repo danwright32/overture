@@ -99,6 +99,37 @@ RUNNER_CHECKED=0; RUNNER_STATUS=""; RUNNER_BUSY=""
 out="$(classify_check_run "swift-tests" "in_progress" "444" "")"
 assert_contains "runner-offline: reported as stalled, unreachable" "${out}" "Stalled. Runner appears unreachable, status is offline (pending 6m40s)"
 
+# --- check_mergeable (#625): a PR with a real merge conflict never gets CI checks at all, so
+# polling check-runs for one just times out reporting "No checks found yet" for the full
+# MAX_WAIT_SECONDS. check_mergeable lets main() fail fast on that specific case instead. ---
+PR_NUMBER="999"
+
+if check_mergeable "CONFLICTING" >/tmp/check-pr-ci-mergeable-out.$$ 2>&1; then
+  echo "FAIL - check_mergeable(\"CONFLICTING\") should return non-zero"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - check_mergeable(\"CONFLICTING\") returns non-zero"
+fi
+assert_contains "check_mergeable(\"CONFLICTING\") names the PR and explains why polling won't help" \
+  "$(cat /tmp/check-pr-ci-mergeable-out.$$)" "PR #999 has a merge conflict"
+rm -f /tmp/check-pr-ci-mergeable-out.$$
+
+if check_mergeable "MERGEABLE" >/dev/null 2>&1; then
+  echo "ok - check_mergeable(\"MERGEABLE\") returns success"
+else
+  echo "FAIL - check_mergeable(\"MERGEABLE\") should return success"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# UNKNOWN means GitHub hasn't finished computing mergeability yet (e.g. moments after a push),
+# not a real conflict. Must not be treated as a hard failure, or every fresh push would false-stop.
+if check_mergeable "UNKNOWN" >/dev/null 2>&1; then
+  echo "ok - check_mergeable(\"UNKNOWN\") returns success (not yet computed is not a conflict)"
+else
+  echo "FAIL - check_mergeable(\"UNKNOWN\") should not be treated as a conflict"
+  FAILURES=$((FAILURES + 1))
+fi
+
 echo
 if [[ ${FAILURES} -eq 0 ]]; then
   echo "All check-pr-ci.sh classification fixtures passed."

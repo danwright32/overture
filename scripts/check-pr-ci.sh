@@ -145,6 +145,20 @@ classify_check_run() {
   fi
 }
 
+# check_mergeable <mergeable-value>. #625: GitHub never runs CI checks on a PR it can't merge,
+# so polling check-runs for one just times out reporting "No checks found yet" for the whole
+# poll window instead of surfacing the real, fixable problem (a merge conflict). Only
+# CONFLICTING is a hard stop; UNKNOWN (mergeability not computed yet, e.g. moments after a push)
+# is not a conflict and must fall through to the normal check-runs poll.
+check_mergeable() {
+  local mergeable="$1"
+  if [[ "${mergeable}" == "CONFLICTING" ]]; then
+    echo "Unmergeable: PR #${PR_NUMBER} has a merge conflict against its base branch. GitHub never runs CI checks on a PR it can't merge, so waiting here would just time out. Resolve the conflict, then rerun."
+    return 1
+  fi
+  return 0
+}
+
 main() {
   [[ $# -eq 1 ]] || usage
   PR_NUMBER="$1"
@@ -152,7 +166,10 @@ main() {
 
   command -v gh >/dev/null || { echo "gh CLI not found; install it and run: gh auth login" >&2; exit 1; }
 
-  SHA="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefOid --jq .headRefOid)"
+  # One combined field fetch instead of two round trips (see the CHECK_RUNS @tsv fetch below for
+  # the same pattern already used in this file).
+  PR_INFO="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefOid,mergeable --jq '[.headRefOid, .mergeable] | @tsv')"
+  IFS=$'\t' read -r SHA MERGEABLE <<< "${PR_INFO}"
   if [[ -z "${SHA}" || "${SHA}" == "null" ]]; then
     echo "Error: could not resolve a head commit for PR #${PR_NUMBER} on ${REPO}." >&2
     exit 1
@@ -160,6 +177,8 @@ main() {
 
   echo "PR #${PR_NUMBER} on ${REPO}, commit ${SHA:0:7}"
   echo
+
+  check_mergeable "${MERGEABLE}" || exit 1
 
   # conclusion is last because it is null (empty after //) until a check completes, and
   # bash's `read` with a tab IFS collapses an empty middle field, shifting check_suite_id
