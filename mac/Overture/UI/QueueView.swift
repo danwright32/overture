@@ -459,8 +459,11 @@ struct QueueView: View {
             }
             Spacer(minLength: OVSpacing.sm)
             VStack(alignment: .trailing, spacing: 6) {
+                // #661 follow-up: the old full card highlighted an overdue reach-out in rust rather
+                // than the plain "in N days" color, so that urgency cue survives the lightweight row.
+                let dueNow = ReachedOutQueue.isDueNow(next: pair.next, now: now)
                 Text(ReachedOutQueue.timingLabel(next: pair.next, now: now))
-                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
                 if r.replied {
                     ConversationStateControl(
                         currentState: r.conversationState, stateSource: r.conversationStateSource,
@@ -473,7 +476,7 @@ struct QueueView: View {
                                                                                 prospects: prospects, context: context, feedback: feedback)
                         })
                 }
-                if ReachedOutQueue.isDueNow(next: pair.next, now: now) {
+                if dueNow {
                     Button("Send a follow-up") { onShowFollowUps() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }
