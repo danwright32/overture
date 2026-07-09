@@ -1,11 +1,17 @@
 # Local file contracts
 
-Overture's pieces (the TypeScript scout engine, the SwiftUI Mac app, and the Claude Code
-workflows) never call each other directly. They hand off through fixed-shape JSON files in
+Overture's pieces (the SwiftUI Mac app, a small booking-history importer script, and the Claude
+Code workflows) never call each other directly. They hand off through fixed-shape JSON files in
 `~/Library/Application Support/Overture/`, the same fire-and-forget boundary Downbeat uses for its
 export. That boundary is the riskiest seam in the product: a format change on one side that the
 other side has not caught up to fails silently in production (the #109 regression, where every
 client was silently treated as cold).
+
+A TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`) used to mirror the app's scout,
+classifier, matcher, ranker, and results writer as a second, parallel implementation. #493 retired
+it once it was confirmed unused (the real scout has always run natively) and already drifting from
+the Swift version it mirrored; only the booking-history importer (`scripts/import-history.ts`)
+survives from that side.
 
 The guard against that is a committed sample fixture per contract under `fixtures/`, asserted by a
 test on each programmatic side (#113 established it for the Downbeat export; #157, #159, and #166 extended
@@ -18,11 +24,9 @@ the workflow's runbook is its spec.
 
 | File (in app-support dir) | Writer | Reader | Version | Fixture | Tests |
 | --- | --- | --- | --- | --- | --- |
-| `downbeat-export.json` | Downbeat app (separate repo) | Scout (`parseDownbeatExport`) + App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `downbeatExportContract.test.ts`, `DownbeatExportContractTests.swift` |
-| `overture-history.json` | Importer (`scripts/import-history.ts`) | Scout (`loadLocalHistory`) + App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `localHistoryContract.test.ts`, `LocalHistoryContractTests.swift` |
-| `overture-results.json` | Scout (`buildResultsFile`) | App (`ResultsFileDecoder.decode`) | 1, 2 | `fixtures/scout-results/` | `resultsContract.test.ts`, `ResultsContractTests.swift` |
-| `overture-uncertain.json` | Scout (`buildUncertainPayload`) | Scout refine agent (workflow) | none (plain array) | `fixtures/scout-refine/uncertain.json` | `refineContract.test.ts` (writer) |
-| `overture-refined.json` | Scout refine agent (workflow) | Scout (`applyRefinements`) | none (plain array) | `fixtures/scout-refine/refined.json` | `refineContract.test.ts` (reader) |
+| `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
+| `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
+| `overture-results.json` | none, retired #493 | App (`ResultsFileDecoder.decode`) | 1, 2 | `fixtures/scout-results/` | `ResultsContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
@@ -30,27 +34,34 @@ the workflow's runbook is its spec.
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
-"Scout" is the TypeScript engine (`src/lib/`, `scripts/scout/run-scout.ts`). "App" is the SwiftUI
-Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max plan, not code.
+`overture-uncertain.json` and `overture-refined.json` (the scout's round trip with a Claude
+Code refine step for ambiguous classifications) were also retired in #493: confirmed never
+actually completed in practice, and fully superseded by the app's own queue-review flow for
+uncertain events. See Per contract below.
+
+"App" is the SwiftUI Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max
+plan, not code.
 
 ## CI coverage
 
 Phases 1 and 3 of #478 run the TypeScript and Swift suites on every PR, but that only closes
 the core worry in #478 (a fixture-shape change merging green while silently breaking the
-other side) for a contract with an automated test on every side that is code. Of the 11
-contracts above, exactly 3 clear that bar: `downbeat-export.json`, `overture-history.json`,
-and `overture-results.json`. For those, CI now catches a side that has not caught up to a
-fixture change instead of letting it drift silently into production.
+other side) for a contract with an automated test on every side that is code. Before #493,
+exactly 3 contracts cleared that bar: `downbeat-export.json`, `overture-history.json`, and
+`overture-results.json`, each with both a TypeScript and a Swift reader/writer. #493 retired
+the TypeScript side of all three (confirmed unused and drifting), so none of the 9 contracts
+above now has two independent code implementations to drift apart from; the cross-language
+risk Phases 1 and 3 guarded against for those 3 no longer exists, there is nothing left to
+drift from. Each still has its own Swift XCTest against the shared fixture.
 
-The other 8 each have at least one side that is not code, by design: a Claude Code workflow
+The remaining 6 each have at least one side that is not code, by design: a Claude Code workflow
 for all of them, plus `mac/scripts/prep-run.sh` (a shell script) on the writing side of
 `overture-prep-progress.json`: the fixture plus the runbook (and, for that one, the script)
 is deliberately the whole spec for that half (see Per contract below). Running the existing
 suite for the code side in CI does not and cannot add coverage for a side that was never
-meant to have an automated test. Do not read Phases 1 and 3 as having closed the
-cross-language risk for anything beyond those 3 contracts.
+meant to have an automated test.
 
-`src/lib/fixtureShape.test.ts` (#509) adds a lightweight structural check for those other 7: it
+`src/lib/fixtureShape.test.ts` (#509) adds a lightweight structural check for those other 6: it
 decodes every version file committed under each fixture directory and asserts it still matches
 its documented shape above (required fields, and which fields are additive vs. a hard replacement
 between versions). This is not behavioral coverage, since the workflow side is not code to run,
@@ -61,37 +72,46 @@ someone notices in production.
 
 ### `downbeat-export.json`
 
-Downbeat's export of past clients, venues, committed bookings, and blocked dates. The only contract
-with two code readers (the scout and the app both consume it), so the same fixture is decoded by
-both. The canonical spec lives in the Downbeat repo at
-`Downbeat/Downbeat/Integration/OvertureExport/CONTRACT.md`; if the Overture decoders ever drift,
-that file wins. Match on `clientId` (the stable org identity), never `clientDisplayName`. `bookings`
-and `blockedDates` start empty and only fill from bookings made through the app going forward.
+Downbeat's export of past clients, venues, committed bookings, and blocked dates, read by the app's
+`DownbeatBridge.decode`. Previously also read by a TypeScript mirror (`parseDownbeatExport`),
+retired in #493 since the real scout has always run natively; the app is now the only reader. The
+canonical spec lives in the Downbeat repo at
+`Downbeat/Downbeat/Integration/OvertureExport/CONTRACT.md`; if the Overture decoder ever drifts from
+it, that file wins. Match on `clientId` (the stable org identity), never `clientDisplayName`.
+`bookings` and `blockedDates` start empty and only fill from bookings made through the app going
+forward.
 
 ### `overture-history.json`
 
 Past booking history (`{ groupName, status }`), so repeat-client matching and do-not-contact
-suppression work before the app has its own activity. A two-reader contract: the scout reads it
-through `loadLocalHistory`, which maps the app's camelCase shape to the matcher's snake_case
-(`{ group_name, status }`), and the app reads it through `[HistoryRecord]`. Skipping that mapping
-silently reads `undefined` and matches nothing (the core of #104), so the shared fixture is decoded
-by both readers (#166). `status` may be null; an unrecognized status reads as cold.
+suppression work before the app has its own activity. Read by the app through `[HistoryRecord]`.
+Previously also read by a TypeScript mirror (`loadLocalHistory`, which mapped the app's camelCase
+shape to the matcher's snake_case, `{ group_name, status }`); skipping that mapping used to silently
+read `undefined` and match nothing (the core of #104), which is why the shared fixture existed for
+both readers (#166). That TypeScript reader was retired in #493; the app is now the only one.
+`status` may be null; an unrecognized status reads as cold.
 
 ### `overture-results.json`
 
-The ranked prospects the scout writes and the app ingests, upserting by natural key so Dan's
-keep/dismiss decisions survive a re-run. The writer pipeline (serialize, collapse multi-night runs,
-sort) is `buildResultsFile` (`src/lib/resultsContract.ts`), kept pure so the writer side is testable.
-Version 2 added the run-collapse fields; the reader's tolerant version gate (1 through 2) accepts the
-older shape and defaults the missing fields.
+The ranked prospects the native scout upserts directly into SwiftData; there is no longer an
+intermediate results file in the live path (`ScoutService.apply` writes straight to the store). The
+TypeScript writer (`buildResultsFile`, `src/lib/resultsContract.ts`) that used to produce this file
+for the app's `ResultsFileDecoder.decode` / `ResultsImporter` to ingest was retired in #493 once it
+was confirmed to be a reference mirror only, never the live path. The app's decoder and importer
+remain in place (harmless if nothing writes a file to ingest) in case a file is ever produced by
+hand; version 2 added the run-collapse fields, and the reader's tolerant version gate (1 through 2)
+still accepts the older shape.
 
-### `overture-uncertain.json` and `overture-refined.json`
+### `overture-uncertain.json` and `overture-refined.json` (retired)
 
-The scout's round trip with the refine agent. The scout writes `uncertain.json` (only the events the
-rules left `uncertain`, via `buildUncertainPayload`); the agent re-judges that slice and writes
-`refined.json`; the scout merges it back with `applyRefinements` and marks those events confident.
-The `title` is the opaque join key the agent must echo back verbatim. The agent is the counterpart
-side with no automated test, so `fixtures/scout-refine/` is its spec (see `docs/scout-runbook.md`).
+This was the TypeScript scout's round trip with a Claude-Code-assisted refine step for events its
+rules left `uncertain`: it wrote `uncertain.json`, a human re-judged that slice via a Claude Code
+session and wrote `refined.json`, and the scout merged the result back in. Retired in #493 after
+confirming it was never actually completed in practice, an `uncertain.json` existed on disk from an
+early manual test run, over two weeks stale, but no `refined.json` was ever produced. The native
+app's queue view already surfaces any prospect with `confidence == uncertain &&
+!confidenceReviewedByDan` for Dan to correct by hand (`ClassificationOverride.swift`), which fully
+covers the same need, so the file hand-off was dropped rather than ported.
 
 ### `overture-prep-queue.json` and `overture-prep-results.json`
 
