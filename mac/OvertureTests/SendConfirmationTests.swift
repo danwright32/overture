@@ -24,14 +24,18 @@ struct SendConfirmationTests {
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status, ingestedAt: Date())
-        p.contactEmail = email
         p.draftSubject = subject
         p.draftBody = body
         p.sentAt = sentAt
         ctx.insert(p)
-        // Confirmation now reads the next pending recipient (#394). Seed the act recipient from the
-        // singular fields the same way the launch backfill does, so sentAt -> already-sent state too.
-        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        // Confirmation now reads the next pending recipient (#394). Seed the act recipient directly,
+        // so sentAt -> already-sent state too.
+        if let id = Recipient.makeId(email: email, formURL: nil) {
+            let r = Recipient(id: id, email: email, provenance: .act)
+            r.sentAt = sentAt
+            r.sendState = sentAt != nil ? .sent : .pending
+            p.setRecipients([r])
+        }
         try? ctx.save()
         return p
     }

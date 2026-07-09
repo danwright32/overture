@@ -129,51 +129,6 @@ enum SendService {
         }
     }
 
-    // Sends ONE conversation re-touch for an ACTIVE lead Dan chose to nudge, or the post-event
-    // closing note (#111). Unlike sendFollowUp this is a separate, UNCAPPED track (it never touches
-    // followUpCount) for leads that have already replied, so the silent-sequence guards don't apply.
-    // It threads onto the original conversation (#74) so a reply still lands where the reply checker
-    // watches. Re-anchors the reminder (conversationRemindedAt); the closing variant resolves the
-    // lead to lostSoft (manual) so it stops nagging. One click = one nudge, never autonomous.
-    @discardableResult
-    static func sendConversationNudge(_ prospect: Prospect, kind: ConversationReminder.Kind,
-                                      now: Date, sender: MailSender) async -> Bool {
-        guard let email = prospect.contactEmail, prospect.sentAt != nil else { return false }
-        let body: String
-        switch kind {
-        case .active(let state):
-            body = ConversationReminder.nudgeBody(for: state, contactName: prospect.contactName,
-                                                  groupName: prospect.groupName, venue: prospect.venue)
-        case .closing:
-            body = ConversationReminder.closingNudgeBody(contactName: prospect.contactName,
-                                                         groupName: prospect.groupName, venue: prospect.venue)
-        case .needsState, .suggested:
-            return false   // a prompt to categorize/confirm, not a sendable email
-        }
-        let mail = OutgoingMail(
-            to: email,
-            subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
-            body: body,
-            inReplyTo: prospect.gmailMessageId,
-            threadId: prospect.gmailThreadId)
-        do {
-            _ = try await sender.send(mail)
-            prospect.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
-            prospect.sendError = nil
-            if case .closing = kind {
-                prospect.outcome = .lostSoft
-                prospect.outcomeSourceRaw = OutcomeSource.manual.rawValue
-                prospect.outcomeAt = now
-                prospect.resolveEngagedContacts(.declinedSoft)   // #448: close the engaged contacts too
-                prospect.suppressUntriedRecipients(reason: .declined)   // #542: and the untried one too
-            }
-            return true
-        } catch {
-            prospect.sendError = error.localizedDescription
-            return false
-        }
-    }
-
     // Sends ONE conversation re-touch or closing note for a specific recipient's ACTIVE conversation
     // (#651/#652), not the lead-level rollup: threads on recipient.gmailMessageId/gmailThreadId (that
     // contact's own conversation), same as sendReplyDraft, so a multi-recipient show's nudge lands on

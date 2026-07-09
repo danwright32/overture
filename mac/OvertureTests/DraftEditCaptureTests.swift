@@ -30,7 +30,6 @@ struct DraftEditCaptureTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.contactEmail = "to@org.org"
         p.draftSubject = subject
         p.draftBody = body
         return p
@@ -79,7 +78,7 @@ struct DraftEditCaptureTests {
         let ctx = ModelContext(try container())
         let p = drafted(subject: "Sent subject", body: "The exact body that went out.")
         ctx.insert(p)
-        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        p.setRecipients([Recipient(id: "to@org.org", email: "to@org.org", provenance: .act)])
         try ctx.save()
 
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 1), sender: FixedSender()) == true)
@@ -95,7 +94,7 @@ struct DraftEditCaptureTests {
         let ctx = ModelContext(try container())
         let p = drafted(subject: "One-off subject", body: "One-off body sent now.")
         ctx.insert(p)
-        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        p.setRecipients([Recipient(id: "to@org.org", email: "to@org.org", provenance: .act)])
         try ctx.save()
 
         #expect(await SendService.sendOne(p, now: Date(), sender: FixedSender()) == true)

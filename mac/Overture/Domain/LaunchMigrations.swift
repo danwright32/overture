@@ -11,9 +11,6 @@ enum LaunchMigrations {
     // than left half-applied.
     @discardableResult
     static func run(in context: ModelContext) -> Bool {
-        // One-time, idempotent migration onto the recipients model (#391). Guarded by
-        // recipients.isEmpty, so it's a no-op on every launch after the first.
-        RecipientBackfill.run(in: context)
         // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
         // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
         // every contacted recipient carries its own thread.
@@ -24,10 +21,6 @@ enum LaunchMigrations {
         // Choral folded into Music (#350), an editorial taxonomy decision. Idempotent: guarded by
         // "any prospect still stored as choral". Does not touch fitScore/tier (Dan's call).
         DisciplineMigration.run(in: context)
-        // #650: seed an in-flight show-level conversation onto the recipient who actually replied, so
-        // it keeps generating reminders once state moves to per-recipient. Idempotent, guarded inside
-        // the migration itself.
-        RecipientConversationStateMigration.run(in: context)
         do {
             try context.save()
             return true

@@ -3,8 +3,8 @@ import Foundation
 import SwiftData
 @testable import Overture
 
-// #479: applicationDidFinishLaunching ran the recipient backfill, the thread-down repair, and the
-// salutation strip against mainContext with no save after them, so a short-lived launch could lose the
+// #479: applicationDidFinishLaunching ran the thread-down repair and the salutation strip against
+// mainContext with no save after them, so a short-lived launch could lose the
 // writes and the idempotency guard would just leave a fragile unsaved window every time it re-ran. This
 // proves the fix against a real, file-backed store (an in-memory one has nothing to "reopen"): run the
 // migrations against one context, WITHOUT the test itself ever calling save, then open a second,
@@ -37,8 +37,8 @@ struct LaunchMigrationsTests {
         let container = try openContainer(at: storeURL)
         let context = ModelContext(container)
         let p = makeProspect("k1")
-        p.contactEmail = "ann@example.com"
         p.draftBody = "Hi Emma, I photograph performing arts in New York."
+        p.setRecipients([Recipient(id: "ann@example.com", email: "ann@example.com", provenance: .act)])
         context.insert(p)
         try context.save()   // seed data, as if it were already durable before this launch
 

@@ -77,19 +77,18 @@ struct SendServiceTests {
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
-        p.contactEmail = email
         p.draftSubject = "S"; p.draftBody = draft
         ctx.insert(p)
-        seedRecipient(p)
+        seedRecipient(p, email: email, name: nil)
         try? ctx.save()
     }
 
-    // Mirror the live flow: a performance has its Recipient rows (seeded at launch by RecipientBackfill)
-    // before any send runs. The send path reads recipients, not the legacy singular fields, so a test
-    // prospect needs its act recipient synthesized the same way the app does.
+    // Mirror the live flow: a performance has its act Recipient row before any send runs. The send
+    // path reads recipients, not any lead-level field, so a test prospect needs one seeded directly.
     @discardableResult
-    private func seedRecipient(_ p: Prospect) -> Recipient? {
-        guard let r = RecipientBackfill.synthesizedRecipient(from: p) else { return nil }
+    private func seedRecipient(_ p: Prospect, email: String?, name: String?) -> Recipient? {
+        guard let id = Recipient.makeId(email: email, formURL: nil) else { return nil }
+        let r = Recipient(id: id, email: email, name: name, provenance: .act)
         p.setRecipients([r])
         return r
     }
@@ -102,10 +101,9 @@ struct SendServiceTests {
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
-        p.contactEmail = email; p.contactName = name
         p.draftSubject = "S"; p.draftBody = body
         ctx.insert(p)
-        seedRecipient(p)
+        seedRecipient(p, email: email, name: name)
         try? ctx.save()
         return p
     }
@@ -146,9 +144,9 @@ struct SendServiceTests {
                          priorRelationship: "booked", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
-        p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hi"
         ctx.insert(p)
-        seedRecipient(p)
+        seedRecipient(p, email: "to@org.org", name: nil)
 
         let sent = await SendService.sendOne(p, now: Date(), sender: FakeSender())
         #expect(sent)

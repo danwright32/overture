@@ -107,54 +107,6 @@ struct ConversationReminderTests {
         #expect(reminder(state: nil, setAt: nil, outcome: .noResponse) == nil)
     }
 
-    private func prospect(state: ConversationState?, setAt: Date?, event: String?, outcome: Outcome) -> Prospect {
-        let p = Prospect(naturalKey: "k-\(event ?? "none")-\(state?.rawValue ?? "nil")-\(outcome.rawValue)",
-                         groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: event, sourceListingURL: nil, websiteURL: nil,
-                         priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
-                         fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
-                         possibleMatchSource: nil, possibleMatchName: nil)
-        p.outcome = outcome
-        p.conversationState = state
-        p.conversationStateSetAt = setAt
-        // Phase F: the derived reads come from contacts, so seed one whose standing matches `outcome`.
-        let r = Recipient(id: "c@e.com", email: "c@e.com", provenance: .act)
-        r.sendState = .sent
-        if outcome == .replied { r.replied = true }
-        p.setRecipients([r])
-        return p
-    }
-
-    @Test func dueIsSortedByUrgencyThenEvent() {
-        let leads = [
-            prospect(state: .interested, setAt: daysAgo(30), event: "2020-01-01", outcome: .replied),     // closing
-            prospect(state: nil, setAt: nil, event: "2026-12-01", outcome: .replied),                     // needsState
-            prospect(state: .interested, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),     // interested
-            prospect(state: .hasQuestion, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),    // hasQuestion
-            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied),    // wantsToBook
-        ]
-        let kinds = ConversationReminder.due(from: leads, now: now).map { $0.1.kind }
-        #expect(kinds == [
-            .active(.wantsToBook), .active(.hasQuestion), .active(.interested), .needsState, .closing,
-        ])
-    }
-
-    @Test func dueExcludesDismissedLeads() {
-        // #238: a dismissed lead must not surface as a conversation reminder, even with an active state.
-        let p = prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-12-01", outcome: .replied)
-        p.status = .dismissed
-        #expect(ConversationReminder.due(from: [p], now: now).isEmpty)
-    }
-
-    @Test func dueBreaksTiesBySoonestEvent() {
-        let leads = [
-            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-08-01", outcome: .replied),
-            prospect(state: .wantsToBook, setAt: daysAgo(30), event: "2026-07-01", outcome: .replied),
-        ]
-        let events = ConversationReminder.due(from: leads, now: now).map { $0.0.performanceDate }
-        #expect(events == ["2026-07-01", "2026-08-01"])
-    }
-
     @Test func accentMapsEachKindToASemanticToken() {
         #expect(ConversationReminder.accent(for: .active(.wantsToBook)) == .onTrack)
         #expect(ConversationReminder.accent(for: .active(.hasQuestion)) == .attention)
@@ -284,6 +236,28 @@ struct ConversationReminderTests {
         let overdue = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         overdue.sendState = .sent
         overdue.setConversationState(.interested, now: now.addingTimeInterval(-20 * 86_400))
+        p.setRecipients([overdue])
+
+        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+    }
+
+    // #238, moved from the now-deleted lead-level due(from:): a dismissed lead must not surface any
+    // of its recipients as a conversation reminder, even with an active state.
+    @Test func dueRecipientsExcludesADismissedLead() throws {
+        let ctx = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                     configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let context = ModelContext(ctx)
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.status = .dismissed
+        context.insert(p)
+        let overdue = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        overdue.sendState = .sent
+        overdue.setConversationState(.wantsToBook, now: now.addingTimeInterval(-30 * 86_400))
         p.setRecipients([overdue])
 
         #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)

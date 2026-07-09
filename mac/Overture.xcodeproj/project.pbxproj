@@ -17,7 +17,6 @@
 		04FB0C39B9A60E2B62710976 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B30D320FEBBA85BDF8EC7A4F /* Assets.xcassets */; };
 		05D91246C0C5C2780C852575 /* FeedReconcile.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB209BD8716EB1330E81E67 /* FeedReconcile.swift */; };
 		06A4CFEDC7146983E2305A8F /* RankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD487981CBBF8C44D61938BB /* RankerTests.swift */; };
-		08BA0B8303805AB5D3B47D6F /* RecipientConversationStateMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A313F0D2CCC369D1DF201AA0 /* RecipientConversationStateMigration.swift */; };
 		0B3F94BB19E539CB2184E94F /* ShowSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E2C0BEAE1DB8F10FB628901 /* ShowSearchField.swift */; };
 		0C90443179FCBB3A84CDA21C /* PrepImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E563EC137DDC54063B7980 /* PrepImporterTests.swift */; };
 		0C99AE96FF1B8D4C2F728C70 /* AwayAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */; };
@@ -112,7 +111,6 @@
 		59B181BC638B80E08D06D40C /* OmniFocusUserNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255F49E0B20DC11D0532ACD1 /* OmniFocusUserNotifier.swift */; };
 		5A3B535D68CD68F9E18AF534 /* LocalHistoryContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B730D9D74C05F700D65AB92D /* LocalHistoryContractTests.swift */; };
 		5AD1245BE8998703FD5283CE /* BookingMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1942D70A38A419E78AF4D91D /* BookingMatchTests.swift */; };
-		5BD70A0400983A849835AC50 /* RecipientConversationStateMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A2C530CBD6ECB27890664D /* RecipientConversationStateMigrationTests.swift */; };
 		5C6A5AD503A4296B257C2D26 /* VenueParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C37374FD3A2F73C11538500F /* VenueParserTests.swift */; };
 		5D04BB2281702E508DADFE68 /* ScoutStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8D2818D1C0214152E05C92 /* ScoutStatus.swift */; };
 		5D1832C1333785994C5F20DB /* ReviewStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E10A3A36DE78E73EF6EAE0B /* ReviewStatus.swift */; };
@@ -478,7 +476,6 @@
 		A04976ED97928B91FDE4C573 /* PrepImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepImporter.swift; sourceTree = "<group>"; };
 		A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutScheduleTests.swift; sourceTree = "<group>"; };
 		A2E8DF70F15A0686D38907C0 /* ArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
-		A313F0D2CCC369D1DF201AA0 /* RecipientConversationStateMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientConversationStateMigration.swift; sourceTree = "<group>"; };
 		A324C48EDE7DCAAE747171E2 /* ArchiveStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveStatus.swift; sourceTree = "<group>"; };
 		A545056FEEAA77E0FFA0D2E6 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		A84298B6C8EA1E8A89770772 /* OmniFocusSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSync.swift; sourceTree = "<group>"; };
@@ -554,7 +551,6 @@
 		E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportContractTests.swift; sourceTree = "<group>"; };
 		E72D937054FBE261722613B6 /* DownbeatBookingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatBookingTests.swift; sourceTree = "<group>"; };
 		E7401013CA3A714300090BE7 /* SendConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendConfirmationTests.swift; sourceTree = "<group>"; };
-		E7A2C530CBD6ECB27890664D /* RecipientConversationStateMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientConversationStateMigrationTests.swift; sourceTree = "<group>"; };
 		E85CCBC10E94DCB73294F923 /* ScoutSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutSchedule.swift; sourceTree = "<group>"; };
 		E86872C2D168C0DEF8984DA2 /* AwayAlertTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwayAlertTests.swift; sourceTree = "<group>"; };
 		E8756FC6C0288732BE6DA264 /* ShowSearchFieldGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSearchFieldGuardTests.swift; sourceTree = "<group>"; };
@@ -707,7 +703,6 @@
 				059EDC5EB5C24A84CB9A7C37 /* ReachedOutQueueTests.swift */,
 				3C200298C3D0968B8EA55122 /* RecipientBackfillLiveStoreTests.swift */,
 				D8F08D34C10DF3DBBCF4B016 /* RecipientBackfillTests.swift */,
-				E7A2C530CBD6ECB27890664D /* RecipientConversationStateMigrationTests.swift */,
 				EF792C18EDEAD3A65D3FDA5A /* RecipientStorageTests.swift */,
 				00808F64D5725ECB3A4619DE /* RecipientTests.swift */,
 				C4052F504E575FB21B90A9DA /* ReconcileSchedulerSaveGuardTests.swift */,
@@ -863,7 +858,6 @@
 				06CDC4E814516BA0EF92C56D /* ReachedOutQueue.swift */,
 				851955E2042FB535C5037580 /* Recipient.swift */,
 				89089A2FCADA4197D142C28E /* RecipientBackfill.swift */,
-				A313F0D2CCC369D1DF201AA0 /* RecipientConversationStateMigration.swift */,
 				4592F13E7DFB6258CFEAF69E /* ReconcileSummary.swift */,
 				3705BA568ACF80E4BE5ECBEF /* ReplyClassify.swift */,
 				2BEF53A35386C9A1C2BF8967 /* ReplyDetection.swift */,
@@ -1111,7 +1105,6 @@
 				78B72D987F7222A94824F7BF /* ReachedOutQueue.swift in Sources */,
 				7ABE14E04C880198900CDC7D /* Recipient.swift in Sources */,
 				E1D103FB0E309BA63C3F332A /* RecipientBackfill.swift in Sources */,
-				08BA0B8303805AB5D3B47D6F /* RecipientConversationStateMigration.swift in Sources */,
 				1C1087D3914ED3D0E6E12B1A /* ReconcileScheduler.swift in Sources */,
 				3C4283ACCC0E8C096D4A1D5E /* ReconcileSummary.swift in Sources */,
 				A568A105B754E3A220EDD917 /* ReminderSettingsView.swift in Sources */,
@@ -1254,7 +1247,6 @@
 				B8FD5B15041C7E93CD754809 /* ReachedOutQueueTests.swift in Sources */,
 				294622ED6F2A7C45793370C5 /* RecipientBackfillLiveStoreTests.swift in Sources */,
 				554A7F6A98EED7FABCBD57CC /* RecipientBackfillTests.swift in Sources */,
-				5BD70A0400983A849835AC50 /* RecipientConversationStateMigrationTests.swift in Sources */,
 				B952EE7455237FCCD9984F50 /* RecipientStorageTests.swift in Sources */,
 				9676857FFB22C7E5FDCBE9D0 /* RecipientTests.swift in Sources */,
 				87EF923801F9804529CDFB7A /* ReconcileSchedulerSaveGuardTests.swift in Sources */,
