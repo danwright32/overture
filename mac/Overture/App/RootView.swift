@@ -52,18 +52,31 @@ struct RootView: View {
 
     private var searchableItems: [QueueItem] { allProspects.map(QueueItem.init) }
 
-    // Whether picking a global search result should jump into the Queue (#236's existing
-    // deep link mechanism) or open Archive with that row forced into view instead. A dismissed
-    // show never renders in the Queue at all, so it always routes to Archive.
+    // Whether picking a global search result, or an OmniFocus follow-up tap (#628), should jump
+    // into the Queue (#236's existing deep link mechanism) or open Archive with that row forced
+    // into view instead. A dismissed show, or one otherwise absent from both Queue pipelines
+    // (closed, past its window), never renders in the Queue, so it routes to Archive instead of
+    // silently landing nowhere.
     private func handleSearchSelection(_ item: QueueItem) {
         let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
-        if item.status != .dismissed,
-           QueueModel.isReachableInQueue(item, reachedOutKeys: reachedOutKeys, today: QueueModel.easternToday()) {
+        if QueueModel.isReachableForDeepLink(item, reachedOutKeys: reachedOutKeys, today: QueueModel.easternToday()) {
             deepLinkedKey = item.id
         } else {
             archiveJumpKey = item.id
             showArchive = true
         }
+    }
+
+    // Same routing as handleSearchSelection, but starting from a natural key (from an OmniFocus
+    // deep link) instead of an already-resolved QueueItem. A key with no matching prospect at all
+    // (shouldn't happen in practice) is treated the same as unreachable.
+    private func routeDeepLink(toKey key: String) {
+        guard let item = searchableItems.first(where: { $0.id == key }) else {
+            archiveJumpKey = key
+            showArchive = true
+            return
+        }
+        handleSearchSelection(item)
     }
 
     private var canStartPrep: Bool {
@@ -106,9 +119,10 @@ struct RootView: View {
                 // #308: a tapped multi-lead away alert opens overture://leads?key=…&key=…; hand the set
                 // to the queue to filter down to exactly those new leads.
                 if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = keys; return }
-                // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; hand the
-                // key to the queue to jump to that lead.
-                if let key = OvertureDeepLink.leadKey(from: url) { deepLinkedKey = key }
+                // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; route it
+                // the same way as a search pick (#628) since a closed show can still generate a due
+                // follow-up (a late reply on a different contact) after it's left the Queue entirely.
+                if let key = OvertureDeepLink.leadKey(from: url) { routeDeepLink(toKey: key) }
             }
             .toolbar {
                 ToolbarItem(placement: .status) {
