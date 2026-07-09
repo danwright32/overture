@@ -403,6 +403,15 @@ enum QueueModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    // #674: the first key in `keys` that's actually present among `items`, or nil if none are. A
+    // multi-lead OmniFocus alert's initial auto-scroll uses this instead of blindly `keys.first`,
+    // so a lead dismissed between the notification firing and Dan tapping it (and so no longer in
+    // the focused list at all) doesn't leave the scroll targeting a row that isn't there.
+    static func firstVisibleKey(_ keys: [String], among items: [QueueItem]) -> String? {
+        let ids = Set(items.map(\.id))
+        return keys.first { ids.contains($0) }
+    }
+
     // #217: the to-send queue is the bookable order with anyone already reached out to removed, so
     // the "To send" and "Reached out" pipelines never show the same prospect twice.
     static func toSendQueue(_ items: [QueueItem], reachedOutKeys: Set<String>, today: String) -> [QueueItem] {
