@@ -41,9 +41,6 @@ struct ProspectRowView: View {
     // #436: in-flight send timestamps so the row shows a live "Sending…" state (see DraftReviewView).
     var outboundSendSince: Date? = nil
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
-    // #223: on the "Reached out" list, the plain-language next-reach-out time ("Reach out now",
-    // "in 3 days"). nil on the to-send queue, where it does not apply.
-    var reachOutLabel: String? = nil
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
@@ -55,14 +52,6 @@ struct ProspectRowView: View {
                 if item.isBooked { bookedSeal } else { fitSeal }
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
-                    if let reachOutLabel {
-                        let urgent = reachOutLabel == "Reach out now"
-                        Text(reachOutLabel)
-                            .font(OVType.tag)
-                            .foregroundStyle(urgent ? OVColor.rust : OVColor.forest)
-                            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                            .background(Capsule().fill((urgent ? OVColor.rust : OVColor.forest).opacity(0.12)))
-                    }
                     feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
                         Text(item.fitReason)

@@ -60,6 +60,12 @@ enum ReachedOutQueue {
         return days == 1 ? "in 1 day" : "in \(days) days"
     }
 
+    // The same "overdue or now" threshold timingLabel's "Reach out now" case uses (#661), so a row's
+    // "Send a follow-up" action and its timing text can never disagree about whether it's due yet.
+    static func isDueNow(next: Date, now: Date) -> Bool {
+        next <= now
+    }
+
     // The next silent nudge for a still-silent recipient, mirroring FollowUp.dueRecipients' own
     // eligibility check (r.isAwaitingFollowUp) rather than reimplementing it: paced by gapDays from
     // the last touch, up to maxFollowUps; nothing once this recipient replied/resolved or the cap is

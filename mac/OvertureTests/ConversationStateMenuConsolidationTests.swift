@@ -17,13 +17,15 @@ struct ConversationStateMenuConsolidationTests {
                 "setStateMenu reintroduced its own ForEach over ConversationState.allCases instead of using the shared view (#662).")
     }
 
+    // #661: stateMenu was folded into the shared ConversationStateControl (which itself renders a
+    // ConversationStateMenu underneath), so the delegation is now checked on stateControl instead.
     @Test func draftReviewViewDelegatesToTheSharedMenu() throws {
         let src = SourceGuardHelper.source("Overture/UI/DraftReviewView.swift")
         #expect(!src.isEmpty)
-        let body = try SourceGuard.functionBody(named: "stateMenu", in: src)
-        #expect(body.contains("ConversationStateMenu("),
-                "stateMenu no longer delegates to the shared ConversationStateMenu view (#662).")
+        let body = try SourceGuard.functionBody(named: "stateControl", in: src)
+        #expect(body.contains("ConversationStateControl("),
+                "stateControl no longer delegates to the shared ConversationStateControl view (#661).")
         #expect(!body.contains("ForEach(ConversationState.allCases"),
-                "stateMenu reintroduced its own ForEach over ConversationState.allCases instead of using the shared view (#662).")
+                "stateControl reintroduced its own ForEach over ConversationState.allCases instead of using the shared view (#661/#662).")
     }
 }

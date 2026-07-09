@@ -472,23 +472,10 @@ struct DraftReviewView: View {
     // right event-aware reminder fires. A distinct control from the "Mark…" menu beside it (a
     // different vocabulary: terminal outcomes there, in-flight conversation state here), mirroring
     // FollowUpsView's own set/confirm split for the same per-recipient state.
-    @ViewBuilder private func stateControl(for c: RecipientSnapshot) -> some View {
-        if let state = c.conversationState, c.conversationStateSource == .auto {
-            // An unconfirmed AI read: say what it looks like, offer Confirm (accept it) or Change.
-            HStack(spacing: 4) {
-                Text("Looks like \(state.label.lowercased())").foregroundStyle(OVColor.inkSoft)
-                Button("Confirm") { onConfirmRecipientConversationState(c.id) }
-                    .buttonStyle(.plain).foregroundStyle(OVColor.forest)
-                stateMenu(for: c, label: "Change")
-            }
-            .font(OVType.meta)
-        } else {
-            stateMenu(for: c, label: c.conversationState == nil ? "Set a state" : "Change")
-        }
-    }
-
-    private func stateMenu(for c: RecipientSnapshot, label: String) -> some View {
-        ConversationStateMenu(currentState: c.conversationState, label: label) { onSetRecipientConversationState(c.id, $0) }
+    private func stateControl(for c: RecipientSnapshot) -> some View {
+        ConversationStateControl(currentState: c.conversationState, stateSource: c.conversationStateSource,
+                                 onSet: { onSetRecipientConversationState(c.id, $0) },
+                                 onConfirm: { onConfirmRecipientConversationState(c.id) })
     }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
