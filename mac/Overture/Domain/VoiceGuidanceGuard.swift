@@ -18,8 +18,9 @@ enum VoiceGuidanceGuard {
     static func forbiddenTerms(from prospects: [Prospect]) -> Set<String> {
         var terms = Set<String>()
         for p in prospects {
-            let candidates: [String?] = [p.groupName, p.venue, p.contactName, p.production,
+            let candidates: [String?] = [p.groupName, p.venue, p.production,
                                          p.possibleMatchName, p.matchedClientName]
+                + p.recipients.map(\.name)
             for raw in candidates {
                 guard let t = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { continue }
                 guard t.count >= minTermLength, t.lowercased() != "self" else { continue }   // "self" = production sentinel

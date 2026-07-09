@@ -71,7 +71,7 @@ struct DebugStagingTests {
 
         let p = DebugStaging.stageSelfSendLead(in: ctx, now: now, address: "self@example.com")
 
-        #expect(p.contactEmail == "self@example.com")
+        #expect(p.recipients.first?.email == "self@example.com")
         #expect(p.draftBody != nil)
         // Drafted (not pre-approved) so Dan exercises the real approve + send clicks himself.
         #expect(p.status == .drafted)
@@ -100,17 +100,18 @@ struct DebugStagingTests {
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
 
-    // #391: each stager must seed a matching recipients[0] in-session, or a freshly staged lead shows
-    // zero recipients until a relaunch triggers the backfill (same unaudited-path class as #317).
-    @Test func stageAsSentSeedsASentRecipient() {
+    // #654: a real prospect already carries its own recipients (from PrepImporter); staging a send
+    // must mark them sent too, mirroring what a real SendService.deliver call does, or every
+    // per-recipient downstream flow (follow-ups, reminders, reply handling) would see nothing to act on.
+    @Test func stageAsSentMarksExistingPendingRecipientsAsSent() {
         let p = makeProspect()
-        p.contactEmail = "ann@example.com"
+        let recipient = Recipient(id: "ann@example.com", email: "ann@example.com", provenance: .act)
+        p.setRecipients([recipient])
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
         DebugStaging.stageAsSent(p, now: now)
 
         #expect(p.recipients.count == 1)
-        #expect(p.recipients.first?.provenance == .act)
         #expect(p.recipients.first?.sendState == .sent)
         #expect(p.recipients.first?.sentAt == now)
     }
@@ -226,18 +227,6 @@ struct DebugStagingTests {
 
         #expect(p.recipients.allSatisfy { $0.name != nil })
         #expect(Set(p.recipients.map { $0.name }).count == 2)   // must not share a display name
-    }
-
-    // DraftReviewView disables Approve when contactEmail is nil, so the legacy singular field must
-    // stay in sync with the act recipient or a multi-recipient lead would be stuck un-approvable.
-    @Test func multiRecipientLeadKeepsLegacyContactFieldInSyncWithTheActRecipient() throws {
-        let ctx = try makeInMemoryContext()
-
-        let p = DebugStaging.stageMultiRecipientSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
-
-        let act = p.recipients.first { $0.provenance == .act }
-        #expect(p.contactEmail != nil)
-        #expect(p.contactEmail == act?.email)
     }
 
     @Test @MainActor func multiRecipientLeadEntersTheSendQueueTwiceOnceApproved() throws {
