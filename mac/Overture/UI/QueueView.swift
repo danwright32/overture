@@ -55,8 +55,9 @@ struct QueueView: View {
     // #683: the lightweight reached-out row has no reply text, AI reply drafter, or Mark… menu
     // (deliberately not duplicated here, see #661); this jumps to the full card that still has
     // them, reusing RootView's existing archive-highlight mechanism (#236/#308) rather than a
-    // second one.
-    var onOpenInArchive: (_ key: String) -> Void = { _ in }
+    // second one. #685: also carries which contact Dan clicked from, so a multi-recipient show
+    // highlights that one instead of just the whole card.
+    var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
 
     private var items: [QueueItem] { prospects.map(QueueItem.init) }
 
@@ -498,7 +499,7 @@ struct QueueView: View {
                 // #683: the reply text, AI reply drafter, and Mark… menu only live on the full
                 // card in Archive; always offered, not just once due, so Dan can read a reply or
                 // record an outcome any time.
-                Button("View in Archive") { onOpenInArchive(p.naturalKey) }
+                Button("View in Archive") { onOpenInArchive(p.naturalKey, r.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }

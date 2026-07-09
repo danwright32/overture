@@ -18,14 +18,16 @@ struct FollowUpsRowArchiveJumpGuardTests {
     @Test func silentFollowUpRowCallsOnOpenInArchive() throws {
         #expect(!followUpsView.isEmpty)
         let body = try SourceGuard.functionBody(named: "row", in: followUpsView)
-        #expect(body.contains("onOpenInArchive(d.prospect.naturalKey)"),
+        // #685: also carries the specific recipient, so a multi-recipient show highlights that
+        // one contact instead of just the whole card.
+        #expect(body.contains("onOpenInArchive(d.prospect.naturalKey, r.id)"),
                 "FollowUpsView's silent-follow-up row doesn't offer a jump to the full card in Archive (#686).")
     }
 
     @Test func conversationRowCallsOnOpenInArchive() throws {
         #expect(!followUpsView.isEmpty)
         let body = try SourceGuard.functionBody(named: "conversationRow", in: followUpsView)
-        #expect(body.contains("onOpenInArchive(d.prospect.naturalKey)"),
+        #expect(body.contains("onOpenInArchive(d.prospect.naturalKey, r.id)"),
                 "FollowUpsView's conversation row doesn't offer a jump to the full card in Archive (#686).")
     }
 

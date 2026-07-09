@@ -41,6 +41,8 @@ struct ProspectRowView: View {
     // #436: in-flight send timestamps so the row shows a live "Sending…" state (see DraftReviewView).
     var outboundSendSince: Date? = nil
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
+    // #685: which contact, if any, to highlight inside this card's Contacts section.
+    var highlightedRecipientId: String? = nil
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
@@ -93,7 +95,8 @@ struct ProspectRowView: View {
                     onEditReplyDraft: onEditReplyDraft,
                     gmailConnected: gmailConnected,
                     outboundSendSince: outboundSendSince,
-                    replySendSince: replySendSince
+                    replySendSince: replySendSince,
+                    highlightedRecipientId: highlightedRecipientId
                 )
                 .padding(.leading, 64 + OVSpacing.md)
             }

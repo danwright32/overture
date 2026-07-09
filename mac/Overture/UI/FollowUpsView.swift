@@ -16,8 +16,9 @@ struct FollowUpsView: View {
     // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
     // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
     // still has them, dismissing this sheet first since Archive opens as a sibling sheet on the
-    // same RootView.
-    var onOpenInArchive: (_ key: String) -> Void = { _ in }
+    // same RootView. #685: also carries the specific contact, so a multi-recipient show
+    // highlights that one instead of just the whole card.
+    var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
     // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, so this
     // sheet scrolls to and highlights that same entry instead of leaving him to find it again.
     var initialHighlightRecipientId: String? = nil
@@ -173,7 +174,7 @@ struct FollowUpsView: View {
             VStack(alignment: .trailing, spacing: 6) {
                 sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
-                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey) }
+                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey, r.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }
@@ -221,7 +222,7 @@ struct FollowUpsView: View {
                     setStateMenu(d, label: "Set a state")
                 }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
-                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey) }
+                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey, r.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }

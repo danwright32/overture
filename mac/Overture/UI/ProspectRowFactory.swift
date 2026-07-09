@@ -9,7 +9,8 @@ import SwiftData
 @MainActor
 enum ProspectRowFactory {
     static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
-                    highlightedKey: String?, outboundSendSince: Date?, replySendSince: @escaping (String) -> Date?,
+                    highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
+                    replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
                     onRestore: (() -> Void)? = nil) -> AnyView {
         let model = prospects.first(where: { $0.naturalKey == item.id })
@@ -59,7 +60,8 @@ enum ProspectRowFactory {
             onRestore: onRestore,
             gmailConnected: GmailAuthManager.shared.isConnected,
             outboundSendSince: outboundSendSince,
-            replySendSince: replySendSince
+            replySendSince: replySendSince,
+            highlightedRecipientId: highlightedRecipientId
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
         let highlighted = highlightedKey == item.id
