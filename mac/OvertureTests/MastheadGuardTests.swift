@@ -24,7 +24,7 @@ struct MastheadGuardTests {
         // fooled by a resized reintroduction of the same dot.
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        let mastheadBody = SourceGuardHelper.propertyBody("private var masthead: some View {", in: queueView)
+        let mastheadBody = SourceGuardHelper.propertyBody("func masthead(visible: [QueueItem], items: [QueueItem]) -> some View {", in: queueView)
         #expect(mastheadBody != nil)
         #expect(mastheadBody?.contains("Circle()") == false)
     }
