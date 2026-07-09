@@ -48,6 +48,10 @@ struct QueueView: View {
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
+    // #682: unlike the generic Follow-ups pill above, the reached-out row's own "Send a follow-up"
+    // button knows exactly which contact Dan clicked from, so it opens the sheet with that
+    // recipient highlighted instead of leaving him to find it again in what could be a longer list.
+    var onShowFollowUpsFor: (_ recipientId: String) -> Void = { _ in }
     // #683: the lightweight reached-out row has no reply text, AI reply drafter, or Mark… menu
     // (deliberately not duplicated here, see #661); this jumps to the full card that still has
     // them, reusing RootView's existing archive-highlight mechanism (#236/#308) rather than a
@@ -488,7 +492,7 @@ struct QueueView: View {
                         })
                 }
                 if dueNow {
-                    Button("Send a follow-up") { onShowFollowUps() }
+                    Button("Send a follow-up") { onShowFollowUpsFor(r.id) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }
                 // #683: the reply text, AI reply drafter, and Mark… menu only live on the full
