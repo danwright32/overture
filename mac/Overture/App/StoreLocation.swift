@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 // Where the local SwiftData store, its single-writer lockfile, and every other piece of Overture's
 // on-disk state live (#264 / Phase 0 and #267 / Phase 3 of #237).
@@ -41,6 +42,21 @@ enum StoreLocation {
 
     static var storeURL: URL { dataDirectory.appendingPathComponent("default.store") }
     static var lockURL: URL { dataDirectory.appendingPathComponent("default.store.lock") }
+
+    // #666: reveal the store file in Finder so StoreUnavailableView's degraded-state warning is
+    // directly actionable instead of leaving Dan to copy a path out of prose and paste it into
+    // Finder by hand. Reveals the file itself, selected, when it exists; else its containing
+    // directory, so the click still opens somewhere useful for a not-yet-created store (a fresh
+    // install, or the #663 refusal before anything's written). The opener is injected, mirroring
+    // AgentLogLocation.revealInFinder, so this is unit-testable without launching Finder.
+    @discardableResult
+    static func revealStoreInFinder(storeURL: URL = StoreLocation.storeURL,
+                                    fileManager: FileManager = .default,
+                                    open: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }) -> URL {
+        let target = fileManager.fileExists(atPath: storeURL.path) ? storeURL : storeURL.deletingLastPathComponent()
+        open(target)
+        return target
+    }
 
     // The single source of truth for the handoff directory: the "Overture" subfolder of the data
     // directory, where every cross-boundary JSON file the app reads or writes lives (docs/contracts.md).

@@ -17,6 +17,9 @@ struct StoreUnavailableView: View {
                 .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            // #666: a quick action on the affected file itself, instead of leaving Dan to copy the
+            // path out of the reason text above and paste it into Finder or Terminal by hand.
+            Button("Show in Finder") { StoreLocation.revealStoreInFinder() }
             Text("If another Overture window is open, use that one. Otherwise quit and reopen Overture.")
                 .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                 .multilineTextAlignment(.center)
