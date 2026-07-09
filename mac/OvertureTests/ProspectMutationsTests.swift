@@ -3,6 +3,17 @@ import Foundation
 import SwiftData
 @testable import Overture
 
+// #468 (SUP-006): a fake MailSender so performSend/sendReply/sendFollowUp/sendConversationNudge
+// are testable without hitting the real network or the GmailAuthManager.shared singleton, the
+// same reason SendServiceTests.swift keeps its own fakes local to that file.
+private final class RecordingSender: MailSender, @unchecked Sendable {
+    private(set) var sent: [OutgoingMail] = []
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        sent.append(mail)
+        return SentReceipt(threadId: "t-recorded", messageID: "<recorded@x.org>")
+    }
+}
+
 @MainActor
 @Suite("ProspectMutations")
 struct ProspectMutationsTests {
@@ -223,5 +234,106 @@ struct ProspectMutationsTests {
         #expect(p.recipients.first?.sendState == .suppressed)
         #expect(p.recipients.first?.suppressionReason == .removedByDan)
         #expect(feedback.message == "Removed Jane Doe from Aurora Strings.")
+    }
+
+    // MARK: - #468 (SUP-006) markSending/clearSending timing, via an injectable sender
+
+    @Test func performSendMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, status: .approved)
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        let r = Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)
+        p.recipients = [r]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+        let sender = RecordingSender()
+        var marked: [String] = []
+        var cleared: [String] = []
+
+        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+                                      markSending: { marked.append($0) }, clearSending: { cleared.append($0) },
+                                      onNeedsReconnect: {})
+
+        #expect(marked == ["k"])       // fired synchronously, before the async send even starts
+        #expect(cleared.isEmpty)       // not yet: the send hasn't completed
+
+        while cleared.isEmpty { await Task.yield() }
+        #expect(cleared == ["k"])
+        #expect(sender.sent.count == 1)
+        #expect(p.status == .contacted)
+    }
+
+    @Test func sendReplyMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let r = Recipient(id: "r1", email: "act@example.com", provenance: .act)
+        r.sendState = .sent; r.replied = true; r.replyDraftBody = "Glad to help."
+        p.recipients = [r]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+        let sender = RecordingSender()
+        var marked: [String] = []
+        var cleared: [String] = []
+
+        ProspectMutations.sendReply(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+                                    markSending: { marked.append($0) }, clearSending: { cleared.append($0) },
+                                    onNeedsReconnect: {})
+
+        #expect(marked == ["r1"])
+        #expect(cleared.isEmpty)
+
+        while cleared.isEmpty { await Task.yield() }
+        #expect(cleared == ["r1"])
+        #expect(sender.sent.count == 1)
+        #expect(r.replyDraftBody == nil)   // consumed on send
+    }
+
+    @Test func sendFollowUpMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let r = Recipient(id: "r1", email: "act@example.com", provenance: .act)
+        r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 100)
+        p.recipients = [r]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+        let sender = RecordingSender()
+        var marked: [String] = []
+        var cleared: [String] = []
+
+        ProspectMutations.sendFollowUp("k", "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+                                       markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
+
+        #expect(marked == ["r1"])
+        #expect(cleared.isEmpty)
+
+        while cleared.isEmpty { await Task.yield() }
+        #expect(cleared == ["r1"])
+        #expect(sender.sent.count == 1)
+        #expect(r.followUpCount == 1)
+    }
+
+    @Test func sendConversationNudgeMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let r = Recipient(id: "r1", email: "act@example.com", provenance: .act)
+        r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 100)
+        p.recipients = [r]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+        let sender = RecordingSender()
+        var marked: [String] = []
+        var cleared: [String] = []
+
+        ProspectMutations.sendConversationNudge("k", "r1", isClosing: false, prospects: [p], context: ctx, feedback: feedback,
+                                                sender: sender,
+                                                markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
+
+        #expect(marked == ["r1"])
+        #expect(cleared.isEmpty)
+
+        while cleared.isEmpty { await Task.yield() }
+        #expect(cleared == ["r1"])
+        #expect(sender.sent.count == 1)
+        #expect(r.conversationRemindedAt != nil)
     }
 }

@@ -228,15 +228,20 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // The default a caller gets when it doesn't inject its own; a test injects a fake instead so
+    // performSend/sendReply/sendFollowUp/sendConversationNudge are testable without hitting the
+    // real network or the GmailAuthManager.shared singleton (#468, SUP-006).
+    private static func liveSender() -> MailSender { GmailSender(fromEmail: "dan@danwrightphotography.com") }
+
     // The confirm dialog itself (step 1 of a send) stays in each screen: it only needs
     // SendConfirmation(prospect:), a pure struct init, not worth extracting. This is step 2, the
     // actual send. markSending/clearSending let each screen show its own live "Sending..." state;
     // onNeedsReconnect lets each screen show its own reconnect prompt.
     static func performSend(_ naturalKey: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                           sender: MailSender = liveSender(),
                            markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
                            onNeedsReconnect: @escaping () -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
-        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
         markSending(naturalKey)
         Task {
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
@@ -247,11 +252,11 @@ enum ProspectMutations {
     }
 
     static func sendReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                          sender: MailSender = liveSender(),
                           markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
                           onNeedsReconnect: @escaping () -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
-        let sender = GmailSender(fromEmail: "dan@danwrightphotography.com")
         markSending(recipientId)
         Task {
             let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
@@ -266,14 +271,14 @@ enum ProspectMutations {
     // button disabled while sending) instead of firing a bare Task with the button left clickable.
     static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
                              context: ModelContext, feedback: ActionFeedback,
+                             sender: MailSender = liveSender(),
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         let org = model.groupName
         markSending(recipientId)
         Task {
-            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(),
-                                                       sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
@@ -285,6 +290,7 @@ enum ProspectMutations {
 
     static func sendConversationNudge(_ naturalKey: String, _ recipientId: String, isClosing: Bool,
                                       prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                                      sender: MailSender = liveSender(),
                                       markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -292,8 +298,7 @@ enum ProspectMutations {
         let kind: ConversationReminder.Kind = isClosing ? .closing : .active(recipient.conversationState ?? .wantsToBook)
         markSending(recipientId)
         Task {
-            let sent = await SendService.sendConversationNudge(recipient, of: model, kind: kind, now: Date(),
-                                                                sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let sent = await SendService.sendConversationNudge(recipient, of: model, kind: kind, now: Date(), sender: sender)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
