@@ -260,6 +260,49 @@ enum ProspectMutations {
             if !sent && !GmailAuthManager.shared.isConnected { onNeedsReconnect() }
         }
     }
+
+    // #468 (SUP-006): mirrors performSend/sendReply's markSending/clearSending shape so
+    // FollowUpsView's nudge and closing-note sends get the same in-flight feedback (a LiveRunLabel,
+    // button disabled while sending) instead of firing a bare Task with the button left clickable.
+    static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
+                             context: ModelContext, feedback: ActionFeedback,
+                             markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
+        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        let org = model.groupName
+        markSending(recipientId)
+        Task {
+            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(),
+                                                       sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
+            clearSending(recipientId)
+            // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
+            if saved {
+                feedback.acknowledge(ActionAck.followUpSent(org: org, success: sent), tone: sent ? .info : .warning)
+            }
+        }
+    }
+
+    static func sendConversationNudge(_ naturalKey: String, _ recipientId: String, isClosing: Bool,
+                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                                      markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
+        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        let org = model.groupName
+        let kind: ConversationReminder.Kind = isClosing ? .closing : .active(recipient.conversationState ?? .wantsToBook)
+        markSending(recipientId)
+        Task {
+            let sent = await SendService.sendConversationNudge(recipient, of: model, kind: kind, now: Date(),
+                                                                sender: GmailSender(fromEmail: "dan@danwrightphotography.com"))
+            let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
+            clearSending(recipientId)
+            // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
+            if saved {
+                feedback.acknowledge(ActionAck.conversationNudge(org: org, closing: isClosing, success: sent),
+                                     tone: sent ? .info : .warning)
+            }
+        }
+    }
 }
 
 // The one email awaiting Dan's explicit confirm before it sends (#49), shared by QueueView and
