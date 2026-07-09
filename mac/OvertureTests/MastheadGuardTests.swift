@@ -17,11 +17,16 @@ struct MastheadGuardTests {
         #expect(!queueView.contains("Performances worth pitching"))
     }
 
-    @Test func decorativeWordmarkDotIsGone() {  // #329
-        // The amber masthead dot is the only 7x7 circle; every other dot is 6x6.
+    @Test func decorativeWordmarkDotIsGone() {  // #329, hardened #569
+        // The removed amber masthead dot lived inside the masthead view's own body, so scoping
+        // this check there (rather than a magic "width: 7, height: 7" string anywhere in a
+        // 700+ line file) can't false-positive on an unrelated circle elsewhere, and can't be
+        // fooled by a resized reintroduction of the same dot.
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        #expect(!queueView.contains("width: 7, height: 7"))
+        let mastheadBody = SourceGuardHelper.propertyBody("private var masthead: some View {", in: queueView)
+        #expect(mastheadBody != nil)
+        #expect(mastheadBody?.contains("Circle()") == false)
     }
 
     @Test func windowTitleBarTextIsSuppressed() {  // #336
