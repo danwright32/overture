@@ -48,6 +48,11 @@ struct QueueView: View {
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
+    // #683: the lightweight reached-out row has no reply text, AI reply drafter, or Mark… menu
+    // (deliberately not duplicated here, see #661); this jumps to the full card that still has
+    // them, reusing RootView's existing archive-highlight mechanism (#236/#308) rather than a
+    // second one.
+    var onOpenInArchive: (_ key: String) -> Void = { _ in }
 
     private var items: [QueueItem] { prospects.map(QueueItem.init) }
 
@@ -486,6 +491,11 @@ struct QueueView: View {
                     Button("Send a follow-up") { onShowFollowUps() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }
+                // #683: the reply text, AI reply drafter, and Mark… menu only live on the full
+                // card in Archive; always offered, not just once due, so Dan can read a reply or
+                // record an outcome any time.
+                Button("View in Archive") { onOpenInArchive(p.naturalKey) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }
         .padding(.vertical, OVSpacing.xs)
