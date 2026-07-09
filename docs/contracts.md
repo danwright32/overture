@@ -27,7 +27,7 @@ the workflow's runbook is its spec.
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -149,6 +149,16 @@ performance; a performer contact's own `overrideBody` is what actually gets sent
 (`SendService`), so a named performer is addressed directly rather than described in the third person
 they'd otherwise read about themselves in. Purely additive; the reader's tolerant gate (1 through 4)
 still accepts `v1.json`/`v2.json`/`v3.json` unchanged, `v4.json` is the override-body spec.
+
+Version 5 (#611) adds an optional `alreadyCoveredNote` on the result itself (a sibling of
+`contacts`/`draft`, not per-contact): a fit-risk Prep's own research found, e.g. the org's site
+explicitly names its own photographer. Set only from an explicit statement actually read on the
+org's site, never inferred (the same STRICT-verification bar `docs/prep-runbook.md` already
+applies to contact confidence). Never changes the show's fit score or tier; the app surfaces it as
+a dismissible warning on the review card (`Prospect.alreadyCoveredNote`/`alreadyCoveredDismissed`)
+so Dan decides himself whether to deprioritize or skip. Purely additive; the reader's tolerant gate
+(1 through 5) still accepts `v1.json`/`v2.json`/`v3.json`/`v4.json` unchanged, `v5.json` is the
+already-covered spec.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

@@ -415,8 +415,8 @@ struct PrepImporterTests {
         #expect(decoded.results.count == 1)
         #expect(decoded.results[0].draft?.subject == "s")
 
-        #expect(throws: PrepResultsError.unsupportedVersion(5)) {
-            try PrepResultsDecoder.decode(Data(#"{"version":5,"generatedAt":"x","results":[]}"#.utf8))
+        #expect(throws: PrepResultsError.unsupportedVersion(6)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":6,"generatedAt":"x","results":[]}"#.utf8))
         }
         // Below the minimum is rejected too — the gate is a closed range, not an exact match (#140).
         #expect(throws: PrepResultsError.unsupportedVersion(0)) {
@@ -446,5 +446,56 @@ struct PrepImporterTests {
 
         #expect(outcome.matched == 1)
         #expect(outcome.saveFailed)
+    }
+
+    // MARK: - #611 already-covered fit-risk flag
+
+    @Test func aFreshAlreadyCoveredNoteSetsItAndClearsAnyPriorDismissal() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.alreadyCoveredDismissed = true   // a stale dismissal from unrelated prior state
+
+        let results = PrepResults(version: 5, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, alreadyCoveredNote: "Lists a Photographer in Residence.")
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.alreadyCoveredNote == "Lists a Photographer in Residence.")
+        #expect(p.alreadyCoveredDismissed == false)   // fresh evidence, not yet judged
+    }
+
+    // A re-run reporting the SAME note Dan already judged a false positive must not silently
+    // un-dismiss it.
+    @Test func anUnchangedAlreadyCoveredNotePreservesDansPriorDismissal() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.alreadyCoveredNote = "Lists a Photographer in Residence."
+        p.alreadyCoveredDismissed = true
+        try ctx.save()
+
+        let results = PrepResults(version: 5, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, alreadyCoveredNote: "Lists a Photographer in Residence.")
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.alreadyCoveredDismissed == true)
+    }
+
+    // A later run that omits the note (a transient research miss) must never erase a real finding.
+    @Test func anAbsentAlreadyCoveredNoteNeverClearsAPreviousOne() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.alreadyCoveredNote = "Lists a Photographer in Residence."
+        try ctx.save()
+
+        let results = PrepResults(version: 5, generatedAt: "now", results: [
+            PrepResult(naturalKey: key)   // no alreadyCoveredNote this time
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.alreadyCoveredNote == "Lists a Photographer in Residence.")
     }
 }

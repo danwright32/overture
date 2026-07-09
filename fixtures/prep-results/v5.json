@@ -1,0 +1,23 @@
+{
+  "version": 5,
+  "generatedAt": "2026-07-09T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "french-american-piano-society|2026-09-12|weill-recital-hall",
+      "contacts": [
+        {
+          "email": "info@frenchamericanpianosociety.example",
+          "method": "generic_inbox",
+          "confidence": "medium",
+          "provenance": "presenter"
+        }
+      ],
+      "draft": {
+        "subject": "Photographing the French-American Piano Society's recital at Weill Recital Hall.",
+        "body": "I photograph performing arts in New York and saw you're presenting a recital at Weill Recital Hall on September 12. I shoot unobtrusive, no-flash documentary coverage and think it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+        "variant": "rate_stated"
+      },
+      "alreadyCoveredNote": "The organization's site lists a Photographer in Residence on its About page."
+    }
+  ]
+}

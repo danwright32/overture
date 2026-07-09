@@ -13,15 +13,21 @@ struct PrepResult: Codable, Equatable, Sendable {
     var naturalKey: String
     var contacts: [PrepContact]?   // v2 (#392): the act plus at most one presenter, never the venue
     var draft: PrepDraft?
+    // v5 (#611): a fit-risk Prep's own research found, e.g. the org's site names its own
+    // photographer. Never changes the show's fit score/tier; surfaced to Dan as a dismissible
+    // warning so he can deprioritize or skip it himself.
+    var alreadyCoveredNote: String?
 
     private enum CodingKeys: String, CodingKey {
-        case naturalKey, contacts, contact, draft
+        case naturalKey, contacts, contact, draft, alreadyCoveredNote
     }
 
-    init(naturalKey: String, contacts: [PrepContact]? = nil, draft: PrepDraft? = nil) {
+    init(naturalKey: String, contacts: [PrepContact]? = nil, draft: PrepDraft? = nil,
+         alreadyCoveredNote: String? = nil) {
         self.naturalKey = naturalKey
         self.contacts = contacts
         self.draft = draft
+        self.alreadyCoveredNote = alreadyCoveredNote
     }
 
     // v1 carried a single `contact` object; v2 carries `contacts[]`. Decode EITHER, mapping a legacy
@@ -30,6 +36,7 @@ struct PrepResult: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         naturalKey = try c.decode(String.self, forKey: .naturalKey)
         draft = try c.decodeIfPresent(PrepDraft.self, forKey: .draft)
+        alreadyCoveredNote = try c.decodeIfPresent(String.self, forKey: .alreadyCoveredNote)
         if let many = try c.decodeIfPresent([PrepContact].self, forKey: .contacts) {
             contacts = many
         } else if let one = try c.decodeIfPresent(PrepContact.self, forKey: .contact) {
@@ -45,6 +52,7 @@ struct PrepResult: Codable, Equatable, Sendable {
         try c.encode(naturalKey, forKey: .naturalKey)
         try c.encodeIfPresent(contacts, forKey: .contacts)
         try c.encodeIfPresent(draft, forKey: .draft)
+        try c.encodeIfPresent(alreadyCoveredNote, forKey: .alreadyCoveredNote)
     }
 }
 
@@ -77,7 +85,7 @@ enum PrepResultsDecoder {
     // that broke the results reader when its version bumped (#132):
     // bumping the contract leaves a closed range that still accepts older files, so a format
     // change can't silently make the reader reject the new (or old) shape (#140).
-    static let supportedVersion = 4
+    static let supportedVersion = 5
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

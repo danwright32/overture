@@ -17,7 +17,8 @@ before this was codified.
   `possibleMatchName`, `priorRelationship`, `production`). `production` is
   `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`).
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `4`: `results[]` each with `naturalKey`, `contacts[]`, `draft`).
+  (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
+  optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
   Each entry in `contacts[]` is one party to email for the performance, carrying a
   `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
@@ -190,6 +191,16 @@ the source page corroborates that person against THIS SPECIFIC performance (name
 instrument/role/context match, e.g. their own site lists this date/venue or names this
 group) — a bare name match with no such corroboration is a misidentification risk, so
 mark it `low` instead, same as any other unverified guess.
+
+**Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
+waterfall above, also watch for an EXPLICIT statement that they already have their own
+photographer (e.g. the site names a "Photographer in Residence," a "House Photographer," or
+similar wording in words, not just a photo credit). If you find one, set `alreadyCoveredNote`
+on the result to a short quote or paraphrase of what the site says (one sentence is enough).
+Same STRICT verification bar as above: only an explicit statement actually read on a real page
+counts, never inferred from an uncredited photo or a guess. This never changes the fit score or
+tier, and never blocks finding a contact or drafting the email below; it only adds a warning the
+app surfaces to Dan so he can judge it himself.
 
 ### 2. Draft the email (PLAN.md §7 + the dan-wright-brand-voice skill)
 

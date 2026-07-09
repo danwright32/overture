@@ -59,6 +59,14 @@ enum PrepImporter {
                     outcome.drafted += 1
                 }
             }
+            // #611: only touch the flag when fresh evidence actually differs from what's already
+            // recorded, so a re-run reporting the SAME note never silently un-dismisses something
+            // Dan already judged a false positive, and an absent note (a transient research miss)
+            // never erases a real finding.
+            if let note = r.alreadyCoveredNote, !note.isEmpty, note != p.alreadyCoveredNote {
+                p.alreadyCoveredNote = note
+                p.alreadyCoveredDismissed = false
+            }
         }
         do {
             try context.save()

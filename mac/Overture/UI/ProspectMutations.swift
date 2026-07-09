@@ -216,6 +216,15 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #611: Dan judged the "already has its own photographer" flag a false positive. Keeps the
+    // original note (an audit trail of what Prep found) and tracks the dismissal separately,
+    // mirroring dismissBookingSuggestion above.
+    static func dismissAlreadyCoveredFlag(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.alreadyCoveredDismissed = true
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
