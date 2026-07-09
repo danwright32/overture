@@ -36,7 +36,8 @@ struct ArchiveViewSearchRevealGuardTests {
             return
         }
         let body = archiveView[onAppearRange.lowerBound...].prefix(200)
-        #expect(body.contains("reveal(key)"))
+        // #685: onAppear also threads the initial recipient to highlight through to reveal(_:).
+        #expect(body.contains("reveal(key, recipientId: initialHighlightRecipientId)"))
     }
 
     @Test func internalSearchFieldSelectionUsesTheSharedRevealHelper() {

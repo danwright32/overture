@@ -35,6 +35,9 @@ struct DraftReviewView: View {
     var outboundSendSince: Date? = nil
     // Same, keyed per recipient for an in-flight reply send.
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
+    // #685: which contact, if any, a deep link (Reached Out row / Follow-ups sheet) targeted, so
+    // that one row is gold-highlighted instead of just the whole card.
+    var highlightedRecipientId: String? = nil
 
     @State private var editing = false
     @State private var draftSubject = ""
@@ -289,6 +292,7 @@ struct DraftReviewView: View {
     }
 
     @ViewBuilder private func contactRow(_ c: RecipientSnapshot) -> some View {
+        let highlighted = highlightedRecipientId == c.id
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: OVSpacing.xs) {
                 Image(systemName: "person.crop.circle").foregroundStyle(OVColor.inkFaint)
@@ -367,7 +371,9 @@ struct DraftReviewView: View {
         }
         .padding(.vertical, 3)
         .padding(.horizontal, OVSpacing.sm)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surface.opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(highlighted ? OVColor.gold.opacity(0.25) : OVColor.surface.opacity(0.6)))
+        .id(c.id)
     }
 
     // The AI reply drafter surface for one replied contact (#420 C6 / #421): a non-binding intent hint,

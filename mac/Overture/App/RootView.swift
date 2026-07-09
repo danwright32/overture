@@ -38,6 +38,9 @@ struct RootView: View {
     @Query private var allProspects: [Prospect]
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
+    // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
+    // the show, e.g. a plain search pick or the toolbar Archive button).
+    @State private var archiveJumpRecipientId: String?
     @State private var searchQuery: String = ""
     @State private var showPatterns = false
     @State private var showFollowUps = false
@@ -66,6 +69,7 @@ struct RootView: View {
             deepLinkedKey = item.id
         } else {
             archiveJumpKey = item.id
+            archiveJumpRecipientId = nil
             showArchive = true
         }
     }
@@ -76,6 +80,7 @@ struct RootView: View {
     private func routeDeepLink(toKey key: String) {
         guard let item = searchableItems.first(where: { $0.id == key }) else {
             archiveJumpKey = key
+            archiveJumpRecipientId = nil
             showArchive = true
             return
         }
@@ -118,7 +123,11 @@ struct RootView: View {
                       followUpsHighlightRecipientId = recipientId
                       showFollowUps = true
                   },
-                  onOpenInArchive: { key in archiveJumpKey = key; showArchive = true })
+                  onOpenInArchive: { key, recipientId in
+                      archiveJumpKey = key
+                      archiveJumpRecipientId = recipientId
+                      showArchive = true
+                  })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
@@ -196,6 +205,7 @@ struct RootView: View {
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
                         archiveJumpKey = nil
+                        archiveJumpRecipientId = nil
                         showArchive = true
                     } label: {
                         ToolbarHoverLabel(title: "Archive", systemImage: "archivebox")
@@ -329,13 +339,15 @@ struct RootView: View {
                 Text(warningMessage ?? "")
             }
             .sheet(isPresented: $showArchive) {
-                ArchiveView(initialHighlightKey: archiveJumpKey, onConnectGmail: connectGmail)
+                ArchiveView(initialHighlightKey: archiveJumpKey, initialHighlightRecipientId: archiveJumpRecipientId,
+                           onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showFollowUps) {
-                FollowUpsView(onOpenInArchive: { key in
+                FollowUpsView(onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     archiveJumpKey = key
+                    archiveJumpRecipientId = recipientId
                     showArchive = true
                 }, initialHighlightRecipientId: followUpsHighlightRecipientId,
                 onHighlightConsumed: { followUpsHighlightRecipientId = nil })

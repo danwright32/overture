@@ -19,7 +19,9 @@ struct ReachedOutRowArchiveJumpGuardTests {
     @Test func rowCallsOnOpenInArchiveWithTheProspectsNaturalKey() throws {
         #expect(!queueView.isEmpty)
         let body = try SourceGuard.functionBody(named: "reachedOutRow", in: queueView)
-        #expect(body.contains("onOpenInArchive(p.naturalKey)"),
+        // #685: also carries the specific recipient, so a multi-recipient show highlights that
+        // one contact instead of just the whole card.
+        #expect(body.contains("onOpenInArchive(p.naturalKey, r.id)"),
                 "reachedOutRow doesn't offer a jump to the full card in Archive (#683).")
     }
 

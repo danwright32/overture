@@ -35,12 +35,16 @@ struct ArchiveView: View {
     @State private var activeStatuses: Set<ArchiveStatus> = [.new, .active]
     @State private var query: String = ""
     @State private var highlightedKey: String?
+    // #685: the specific contact (if any) the jump targeted, so a multi-recipient show highlights
+    // that one row inside the full card instead of just the whole card.
+    @State private var highlightedRecipientId: String?
     @State private var outboundSending: [String: Date] = [:]
     @State private var replySending: [String: Date] = [:]
     @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
 
     var initialHighlightKey: String? = nil
+    var initialHighlightRecipientId: String? = nil
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
@@ -82,18 +86,20 @@ struct ArchiveView: View {
         }
         .onAppear {
             guard let key = initialHighlightKey else { return }
-            reveal(key)
+            reveal(key, recipientId: initialHighlightRecipientId)
         }
     }
 
     // Widens the filter to include the target's status and marks it highlighted, so jumping to a
     // show (from the global search bar's onAppear, or from this screen's own search field) always
     // lands on a visible, scrolled to row instead of silently doing nothing when the target's
-    // status is not among the currently active filter chips.
-    private func reveal(_ key: String) {
+    // status is not among the currently active filter chips. #685: an optional recipient narrows
+    // the highlight to one contact within the card instead of the whole card.
+    private func reveal(_ key: String, recipientId: String? = nil) {
         guard let target = items.first(where: { $0.id == key }) else { return }
         activeStatuses.insert(ArchiveStatus.of(target))
         highlightedKey = key
+        highlightedRecipientId = recipientId
     }
 
     private var header: some View {
@@ -141,7 +147,10 @@ struct ArchiveView: View {
                         withAnimation { proxy.scrollTo(key, anchor: .center) }
                     }
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
-                    if highlightedKey == key { highlightedKey = nil }
+                    if highlightedKey == key {
+                        highlightedKey = nil
+                        highlightedRecipientId = nil
+                    }
                 }
             }
         }
@@ -162,7 +171,8 @@ struct ArchiveView: View {
 
     private func row(_ item: QueueItem) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
-                              highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                              highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
+                              outboundSendSince: outboundSending[item.id],
                               replySendSince: { rid in replySending[rid] },
                               onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                               onRestore: item.status == .dismissed ? { restore(item) } : nil)
