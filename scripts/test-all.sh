@@ -8,6 +8,10 @@ set -euo pipefail
 # reported it minutes later. This is the one command to run before pushing anything that
 # touches a cross-language contract (fixtures/, docs/contracts.md) or, really, anything at all.
 #
+# #698: also runs every scripts/*.test.sh and mac/scripts/**/*.test.sh fixture (the pure-function
+# tests for check-pr-ci.sh, merge-when-green.sh, run-tests-locked.sh, etc.), which previously only
+# ran when someone remembered to run them by hand.
+#
 # Usage: scripts/test-all.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +23,9 @@ pnpm typecheck
 
 echo "==> pnpm test"
 pnpm test
+
+echo "==> scripts/run-shell-fixtures.sh"
+"${REPO_ROOT}/scripts/run-shell-fixtures.sh"
 
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
