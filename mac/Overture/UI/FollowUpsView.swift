@@ -206,13 +206,7 @@ struct FollowUpsView: View {
     }
 
     private func setStateMenu(_ d: ConversationReminder.DueRecipient, label: String = "Set a state") -> some View {
-        Menu(label) {
-            ForEach(ConversationState.allCases, id: \.self) { s in
-                Button(s.label) { setState(d, s) }
-            }
-        }
-        .menuStyle(.borderlessButton).fixedSize()
-        .font(OVType.meta)
+        ConversationStateMenu(currentState: d.recipient.conversationState, label: label) { setState(d, $0) }
     }
 
     private func requestNudge(_ d: FollowUp.DueRecipient) {
