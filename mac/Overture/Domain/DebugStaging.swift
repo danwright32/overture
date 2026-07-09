@@ -11,23 +11,19 @@ import SwiftData
 enum DebugStaging {
     // Mark a prospect as an approved-and-sent lead. sentAt + the .approved status are exactly
     // what wasContacted reads, and priorRelationshipAtSend is snapshotted just as SendService
-    // does (#66) so booking detection sees a genuine pre-send relationship. Nothing else is
-    // touched, so the lead reads as a fresh send with no reply or outcome yet.
+    // does (#66) so booking detection sees a genuine pre-send relationship. A real prospect
+    // already carries its own recipients (from PrepImporter, #654); any still-pending one is
+    // marked sent too, mirroring SendService.deliver, so per-recipient downstream flows
+    // (follow-ups, reminders, reply handling) have something to act on.
     static func stageAsSent(_ prospect: Prospect, now: Date) {
         prospect.sentAt = now
         prospect.status = .approved
         prospect.priorRelationshipAtSend = prospect.priorRelationship
         prospect.sendError = nil
-        seedRecipient(prospect)
-    }
-
-    // #391: mirror the staged singular fields into recipients[0] in-session, reusing the same
-    // synthesizer the launch backfill uses, so a staged lead carries the new model immediately
-    // instead of showing zero recipients until the next-launch backfill. No-op when the staged lead
-    // has no contact email (nothing to make a recipient from).
-    private static func seedRecipient(_ prospect: Prospect) {
-        guard let recipient = RecipientBackfill.synthesizedRecipient(from: prospect) else { return }
-        prospect.setRecipients([recipient])
+        for r in prospect.recipients where r.sendState == .pending {
+            r.sendState = .sent
+            r.sentAt = now
+        }
     }
 
     // Insert a fresh lead already eligible for the OmniFocus sync (#231): contacted, replied, with a
@@ -44,13 +40,15 @@ enum DebugStaging {
                          fitScore: 7, tier: "high", fitReason: "debug", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
         p.sentAt = now.addingTimeInterval(-86_400)
-        p.contactName = "Test Contact (debug)"
-        p.contactEmail = "reminder@debug.example"   // a real send always has a contact (#331)
         p.outcome = .replied
-        p.conversationStateRaw = ConversationState.wantsToBook.rawValue
-        p.conversationStateSourceRaw = OutcomeSource.manual.rawValue
-        p.conversationStateSetAt = now
-        seedRecipient(p)
+        // #654: the conversation state Dan confirms lives on the recipient now, not the lead.
+        let recipient = Recipient(id: "reminder@debug.example", email: "reminder@debug.example",
+                                  name: "Test Contact (debug)", provenance: .act)
+        recipient.sendState = .sent
+        recipient.sentAt = p.sentAt
+        recipient.replied = true
+        recipient.setConversationState(.wantsToBook, now: now)
+        p.setRecipients([recipient])
         context.insert(p)
         return p
     }
@@ -82,11 +80,11 @@ enum DebugStaging {
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "debug self-send", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
-        p.contactName = "Dan (test)"
-        p.contactEmail = address
         p.draftSubject = "Overture self-send test"
         p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
-        seedRecipient(p)
+        let recipient = Recipient(id: Recipient.makeId(email: address, formURL: nil) ?? address,
+                                  email: address, name: "Dan (test)", provenance: .act)
+        p.setRecipients([recipient])
         context.insert(p)
         return p
     }
@@ -96,9 +94,6 @@ enum DebugStaging {
     // separate emails, each to its own address and greeting its own name, on their own Gmail threads.
     // Both addresses derive from Dan's own inbox via a +tag so a live send still reaches him, but the
     // two recipients keep distinct ids (Recipient.id is the canonicalized email) within this one lead.
-    // The legacy contactName/contactEmail fields mirror the act recipient (same pattern seedRecipient
-    // establishes for the single-recipient stager) since DraftReviewView's Approve button is disabled
-    // when contactEmail is nil.
     @discardableResult
     static func stageMultiRecipientSelfSendLead(in context: ModelContext, now: Date,
                                                 address: String = defaultSelfSendAddress) -> Prospect {
@@ -114,8 +109,6 @@ enum DebugStaging {
                          fitScore: 7, tier: "high", fitReason: "debug multi-recipient self-send",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)
-        p.contactName = "Dan (test act)"
-        p.contactEmail = actEmail
         p.draftSubject = "Overture self-send test"
         p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
 

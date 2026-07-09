@@ -172,30 +172,13 @@ enum ConversationReminder {
         return DueReminder(kind: .active(state), reason: reason(for: .active(state)))
     }
 
-    static func due(from prospects: [Prospect], now: Date,
-                    config: ConversationReminderConfig = .init()) -> [(Prospect, DueReminder)] {
-        prospects.compactMap { p in
-            guard p.status != .dismissed else { return nil }   // #238: dismissed leads stop nagging
-            return reminder(state: p.conversationState, setAt: p.conversationStateSetAt,
-                            remindedAt: p.conversationRemindedAt, performanceDate: p.performanceDate,
-                            isClosed: p.isClosed, hasUnhandledReply: p.hasUnhandledReply,
-                            source: p.conversationStateSource, now: now, config: config).map { (p, $0) }
-        }
-        .sorted {
-            let ra = urgencyRank($0.1.kind), rb = urgencyRank($1.1.kind)
-            if ra != rb { return ra < rb }
-            return ($0.0.performanceDate ?? "9999") < ($1.0.performanceDate ?? "9999")
-        }
-    }
-
-    // #652: carries the classified reminder (kind + reason) alongside the recipient, mirroring what
-    // due(from:) already returns at the lead level, so the UI can render the pill/reason and pick the
-    // right action without re-deriving it.
+    // #652: carries the classified reminder (kind + reason) alongside the recipient, so the UI can
+    // render the pill/reason and pick the right action without re-deriving it.
     struct DueRecipient { let prospect: Prospect; let recipient: Recipient; let reminder: DueReminder }
 
     // Per-recipient due calculation (#650 Phase 1), mirroring FollowUp.dueRecipients' shape exactly:
-    // a hand-resolved or booked show stops ALL its reminders (matches the lead-level auto-stop), then
-    // each recipient is evaluated independently through the same pure reminder() calculator, using
+    // a dismissed lead (#238) or a hand-resolved/booked show stops ALL its reminders, then each
+    // recipient is evaluated independently through the same pure reminder() calculator, using
     // Recipient.standing (already-established in PerformanceStatus.swift) for the per-recipient
     // "closed" and "unhandled reply" inputs that Prospect.isClosed/hasUnhandledReply provide at the
     // lead level.
@@ -203,6 +186,7 @@ enum ConversationReminder {
                              config: ConversationReminderConfig = .init()) -> [DueRecipient] {
         var due: [DueRecipient] = []
         for p in prospects {
+            if p.status == .dismissed { continue }   // #238: dismissed leads stop nagging
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             for r in p.recipients {
                 let standing = r.standing

@@ -183,6 +183,18 @@ final class Recipient {
         set { outcomeSourceRaw = newValue?.rawValue }
     }
 
+    // #654: mirrors Prospect's own contactMethod/contactConfidence wrappers, now the only copy since
+    // the lead-level ones were deleted.
+    var contactMethod: ContactMethod? {
+        get { contactMethodRaw.flatMap(ContactMethod.init) }
+        set { contactMethodRaw = newValue?.rawValue }
+    }
+
+    var contactConfidence: ContactConfidence? {
+        get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
+        set { contactConfidenceRaw = newValue?.rawValue }
+    }
+
     var conversationState: ConversationState? {
         get { conversationStateRaw.flatMap(ConversationState.init) }
         set { conversationStateRaw = newValue?.rawValue }

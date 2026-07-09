@@ -22,7 +22,9 @@ struct VoiceGuidanceGuardTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: matchedClient, possibleMatchSource: nil,
                          possibleMatchName: possibleMatch, status: .contacted)
-        p.contactName = contact
+        if let contact {
+            p.setRecipients([Recipient(id: contact, email: nil, name: contact, provenance: .act)])
+        }
         return p
     }
 

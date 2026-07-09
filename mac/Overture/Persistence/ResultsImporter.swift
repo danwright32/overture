@@ -121,12 +121,6 @@ extension QueueItem {
             possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
             status: p.status,
-            contactName: p.contactName,
-            contactRole: p.contactRole,
-            contactEmail: p.contactEmail,
-            contactConfidence: p.contactConfidence,
-            contactMethod: p.contactMethod,
-            contactFormURL: p.contactFormURL,
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
@@ -141,27 +135,32 @@ extension QueueItem {
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
             outcomeSourceRaw: p.outcomeSourceRaw,
-            conversationState: p.conversationState,
-            conversationStateSource: p.conversationStateSource,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed,
             contacts: p.recipients
                 .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
-                .map { r in
-                    RecipientSnapshot(id: r.id, name: r.name, email: r.email, role: r.role,
-                                      provenance: r.provenance, sendState: r.sendState, replied: r.replied,
-                                      lastReplyText: r.lastReplyText, resolution: r.resolution,
-                                      bounced: r.bounced, outcomeSource: r.outcomeSource,
-                                      suppressionReason: r.suppressionReason,
-                                      replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
-                                      replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
-                                      replyDraftEditedByDan: r.replyDraftEditedByDan,
-                                      overrideBody: r.overrideBody,
-                                      conversationState: r.conversationState,
-                                      conversationStateSource: r.conversationStateSource,
-                                      conversationRemindedAt: r.conversationRemindedAt)
-                }
+                .map(RecipientSnapshot.init)
         )
+    }
+}
+
+extension RecipientSnapshot {
+    init(_ r: Recipient) {
+        self.init(id: r.id, name: r.name, email: r.email, role: r.role,
+                  provenance: r.provenance, sendState: r.sendState, replied: r.replied,
+                  lastReplyText: r.lastReplyText, resolution: r.resolution,
+                  bounced: r.bounced, outcomeSource: r.outcomeSource,
+                  suppressionReason: r.suppressionReason,
+                  replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
+                  replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
+                  replyDraftEditedByDan: r.replyDraftEditedByDan,
+                  overrideBody: r.overrideBody,
+                  conversationState: r.conversationState,
+                  conversationStateSource: r.conversationStateSource,
+                  conversationRemindedAt: r.conversationRemindedAt,
+                  contactConfidence: r.contactConfidence,
+                  contactMethod: r.contactMethod,
+                  contactFormURL: r.contactFormURL)
     }
 }

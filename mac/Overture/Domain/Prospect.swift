@@ -44,14 +44,6 @@ final class Prospect {
     // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.
     var classificationOverriddenByDan: Bool = false
 
-    // Filled by the Prep run (Trigger 2). Defaulted so the scout's inserts are unaffected.
-    var contactName: String? = nil
-    var contactRole: String? = nil
-    var contactEmail: String? = nil
-    var contactMethodRaw: String? = nil
-    var contactConfidenceRaw: String? = nil
-    var contactFormURL: String? = nil
-
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftVariant: String? = nil
@@ -101,15 +93,6 @@ final class Prospect {
     // Follow-up sequencer state (#45). Defaulted so existing records migrate cleanly.
     var followUpCount: Int = 0
     var lastFollowUpAt: Date? = nil
-
-    // Conversation lifecycle (#111): where an active reply sits between replied and booked, plus the
-    // timing anchors for its reminder (setAt = when the state was set; remindedAt = last time Dan
-    // acted on the reminder, re-anchoring it) and the auto/manual source so #112 cannot overwrite a
-    // manual set. Defaulted nil so existing records migrate cleanly (lightweight, like #132).
-    var conversationStateRaw: String? = nil
-    var conversationStateSetAt: Date? = nil
-    var conversationRemindedAt: Date? = nil
-    var conversationStateSourceRaw: String? = nil
 
     // The latest inbound reply's text + when it was captured (#112): pulled lazily when a reply is
     // first detected, handed to the classify workflow. Defaulted nil so existing records migrate cleanly.
@@ -227,16 +210,6 @@ final class Prospect {
     // partial feed (#133). Cancelled or pulled, not merely a one-off glitch.
     var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
 
-    var contactMethod: ContactMethod? {
-        get { contactMethodRaw.flatMap(ContactMethod.init) }
-        set { contactMethodRaw = newValue?.rawValue }
-    }
-
-    var contactConfidence: ContactConfidence? {
-        get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
-        set { contactConfidenceRaw = newValue?.rawValue }
-    }
-
     var hasDraft: Bool { draftBody != nil }
 
     // Apply Dan's edit to the draft (#240 / #119). The FIRST time the edited text meaningfully
@@ -285,16 +258,6 @@ final class Prospect {
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }
         set { outcomeRaw = newValue.rawValue }
-    }
-
-    var conversationState: ConversationState? {
-        get { conversationStateRaw.flatMap(ConversationState.init) }
-        set { conversationStateRaw = newValue?.rawValue }
-    }
-
-    var conversationStateSource: OutcomeSource? {
-        get { conversationStateSourceRaw.flatMap(OutcomeSource.init) }
-        set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
     // Phase F (#424): the show's status derived from its contacts (Booked > Active > Lost > New).
@@ -378,18 +341,6 @@ final class Prospect {
         mutate(r)
     }
 
-    // Closing the whole show by hand (#448) writes the close through to the contacts Dan actually
-    // engaged: an emailed, still-open, un-bounced contact (`standing.isInPlay`) resolves to the given
-    // resolution as Dan's manual call. Deliberately leaves UNTRIED contacts (never emailed) and
-    // already-terminal ones (resolved/bounced) untouched: a contact Dan never reached must not read as
-    // won or lost (Dan, 2026-06-29). Callers pair this with suppressUntriedRecipients (#542) so the
-    // untried contact stops being reachable too, once the show itself is settled.
-    func resolveEngagedContacts(_ resolution: RecipientResolution) {
-        for r in recipients where r.standing.isInPlay {
-            r.markOutcomeManually(resolution: resolution)
-        }
-    }
-
     // Takes every still-untried recipient on this lead out of future sends once the lead itself has
     // resolved, so a resolved show can't still generate a fresh cold email to a sibling contact it
     // never reached. Originally only the auto-detected-booking freeze (DownbeatBooking); #542 shares
@@ -458,48 +409,6 @@ final class Prospect {
             // Legacy auto-booking with no recorded id: block re-detection for this prospect (#218).
             autoBookingRejectedWithoutId = true
         }
-    }
-
-    // Dan sets the conversation state by hand (#111). An active state also marks a not-yet-replied
-    // lead as replied (manual) so the silent FollowUp sequencer stands down and the lead can't be in
-    // both queues; an existing reply keeps its source. `declined` resolves the lead to lost-soft
-    // (door open), recording the decline and stopping the reminders in one action.
-    func setConversationState(_ state: ConversationState, now: Date) {
-        conversationState = state
-        conversationStateSetAt = now
-        conversationStateSource = .manual
-        resumePausedRecipients()   // #430: hand-setting the conversation state is triage; resume the rest
-        if state == .declined {
-            markOutcomeManually(.lostSoft, now: now)
-            resolveEngagedContacts(.declinedSoft)
-            suppressUntriedRecipients(reason: .declined)   // #542
-        } else if outcome == .noResponse {
-            markOutcomeManually(.replied, now: now)
-        }
-    }
-
-    // "Remind me later": step an active reminder forward by re-anchoring it, without sending.
-    func remindLater(now: Date) {
-        conversationRemindedAt = now
-    }
-
-    // The AI's auto-classification (#112) suggests a state (source = auto). NEVER overwrites a state
-    // Dan set by hand (#60). The suggestion surfaces immediately in Due until Dan confirms/corrects;
-    // the lead is already .replied from detection, so the outcome is left alone.
-    func suggestConversationState(_ state: ConversationState, now: Date) {
-        guard conversationStateSource != .manual else { return }
-        conversationState = state
-        conversationStateSetAt = now
-        conversationStateSource = .auto
-    }
-
-    // Dan accepts a suggestion: it becomes his (manual) and the timed reminder clock restarts from now.
-    func confirmConversationState(now: Date) {
-        guard conversationState != nil else { return }
-        conversationStateSource = .manual
-        conversationStateSetAt = now
-        conversationRemindedAt = nil
-        resumePausedRecipients()   // #430: confirming the reply's read is triage; resume the rest
     }
 
     // True once the email was actually sent (approved-and-sent). Outcomes only count

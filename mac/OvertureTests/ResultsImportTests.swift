@@ -116,6 +116,28 @@ struct ResultsImportTests {
         #expect(ann.lastReplyText == "Yes, let's talk.")
     }
 
+    // #654: contactConfidence/contactMethod/contactFormURL move from the lead-level QueueItem fields
+    // (deleted) onto each contact's own snapshot, since the display data is genuinely per-recipient.
+    @Test func queueItemCarriesEachContactsOwnConfidenceMethodAndFormURL() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act,
+                            contactMethodRaw: "named_decision_maker", contactConfidenceRaw: "high",
+                            contactFormURL: "https://x.example/contact")
+        p.setRecipients([act])
+
+        let item = QueueItem(p)
+        let a = item.contacts.first
+        #expect(a?.contactMethod == .namedDecisionMaker)
+        #expect(a?.contactConfidence == .high)
+        #expect(a?.contactFormURL == "https://x.example/contact")
+    }
+
     // #642 (#634 Phase D): a performer recipient's overrideBody must reach the snapshot the review
     // screen reads, or there is no text for it to show Dan before he approves/sends.
     @Test func queueItemCarriesAPerformersOverrideBody() throws {

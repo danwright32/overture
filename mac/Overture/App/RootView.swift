@@ -417,7 +417,7 @@ struct RootView: View {
         let p = DebugStaging.stageSelfSendLead(in: context, now: Date(), address: address)
         do {
             try context.save()
-            statusMessage = "DEBUG: staged self-send lead to \(p.contactEmail ?? "?"). Approve it, then Send"
+            statusMessage = "DEBUG: staged self-send lead to \(p.recipients.first?.email ?? "?"). Approve it, then Send"
         } catch {
             statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
         }

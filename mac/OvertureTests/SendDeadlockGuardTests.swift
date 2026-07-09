@@ -54,9 +54,9 @@ struct SendDeadlockGuardTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.contactEmail = "to@org.org"; p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hi"
         ctx.insert(p)
-        if let r = RecipientBackfill.synthesizedRecipient(from: p) { p.setRecipients([r]) }
+        p.setRecipients([Recipient(id: "to@org.org", email: "to@org.org", provenance: .act)])
         try? ctx.save()
         return await SendService.sendOne(p, now: Date(), sender: sender)
     }

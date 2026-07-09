@@ -38,15 +38,13 @@ struct PrepImporterTests {
         #expect(outcome.matched == 1)
 
         let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        // The single contact becomes recipients[0]...
+        // The single contact becomes recipients[0].
         #expect(p?.recipients.count == 1)
         #expect(p?.recipients.first?.email == "jane@choir.org")
         #expect(p?.recipients.first?.provenance == .act)
-        // ...and is mirrored into the legacy singular fields (transitional, until Phase 7/8).
-        #expect(p?.contactName == "Jane Doe")
-        #expect(p?.contactEmail == "jane@choir.org")
-        #expect(p?.contactConfidence == .high)
-        #expect(p?.contactMethod == .namedDecisionMaker)
+        #expect(p?.recipients.first?.name == "Jane Doe")
+        #expect(p?.recipients.first?.contactConfidenceRaw == "high")
+        #expect(p?.recipients.first?.contactMethodRaw == "named_decision_maker")
         #expect(p?.draftSubject == "Photographing your Carnegie performance")
         #expect(p?.hasDraft == true)
         #expect(p?.status == .drafted)
@@ -110,8 +108,6 @@ struct PrepImporterTests {
         #expect(p?.recipients.count == 2)
         #expect(p?.recipients.first(where: { $0.provenance == .act })?.email == "emma@act.example")
         #expect(p?.recipients.first(where: { $0.provenance == .presenter })?.email == "lou@presenter.example")
-        // The legacy mirror tracks the act contact (transitional display).
-        #expect(p?.contactEmail == "emma@act.example")
     }
 
     // A form-only act (#368) still becomes a recipient (no email, id keyed on the form URL) so it
@@ -409,28 +405,6 @@ struct PrepImporterTests {
         let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
         #expect(p?.recipients.first?.provenance == .act)
         #expect(p?.recipients.first?.overrideBody == nil)
-    }
-
-    // The legacy single-contact mirror must treat `.performer` as primary too, the same as `.act`: a
-    // performer-only self-produced show that also carries a presenter must mirror the PERFORMER into
-    // the legacy contact fields, never fall through to an arbitrary recipient (SwiftData to-many order
-    // isn't guaranteed) and mislabel the presenter as the primary contact.
-    @Test func legacyMirrorPrefersPerformerOverPresenterWhenNoAct() throws {
-        let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
-
-        let results = PrepResults(version: 3, generatedAt: "now", results: [
-            PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Lou", role: "Presenting Director", email: "lou@presenter.example",
-                            method: "named_decision_maker", confidence: "medium", formUrl: nil, provenance: "presenter"),
-                PrepContact(name: "Emma Robinson", role: nil, email: "emma@performer.example",
-                            method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "performer"),
-            ])
-        ])
-        _ = PrepImporter.ingest(results, into: ctx)
-
-        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(p?.contactEmail == "emma@performer.example")
     }
 
     @Test func decodesAndVersionGates() throws {

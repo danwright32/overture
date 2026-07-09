@@ -60,17 +60,6 @@ struct ProspectDerivedStatusTests {
         #expect(!p.hasUnhandledReply)
     }
 
-    // #653: the gate used to check the LEAD's own conversationStateSource, so a stale/legacy
-    // lead-level field (or triaging some OTHER recipient) could mask an entirely different,
-    // still-uncategorized recipient's reply. It now lives per-recipient.
-    @Test func aDifferentRecipientsReplyStillSurfacesEvenIfTheLeadItselfIsMarkedManual() throws {
-        let ctx = try makeInMemoryContext()
-        let p = makeProspect(ctx)
-        p.setRecipients([recipient("a@e.com", sendState: .sent, replied: true)])
-        p.conversationStateSource = .manual   // legacy lead-level field, not THIS recipient's own
-        #expect(p.hasUnhandledReply)
-    }
-
     @Test func noUnhandledReplyWhenTheRepliedContactIsResolved() throws {
         let ctx = try makeInMemoryContext()
         let p = makeProspect(ctx)
