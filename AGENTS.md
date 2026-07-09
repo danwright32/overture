@@ -77,6 +77,14 @@ To restore: quit Overture (including from the menu bar), copy the desired backup
 `default.store` (+ `-wal`/`-shm`, if present) over the live files at the path above, then
 relaunch.
 
+As of #663, launch also refuses to open a file at that path that doesn't already contain
+Overture's own `ZPROSPECT` table (checked read-only, before anything else touches the file). This
+catches another app writing its own database to the same shared, unsandboxed path (it happened
+once with Downbeat, 2026-07-08): instead of CoreData silently creating a fresh, near-empty store
+inside the foreign file, Overture shows the store-unavailable screen with a reason naming the
+path, so the collision is caught at launch instead of requiring a manual sqlite3 inspection to
+even notice.
+
 ## CI status before merging
 
 A pending check and a stuck one look identical in GitHub's PR view. Do not merge a PR on

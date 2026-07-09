@@ -19,6 +19,10 @@ targets:
     platform: macOS
     sources:
       - path: Overture
+    dependencies:
+      # #663: StoreSchemaGuard reads the store's raw sqlite_master to confirm it's actually
+      # Overture's own database before ModelContainer ever opens it.
+      - sdk: libsqlite3.tbd
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
