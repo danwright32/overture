@@ -1,6 +1,25 @@
 import SwiftUI
 import SwiftData
 
+// The reveal task's cancellation-safe timing, extracted from ArchiveView's `.task(id:)` so a
+// superseded reveal (an older search pick's task, cancelled the moment a newer one starts) can be
+// proven to never scroll. Without the explicit isCancelled check, `try? await sleep(...)`
+// swallows the CancellationError that caused the cancellation, so a stale task would otherwise
+// carry on and scroll to its captured (now wrong) key (#633). `sleep` is injectable so a test can
+// exercise this without waiting out the real delay.
+enum ArchiveReveal {
+    @MainActor
+    static func scrollAfterDelay(
+        key: String,
+        sleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
+        scrollTo: (String) -> Void
+    ) async {
+        try? await sleep(50_000_000)
+        guard !Task.isCancelled else { return }
+        scrollTo(key)
+    }
+}
+
 // Every show Overture has ever tracked, for the cases the day to day Queue intentionally
 // hides: past its bookable window, booked, closed either way, or dismissed at triage. Replaces
 // DismissedView (Dismissed is now one of six independent status filters here, instead of its own
@@ -118,8 +137,9 @@ struct ArchiveView: View {
                 // from this screen's own search field, not just the first one.
                 .task(id: highlightedKey) {
                     guard let key = highlightedKey else { return }
-                    try? await Task.sleep(nanoseconds: 50_000_000)
-                    withAnimation { proxy.scrollTo(key, anchor: .center) }
+                    await ArchiveReveal.scrollAfterDelay(key: key) { key in
+                        withAnimation { proxy.scrollTo(key, anchor: .center) }
+                    }
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
                     if highlightedKey == key { highlightedKey = nil }
                 }
