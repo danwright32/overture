@@ -108,6 +108,16 @@ struct ReachedOutQueueTests {
         #expect(ReachedOutQueue.timingLabel(next: now.addingTimeInterval(3 * 86_400), now: now) == "in 3 days")
     }
 
+    // #661: the lightweight reached-out row only offers a "Send a follow-up" action once it's
+    // actually due, the same "overdue or now" threshold timingLabel's "Reach out now" case uses, so
+    // the button and the label can never disagree about whether something is due yet.
+    @Test func isDueNowMatchesTheReachOutNowThreshold() {
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        #expect(ReachedOutQueue.isDueNow(next: now, now: now))
+        #expect(ReachedOutQueue.isDueNow(next: now.addingTimeInterval(-5 * 86_400), now: now))
+        #expect(!ReachedOutQueue.isDueNow(next: now.addingTimeInterval(86_400), now: now))
+    }
+
     @Test func activeListIsSortedSoonestFirstAndExcludesStopped() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)

@@ -419,7 +419,9 @@ struct QueueView: View {
     // #217/#652: contacts Dan has already pitched, ordered by when to next reach out to each one
     // (soonest first). A flat list rather than date groups, since the next-reach-out order is what
     // matters here. One row per RECIPIENT: a multi-contact show with two contacts due at different
-    // times appears twice, each labeled with that contact's own timing.
+    // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
+    // (group name, this one contact, timing, and the state control), not the entire show card, so
+    // two contacts due on the same show don't render as two large, nearly-identical cards.
     @ViewBuilder private var reachedOutList: some View {
         let dated = reachedOutRecipients
         if dated.isEmpty {
@@ -435,16 +437,55 @@ struct QueueView: View {
             let now = Date()
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 ForEach(dated, id: \.recipient.id) { pair in
-                    prospectRow(QueueItem(pair.prospect), reachOutLabel: ReachedOutQueue.timingLabel(next: pair.next, now: now))
+                    reachedOutRow(pair, now: now)
+                    Divider()
                 }
             }
         }
     }
 
-    private func prospectRow(_ item: QueueItem, reachOutLabel: String? = nil) -> some View {
+    // #661: group name, this one contact, timing, and the conversation-state control (the shared
+    // ConversationStateControl, #652/#661), plus a link to Follow-ups once it's actually due, since
+    // that screen already owns the real nudge/reply-sending flow rather than a second copy of it here.
+    private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {
+        let p = pair.prospect, r = pair.recipient
+        return HStack(alignment: .top, spacing: OVSpacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                Text(r.email ?? r.name ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                if let line = SendFailureLine.text(for: r.sendError) {
+                    Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
+                }
+            }
+            Spacer(minLength: OVSpacing.sm)
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(ReachedOutQueue.timingLabel(next: pair.next, now: now))
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                if r.replied {
+                    ConversationStateControl(
+                        currentState: r.conversationState, stateSource: r.conversationStateSource,
+                        onSet: { state in
+                            ProspectMutations.setRecipientConversationState(QueueItem(p), r.id, state,
+                                                                            prospects: prospects, context: context, feedback: feedback)
+                        },
+                        onConfirm: {
+                            ProspectMutations.confirmRecipientConversationState(QueueItem(p), r.id,
+                                                                                prospects: prospects, context: context, feedback: feedback)
+                        })
+                }
+                if ReachedOutQueue.isDueNow(next: pair.next, now: now) {
+                    Button("Send a follow-up") { onShowFollowUps() }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                }
+            }
+        }
+        .padding(.vertical, OVSpacing.xs)
+    }
+
+    private func prospectRow(_ item: QueueItem) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                               highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
-                              replySendSince: { rid in replySending[rid] }, reachOutLabel: reachOutLabel,
+                              replySendSince: { rid in replySending[rid] },
                               onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
     }
 
