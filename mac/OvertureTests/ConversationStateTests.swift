@@ -4,18 +4,11 @@ import Foundation
 
 // The conversation-state dimension layered on a reply (#111): where an active conversation sits
 // between a bare reply and a booking. interested / wantsToBook / hasQuestion are "active" (they get
-// reminders); declined is terminal. Stored on Prospect as a raw string with an auto/manual source,
-// mirroring Outcome, so #112's AI suggestion never silently overwrites a state Dan set by hand.
+// reminders); declined is terminal. Stored on Recipient as a raw string with an auto/manual source,
+// mirroring Outcome, so #112's AI suggestion never silently overwrites a state Dan set by hand (see
+// RecipientTests for the accessor round-trip coverage).
 @Suite("Conversation state")
 struct ConversationStateTests {
-    private func makeProspect() -> Prospect {
-        Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
-                 performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
-                 priorRelationship: "none", production: "self", profile: "neutral",
-                 coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
-                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
-    }
-
     @Test func rawValuesAreStable() {
         #expect(ConversationState.interested.rawValue == "interested")
         #expect(ConversationState.wantsToBook.rawValue == "wants_to_book")
@@ -34,24 +27,5 @@ struct ConversationStateTests {
         #expect(ConversationState.wantsToBook.isActive)
         #expect(ConversationState.hasQuestion.isActive)
         #expect(ConversationState.declined.isActive == false)
-    }
-
-    @Test func prospectStartsWithNoConversationState() {
-        #expect(makeProspect().conversationState == nil)
-        #expect(makeProspect().conversationStateSource == nil)
-    }
-
-    @Test func prospectConversationStateAccessorRoundTrips() {
-        let p = makeProspect()
-        p.conversationState = .wantsToBook
-        #expect(p.conversationStateRaw == "wants_to_book")
-        #expect(p.conversationState == .wantsToBook)
-    }
-
-    @Test func prospectConversationStateSourceReusesOutcomeSource() {
-        let p = makeProspect()
-        p.conversationStateSource = .manual
-        #expect(p.conversationStateSourceRaw == "manual")
-        #expect(p.conversationStateSource == .manual)
     }
 }

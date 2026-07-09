@@ -14,16 +14,13 @@ struct ReplyClassifyImporterTests {
     }
 
     @discardableResult
-    private func lead(_ ctx: ModelContext, key: String,
-                      state: ConversationState? = nil, source: OutcomeSource? = nil) -> Prospect {
+    private func lead(_ ctx: ModelContext, key: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
                          performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)
         p.outcome = .replied
-        if let state { p.conversationState = state }
-        p.conversationStateSourceRaw = source?.rawValue
         ctx.insert(p); try? ctx.save()
         return p
     }
