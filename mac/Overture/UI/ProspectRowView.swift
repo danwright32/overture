@@ -315,11 +315,17 @@ struct ProspectRowView: View {
 
     @ViewBuilder private var links: some View {
         HStack(spacing: OVSpacing.md) {
+            // #358: .tint(OVColor.forest) below does not recolor a Link's own text on macOS (tint
+            // affects control accents, not text color), so the default bright system blue clashed
+            // with the forest/gold palette and made these secondary reference links read as more
+            // important than they are. Each link needs its own explicit override.
             if let s = item.sourceListingURL, let url = URL(string: s) {
                 Link("Source listing", destination: url)
+                    .foregroundStyle(OVColor.forest)
             }
             if let w = item.websiteURL, let url = URL(string: w) {
                 Link("Group website", destination: url)
+                    .foregroundStyle(OVColor.forest)
             }
             if !item.hasDraft && !item.isBooked {
                 Text(item.isKept ? "Contact: pending Prep run" : "Contact: keep to prep")

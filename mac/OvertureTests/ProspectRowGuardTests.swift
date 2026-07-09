@@ -135,3 +135,27 @@ struct ProspectRowRestoreGuardTests {
         #expect(!body.contains("} else if item.isKept {"))
     }
 }
+
+// #358: the "Source listing" and "Group website" reference links rendered in the default system
+// accent blue, clashing with the forest/gold palette and reading as more important than the
+// secondary reference links they are. The links row's own .tint(OVColor.forest) does not actually
+// recolor a Link's own text on macOS (tint affects control accents, not Link's text color), so
+// each link needs its own explicit override. Scoped to the `links` property body (propertyBody,
+// #569) rather than a whole-file contains check, since .foregroundStyle(OVColor.forest) already
+// appears 4 times elsewhere in this 470-line file for unrelated views.
+@Suite("Reference links use the brand palette, not default blue")
+struct ReferenceLinkColorGuardTests {
+    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func sourceListingAndGroupWebsiteLinksHaveTheirOwnBrandColorOverride() {
+        #expect(!prospectRow.isEmpty)
+        let linksBody = SourceGuardHelper.propertyBody("private var links: some View {", in: prospectRow)
+        #expect(linksBody != nil)
+        #expect(linksBody?.contains("Link(\"Source listing\"") == true)
+        #expect(linksBody?.contains("Link(\"Group website\"") == true)
+        // Two links, each with its own override: a shared .tint() further down the modifier
+        // chain doesn't reach either Link's own text color.
+        let overrideCount = (linksBody?.components(separatedBy: ".foregroundStyle(OVColor.forest)").count ?? 1) - 1
+        #expect(overrideCount == 2)
+    }
+}
