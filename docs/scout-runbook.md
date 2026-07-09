@@ -54,8 +54,8 @@ earlier TypeScript reference pipeline once it was confirmed unused and drifting)
 4. **Upsert into the local store.** `ScoutService.apply` upserts the surviving, ranked
    prospects directly into SwiftData by natural key, preserving Dan's keep/dismiss
    decisions. There is no intermediate results file in the live path; `overture-results.json`
-   and its importer (`ResultsImporter.swift`) still exist for a manually-produced file, but
-   nothing writes one anymore now that the TypeScript mirror is retired.
+   and its importer (`ResultsImporter.swift`) were removed entirely in #669 once it was
+   confirmed nothing had ever written one since the TypeScript mirror was retired.
 
 ## Status
 

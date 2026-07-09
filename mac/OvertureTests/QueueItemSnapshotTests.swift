@@ -3,54 +3,14 @@ import Foundation
 import SwiftData
 @testable import Overture
 
-private let sampleJSON = """
-{
-  "version": 1,
-  "generatedAt": "2026-06-22T19:18:09.848Z",
-  "prospects": [
-    {
-      "groupName": "Indianapolis Children's Choir",
-      "discipline": "choral",
-      "venue": "Stern Auditorium / Perelman Stage",
-      "performanceDate": "2026-06-24",
-      "sourceListingUrl": "https://example.com/a",
-      "websiteUrl": null,
-      "priorRelationship": "none",
-      "production": "self",
-      "profile": "strong",
-      "coverage": "likely_uncovered",
-      "fitScore": 7,
-      "tier": "high",
-      "fitReason": "Self-produced children's choir.",
-      "matchedClientName": null,
-      "possibleMatchSource": null,
-      "possibleMatchName": null
-    },
-    {
-      "groupName": "New York Rising Stars Concert",
-      "discipline": "music",
-      "venue": "Weill Recital Hall",
-      "performanceDate": "2026-06-23",
-      "sourceListingUrl": null,
-      "websiteUrl": null,
-      "priorRelationship": "none",
-      "production": "agency",
-      "profile": "weak",
-      "coverage": "likely_uncovered",
-      "fitScore": -2,
-      "tier": "longshot",
-      "fitReason": "Rising-stars showcase rental.",
-      "matchedClientName": null,
-      "possibleMatchSource": null,
-      "possibleMatchName": null
-    }
-  ]
-}
-"""
-
+// QueueItem(_ p: Prospect) and RecipientSnapshot(_ r: Recipient) convert a SwiftData model into the
+// flat, Equatable view-model the UI (and QueueModel's pure logic) actually work with. Split out of
+// the former ResultsImportTests.swift (#669): that file mixed these live conversion tests with tests
+// of the (now-removed) ResultsFileDecoder/ResultsImporter results-file handoff, which had no live
+// writer anywhere since #493.
 @MainActor
-@Suite("Results import")
-struct ResultsImportTests {
+@Suite("QueueItem and RecipientSnapshot construction from the domain model")
+struct QueueItemSnapshotTests {
     private func makeContainer() throws -> ModelContainer {
         let schema = Schema([Prospect.self, Recipient.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -259,70 +219,5 @@ struct ResultsImportTests {
         #expect(QueueModel.replyIntentLabel("wants_to_book") == "wants to book")
         #expect(QueueModel.replyIntentLabel("has_question") == "has a question")
         #expect(QueueModel.replyIntentLabel("weird") == "weird")          // unknown passes through
-    }
-
-    @Test func decodesFileAndRejectsWrongVersion() throws {
-        let file = try ResultsFileDecoder.decode(Data(sampleJSON.utf8))
-        #expect(file.version == 1)
-        #expect(file.prospects.count == 2)
-
-        let outOfRange = Data(#"{"version":99,"generatedAt":"x","prospects":[]}"#.utf8)
-        #expect(throws: ResultsFileError.unsupportedVersion(99)) {
-            try ResultsFileDecoder.decode(outOfRange)
-        }
-    }
-
-    @Test func decodesVersionTwoFile() throws {
-        let v2JSON = Data(#"{"version":2,"generatedAt":"2026-06-25T00:00:00Z","prospects":[]}"#.utf8)
-        let file = try ResultsFileDecoder.decode(v2JSON)
-        #expect(file.version == 2)
-        #expect(file.prospects.isEmpty)
-    }
-
-    @Test func ingestInsertsAllAsNew() throws {
-        let container = try makeContainer()
-        let context = ModelContext(container)
-        let file = try ResultsFileDecoder.decode(Data(sampleJSON.utf8))
-
-        let outcome = try ResultsImporter.ingest(file, into: context)
-        #expect(outcome.inserted == 2)
-        #expect(outcome.updated == 0)
-
-        let stored = try context.fetch(FetchDescriptor<Prospect>())
-        #expect(stored.count == 2)
-        #expect(stored.allSatisfy { $0.status == .new })
-    }
-
-    @Test func reingestPreservesDansDecisionAndRefreshesRanking() throws {
-        let container = try makeContainer()
-        let context = ModelContext(container)
-        let file = try ResultsFileDecoder.decode(Data(sampleJSON.utf8))
-        _ = try ResultsImporter.ingest(file, into: context)
-
-        // Dan dismisses one prospect.
-        let key = Prospect.makeNaturalKey(
-            groupName: "New York Rising Stars Concert",
-            performanceDate: "2026-06-23",
-            venue: "Weill Recital Hall"
-        )
-        let target = try context.fetch(
-            FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-        ).first
-        target?.status = .dismissed
-        try context.save()
-
-        // A fresh scout run re-ingests the same performances (different fit score).
-        var rescored = file
-        rescored.prospects[1].fitScore = 4
-        let outcome = try ResultsImporter.ingest(rescored, into: context)
-
-        #expect(outcome.inserted == 0)
-        #expect(outcome.updated == 2)
-
-        let refreshed = try context.fetch(
-            FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-        ).first
-        #expect(refreshed?.status == .dismissed)  // decision preserved
-        #expect(refreshed?.fitScore == 4)          // ranking refreshed
     }
 }

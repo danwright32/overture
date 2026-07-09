@@ -1,6 +1,6 @@
 // One-shot importer: parses Dan's booking-log CSV into the local history file the native
-// Mac app reads, ~/Library/Application Support/Overture/overture-history.json (sibling to
-// overture-results.json, the same fire-and-forget file boundary the rest of the app uses).
+// Mac app reads, ~/Library/Application Support/Overture/overture-history.json, the same
+// fire-and-forget file boundary the rest of the app uses.
 // Idempotent: overwrites the file, so re-running gives a clean reload. The app merges this
 // one-time legacy history with its own live activity at scout time (#19, #69).
 //

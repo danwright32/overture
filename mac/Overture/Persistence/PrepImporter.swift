@@ -4,7 +4,7 @@ import SwiftData
 // Ingests a Prep results file into the local store: matches each result to an existing
 // prospect by natural key and fills in the found contact and the drafted email. A
 // prospect that gains a draft moves to `.drafted` (ready for Dan to review/approve).
-// Results with no matching prospect are skipped. Mirrors ResultsImporter.
+// Results with no matching prospect are skipped.
 
 enum PrepImporter {
     // unmatchedKeys: results that matched no kept prospect (surfaced, never swallowed,

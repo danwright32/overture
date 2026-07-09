@@ -17,7 +17,6 @@ enum DebugSeed {
     static let inputFileNames = [
         "downbeat-export.json",
         "overture-history.json",
-        "overture-results.json",
         "overture-prep-results.json",
         "overture-reply-classify-results.json",
         "overture-blocked-dates.json",

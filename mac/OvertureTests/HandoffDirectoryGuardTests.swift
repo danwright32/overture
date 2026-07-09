@@ -15,7 +15,6 @@ struct HandoffDirectoryGuardTests {
     // elsewhere (the resident agent logs in ~/Library/Logs, the LaunchAgent plist) are excluded.
     private var handoffURLs: [(label: String, url: URL)] {
         [
-            ("results", ResultsImporter.defaultResultsURL),
             ("downbeat-export", DownbeatBridge.defaultURL),
             ("prep-results", PrepImporter.defaultURL),
             ("prep-queue", PrepQueueBuilder.defaultURL),

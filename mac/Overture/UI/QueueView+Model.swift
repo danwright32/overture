@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // Pure view-model helpers for the approval queue: labels, badges, timing hints,
 // and date groupings. Ported from the engine's queueView.ts so the display logic
@@ -473,4 +474,70 @@ enum QueueModel {
     private static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     private static func shortWeekday(_ component: Int) -> String { weekdays[(component - 1 + 7) % 7] }
     private static func shortMonth(_ component: Int) -> String { months[(component - 1 + 12) % 12] }
+}
+
+extension QueueItem {
+    init(_ p: Prospect) {
+        self.init(
+            id: p.naturalKey,
+            groupName: p.groupName,
+            discipline: p.discipline,
+            venue: p.venue,
+            performanceDate: p.performanceDate,
+            sourceListingURL: p.sourceListingURL,
+            websiteURL: p.websiteURL,
+            priorRelationship: p.priorRelationship,
+            production: p.production,
+            profile: p.profile,
+            coverage: p.coverage,
+            fitScore: p.fitScore,
+            tier: p.tier,
+            fitReason: p.fitReason,
+            matchedClientName: p.matchedClientName,
+            possibleMatchSource: p.possibleMatchSource,
+            possibleMatchName: p.possibleMatchName,
+            status: p.status,
+            draftSubject: p.draftSubject,
+            draftBody: p.draftBody,
+            draftEditedByDan: p.draftEditedByDan,
+            outcome: p.outcome,
+            performanceStatus: p.performanceStatus,
+            sentAt: p.sentAt,
+            hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
+            sendError: p.sendError,
+            lostReason: p.lostReason,
+            classificationConfidence: p.classificationConfidence,
+            confidenceReviewedByDan: p.confidenceReviewedByDan,
+            classificationOverriddenByDan: p.classificationOverriddenByDan,
+            bookingSuggested: p.bookingSuggested,
+            outcomeSourceRaw: p.outcomeSourceRaw,
+            runEndDate: p.runEndDate,
+            partOfRelatedRun: p.partOfRelatedRun,
+            disappearedFromFeed: p.disappearedFromFeed,
+            contacts: p.recipients
+                .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+                .map(RecipientSnapshot.init)
+        )
+    }
+}
+
+extension RecipientSnapshot {
+    init(_ r: Recipient) {
+        self.init(id: r.id, name: r.name, email: r.email, role: r.role,
+                  provenance: r.provenance, sendState: r.sendState, replied: r.replied,
+                  lastReplyText: r.lastReplyText, resolution: r.resolution,
+                  bounced: r.bounced, outcomeSource: r.outcomeSource,
+                  suppressionReason: r.suppressionReason,
+                  replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
+                  replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
+                  replyDraftEditedByDan: r.replyDraftEditedByDan,
+                  overrideBody: r.overrideBody,
+                  conversationState: r.conversationState,
+                  conversationStateSource: r.conversationStateSource,
+                  conversationRemindedAt: r.conversationRemindedAt,
+                  contactConfidence: r.contactConfidence,
+                  contactMethod: r.contactMethod,
+                  contactFormURL: r.contactFormURL,
+                  delayNoticeAt: r.delayNoticeAt)
+    }
 }
