@@ -161,6 +161,7 @@ extension RecipientSnapshot {
                   conversationRemindedAt: r.conversationRemindedAt,
                   contactConfidence: r.contactConfidence,
                   contactMethod: r.contactMethod,
-                  contactFormURL: r.contactFormURL)
+                  contactFormURL: r.contactFormURL,
+                  delayNoticeAt: r.delayNoticeAt)
     }
 }

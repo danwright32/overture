@@ -224,6 +224,48 @@ struct RecipientTests {
         #expect(snapshot(source: .manual).isAutoBounced == false)
     }
 
+    // #656: a soft/temporary Gmail delay notice is a quiet, purely informational hint, never a
+    // state change, so it must fade on its own (Gmail never tells us a delay resolved) and must
+    // never show once something more definite (a bounce, a reply, or a resolution) applies.
+    private func delaySnapshot(delayNoticeAt: Date?, bounced: Bool = false, replied: Bool = false,
+                               resolution: RecipientResolution? = nil) -> RecipientSnapshot {
+        RecipientSnapshot(id: "a@act.example", name: nil, email: "a@act.example",
+                          role: nil, provenance: .act, sendState: .sent,
+                          replied: replied, lastReplyText: nil, resolution: resolution,
+                          bounced: bounced, outcomeSource: nil, delayNoticeAt: delayNoticeAt)
+    }
+
+    @Test func hasRecentDeliveryDelayIsTrueJustAfterTheNotice() {
+        let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 1000))
+        #expect(s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
+    }
+
+    @Test func hasRecentDeliveryDelayFadesAfterTheWindow() {
+        let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 0))
+        let pastTheWindow = Date(timeIntervalSince1970: 0).addingTimeInterval(RecipientSnapshot.deliveryDelayWindow + 1)
+        #expect(!s.hasRecentDeliveryDelay(now: pastTheWindow))
+    }
+
+    @Test func hasRecentDeliveryDelayIsFalseWithNoNotice() {
+        let s = delaySnapshot(delayNoticeAt: nil)
+        #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000)))
+    }
+
+    @Test func hasRecentDeliveryDelayIsFalseOnceBounced() {
+        let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 1000), bounced: true)
+        #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
+    }
+
+    @Test func hasRecentDeliveryDelayIsFalseOnceReplied() {
+        let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 1000), replied: true)
+        #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
+    }
+
+    @Test func hasRecentDeliveryDelayIsFalseOnceResolved() {
+        let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 1000), resolution: .booked)
+        #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
+    }
+
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
     // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
     // a later re-draft can't rewrite the lesson.

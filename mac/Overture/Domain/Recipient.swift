@@ -93,6 +93,12 @@ final class Recipient {
     // positive never re-flags while a genuinely new bounce still does.
     var lastBounceId: String?
     var dismissedBounceId: String?
+    // #656: when the newest Gmail delay notice was first seen on this thread, paired with its
+    // message id so a fresh delay notice restarts the fade window without re-triggering on the
+    // same one repeatedly. Purely informational: never gates isSilent or follow-up eligibility,
+    // and BounceService leaves both alone once bounced/replied (see the isSilent guard above).
+    var delayNoticeAt: Date? = nil
+    var lastDelayMessageId: String? = nil
     // Per-recipient conversation state (#650, Phase 1 of milestone #19), mirroring the four fields
     // already on Prospect exactly. The per-recipient conversation surface that sets these is a later
     // phase; for now this is a pure domain addition plus the migration in Task 3.

@@ -7,6 +7,10 @@ import Foundation
 // (dismissedBounceId) never re-flags. Metadata-only: no full-thread fetch needed, since
 // BounceDetection classifies purely from the From + Subject headers GmailReplyChecker already
 // requests.
+//
+// Also notices a soft/temporary delay notice on the same already-fetched thread (#656), purely
+// informational: it never sets bounced and never affects isSilent or follow-up eligibility. A
+// hard bounce takes precedence when a thread somehow carries both.
 @MainActor
 enum BounceService {
     @discardableResult
@@ -20,13 +24,19 @@ enum BounceService {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 if r.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
                 if r.bounced || r.replied || r.resolution == .booked { continue }
-                guard let data = fetchThread(threadId),
-                      let bounceId = BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: selfEmail)
-                else { continue }
-                if bounceId == r.dismissedBounceId { continue }
-                r.bounced = true
-                r.lastBounceId = bounceId
-                count += 1
+                guard let data = fetchThread(threadId) else { continue }
+                if let bounceId = BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: selfEmail),
+                   bounceId != r.dismissedBounceId {
+                    r.bounced = true
+                    r.lastBounceId = bounceId
+                    count += 1
+                    continue   // superseded by a hard bounce; no need to also flag a delay
+                }
+                if let delayId = BounceDetection.delayMessageId(threadJSON: data, selfEmail: selfEmail),
+                   delayId != r.lastDelayMessageId {
+                    r.lastDelayMessageId = delayId
+                    r.delayNoticeAt = now
+                }
             }
         }
         return count

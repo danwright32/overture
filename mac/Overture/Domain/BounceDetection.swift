@@ -25,13 +25,21 @@ enum BounceDetection {
         return s.contains("failure") || s.contains("undelivered") || s.contains("delivery failed")
     }
 
-    // The Gmail message id of the newest hard bounce in a threads.get (metadata, From + Subject
-    // headers) response, or nil if there is none. A recipient can carry more than one bounce
-    // notification on the same thread (a dismissed false positive followed by a genuinely new
-    // bounce, #398), and threads.get's array order isn't guaranteed to be chronological, so this
-    // sorts by internalDate (ReplyDetection.newestFirst, the same precedent latestReplyId uses)
-    // rather than returning whichever bounce happens to come first in the array.
-    static func hardBounceMessageId(threadJSON data: Data, selfEmail: String) -> String? {
+    // A soft/temporary delay ("Delivery Status Notification (Delay)", "Delayed Mail"): a mailbox
+    // that's temporarily full or a delivery still being retried, not a permanent failure (#656).
+    static func isDelaySubject(_ subject: String) -> Bool {
+        subject.lowercased().contains("delay")
+    }
+
+    // Shared by hardBounceMessageId and delayMessageId: the Gmail message id of the newest
+    // bounce-sender message whose subject matches `predicate`, or nil if there is none. A
+    // recipient can carry more than one bounce notification on the same thread (a dismissed false
+    // positive followed by a genuinely new bounce, #398), and threads.get's array order isn't
+    // guaranteed to be chronological, so this sorts by internalDate (ReplyDetection.newestFirst,
+    // the same precedent latestReplyId uses) rather than returning whichever notice happens to
+    // come first in the array.
+    private static func newestBounceSenderMessageId(threadJSON data: Data,
+                                                    matching predicate: (String) -> Bool) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         for m in ReplyDetection.newestFirst(messages) {
@@ -40,9 +48,22 @@ enum BounceDetection {
             let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
             let subject = headers.first { ($0["name"] as? String)?.lowercased() == "subject" }?["value"] as? String ?? ""
             let e = ReplyDetection.email(from: from)
-            guard !e.isEmpty, isBounceSender(e), isHardBounceSubject(subject) else { continue }
+            guard !e.isEmpty, isBounceSender(e), predicate(subject) else { continue }
             return m["id"] as? String
         }
         return nil
+    }
+
+    // The Gmail message id of the newest hard bounce in a threads.get (metadata, From + Subject
+    // headers) response, or nil if there is none.
+    static func hardBounceMessageId(threadJSON data: Data, selfEmail: String) -> String? {
+        newestBounceSenderMessageId(threadJSON: data, matching: isHardBounceSubject)
+    }
+
+    // The Gmail message id of the newest soft/temporary delay notice, or nil if there is none
+    // (#656). Purely a read: callers must never let this affect isSilent or follow-up eligibility
+    // the way a hard bounce does.
+    static func delayMessageId(threadJSON data: Data, selfEmail: String) -> String? {
+        newestBounceSenderMessageId(threadJSON: data, matching: isDelaySubject)
     }
 }
