@@ -483,18 +483,7 @@ struct DraftReviewView: View {
     }
 
     private func stateMenu(for c: RecipientSnapshot, label: String) -> some View {
-        Menu(label) {
-            ForEach(ConversationState.allCases, id: \.self) { s in
-                Button {
-                    onSetRecipientConversationState(c.id, s)
-                } label: {
-                    if s == c.conversationState { Label(s.label, systemImage: "checkmark") }
-                    else { Text(s.label) }
-                }
-            }
-        }
-        .menuStyle(.borderlessButton).fixedSize()
-        .font(OVType.meta)
+        ConversationStateMenu(currentState: c.conversationState, label: label) { onSetRecipientConversationState(c.id, $0) }
     }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
