@@ -295,6 +295,11 @@ struct DraftReviewView: View {
                 Text(c.displayName).fontWeight(.medium).foregroundStyle(OVColor.ink)
                 Text(provenanceLabel(c.provenance)).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
                 Spacer()
+                // #656: a soft/temporary Gmail delay, purely informational, alongside (never in
+                // place of) the status line, since it must never affect isSilent/eligibility.
+                if c.hasRecentDeliveryDelay(now: Date()) {
+                    Text("Delivery delayed").font(OVType.tag).foregroundStyle(OVColor.gold)
+                }
                 Text(c.statusLabel).font(OVType.meta).foregroundStyle(contactStatusColor(c))
             }
             .font(.system(size: 12))

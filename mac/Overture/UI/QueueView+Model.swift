@@ -136,6 +136,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var contactConfidence: ContactConfidence? = nil
     var contactMethod: ContactMethod? = nil
     var contactFormURL: String? = nil
+    // #656: when the newest Gmail delay notice was first seen, or nil if there's never been one
+    // (or it was superseded by a fresh reply/bounce/resolution). Drives hasRecentDeliveryDelay.
+    var delayNoticeAt: Date? = nil
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
@@ -163,6 +166,17 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // A bounce Overture auto-detected (not one Dan hand-marked): only these get a "not really
     // bounced" dismiss control (#398).
     var isAutoBounced: Bool { bounced && outcomeSource != .manual }
+
+    // A soft/temporary Gmail delay notice within the fade window (#656): purely informational, so
+    // it never shows once superseded by something more definite (a bounce, a reply, or a terminal
+    // resolution), and fades on its own after a few days since Gmail never tells us a delay
+    // resolved (most delayed mail either quietly delivers or eventually hard-bounces).
+    static let deliveryDelayWindow: TimeInterval = 3 * 24 * 3600
+
+    func hasRecentDeliveryDelay(now: Date) -> Bool {
+        guard !bounced, !replied, resolution == nil, let delayNoticeAt else { return false }
+        return now.timeIntervalSince(delayNoticeAt) < Self.deliveryDelayWindow
+    }
 
     // The plain-language status line. Terminal marks win; then bounce; then reply; then send state.
     var statusLabel: String {

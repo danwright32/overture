@@ -88,4 +88,55 @@ struct BounceDetectionTests {
         """#.utf8)
         #expect(BounceDetection.hardBounceMessageId(threadJSON: json, selfEmail: "dan@danwrightphotography.com") == "bounce-2")
     }
+
+    // #656: a soft/temporary delay is the one case #398's hard-bounce detection deliberately
+    // ignores. It's the same sender check, a different (inverse) subject check, surfaced as a
+    // quiet, non-state-changing hint rather than the total silence a delay used to get.
+    @Test func recognizesADelaySubject() {
+        #expect(BounceDetection.isDelaySubject("Delivery Status Notification (Delay)"))
+        #expect(BounceDetection.isDelaySubject("Delayed Mail (still being retried)"))
+    }
+
+    @Test func doesNotTreatAPermanentFailureAsADelay() {
+        #expect(!BounceDetection.isDelaySubject("Delivery Status Notification (Failure)"))
+        #expect(!BounceDetection.isDelaySubject("Undelivered Mail Returned to Sender"))
+    }
+
+    @Test func doesNotTreatAnUnrelatedSubjectAsADelay() {
+        #expect(!BounceDetection.isDelaySubject("Re: Carnegie Hall performance opportunity"))
+    }
+
+    @Test func findsTheDelayMessageIdWhenSenderAndSubjectBothMatch() {
+        let data = threadJSON(from: "mailer-daemon@googlemail.com",
+                              subject: "Delivery Status Notification (Delay)", id: "delay-1")
+        #expect(BounceDetection.delayMessageId(threadJSON: data, selfEmail: "dan@danwrightphotography.com") == "delay-1")
+    }
+
+    @Test func ignoresADelaySubjectFromAnOrdinaryReplySender() {
+        // A real person's "Sorry for the delay in getting back to you" must never read as a delay notice.
+        let data = threadJSON(from: "manager@bachsociety.org", subject: "Sorry for the delay in getting back to you")
+        #expect(BounceDetection.delayMessageId(threadJSON: data, selfEmail: "dan@danwrightphotography.com") == nil)
+    }
+
+    @Test func delayMessageIdIsNilForAHardBounce() {
+        let data = threadJSON(from: "mailer-daemon@googlemail.com",
+                              subject: "Delivery Status Notification (Failure)")
+        #expect(BounceDetection.delayMessageId(threadJSON: data, selfEmail: "dan@danwrightphotography.com") == nil)
+    }
+
+    @Test func returnsTheNewestDelayNoticeNotArrayPosition() {
+        let json = Data(#"""
+        {"messages":[
+          {"id":"delay-1","internalDate":"1000","payload":{"headers":[
+            {"name":"From","value":"mailer-daemon@googlemail.com"},
+            {"name":"Subject","value":"Delivery Status Notification (Delay)"}
+          ]}},
+          {"id":"delay-2","internalDate":"2000","payload":{"headers":[
+            {"name":"From","value":"mailer-daemon@googlemail.com"},
+            {"name":"Subject","value":"Delivery Status Notification (Delay)"}
+          ]}}
+        ]}
+        """#.utf8)
+        #expect(BounceDetection.delayMessageId(threadJSON: json, selfEmail: "dan@danwrightphotography.com") == "delay-2")
+    }
 }
