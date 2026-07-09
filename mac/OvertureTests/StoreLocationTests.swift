@@ -38,6 +38,41 @@ struct StoreLocationTests {
         }
     }
 
+    // #666: StoreUnavailableView's degraded-state warning names a file path in prose, with nothing
+    // to click; this is the reveal action behind its "Show in Finder" button. Mirrors
+    // AgentLogLocation.revealInFinder's injected-opener convention so it's unit-testable without
+    // launching Finder.
+    @Test func revealStoreOpensTheStoreFileWhenItExists() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("store-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let store = base.appendingPathComponent("default.store")
+        try Data("x".utf8).write(to: store)
+
+        var opened: URL?
+        let returned = StoreLocation.revealStoreInFinder(storeURL: store, open: { opened = $0 })
+
+        #expect(opened == store)
+        #expect(returned == store)
+    }
+
+    // A not-yet-created store (a fresh install, or the #663 refusal before anything's written) must
+    // still open Finder somewhere useful, not silently do nothing.
+    @Test func revealStoreOpensTheContainingFolderWhenTheStoreIsMissing() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("store-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let store = base.appendingPathComponent("default.store")   // never created
+
+        var opened: URL?
+        let returned = StoreLocation.revealStoreInFinder(storeURL: store, open: { opened = $0 })
+
+        #expect(opened == base)
+        #expect(returned == base)
+    }
+
     // #317: the handoff directory (where every cross-boundary JSON file lives) is the "Overture"
     // subfolder of the data directory, derived through one helper so it cannot drift per-call-site.
     @Test func handoffDirectoryIsTheOvertureSubfolderInRelease() {
