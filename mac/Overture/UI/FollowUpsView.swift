@@ -13,6 +13,11 @@ struct FollowUpsView: View {
     @State private var pending: PendingNudge?
     @State private var pendingConversation: PendingConversation?
     @State private var showSettings = false
+    // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
+    // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
+    // still has them, dismissing this sheet first since Archive opens as a sibling sheet on the
+    // same RootView.
+    var onOpenInArchive: (_ key: String) -> Void = { _ in }
 
     // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
     // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
@@ -140,7 +145,12 @@ struct FollowUpsView: View {
                 }
             }
             Spacer(minLength: OVSpacing.sm)
-            sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
+            VStack(alignment: .trailing, spacing: 6) {
+                sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
+                // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
+                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            }
         }
         .padding(.vertical, OVSpacing.xs)
     }
@@ -181,6 +191,9 @@ struct FollowUpsView: View {
                 case .needsState:
                     setStateMenu(d, label: "Set a state")
                 }
+                // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
+                Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }
         .padding(.vertical, OVSpacing.xs)
