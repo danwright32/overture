@@ -491,3 +491,30 @@ struct QueueReachabilityTests {
         #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: [], today: "2026-07-07") == false)
     }
 }
+
+// #628: an OmniFocus follow-up tap (or a global search pick) must route to the Queue only when
+// the show would really render there, and to Archive otherwise, so it never silently lands nowhere.
+@Suite("Deep link reachability")
+struct DeepLinkReachabilityTests {
+    @Test func aDismissedShowIsNeverReachableEvenIfWithinTheBookableWindow() {
+        let a = item(performanceDate: "2026-08-01", status: .dismissed, key: "a")
+        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07") == false)
+    }
+
+    @Test func aClosedShowPastItsWindowWithALateReplyIsUnreachable() {
+        // Mirrors #628's exact scenario: a closed show, no longer in either Queue pipeline, that
+        // still generated a follow-up task because a different contact replied late.
+        let a = item(performanceDate: "2020-01-01", key: "a")
+        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07") == false)
+    }
+
+    @Test func aShowInTheReachedOutSetIsReachableEvenIfLongPast() {
+        let a = item(performanceDate: "2020-01-01", key: "a")
+        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: ["a"], today: "2026-07-07"))
+    }
+
+    @Test func aShowWithinTheBookableWindowIsReachable() {
+        let a = item(performanceDate: "2026-08-01", key: "a")
+        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07"))
+    }
+}

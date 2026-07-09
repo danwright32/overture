@@ -403,6 +403,15 @@ enum QueueModel {
         return !toSendQueue([item], reachedOutKeys: [], today: today).isEmpty
     }
 
+    // Whether an OmniFocus follow-up tap or a global search pick should jump into the Queue, as
+    // opposed to opening Archive with the item highlighted instead. A dismissed show never renders
+    // in the Queue at all, so it's excluded here even though isReachableInQueue alone wouldn't catch
+    // it. Shared by both call sites so a closed show with a late reply (#628) can't drift between
+    // "reachable by search" and "reachable by deep link".
+    static func isReachableForDeepLink(_ item: QueueItem, reachedOutKeys: Set<String>, today: String) -> Bool {
+        item.status != .dismissed && isReachableInQueue(item, reachedOutKeys: reachedOutKeys, today: today)
+    }
+
     static func summary(_ items: [QueueItem]) -> (total: Int, high: Int) {
         (items.count, items.filter { $0.tier == "high" }.count)
     }
