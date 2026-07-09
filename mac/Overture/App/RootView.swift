@@ -325,7 +325,13 @@ struct RootView: View {
                 ArchiveView(initialHighlightKey: archiveJumpKey, onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
-            .sheet(isPresented: $showFollowUps) { FollowUpsView() }
+            .sheet(isPresented: $showFollowUps) {
+                FollowUpsView(onOpenInArchive: { key in
+                    showFollowUps = false
+                    archiveJumpKey = key
+                    showArchive = true
+                })
+            }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
