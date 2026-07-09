@@ -118,6 +118,17 @@ final class Prospect {
     // noise, not hard facts (#114). Defaulted so existing records migrate cleanly.
     var bookingSuggestionDismissed: Bool = false
 
+    // #611: a fit-risk Prep's own research found (the org's site explicitly names its own
+    // photographer), never changes fitScore/tier, surfaced as a dismissible warning so Dan
+    // decides himself whether to deprioritize or skip. Mirrors bookingSuggested/
+    // bookingSuggestionDismissed's shape: the original finding is kept even after Dan dismisses
+    // it, with dismissal tracked separately, so a later re-run reporting the SAME note doesn't
+    // silently reactivate something already judged a false positive (PrepImporter.ingest resets
+    // the dismissal only when the note text actually changes). Defaulted so existing records
+    // migrate cleanly.
+    var alreadyCoveredNote: String? = nil
+    var alreadyCoveredDismissed: Bool = false
+
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
     // time so Dan can reject that exact match. Defaulted so existing records migrate cleanly.
     var autoBookedFromBookingId: String? = nil
