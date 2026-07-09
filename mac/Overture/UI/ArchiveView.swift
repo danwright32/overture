@@ -128,7 +128,9 @@ struct ArchiveView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: OVSpacing.md) {
-                        ForEach(filtered) { item in row(item) }
+                        ForEach(filtered) { item in
+                            row(item, context: context, feedback: feedback, outboundSendSince: outboundSending[item.id])
+                        }
                     }
                     .padding(OVSpacing.lg)
                 }
@@ -163,10 +165,17 @@ struct ArchiveView: View {
         .padding(OVSpacing.xl)
     }
 
-    private func row(_ item: QueueItem) -> some View {
+    // #710: internal (not private), and context/feedback/outboundSendSince threaded explicitly
+    // (not read from self.context/self.feedback/self.outboundSending internally) so
+    // ArchiveViewSendStateTests can call this directly without needing a real SwiftUI environment
+    // hosted around a bare ArchiveView instance (self.feedback is an
+    // @Environment(ActionFeedback.self) read, which traps with no ancestor view providing one) or
+    // fighting an owned @State from outside a view instance. Same prop-threading fix as
+    // FollowUpsView's `since` parameter.
+    func row(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback, outboundSendSince: Date? = nil) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                               highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
-                              outboundSendSince: outboundSending[item.id],
+                              outboundSendSince: outboundSendSince,
                               replySendSince: { rid in replySending[rid] },
                               onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                               onRestore: item.status == .dismissed ? { restore(item) } : nil)
