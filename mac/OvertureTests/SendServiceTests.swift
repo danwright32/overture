@@ -584,6 +584,123 @@ struct SendServiceTests {
         #expect(await SendService.sendReplyDraft(r, of: p, now: Date(), sender: CapturingSender()) == false)
     }
 
+    // MARK: - #468 (SUP-005) secondary-send claim guards
+
+    @Test func aSecondReplyDraftSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let r = p.recipients.first { $0.email == "emma@act.example" }!
+        r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
+        r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help — July works."
+        let sender = GatedSender()
+
+        let firstTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
+        while sender.callCount == 0 { await Task.yield() }   // the first call is now parked mid-send
+
+        let secondResult = await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 20), sender: sender)
+        #expect(secondResult == false)
+        #expect(sender.callCount == 1)   // the second attempt never reached the network at all
+
+        sender.release()
+        #expect(await firstTask.value == true)
+        #expect(r.replyDraftBody == nil)
+    }
+
+    @Test func aFailedReplyDraftSendReleasesTheClaimSoARetryCanGoThrough() async throws {
+        let ctx = ModelContext(try container())
+        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let r = p.recipients.first { $0.email == "emma@act.example" }!
+        r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
+        r.replyDraftBody = "Glad to help."
+
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(r.replySendClaimedAt == nil)   // retryable, never stuck claimed
+
+        #expect(await SendService.sendReplyDraft(r, of: p, now: Date(), sender: CapturingSender()) == true)
+    }
+
+    @Test func aSecondFollowUpSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        let sender = GatedSender()
+
+        let firstTask = Task { await SendService.sendFollowUp(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
+        while sender.callCount == 0 { await Task.yield() }
+
+        let secondResult = await SendService.sendFollowUp(r, of: p, now: Date(timeIntervalSince1970: 20), sender: sender)
+        #expect(secondResult == false)
+        #expect(sender.callCount == 1)
+
+        sender.release()
+        #expect(await firstTask.value == true)
+        #expect(r.followUpCount == 1)
+    }
+
+    @Test func aFailedFollowUpSendReleasesTheClaimSoARetryCanGoThrough() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+
+        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(r.nudgeSendClaimedAt == nil)
+
+        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: FakeSender()) == true)
+    }
+
+    @Test func aSecondConversationNudgeSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        let sender = GatedSender()
+
+        let firstTask = Task {
+            await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+                                                     now: Date(timeIntervalSince1970: 10), sender: sender)
+        }
+        while sender.callCount == 0 { await Task.yield() }
+
+        let secondResult = await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+                                                                    now: Date(timeIntervalSince1970: 20), sender: sender)
+        #expect(secondResult == false)
+        #expect(sender.callCount == 1)
+
+        sender.release()
+        #expect(await firstTask.value == true)
+    }
+
+    @Test func aFailedConversationNudgeSendReleasesTheClaimSoARetryCanGoThrough() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+
+        #expect(await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+                                                         now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(r.nudgeSendClaimedAt == nil)
+
+        #expect(await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+                                                         now: Date(), sender: FakeSender()) == true)
+    }
+
+    // sendFollowUp and sendConversationNudge share ONE claim field (they're mutually exclusive by
+    // domain state: setConversationState always pairs with outcomeSourceRaw = .manual, which
+    // isAwaitingFollowUp requires be unset). A reply-draft send is kept on its OWN field instead,
+    // because a replied recipient CAN legitimately be due for a conversation nudge at the same
+    // time (two different open surfaces), so sharing there would cause spurious refusals.
+    @Test func aReplyDraftSendInFlightDoesNotBlockAConversationNudgeSendOnTheSameRecipient() async throws {
+        let ctx = ModelContext(try container())
+        let (p, r) = sentContact(ctx, group: "A")
+        r.replied = true
+        r.replyDraftBody = "Glad to help."
+        let replySender = GatedSender()
+
+        let replyTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: replySender) }
+        while replySender.callCount == 0 { await Task.yield() }
+
+        let nudgeResult = await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+                                                                   now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
+        #expect(nudgeResult == true)
+
+        replySender.release()
+        #expect(await replyTask.value == true)
+    }
+
     // Copy-out path: Dan sent the reply from Gmail himself; consume the draft + re-anchor, no send.
     @Test func recordRepliedInGmailConsumesTheDraftWithoutSending() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
