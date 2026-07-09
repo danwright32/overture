@@ -219,6 +219,13 @@ final class Recipient {
     // is still "silent" by the raw definition but must never be nudged again.
     var isAwaitingFollowUp: Bool { isSilent && resolution == nil && outcomeSource != .manual }
 
+    // #677: this contact replied and nobody has dealt with it yet: replied, no resolution recorded,
+    // and it didn't bounce. Was independently recomputed in OmniFocusSync, ReachedOutQueue, and
+    // ConversationReminder (plus inline in Prospect.hasUnhandledReply); now the one shared source. A
+    // manually hand-set conversation state (#653) is NOT excluded here: only two of the four call
+    // sites need that exclusion, so they layer `&& conversationStateSource != .manual` on top.
+    var hasUnhandledReply: Bool { replied && resolution == nil && !bounced }
+
     // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
     // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
     // queue, the manual-send picker, and the "show fully sent?" rollup all read this one predicate.

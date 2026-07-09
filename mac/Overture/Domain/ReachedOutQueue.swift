@@ -18,7 +18,7 @@ enum ReachedOutQueue {
         let standing = r.standing
         guard standing.isInPlay else { return nil }
 
-        let unhandledReply = r.replied && standing.resolution == nil && !standing.bounced
+        let unhandledReply = r.hasUnhandledReply
         let reminderDate = ConversationReminder.nextReminderDate(
             state: r.conversationState, setAt: r.conversationStateSetAt, remindedAt: r.conversationRemindedAt,
             performanceDate: p.performanceDate, isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
