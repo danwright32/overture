@@ -30,4 +30,9 @@ enum RunTimeouts {
     // well-behaved failure surfacing on its own. Past this, something is genuinely wedged (not
     // just slow), so it should offer a retry rather than an open-ended "Sending…".
     static let send: TimeInterval = 60
+
+    // OmniFocus sync (#469): a handful of AppleScript Apple events, normally done in well under a
+    // second. Generous leash since a slow OmniFocus launch or a stalled Automation permission
+    // prompt can legitimately take a while, but a run past this reads as stuck.
+    static let omniFocusSync: TimeInterval = 60
 }

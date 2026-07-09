@@ -21,6 +21,9 @@ struct RootView: View {
     @State private var warningMessage: String?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
+    // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
+    // consistent with scout/prep/connect/send.
+    @State private var omniFocusSyncStartedAt: Date?
     // #355: the SAME key ReminderSettingsView binds, so toggling from either surface stays in sync.
     @AppStorage(OmniFocusSyncConfig.Keys.enabled) private var omniFocusEnabled = OmniFocusSyncConfig().enabled
     // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
@@ -266,8 +269,17 @@ struct RootView: View {
                         }
                         Divider()
                         Button("Sync now") { syncOmniFocus(force: true) }
+                            .disabled(omniFocusSyncStartedAt != nil)
                     } label: {
-                        ToolbarHoverLabel(title: "OmniFocus", systemImage: "checklist")
+                        // #469: the menu itself stays clickable while syncing (unlike Scout/Prep and
+                        // Gmail connect, this doesn't block anything Dan would want to check), but the
+                        // idle icon swaps for a live state so a sync in progress is never silently
+                        // indistinguishable from an idle one.
+                        if let since = omniFocusSyncStartedAt {
+                            LiveRunLabel(base: "Syncing", since: since, timeout: RunTimeouts.omniFocusSync)
+                        } else {
+                            ToolbarHoverLabel(title: "OmniFocus", systemImage: "checklist")
+                        }
                     }
                     .help("Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus.")
                 }
@@ -653,6 +665,7 @@ struct RootView: View {
         guard force || config.enabled else { return }
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: Date(), horizonDays: config.horizonDays)
+        omniFocusSyncStartedAt = Date()   // #469: drives the live "Syncing…" state on the toolbar item
         // NSAppleScript must run on the main thread. Use a (non-awaited) main-actor task so this
         // doesn't block the launch sequence, but still runs where AppleScript works. The work is a
         // handful of Apple events, so the brief main-actor occupancy is acceptable.
@@ -668,6 +681,7 @@ struct RootView: View {
                 OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
                 if force { errorMessage = "OmniFocus sync failed: \(error)" }
             }
+            omniFocusSyncStartedAt = nil
         }
     }
 
