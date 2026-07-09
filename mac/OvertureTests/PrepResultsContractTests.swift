@@ -118,4 +118,19 @@ struct PrepResultsContractTests {
         // The shared draft stays third-person, unaffected by the performer's override.
         #expect(multi.draft?.body.contains("Midnight Quartet is self-presenting") == true)
     }
+
+    // v5 (#611): an optional alreadyCoveredNote flags a fit-risk Prep's own research found (the
+    // org's site names its own photographer), surfaced to Dan so he can deprioritize or skip
+    // without the show's fit score/tier changing. The tolerant gate (1...5) still accepts the
+    // v1/v2/v3/v4 fixtures above.
+    @Test func decodesTheV5FixtureWithAnAlreadyCoveredNote() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v5.json"))
+        #expect(results.version == 5)
+
+        let flagged = results.results[0]
+        #expect(flagged.naturalKey == "french-american-piano-society|2026-09-12|weill-recital-hall")
+        #expect(flagged.alreadyCoveredNote == "The organization's site lists a Photographer in Residence on its About page.")
+        #expect(flagged.contacts?.first?.provenance == "presenter")
+        #expect(flagged.draft?.subject == "Photographing the French-American Piano Society's recital at Weill Recital Hall.")
+    }
 }

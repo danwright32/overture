@@ -47,7 +47,7 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"]);
   });
 
   for (const file of files) {
@@ -75,6 +75,12 @@ describe("prep-results fixture shapes", () => {
     };
     mutated.results[0].contacts![0].overrideBody = "I saw you...";
     expect(() => assertPrepResultsShape(mutated, "v3.json", 3)).toThrow(/overrideBody.*before version 4/);
+  });
+
+  it("rejects a v4 file whose result already carries the v5 alreadyCoveredNote field", () => {
+    const mutated = readJson("prep-results", "v4.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[0].alreadyCoveredNote = "Lists its own photographer.";
+    expect(() => assertPrepResultsShape(mutated, "v4.json", 4)).toThrow(/alreadyCoveredNote.*before version 5/);
   });
 });
 

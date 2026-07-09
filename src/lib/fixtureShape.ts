@@ -104,14 +104,16 @@ function assertPrepContact(
 }
 
 // overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it;
-// version 3: adds "performer" to the provenance vocabulary, #587)
+// version 3: adds "performer" to the provenance vocabulary, #587; version 5: adds an optional
+// alreadyCoveredNote fit-risk flag on the result itself, #611)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
   const overrideBodyAllowed = version >= 4;
+  const alreadyCoveredNoteAllowed = version >= 5;
   results.forEach((item, i) => {
     const o = requireObject(item, file, `results[${i}]`);
     requireString(o.naturalKey, file, `results[${i}].naturalKey`);
@@ -120,6 +122,11 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
       requireString(draft.subject, file, `results[${i}].draft.subject`);
       requireString(draft.body, file, `results[${i}].draft.body`);
       requireString(draft.variant, file, `results[${i}].draft.variant`);
+    }
+    if (alreadyCoveredNoteAllowed) {
+      optionalString(o.alreadyCoveredNote, file, `results[${i}].alreadyCoveredNote`);
+    } else if (o.alreadyCoveredNote !== undefined) {
+      fail(file, `results[${i}].alreadyCoveredNote must not be present before version 5`);
     }
     if (version === 1) {
       if (o.contacts !== undefined) fail(file, `results[${i}].contacts must not be present before version 2`);
