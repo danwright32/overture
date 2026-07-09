@@ -2,14 +2,13 @@
   "name": "overture-engine",
   "version": "0.1.0",
   "private": true,
-  "description": "Overture scout engine: discovers and ranks performances, writes the results handoff the native macOS app ingests.",
+  "description": "Overture booking-history importer: one-shot ingest of the Downbeat CSV export the native macOS app reads. Scouting, classification, and ranking all run natively in the Mac app.",
   "packageManager": "pnpm@11.8.0",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "import-history": "tsx scripts/import-history.ts",
-    "scout": "tsx scripts/scout/run-scout.ts"
+    "import-history": "tsx scripts/import-history.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.0"

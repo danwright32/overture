@@ -1,11 +1,10 @@
 # Scout runbook
 
-How a scout run produces the prospects the native app surfaces. The live scout runs
+How a scout run produces the prospects the native app surfaces. The scout runs
 natively IN the Mac app (the "Run scout" button + the daily auto-run): no browser, no
-terminal, no cloud. The classify -> match -> rank -> assemble brain is the tested
-engine, ported to Swift in `mac/Overture/Domain/`. The TypeScript path
-(`scripts/scout/run-scout.ts`) mirrors it and writes a results file for reference, but
-the app's own scout is the live one.
+terminal, no cloud, no TypeScript mirror. Extract, classify, match, rank, and assemble
+all happen in `mac/Overture/Domain/` and `mac/Overture/Integration/` (#493 retired the
+earlier TypeScript reference pipeline once it was confirmed unused and drifting).
 
 ## The loop
 
@@ -16,28 +15,22 @@ the app's own scout is the live one.
    of scraping the DOM. This is a plain HTTPS POST using the public, search-only key the
    site ships in its own client JS (not a secret); no headless browser is involved.
    Implemented in `mac/Overture/Integration/CarnegieExtractor.swift` (+
-   `AlgoliaCalendar.swift`) for the app and mirrored in `src/lib/algoliaCalendar.ts`
-   (`fetchCalendar`, `WINDOW_DAYS = 90`) for the TS path. The window opens at midnight
-   New York today and runs 90 days out (Eastern, not UTC). At parse time the feed is
-   cleaned: cancelled performances (a `Cancelled:` title prefix) are dropped and embedded
-   HTML / zero-width characters are stripped from text fields. Output: `ExtractedEvent`s
-   with `title`, `presenter`, `venue`, `performanceDate`, `sourceUrl`. If Carnegie
-   rotates the Algolia key or restructures the index, `AlgoliaCalendar` is the spot to
-   update.
+   `AlgoliaCalendar.swift`). The window opens at midnight New York today and runs 90 days
+   out (Eastern, not UTC). At parse time the feed is cleaned: cancelled performances (a
+   `Cancelled:` title prefix) are dropped and embedded HTML / zero-width characters are
+   stripped from text fields. Output: `ExtractedEvent`s with `title`, `presenter`,
+   `venue`, `performanceDate`, `sourceUrl`. If Carnegie rotates the Algolia key or
+   restructures the index, `AlgoliaCalendar.swift` is the spot to update.
 
-2. **Classify (rules first, then refine the unsure slice).** `run-scout.ts` rule-classifies
-   every event for free (`classifyEvent`), assigning the ranker's inputs from the fit rules in
-   `PLAN.md` section 4 (summarized below). It flags genuinely ambiguous events `uncertain` and
-   writes just those to `~/Library/Application Support/Overture/overture-uncertain.json`, each
-   with the rules' best guess. **You (the Claude step) re-judge only that uncertain slice (#30)**
-   — read the file, decide `production` / `profile` / `coverage` / `discipline` for each using
-   the same rules plus your judgment (e.g. a self-presented orchestra that is actually already
-   covered), and write the results as `overture-refined.json` (an array of
-   `{title, production, profile, coverage, discipline, fit_reason?}`). Canonical samples of both
-   files (the cross-language contract guard, #159) live in `fixtures/scout-refine/`; echo each
-   `title` back verbatim, as it is the join key. Re-run `run-scout.ts`; it merges the refinements
-   over the rules output and marks those events confident. Refining only the unsure slice keeps
-   cost near zero. The rules summary you also apply when refining:
+2. **Classify.** `EventClassifier.swift` rule-classifies every event, assigning the
+   ranker's inputs from the fit rules in `PLAN.md` section 4 (summarized below).
+   Genuinely ambiguous events are marked `.uncertain` rather than guessed at; they still
+   get inserted as prospects, and the review queue (`QueueView`) surfaces any prospect
+   where `confidence == uncertain && !confidenceReviewedByDan` for Dan to correct by
+   hand via `ClassificationOverride.swift`. There is no automated re-judge pass; an
+   earlier Claude-Code-assisted file hand-off for this existed only in the retired
+   TypeScript mirror and was confirmed never actually used in practice. The rules
+   summary, also useful when manually reviewing an uncertain event:
    - `production`: `agency` when presenter is a tour operator / management / a
      "International Competition Winners" or "Rising Stars" showcase rental; `self`
      when the presenter is the performing group itself (a choir, school, ensemble,
@@ -53,16 +46,16 @@ the app's own scout is the live one.
    - `reachable`: true for any venue Dan can reach by transit (section 8).
    - `fit_reason`: one plain sentence, in Dan's terms.
 
-3. **Match + rank + assemble (TS foundation).** Feed each classified event through
-   `matchRelationship` (repeat-client + DNC against the Downbeat export and booking
-   history) and `decideProspect` (drops blocked/suppressed/unreachable, scores the
-   rest). This is the tested engine in `src/lib/`; do not re-implement it.
+3. **Match + rank + assemble.** Each classified event goes through
+   `HistoryMatch.matchRelationship` (repeat-client + DNC against the Downbeat export and
+   booking history) and `ProspectAssembler.decide` (drops blocked/suppressed/unreachable,
+   scores the rest).
 
-4. **Write the results file.** Emit the surviving, ranked prospects as
-   `~/Library/Application Support/Overture/overture-results.json` (the format in
-   `scripts/scout/run-scout.ts` and `mac/.../Domain/ResultsFile.swift`; canonical sample
-   and the cross-language contract guard live in `fixtures/scout-results/`, #157). The Mac
-   app ingests it, upserting by natural key so Dan's keep/dismiss decisions are preserved.
+4. **Upsert into the local store.** `ScoutService.apply` upserts the surviving, ranked
+   prospects directly into SwiftData by natural key, preserving Dan's keep/dismiss
+   decisions. There is no intermediate results file in the live path; `overture-results.json`
+   and its importer (`ResultsImporter.swift`) still exist for a manually-produced file, but
+   nothing writes one anymore now that the TypeScript mirror is retired.
 
 ## Status
 

@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  assertUncertainEventsShape,
-  assertRefinedEventsShape,
   assertPrepQueueShape,
   assertPrepResultsShape,
   assertPrepProgressShape,
@@ -13,8 +11,8 @@ import {
   versionFromFilename,
 } from "./fixtureShape";
 
-// Shape-drift guard (#509) for the 8 contracts where at least one side is not code with no
-// automated test (docs/contracts.md's "CI coverage" section): scout-refine, prep-queue,
+// Shape-drift guard (#509) for the contracts where at least one side is not code with no
+// automated test (docs/contracts.md's "CI coverage" section): prep-queue,
 // prep-results, prep-progress, reply-classify, voice-feedback. This does not test behavior (the
 // non-code side isn't code); it only asserts every fixture actually committed under each
 // directory still matches its documented shape, so a format change on the non-code side that the
@@ -29,22 +27,6 @@ function readJson(dir: string, filename: string): unknown {
 function jsonFilenames(dir: string): string[] {
   return readdirSync(fixtureDir(dir)).filter((f) => f.endsWith(".json"));
 }
-
-describe("scout-refine fixture shapes", () => {
-  const files = jsonFilenames("scout-refine");
-
-  it("covers exactly the known scout-refine files (catches an unrecognized fixture silently added)", () => {
-    expect(files.sort()).toEqual(["refined.json", "uncertain.json"]);
-  });
-
-  it("uncertain.json matches the UncertainEvent[] shape", () => {
-    expect(() => assertUncertainEventsShape(readJson("scout-refine", "uncertain.json"), "uncertain.json")).not.toThrow();
-  });
-
-  it("refined.json matches the EventRefinement[] shape", () => {
-    expect(() => assertRefinedEventsShape(readJson("scout-refine", "refined.json"), "refined.json")).not.toThrow();
-  });
-});
 
 describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");

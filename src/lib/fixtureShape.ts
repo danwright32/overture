@@ -1,11 +1,9 @@
-// Lightweight structural checks for the 7 JSON handoff contracts where one side is a Claude
-// Code workflow, not code (docs/contracts.md's "CI coverage" section): scout-refine, prep-queue,
+// Lightweight structural checks for the JSON handoff contracts where one side is a Claude
+// Code workflow, not code (docs/contracts.md's "CI coverage" section): prep-queue,
 // prep-results, reply-classify, voice-feedback. Full behavioral testing of the workflow side
 // isn't feasible, but catching a fixture that no longer matches its documented shape is (#509).
 // Each checker throws a descriptive error naming the file and the field, so a mismatch reads as
 // a real assertion failure in fixtureShape.test.ts rather than a silent pass.
-
-import type { Candidate } from "./ranker";
 
 function fail(file: string, message: string): never {
   throw new Error(`${file}: ${message}`);
@@ -53,52 +51,9 @@ function requireNonNegativeInt(v: unknown, file: string, path: string): number {
   return v;
 }
 
-const PRODUCTION: readonly Candidate["production"][] = ["self", "agency", "unknown"];
-const PROFILE: readonly Candidate["profile"][] = ["strong", "weak", "neutral"];
-const COVERAGE: readonly Candidate["coverage"][] = ["likely_uncovered", "likely_covered", "unknown"];
-const DISCIPLINE: readonly Candidate["discipline"][] = [
-  "dance",
-  "opera",
-  "theater",
-  "music",
-  "band",
-  "comedy",
-  "other",
-];
+const PRODUCTION = ["self", "agency", "unknown"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
-
-// overture-uncertain.json: UncertainEvent[] (src/lib/refineContract.ts)
-export function assertUncertainEventsShape(data: unknown, file: string): void {
-  const items = requireArray(data, file, "(root)");
-  items.forEach((item, i) => {
-    const o = requireObject(item, file, `[${i}]`);
-    requireString(o.title, file, `[${i}].title`);
-    requireStringOrNull(o.presenter, file, `[${i}].presenter`);
-    requireStringOrNull(o.venue, file, `[${i}].venue`);
-    requireStringOrNull(o.performanceDate, file, `[${i}].performanceDate`);
-    requireStringOrNull(o.sourceUrl, file, `[${i}].sourceUrl`);
-    const guess = requireObject(o.rulesGuess, file, `[${i}].rulesGuess`);
-    requireEnum(guess.production, file, `[${i}].rulesGuess.production`, PRODUCTION);
-    requireEnum(guess.profile, file, `[${i}].rulesGuess.profile`, PROFILE);
-    requireEnum(guess.coverage, file, `[${i}].rulesGuess.coverage`, COVERAGE);
-    requireEnum(guess.discipline, file, `[${i}].rulesGuess.discipline`, DISCIPLINE);
-  });
-}
-
-// overture-refined.json: EventRefinement[] (src/lib/refineClassifications.ts)
-export function assertRefinedEventsShape(data: unknown, file: string): void {
-  const items = requireArray(data, file, "(root)");
-  items.forEach((item, i) => {
-    const o = requireObject(item, file, `[${i}]`);
-    requireString(o.title, file, `[${i}].title`);
-    requireEnum(o.production, file, `[${i}].production`, PRODUCTION);
-    requireEnum(o.profile, file, `[${i}].profile`, PROFILE);
-    requireEnum(o.coverage, file, `[${i}].coverage`, COVERAGE);
-    requireEnum(o.discipline, file, `[${i}].discipline`, DISCIPLINE);
-    optionalString(o.fit_reason, file, `[${i}].fit_reason`);
-  });
-}
 
 // overture-prep-queue.json (versions 1-2, additive: production at v2+, #586)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {

@@ -6,18 +6,20 @@ drafted email. See `PLAN.md` for the full product plan.
 
 This repository holds two pieces:
 
-- **The scout engine** (`src/lib/`, `scripts/`): TypeScript, run with `tsx` and tested
-  with `vitest`. Pure, deterministic qualification logic (ranker, repeat-client
-  matcher, prospect assembly) plus the scripts that read the Downbeat client/venue
-  export, import booking history, and write the results handoff file. The agentic
-  scouting/contact-finding/drafting runs as a Claude Code workflow on Dan's Max plan.
 - **The native macOS app** (`mac/`): a SwiftUI app (the review surface Dan lives in),
   generated with `xcodegen` from `mac/project.yml`. It owns a local SwiftData store and
-  ingests the results file the engine writes, the same fire-and-forget file boundary
-  Downbeat uses for its export. Mirrors Downbeat's structure and conventions; keeps
-  Overture's own forest-green and gold brand.
+  runs the whole scout itself, extract, classify, match, rank, assemble, upsert, no
+  TypeScript involved. Mirrors Downbeat's structure and conventions; keeps Overture's
+  own forest-green and gold brand.
+- **The booking-history importer** (`src/lib/`, `scripts/`): a small TypeScript script,
+  run with `tsx` and tested with `vitest`, that one-shot imports the Downbeat booking
+  history CSV into `overture-history.json` for the app to read. The agentic
+  scouting/contact-finding/drafting runs as a Claude Code workflow on Dan's Max plan.
 
-The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
+The earlier Next.js web dashboard was retired once Dan chose a native Mac app. A parallel
+TypeScript scout/classify/rank/assemble pipeline that used to mirror the native app's own logic
+was retired in #493 once it was confirmed unused (the real scout has always run natively) and
+already drifting from the Swift version it mirrored.
 
 ## Working here
 
@@ -27,10 +29,9 @@ The earlier Next.js web dashboard was retired once Dan chose a native Mac app.
   command (#595): the repo's two independent CI jobs (`typecheck-and-test`, `swift-tests`)
   make it easy to run only the Mac app's tests locally, see them pass, and push, only
   learning the TypeScript side would have failed once CI reports it minutes later.
-- Engine: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
-  history import, see `docs/import-history.md`). `pnpm scout [events.json]` mirrors the
-  live scout in TypeScript and writes a reference results file (see
-  `docs/scout-runbook.md`); the real scout runs natively in the Mac app.
+- Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
+  history import, see `docs/import-history.md`). The scout itself is entirely native; see
+  `docs/scout-runbook.md`.
 - Mac app: `cd mac && xcodegen generate`, then `./scripts/run-tests-locked.sh` (wraps
   `xcodebuild -scheme Overture -destination 'platform=macOS' test` in a lock so it can't
   collide with another test run on this Mac; use it instead of raw `xcodebuild test`). A
