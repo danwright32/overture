@@ -563,6 +563,20 @@ struct RecipientTests {
         #expect(r.isSendablePending)
     }
 
+    @Test func looksLikeDuplicateContactDefaultsToFalse() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.looksLikeDuplicateContact == false)
+        #expect(r.looksLikeDuplicateContactDismissed == false)
+    }
+
+    @Test func aRecipientFlaggedAsDuplicateIsNotSendableUntilDismissed() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        r.looksLikeDuplicateContact = true
+        #expect(r.isSendablePending == false)
+        r.looksLikeDuplicateContactDismissed = true
+        #expect(r.isSendablePending == true)
+    }
+
     @MainActor
     @Test func aReplyPausesTheShowsStillPendingContacts() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),

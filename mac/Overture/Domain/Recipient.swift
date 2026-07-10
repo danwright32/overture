@@ -84,6 +84,12 @@ final class Recipient {
     var looksLikePressContact: Bool = false
     var looksLikePressContactDismissed: Bool = false
 
+    // #726: a heuristic guess (DuplicateContactGuard) that this contact is already being pitched
+    // on another still-open prospect for what looks like the same real-world performance, a
+    // safety net for #369's grouping. Dismissible for the same reason as the two flags above.
+    var looksLikeDuplicateContact: Bool = false
+    var looksLikeDuplicateContactDismissed: Bool = false
+
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
     // Why sendState == .suppressed (#542). Only meaningful while sendState == .suppressed; nil for
@@ -273,6 +279,7 @@ final class Recipient {
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
+            && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
