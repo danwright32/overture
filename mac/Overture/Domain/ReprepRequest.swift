@@ -16,16 +16,22 @@ enum ReprepRequest {
     // until every recipient is sendable/sent), so redrafting the shared body after a partial send
     // would silently create two different pitches for the same show. Contacts-only is never
     // restricted by send state, it never touches the text anyone already received.
-    static func apply(_ mode: ReprepMode, to p: Prospect) {
+    // Returns whether the draft-affecting half was actually granted, so a bulk caller can summarize
+    // how many prospects got the full request versus a narrowed one.
+    @discardableResult
+    static func apply(_ mode: ReprepMode, to p: Prospect) -> Bool {
         let draftAllowed = p.sentAt == nil
         switch mode {
         case .draftOnly:
             if draftAllowed { p.reprepDraftRequested = true }
+            return draftAllowed
         case .contactsOnly:
             p.reprepContactsRequested = true
+            return false
         case .both:
             if draftAllowed { p.reprepDraftRequested = true }
             p.reprepContactsRequested = true
+            return draftAllowed
         }
     }
 }

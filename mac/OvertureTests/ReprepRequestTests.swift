@@ -33,10 +33,11 @@ struct ReprepRequestTests {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, sentAt: nil)
 
-        ReprepRequest.apply(.draftOnly, to: p)
+        let draftGranted = ReprepRequest.apply(.draftOnly, to: p)
 
         #expect(p.reprepDraftRequested == true)
         #expect(p.reprepContactsRequested == false)
+        #expect(draftGranted == true)
     }
 
     @Test func contactsOnlyOnUnsentProspectSetsOnlyContactsFlag() throws {
@@ -63,20 +64,22 @@ struct ReprepRequestTests {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, sentAt: Date(timeIntervalSince1970: 10))
 
-        ReprepRequest.apply(.draftOnly, to: p)
+        let draftGranted = ReprepRequest.apply(.draftOnly, to: p)
 
         #expect(p.reprepDraftRequested == false)
         #expect(p.reprepContactsRequested == false)
+        #expect(draftGranted == false)
     }
 
     @Test func bothOnAlreadySentProspectOnlyGrantsContacts() throws {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, sentAt: Date(timeIntervalSince1970: 10))
 
-        ReprepRequest.apply(.both, to: p)
+        let draftGranted = ReprepRequest.apply(.both, to: p)
 
         #expect(p.reprepDraftRequested == false)
         #expect(p.reprepContactsRequested == true)
+        #expect(draftGranted == false)
     }
 
     @Test func contactsOnlyOnAlreadySentProspectStillGrantsContacts() throws {

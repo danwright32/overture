@@ -99,6 +99,16 @@ struct RootView: View {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
     }
 
+    // #367: the bulk action's scope, mirroring ProspectMutations.bulkReprep's own filter so the
+    // menu's disabled state always agrees with what a tap would actually do.
+    private var eligibleForBulkReprep: [Prospect] {
+        allProspects.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
+    }
+
+    private func bulkReprep(_ mode: ReprepMode) {
+        ProspectMutations.bulkReprep(mode, prospects: allProspects, context: context, feedback: feedback)
+    }
+
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
     // ScoutStatus already use in the masthead rather than introducing a second one.
     private var omniFocusStatusLine: String {
@@ -181,6 +191,15 @@ struct RootView: View {
                         }
                         .keyboardShortcut("p", modifiers: .command)
                         .disabled(!canStartPrep)
+                        // #367: re-prep everything already drafted/approved in one go; each choice
+                        // just flags the eligible prospects and they ride along in the next
+                        // "Prep kept" run above, no separate run/launch of its own.
+                        Menu("Re-prep kept") {
+                            Button("Redraft only") { bulkReprep(.draftOnly) }
+                            Button("Find contacts only") { bulkReprep(.contactsOnly) }
+                            Button("Redraft and find contacts") { bulkReprep(.both) }
+                        }
+                        .disabled(eligibleForBulkReprep.isEmpty)
                     } label: {
                         if isScanning {
                             LiveRunLabel(base: "Scouting", since: scoutStartedAt,
