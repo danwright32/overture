@@ -336,4 +336,21 @@ struct ProspectMutationsTests {
         #expect(sender.sent.count == 1)
         #expect(r.conversationRemindedAt != nil)
     }
+
+    // #718: overriding records the EXACT current draft body, so a later edit to different text
+    // silently invalidates it (Recipient.isSendablePending/Prospect.isSalutationReviewOverridden
+    // compare against this stored copy, not a bare boolean).
+    @Test func overrideSalutationReviewRecordsTheCurrentDraftBody() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        p.draftBody = "Hi 2026 season, here is what we offer."
+        p.draftNeedsSalutationReview = true
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.overrideSalutationReview(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.draftSalutationReviewOverriddenBody == "Hi 2026 season, here is what we offer.")
+        #expect(p.isSalutationReviewOverridden == true)
+    }
 }

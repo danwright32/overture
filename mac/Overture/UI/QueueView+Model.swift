@@ -52,6 +52,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #407: an old draft still carrying an un-strippable inline greeting; sending is blocked
     // entirely (Recipient.isSendablePending) until this clears itself on a fresh migration pass.
     var draftNeedsSalutationReview: Bool = false
+    // #718: Dan's deliberate override of the block above, for the exact draft text he confirmed.
+    var salutationReviewOverridden: Bool = false
     var outcomeSourceRaw: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
@@ -520,6 +522,7 @@ extension QueueItem {
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,
             draftNeedsSalutationReview: p.draftNeedsSalutationReview,
+            salutationReviewOverridden: p.isSalutationReviewOverridden,
             outcomeSourceRaw: p.outcomeSourceRaw,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,

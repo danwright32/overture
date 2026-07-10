@@ -170,6 +170,22 @@ struct SendServiceTests {
         #expect(sender.last == nil)
     }
 
+    // #718: an override for the EXACT current body unblocks sending despite the flag.
+    @Test func sendOneSendsWhenTheSalutationReviewFlagIsOverriddenForTheCurrentBody() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
+                              body: "Hi 2026 season, I photograph performing arts in New York.",
+                              ingested: Date(timeIntervalSince1970: 1))
+        p.draftNeedsSalutationReview = true
+        p.draftSalutationReviewOverriddenBody = p.draftBody
+        let sender = CapturingSender()
+
+        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sent == true)
+        #expect(sender.last != nil)
+    }
+
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
         // match can tell a genuine new booking from a pre-existing client.

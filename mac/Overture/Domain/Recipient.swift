@@ -243,11 +243,12 @@ final class Recipient {
     // A contact auto-paused by a reply on the same show (#430) is held back until Dan triages, so it
     // drops out of every send path that reads this predicate. #407: a performance whose draft still
     // carries an old, un-strippable inline greeting is blocked ENTIRELY (every recipient, not just a
-    // differently-named one) until that clears; a recipient with no prospect wired (every bare-
+    // differently-named one) until that clears OR Dan explicitly overrides it (#718,
+    // Prospect.isSalutationReviewOverridden); a recipient with no prospect wired (every bare-
     // Recipient unit test in this file) is unaffected, since there is nothing to check.
     var isSendablePending: Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
-            && prospect?.draftNeedsSalutationReview != true
+            && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and

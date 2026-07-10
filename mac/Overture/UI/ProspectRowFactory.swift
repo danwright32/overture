@@ -25,6 +25,7 @@ enum ProspectRowFactory {
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,
+            onOverrideSalutationReview: { ProspectMutations.overrideSalutationReview(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
             onMarkContact: { rid, resolution, bounced in
                 ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
