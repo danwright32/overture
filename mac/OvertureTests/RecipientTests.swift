@@ -308,6 +308,16 @@ struct RecipientTests {
         #expect(s.contactSourceLinkURL == nil)
     }
 
+    @Test func contactSourceLinkURLIsNilForAnEmptyStringSourceURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilWhenConfidenceIsNotSet() {
+        let s = confidenceSnapshot(confidence: nil, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
     // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
     // a later re-draft can't rewrite the lesson.
