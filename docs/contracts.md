@@ -27,7 +27,7 @@ the workflow's runbook is its spec.
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -159,6 +159,17 @@ a dismissible warning on the review card (`Prospect.alreadyCoveredNote`/`already
 so Dan decides himself whether to deprioritize or skip. Purely additive; the reader's tolerant gate
 (1 through 5) still accepts `v1.json`/`v2.json`/`v3.json`/`v4.json` unchanged, `v5.json` is the
 already-covered spec.
+
+Version 6 (#363) adds an optional `sourceUrl` to a `contacts[]` entry: the page the run actually
+read a high-confidence named contact from, so the app's confidence badge can link Dan through to
+verify it himself instead of asking him to trust an unverifiable "high confidence" label. Only
+ever meaningful when `confidence == "high"`; the app's own display gate
+(`RecipientSnapshot.contactSourceLinkURL`) never shows a link for medium/low regardless of what's
+set, so a stale or mistaken value on a lower-confidence contact is inert rather than misleading.
+Distinct from the existing `formUrl`, which stays the `form_or_dm` contact's own actionable
+submission link; the two fields never carry the same meaning. Purely additive; the reader's
+tolerant gate (1 through 6) still accepts `v1.json`/`v2.json`/`v3.json`/`v4.json`/`v5.json`
+unchanged, `v6.json` is the source-URL spec.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

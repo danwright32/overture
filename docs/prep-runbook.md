@@ -195,14 +195,17 @@ none of the above yields a non-venue contact for a given target, omit that targe
 result with the key echoed and `contacts` absent).
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an
-address actually READ from a real page; set `formUrl` to that source URL. NEVER emit
-a pattern-guessed address (e.g. firstname@org) as high — if you only inferred it, use
-`low` and say so. Confidence mapping: named+read = high, generic inbox = medium,
-form/DM or inferred = low. **For a named performer specifically**, only use `high` if
-the source page corroborates that person against THIS SPECIFIC performance (name plus
-instrument/role/context match, e.g. their own site lists this date/venue or names this
-group) — a bare name match with no such corroboration is a misidentification risk, so
-mark it `low` instead, same as any other unverified guess.
+address actually READ from a real page; set `sourceUrl` to that page's URL (v6, #363:
+the app links the confidence badge to it so Dan can verify it himself, distinct from
+`formUrl`, which stays reserved for a `form_or_dm` contact's own submission link and
+never doubles as a citation). NEVER emit a pattern-guessed address (e.g. firstname@org)
+as high; if you only inferred it, use `low` and say so, and omit `sourceUrl` (only
+ever meaningful at `high`). Confidence mapping: named+read = high, generic inbox =
+medium, form/DM or inferred = low. **For a named performer specifically**, only use
+`high` if the source page corroborates that person against THIS SPECIFIC performance
+(name plus instrument/role/context match, e.g. their own site lists this date/venue or
+names this group); a bare name match with no such corroboration is a misidentification
+risk, so mark it `low` instead, same as any other unverified guess.
 
 **Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
 waterfall above, also watch for an EXPLICIT statement that they already have their own
