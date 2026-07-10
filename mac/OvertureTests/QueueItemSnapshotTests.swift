@@ -89,6 +89,7 @@ struct QueueItemSnapshotTests {
         let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act,
                             contactMethodRaw: "named_decision_maker", contactConfidenceRaw: "high",
                             contactFormURL: "https://x.example/contact", contactSourceURL: "https://act.example/about/staff")
+        act.looksLikeDuplicateContact = true
         p.setRecipients([act])
 
         let item = QueueItem(p)
@@ -97,6 +98,8 @@ struct QueueItemSnapshotTests {
         #expect(a?.contactConfidence == .high)
         #expect(a?.contactFormURL == "https://x.example/contact")
         #expect(a?.contactSourceURL == "https://act.example/about/staff")
+        #expect(a?.looksLikeDuplicateContact == true)
+        #expect(a?.looksLikeDuplicateContactDismissed == false)
     }
 
     // #642 (#634 Phase D): a performer recipient's overrideBody must reach the snapshot the review
