@@ -157,6 +157,50 @@ struct PrepImporterTests {
         #expect(p?.recipients.first?.role == "Director")
     }
 
+    // #363: a high-confidence contact's sourceUrl is captured onto the recipient on first ingest.
+    @Test func capturesSourceURLOnANewHighConfidenceContact() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+
+        let results = PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma Robinson", role: "Marketing Director", email: "emma@act.example",
+                            method: "named_decision_maker", confidence: "high",
+                            formUrl: nil, provenance: "act",
+                            sourceUrl: "https://act.example/about/staff"),
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.contactSourceURL == "https://act.example/about/staff")
+    }
+
+    // #363: a re-run correcting a contact also updates its sourceUrl in place, mirroring how the
+    // same re-run already corrects contactFormURL/contactConfidenceRaw.
+    @Test func reIngestUpdatesSourceURLInPlace() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: "Manager", email: "emma@act.example",
+                            method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act"),
+            ])
+        ]), into: ctx)
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "later", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma Robinson", role: "Director", email: "emma@act.example",
+                            method: "named_decision_maker", confidence: "high",
+                            formUrl: nil, provenance: "act",
+                            sourceUrl: "https://act.example/about/staff"),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 1)
+        #expect(p?.recipients.first?.contactSourceURL == "https://act.example/about/staff")
+    }
+
     // recipientsEditedByDan is a freeze SEPARATE from draftEditedByDan: once Dan has curated the
     // recipient list (manual add/remove, Phase 7), a re-run must not clobber it, even while a body
     // redraft still flows.

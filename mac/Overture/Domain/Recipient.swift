@@ -60,6 +60,13 @@ final class Recipient {
     var contactMethodRaw: String?
     var contactConfidenceRaw: String?
     var contactFormURL: String?
+    // #363: the page this contact was actually read from, so the confidence badge can link Dan
+    // through to verify it himself. Only ever meaningful when contactConfidence == .high;
+    // RecipientSnapshot.contactSourceLinkURL is the single place that gate is enforced for
+    // display, so a stale value left over from a since-downgraded confidence is inert rather
+    // than shown as a false citation. Distinct from contactFormURL, which stays the form_or_dm
+    // contact's own submission link.
+    var contactSourceURL: String?
     // v4 (#640, #634 Phase B): only ever meaningful when provenance == .performer, a direct,
     // second-person draft for THIS recipient, preferred over the shared Prospect.draftBody at send.
     // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
@@ -165,7 +172,7 @@ final class Recipient {
     init(id: String, email: String?, name: String? = nil, role: String? = nil,
          provenance: RecipientProvenance,
          contactMethodRaw: String? = nil, contactConfidenceRaw: String? = nil,
-         contactFormURL: String? = nil) {
+         contactFormURL: String? = nil, contactSourceURL: String? = nil) {
         self.id = id
         self.email = email
         self.name = name
@@ -174,6 +181,7 @@ final class Recipient {
         self.contactMethodRaw = contactMethodRaw
         self.contactConfidenceRaw = contactConfidenceRaw
         self.contactFormURL = contactFormURL
+        self.contactSourceURL = contactSourceURL
     }
 
     // The stable join + dedupe key: the canonicalized email when present, else the form URL (so a

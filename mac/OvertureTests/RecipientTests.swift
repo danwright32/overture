@@ -50,6 +50,15 @@ struct RecipientTests {
         #expect(r.sendStateRaw == "suppressed")
     }
 
+    @Test func contactSourceURLDefaultsToNilAndRoundTripsThroughInit() {
+        let noSource = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(noSource.contactSourceURL == nil)
+
+        let withSource = Recipient(id: "b@act.example", email: "b@act.example", provenance: .act,
+                                   contactSourceURL: "https://act.example/about/staff")
+        #expect(withSource.contactSourceURL == "https://act.example/about/staff")
+    }
+
     // #542: every suppression that predates this field (all of them were booking-freezes) has no raw
     // value stored, so it must read as .bookedElsewhere rather than an unrepresentable nil, or the
     // label for Dan's existing live data would break.
