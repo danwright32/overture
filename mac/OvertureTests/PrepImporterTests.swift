@@ -179,10 +179,13 @@ struct PrepImporterTests {
         #expect(p2?.recipients.first?.looksLikeDuplicateContact == true)
     }
 
-    // #726: two different, un-related recipients within the SAME prospect with different emails
-    // (unusual, but this guard's concern) must never flag each other; the exclusion is by
-    // prospect naturalKey, not by recipient id.
-    @Test func doesNotFlagTwoRecipientsOnTheSameProspectSharingAnEmail() throws {
+    // #726: two different recipients on the SAME prospect, with different emails, never cross-flag
+    // each other (a plain regression check on the importer's wiring). This does NOT exercise the
+    // guard's own naturalKey-based self-exclusion, since two PrepContacts sharing an email in one
+    // batch collapse into a single Recipient row before the guard ever runs (Recipient.makeId
+    // matches by email first). The self-exclusion itself is covered directly at the guard level by
+    // DuplicateContactGuardTests.doesNotFlagTheSameProspectItself.
+    @Test func differentRecipientsOnTheSameProspectNeverCrossFlag() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-07-08", venue: "Carnegie Hall")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
