@@ -26,7 +26,7 @@ the workflow's runbook is its spec.
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -117,7 +117,8 @@ covers the same need, so the file hand-off was dropped rather than ported.
 ### `overture-prep-queue.json` and `overture-prep-results.json`
 
 The app's round trip with the Prep run. The app writes `prep-queue.json` (the kept-undrafted
-prospects that need a contact and a draft, via `PrepQueueBuilder.encode`); the Prep run reads it,
+prospects that need a contact and a draft, plus, since #367, any prospect Dan explicitly flagged
+for re-prep even though it already has one, via `PrepQueueBuilder.encode`); the Prep run reads it,
 does the research and drafting, and writes `prep-results.json`; the app ingests that through
 `PrepImporter`, moving prospects to `drafted` for Dan to review. The `naturalKey` is the opaque join
 key the run must echo back verbatim, never rebuild. The Prep run is the counterpart side with no
@@ -128,6 +129,11 @@ Queue version 2 (#586, #366 Phase 1) adds an optional `production` (`self` / `ag
 from `Prospect.production`/#349) to each item, so the research step knows whether a show is
 self-produced before deciding whether to pursue a named performer directly (#366 Phase 3). Additive;
 `v1.json` stays byte-identical and still decodes with `production` absent (nil).
+
+Queue version 3 (#367) adds an optional `reprepMode` (`draft_only` / `contacts_only`, absent means
+both) to each item, set only when Dan asked to re-prep a prospect that already has a draft, so the
+run knows to skip the corresponding half instead of redoing everything. Additive; `v1.json`/
+`v2.json` stay byte-identical and still decode with it absent (nil).
 
 Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
 the run found for the performance: the act plus at most one real presenting org, each labelled with a

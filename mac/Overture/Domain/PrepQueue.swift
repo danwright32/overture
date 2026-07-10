@@ -23,10 +23,13 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     var possibleMatchName: String?
     var priorRelationship: String
     var production: String?       // v2 (#586): self | agency | unknown, from Prospect.production/#349
+    // v3 (#367): "draft_only" | "contacts_only", absent means do both. Set only for a prospect Dan
+    // asked to re-prep; tells the run which half to skip for this item.
+    var reprepMode: String? = nil
 }
 
 enum PrepQueueBuilder {
-    static let version = 2
+    static let version = 3
 
     // A prospect is "to prep" when Dan kept it (.queued) and it has no draft yet, OR (#367) he
     // explicitly asked for a re-prep on a prospect that already has one, restricted to statuses

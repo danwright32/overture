@@ -12,10 +12,13 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `2`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  (`PrepQueue` version `3`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `discipline`, `websiteURL`, `sourceListingURL`,
-  `possibleMatchName`, `priorRelationship`, `production`). `production` is
-  `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`).
+  `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`). `production` is
+  `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`). `reprepMode` is
+  `draft_only` / `contacts_only`; absent (the normal case for a fresh, never-drafted prospect)
+  means do both, exactly as today. See "Re-prep mode" under "Per prospect" below for what each
+  value means for that item.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
   optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
@@ -102,6 +105,23 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
    (e.g. performative enthusiasm). On any conflict, the skill wins.
 
 ## Per prospect
+
+### 0. Check `reprepMode` (#367)
+
+Before doing anything else for this item, check its `reprepMode`:
+
+- **`contacts_only`:** this prospect already has a draft Dan does not want touched. Run step 1
+  (find the contact) below, but SKIP step 2 (draft the email) entirely: do not emit `draft` on
+  the result for this item at all, not even a copy of the existing text. The app treats an
+  absent `draft` as "nothing to apply" and will leave the existing draft alone; emitting one
+  anyway, even unchanged, risks the app treating it as a real update.
+- **`draft_only`:** skip step 1 (finding the contact) entirely for this item: do not emit
+  `contacts` on the result. Run step 2 (draft the email) as normal.
+- **Absent** (the normal case for a fresh, never-drafted prospect, and also what "re-prep both"
+  requests): run both steps as today, unchanged.
+
+This only changes what you emit for THIS item; it has no effect on any other item in the same
+run.
 
 ### 1. Find the contact (waterfall, PLAN.md §5)
 
@@ -357,8 +377,11 @@ confirm the headless `claude -p` launch and the results file land.
 
 ## Notes
 
-- Already-drafted/approved prospects are excluded from the queue by the app, so the
-  run only works fresh ones. A draft Dan hand-edited is never overwritten on re-ingest
-  (PrepImporter).
+- A fresh (never-drafted) prospect is the normal queue item. Since #367, a drafted or approved
+  prospect can also appear if Dan explicitly asked to re-prep it (see `reprepMode` above); the app
+  never adds one of these without Dan asking. A draft Dan hand-edited is never overwritten on
+  re-ingest (PrepImporter), and the app also defensively ignores a `draft`/`contacts` update the
+  run emits outside what the item's `reprepMode` actually asked for, so getting `reprepMode` wrong
+  degrades gracefully rather than silently overwriting something Dan didn't want touched.
 - Results that match no kept prospect are surfaced by the app ("N didn't match"), not
   swallowed — a sign the key was rebuilt instead of copied.
