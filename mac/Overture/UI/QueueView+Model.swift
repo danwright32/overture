@@ -158,6 +158,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #722: same shape, for a suspected press/media contact.
     var looksLikePressContact: Bool = false
     var looksLikePressContactDismissed: Bool = false
+    // #726: same shape, for a contact already pitched on another still-open prospect for what
+    // looks like the same real-world performance.
+    var looksLikeDuplicateContact: Bool = false
+    var looksLikeDuplicateContactDismissed: Bool = false
 
     // #363: the confidence badge becomes a clickable link to where the contact was actually
     // verified, so "high confidence" is checkable instead of an unverifiable assertion. Gated
@@ -576,6 +580,8 @@ extension RecipientSnapshot {
                   looksLikeVenue: r.looksLikeVenue,
                   looksLikeVenueDismissed: r.looksLikeVenueDismissed,
                   looksLikePressContact: r.looksLikePressContact,
-                  looksLikePressContactDismissed: r.looksLikePressContactDismissed)
+                  looksLikePressContactDismissed: r.looksLikePressContactDismissed,
+                  looksLikeDuplicateContact: r.looksLikeDuplicateContact,
+                  looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed)
     }
 }

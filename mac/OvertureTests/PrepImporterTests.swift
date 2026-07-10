@@ -157,6 +157,105 @@ struct PrepImporterTests {
         #expect(p?.recipients.first?.role == "Director")
     }
 
+    // #726: a contact already pitched on another still-open prospect for what looks like the
+    // same real-world performance (same contact, same venue, close date) gets flagged on ingest.
+    @Test func flagsAContactAlreadyPitchedForANearbyPerformanceAtTheSameVenue() throws {
+        let ctx = ModelContext(try container())
+        _ = keptProspect(ctx, group: "Golden Awards", date: "2026-07-08", venue: "Weill Recital Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: Prospect.makeNaturalKey(groupName: "Golden Awards", performanceDate: "2026-07-08", venue: "Weill Recital Hall"),
+                       contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")])
+        ]), into: ctx)
+
+        let key2 = keptProspect(ctx, group: "Golden Awards Guest Artist Night", date: "2026-07-09", venue: "Weill Recital Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "later", results: [
+            PrepResult(naturalKey: key2,
+                       contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")])
+        ]), into: ctx)
+
+        let p2 = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key2 })).first
+        #expect(p2?.recipients.first?.looksLikeDuplicateContact == true)
+    }
+
+    // #726: two different recipients on the SAME prospect, with different emails, never cross-flag
+    // each other (a plain regression check on the importer's wiring). This does NOT exercise the
+    // guard's own naturalKey-based self-exclusion, since two PrepContacts sharing an email in one
+    // batch collapse into a single Recipient row before the guard ever runs (Recipient.makeId
+    // matches by email first). The self-exclusion itself is covered directly at the guard level by
+    // DuplicateContactGuardTests.doesNotFlagTheSameProspectItself.
+    @Test func differentRecipientsOnTheSameProspectNeverCrossFlag() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-07-08", venue: "Carnegie Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, contacts: [
+                PrepContact(name: "Emma", role: nil, email: "emma@act.example",
+                            method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act"),
+                PrepContact(name: "Lou", role: nil, email: "lou@presenter.example",
+                            method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "presenter"),
+            ])
+        ]), into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.count == 2)
+        #expect(p?.recipients.allSatisfy { $0.looksLikeDuplicateContact == false } == true)
+    }
+
+    // #726: a re-run that CORRECTS the email must reset a previously-set dismissal, mirroring the
+    // existing looksLikeVenueDismissed reset-on-real-change convention.
+    @Test func reIngestResetsDuplicateDismissalWhenEmailActuallyChanges() throws {
+        let ctx = ModelContext(try container())
+        _ = keptProspect(ctx, group: "Golden Awards", date: "2026-07-08", venue: "Weill Recital Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: Prospect.makeNaturalKey(groupName: "Golden Awards", performanceDate: "2026-07-08", venue: "Weill Recital Hall"),
+                       contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")])
+        ]), into: ctx)
+
+        let key2 = keptProspect(ctx, group: "Golden Awards Guest Artist Night", date: "2026-07-09", venue: "Weill Recital Hall")
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "later", results: [
+            PrepResult(naturalKey: key2,
+                       contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")])
+        ]), into: ctx)
+        let p2 = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key2 })).first
+        p2?.recipients.first?.looksLikeDuplicateContactDismissed = true
+        try ctx.save()
+
+        // A later run corrects the email to a genuinely different address.
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "even later", results: [
+            PrepResult(naturalKey: key2,
+                       contacts: [PrepContact(name: nil, role: nil, email: "new@ceremony.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")])
+        ]), into: ctx)
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key2 })).first
+        #expect(after?.recipients.first?.looksLikeDuplicateContactDismissed == false)
+    }
+
+    // #726: same-batch ordering asymmetry, an accepted, documented limitation. When two brand-new
+    // duplicate prospects arrive together in ONE Prep results batch, only whichever is LATER in
+    // the batch's results array sees the earlier one already inserted and gets flagged; the first
+    // one processed correctly sees nothing yet, since it hasn't been inserted at that point.
+    @Test func onlyTheLaterProspectInTheSameBatchGetsFlagged() throws {
+        let ctx = ModelContext(try container())
+        let key1 = keptProspect(ctx, group: "Golden Awards", date: "2026-07-08", venue: "Weill Recital Hall")
+        let key2 = keptProspect(ctx, group: "Golden Awards Guest Artist Night", date: "2026-07-09", venue: "Weill Recital Hall")
+
+        _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
+            PrepResult(naturalKey: key1, contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                                                method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")]),
+            PrepResult(naturalKey: key2, contacts: [PrepContact(name: nil, role: nil, email: "info@ceremony.example",
+                                                                method: "generic_inbox", confidence: "medium", formUrl: nil, provenance: "act")]),
+        ]), into: ctx)
+
+        let p1 = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key1 })).first
+        let p2 = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key2 })).first
+        #expect(p1?.recipients.first?.looksLikeDuplicateContact == false)
+        #expect(p2?.recipients.first?.looksLikeDuplicateContact == true)
+    }
+
     // #363: a high-confidence contact's sourceUrl is captured onto the recipient on first ingest.
     @Test func capturesSourceURLOnANewHighConfidenceContact() throws {
         let ctx = ModelContext(try container())

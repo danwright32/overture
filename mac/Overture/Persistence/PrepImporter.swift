@@ -39,7 +39,7 @@ enum PrepImporter {
                     // from the draft freeze below, so the body redraft still flows).
                     outcome.skippedRecipientEdits += 1
                 } else {
-                    ingestContacts(contacts, into: p)
+                    ingestContacts(contacts, into: p, context: context)
                 }
             }
             if let d = r.draft {
@@ -83,7 +83,7 @@ enum PrepImporter {
     // already-sent recipient is never rewritten (its address is locked): a "corrected" contact for it
     // is dropped rather than appended as a duplicate (#408, audit SUP-017).
     @MainActor
-    private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect) {
+    private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect, context: ModelContext) {
         // A batch that (unexpectedly) carries more than one contact of the same provenance cannot be
         // matched to an existing recipient by provenance alone: the pending/sent fallbacks below would
         // let a later contact in the batch grab and overwrite an earlier one's row (#408). When a
@@ -97,13 +97,15 @@ enum PrepImporter {
             let provenanceIsUnambiguous = (provenanceCounts[c.provenance ?? ""] ?? 0) <= 1
 
             if let existing = p.recipients.first(where: { $0.id == id }) {
-                apply(c, email: email, provenance: provenance, venue: p.venue, to: existing)
+                apply(c, email: email, provenance: provenance, venue: p.venue,
+                     performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey, context: context, to: existing)
             } else if provenanceIsUnambiguous,
                       let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
                 // A corrected email for an existing pending act/presenter (or a form-only recipient
                 // that just gained an email, matched by its form URL #408) updates the row in place.
                 existing.id = id
-                apply(c, email: email, provenance: provenance, venue: p.venue, to: existing)
+                apply(c, email: email, provenance: provenance, venue: p.venue,
+                     performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey, context: context, to: existing)
             } else if provenanceIsUnambiguous,
                       alreadySent(in: p, provenance: provenance) {
                 continue
@@ -119,6 +121,9 @@ enum PrepImporter {
                 if provenance != .manual {
                     recipient.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: email, venue: p.venue)
                     recipient.looksLikePressContact = PressContactGuard.looksLikePressContact(email: email, role: c.role)
+                    recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
+                        email: email, venue: p.venue, performanceDate: p.performanceDate,
+                        excludingProspectKey: p.naturalKey, in: context)
                 }
                 p.addRecipient(recipient)
             }
@@ -152,7 +157,8 @@ enum PrepImporter {
     // Refresh a recipient row's contact fields from a found contact, preserving its send/engagement
     // state. nil fields in the new contact don't erase existing values.
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
-                              venue: String?, to r: Recipient) {
+                              venue: String?, performanceDate: String?, excludingProspectKey: String,
+                              context: ModelContext, to r: Recipient) {
         let priorEmail = r.email
         let priorRole = r.role
         if let email { r.email = email }
@@ -174,12 +180,18 @@ enum PrepImporter {
         // judged wrong, mirroring the #611 alreadyCoveredDismissed reset-on-real-change convention.
         // Never second-guess a manually-added contact.
         if provenance != .manual {
-            if r.email != priorEmail { r.looksLikeVenueDismissed = false }
+            if r.email != priorEmail {
+                r.looksLikeVenueDismissed = false
+                r.looksLikeDuplicateContactDismissed = false
+            }
             r.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: r.email, venue: venue)
             // #722: same reset-on-real-change convention, but role is ALSO a matching signal here,
             // so either the address or the role text changing should prompt fresh scrutiny.
             if r.email != priorEmail || r.role != priorRole { r.looksLikePressContactDismissed = false }
             r.looksLikePressContact = PressContactGuard.looksLikePressContact(email: r.email, role: r.role)
+            r.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
+                email: r.email, venue: venue, performanceDate: performanceDate,
+                excludingProspectKey: excludingProspectKey, in: context)
         }
     }
 

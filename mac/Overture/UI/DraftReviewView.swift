@@ -28,6 +28,7 @@ struct DraftReviewView: View {
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
     // #722: same, for a suspected press/media contact.
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
+    var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -69,6 +70,7 @@ struct DraftReviewView: View {
             contactLine
             venueMatchWarnings
             pressContactWarnings
+            duplicateContactWarnings
             draftBlock
             performerOverridePreviews
             actionRow
@@ -141,6 +143,14 @@ struct DraftReviewView: View {
         recipientWarning(item.contacts.filter { $0.looksLikePressContact && !$0.looksLikePressContactDismissed },
                         message: { "\($0.displayName) may be a press/media contact, not the act; blocked from sending." },
                         dismissLabel: "Not press/media", onDismiss: onDismissPressContactMatch)
+    }
+
+    // #726: same shape as venueMatchWarnings/pressContactWarnings above, for a contact already
+    // pitched on another still-open prospect for what looks like the same real-world performance.
+    @ViewBuilder private var duplicateContactWarnings: some View {
+        recipientWarning(item.contacts.filter { $0.looksLikeDuplicateContact && !$0.looksLikeDuplicateContactDismissed },
+                        message: { "\($0.displayName) may already be pitched for a nearby show; blocked from sending." },
+                        dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
     }
 
     @ViewBuilder private var draftBlock: some View {
