@@ -146,6 +146,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var contactConfidence: ContactConfidence? = nil
     var contactMethod: ContactMethod? = nil
     var contactFormURL: String? = nil
+    // #363: mirrors Recipient.contactSourceURL. See contactSourceLinkURL below for the display
+    // gate (only ever a link at confidence == .high).
+    var contactSourceURL: String? = nil
     // #656: when the newest Gmail delay notice was first seen, or nil if there's never been one
     // (or it was superseded by a fresh reply/bounce/resolution). Drives hasRecentDeliveryDelay.
     var delayNoticeAt: Date? = nil
@@ -155,6 +158,17 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #722: same shape, for a suspected press/media contact.
     var looksLikePressContact: Bool = false
     var looksLikePressContactDismissed: Bool = false
+
+    // #363: the confidence badge becomes a clickable link to where the contact was actually
+    // verified, so "high confidence" is checkable instead of an unverifiable assertion. Gated
+    // here (not in PrepImporter) so a contactSourceURL left over from a since-downgraded
+    // confidence is inert rather than shown as a false citation, mirroring ContactDisplay's own
+    // "decide purely, keep the SwiftUI row dumb" pattern.
+    var contactSourceLinkURL: URL? {
+        guard contactConfidence == .high, let contactSourceURL, !contactSourceURL.isEmpty,
+              let url = URL(string: contactSourceURL), url.scheme != nil else { return nil }
+        return url
+    }
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
@@ -557,6 +571,7 @@ extension RecipientSnapshot {
                   contactConfidence: r.contactConfidence,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
+                  contactSourceURL: r.contactSourceURL,
                   delayNoticeAt: r.delayNoticeAt,
                   looksLikeVenue: r.looksLikeVenue,
                   looksLikeVenueDismissed: r.looksLikeVenueDismissed,

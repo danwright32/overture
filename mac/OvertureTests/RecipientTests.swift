@@ -275,6 +275,39 @@ struct RecipientTests {
         #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
     }
 
+    private func confidenceSnapshot(confidence: ContactConfidence?, sourceURL: String?) -> RecipientSnapshot {
+        RecipientSnapshot(id: "a@act.example", name: "Emma", email: "a@act.example",
+                          role: nil, provenance: .act, sendState: .pending,
+                          replied: false, lastReplyText: nil, resolution: nil,
+                          bounced: false, outcomeSource: nil,
+                          contactConfidence: confidence, contactSourceURL: sourceURL)
+    }
+
+    @Test func contactSourceLinkURLIsSetForHighConfidenceWithAValidURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == URL(string: "https://act.example/about/staff"))
+    }
+
+    @Test func contactSourceLinkURLIsNilForMediumConfidenceEvenWithAURL() {
+        let s = confidenceSnapshot(confidence: .medium, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilForLowConfidenceEvenWithAURL() {
+        let s = confidenceSnapshot(confidence: .low, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilWhenNoSourceURLIsSet() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: nil)
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilForAnUnparseableURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "not a url")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The
     // first substantive edit snapshots the AI original; the committed copy is frozen at send / copy-out so
     // a later re-draft can't rewrite the lesson.
