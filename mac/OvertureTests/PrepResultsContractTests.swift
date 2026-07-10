@@ -133,4 +133,23 @@ struct PrepResultsContractTests {
         #expect(flagged.contacts?.first?.provenance == "presenter")
         #expect(flagged.draft?.subject == "Photographing the French-American Piano Society's recital at Weill Recital Hall.")
     }
+
+    // v6 (#363): an optional sourceUrl on a contacts[] entry, the page the run actually read a
+    // high-confidence contact from, so the app's confidence badge can link Dan through to verify
+    // it himself. Distinct from formUrl, which stays the form_or_dm contact's own submission
+    // link. Only ever meaningful at confidence == "high"; the tolerant gate (1...6) still accepts
+    // the v1/v2/v3/v4/v5 fixtures above.
+    @Test func decodesTheV6FixtureWithASourceURL() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v6.json"))
+        #expect(results.version == 6)
+
+        let multi = results.results[0]
+        #expect(multi.naturalKey == "aurora-strings|2026-03-10|carnegie-hall")
+        #expect(multi.contacts?.count == 2)
+        #expect(multi.contacts?[0].confidence == "high")
+        #expect(multi.contacts?[0].sourceUrl == "https://www.aurorastrings.example/about/staff")
+        // A medium-confidence contact carries no source citation.
+        #expect(multi.contacts?[1].confidence == "medium")
+        #expect(multi.contacts?[1].sourceUrl == nil)
+    }
 }

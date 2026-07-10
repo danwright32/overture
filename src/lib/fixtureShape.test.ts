@@ -47,7 +47,7 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"]);
   });
 
   for (const file of files) {
@@ -81,6 +81,14 @@ describe("prep-results fixture shapes", () => {
     const mutated = readJson("prep-results", "v4.json") as { results: Array<Record<string, unknown>> };
     mutated.results[0].alreadyCoveredNote = "Lists its own photographer.";
     expect(() => assertPrepResultsShape(mutated, "v4.json", 4)).toThrow(/alreadyCoveredNote.*before version 5/);
+  });
+
+  it("rejects a v5 file whose contact already carries the v6 sourceUrl field", () => {
+    const mutated = readJson("prep-results", "v5.json") as {
+      results: Array<{ contacts?: Array<Record<string, unknown>> }>;
+    };
+    mutated.results[0].contacts![0].sourceUrl = "https://example.com/about/staff";
+    expect(() => assertPrepResultsShape(mutated, "v5.json", 5)).toThrow(/sourceUrl.*before version 6/);
   });
 });
 

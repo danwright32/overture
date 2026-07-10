@@ -68,6 +68,11 @@ struct PrepContact: Codable, Equatable, Sendable {
     // draft body for THIS contact, used instead of the shared (third-person) PrepResult.draft.body when
     // emailing a named performer directly rather than a third party describing them.
     var overrideBody: String?
+    // v6 (#363): the page this contact was actually read from, so the app's confidence badge can
+    // link Dan through to verify it himself. Only ever meaningful when confidence == "high" (the
+    // runbook's STRICT verification bar); distinct from formUrl, which stays the form_or_dm
+    // contact's own submission link and never doubles as a citation.
+    var sourceUrl: String?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -85,7 +90,7 @@ enum PrepResultsDecoder {
     // that broke the results reader when its version bumped (#132):
     // bumping the contract leaves a closed range that still accepts older files, so a format
     // change can't silently make the reader reject the new (or old) shape (#140).
-    static let supportedVersion = 5
+    static let supportedVersion = 6
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

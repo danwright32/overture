@@ -78,7 +78,7 @@ struct QueueItemSnapshotTests {
 
     // #654: contactConfidence/contactMethod/contactFormURL move from the lead-level QueueItem fields
     // (deleted) onto each contact's own snapshot, since the display data is genuinely per-recipient.
-    @Test func queueItemCarriesEachContactsOwnConfidenceMethodAndFormURL() throws {
+    @Test func queueItemCarriesEachContactsOwnConfidenceMethodFormURLAndSourceURL() throws {
         let ctx = ModelContext(try makeContainer())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
                          performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
@@ -88,7 +88,7 @@ struct QueueItemSnapshotTests {
         ctx.insert(p)
         let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act,
                             contactMethodRaw: "named_decision_maker", contactConfidenceRaw: "high",
-                            contactFormURL: "https://x.example/contact")
+                            contactFormURL: "https://x.example/contact", contactSourceURL: "https://act.example/about/staff")
         p.setRecipients([act])
 
         let item = QueueItem(p)
@@ -96,6 +96,7 @@ struct QueueItemSnapshotTests {
         #expect(a?.contactMethod == .namedDecisionMaker)
         #expect(a?.contactConfidence == .high)
         #expect(a?.contactFormURL == "https://x.example/contact")
+        #expect(a?.contactSourceURL == "https://act.example/about/staff")
     }
 
     // #642 (#634 Phase D): a performer recipient's overrideBody must reach the snapshot the review

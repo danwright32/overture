@@ -50,6 +50,15 @@ struct RecipientTests {
         #expect(r.sendStateRaw == "suppressed")
     }
 
+    @Test func contactSourceURLDefaultsToNilAndRoundTripsThroughInit() {
+        let noSource = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(noSource.contactSourceURL == nil)
+
+        let withSource = Recipient(id: "b@act.example", email: "b@act.example", provenance: .act,
+                                   contactSourceURL: "https://act.example/about/staff")
+        #expect(withSource.contactSourceURL == "https://act.example/about/staff")
+    }
+
     // #542: every suppression that predates this field (all of them were booking-freezes) has no raw
     // value stored, so it must read as .bookedElsewhere rather than an unrepresentable nil, or the
     // label for Dan's existing live data would break.
@@ -264,6 +273,49 @@ struct RecipientTests {
     @Test func hasRecentDeliveryDelayIsFalseOnceResolved() {
         let s = delaySnapshot(delayNoticeAt: Date(timeIntervalSince1970: 1000), resolution: .booked)
         #expect(!s.hasRecentDeliveryDelay(now: Date(timeIntervalSince1970: 1000 + 60)))
+    }
+
+    private func confidenceSnapshot(confidence: ContactConfidence?, sourceURL: String?) -> RecipientSnapshot {
+        RecipientSnapshot(id: "a@act.example", name: "Emma", email: "a@act.example",
+                          role: nil, provenance: .act, sendState: .pending,
+                          replied: false, lastReplyText: nil, resolution: nil,
+                          bounced: false, outcomeSource: nil,
+                          contactConfidence: confidence, contactSourceURL: sourceURL)
+    }
+
+    @Test func contactSourceLinkURLIsSetForHighConfidenceWithAValidURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == URL(string: "https://act.example/about/staff"))
+    }
+
+    @Test func contactSourceLinkURLIsNilForMediumConfidenceEvenWithAURL() {
+        let s = confidenceSnapshot(confidence: .medium, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilForLowConfidenceEvenWithAURL() {
+        let s = confidenceSnapshot(confidence: .low, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilWhenNoSourceURLIsSet() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: nil)
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilForAnUnparseableURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "not a url")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilForAnEmptyStringSourceURL() {
+        let s = confidenceSnapshot(confidence: .high, sourceURL: "")
+        #expect(s.contactSourceLinkURL == nil)
+    }
+
+    @Test func contactSourceLinkURLIsNilWhenConfidenceIsNotSet() {
+        let s = confidenceSnapshot(confidence: nil, sourceURL: "https://act.example/about/staff")
+        #expect(s.contactSourceLinkURL == nil)
     }
 
     // #463 — the reply-draft voice pair, mirroring the cold path (Prospect.originalDraft*/sentBody). The

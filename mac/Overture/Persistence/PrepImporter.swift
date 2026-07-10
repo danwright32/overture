@@ -110,7 +110,8 @@ enum PrepImporter {
             } else {
                 let recipient = Recipient(id: id, email: email, name: c.name, role: c.role,
                                           provenance: provenance, contactMethodRaw: c.method,
-                                          contactConfidenceRaw: c.confidence, contactFormURL: c.formUrl)
+                                          contactConfidenceRaw: c.confidence, contactFormURL: c.formUrl,
+                                          contactSourceURL: c.sourceUrl)
                 // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
                 // matching guard for why a non-performer contact never carries one.
                 recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
@@ -161,6 +162,7 @@ enum PrepImporter {
         r.contactMethodRaw = c.method ?? r.contactMethodRaw
         r.contactConfidenceRaw = c.confidence ?? r.contactConfidenceRaw
         r.contactFormURL = c.formUrl ?? r.contactFormURL
+        r.contactSourceURL = c.sourceUrl ?? r.contactSourceURL
         // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
         // above, a reclassification AWAY from .performer must CLEAR it rather than preserve it, or a
         // recipient now treated as a generic act/presenter contact would keep stale second-person
