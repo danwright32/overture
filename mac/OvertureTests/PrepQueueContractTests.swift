@@ -65,9 +65,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion2() {
+    @Test func theBuilderNowStampsVersion3() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
-        #expect(q.version == 2)
+        #expect(q.version == 3)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -79,5 +79,15 @@ struct PrepQueueContractTests {
         #expect(decoded.version == 2)
         #expect(decoded.items[0].production == "self")
         #expect(decoded.items[1].production == "agency")
+    }
+
+    // v3 (#367): the queue item gains an optional `reprepMode` ("draft_only" / "contacts_only",
+    // absent means both), so the Prep run knows to skip the corresponding half for a prospect Dan
+    // asked to re-prep. Additive, so the v1/v2 fixtures above still decode with it absent (nil).
+    @Test func theV3FixtureCarriesTheReprepMode() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v3.json"))
+        #expect(decoded.version == 3)
+        #expect(decoded.items[0].reprepMode == "draft_only")
+        #expect(decoded.items[1].reprepMode == "contacts_only")
     }
 }

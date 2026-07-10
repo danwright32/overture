@@ -49,6 +49,35 @@ struct QueueItemSnapshotTests {
         #expect(QueueItem(p).hasPendingRecipient == false)
     }
 
+    // #367: the re-prep flags and eligibility carry through to the view-model so the UI can show a
+    // "Re-prep queued" badge and gate the action to non-terminal statuses.
+    @Test func queueItemCarriesReprepFlagsAndEligibility() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted)
+        p.draftBody = "Hi"
+        ctx.insert(p)
+
+        #expect(QueueItem(p).isReprepQueued == false)
+        #expect(QueueItem(p).isReprepEligible == true)
+
+        p.reprepDraftRequested = true
+        #expect(QueueItem(p).isReprepQueued == true)
+
+        p.status = .contacted
+        #expect(QueueItem(p).isReprepEligible == false)
+
+        p.status = .dismissed
+        #expect(QueueItem(p).isReprepEligible == false)
+
+        p.status = .approved
+        #expect(QueueItem(p).isReprepEligible == true)
+    }
+
     // #418 B1 — QueueItem carries per-contact snapshots in send order (act before presenter) for the
     // conversation surface, with each contact's reply text and a derived status.
     @Test func queueItemBuildsContactSnapshotsInSendOrder() throws {

@@ -41,6 +41,23 @@ struct StageNavigationTests {
         #expect(keys == ["kept-no-draft"])
     }
 
+    // #367: a drafted prospect flagged for re-prep also belongs on the Prep pill, even though it
+    // already has a draft, so tapping the pill takes Dan to everything actually pending a run.
+    @MainActor
+    @Test func prepStageAlsoIncludesReprepFlaggedProspects() throws {
+        let ctx = makeContext()
+        _ = prospect(ctx, key: "kept-no-draft", status: .queued, hasDraft: false)
+        let flaggedDrafted = prospect(ctx, key: "flagged-drafted", status: .drafted, hasDraft: true)
+        flaggedDrafted.reprepContactsRequested = true
+        let flaggedApproved = prospect(ctx, key: "flagged-approved", status: .approved, hasDraft: true)
+        flaggedApproved.reprepDraftRequested = true
+        _ = prospect(ctx, key: "unflagged-drafted", status: .drafted, hasDraft: true)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let keys = Set(StageNavigation.naturalKeys(forStage: "Prep", in: all))
+        #expect(keys == Set(["kept-no-draft", "flagged-drafted", "flagged-approved"]))
+    }
+
     @MainActor
     @Test func reviewStageIsDrafted() throws {
         let ctx = makeContext()

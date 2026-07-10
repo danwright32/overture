@@ -354,6 +354,51 @@ struct ProspectMutationsTests {
         #expect(p.isSalutationReviewOverridden == true)
     }
 
+    // #367: the per-prospect re-prep action just delegates to ReprepRequest.apply and saves.
+    @Test func reprepAppliesTheRequestedModeAndSaves() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, status: .drafted)
+        p.draftBody = "Hi"
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.reprepContactsRequested == true)
+        #expect(p.reprepDraftRequested == false)
+        #expect(feedback.message != nil)
+    }
+
+    // #367: the bulk action only touches prospects that already have a draft and aren't in a
+    // terminal state; a fresh queued-undrafted prospect is already covered by the normal flow and
+    // must not get double-flagged, and a partially/fully sent one only ever gets the contacts half.
+    @Test func bulkReprepOnlyTouchesEligibleAlreadyDraftedProspects() throws {
+        let ctx = ModelContext(try container())
+        let drafted = makeProspect(ctx, key: "drafted", status: .drafted)
+        drafted.draftBody = "Hi"
+        let approvedSent = makeProspect(ctx, key: "approved-sent", status: .approved)
+        approvedSent.draftBody = "Hi"
+        approvedSent.sentAt = Date(timeIntervalSince1970: 10)
+        let freshQueued = makeProspect(ctx, key: "fresh", status: .queued)   // no draft yet
+        let contacted = makeProspect(ctx, key: "contacted", status: .contacted)
+        contacted.draftBody = "Hi"
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.bulkReprep(.both, prospects: [drafted, approvedSent, freshQueued, contacted],
+                                     context: ctx, feedback: feedback)
+
+        #expect(drafted.reprepDraftRequested == true)
+        #expect(drafted.reprepContactsRequested == true)
+        #expect(approvedSent.reprepDraftRequested == false)   // already sent: draft half refused
+        #expect(approvedSent.reprepContactsRequested == true)
+        #expect(freshQueued.reprepDraftRequested == false)    // not eligible for bulk re-prep
+        #expect(freshQueued.reprepContactsRequested == false)
+        #expect(contacted.reprepDraftRequested == false)      // terminal status: untouched
+        #expect(contacted.reprepContactsRequested == false)
+        #expect(feedback.message != nil)
+    }
+
     // #388: dismissing a specific contact's venue-match guess clears it for THAT recipient only.
     @Test func dismissVenueMatchClearsTheFlagForThatRecipient() throws {
         let ctx = ModelContext(try container())

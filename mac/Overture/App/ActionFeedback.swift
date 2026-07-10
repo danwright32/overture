@@ -68,6 +68,40 @@ enum ActionAck {
         "Updated \(org)'s classification"
     }
 
+    // #367: the per-prospect re-prep confirmation. draftGranted false for a requested draft-
+    // affecting mode means the show had already been sent to, so only the contacts half applied;
+    // Dan needs to see that narrowing, not just "queued".
+    static func reprepQueued(mode: ReprepMode, draftGranted: Bool, org: String) -> String {
+        switch mode {
+        case .contactsOnly:
+            return "Queued \(org) to find new contacts"
+        case .draftOnly:
+            return draftGranted ? "Queued \(org) to redraft"
+                                : "\(org) has already been sent to, so nothing was queued"
+        case .both:
+            return draftGranted ? "Queued \(org) to redraft and find new contacts"
+                                : "\(org) has already been sent to; queued to find new contacts only"
+        }
+    }
+
+    static let bulkReprepNothingEligible = "No drafted or approved prospects to re-prep"
+
+    // #367: the bulk confirmation must say when the batch was narrowed (some prospects already
+    // sent, so they only got the contacts half) rather than silently applying less than asked.
+    static func bulkReprepQueued(mode: ReprepMode, total: Int, draftGrantedCount: Int) -> String {
+        let prospectWord = total == 1 ? "prospect" : "prospects"
+        guard mode != .contactsOnly else {
+            return "Queued \(total) \(prospectWord) to find new contacts"
+        }
+        let narrowedCount = total - draftGrantedCount
+        guard narrowedCount > 0 else {
+            return "Queued \(total) \(prospectWord) to redraft" + (mode == .both ? " and find new contacts" : "")
+        }
+        let base = mode == .both ? "redraft and find new contacts" : "redraft"
+        return "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
+             + "\(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
+    }
+
     // #499: a non-send mutation (keep/dismiss, draft edit, manual outcome, booking confirm, ...)
     // whose local save fails must say so instead of looking like nothing happened.
     static func saveFailed(org: String) -> String {

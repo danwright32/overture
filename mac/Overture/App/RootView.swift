@@ -34,7 +34,12 @@ struct RootView: View {
     @State private var deepLinkedKeys: [String]?
 
     // Kept prospects with no draft yet: what a Prep run would work on.
-    @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
+    // #367: shares PrepQueueBuilder.needsPrepPredicate rather than an inline #Predicate literal,
+    // so this gate for enabling "Prep kept" stays in lockstep with every other eligibility check
+    // (a #Predicate macro can't call the plain-Swift needsPrep function the other checks use, so
+    // this is the one place the SAME logic has to be expressed a second way; see
+    // PrepQueueEligibilityParityTests for the guard against the two drifting apart).
+    @Query(filter: PrepQueueBuilder.needsPrepPredicate)
     private var toPrep: [Prospect]
 
     // All prospects, for the time-based follow-up due count (#45).
@@ -92,6 +97,16 @@ struct RootView: View {
 
     private var canStartPrep: Bool {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
+    }
+
+    // #367: the bulk action's scope, mirroring ProspectMutations.bulkReprep's own filter so the
+    // menu's disabled state always agrees with what a tap would actually do.
+    private var eligibleForBulkReprep: [Prospect] {
+        allProspects.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
+    }
+
+    private func bulkReprep(_ mode: ReprepMode) {
+        ProspectMutations.bulkReprep(mode, prospects: allProspects, context: context, feedback: feedback)
     }
 
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
@@ -176,6 +191,15 @@ struct RootView: View {
                         }
                         .keyboardShortcut("p", modifiers: .command)
                         .disabled(!canStartPrep)
+                        // #367: re-prep everything already drafted/approved in one go; each choice
+                        // just flags the eligible prospects and they ride along in the next
+                        // "Prep kept" run above, no separate run/launch of its own.
+                        Menu("Re-prep kept") {
+                            Button("Redraft only") { bulkReprep(.draftOnly) }
+                            Button("Find contacts only") { bulkReprep(.contactsOnly) }
+                            Button("Redraft and find contacts") { bulkReprep(.both) }
+                        }
+                        .disabled(eligibleForBulkReprep.isEmpty)
                     } label: {
                         if isScanning {
                             LiveRunLabel(base: "Scouting", since: scoutStartedAt,

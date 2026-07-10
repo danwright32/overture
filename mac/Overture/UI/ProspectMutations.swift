@@ -188,6 +188,35 @@ enum ProspectMutations {
         }
     }
 
+    // #367: queue this one prospect for the next Prep run even though it already has a draft.
+    static func reprep(_ item: QueueItem, mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        let draftGranted = ReprepRequest.apply(mode, to: model)
+        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
+            feedback.acknowledge(ActionAck.reprepQueued(mode: mode, draftGranted: draftGranted, org: item.groupName))
+        }
+    }
+
+    // #367: apply the requested mode to every eligible prospect (already has a draft, not yet
+    // contacted or dismissed) in one go; a queued-undrafted prospect is already covered by the
+    // normal Prep flow and is skipped rather than double-flagged.
+    static func bulkReprep(_ mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        let eligible = prospects.filter {
+            $0.hasDraft && ($0.status == .drafted || $0.status == .approved)
+        }
+        guard !eligible.isEmpty else {
+            feedback.acknowledge(ActionAck.bulkReprepNothingEligible, tone: .warning)
+            return
+        }
+        var draftGrantedCount = 0
+        for p in eligible {
+            if ReprepRequest.apply(mode, to: p) { draftGrantedCount += 1 }
+        }
+        if context.saveOrWarn(org: "the queue", feedback: feedback) {
+            feedback.acknowledge(ActionAck.bulkReprepQueued(mode: mode, total: eligible.count, draftGrantedCount: draftGrantedCount))
+        }
+    }
+
     static func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?,
                                       prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }

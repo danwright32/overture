@@ -9,6 +9,8 @@ struct DraftReviewView: View {
     let onApprove: () -> Void
     let onUnapprove: () -> Void
     let onSkip: () -> Void
+    // #367: request a re-prep on a prospect that already has a draft.
+    var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
@@ -187,6 +189,11 @@ struct DraftReviewView: View {
                 if item.draftEditedByDan {
                     Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
                 }
+                // #367: a re-prep still awaiting the next Prep run, distinct from "Edited" (this
+                // just means a run is pending, not that Dan has touched the text).
+                if item.isReprepQueued {
+                    Text("Re-prep queued").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                }
                 draftCheckFlags
             }
         }
@@ -266,6 +273,7 @@ struct DraftReviewView: View {
                     .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    if item.isReprepEligible { reprepMenu }
                     // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as
                     // wrong. It's a fact about the stored text, and clears itself once the draft is
                     // fixed. #718: he CAN override the block itself via a deliberate two-step confirm
@@ -303,6 +311,7 @@ struct DraftReviewView: View {
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                if item.isReprepEligible { reprepMenu }
             }
             if !isApproved { Spacer() }
         }
@@ -312,6 +321,21 @@ struct DraftReviewView: View {
         } message: {
             Text("Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is.")
         }
+    }
+
+    // #367: one button, opens a picker of the three re-prep choices, rather than separate buttons
+    // for each. The draft-affecting choices are disabled once anything has actually been sent for
+    // this prospect (a partial send on a multi-recipient show still leaves it .approved); finding
+    // new contacts never touches text someone already received, so it stays available regardless.
+    private var reprepMenu: some View {
+        Menu("Re-prep") {
+            Button("Redraft only") { onReprep(.draftOnly) }
+                .disabled(item.isSent)
+            Button("Find contacts only") { onReprep(.contactsOnly) }
+            Button("Redraft and find contacts") { onReprep(.both) }
+                .disabled(item.isSent)
+        }
+        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
     }
 
     // Per-contact conversation surface (#418 B1): once a show is sent, list each contact with its

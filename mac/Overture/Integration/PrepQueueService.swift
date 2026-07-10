@@ -14,7 +14,7 @@ enum PrepQueueService {
     static func buildQueue(from context: ModelContext, generatedAt: String) -> PrepQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let items: [PrepQueueItem] = all
-            .filter { PrepQueueBuilder.needsPrep(status: $0.status, hasDraft: $0.hasDraft) }
+            .filter(PrepQueueBuilder.needsPrepEligible)
             .map { p in
                 PrepQueueItem(
                     naturalKey: p.naturalKey,
@@ -26,7 +26,10 @@ enum PrepQueueService {
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
                     priorRelationship: p.priorRelationship,
-                    production: p.production
+                    production: p.production,
+                    reprepMode: PrepQueueBuilder.reprepModeString(
+                        draftRequested: p.reprepDraftRequested,
+                        contactsRequested: p.reprepContactsRequested)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)

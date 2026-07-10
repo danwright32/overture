@@ -63,6 +63,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Empty for a single-contact legacy view; built from prospect.recipients in send order.
     var contacts: [RecipientSnapshot] = []
 
+    // #367: whether Dan asked for a re-prep still awaiting the next Prep run.
+    var reprepDraftRequested: Bool = false
+    var reprepContactsRequested: Bool = false
+
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
         classificationConfidence == Confidence.uncertain.rawValue && !confidenceReviewedByDan
@@ -79,6 +83,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
     var isSent: Bool { sentAt != nil }
+    // #367: a re-prep still awaiting the next Prep run, shown as a small badge (mirrors the
+    // existing "Edited" badge) so Dan can tell which prospects are still waiting versus served.
+    var isReprepQueued: Bool { reprepDraftRequested || reprepContactsRequested }
+    // #367: re-prep is never offered once sent (.contacted) or given up on (.dismissed); redrafting
+    // text already sent, or reviving a dismissed lead, are different actions from re-prep.
+    var isReprepEligible: Bool { status != .contacted && status != .dismissed }
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }
     var hasDraft: Bool { draftBody != nil }
@@ -553,7 +563,9 @@ extension QueueItem {
             disappearedFromFeed: p.disappearedFromFeed,
             contacts: p.recipients
                 .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
-                .map(RecipientSnapshot.init)
+                .map(RecipientSnapshot.init),
+            reprepDraftRequested: p.reprepDraftRequested,
+            reprepContactsRequested: p.reprepContactsRequested
         )
     }
 }

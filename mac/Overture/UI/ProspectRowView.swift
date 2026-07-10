@@ -14,6 +14,8 @@ struct ProspectRowView: View {
     var onApprove: () -> Void = {}
     var onUnapprove: () -> Void = {}
     var onSkipDraft: () -> Void = {}
+    // #367
+    var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
@@ -85,6 +87,7 @@ struct ProspectRowView: View {
                     onApprove: onApprove,
                     onUnapprove: onUnapprove,
                     onSkip: onSkipDraft,
+                    onReprep: onReprep,
                     onSaveDraft: onSaveDraft,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,

@@ -72,6 +72,13 @@ final class Prospect {
     // even while a body redraft still flows. The two freezes are independent.
     var recipientsEditedByDan: Bool = false
 
+    // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
+    // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep
+    // admits a prospect with either flag set even though hasDraft is true. Cleared by PrepImporter
+    // once the run produces any result for this prospect, served or not.
+    var reprepDraftRequested: Bool = false
+    var reprepContactsRequested: Bool = false
+
     // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
     // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
     // frozen at send so a later draft edit can't make the "sent" side lie. Together they let the

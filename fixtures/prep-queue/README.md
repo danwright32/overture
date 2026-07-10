@@ -20,3 +20,8 @@ omitted. `naturalKey` is an opaque token the workflow must echo back verbatim in
 Prep research step knows whether a show is self-produced before deciding whether to pursue a named
 performer directly (#366 Phase 3). Additive, so `v1.json` still decodes with `production` absent
 (nil). Both are asserted by `PrepQueueContractTests`.
+
+`v3.json` (#367) adds an optional `reprepMode` (`draft_only` / `contacts_only`, absent means both)
+to each item. Set only when Dan asks to re-prep a prospect that already has a draft, so the run
+knows to skip the corresponding half instead of redoing everything. Additive, so `v1.json`/`v2.json`
+still decode with it absent (nil). Asserted by `PrepQueueContractTests`.
