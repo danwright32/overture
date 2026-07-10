@@ -237,6 +237,14 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   hour plus tax, one-hour minimum, gallery within two weeks) OR link the contract
   page. Record which in `variant`.
 - **CTA:** soft. "let me know how that lands."
+- **Credential + portfolio link (#365):** work in one of Dan's citable credentials
+  (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
+  Center / Radio City Music Hall venues) plus the portfolio link
+  (danwrightphotography.com), so the pitch carries proof, not just an offer. Tailor
+  which credential leads to the target venue: a Carnegie-venue show leads with the
+  Carnegie tenure, another marquee venue can lead with itself or pair with the
+  Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
+  pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
 
 Hard rules: no em dashes; contractions throughout; NO fabrication (only what's real
 from the listing — never invent performer states); never volunteer the dance
