@@ -415,8 +415,8 @@ struct PrepImporterTests {
         #expect(decoded.results.count == 1)
         #expect(decoded.results[0].draft?.subject == "s")
 
-        #expect(throws: PrepResultsError.unsupportedVersion(6)) {
-            try PrepResultsDecoder.decode(Data(#"{"version":6,"generatedAt":"x","results":[]}"#.utf8))
+        #expect(throws: PrepResultsError.unsupportedVersion(7)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":7,"generatedAt":"x","results":[]}"#.utf8))
         }
         // Below the minimum is rejected too — the gate is a closed range, not an exact match (#140).
         #expect(throws: PrepResultsError.unsupportedVersion(0)) {
