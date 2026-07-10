@@ -49,6 +49,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // dismissible without changing fitScore/tier or the whole prospect's status.
     var alreadyCoveredNote: String? = nil
     var alreadyCoveredDismissed: Bool = false
+    // #407: an old draft still carrying an un-strippable inline greeting; sending is blocked
+    // entirely (Recipient.isSendablePending) until this clears itself on a fresh migration pass.
+    var draftNeedsSalutationReview: Bool = false
     var outcomeSourceRaw: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
@@ -516,6 +519,7 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,
+            draftNeedsSalutationReview: p.draftNeedsSalutationReview,
             outcomeSourceRaw: p.outcomeSourceRaw,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,

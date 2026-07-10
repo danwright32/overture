@@ -7,8 +7,10 @@ import SwiftData
 // as the Phase 1 RecipientBackfill. It is idempotent (a salutation-free body has nothing to strip),
 // so no run-once flag is needed; SalutationStrip leaves ambiguous greetings untouched and flags them.
 enum DraftSalutationMigration {
-    // Strip the leading greeting from every draft where it is safe; flag the ambiguous ones. Returns
-    // how many drafts were actually changed.
+    // Strip the leading greeting from every draft where it is safe; re-derive draftNeedsSalutationReview
+    // from the CURRENT body every run (#407), not a one-way latch, so a draft Dan rewrites by hand or a
+    // fresh Prep re-run clears the flag the next time this runs, instead of staying flagged forever.
+    // Returns how many drafts were actually changed.
     @discardableResult
     static func run(in context: ModelContext) -> Int {
         let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -20,9 +22,7 @@ enum DraftSalutationMigration {
                 prospect.draftBody = result.body
                 normalized += 1
             }
-            if result.needsReview {
-                prospect.draftNeedsSalutationReview = true
-            }
+            prospect.draftNeedsSalutationReview = result.needsReview
         }
         return normalized
     }

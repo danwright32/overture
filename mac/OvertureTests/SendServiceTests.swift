@@ -154,6 +154,22 @@ struct SendServiceTests {
                 "Attn: Jane Doe, PR Associate Director\n\nHello,\n\nI photograph performing arts in New York.")
     }
 
+    // #407: a draft still carrying an old, un-strippable inline greeting must never send at all,
+    // to any recipient, until Dan (or a fresh Prep re-run) actually fixes it.
+    @Test func sendOneNeverSendsWhileTheDraftNeedsSalutationReview() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
+                              body: "Hi 2026 season, I photograph performing arts in New York.",
+                              ingested: Date(timeIntervalSince1970: 1))
+        p.draftNeedsSalutationReview = true
+        let sender = CapturingSender()
+
+        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sent == false)
+        #expect(sender.last == nil)
+    }
+
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
         // match can tell a genuine new booking from a pre-existing client.

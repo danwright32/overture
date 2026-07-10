@@ -217,6 +217,12 @@ struct DraftReviewView: View {
                     .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    // #407: a plain, non-dismissible warning, not a flag Dan can dismiss as wrong.
+                    // It's a fact about the stored text, and clears itself once the draft is fixed.
+                    if item.draftNeedsSalutationReview {
+                        Text("This old draft may still have a name in the greeting Overture couldn't safely remove; edit it before sending.")
+                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                    }
                     if let line = SendFailureLine.text(for: item.sendError) {
                         Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                     }
