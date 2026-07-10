@@ -65,6 +65,13 @@ final class Recipient {
     // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
     var overrideBody: String?
 
+    // #388: a heuristic guess (VenueContactGuard) that this contact's address belongs to the host
+    // venue, not the act/presenter, set on ingest and blocking sendability until Dan dismisses it
+    // (a weaker signal than the runbook's own STRICT venue-disqualify rule for the AI, so it's
+    // reversible rather than absolute).
+    var looksLikeVenue: Bool = false
+    var looksLikeVenueDismissed: Bool = false
+
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
     // Why sendState == .suppressed (#542). Only meaningful while sendState == .suppressed; nil for
@@ -245,10 +252,13 @@ final class Recipient {
     // carries an old, un-strippable inline greeting is blocked ENTIRELY (every recipient, not just a
     // differently-named one) until that clears OR Dan explicitly overrides it (#718,
     // Prospect.isSalutationReviewOverridden); a recipient with no prospect wired (every bare-
-    // Recipient unit test in this file) is unaffected, since there is nothing to check.
+    // Recipient unit test in this file) is unaffected, since there is nothing to check. #388: a
+    // recipient whose address looks like the host venue (VenueContactGuard, set at ingest) is
+    // blocked until Dan dismisses that specific guess as wrong.
     var isSendablePending: Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
+            && !(looksLikeVenue && !looksLikeVenueDismissed)
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and

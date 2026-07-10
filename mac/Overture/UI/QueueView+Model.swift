@@ -149,6 +149,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #656: when the newest Gmail delay notice was first seen, or nil if there's never been one
     // (or it was superseded by a fresh reply/bounce/resolution). Drives hasRecentDeliveryDelay.
     var delayNoticeAt: Date? = nil
+    // #388: a heuristic guess that this address belongs to the host venue, not the act/presenter.
+    var looksLikeVenue: Bool = false
+    var looksLikeVenueDismissed: Bool = false
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
@@ -551,6 +554,8 @@ extension RecipientSnapshot {
                   contactConfidence: r.contactConfidence,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
-                  delayNoticeAt: r.delayNoticeAt)
+                  delayNoticeAt: r.delayNoticeAt,
+                  looksLikeVenue: r.looksLikeVenue,
+                  looksLikeVenueDismissed: r.looksLikeVenueDismissed)
     }
 }

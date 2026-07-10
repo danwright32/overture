@@ -115,6 +115,15 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #388: Dan judged a specific "looks like the venue" heuristic guess to be wrong for this one
+    // contact, unblocking it from sending.
+    static func dismissVenueMatch(_ item: QueueItem, _ recipientId: String,
+                                  prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.looksLikeVenueDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
