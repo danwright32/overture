@@ -68,6 +68,18 @@ enum PrepQueueBuilder {
         }
     }
 
+    // #367: the wire value for a queue item's reprepMode, derived from the prospect's two
+    // independent flags. Both true (a "both" request) or both false (a normal, never-drafted
+    // prospect) both mean "do both", so both collapse to nil, exactly as an absent field always
+    // has: the run's default behavior.
+    static func reprepModeString(draftRequested: Bool, contactsRequested: Bool) -> String? {
+        switch (draftRequested, contactsRequested) {
+        case (true, false): return "draft_only"
+        case (false, true): return "contacts_only"
+        default: return nil
+        }
+    }
+
     static func build(from prospects: [PrepQueueItem], generatedAt: String) -> PrepQueue {
         PrepQueue(version: version, generatedAt: generatedAt, items: prospects)
     }

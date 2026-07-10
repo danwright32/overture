@@ -26,7 +26,10 @@ enum PrepQueueService {
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
                     priorRelationship: p.priorRelationship,
-                    production: p.production
+                    production: p.production,
+                    reprepMode: PrepQueueBuilder.reprepModeString(
+                        draftRequested: p.reprepDraftRequested,
+                        contactsRequested: p.reprepContactsRequested)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)

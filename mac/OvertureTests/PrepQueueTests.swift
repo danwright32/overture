@@ -11,7 +11,10 @@ struct PrepQueueTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func insert(_ ctx: ModelContext, group: String, status: ReviewStatus, hasDraft: Bool = false) {
+    @discardableResult
+    private func insert(_ ctx: ModelContext, group: String, status: ReviewStatus, hasDraft: Bool = false,
+                        reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
+                        sentAt: Date? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "Weill Recital Hall",
                          performanceDate: "2026-07-01", sourceListingURL: "https://src", websiteURL: "https://site",
@@ -19,8 +22,12 @@ struct PrepQueueTests {
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)
         if hasDraft { p.draftSubject = "s"; p.draftBody = "b" }
+        p.reprepDraftRequested = reprepDraftRequested
+        p.reprepContactsRequested = reprepContactsRequested
+        p.sentAt = sentAt
         ctx.insert(p)
         try? ctx.save()
+        return p
     }
 
     @Test func needsPrepOnlyForKeptUndrafted() {
@@ -74,6 +81,44 @@ struct PrepQueueTests {
         #expect(item.websiteURL == "https://site")
         // #366 Phase 1: the AI research step needs to know if a show is self-produced.
         #expect(item.production == "self")
+    }
+
+    // #367: a normal, never-drafted prospect carries no reprepMode (do both, as always).
+    @Test func normalQueuedUndraftedItemCarriesNoReprepMode() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Fresh Choir", status: .queued)
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now")
+        #expect(queue.items.count == 1)
+        #expect(queue.items[0].reprepMode == nil)
+    }
+
+    @Test func reprepDraftOnlyProducesDraftOnlyMode() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Redraft Me", status: .drafted, hasDraft: true, reprepDraftRequested: true)
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now")
+        #expect(queue.items.count == 1)
+        #expect(queue.items[0].reprepMode == "draft_only")
+    }
+
+    @Test func reprepContactsOnlyProducesContactsOnlyMode() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Find Contacts", status: .approved, hasDraft: true, reprepContactsRequested: true)
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now")
+        #expect(queue.items.count == 1)
+        #expect(queue.items[0].reprepMode == "contacts_only")
+    }
+
+    @Test func reprepBothFlagsProducesNoReprepMode() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Both Please", status: .drafted, hasDraft: true,
+              reprepDraftRequested: true, reprepContactsRequested: true)
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now")
+        #expect(queue.items.count == 1)
+        #expect(queue.items[0].reprepMode == nil)
     }
 
     @Test func startPrepWritesWorkListThenReportsRunnerUnavailable() throws {
