@@ -384,7 +384,9 @@ struct QueueView: View {
             .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: s.state == .idle ? 1 : 0))
         }
         .buttonStyle(.plain)
-        .help(s.detail)
+        // #332: the concept sentence (what this pill IS) alongside the live detail (what's in it
+        // right now), so hovering answers "what is this" the first time, not just "how many".
+        .help("\(AgentRoster.conceptSummary(for: s.name)) \(s.detail)")
     }
 
     private func agentColor(_ state: AgentState) -> Color {
