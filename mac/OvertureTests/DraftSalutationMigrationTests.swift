@@ -71,4 +71,19 @@ struct DraftSalutationMigrationTests {
         #expect(secondRun == 0)
         #expect(p.draftBody == "I photograph performing arts.")
     }
+
+    // #407: the flag is re-derived from the CURRENT body every run, not a one-way latch, so it
+    // clears once Dan (or a fresh Prep re-run) actually fixes the draft.
+    @Test func clearsThePreviouslySetFlagOnceTheBodyNoLongerNeedsReview() throws {
+        let ctx = try context()
+        let p = prospect("k1", draft: "Hi 2026 season, here is what we offer.")
+        ctx.insert(p)
+        _ = DraftSalutationMigration.run(in: ctx)
+        #expect(p.draftNeedsSalutationReview == true)
+
+        p.draftBody = "Here is what we offer this season."   // Dan rewrote it by hand
+        _ = DraftSalutationMigration.run(in: ctx)
+
+        #expect(p.draftNeedsSalutationReview == false)
+    }
 }

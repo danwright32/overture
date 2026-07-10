@@ -428,6 +428,39 @@ struct RecipientTests {
         #expect(!r.isSendablePending)         // paused pending a reply triage (#430)
     }
 
+    // #407: a recipient with no prospect wired at all (every existing bare-Recipient test in this
+    // file) must stay governed by its own state alone, never blocked by a flag it has no way to see.
+    @Test func aRecipientWithNoProspectIsUnaffectedByTheSalutationReviewGate() {
+        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        #expect(r.prospect == nil)
+        #expect(r.isSendablePending)
+    }
+
+    @MainActor
+    @Test func aFlaggedDraftBlocksEveryRecipientOnThatPerformance() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.draftNeedsSalutationReview = true
+        ctx.insert(p)
+        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let presenter = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        p.setRecipients([act, presenter])
+
+        // Even the recipient the legacy body was originally written for is blocked (Dan's call:
+        // block entirely, not just the differently-named recipient).
+        #expect(!act.isSendablePending)
+        #expect(!presenter.isSendablePending)
+
+        p.draftNeedsSalutationReview = false
+        #expect(act.isSendablePending)
+        #expect(presenter.isSendablePending)
+    }
+
     @MainActor
     @Test func aReplyPausesTheShowsStillPendingContacts() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
