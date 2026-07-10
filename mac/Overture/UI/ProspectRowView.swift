@@ -17,6 +17,7 @@ struct ProspectRowView: View {
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
+    var onOverrideSalutationReview: () -> Void = {}
     var onDismissReply: () -> Void = {}
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
@@ -84,6 +85,7 @@ struct ProspectRowView: View {
                     onSaveDraft: onSaveDraft,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,
+                    onOverrideSalutationReview: onOverrideSalutationReview,
                     onDismissReply: onDismissReply,
                     onMarkContact: onMarkContact,
                     onSetRecipientConversationState: onSetRecipientConversationState,

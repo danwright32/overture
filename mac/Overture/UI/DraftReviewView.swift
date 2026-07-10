@@ -12,6 +12,9 @@ struct DraftReviewView: View {
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
+    // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
+    // two-step alert (showOverrideConfirm below) rather than firing on a single tap.
+    var onOverrideSalutationReview: () -> Void = {}
     var onDismissReply: () -> Void = {}
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
@@ -53,6 +56,7 @@ struct DraftReviewView: View {
     @State private var showAddContact = false
     @State private var addContactEmail = ""
     @State private var addContactName = ""
+    @State private var showOverrideConfirm = false
 
     private var isApproved: Bool { item.status == .approved }
 
@@ -217,10 +221,18 @@ struct DraftReviewView: View {
                     .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    // #407: a plain, non-dismissible warning, not a flag Dan can dismiss as wrong.
-                    // It's a fact about the stored text, and clears itself once the draft is fixed.
-                    if item.draftNeedsSalutationReview {
+                    // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as
+                    // wrong. It's a fact about the stored text, and clears itself once the draft is
+                    // fixed. #718: he CAN override the block itself via a deliberate two-step confirm
+                    // (a native alert, not a single tap), which then tones the message down rather
+                    // than hiding it, so there's still a visible trail the send happened despite it.
+                    if item.draftNeedsSalutationReview && !item.salutationReviewOverridden {
                         Text("This old draft may still have a name in the greeting Overture couldn't safely remove; edit it before sending.")
+                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                        Button("Override") { showOverrideConfirm = true }
+                            .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                    } else if item.draftNeedsSalutationReview && item.salutationReviewOverridden {
+                        Text("Sending despite the greeting warning you confirmed.")
                             .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                     }
                     if let line = SendFailureLine.text(for: item.sendError) {
@@ -248,6 +260,12 @@ struct DraftReviewView: View {
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
             if !isApproved { Spacer() }
+        }
+        .alert("Send anyway?", isPresented: $showOverrideConfirm) {
+            Button("Send Anyway") { onOverrideSalutationReview() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is.")
         }
     }
 

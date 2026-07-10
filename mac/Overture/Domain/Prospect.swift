@@ -55,6 +55,18 @@ final class Prospect {
     // produces a salutation-free body.
     var draftNeedsSalutationReview: Bool = false
 
+    // #718: the EXACT draftBody text Dan explicitly confirmed is fine to send despite the flag
+    // above, deliberately a copy of the text rather than a bare boolean, so a later edit to
+    // DIFFERENT text silently invalidates the override with no extra migration bookkeeping (see
+    // isSalutationReviewOverridden below). `nil` means never overridden (or a stale override).
+    var draftSalutationReviewOverriddenBody: String? = nil
+
+    // True only when the current draftBody is the EXACT text Dan overrode; a mismatch (edited
+    // since, or never overridden) means the #407 block still applies.
+    var isSalutationReviewOverridden: Bool {
+        draftSalutationReviewOverriddenBody != nil && draftSalutationReviewOverriddenBody == draftBody
+    }
+
     // A freeze SEPARATE from draftEditedByDan (#392): set once Dan has curated the recipient list
     // (manual add/remove at approval, Phase 7), so a Prep re-run never clobbers his recipient edits
     // even while a body redraft still flows. The two freezes are independent.

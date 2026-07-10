@@ -225,6 +225,17 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #718: Dan's deliberate, confirmed override of the #407 salutation-review send block, for
+    // when SalutationStrip's heuristic flagged text he's confident is fine to send as-is. Records
+    // the EXACT current draftBody rather than a bare boolean (see
+    // Prospect.isSalutationReviewOverridden), so a later edit to different text silently
+    // invalidates this without any extra reset logic needed here or in the migration.
+    static func overrideSalutationReview(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.draftSalutationReviewOverriddenBody = model.draftBody
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())

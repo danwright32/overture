@@ -461,6 +461,31 @@ struct RecipientTests {
         #expect(presenter.isSendablePending)
     }
 
+    // #718: Dan can override the #407 block for a false-positive flag, but only for the EXACT body
+    // text he approved; a further edit to a different body must not inherit stale permission.
+    @MainActor
+    @Test func anOverriddenFlagUnblocksSendingOnlyForTheExactApprovedBody() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.draftBody = "Hi 2026 season, here is what we offer."
+        p.draftNeedsSalutationReview = true
+        ctx.insert(p)
+        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        p.setRecipients([act])
+        #expect(!act.isSendablePending)
+
+        p.draftSalutationReviewOverriddenBody = p.draftBody
+        #expect(act.isSendablePending)
+
+        p.draftBody = "Hi 2027 season, here is what we offer."   // edited again after overriding
+        #expect(!act.isSendablePending)                          // stale override no longer applies
+    }
+
     @MainActor
     @Test func aReplyPausesTheShowsStillPendingContacts() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
