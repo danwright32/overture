@@ -229,10 +229,26 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   to the act and to a differently-named presenter. A body that opens with "Hi <name>," is a
   wrong result.
 - **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
-- **Opener:** a genuine, specific reason, group + performance named correctly. No
-  throat-clearing ("I hope this finds you well") and no greeting line.
-- **Body, 2-3 sentences:** unobtrusive no-flash documentary coverage; why it fits this
-  performance; a discipline-matched gallery link (below).
+  This formula stays fixed across drafts; the variety budget below goes into the body.
+- **Opener archetype, rotate across the run (#362):** pick ONE of these four shapes
+  for each draft, and don't use the same shape twice in a row within this run:
+  - *Reason-first:* open on the genuine, specific reason for reaching out, group and
+    performance named correctly ("I photograph performing arts in New York and saw
+    [group]'s upcoming [performance]...").
+  - *Credential-first:* open by leading with the relevant credential from the
+    Credential + portfolio bullet below, then connect it to this performance.
+  - *Observation-first:* open on a specific, real detail about the performance,
+    venue, or program (something from the listing, never invented).
+  - *Direct-intent:* a plain, unadorned statement of what Dan does and why he's
+    writing, no throat-clearing.
+
+  No greeting token in any shape ("I hope this finds you well" and "Hi Emma," are
+  both wrong), and never fabricate a detail to fill a shape, if the listing doesn't
+  supply what an archetype needs for this prospect, use a different one.
+- **Body, 2-4 sentences:** unobtrusive no-flash documentary coverage; why it fits this
+  performance; a discipline-matched gallery link (below). Let the length breathe with
+  the archetype and the material, a short punchy draft and a slightly fuller one both
+  read as normal; don't pad to hit a target length.
 - **Offer:** held positively. A/B variant — either state the rate plainly ($250 an
   hour plus tax, one-hour minimum, gallery within two weeks) OR link the contract
   page. Record which in `variant`.
@@ -245,6 +261,10 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   Carnegie tenure, another marquee venue can lead with itself or pair with the
   Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
+- **Anti-repetition within the run (#362):** before finalizing each draft, compare it
+  against the one or two drafts immediately before it in this run. Don't reuse the
+  same opening line, hook, or distinctive phrase back to back. This is a within-run
+  check only, you aren't expected to recall drafts from a previous day's run.
 
 Hard rules: no em dashes; contractions throughout; NO fabrication (only what's real
 from the listing — never invent performer states); never volunteer the dance
