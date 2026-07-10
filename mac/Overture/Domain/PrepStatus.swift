@@ -5,7 +5,8 @@ import Foundation
 // Pure so it is unit-testable; the view formats the relative time.
 
 struct PrepStatus: Equatable, Sendable {
-    var kept: Int          // kept (.queued) with no draft yet, waiting on a Prep run
+    var kept: Int          // waiting on a Prep run: kept (.queued) with no draft yet, or (#367)
+                           // flagged for re-prep
     var drafted: Int       // have a draft awaiting Dan's review (.drafted)
     var approved: Int      // approved to send (.approved)
     var lastRunStartedAt: Date?
@@ -32,8 +33,9 @@ struct PrepStatus: Equatable, Sendable {
     // send (#200): once sent, a prospect is .contacted (or legacy .approved with a send date),
     // so the send date excludes it here and it stops inflating the "approved" figure.
     static func from(prospects: [Prospect], lastRunStartedAt: Date?, running: Bool) -> PrepStatus {
-        PrepStatus(
-            kept: prospects.filter { $0.status == .queued && !$0.hasDraft }.count,
+        let keptCount = prospects.filter(PrepQueueBuilder.needsPrepEligible).count
+        return PrepStatus(
+            kept: keptCount,
             drafted: prospects.filter { $0.status == .drafted }.count,
             approved: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
             lastRunStartedAt: lastRunStartedAt,

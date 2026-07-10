@@ -31,6 +31,32 @@ struct PrepQueueTests {
         #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true) == false)
     }
 
+    // #367: a drafted/approved prospect flagged for re-prep re-enters the queue even though it
+    // already has a draft, but only for the eligible statuses; contacted/dismissed never qualify
+    // no matter what the flags say.
+    @Test func needsPrepAlsoTrueForReprepFlaggedEligibleStatuses() {
+        #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
+                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
+        #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
+                                           reprepDraftRequested: false, reprepContactsRequested: true) == true)
+        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true,
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == true)
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true,
+                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
+    }
+
+    @Test func needsPrepFalseWhenReprepFlagsSetButNoFlagsActuallyTrue() {
+        #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
+                                           reprepDraftRequested: false, reprepContactsRequested: false) == false)
+    }
+
+    @Test func needsPrepNeverTrueForContactedOrDismissedEvenWithReprepFlags() {
+        #expect(PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true,
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true,
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
+    }
+
     @Test func gathersOnlyKeptUndraftedProspectsWithExactKey() throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Kept Choir", status: .queued)

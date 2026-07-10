@@ -43,6 +43,22 @@ struct PrepStatusTests {
         #expect(s.drafted == 1)    // only ToReview
     }
 
+    // #367: a drafted prospect flagged for re-prep must count toward "kept" (to prep) even
+    // though it already has a draft, so the header/menu total reflects real pending work.
+    @MainActor
+    @Test func fromCountsReprepFlaggedDraftedProspectAsKept() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let flagged = prospect(ctx, group: "ReprepMe", status: .drafted, hasDraft: true, sentAt: nil)
+        flagged.reprepDraftRequested = true
+        _ = prospect(ctx, group: "OrdinaryDrafted", status: .drafted, hasDraft: true, sentAt: nil)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let s = PrepStatus.from(prospects: all, lastRunStartedAt: nil, running: false)
+        #expect(s.kept == 1)       // the flagged one
+        #expect(s.drafted == 2)   // both still show as drafted for the review count
+    }
+
     @Test func runningTakesPrecedence() {
         let s = PrepStatus(kept: 3, drafted: 1, approved: 0, lastRunStartedAt: now, running: true)
         #expect(s.summary(now: now).hasPrefix("Prepping 3"))

@@ -9,7 +9,11 @@ enum StageNavigation {
     static func naturalKeys(forStage name: String, in prospects: [Prospect]) -> [String] {
         switch name {
         case "Prep":
-            return prospects.filter { $0.status == .queued && !$0.hasDraft }.map(\.naturalKey)
+            return prospects.filter {
+                PrepQueueBuilder.needsPrep(status: $0.status, hasDraft: $0.hasDraft,
+                                          reprepDraftRequested: $0.reprepDraftRequested,
+                                          reprepContactsRequested: $0.reprepContactsRequested)
+            }.map(\.naturalKey)
         case "Review":
             return prospects.filter { $0.status == .drafted }.map(\.naturalKey)
         case "Send":

@@ -34,7 +34,12 @@ struct RootView: View {
     @State private var deepLinkedKeys: [String]?
 
     // Kept prospects with no draft yet: what a Prep run would work on.
-    @Query(filter: #Predicate<Prospect> { $0.statusRaw == "queued" && $0.draftBody == nil })
+    // #367: shares PrepQueueBuilder.needsPrepPredicate rather than an inline #Predicate literal,
+    // so this gate for enabling "Prep kept" stays in lockstep with every other eligibility check
+    // (a #Predicate macro can't call the plain-Swift needsPrep function the other checks use, so
+    // this is the one place the SAME logic has to be expressed a second way; see
+    // PrepQueueEligibilityParityTests for the guard against the two drifting apart).
+    @Query(filter: PrepQueueBuilder.needsPrepPredicate)
     private var toPrep: [Prospect]
 
     // All prospects, for the time-based follow-up due count (#45).
