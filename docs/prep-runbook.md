@@ -179,11 +179,14 @@ in order, stop at the first that works:
 3. **The target's contact form / Instagram DM** when it publishes no email. Record it
    as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
    tappable link). This outranks any venue inbox.
-4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Emit
-   the presenter as an ADDITIONAL entry in `contacts[]` with `provenance: "presenter"`,
-   alongside the act or performer entries, when you find a real presenting org for the
-   show. At most one presenter, and never the host venue. This step is unchanged and
-   still runs regardless of `production`; the presenter is always additive, never a
+4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Find its
+   contact the SAME way, running steps 1-3 above once more with the presenting org itself as
+   the target (so it too can carry a named decision-maker, a generic inbox with a named
+   contact behind it per #610, or a form/DM). Emit the presenter as an ADDITIONAL entry in
+   `contacts[]` with `provenance: "presenter"`, alongside the act or performer entries, when
+   you find a real presenting org for the show. At most one presenter, and never the host
+   venue. This step is unchanged and still runs regardless of `production`; the presenter is
+   always additive, never a
    fallback for a missing act/performer contact.
 
 Each contact you emit becomes its own entry in `contacts[]` with its own `provenance`. If
