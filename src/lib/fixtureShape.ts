@@ -52,13 +52,14 @@ function requireNonNegativeInt(v: unknown, file: string, path: string): number {
 }
 
 const PRODUCTION = ["self", "agency", "unknown"] as const;
+const REPREP_MODE = ["draft_only", "contacts_only"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-2, additive: production at v2+, #586)
+// overture-prep-queue.json (versions 1-3, additive: production at v2+ #586, reprepMode at v3+ #367)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2]);
+  const version = requireVersion(root.version, file, [1, 2, 3]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const items = requireArray(root.items, file, "items");
@@ -74,6 +75,7 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
     optionalString(o.sourceListingURL, file, `items[${i}].sourceListingURL`);
     optionalString(o.possibleMatchName, file, `items[${i}].possibleMatchName`);
     if (o.production !== undefined) requireEnum(o.production, file, `items[${i}].production`, PRODUCTION);
+    if (o.reprepMode !== undefined) requireEnum(o.reprepMode, file, `items[${i}].reprepMode`, REPREP_MODE);
   });
 }
 
