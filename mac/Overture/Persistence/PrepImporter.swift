@@ -15,6 +15,11 @@ enum PrepImporter {
         var drafted = 0
         var skippedEdited = 0
         var skippedRecipientEdits = 0
+        // #367: the Prep run is prompt-driven, not code, so its result can carry a draft/contacts
+        // update outside what the prospect's own reprep flags actually asked for (e.g. a draft
+        // returned for a contacts-only request). Counts every such update the app refused to apply,
+        // distinct from skippedEdited/skippedRecipientEdits (which mean Dan's own edit wins).
+        var skippedOutOfScope = 0
         var unmatchedKeys: [String] = []
         // #499: set when a context.save() failed, so this run's matches/drafts may not persist.
         var saveFailed = false
@@ -33,11 +38,24 @@ enum PrepImporter {
             }
             outcome.matched += 1
 
+            // #367: what Dan actually asked for this cycle, so a result that carries the other
+            // half anyway (the run misreading reprepMode, or a stale/mismatched item) gets ignored
+            // rather than applied. Both false (a normal, never-flagged prospect) means neither
+            // restriction applies, exactly as before this feature existed.
+            let contactsOnlyRequest = p.reprepContactsRequested && !p.reprepDraftRequested
+            let draftOnlyRequest = p.reprepDraftRequested && !p.reprepContactsRequested
+            // Defensive backstop independent of ReprepRequest's own gate (red-team finding 3): never
+            // apply a draft change once anything has gone out for this prospect, even if such an
+            // item somehow reached ingest.
+            let draftBlockedBySend = p.sentAt != nil
+
             if let contacts = r.contacts, !contacts.isEmpty {
                 if p.recipientsEditedByDan {
                     // Dan curated the recipient list; a re-run never clobbers it (a freeze separate
                     // from the draft freeze below, so the body redraft still flows).
                     outcome.skippedRecipientEdits += 1
+                } else if draftOnlyRequest {
+                    outcome.skippedOutOfScope += 1
                 } else {
                     ingestContacts(contacts, into: p, context: context)
                 }
@@ -47,13 +65,17 @@ enum PrepImporter {
                 // explicitly skips/dismisses it.
                 if p.draftEditedByDan {
                     outcome.skippedEdited += 1
+                } else if contactsOnlyRequest || draftBlockedBySend {
+                    outcome.skippedOutOfScope += 1
                 } else {
                     p.draftSubject = d.subject
                     p.draftBody = d.body
                     p.draftVariant = d.variant
-                    // A fresh draft returns the prospect to "needs review", but never
-                    // silently un-approves one Dan already approved.
-                    if p.status == .queued || p.status == .new || p.status == .drafted {
+                    // A fresh draft returns the prospect to "needs review", but never silently
+                    // un-approves one Dan already approved... except #367's whole point is that a
+                    // real redraft DOES require re-review even from .approved, so Dan can't send
+                    // stale-reviewed text under a changed body.
+                    if p.status == .queued || p.status == .new || p.status == .drafted || p.status == .approved {
                         p.status = .drafted
                     }
                     outcome.drafted += 1
@@ -67,6 +89,11 @@ enum PrepImporter {
                 p.alreadyCoveredNote = note
                 p.alreadyCoveredDismissed = false
             }
+            // #367: the request is "served" once the run has produced any result for this key,
+            // whether applied or skipped above; an item the run never reaches keeps its flags and
+            // correctly rides along again in the next queue.
+            p.reprepDraftRequested = false
+            p.reprepContactsRequested = false
         }
         do {
             try context.save()

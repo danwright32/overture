@@ -50,6 +50,146 @@ struct PrepImporterTests {
         #expect(p?.status == .drafted)
     }
 
+    // #367: a prospect that already has a draft, flagged for re-prep.
+    @discardableResult
+    private func reprepProspect(_ ctx: ModelContext, key: String, status: ReviewStatus = .drafted,
+                                draftEditedByDan: Bool = false,
+                                reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
+                                sentAt: Date? = nil) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: status)
+        p.draftSubject = "Old subject"
+        p.draftBody = "Old body"
+        p.draftEditedByDan = draftEditedByDan
+        p.reprepDraftRequested = reprepDraftRequested
+        p.reprepContactsRequested = reprepContactsRequested
+        p.sentAt = sentAt
+        ctx.insert(p)
+        try? ctx.save()
+        return p
+    }
+
+    // #367: a fresh (non-hand-edited) draft on an approved prospect must revert it to .drafted so
+    // Dan re-reviews before it can send again.
+    @Test func approvedProspectRevertsToDraftedOnGenuineRedraft() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k1", status: .approved, reprepDraftRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey, draft: PrepDraft(subject: "New", body: "New body", variant: "A"))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(outcome.drafted == 1)
+        #expect(p.status == .drafted)
+        #expect(p.draftBody == "New body")
+    }
+
+    @Test func approvedProspectStaysApprovedWhenDraftWasHandEdited() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k2", status: .approved, draftEditedByDan: true, reprepDraftRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey, draft: PrepDraft(subject: "New", body: "New body", variant: "A"))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(outcome.skippedEdited == 1)
+        #expect(p.status == .approved)
+        #expect(p.draftBody == "Old body")
+    }
+
+    @Test func approvedProspectStaysApprovedOnContactsOnlyChange() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k3", status: .approved, reprepContactsRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey, contacts: [
+                PrepContact(name: "New Contact", role: nil, email: "new@example.com",
+                           method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "act")
+            ])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.status == .approved)
+    }
+
+    @Test func reprepFlagsClearAfterIngestWhetherAppliedOrSkipped() throws {
+        let ctx = ModelContext(try container())
+        let applied = reprepProspect(ctx, key: "applied", status: .drafted, reprepDraftRequested: true)
+        let skipped = reprepProspect(ctx, key: "skipped", status: .drafted,
+                                     draftEditedByDan: true, reprepDraftRequested: true, reprepContactsRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: applied.naturalKey, draft: PrepDraft(subject: "New", body: "New body", variant: "A")),
+            PrepResult(naturalKey: skipped.naturalKey, draft: PrepDraft(subject: "New", body: "New body", variant: "A")),
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        #expect(applied.reprepDraftRequested == false)
+        #expect(applied.reprepContactsRequested == false)
+        #expect(skipped.reprepDraftRequested == false)
+        #expect(skipped.reprepContactsRequested == false)
+    }
+
+    // #367 (red-team finding 2): the external Prep run is prompt-driven, not code, so the app must
+    // not trust it to have honored a contacts-only request. If it returns a draft anyway, ignore it.
+    @Test func outOfScopeDraftIsIgnoredForContactsOnlyRequest() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k4", status: .drafted, reprepContactsRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey,
+                      contacts: [PrepContact(name: "New Contact", role: nil, email: "new@example.com",
+                                             method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "act")],
+                      draft: PrepDraft(subject: "Unwanted", body: "Unwanted body", variant: "A"))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.draftBody == "Old body")
+        #expect(p.recipients.count == 1)   // contacts still applied normally
+        #expect(outcome.skippedOutOfScope == 1)
+    }
+
+    @Test func outOfScopeContactsAreIgnoredForDraftOnlyRequest() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k5", status: .drafted, reprepDraftRequested: true)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey,
+                      contacts: [PrepContact(name: "Unwanted Contact", role: nil, email: "unwanted@example.com",
+                                             method: "named_decision_maker", confidence: "high", formUrl: nil, provenance: "act")],
+                      draft: PrepDraft(subject: "New", body: "New body", variant: "A"))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.draftBody == "New body")   // draft still applied normally
+        #expect(p.recipients.isEmpty)
+        #expect(outcome.skippedOutOfScope == 1)
+    }
+
+    // #367 (red-team finding 3): a defensive backstop, independent of ReprepRequest's own gate, in
+    // case a draft-affecting item ever reaches ingest for a prospect something has already been
+    // sent to.
+    @Test func draftChangeIsRefusedOnceSentAtIsSet() throws {
+        let ctx = ModelContext(try container())
+        let p = reprepProspect(ctx, key: "k6", status: .approved, reprepDraftRequested: true,
+                               sentAt: Date(timeIntervalSince1970: 10))
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: p.naturalKey, draft: PrepDraft(subject: "New", body: "New body", variant: "A"))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(p.draftBody == "Old body")
+        #expect(p.status == .approved)
+        #expect(outcome.skippedOutOfScope == 1)
+    }
+
     @Test func reportsUnmatchedKeysInsteadOfSilentlyDropping() throws {
         let ctx = ModelContext(try container())
         let results = PrepResults(version: 2, generatedAt: "now", results: [
