@@ -59,7 +59,8 @@ enum SendService {
         }
 
         let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
-                                body: Salutation.greeting(for: recipient.name) + "\n\n" + effectiveBody)
+                                body: Salutation.attnLine(for: recipient)
+                                    + Salutation.greeting(for: recipient) + "\n\n" + effectiveBody)
         do {
             let receipt = try await sender.send(mail)
             recipient.sentAt = now

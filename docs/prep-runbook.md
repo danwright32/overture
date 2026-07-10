@@ -167,6 +167,15 @@ in order, stop at the first that works:
    performer rarely has one of these), never a press/media/PR inbox, see the hard
    press/media-disqualify rule above. A real email for the target, even a generic one,
    is PREFERRED over a contact form.
+
+   **A named contact behind a generic inbox (#610).** While reading the target's own site for
+   this step, you may also come across a specific individual (e.g. a PR associate director, an
+   administrative director) named on a staff or press page. If so, ALSO set `name` (and `role`
+   when the page states one) on this `generic_inbox` contact, so the app can address the pitch
+   to a specific desk instead of a shared one. Same STRICT verification bar as elsewhere: only
+   an explicit name actually read from a real page counts, never inferred or pattern-guessed.
+   This never changes the contact's `method` or `confidence` (still `generic_inbox` / `medium`)
+   and never applies to a `form_or_dm` contact.
 3. **The target's contact form / Instagram DM** when it publishes no email. Record it
    as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
    tappable link). This outranks any venue inbox.

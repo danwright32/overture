@@ -62,8 +62,9 @@ struct FollowUpTests {
         for banned in ["love to", "thrilled", "excited", "!"] { #expect(final.lowercased().contains(banned) == false) }
     }
 
+    // #610: "Hello," (Dan's preferred wording), not "Hi there,", when there's no contact name.
     @Test func nudgeGreetsGenericallyWhenNoContactName() {
-        #expect(FollowUp.nudgeBody(contactName: nil, groupName: "The Dessoff Choirs", venue: nil).contains("Hi there"))
+        #expect(FollowUp.nudgeBody(contactName: nil, groupName: "The Dessoff Choirs", venue: nil).contains("Hello,"))
     }
 
     // #418 D — per-contact eligibility: the pacing core gates on an `eligible` flag.

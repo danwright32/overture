@@ -86,15 +86,18 @@ struct SendServiceTests {
     // Mirror the live flow: a performance has its act Recipient row before any send runs. The send
     // path reads recipients, not any lead-level field, so a test prospect needs one seeded directly.
     @discardableResult
-    private func seedRecipient(_ p: Prospect, email: String?, name: String?) -> Recipient? {
+    private func seedRecipient(_ p: Prospect, email: String?, name: String?,
+                              role: String? = nil, method: ContactMethod? = nil) -> Recipient? {
         guard let id = Recipient.makeId(email: email, formURL: nil) else { return nil }
-        let r = Recipient(id: id, email: email, name: name, provenance: .act)
+        let r = Recipient(id: id, email: email, name: name, role: role, provenance: .act,
+                          contactMethodRaw: method?.rawValue)
         p.setRecipients([r])
         return r
     }
 
     private func approvedNamed(_ ctx: ModelContext, group: String, name: String?, email: String,
-                               body: String, ingested: Date) -> Prospect {
+                               body: String, ingested: Date,
+                               role: String? = nil, method: ContactMethod? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -103,7 +106,7 @@ struct SendServiceTests {
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
         p.draftSubject = "S"; p.draftBody = body
         ctx.insert(p)
-        seedRecipient(p, email: email, name: name)
+        seedRecipient(p, email: email, name: name, role: role, method: method)
         try? ctx.save()
         return p
     }
@@ -123,7 +126,7 @@ struct SendServiceTests {
         #expect(p.sentBody == "I photograph performing arts in New York.")
     }
 
-    @Test func sendOneGreetsThereWhenNoName() async throws {
+    @Test func sendOneGreetsHelloWhenNoName() async throws {
         let ctx = ModelContext(try container())
         let p = approvedNamed(ctx, group: "Aurora", name: nil, email: "info@act.example",
                               body: "I document dance unobtrusively.",
@@ -132,7 +135,23 @@ struct SendServiceTests {
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
 
-        #expect(sender.last?.body == "Hi there,\n\nI document dance unobtrusively.")
+        #expect(sender.last?.body == "Hello,\n\nI document dance unobtrusively.")
+    }
+
+    // #610: a name Prep found behind a generic-inbox address gets an Attn: line ahead of the
+    // (still impersonal) greeting, so the pitch routes to the right desk in a shared inbox.
+    @Test func sendOneAddsAnAttnLineForANamedGenericInboxContact() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Clarion Society", name: "Jane Doe", email: "info@clarion.example",
+                              body: "I photograph performing arts in New York.",
+                              ingested: Date(timeIntervalSince1970: 1),
+                              role: "PR Associate Director", method: .genericInbox)
+        let sender = CapturingSender()
+
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
+
+        #expect(sender.last?.body ==
+                "Attn: Jane Doe, PR Associate Director\n\nHello,\n\nI photograph performing arts in New York.")
     }
 
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
