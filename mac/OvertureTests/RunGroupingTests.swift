@@ -48,4 +48,49 @@ struct RunGroupingTests {
         #expect(out.count == 2)
         #expect(out.allSatisfy { $0.runEndDate == nil && !$0.partOfRelatedRun })
     }
+
+    // #369: a ceremony and its differently-titled sub-event (a "Guest Artist:" night) at the
+    // same venue on an adjacent date must merge into one run, using GroupNameMatch's existing
+    // name-similarity check instead of exact title equality. The shorter title (the general
+    // ceremony name, not the specific sub-event name) becomes the run's displayed representative.
+    @Test func ceremonySubEventWithGuestArtistTitleMergesWithParentCeremony() {
+        let out = RunGrouping.group([
+            row("Golden Classical Music Awards Ceremony", "2026-07-08", venue: "Weill Recital Hall"),
+            row("Golden Classical Music Awards Ceremony Guest Artist: Aurelia Faidley-Solars, Cello",
+                "2026-07-09", venue: "Weill Recital Hall"),
+        ])
+        #expect(out.count == 1)
+        #expect(out[0].row.groupName == "Golden Classical Music Awards Ceremony")
+        #expect(out[0].runEndDate == "2026-07-09")
+        #expect(out[0].partOfRelatedRun == false)
+        #expect(out[0].runSourceURLs.sorted() == ["u-2026-07-08", "u-2026-07-09"])
+    }
+
+    // #369: the shortest-title tiebreak must win regardless of which night is chronologically
+    // first. Same pair as above with the dates swapped, proving the representative isn't just
+    // "whichever row sorts first" coinciding with the shorter title by chance.
+    @Test func shortestTitleWinsAsRepresentativeEvenWhenItIsTheLaterNight() {
+        let out = RunGrouping.group([
+            row("Golden Classical Music Awards Ceremony Guest Artist: Aurelia Faidley-Solars, Cello",
+                "2026-07-08", venue: "Weill Recital Hall"),
+            row("Golden Classical Music Awards Ceremony", "2026-07-09", venue: "Weill Recital Hall"),
+        ])
+        #expect(out.count == 1)
+        #expect(out[0].row.groupName == "Golden Classical Music Awards Ceremony")
+        #expect(out[0].runEndDate == "2026-07-09")
+    }
+
+    // #369: a genuinely different act sharing both a venue and a long common title prefix must
+    // NOT merge. GroupNameMatch.isConfident requires the shorter name's full token sequence to
+    // appear as a contiguous run inside the longer one; these two diverge partway through
+    // ("The Bright Sparks" vs "The Dizzy Gillespie All Stars"), so it correctly returns false.
+    // Guards against the grouping fix becoming too aggressive.
+    @Test func differentActsAtSameVenueStayUnmergedDespiteSharedPrefix() {
+        let out = RunGrouping.group([
+            row("Jazz at Lincoln Center Presents The Bright Sparks", "2026-07-01", venue: "Rose Theater"),
+            row("Jazz at Lincoln Center Presents The Dizzy Gillespie All Stars", "2026-07-03", venue: "Rose Theater"),
+        ])
+        #expect(out.count == 2)
+        #expect(out.allSatisfy { !$0.partOfRelatedRun })
+    }
 }
