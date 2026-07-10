@@ -28,6 +28,7 @@ struct ProspectRowView: View {
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
+    var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
@@ -96,6 +97,7 @@ struct ProspectRowView: View {
                     onDismissContactBounce: onDismissContactBounce,
                     onDismissVenueMatch: onDismissVenueMatch,
                     onDismissPressContactMatch: onDismissPressContactMatch,
+                    onDismissDuplicateContactMatch: onDismissDuplicateContactMatch,
                     onAddRecipient: onAddRecipient,
                     onRemoveRecipient: onRemoveRecipient,
                     onDraftReply: onDraftReply,
