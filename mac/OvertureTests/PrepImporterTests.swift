@@ -498,4 +498,85 @@ struct PrepImporterTests {
 
         #expect(p.alreadyCoveredNote == "Lists a Photographer in Residence.")
     }
+
+    // MARK: - #388 venue contact guard
+
+    @Test func aFreshVenueMatchingContactIsFlaggedOnIngest() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "publicrelations@carnegiehall.org",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.looksLikeVenue == true)
+        #expect(p?.recipients.first?.looksLikeVenueDismissed == false)
+    }
+
+    @Test func anUnchangedVenueMatchingAddressPreservesDansPriorDismissal() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "publicrelations@carnegiehall.org",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.recipients.first!.looksLikeVenueDismissed = true   // Dan judged this one a false positive
+        try ctx.save()
+
+        _ = PrepImporter.ingest(results, into: ctx)   // a re-run reports the SAME address
+
+        #expect(p.recipients.first?.looksLikeVenueDismissed == true)
+    }
+
+    @Test func aChangedAddressResetsTheDismissalAndReDerivesTheFlag() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "publicrelations@carnegiehall.org",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.recipients.first!.looksLikeVenueDismissed = true
+        try ctx.save()
+
+        let corrected = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "info@frenchamericanpiano.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(corrected, into: ctx)
+
+        #expect(p.recipients.first?.email == "info@frenchamericanpiano.example")
+        #expect(p.recipients.first?.looksLikeVenue == false)
+        #expect(p.recipients.first?.looksLikeVenueDismissed == false)
+    }
+
+    @Test func aManualContactIsNeverCheckedAgainstTheVenue() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "publicrelations@carnegiehall.org",
+                                              method: nil, confidence: nil, formUrl: nil,
+                                              provenance: "manual")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.looksLikeVenue == false)
+    }
 }

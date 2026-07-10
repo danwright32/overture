@@ -106,3 +106,70 @@ struct DraftReviewViewSalutationReviewTests {
         #expect(overridden == false)
     }
 }
+
+// #388: a contact whose address looks like the host venue shows a dismissible warning, listed for
+// EVERY flagged contact (not just the primary one contactLine shows), since a secondary contact
+// (e.g. a presenter) would otherwise be invisible before send.
+@MainActor
+@Suite("DraftReviewView venue-match warning (#388)")
+struct DraftReviewViewVenueMatchTests {
+    private func recipient(id: String, name: String?, looksLikeVenue: Bool, dismissed: Bool = false,
+                           provenance: RecipientProvenance = .act) -> RecipientSnapshot {
+        RecipientSnapshot(id: id, name: name, email: "\(id)@example.com", role: nil, provenance: provenance,
+                          sendState: .pending, replied: false, lastReplyText: nil, resolution: nil,
+                          bounced: false, outcomeSource: nil, looksLikeVenue: looksLikeVenue,
+                          looksLikeVenueDismissed: dismissed)
+    }
+
+    private func item(contacts: [RecipientSnapshot]) -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .approved, draftSubject: "S", draftBody: "Hi", contacts: contacts)
+    }
+
+    @Test func aFlaggedSecondaryContactShowsTheWarningEvenThoughItIsNotThePrimary() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "act", name: "Emma Robinson", looksLikeVenue: false),
+            recipient(id: "presenter", name: nil, looksLikeVenue: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("may be the venue") })
+        _ = try view.inspect().find(button: "Not the venue")
+    }
+
+    @Test func noFlaggedContactsShowNoWarning() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "act", name: "Emma Robinson", looksLikeVenue: false),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("may be the venue") })
+        #expect((try? view.inspect().find(button: "Not the venue")) == nil)
+    }
+
+    @Test func aDismissedFlagShowsNoWarning() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "presenter", name: nil, looksLikeVenue: true, dismissed: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("may be the venue") })
+    }
+
+    @Test func tappingNotTheVenueFiresTheCallbackWithTheRightRecipientId() throws {
+        var dismissedId: String?
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "presenter", name: nil, looksLikeVenue: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+           onDismissVenueMatch: { rid in dismissedId = rid }, outboundSendSince: nil)
+
+        let button = try view.inspect().find(button: "Not the venue")
+        try button.tap()
+
+        #expect(dismissedId == "presenter")
+    }
+}

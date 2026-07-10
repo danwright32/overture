@@ -353,4 +353,19 @@ struct ProspectMutationsTests {
         #expect(p.draftSalutationReviewOverriddenBody == "Hi 2026 season, here is what we offer.")
         #expect(p.isSalutationReviewOverridden == true)
     }
+
+    // #388: dismissing a specific contact's venue-match guess clears it for THAT recipient only.
+    @Test func dismissVenueMatchClearsTheFlagForThatRecipient() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let flagged = Recipient(id: "r1", email: "publicrelations@carnegiehall.example", provenance: .presenter)
+        flagged.looksLikeVenue = true
+        p.recipients = [flagged]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.dismissVenueMatch(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.first?.looksLikeVenueDismissed == true)
+    }
 }

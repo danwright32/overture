@@ -486,6 +486,19 @@ struct RecipientTests {
         #expect(!act.isSendablePending)                          // stale override no longer applies
     }
 
+    // #388: a recipient flagged as looking like the venue is blocked until Dan dismisses that
+    // specific guess; the flag lives on the RECIPIENT itself, not the performance.
+    @Test func aVenueMatchFlagBlocksOnlyThatRecipientUntilDismissed() {
+        let r = Recipient(id: "a@carnegiehall.example", email: "a@carnegiehall.example", provenance: .act)
+        #expect(r.isSendablePending)
+
+        r.looksLikeVenue = true
+        #expect(!r.isSendablePending)
+
+        r.looksLikeVenueDismissed = true
+        #expect(r.isSendablePending)
+    }
+
     @MainActor
     @Test func aReplyPausesTheShowsStillPendingContacts() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),

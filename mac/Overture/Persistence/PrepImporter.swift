@@ -97,13 +97,13 @@ enum PrepImporter {
             let provenanceIsUnambiguous = (provenanceCounts[c.provenance ?? ""] ?? 0) <= 1
 
             if let existing = p.recipients.first(where: { $0.id == id }) {
-                apply(c, email: email, provenance: provenance, to: existing)
+                apply(c, email: email, provenance: provenance, venue: p.venue, to: existing)
             } else if provenanceIsUnambiguous,
                       let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
                 // A corrected email for an existing pending act/presenter (or a form-only recipient
                 // that just gained an email, matched by its form URL #408) updates the row in place.
                 existing.id = id
-                apply(c, email: email, provenance: provenance, to: existing)
+                apply(c, email: email, provenance: provenance, venue: p.venue, to: existing)
             } else if provenanceIsUnambiguous,
                       alreadySent(in: p, provenance: provenance) {
                 continue
@@ -114,6 +114,10 @@ enum PrepImporter {
                 // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
                 // matching guard for why a non-performer contact never carries one.
                 recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
+                // #388: never second-guess a manually-added contact; Dan typed it in himself.
+                if provenance != .manual {
+                    recipient.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: email, venue: p.venue)
+                }
                 p.addRecipient(recipient)
             }
         }
@@ -146,7 +150,8 @@ enum PrepImporter {
     // Refresh a recipient row's contact fields from a found contact, preserving its send/engagement
     // state. nil fields in the new contact don't erase existing values.
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
-                              to r: Recipient) {
+                              venue: String?, to r: Recipient) {
+        let priorEmail = r.email
         if let email { r.email = email }
         r.name = c.name ?? r.name
         r.role = c.role ?? r.role
@@ -159,6 +164,15 @@ enum PrepImporter {
         // recipient now treated as a generic act/presenter contact would keep stale second-person
         // text addressed to them personally.
         r.overrideBody = provenance == .performer ? (c.overrideBody ?? r.overrideBody) : nil
+        // #388: re-derive the venue-match guess fresh on EVERY ingest (never a one-way latch), but
+        // only reset Dan's dismissal of it when the address itself actually changed; a re-run that
+        // reports the SAME still-flagged address must not silently un-dismiss a guess he already
+        // judged wrong, mirroring the #611 alreadyCoveredDismissed reset-on-real-change convention.
+        // Never second-guess a manually-added contact.
+        if provenance != .manual {
+            if r.email != priorEmail { r.looksLikeVenueDismissed = false }
+            r.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: r.email, venue: venue)
+        }
     }
 
     @MainActor

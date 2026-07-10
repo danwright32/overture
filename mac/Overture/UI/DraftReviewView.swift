@@ -24,6 +24,8 @@ struct DraftReviewView: View {
     var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
+    // #388: Dan dismissing a specific heuristic "looks like the venue" guess as wrong.
+    var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -63,6 +65,7 @@ struct DraftReviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             contactLine
+            venueMatchWarnings
             draftBlock
             performerOverridePreviews
             actionRow
@@ -106,6 +109,21 @@ struct DraftReviewView: View {
             }
         }
         .font(.system(size: 12))
+    }
+
+    // #388: contactLine only ever shows the ONE primary contact, so a flagged SECONDARY contact
+    // (e.g. a presenter) would otherwise be invisible before send. Lists every contact currently
+    // flagged, not just the primary. Dismissible (a code guess, weaker than the runbook's own
+    // STRICT venue rule for the AI), unlike the AI's own absolute disqualification.
+    @ViewBuilder private var venueMatchWarnings: some View {
+        ForEach(item.contacts.filter { $0.looksLikeVenue && !$0.looksLikeVenueDismissed }) { c in
+            HStack(spacing: OVSpacing.xs) {
+                Text("\(c.displayName) may be the venue itself, not the act; blocked from sending.")
+                    .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                Button("Not the venue") { onDismissVenueMatch(c.id) }
+                    .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            }
+        }
     }
 
     @ViewBuilder private var draftBlock: some View {
