@@ -579,4 +579,85 @@ struct PrepImporterTests {
         let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
         #expect(p?.recipients.first?.looksLikeVenue == false)
     }
+
+    // MARK: - #722 press contact guard
+
+    @Test func aFreshPressMatchingContactIsFlaggedOnIngest() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: nil, email: "press@frenchamericanpiano.example",
+                                              method: "generic_inbox", confidence: "medium", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.looksLikePressContact == true)
+        #expect(p?.recipients.first?.looksLikePressContactDismissed == false)
+    }
+
+    @Test func anUnchangedPressMatchingContactPreservesDansPriorDismissal() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: "Media Relations Manager", email: "jane@frenchamericanpiano.example",
+                                              method: "named_decision_maker", confidence: "high", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.recipients.first!.looksLikePressContactDismissed = true
+        try ctx.save()
+
+        _ = PrepImporter.ingest(results, into: ctx)   // a re-run reports the SAME email and role
+
+        #expect(p.recipients.first?.looksLikePressContactDismissed == true)
+    }
+
+    @Test func aChangedRoleResetsTheDismissalAndReDerivesTheFlag() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: "Media Relations Manager", email: "jane@frenchamericanpiano.example",
+                                              method: "named_decision_maker", confidence: "high", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+        p.recipients.first!.looksLikePressContactDismissed = true
+        try ctx.save()
+
+        let corrected = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: "Artistic Director", email: "jane@frenchamericanpiano.example",
+                                              method: "named_decision_maker", confidence: "high", formUrl: nil,
+                                              provenance: "presenter")])
+        ])
+        _ = PrepImporter.ingest(corrected, into: ctx)
+
+        #expect(p.recipients.first?.role == "Artistic Director")
+        #expect(p.recipients.first?.looksLikePressContact == false)
+        #expect(p.recipients.first?.looksLikePressContactDismissed == false)
+    }
+
+    @Test func aManualContactIsNeverCheckedAgainstThePressRule() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "French-American Piano Society", date: "2026-09-12", venue: "Weill Recital Hall")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: nil, role: "Media Relations Manager", email: "press@frenchamericanpiano.example",
+                                              method: nil, confidence: nil, formUrl: nil,
+                                              provenance: "manual")])
+        ])
+        _ = PrepImporter.ingest(results, into: ctx)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.recipients.first?.looksLikePressContact == false)
+    }
 }

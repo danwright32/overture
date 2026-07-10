@@ -117,6 +117,7 @@ enum PrepImporter {
                 // #388: never second-guess a manually-added contact; Dan typed it in himself.
                 if provenance != .manual {
                     recipient.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: email, venue: p.venue)
+                    recipient.looksLikePressContact = PressContactGuard.looksLikePressContact(email: email, role: c.role)
                 }
                 p.addRecipient(recipient)
             }
@@ -152,6 +153,7 @@ enum PrepImporter {
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
                               venue: String?, to r: Recipient) {
         let priorEmail = r.email
+        let priorRole = r.role
         if let email { r.email = email }
         r.name = c.name ?? r.name
         r.role = c.role ?? r.role
@@ -172,6 +174,10 @@ enum PrepImporter {
         if provenance != .manual {
             if r.email != priorEmail { r.looksLikeVenueDismissed = false }
             r.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: r.email, venue: venue)
+            // #722: same reset-on-real-change convention, but role is ALSO a matching signal here,
+            // so either the address or the role text changing should prompt fresh scrutiny.
+            if r.email != priorEmail || r.role != priorRole { r.looksLikePressContactDismissed = false }
+            r.looksLikePressContact = PressContactGuard.looksLikePressContact(email: r.email, role: r.role)
         }
     }
 

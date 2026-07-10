@@ -124,6 +124,14 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #722: same shape as dismissVenueMatch above, for a suspected press/media contact.
+    static func dismissPressContactMatch(_ item: QueueItem, _ recipientId: String,
+                                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.looksLikePressContactDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }

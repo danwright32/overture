@@ -72,6 +72,11 @@ final class Recipient {
     var looksLikeVenue: Bool = false
     var looksLikeVenueDismissed: Bool = false
 
+    // #722: same shape as looksLikeVenue above, for the runbook's separate press/media-disqualify
+    // rule (#635); a heuristic guess (PressContactGuard), dismissible for the same reason.
+    var looksLikePressContact: Bool = false
+    var looksLikePressContactDismissed: Bool = false
+
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
     // Why sendState == .suppressed (#542). Only meaningful while sendState == .suppressed; nil for
@@ -259,6 +264,7 @@ final class Recipient {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
             && !(looksLikeVenue && !looksLikeVenueDismissed)
+            && !(looksLikePressContact && !looksLikePressContactDismissed)
     }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and

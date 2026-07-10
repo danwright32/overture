@@ -152,6 +152,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #388: a heuristic guess that this address belongs to the host venue, not the act/presenter.
     var looksLikeVenue: Bool = false
     var looksLikeVenueDismissed: Bool = false
+    // #722: same shape, for a suspected press/media contact.
+    var looksLikePressContact: Bool = false
+    var looksLikePressContactDismissed: Bool = false
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
@@ -556,6 +559,8 @@ extension RecipientSnapshot {
                   contactFormURL: r.contactFormURL,
                   delayNoticeAt: r.delayNoticeAt,
                   looksLikeVenue: r.looksLikeVenue,
-                  looksLikeVenueDismissed: r.looksLikeVenueDismissed)
+                  looksLikeVenueDismissed: r.looksLikeVenueDismissed,
+                  looksLikePressContact: r.looksLikePressContact,
+                  looksLikePressContactDismissed: r.looksLikePressContactDismissed)
     }
 }
