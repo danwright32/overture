@@ -368,4 +368,19 @@ struct ProspectMutationsTests {
 
         #expect(p.recipients.first?.looksLikeVenueDismissed == true)
     }
+
+    // #722: same shape as dismissVenueMatch above, for a suspected press/media contact.
+    @Test func dismissPressContactMatchClearsTheFlagForThatRecipient() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let flagged = Recipient(id: "r1", email: "press@venue.example", provenance: .presenter)
+        flagged.looksLikePressContact = true
+        p.recipients = [flagged]
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.dismissPressContactMatch(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.recipients.first?.looksLikePressContactDismissed == true)
+    }
 }

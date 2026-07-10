@@ -499,6 +499,18 @@ struct RecipientTests {
         #expect(r.isSendablePending)
     }
 
+    // #722: same shape as the venue-match gate above, for a suspected press/media contact.
+    @Test func aPressContactFlagBlocksOnlyThatRecipientUntilDismissed() {
+        let r = Recipient(id: "press@venue.example", email: "press@venue.example", provenance: .act)
+        #expect(r.isSendablePending)
+
+        r.looksLikePressContact = true
+        #expect(!r.isSendablePending)
+
+        r.looksLikePressContactDismissed = true
+        #expect(r.isSendablePending)
+    }
+
     @MainActor
     @Test func aReplyPausesTheShowsStillPendingContacts() throws {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),

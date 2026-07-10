@@ -173,3 +173,68 @@ struct DraftReviewViewVenueMatchTests {
         #expect(dismissedId == "presenter")
     }
 }
+
+// #722: same shape as DraftReviewViewVenueMatchTests above, for a suspected press/media contact.
+@MainActor
+@Suite("DraftReviewView press-contact warning (#722)")
+struct DraftReviewViewPressContactTests {
+    private func recipient(id: String, name: String?, looksLikePressContact: Bool, dismissed: Bool = false,
+                           provenance: RecipientProvenance = .act) -> RecipientSnapshot {
+        RecipientSnapshot(id: id, name: name, email: "\(id)@example.com", role: nil, provenance: provenance,
+                          sendState: .pending, replied: false, lastReplyText: nil, resolution: nil,
+                          bounced: false, outcomeSource: nil, looksLikePressContact: looksLikePressContact,
+                          looksLikePressContactDismissed: dismissed)
+    }
+
+    private func item(contacts: [RecipientSnapshot]) -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .approved, draftSubject: "S", draftBody: "Hi", contacts: contacts)
+    }
+
+    @Test func aFlaggedSecondaryContactShowsTheWarningEvenThoughItIsNotThePrimary() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "act", name: "Emma Robinson", looksLikePressContact: false),
+            recipient(id: "presenter", name: nil, looksLikePressContact: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("may be a press/media contact") })
+        _ = try view.inspect().find(button: "Not press/media")
+    }
+
+    @Test func noFlaggedContactsShowNoWarning() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "act", name: "Emma Robinson", looksLikePressContact: false),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("may be a press/media contact") })
+        #expect((try? view.inspect().find(button: "Not press/media")) == nil)
+    }
+
+    @Test func aDismissedFlagShowsNoWarning() throws {
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "presenter", name: nil, looksLikePressContact: true, dismissed: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("may be a press/media contact") })
+    }
+
+    @Test func tappingNotPressMediaFiresTheCallbackWithTheRightRecipientId() throws {
+        var dismissedId: String?
+        let view = DraftReviewView(item: item(contacts: [
+            recipient(id: "presenter", name: nil, looksLikePressContact: true, provenance: .presenter),
+        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+           onDismissPressContactMatch: { rid in dismissedId = rid }, outboundSendSince: nil)
+
+        let button = try view.inspect().find(button: "Not press/media")
+        try button.tap()
+
+        #expect(dismissedId == "presenter")
+    }
+}
