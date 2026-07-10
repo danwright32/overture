@@ -104,4 +104,18 @@ struct AgentRosterTests {
         var i = calm; i.keptToPrep = 1; i.toReview = 1; i.sendErrors = 1; i.readyToSend = 1
         #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 3)  // Prep, Review, Send
     }
+
+    // #332: first-time user can't tell what each pill means, only its live count. A short,
+    // stable concept sentence per pill (independent of live state) fixes that without touching
+    // the existing per-state `detail` strings above, which stay pinned by the tests above.
+    @Test func conceptSummaryExplainsEachPillAsAWorkQueue() {
+        #expect(AgentRoster.conceptSummary(for: "Prep").contains("draft"))
+        #expect(AgentRoster.conceptSummary(for: "Review").contains("approve"))
+        #expect(AgentRoster.conceptSummary(for: "Send").contains("sent") || AgentRoster.conceptSummary(for: "Send").contains("send"))
+        #expect(AgentRoster.conceptSummary(for: "Follow-ups").contains("reached out"))
+    }
+
+    @Test func conceptSummaryIsEmptyForAnUnknownName() {
+        #expect(AgentRoster.conceptSummary(for: "Nonsense").isEmpty)
+    }
 }

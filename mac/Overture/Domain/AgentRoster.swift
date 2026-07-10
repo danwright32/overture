@@ -40,6 +40,23 @@ enum AgentRoster {
         statuses.filter { $0.state == .needsAttention || $0.state == .error }.count
     }
 
+    // #332: a first-time user could not tell what Prep/Review/Send/Follow-ups each mean, only
+    // their live count. This is a short, stable sentence per pill, independent of the live
+    // `detail` above, meant to be shown ALONGSIDE it (not replacing it) in the pill's tooltip, so
+    // hovering explains both the concept and the current count in one place. Deliberately worded
+    // as a queue ("shows waiting to...") rather than a step in a sequence, since these four are
+    // parallel work queues a single show can skip entirely (e.g. dismissed before Send), not
+    // stages every show passes through in order.
+    static func conceptSummary(for name: String) -> String {
+        switch name {
+        case "Prep": return "Finds a contact and drafts an email for shows you've kept."
+        case "Review": return "Drafts waiting for you to read, edit, and approve."
+        case "Send": return "Approved emails waiting to be sent."
+        case "Follow-ups": return "Nudges due on shows you've already reached out to."
+        default: return ""
+        }
+    }
+
     private static func prep(_ i: AgentInputs) -> AgentStatus {
         if i.prepRunning { return AgentStatus(name: "Prep", state: .working, detail: "Finding contacts and drafting…") }
         if i.keptToPrep > 0 { return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep") }
