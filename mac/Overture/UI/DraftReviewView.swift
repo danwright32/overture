@@ -102,7 +102,7 @@ struct DraftReviewView: View {
                 Text("No contact found").foregroundStyle(OVColor.inkFaint)
             }
             if let conf = primary?.contactConfidence {
-                ConfidencePip(confidence: conf)
+                ConfidencePip(confidence: conf, sourceURL: primary?.contactSourceLinkURL)
             }
             Spacer()
             // The address is echoed small on the right only for a named contact (name on the left,
@@ -619,6 +619,9 @@ extension ReminderAccent {
 
 private struct ConfidencePip: View {
     let confidence: ContactConfidence
+    // #363: when set (only ever at confidence == .high, per RecipientSnapshot.contactSourceLinkURL),
+    // the badge becomes a clickable link to the page the contact was verified on.
+    let sourceURL: URL?
     var body: some View {
         let (label, color): (String, Color) = {
             switch confidence {
@@ -627,10 +630,15 @@ private struct ConfidencePip: View {
             case .low: return ("low confidence", OVColor.rust)
             }
         }()
-        Text(label)
+        let pip = Text(label)
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(color)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.12)))
+        if let sourceURL {
+            Link(destination: sourceURL) { pip }
+        } else {
+            pip
+        }
     }
 }
