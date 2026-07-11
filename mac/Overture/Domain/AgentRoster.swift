@@ -1,8 +1,9 @@
 import Foundation
 
 // Per-stage status so Dan can see at a glance where he's needed, without digging into
-// each agent (#15). Only the stages that can wait on him are here: Prep, Review, Send,
-// Follow-ups; the scout is automatic (#33) and never blocks on a decision. Pure.
+// each agent (#15). The stages that can wait on him are Scout (#370: the keep/dismiss
+// triage on freshly found events), Prep, Review, Send, Follow-ups; the scout RUN itself is
+// automatic (#33) and never blocks on a decision, only its output (undecided prospects) does. Pure.
 enum AgentState: String, Equatable, Sendable {
     case idle, working, needsAttention, error
 }
@@ -19,6 +20,7 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
 }
 
 struct AgentInputs: Sendable {
+    var toTriage: Int        // #370: freshly scouted, undecided (status .new), awaiting keep/dismiss
     var keptToPrep: Int      // kept, no draft yet, waiting on a Prep run
     var prepRunning: Bool
     var toReview: Int        // drafted, awaiting Dan's review/approval
@@ -33,7 +35,7 @@ struct AgentInputs: Sendable {
 
 enum AgentRoster {
     static func statuses(_ i: AgentInputs) -> [AgentStatus] {
-        [prep(i), review(i), send(i), followUps(i)]
+        [scout(i), prep(i), review(i), send(i), followUps(i)]
     }
 
     static func needsYouCount(_ statuses: [AgentStatus]) -> Int {
@@ -49,12 +51,21 @@ enum AgentRoster {
     // stages every show passes through in order.
     static func conceptSummary(for name: String) -> String {
         switch name {
+        case "Scout": return "Freshly found events waiting for you to keep or dismiss."
         case "Prep": return "Finds a contact and drafts an email for shows you've kept."
         case "Review": return "Drafts waiting for you to read, edit, and approve."
         case "Send": return "Approved emails waiting to be sent."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
         default: return ""
         }
+    }
+
+    // #370: the freshly scouted, undecided triage. Deliberately never .working (the scout run
+    // itself already surfaces its own live state via ScoutStatus/isScanning elsewhere); this pill
+    // only reflects its OUTPUT, the backlog still awaiting a keep/dismiss decision.
+    private static func scout(_ i: AgentInputs) -> AgentStatus {
+        if i.toTriage > 0 { return AgentStatus(name: "Scout", state: .needsAttention, detail: "\(i.toTriage) to triage") }
+        return AgentStatus(name: "Scout", state: .idle, detail: "Nothing new")
     }
 
     private static func prep(_ i: AgentInputs) -> AgentStatus {

@@ -6,7 +6,7 @@ import Testing
 // scout is automatic and never blocks on him). This is the pure state computation.
 @Suite("Agent roster status")
 struct AgentRosterTests {
-    private let calm = AgentInputs(keptToPrep: 0, prepRunning: false, toReview: 0,
+    private let calm = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
                                    readyToSend: 0, gmailConnected: true, sendErrors: 0, followUpsDue: 0)
 
     private func status(_ name: String, _ inputs: AgentInputs) -> AgentStatus {
@@ -17,6 +17,19 @@ struct AgentRosterTests {
         let s = AgentRoster.statuses(calm)
         #expect(s.allSatisfy { $0.state == .idle })
         #expect(AgentRoster.needsYouCount(s) == 0)
+    }
+
+    // #370: freshly scouted, undecided prospects (status .new) get their own pill, before Prep,
+    // distinct from the kept-undrafted prospects Prep counts.
+    @Test func scoutNeedsAttentionWithNewProspects() {
+        var i = calm; i.toTriage = 3
+        #expect(status("Scout", i).state == .needsAttention)
+        #expect(status("Scout", i).detail == "3 to triage")
+        #expect(status("Scout", calm).state == .idle)
+    }
+
+    @Test func statusesListsScoutFirst() {
+        #expect(AgentRoster.statuses(calm).first?.name == "Scout")
     }
 
     @Test func prepWorksThenWaits() {
@@ -109,6 +122,7 @@ struct AgentRosterTests {
     // stable concept sentence per pill (independent of live state) fixes that without touching
     // the existing per-state `detail` strings above, which stay pinned by the tests above.
     @Test func conceptSummaryExplainsEachPillAsAWorkQueue() {
+        #expect(AgentRoster.conceptSummary(for: "Scout").contains("keep") || AgentRoster.conceptSummary(for: "Scout").contains("dismiss"))
         #expect(AgentRoster.conceptSummary(for: "Prep").contains("draft"))
         #expect(AgentRoster.conceptSummary(for: "Review").contains("approve"))
         #expect(AgentRoster.conceptSummary(for: "Send").contains("sent") || AgentRoster.conceptSummary(for: "Send").contains("send"))
