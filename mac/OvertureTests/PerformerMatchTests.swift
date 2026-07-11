@@ -110,27 +110,57 @@ struct PerformerMatchTests {
             #expect(verdict.relationship == .booked)
             #expect(verdict.emailCorroborated)
         }
-
-        // And an address in neither slot still conflicts, so the match is suppressed.
-        let stranger = HistoryMatch.matchPerformer(
-            performerName: "Duo Act Member", performerEmail: "c@example.com",
-            production: .selfProduced, clients: [], history: history)
-        #expect(stranger == .noMatch)
     }
 
-    // A conflict on ANY confidently name-matching record suppresses the whole match, rather than
-    // just dropping that record. Otherwise the match walks back in through a quieter row that
-    // happens to carry no address, and the rule Dan chose is silently defeated.
-    @Test func aConflictOnOneRecordSuppressesEvenWhenAQuieterRecordWouldHaveMatched() {
-        let history = [
-            HistoryRecord(groupName: "Alex Rivera", status: "booked", email: "the.real.alex@example.com"),
-            HistoryRecord(groupName: "Alex Rivera", status: "warm"),   // no address: would say yes alone
-        ]
+    // #779, and the whole point of re-importing the real CSV before trusting this. The booking
+    // sheet's Email column is a "how I contacted them" field, NOT an identity field: it routinely
+    // holds an AGENT (Lisa Batiashvili's is her agent's), an ensemble address (Amandine Beyer's is
+    // Gli Incogniti's), or no address at all ("DM on instagram").
+    //
+    // So a differing address there is weak evidence, not evidence against identity, and treating it
+    // as fatal (as the client branch rightly does) would suppress REAL past leads the moment Prep
+    // found the performer directly rather than through their agent. It corroborates, and nothing more.
+    @Test func aDifferingHistoryAddressDoesNotSuppressTheMatch() {
+        let viaAgent = [HistoryRecord(groupName: "Lisa Batiashvili, Violin", status: "lost_soft",
+                                      email: "agent@impresariat.example")]
+
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Alex Rivera", performerEmail: "a.different.alex@example.com",
-            production: .selfProduced, clients: [], history: history)
+            performerName: "Lisa Batiashvili", performerEmail: "lisa@herownsite.example",
+            production: .selfProduced, clients: [], history: viaAgent)
+
+        #expect(verdict.relationship == .lostSoft)   // still found, not suppressed
+        #expect(!verdict.emailCorroborated)          // but the address corroborated nothing
+        #expect(verdict.note?.contains("email") != true)
+    }
+
+    // A conflicting address on a CLIENT is still fatal, unchanged (Dan's original call): there the
+    // address genuinely is that client's own, so a mismatch really does say "different person".
+    @Test func aDifferingClientAddressStillSuppressesTheMatch() {
+        let client = DownbeatClient(id: "c", displayName: "Marisol Vega", shortName: nil,
+                                    email: "marisol@vegaviolin.com", contractEmail: "",
+                                    phoneNumber: nil, isTaxExempt: nil, hasLeftReview: false,
+                                    specialBehaviors: [], notes: nil, hostingSite: "")
+
+        let verdict = HistoryMatch.matchPerformer(
+            performerName: "Marisol Vega", performerEmail: "someone.else@example.com",
+            production: .selfProduced, clients: [client], history: [])
 
         #expect(verdict == .noMatch)
+    }
+
+    // The column also holds things that are not addresses at all. They must corroborate nothing, and
+    // (crucially) must not be mistaken for an address that then fails to match.
+    @Test func aHistoryCellThatIsNotAnEmailIsSimplyNoSignal() {
+        let notEmails = [
+            HistoryRecord(groupName: "Kento Hong, violin", status: "warm",
+                          email: "DM on instagram\nhttps://www.instagram.com/kenjin39/?hl=en"),
+        ]
+        let verdict = HistoryMatch.matchPerformer(
+            performerName: "Kento Hong", performerEmail: "kento@example.com",
+            production: .selfProduced, clients: [], history: notEmails)
+
+        #expect(verdict.relationship == .warm)
+        #expect(!verdict.emailCorroborated)
     }
 
     // The corroborating email is only worth surfacing when it actually corroborated something.

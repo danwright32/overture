@@ -260,15 +260,15 @@
       }
     },
     {
-      "name": "a conflicting history email suppresses the match, the same rule as for a client",
+      "name": "a differing history email does NOT suppress: that column often holds an agent, not the performer (#779)",
       "performerName": "Tomas Iyer",
       "performerEmail": "someone.else@example.com",
       "production": "self",
       "expect": {
-        "relationship": "none",
+        "relationship": "warm",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": null,
+        "matchedPerformerName": "Tomas Iyer",
         "emailCorroborated": false
       }
     },

@@ -138,12 +138,21 @@ enum HistoryMatch {
         return known.contains(performer) ? .corroborates : .conflicts
     }
 
-    // One booking-sheet cell can hold two addresses (#762): the CSV really is written that way.
+    // Pull the real addresses out of one booking-sheet cell (#762/#779). The cell is free text and,
+    // in the real sheet, holds any of: one address, TWO addresses, a contact-form URL, an Instagram
+    // handle, or a bare note like "DM on instagram". So this looks for things actually shaped like an
+    // address (a local part, an @, then a dotted domain) rather than anything merely containing an @,
+    // which would let a URL or a social handle pose as an address that then fails to corroborate.
     private static func addresses(in raw: String?) -> [String] {
         (raw ?? "")
-            .split(whereSeparator: { $0 == "," || $0 == ";" || $0 == "/" || $0.isWhitespace })
-            .map(String.init)
-            .filter { $0.contains("@") }
+            .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isWhitespace })
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "<>()[]\"'")) }
+            .filter { candidate in
+                let parts = candidate.split(separator: "@")
+                guard parts.count == 2, !parts[0].isEmpty else { return false }
+                let domain = parts[1]
+                return domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+            }
     }
 
     private static func normalizedEmail(_ raw: String) -> String {
@@ -211,20 +220,21 @@ enum HistoryMatch {
             !isStatus($0.status, "dnc")
                 && GroupNameMatch.isConfidentPersonName(performerName, inEntry: $0.groupName)
         }
-        // The history carries the address from the booking sheet too now (#762), so this branch gets
-        // the same corroboration the client branch has always had. It is the branch that needed it
-        // most: the history is older and broader than the client list, so a name hit here is the one
-        // most likely to be a DIFFERENT person who merely shares the name.
+        // The history carries the address from the booking sheet now (#762), so a match found here can
+        // be corroborated. But it CORROBORATES ONLY, and a differing address is ignored rather than
+        // fatal (#779, Dan's call after the real CSV was imported and inspected).
         //
-        // A conflict anywhere suppresses the WHOLE match, exactly as it does for a client. It means
-        // someone with this name is demonstrably not our performer, which makes the name itself
-        // ambiguous. Dropping only the conflicting row and matching on a quieter one would let the
-        // match back in through the side door and quietly defeat the rule Dan chose.
-        let agreements = confident.map {
-            emailAgreement(performerEmail: performerEmail, onFile: addresses(in: $0.email))
+        // That asymmetry with the client branch is deliberate and data-driven. The sheet's Email
+        // column is a "how I contacted them" field, not an identity field: it routinely holds an
+        // AGENT's address, an ensemble's, an unrelated org's, or no address at all ("DM on
+        // instagram"). So a mismatch there is weak evidence, not evidence against identity, and
+        // treating it as fatal would suppress REAL past leads the moment Prep found a performer
+        // directly rather than through their agent. A Downbeat client's address IS their own, which
+        // is why a conflict there still kills the match.
+        let corroborated = confident.contains {
+            emailAgreement(performerEmail: performerEmail,
+                           onFile: addresses(in: $0.email)) == .corroborates
         }
-        if agreements.contains(.conflicts) { return .noMatch }
-        let corroborated = agreements.contains(.corroborates)
 
         let signals = confident.map { relationship(forStatus: $0.status) }
         if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }),
