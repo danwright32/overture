@@ -27,7 +27,19 @@ and a presenter, plus a form-only act with no email.
 `provenance` vocabulary, a named individual performer on a self-produced show, distinct from `act` (a
 single-act waterfall result).
 
-`v4.json` (version 4, #639) is the current shape new runs MUST write: adds an optional `overrideBody`
-to a `contacts[]` entry, a direct second-person draft for that specific contact, meaningful only when
-its `provenance` is `performer`. It exercises a performer contact carrying an `overrideBody` alongside
-a presenter contact with none, under one shared third-person `draft.body`.
+`v4.json` (version 4, #639) adds an optional `overrideBody` to a `contacts[]` entry, a direct
+second-person draft for that specific contact, meaningful only when its `provenance` is `performer`.
+It exercises a performer contact carrying an `overrideBody` alongside a presenter contact with none,
+under one shared third-person `draft.body`.
+
+`v5.json` (version 5, #611) adds an optional `alreadyCoveredNote` on the result itself: a fit-risk
+flag Prep's own research found (the org's site already names its own photographer), surfaced to Dan
+so he can deprioritize or skip without the show's fit score/tier changing. It exercises a presenter
+contact whose result carries the note alongside a normal draft.
+
+`v6.json` (version 6, #363) is the current shape new runs MUST write: adds an optional `sourceUrl` to
+a `contacts[]` entry, the page the run actually read a high-confidence contact from, so the app's
+confidence badge can link Dan through to verify it himself. Distinct from `formUrl`, which stays the
+`form_or_dm` contact's own submission link; only ever meaningful at `confidence == "high"`. It
+exercises a high-confidence act contact carrying a `sourceUrl` alongside a medium-confidence presenter
+contact with none.
