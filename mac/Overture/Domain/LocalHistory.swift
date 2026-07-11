@@ -27,6 +27,20 @@ enum LocalHistory {
                schedulingDismissals.contains(reason) {
                 return HistoryRecord(groupName: p.groupName, status: "declined")
             }
+            // #384: Dan passed on this show on taste ("Don't want to shoot this"). Recorded WITH its
+            // venue, which is the whole point: the penalty is aimed at this org at this venue, so the
+            // same org anywhere else stays a perfectly ordinary lead.
+            //
+            // #351 recorded nothing here, precisely so a taste pass could never become an org-wide
+            // black mark. The venue is what lets us keep that promise while still remembering the pass,
+            // so the identical recurring show doesn't come back next season scoring just as high.
+            // "Not a fit" (.notInterested) is still recorded as nothing at all: that is a judgement
+            // about the show, not a standing pass Dan wants us to act on.
+            if p.status == .dismissed,
+               DismissReason(rawValue: p.dismissReasonRaw ?? "") == .dontWantToShoot {
+                return HistoryRecord(groupName: p.groupName, status: "passed",
+                                     email: nil, venue: p.venue)
+            }
             // Warm = they wrote back. Phase F: derive from a contact replying (the A3 lead rollup is
             // gone); the legacy lead outcome is kept as a fallback for un-backfilled stores.
             if p.outcome == .replied || p.recipients.contains(where: \.replied) {

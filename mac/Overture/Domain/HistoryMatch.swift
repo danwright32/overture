@@ -16,6 +16,11 @@ struct HistoryRecord: Codable, Equatable, Sendable {
     // same name, because the history is older and broader than the client list. Optional, so an older
     // file with no addresses still decodes. May hold two addresses in one cell (the booking CSV does).
     var email: String? = nil
+    // #384: the venue of a show Dan PASSED on ("Don't want to shoot this"). Only ever set on a
+    // "passed" record, and load-bearing there: the penalty is aimed at org AND venue, so the same org
+    // anywhere else is untouched. Without it this would be an org-wide black mark, which is exactly
+    // what #351 refused to create. A record with no venue can never penalise anything.
+    var venue: String? = nil
 }
 
 struct PossibleMatch: Equatable, Sendable {
@@ -30,6 +35,11 @@ struct MatchVerdict: Equatable, Sendable {
     var downbeatClientId: String?
     var matchedClientName: String?
     var possible: PossibleMatch?
+    // #384: Dan already passed on THIS show (same org, same venue). Deliberately its own field rather
+    // than a PriorRelationship value: the pass is ORTHOGONAL to the relationship. He can have booked
+    // an org happily and still not want their particular annual show, and as a relationship value
+    // "passed" would simply be outranked by "booked" and never apply to the orgs he works with most.
+    var passedOnThisShow: Bool = false
 }
 
 // The verdict from matching a PERFORMER's name rather than the org's (#749, plan #748, issue #585).
@@ -77,18 +87,42 @@ enum HistoryMatch {
         }
     }
 
+    // Two venue names refer to the same room (#384). Compared through the natural key's own
+    // canonicaliser, since both sides come from scraped listing text: casing, exotic whitespace and
+    // HTML entities must not defeat a match that is really the same hall. A record with no venue can
+    // never match anything, which is what keeps a venueless (CSV-imported) row from ever penalising.
+    private static func sameVenue(_ recorded: String?, _ candidate: String?) -> Bool {
+        guard let recorded, let candidate else { return false }
+        let a = Prospect.canonicalize(recorded)
+        return !a.isEmpty && a == Prospect.canonicalize(candidate)
+    }
+
+    // `venue` is what makes #384's pass a pass on ONE SHOW rather than a black mark on the org. It
+    // defaults to nil because a caller with no venue in hand simply cannot penalise, which is the
+    // safe direction to fail in.
     static func matchRelationship(
         name: String,
+        venue: String? = nil,
         clients: [DownbeatClient],
         history: [HistoryRecord]
     ) -> MatchVerdict {
         let confidentHistory = history.filter { GroupNameMatch.isConfident(name, $0.groupName) }
 
+        // #384: Dan passed on this exact show before (same org, same venue). Computed on its own, and
+        // deliberately EXCLUDED from the relationship signals below, for two reasons. It must not make
+        // the org read as merely "contacted" (which is what an unrecognised status would fall back
+        // to), and it must not be outranked out of existence by a booking on the same org: a pass and
+        // a relationship are different facts, and both can be true at once.
+        let passedOnThisShow = confidentHistory.contains {
+            isStatus($0.status, "passed") && sameVenue($0.venue, venue)
+        }
+
         // DNC suppression is confident-match-only: a fuzzy name match is never
         // authoritative enough to silently drop a performance (precision over recall).
         if confidentHistory.contains(where: { isStatus($0.status, "dnc") }) {
             return MatchVerdict(relationship: .none, suppressed: true,
-                                downbeatClientId: nil, matchedClientName: nil, possible: nil)
+                                downbeatClientId: nil, matchedClientName: nil, possible: nil,
+                                passedOnThisShow: passedOnThisShow)
         }
 
         let confidentClient = clients.first { c in
@@ -96,15 +130,19 @@ enum HistoryMatch {
         }
         if let client = confidentClient {
             return MatchVerdict(relationship: .booked, suppressed: false,
-                                downbeatClientId: client.id, matchedClientName: client.displayName, possible: nil)
+                                downbeatClientId: client.id, matchedClientName: client.displayName,
+                                possible: nil, passedOnThisShow: passedOnThisShow)
         }
         // Resolve the history signals to the strongest relationship by fit weight, so a real
         // relationship (warm) beats a lost outcome on the same org, and a booked history beats
         // everything below it. A bare cold send is `contacted` (neutral, 0), not warm (#70).
-        let signals = confidentHistory.map { relationship(forStatus: $0.status) }
+        let signals = confidentHistory
+            .filter { !isStatus($0.status, "passed") }
+            .map { relationship(forStatus: $0.status) }
         if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }) {
             return MatchVerdict(relationship: best, suppressed: false,
-                                downbeatClientId: nil, matchedClientName: nil, possible: nil)
+                                downbeatClientId: nil, matchedClientName: nil, possible: nil,
+                                passedOnThisShow: passedOnThisShow)
         }
 
         if let possibleClient = clients.first(where: { c in
@@ -112,17 +150,20 @@ enum HistoryMatch {
         }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
-                                possible: PossibleMatch(source: "downbeat_client", ref: possibleClient.id, name: possibleClient.displayName))
+                                possible: PossibleMatch(source: "downbeat_client", ref: possibleClient.id, name: possibleClient.displayName),
+                                passedOnThisShow: passedOnThisShow)
         }
 
         if let possibleHistory = history.first(where: { GroupNameMatch.isPossible(name, $0.groupName) }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
-                                possible: PossibleMatch(source: "history", ref: "", name: possibleHistory.groupName))
+                                possible: PossibleMatch(source: "history", ref: "", name: possibleHistory.groupName),
+                                passedOnThisShow: passedOnThisShow)
         }
 
         return MatchVerdict(relationship: .none, suppressed: false,
-                            downbeatClientId: nil, matchedClientName: nil, possible: nil)
+                            downbeatClientId: nil, matchedClientName: nil, possible: nil,
+                            passedOnThisShow: passedOnThisShow)
     }
 
     // Does the performer's own email agree with what Downbeat holds for this client?

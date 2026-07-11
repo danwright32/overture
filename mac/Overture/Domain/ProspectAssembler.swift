@@ -31,6 +31,8 @@ struct AssembledProspect: Equatable, Sendable {
     // match already corrected this prospect and must not be reverted", and a string comparison on a
     // field the guard is itself protecting cannot answer that.
     var orgMatchConfident: Bool = false
+    // #384: Dan passed on this exact show before (same org, same venue), so it carries a fit penalty.
+    var passedOnThisShow: Bool = false
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
@@ -64,7 +66,8 @@ enum ProspectAssembler {
             production: c.production,
             profile: c.profile,
             coverage: c.coverage,
-            discipline: c.discipline
+            discipline: c.discipline,
+            passedOnThisShow: verdict.passedOnThisShow
         )
         let fit = Ranker.scoreFit(candidate)
         if fit.excluded { return .skip(.unreachable) }
@@ -94,7 +97,8 @@ enum ProspectAssembler {
             // A confident org match is exactly one that resolved to a real relationship: matchRelationship
             // returns .none for both no-match and a merely-possible (fuzzy) match, neither of which
             // outranks a standing performer-match correction (#750).
-            orgMatchConfident: verdict.relationship != .none
+            orgMatchConfident: verdict.relationship != .none,
+            passedOnThisShow: verdict.passedOnThisShow
         ))
     }
 }

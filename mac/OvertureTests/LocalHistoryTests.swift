@@ -16,9 +16,10 @@ struct LocalHistoryTests {
 
     @discardableResult
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
+                      venue: String = "V",
                       sentAt: Date? = nil, outcome: Outcome = .noResponse,
                       dismissReason: DismissReason? = nil) -> Prospect {
-        let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
+        let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: venue,
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
@@ -40,15 +41,33 @@ struct LocalHistoryTests {
         #expect(records.first?.status == "contacted")
     }
 
-    // #351: "Don't want to shoot this" is a personal-taste pass on one event. Unlike a scheduling
-    // miss (which keeps the org a hot "declined" lead), it must NOT touch the org's future ranking,
-    // so it produces no history record (neutral), the same as "Not a fit".
-    @Test func personalPassDismissalIsNeutral() throws {
+    // #351/#384: "Don't want to shoot this" is a personal-taste pass on one event. Unlike a
+    // scheduling miss (which keeps the org a hot "declined" lead), it must not make the ORG cold.
+    //
+    // #351 achieved that by recording nothing at all, which also meant the pass was forgotten
+    // entirely and the identical recurring show came back next season scoring just as high. The
+    // record now exists and CARRIES THE VENUE, so the penalty can be aimed at exactly the show Dan
+    // passed on (org AND venue) and at nothing else. The venue is what makes the record safe to keep:
+    // without it, this would be an org-wide black mark, which is precisely what #351 was avoiding.
+    @Test func personalPassIsRecordedAgainstTheShowItWasAboutNotTheOrg() throws {
         let ctx = ModelContext(try container())
-        make(ctx, group: "Passed Org", status: .dismissed, dismissReason: .dontWantToShoot)
+        make(ctx, group: "Passed Org", status: .dismissed,
+             venue: "Weill Recital Hall", dismissReason: .dontWantToShoot)
+
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
-        #expect(records.isEmpty)
+
+        #expect(records.count == 1)
+        #expect(records.first?.status == "passed")
+        #expect(records.first?.venue == "Weill Recital Hall")
         #expect(DismissReason.dontWantToShoot.label == "Don't want to shoot this")
+    }
+
+    // "Not a fit" stays genuinely neutral: it is a judgement about the show, not a standing pass Dan
+    // wants remembered, so it must still record nothing.
+    @Test func aNotAFitDismissalStillRecordsNothing() throws {
+        let ctx = ModelContext(try container())
+        make(ctx, group: "Wrong Fit Org", status: .dismissed, dismissReason: .notInterested)
+        #expect(LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>())).isEmpty)
     }
 
     @Test func bookedOutcomeBecomesBookedHistory() throws {
