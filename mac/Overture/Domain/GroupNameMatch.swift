@@ -86,4 +86,18 @@ enum GroupNameMatch {
         let union = ta.union(tb).count
         return Double(shared) / Double(union) >= 0.5
     }
+
+    // Person names, matched STRICTLY (#749). isConfident above accepts token containment, which is
+    // right for orgs ("New York Ballet" really is "New York Theatre Ballet") and wrong for people:
+    // it would match the person "Jane Doe" to the org "Jane Doe Ensemble", and warm a lead off a
+    // group that merely bears her name. Full token-set equality instead, so every token on both
+    // sides has to be accounted for. Order still doesn't matter, so a surname-first program listing
+    // ("Vega, Marisol") matches. Deliberately a SEPARATE entry point: the org call sites keep the
+    // looser containment rule, unchanged.
+    static func isConfidentPersonName(_ a: String, _ b: String) -> Bool {
+        let ta = Set(tokens(a))
+        let tb = Set(tokens(b))
+        if ta.isEmpty || tb.isEmpty { return false }
+        return ta == tb
+    }
 }
