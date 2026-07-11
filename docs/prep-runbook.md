@@ -269,9 +269,14 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   performance; a discipline-matched gallery link (below). Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
-- **Offer:** held positively. A/B variant — either state the rate plainly ($250 an
-  hour plus tax, one-hour minimum, gallery within two weeks) OR link the contract
-  page. Record which in `variant`.
+- **Offer:** held positively, and ALWAYS state the rate plainly ($250 an hour plus tax,
+  one-hour minimum, gallery within two weeks). Record `rate_stated` in `variant`.
+  **Never link to a contract, pricing, or rates page: the site does not have one** (#612).
+  The original plan called for A/B testing "state the rate" against "link the contract
+  page", but that second arm was never real, and the only way to write it is to invent a
+  URL that 404s in an email Dan actually sends. There is nothing to choose between here.
+  (The `variant` field itself is still live and still used, for the opener archetypes of
+  #362; this drops only the offer half of the test.)
 - **CTA:** soft. "let me know how that lands."
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials
   (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
