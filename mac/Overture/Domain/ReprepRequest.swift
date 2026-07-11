@@ -10,6 +10,16 @@ enum ReprepMode: Sendable {
 }
 
 enum ReprepRequest {
+    // #733: guard against repeatedly re-prepping the same prospect. 24 hours from when a Prep run
+    // last actually served this prospect (a normal fresh draft, or a served re-prep), simple and
+    // predictable rather than tied to the Prep run cadence itself.
+    static let cooldown: TimeInterval = 86400
+
+    static func isInCooldown(lastServedAt: Date?, now: Date) -> Bool {
+        guard let lastServedAt else { return false }
+        return now.timeIntervalSince(lastServedAt) < cooldown
+    }
+
     // Sets the prospect's re-prep flags for the requested mode. Gates the DRAFT-affecting half on
     // `sentAt == nil` (#367 red-team finding 3): a multi-recipient show can have one recipient
     // already sent while the prospect itself is still `.approved` (SendService keeps it approved

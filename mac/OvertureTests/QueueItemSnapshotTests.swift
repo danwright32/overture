@@ -78,6 +78,25 @@ struct QueueItemSnapshotTests {
         #expect(QueueItem(p).isReprepEligible == true)
     }
 
+    // #733: reprepLastServedAt carries through so the UI can warn before re-prepping something
+    // just researched.
+    @Test func queueItemCarriesReprepLastServedAt() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted)
+        p.draftBody = "Hi"
+        ctx.insert(p)
+        #expect(QueueItem(p).reprepLastServedAt == nil)
+
+        let servedAt = Date(timeIntervalSince1970: 1_000_000)
+        p.reprepLastServedAt = servedAt
+        #expect(QueueItem(p).reprepLastServedAt == servedAt)
+    }
+
     // #418 B1 — QueueItem carries per-contact snapshots in send order (act before presenter) for the
     // conversation surface, with each contact's reply text and a derived status.
     @Test func queueItemBuildsContactSnapshotsInSendOrder() throws {

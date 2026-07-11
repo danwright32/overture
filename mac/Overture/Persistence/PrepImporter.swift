@@ -27,7 +27,7 @@ enum PrepImporter {
 
     @MainActor
     @discardableResult
-    static func ingest(_ results: PrepResults, into context: ModelContext) -> Outcome {
+    static func ingest(_ results: PrepResults, into context: ModelContext, now: Date = Date()) -> Outcome {
         var outcome = Outcome()
         for r in results.results {
             let key = r.naturalKey
@@ -94,6 +94,9 @@ enum PrepImporter {
             // correctly rides along again in the next queue.
             p.reprepDraftRequested = false
             p.reprepContactsRequested = false
+            // #733: stamps every matched result, not just re-preps, so re-prepping a prospect a
+            // normal first-time Prep run JUST drafted is subject to the same cooldown.
+            p.reprepLastServedAt = now
         }
         do {
             try context.save()

@@ -90,4 +90,22 @@ struct ReprepRequestTests {
 
         #expect(p.reprepContactsRequested == true)
     }
+
+    // #733: guard against repeatedly re-prepping the same prospect. A 24h cooldown from when a
+    // Prep run last actually served this prospect (normal draft or a served re-prep).
+    @Test func isInCooldownTrueWithinTwentyFourHours() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let twentyThreeHoursAgo = now.addingTimeInterval(-23 * 3600)
+        #expect(ReprepRequest.isInCooldown(lastServedAt: twentyThreeHoursAgo, now: now) == true)
+    }
+
+    @Test func isInCooldownFalsePastTwentyFourHours() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let twentyFiveHoursAgo = now.addingTimeInterval(-25 * 3600)
+        #expect(ReprepRequest.isInCooldown(lastServedAt: twentyFiveHoursAgo, now: now) == false)
+    }
+
+    @Test func isInCooldownFalseWhenNeverServed() {
+        #expect(ReprepRequest.isInCooldown(lastServedAt: nil, now: Date()) == false)
+    }
 }

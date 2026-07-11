@@ -197,23 +197,42 @@ enum ProspectMutations {
         }
     }
 
-    // #367: apply the requested mode to every eligible prospect (already has a draft, not yet
-    // contacted or dismissed) in one go; a queued-undrafted prospect is already covered by the
-    // normal Prep flow and is skipped rather than double-flagged.
-    static func bulkReprep(_ mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        let eligible = prospects.filter {
+    // #367/#733: which prospects the bulk re-prep action would actually touch: already has a
+    // draft, not yet contacted or dismissed, no re-prep already pending, and not served within the
+    // cooldown window. Shared by RootView's menu-disabled check and bulkReprep itself, so what the
+    // menu shows enabled always agrees with what a tap would actually queue.
+    static func bulkReprepEligible(_ prospects: [Prospect], now: Date) -> [Prospect] {
+        prospects.filter {
             $0.hasDraft && ($0.status == .drafted || $0.status == .approved)
+                && !$0.reprepDraftRequested && !$0.reprepContactsRequested
+                && !ReprepRequest.isInCooldown(lastServedAt: $0.reprepLastServedAt, now: now)
         }
+    }
+
+    // #367: apply the requested mode to every eligible prospect in one go; a queued-undrafted
+    // prospect is already covered by the normal Prep flow and is skipped rather than
+    // double-flagged. #733: also silently skips anything already pending or re-prepped within the
+    // cooldown window, reporting the skip in the confirmation rather than a per-prospect dialog.
+    static func bulkReprep(_ mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback, now: Date = Date()) {
+        let baseEligible = prospects.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
+        let eligible = bulkReprepEligible(prospects, now: now)
         guard !eligible.isEmpty else {
-            feedback.acknowledge(ActionAck.bulkReprepNothingEligible, tone: .warning)
+            if baseEligible.isEmpty {
+                feedback.acknowledge(ActionAck.bulkReprepNothingEligible, tone: .warning)
+            } else {
+                feedback.acknowledge(ActionAck.bulkReprepAllSkipped(count: baseEligible.count), tone: .warning)
+            }
             return
         }
+        let skippedCount = baseEligible.count - eligible.count
         var draftGrantedCount = 0
         for p in eligible {
             if ReprepRequest.apply(mode, to: p) { draftGrantedCount += 1 }
         }
         if context.saveOrWarn(org: "the queue", feedback: feedback) {
-            feedback.acknowledge(ActionAck.bulkReprepQueued(mode: mode, total: eligible.count, draftGrantedCount: draftGrantedCount))
+            feedback.acknowledge(ActionAck.bulkReprepQueued(mode: mode, total: eligible.count,
+                                                            draftGrantedCount: draftGrantedCount,
+                                                            skippedCount: skippedCount))
         }
     }
 

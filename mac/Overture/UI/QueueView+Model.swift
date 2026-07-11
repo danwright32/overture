@@ -66,6 +66,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #367: whether Dan asked for a re-prep still awaiting the next Prep run.
     var reprepDraftRequested: Bool = false
     var reprepContactsRequested: Bool = false
+    // #733: when a Prep run last served this prospect, for the re-prep cooldown warning.
+    var reprepLastServedAt: Date? = nil
 
     // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
     var isClassificationUncertain: Bool {
@@ -565,7 +567,8 @@ extension QueueItem {
                 .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
                 .map(RecipientSnapshot.init),
             reprepDraftRequested: p.reprepDraftRequested,
-            reprepContactsRequested: p.reprepContactsRequested
+            reprepContactsRequested: p.reprepContactsRequested,
+            reprepLastServedAt: p.reprepLastServedAt
         )
     }
 }

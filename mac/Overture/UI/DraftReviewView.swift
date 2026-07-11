@@ -64,6 +64,9 @@ struct DraftReviewView: View {
     @State private var addContactEmail = ""
     @State private var addContactName = ""
     @State private var showOverrideConfirm = false
+    // #733: guard against repeatedly re-prepping the same prospect.
+    @State private var showReprepCooldownConfirm = false
+    @State private var pendingReprepMode: ReprepMode?
 
     private var isApproved: Bool { item.status == .approved }
 
@@ -321,21 +324,48 @@ struct DraftReviewView: View {
         } message: {
             Text("Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is.")
         }
+        // #733: guard against repeatedly re-prepping the same prospect.
+        .alert("Redo this re-prep?", isPresented: $showReprepCooldownConfirm) {
+            Button("Redo Anyway") {
+                if let mode = pendingReprepMode { onReprep(mode) }
+                pendingReprepMode = nil
+            }
+            Button("Cancel", role: .cancel) { pendingReprepMode = nil }
+        } message: {
+            if let servedAt = item.reprepLastServedAt {
+                Text("This was re-prepped \(PrepStatus.relative(from: servedAt, to: Date())). Redo it anyway?")
+            } else {
+                Text("Redo it anyway?")
+            }
+        }
     }
 
     // #367: one button, opens a picker of the three re-prep choices, rather than separate buttons
     // for each. The draft-affecting choices are disabled once anything has actually been sent for
     // this prospect (a partial send on a multi-recipient show still leaves it .approved); finding
     // new contacts never touches text someone already received, so it stays available regardless.
+    // #733: the whole menu disables while a request is already pending (nothing new to pick), and
+    // any choice made within the cooldown window confirms before actually asking, rather than
+    // silently spending another Prep run on a prospect just researched.
     private var reprepMenu: some View {
         Menu("Re-prep") {
-            Button("Redraft only") { onReprep(.draftOnly) }
+            Button("Redraft only") { requestReprep(.draftOnly) }
                 .disabled(item.isSent)
-            Button("Find contacts only") { onReprep(.contactsOnly) }
-            Button("Redraft and find contacts") { onReprep(.both) }
+            Button("Find contacts only") { requestReprep(.contactsOnly) }
+            Button("Redraft and find contacts") { requestReprep(.both) }
                 .disabled(item.isSent)
         }
+        .disabled(item.isReprepQueued)
         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+    }
+
+    private func requestReprep(_ mode: ReprepMode) {
+        if ReprepRequest.isInCooldown(lastServedAt: item.reprepLastServedAt, now: Date()) {
+            pendingReprepMode = mode
+            showReprepCooldownConfirm = true
+        } else {
+            onReprep(mode)
+        }
     }
 
     // Per-contact conversation surface (#418 B1): once a show is sent, list each contact with its

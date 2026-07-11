@@ -228,6 +228,22 @@ struct PrepImporterTests {
         #expect(outcome.skippedEdited == 1)
     }
 
+    // #733: every matched result stamps reprepLastServedAt, whether the draft/contacts were
+    // applied or skipped, so the UI can warn before re-prepping something just researched.
+    @Test func ingestStampsReprepLastServedAtForEveryMatchedResult() throws {
+        let ctx = ModelContext(try container())
+        let key = keptProspect(ctx, group: "Aurora Strings", date: "2026-03-10", venue: "Carnegie Hall")
+        let now = Date(timeIntervalSince1970: 1_000_000)
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: key, draft: PrepDraft(subject: "S", body: "B", variant: "A"))
+        ])
+        _ = PrepImporter.ingest(results, into: ctx, now: now)
+
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(p?.reprepLastServedAt == now)
+    }
+
     // v2 (#392): a performance can carry the act plus a presenter; each becomes its own recipient
     // with its provenance preserved, while the legacy mirror tracks the act for the current UI.
     @Test func ingestsMultipleContactsAsRecipientsWithProvenance() throws {
