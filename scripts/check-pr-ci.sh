@@ -97,6 +97,21 @@ classify_check_run() {
         label="Failed"
         EXIT_CODE=1
         ;;
+      skipped)
+        # #761: swift-tests is path-filtered in ci.yml, so it legitimately does not run on a change
+        # that touches no Swift, fixture or CI-script file (an npm dependency bump, say). That is an
+        # INTENTIONAL decision, not an absent result, so it must not block the merge.
+        #
+        # Reported as "Skipped", never folded into "Passed": this whole script exists so Dan can tell
+        # a check that actually ran and went green apart from one that never ran at all. Any OTHER
+        # check skipping is unexpected and still blocks, because nothing is supposed to skip it.
+        if [[ "${name}" == "${SWIFT_CHECK_NAME}" ]]; then
+          label="Skipped (nothing Swift-related changed, so the Mac tests were not needed)"
+        else
+          label="Skipped unexpectedly (nothing should skip this check)"
+          EXIT_CODE=1
+        fi
+        ;;
       *)
         label="${conclusion}"
         EXIT_CODE=1
