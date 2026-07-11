@@ -25,7 +25,10 @@ enum PrepQueueService {
                     websiteURL: p.websiteURL,
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
-                    priorRelationship: p.priorRelationship,
+                    // #752: NOT p.priorRelationship. An unconfirmed performer match must not reach the
+                    // drafter, or a guess Dan never agreed with picks the tone of a real email. This is
+                    // the only writer of this field, so this is the only place the gate belongs.
+                    priorRelationship: p.priorRelationshipForDrafting,
                     production: p.production,
                     reprepMode: PrepQueueBuilder.reprepModeString(
                         draftRequested: p.reprepDraftRequested,
