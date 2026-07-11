@@ -38,4 +38,25 @@ enum LocalHistory {
             return nil
         }
     }
+
+    // The one-time legacy booking-history import (group name + status), produced by
+    // scripts/import-history.ts (pnpm import-history) from Dan's booking CSV. Absent file = no
+    // history yet, which is normal, not an error.
+    static var importedURL: URL {
+        StoreLocation.handoffDirectory.appendingPathComponent("overture-history.json")
+    }
+
+    static func imported(from url: URL = importedURL) -> [HistoryRecord] {
+        guard let data = try? Data(contentsOf: url),
+              let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else { return [] }
+        return history
+    }
+
+    // The COMPLETE history any matcher should see: the legacy import plus Overture's own activity.
+    // Shared (#751) so the scout and Prep match against the same records. They used to compose this
+    // separately, which would have let the same performer read as a past client in one place and a
+    // stranger in the other, with nothing catching the discrepancy.
+    static func forMatching(existing: [Prospect], importedFrom url: URL = importedURL) -> [HistoryRecord] {
+        imported(from: url) + records(from: existing)
+    }
 }

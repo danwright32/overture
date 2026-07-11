@@ -959,4 +959,166 @@ struct PrepImporterTests {
         let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
         #expect(p?.recipients.first?.looksLikePressContact == false)
     }
+
+    // MARK: - Performer-name warm-lead detection (#751, plan #748, issue #585)
+
+    // Scores below are all: music 1 + self 2 + strong 2 + likely_uncovered 2 = 7, plus the prior.
+    // So none = 7, warm = 17, declined_by_you = 25, booked = 27.
+    private func performerProspect(_ ctx: ModelContext, prior: String = "none",
+                                   production: String = "self") -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: "Emerging Artists Series",
+                                          performanceDate: "2026-08-02", venue: "Weill Recital Hall")
+        let base = Ranker.scoreFit(Candidate(
+            reachable: true, priorRelationship: PriorRelationship(rawValue: prior) ?? .none,
+            production: Production(rawValue: production) ?? .unknown, profile: .strong,
+            coverage: .likelyUncovered, discipline: .music))
+        let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
+                         venue: "Weill Recital Hall", performanceDate: "2026-08-02",
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: prior,
+                         production: production, profile: "strong", coverage: "likely_uncovered",
+                         fitScore: base.score, tier: base.tier.rawValue, fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .queued)
+        ctx.insert(p)
+        try? ctx.save()
+        return p
+    }
+
+    private func marisol(email: String = "") -> DownbeatClient {
+        DownbeatClient(id: "client-marisol", displayName: "Marisol Vega", shortName: nil,
+                       email: email, contractEmail: "", phoneNumber: nil, isTaxExempt: nil,
+                       hasLeftReview: false, specialBehaviors: [], notes: nil, hostingSite: "")
+    }
+
+    private func performerResults(_ key: String, name: String = "Marisol Vega",
+                                  email: String? = "marisol@vegaviolin.com",
+                                  provenance: String = "performer") -> PrepResults {
+        PrepResults(version: 3, generatedAt: "now", results: [
+            PrepResult(naturalKey: key,
+                       contacts: [PrepContact(name: name, role: "Violinist", email: email,
+                                              method: "named_decision_maker", confidence: "high",
+                                              formUrl: nil, provenance: provenance)],
+                       draft: nil)
+        ])
+    }
+
+    // The whole point of #585: the group name ("Emerging Artists Series") matches nothing, but the
+    // performer fronting it is a past client, so the lead is warm and was being scored cold.
+    @Test func aPerformerWhoIsAPastClientCorrectsTheRelationshipAndRescores() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx)
+        #expect(p.fitScore == 7)   // cold, on the org name alone
+
+        _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx,
+                                clients: [marisol()], history: [])
+
+        #expect(p.priorRelationship == "booked")
+        #expect(p.matchedClientName == "Marisol Vega")
+        #expect(p.downbeatClientId == "client-marisol")
+        #expect(p.fitScore == 27)                 // rescored from the upgraded relationship
+        #expect(p.tier == "high")
+        #expect(p.relationshipCorrectedByPerformerMatch)
+        #expect(p.matchedPerformerName == "Marisol Vega")
+        #expect(p.performerMatchNote != nil)
+        // A brand-new finding starts unreviewed and undismissed: Dan hasn't seen it yet.
+        #expect(!p.performerMatchReviewed)
+        #expect(!p.performerMatchDismissed)
+        // The pre-correction snapshot, so a dismissal can restore exactly what the scout had.
+        #expect(p.performerMatchPreviousRelationship == "none")
+        #expect(p.performerMatchPreviousFitScore == 7)
+        #expect(p.performerMatchPreviousMatchedClientName == nil)
+    }
+
+    @Test func aPerformerWhoMatchesNothingLeavesTheProspectAlone() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx)
+
+        _ = PrepImporter.ingest(performerResults(p.naturalKey, name: "Rowan Delacroix"),
+                                into: ctx, clients: [marisol()], history: [])
+
+        #expect(p.priorRelationship == "none")
+        #expect(p.fitScore == 7)
+        #expect(!p.relationshipCorrectedByPerformerMatch)
+        #expect(p.performerMatchNote == nil)
+    }
+
+    // "Assume it runs twice": re-ingesting the same prep-results file must not re-fire. If it did, the
+    // second pass would snapshot the ALREADY-CORRECTED values as the "previous" ones, destroying the
+    // only record of what the scout originally had, and would silently un-review a finding Dan had
+    // already looked at.
+    @Test func reIngestingTheSameEvidenceDoesNotReFireTheCorrection() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx)
+        let results = performerResults(p.naturalKey)
+
+        _ = PrepImporter.ingest(results, into: ctx, clients: [marisol()], history: [])
+        p.performerMatchReviewed = true   // Dan has now seen it
+        try ctx.save()
+
+        _ = PrepImporter.ingest(results, into: ctx, clients: [marisol()], history: [])
+
+        #expect(p.performerMatchReviewed)                       // not silently un-reviewed
+        #expect(p.performerMatchPreviousFitScore == 7)          // still the SCOUT's score, not 27
+        #expect(p.performerMatchPreviousRelationship == "none")
+        #expect(p.fitScore == 27)
+    }
+
+    // The upgrade-only floor. This, not the do-not-contact exclusion, is what stops a performer match
+    // from quietly DOWNGRADING a lead: the ordinary history path resolves declined/lost statuses just
+    // fine, so without this floor a warm match on an already-booked prospect would cut its score.
+    @Test func aPerformerMatchWeakerThanTheCurrentRelationshipIsRefused() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx, prior: "booked")
+        #expect(p.fitScore == 27)
+
+        // The performer's history says merely "warm" (10), against a prospect already booked (20).
+        _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx, clients: [],
+                                history: [HistoryRecord(groupName: "Marisol Vega", status: "warm")])
+
+        #expect(p.priorRelationship == "booked")
+        #expect(p.fitScore == 27)
+        #expect(!p.relationshipCorrectedByPerformerMatch)
+    }
+
+    // Dan's call, 2026-07-11: trust the ranker's one definition of a better lead. It scores
+    // declined_by_you (18) ABOVE warm (10), because someone who approached you and got turned down
+    // knows you and wanted you, which beats an untested warm name. So this counts as an upgrade and
+    // applies, even though "declined" sounds like a downgrade in plain English. Locked here so the
+    // behavior is visible rather than surprising.
+    @Test func aDeclinedPerformerOutranksAMerelyWarmProspectAndStillApplies() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx, prior: "warm")
+        #expect(p.fitScore == 17)
+
+        _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx, clients: [],
+                                history: [HistoryRecord(groupName: "Marisol Vega", status: "declined")])
+
+        #expect(p.priorRelationship == "declined_by_you")
+        #expect(p.fitScore == 25)
+        #expect(p.relationshipCorrectedByPerformerMatch)
+    }
+
+    @Test func anAgencyProducedProspectIsNeverPerformerMatched() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx, production: "agency")
+
+        _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx,
+                                clients: [marisol()], history: [])
+
+        #expect(p.priorRelationship == "none")
+        #expect(!p.relationshipCorrectedByPerformerMatch)
+    }
+
+    // Only a contact the Prep run identified as the PERFORMER is a person; an act or presenter
+    // contact is an org's staffer, and matching their name against the client list would be nonsense.
+    @Test func aNonPerformerContactNeverTriggersAMatch() throws {
+        let ctx = ModelContext(try container())
+        let p = performerProspect(ctx)
+
+        _ = PrepImporter.ingest(performerResults(p.naturalKey, provenance: "act"),
+                                into: ctx, clients: [marisol()], history: [])
+
+        #expect(p.priorRelationship == "none")
+        #expect(!p.relationshipCorrectedByPerformerMatch)
+    }
 }

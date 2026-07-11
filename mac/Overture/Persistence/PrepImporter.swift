@@ -27,7 +27,10 @@ enum PrepImporter {
 
     @MainActor
     @discardableResult
-    static func ingest(_ results: PrepResults, into context: ModelContext, now: Date = Date()) -> Outcome {
+    // clients/history feed the performer-name warm-lead matcher (#751). They default to empty, which
+    // simply means no performer matching runs; the real entry point (ingestFile) always supplies them.
+    static func ingest(_ results: PrepResults, into context: ModelContext, now: Date = Date(),
+                       clients: [DownbeatClient] = [], history: [HistoryRecord] = []) -> Outcome {
         var outcome = Outcome()
         for r in results.results {
             let key = r.naturalKey
@@ -58,6 +61,13 @@ enum PrepImporter {
                     outcome.skippedOutOfScope += 1
                 } else {
                     ingestContacts(contacts, into: p, context: context)
+                }
+                // The warm-lead correction is derived from the RESEARCH, not from the recipient list,
+                // so it still runs when Dan's curated recipients are frozen: learning that this
+                // performer is a past client has nothing to do with who he chose to email. A
+                // draft-only request carries no fresh contact research to trust, so it stays out.
+                if !draftOnlyRequest {
+                    applyPerformerMatch(contacts, to: p, clients: clients, history: history)
                 }
             }
             if let d = r.draft {
@@ -225,10 +235,84 @@ enum PrepImporter {
         }
     }
 
+    // Warm-lead detection by performer name (#751, plan #748, issue #585). Repeat-client detection has
+    // only ever matched the ORG name, so a performance fronted by a performer Dan has already shot
+    // scored cold whenever the group name was new. Prep is where we finally know who the performer IS.
+    //
+    // The production gate and the do-not-contact exclusion both live inside HistoryMatch.matchPerformer,
+    // so they cannot be forgotten here.
+    @MainActor
+    private static func applyPerformerMatch(_ contacts: [PrepContact], to p: Prospect,
+                                            clients: [DownbeatClient], history: [HistoryRecord]) {
+        let production = Production(rawValue: p.production) ?? .unknown
+        let current = PriorRelationship(rawValue: p.priorRelationship) ?? .none
+
+        for c in contacts where c.provenance == "performer" {
+            guard let name = c.name, !name.isEmpty else { continue }
+            let verdict = HistoryMatch.matchPerformer(
+                performerName: name,
+                performerEmail: c.email ?? "",
+                production: production,
+                clients: clients,
+                history: history
+            )
+            guard verdict.isMatch, let matchedName = verdict.matchedPerformerName else { continue }
+
+            // "Assume it runs twice." Re-ingesting the same prep-results file must not re-fire: a second
+            // pass would snapshot the ALREADY-CORRECTED values as the "previous" ones, destroying the
+            // only record of what the scout originally had, and would silently un-review (or un-dismiss)
+            // a finding Dan already judged. Only genuinely NEW evidence, a different performer, acts.
+            // Mirrors alreadyCoveredNote's "only touch when the evidence actually differs" rule (#611).
+            if p.relationshipCorrectedByPerformerMatch && p.matchedPerformerName == matchedName { continue }
+
+            // The upgrade-only floor, and the REAL backstop against a downgrade: the do-not-contact
+            // exclusion in the matcher does not provide this, because the ordinary history path still
+            // resolves declined/lost statuses perfectly well. Without this comparison, a merely-warm
+            // performer match on an already-booked prospect would CUT its score.
+            //
+            // Compared on Ranker.priorPoints, the app's single definition of a better lead (Dan's call,
+            // 2026-07-11). That ranks declined_by_you (18) above warm (10), so a performer Dan turned
+            // down does count as an upgrade over an untested warm name: they know him and they wanted
+            // him. Deliberate, and locked by a test.
+            guard Ranker.priorPoints(verdict.relationship) > Ranker.priorPoints(current) else { continue }
+
+            // Snapshot BEFORE mutating, so a dismissal restores exactly what the scout had rather than
+            // guessing at an inverse.
+            p.performerMatchPreviousRelationship = p.priorRelationship
+            p.performerMatchPreviousFitScore = p.fitScore
+            p.performerMatchPreviousTier = p.tier
+            p.performerMatchPreviousMatchedClientName = p.matchedClientName
+            p.performerMatchPreviousDownbeatClientId = p.downbeatClientId
+
+            p.priorRelationship = verdict.relationship.rawValue
+            // Only overwrite the identity fields the verdict actually carries: a history-only match
+            // names no Downbeat client, and blanking the existing values would lose information.
+            if let clientName = verdict.matchedClientName { p.matchedClientName = clientName }
+            if let clientId = verdict.downbeatClientId { p.downbeatClientId = clientId }
+
+            p.relationshipCorrectedByPerformerMatch = true
+            p.matchedPerformerName = matchedName
+            p.performerMatchNote = verdict.note
+            p.performerMatchDismissed = false
+            p.performerMatchReviewed = false   // a new finding Dan has not seen yet
+
+            // rescored() reads priorRelationship straight off the prospect (it takes no relationship
+            // argument), so priorRelationship MUST already be assigned above before this call.
+            let refit = ClassificationOverride.rescored(p, discipline: nil, production: nil)
+            p.fitScore = refit.score
+            p.tier = refit.tier.rawValue
+            return   // one correction per prospect; the first confident performer wins
+        }
+    }
+
     @MainActor
     static func ingestFile(at url: URL, into context: ModelContext) throws -> Outcome {
         let data = try Data(contentsOf: url)
-        return ingest(try PrepResultsDecoder.decode(data), into: context)
+        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        return ingest(try PrepResultsDecoder.decode(data), into: context,
+                      clients: loaded.clients,
+                      history: LocalHistory.forMatching(existing: existing))
     }
 
     static var defaultURL: URL {
