@@ -58,7 +58,10 @@
     { "groupName": "Hollis Grant", "status": "dnc" },
     { "groupName": "Lena Whitfield", "status": "contacted" },
     { "groupName": "Devon Marsh", "status": "lost_hard" },
-    { "groupName": "Aiko Tanaka", "status": "lost_soft" }
+    { "groupName": "Aiko Tanaka", "status": "lost_soft" },
+    { "groupName": "Kento Hong, violin", "status": "lost_soft" },
+    { "groupName": "Rainer Crosett, Cello\nVictor Santiago Asuncion, Piano\nThe American Recital Debut Award Concert", "status": "booked" },
+    { "groupName": "Abby Whiteside Foundation", "status": "warm" }
   ],
   "cases": [
     {
@@ -233,6 +236,58 @@
     {
       "name": "a do-not-contact record neither suppresses nor produces a positive relationship",
       "performerName": "Hollis Grant",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a soloist listed with their instrument still matches, the history stores 'Kento Hong, violin'",
+      "performerName": "Kento Hong",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "lost_soft",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Kento Hong",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "the FIRST soloist on a multi-line recital entry matches",
+      "performerName": "Rainer Crosett",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Rainer Crosett",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "the SECOND soloist matches too, on a line the org matcher never reads",
+      "performerName": "Victor Santiago Asuncion",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Victor Santiago Asuncion",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "an org merely NAMED AFTER a person is not that person (the false positive this rule exists to stop)",
+      "performerName": "Abby Whiteside",
       "performerEmail": "",
       "production": "self",
       "expect": {

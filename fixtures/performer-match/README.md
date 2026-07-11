@@ -35,6 +35,28 @@ regress by "improving" the matcher:
    quietly downgrading a lead. The floor is read off `Ranker.priorPoints`, not a hardcoded status
    list, so it stays honest if the ranker's weights are ever retuned.
 
+Three further rules exist ONLY because the #755 precision check ran the matcher against Dan's real
+Downbeat clients and booking history, where it initially matched just 2 of 13 known past performers.
+Each is a concession to how his history is actually written, and each is deliberately narrow enough
+to leave the traps in rule 1 intact:
+
+5. **A trailing instrument or voice part is not part of a name.** His history files a soloist as
+   "Kento Hong, violin", so a strict rule could never match the person to the record that IS him. A
+   CLOSED vocabulary of role words, not "drop the last token": dropping blindly would turn the org
+   "Jane Doe Ensemble" into the person "Jane Doe", which is precisely the false positive rule 1
+   exists to stop. Never strips a name below two tokens.
+6. **Every line of a multi-line entry is its own candidate person.** He files a two-soloist recital
+   as one entry with a performer per line, and the org path only ever reads the org line, so the
+   second soloist sat on a line nothing looked at.
+7. **Accents fold to plain letters.** `normalize` strips everything outside `a-z`, so "Asunción"
+   shredded into the junk tokens "asunci" and "n" and could not match even itself. In classical music
+   an accented name is most of the roster, not an edge case.
+
+Together those took the real-data result from 2/13 to 10/13 with both traps still rejecting. The
+remaining misses are names buried inside a program title ("American Recital Debut Award Recital
+(Sydney Lee)"). Catching those needs a name-appears-anywhere-inside rule, which is exactly what would
+match "Abby Whiteside" to her namesake foundation, so they are accepted as misses on purpose.
+
 The production gate is enforced inside the matcher rather than at the call site: an agency-produced
 or unknown-production performance returns no match without ever being compared, so a future caller
 cannot forget to check.

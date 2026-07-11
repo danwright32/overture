@@ -164,6 +164,51 @@ struct PerformerMatchTests {
         #expect(Ranker.priorPoints(.booked) > Ranker.priorPoints(PriorRelationship.none))
     }
 
+    // #755, found by running the matcher against Dan's REAL booking history: it matched only 2 of 13
+    // known past performers, because almost every soloist is filed with their instrument.
+    @Test func aTrailingInstrumentOrVoicePartIsNotPartOfAPersonsName() {
+        #expect(GroupNameMatch.personNameTokens("Kento Hong, violin") == ["kento", "hong"])
+        #expect(GroupNameMatch.personNameTokens("Rainer Crosett, Cello") == ["rainer", "crosett"])
+        #expect(GroupNameMatch.personNameTokens("Jane Doe, mezzo soprano") == ["jane", "doe"])
+        #expect(GroupNameMatch.isConfidentPersonName("Kento Hong", "Kento Hong, violin"))
+
+        // Never strips below two tokens, so a name can't erode into a single word that would then
+        // collide with half the world.
+        #expect(GroupNameMatch.personNameTokens("Piano") == ["piano"])
+        // And it is a CLOSED vocabulary, not "drop the last token": blindly dropping would turn the
+        // org "Jane Doe Ensemble" into the person "Jane Doe", the exact false positive we prevent.
+        #expect(GroupNameMatch.personNameTokens("Jane Doe Ensemble") == ["jane", "doe", "ensemble"])
+        #expect(!GroupNameMatch.isConfidentPersonName("Jane Doe", "Jane Doe Ensemble"))
+    }
+
+    // #755, caught by the real-data check: normalize() strips everything outside a-z, so an accented
+    // name shredded into junk tokens and could never match even itself. In classical music that is
+    // most of the roster, not an edge case.
+    @Test func anAccentedNameMatchesItsPlainSpelling() {
+        #expect(GroupNameMatch.personNameTokens("Victor Santiago Asunción, Piano")
+                == ["victor", "santiago", "asuncion"])
+        #expect(GroupNameMatch.isConfidentPersonName("Victor Santiago Asuncion",
+                                                     "Victor Santiago Asunción, Piano"))
+        // And in both directions, since either side can carry the accent.
+        #expect(GroupNameMatch.isConfidentPersonName("Antonín Dvořák", "Antonin Dvorak"))
+        #expect(GroupNameMatch.isConfidentPersonName("Víkingur Ólafsson", "Vikingur Olafsson"))
+    }
+
+    // A history entry is messy free text and can list one performer per line, so the org path's
+    // "read the org line" rule never sees the second soloist (#755).
+    @Test func everyLineOfAMultiLineHistoryEntryIsACandidatePerson() {
+        let entry = "Rainer Crosett, Cello\nVictor Santiago Asuncion, Piano\nThe American Recital Debut Award Concert"
+
+        #expect(GroupNameMatch.isConfidentPersonName("Rainer Crosett", inEntry: entry))
+        #expect(GroupNameMatch.isConfidentPersonName("Victor Santiago Asuncion", inEntry: entry))
+        #expect(!GroupNameMatch.isConfidentPersonName("American Recital", inEntry: entry))
+
+        // The trap that keeps the precision honest: an org merely NAMED AFTER a person is not that
+        // person. It has a leftover token, so full token-set equality rejects it.
+        #expect(!GroupNameMatch.isConfidentPersonName("Abby Whiteside", inEntry: "Abby Whiteside Foundation"))
+        #expect(!GroupNameMatch.isConfidentPersonName("Sophia Rosoff", inEntry: "The Sophia Rosoff Concert Series 2026"))
+    }
+
     @Test func personNameMatchingIgnoresTokenOrderButNotExtraTokens() {
         #expect(GroupNameMatch.isConfidentPersonName("Vega, Marisol", "Marisol Vega"))
         #expect(GroupNameMatch.isConfidentPersonName("marisol vega", "Marisol Vega"))
