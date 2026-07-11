@@ -25,6 +25,72 @@ struct StoreBackupTests {
         return dir
     }
 
+    // MARK: - backup.log is bounded (#608)
+    //
+    // The log gains one line per launch and nothing ever trimmed it, so on an app that is opened
+    // every day it grew without limit forever. Tiny in practice (a few dozen bytes a launch), which
+    // is exactly why it would never have been noticed until it was large. It now rotates through the
+    // SAME copytruncate helper the main app log uses (LogRotation), rather than a second copy of that
+    // logic living here.
+
+    private func backupLogURL(_ dataDirectory: URL) -> URL {
+        StoreBackup.backupsDirectory(dataDirectory: dataDirectory)
+            .appendingPathComponent("backup.log")
+    }
+
+    private func seedStore(_ dataDirectory: URL) throws {
+        try Data("store".utf8).write(to: dataDirectory.appendingPathComponent("default.store"))
+    }
+
+    @Test func anOversizeBackupLogIsRotatedAndTheLiveFileStaysBounded() throws {
+        let dataDirectory = try makeSandboxDataDirectory()
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+        try seedStore(dataDirectory)
+
+        // A log left oversize by earlier launches.
+        let backupsDirectory = StoreBackup.backupsDirectory(dataDirectory: dataDirectory)
+        try FileManager.default.createDirectory(at: backupsDirectory, withIntermediateDirectories: true)
+        let log = backupLogURL(dataDirectory)
+        try Data(String(repeating: "x", count: StoreBackup.maxLogBytes + 1).utf8).write(to: log)
+
+        _ = StoreBackup.makeBackup(dataDirectory: dataDirectory, now: Date())
+
+        // The old content is preserved in the .1 backup, and the live file restarted from empty and
+        // now holds only this launch's line.
+        let rotated = log.appendingPathExtension("1")
+        #expect(FileManager.default.fileExists(atPath: rotated.path))
+        let live = try String(contentsOf: log, encoding: .utf8)
+        #expect(live.contains("success"))
+        #expect(live.count < StoreBackup.maxLogBytes)
+    }
+
+    @Test func aBackupLogUnderTheCapIsNotRotated() throws {
+        let dataDirectory = try makeSandboxDataDirectory()
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+        try seedStore(dataDirectory)
+
+        _ = StoreBackup.makeBackup(dataDirectory: dataDirectory, now: Date())
+        _ = StoreBackup.makeBackup(dataDirectory: dataDirectory, now: Date().addingTimeInterval(60))
+
+        #expect(!FileManager.default.fileExists(atPath: backupLogURL(dataDirectory).appendingPathExtension("1").path))
+        // Both launches are still recorded: rotation must not cost history it didn't need to.
+        let live = try String(contentsOf: backupLogURL(dataDirectory), encoding: .utf8)
+        #expect(live.split(separator: "\n").count == 2)
+    }
+
+    // The failure path: capping a log that does not exist yet (the very first launch) must be a
+    // silent no-op, not a crash and not a stray empty .1 file.
+    @Test func cappingAMissingBackupLogIsAHarmlessNoOp() throws {
+        let dataDirectory = try makeSandboxDataDirectory()
+        defer { try? FileManager.default.removeItem(at: dataDirectory) }
+        try seedStore(dataDirectory)
+
+        _ = StoreBackup.makeBackup(dataDirectory: dataDirectory, now: Date())
+
+        #expect(FileManager.default.fileExists(atPath: backupLogURL(dataDirectory).path))
+        #expect(!FileManager.default.fileExists(atPath: backupLogURL(dataDirectory).appendingPathExtension("1").path))
+    }
+
     @Test func makeBackupReturnsNilWhenThereIsNoStoreYet() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }

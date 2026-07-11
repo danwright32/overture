@@ -45,11 +45,23 @@ enum StoreBackup {
         return destination
     }
 
+    // #608: one line per launch, forever, with nothing trimming it. Negligible per launch (a few
+    // dozen bytes), which is exactly why it would have grown for years before anyone looked. 256 KB
+    // still holds several thousand launches of history, far more than is ever useful, while keeping
+    // the file trivially small. Deliberately much tighter than the agent's 5 MB stdout/stderr cap:
+    // that log carries real diagnostic output, this one carries one dated line.
+    static let maxLogBytes = 256 * 1_024
+
     // A small, self-contained log colocated with the backups themselves: there's no existing
     // app-wide event log to hook into, and this is more discoverable than a buried one would be
     // anyway, sitting right next to the thing it's recording the history of.
     private static func appendLog(_ line: String, backupsDirectory: URL, fileManager: FileManager) {
         let logURL = backupsDirectory.appendingPathComponent("backup.log")
+        // Cap BEFORE appending, through the same copytruncate helper the agent's logs use (#608), so
+        // the file can never sit above the cap between launches. A missing log (the first launch) is
+        // a silent no-op.
+        LogRotation.cap(files: [logURL], maxBytes: maxLogBytes, fileManager: fileManager)
+
         let entry = line + "\n"
         guard let data = entry.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: logURL) {

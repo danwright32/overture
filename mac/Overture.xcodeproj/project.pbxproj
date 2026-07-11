@@ -309,6 +309,7 @@
 		EF632FC30591AFA373EADEF5 /* RunProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7282E503DFB2A4A9D4F694 /* RunProgress.swift */; };
 		EFC964E697651DC1E488C4B3 /* VoiceFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B1B340C5C9A1E6B98D0D4C /* VoiceFeedbackService.swift */; };
 		F13FA6380F87B044A01A861B /* SaveOrWarnConsolidationGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 446CED6B3B61366AC83A38A2 /* SaveOrWarnConsolidationGuardTests.swift */; };
+		F6280F73CC057368AE7387F1 /* LogRotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1816DEC8EEAF588FC12775 /* LogRotation.swift */; };
 		F6722E5C044EE1C13E4AE18F /* PressContactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C75C38F33BA5598BCFE58B2 /* PressContactGuard.swift */; };
 		F76460F0D7481200D7361A3B /* ActionFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178A580B99A434A3D0A30B04 /* ActionFeedback.swift */; };
 		F7AD03FD6783102EF0485DD6 /* VoiceGuidanceGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7F3F5FCB2179A316B76715 /* VoiceGuidanceGuard.swift */; };
@@ -553,6 +554,7 @@
 		A84298B6C8EA1E8A89770772 /* OmniFocusSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSync.swift; sourceTree = "<group>"; };
 		A845FED20A605560CC21DB4A /* EventClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifier.swift; sourceTree = "<group>"; };
 		A994B8F944AA55C7BF692874 /* PrepResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepResults.swift; sourceTree = "<group>"; };
+		AA1816DEC8EEAF588FC12775 /* LogRotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRotation.swift; sourceTree = "<group>"; };
 		AA8D2818D1C0214152E05C92 /* ScoutStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutStatus.swift; sourceTree = "<group>"; };
 		AA9397FDF7E49A3E34623AD3 /* OutcomeStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomeStatsTests.swift; sourceTree = "<group>"; };
 		ABB209BD8716EB1330E81E67 /* FeedReconcile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedReconcile.swift; sourceTree = "<group>"; };
@@ -692,6 +694,7 @@
 				D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */,
 				B10A871E236F74AA30B8F4E6 /* AppDelegate.swift */,
 				513DB732FDE78DAFF21B9C48 /* DockPresence.swift */,
+				AA1816DEC8EEAF588FC12775 /* LogRotation.swift */,
 				D33E969396D2DF078F0D8654 /* MenuBarContent.swift */,
 				0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */,
 				D9B0914E3F338108E97924DF /* OvertureApp.swift */,
@@ -1221,6 +1224,7 @@
 				32299D54095B6E93E2BBB3F6 /* LaunchMigrations.swift in Sources */,
 				E74929018F823846F14A9908 /* LiveRunLabel.swift in Sources */,
 				FEB51866278C885610064F34 /* LocalHistory.swift in Sources */,
+				F6280F73CC057368AE7387F1 /* LogRotation.swift in Sources */,
 				E7430F3B28C911A906E599AE /* LoopbackListener.swift in Sources */,
 				4B822A1013C867F99F2E5314 /* MailSender.swift in Sources */,
 				3BB30FA715BB20466ED09B89 /* ManualRecipientCheck.swift in Sources */,

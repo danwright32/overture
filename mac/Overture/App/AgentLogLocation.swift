@@ -52,30 +52,15 @@ enum AgentLogLocation {
         return newBytes >= threshold
     }
 
-    // Bound each log to maxBytes, logrotate "copytruncate" style: when a file is over the cap, copy it
-    // to a single ".1" backup (replacing any prior one) then truncate the LIVE file in place to zero.
-    // Truncating in place (not renaming) is load-bearing: launchd opens these files in append mode
-    // before the agent starts and holds them open for its whole life, so the agent keeps writing to the
-    // same inode and resumes at the new end after truncation. Renaming would orphan the agent's writes
-    // onto the backup. Best-effort and idempotent; a per-file failure just leaves that file unrotated.
-    // Returns the files actually rotated. Run at startup, alongside prepareDirectory().
+    // Bound the agent's logs. The copytruncate mechanism itself now lives in LogRotation (#608), so
+    // the store-backup log can use the same one rather than growing a second copy of it; this stays
+    // as the agent-specific entry point (its own files, its own cap). Run at startup, alongside
+    // prepareDirectory().
     @discardableResult
     static func capLogs(maxBytes: Int = defaultMaxLogBytes,
                         files: [URL] = [standardOutURL, standardErrorURL],
                         fileManager: FileManager = .default) -> [URL] {
-        var rotated: [URL] = []
-        for file in files {
-            guard let size = try? fileManager.attributesOfItem(atPath: file.path)[.size] as? Int,
-                  size > maxBytes else { continue }
-            let backup = file.appendingPathExtension("1")
-            try? fileManager.removeItem(at: backup)
-            try? fileManager.copyItem(at: file, to: backup)
-            guard let handle = try? FileHandle(forWritingTo: file) else { continue }
-            defer { try? handle.close() }
-            guard (try? handle.truncate(atOffset: 0)) != nil else { continue }
-            rotated.append(file)
-        }
-        return rotated
+        LogRotation.cap(files: files, maxBytes: maxBytes, fileManager: fileManager)
     }
 
     // Create the log directory owner-only (0700) if missing, and tighten it if an earlier run left it
