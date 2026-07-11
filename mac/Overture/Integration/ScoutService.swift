@@ -44,7 +44,7 @@ enum ScoutService {
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let history = loadLocalHistory() + LocalHistory.records(from: existing)
+        let history = LocalHistory.forMatching(existing: existing)
         let health = feedHealthState()
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
         var outcome = apply(events: events, clients: loaded.clients, history: history,
@@ -350,16 +350,6 @@ enum ScoutService {
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs
         existing.ingestedAt = Date()
-    }
-
-    // Local booking history the matcher reads (group name + status), produced by
-    // scripts/import-history.ts (pnpm import-history) from Dan's booking CSV.
-    // Absent file = no history yet.
-    private static func loadLocalHistory() -> [HistoryRecord] {
-        let url = appSupport("overture-history.json")
-        guard let data = try? Data(contentsOf: url),
-              let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else { return [] }
-        return history
     }
 
     // The days the scout suppresses: Downbeat's exported blockedDates (the canonical source,
