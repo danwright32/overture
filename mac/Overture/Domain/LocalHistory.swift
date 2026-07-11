@@ -46,17 +46,33 @@ enum LocalHistory {
         StoreLocation.handoffDirectory.appendingPathComponent("overture-history.json")
     }
 
+    // ABSENT and UNREADABLE are different things (#754). Both used to return an empty array, so a
+    // CORRUPT history file looked exactly like a fresh install with no import yet, and every repeat
+    // client silently read as a cold lead with no symptom at all. Absent is a normal state; corrupt
+    // is a fault, and the caller has to be able to say so.
+    static func importedWithHealth(from url: URL = importedURL) -> (records: [HistoryRecord], unreadable: Bool) {
+        guard let data = try? Data(contentsOf: url) else { return ([], false) }
+        guard let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else {
+            return ([], true)
+        }
+        return (history, false)
+    }
+
     static func imported(from url: URL = importedURL) -> [HistoryRecord] {
-        guard let data = try? Data(contentsOf: url),
-              let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else { return [] }
-        return history
+        importedWithHealth(from: url).records
     }
 
     // The COMPLETE history any matcher should see: the legacy import plus Overture's own activity.
     // Shared (#751) so the scout and Prep match against the same records. They used to compose this
     // separately, which would have let the same performer read as a past client in one place and a
     // stranger in the other, with nothing catching the discrepancy.
+    static func forMatchingWithHealth(existing: [Prospect], importedFrom url: URL = importedURL)
+        -> (records: [HistoryRecord], unreadable: Bool) {
+        let imported = importedWithHealth(from: url)
+        return (imported.records + records(from: existing), imported.unreadable)
+    }
+
     static func forMatching(existing: [Prospect], importedFrom url: URL = importedURL) -> [HistoryRecord] {
-        imported(from: url) + records(from: existing)
+        forMatchingWithHealth(existing: existing, importedFrom: url).records
     }
 }
