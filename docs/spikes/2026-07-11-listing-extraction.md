@@ -41,6 +41,17 @@ greenlit on a result the shipped scout could never reproduce.
 
 **Nothing was missed and nothing was invented, across every site.** It passed the traps:
 
+**Read that result at its true strength, not stronger.** Five of the seven sites had no upcoming
+shows at all, so they test only that the extractor does not INVENT shows (it did not, on any of
+them, including one page carrying eleven past concert dates). Its ability to find every show that is
+really there was exercised against the three sites that actually had any: Symphony Space (12),
+Bargemusic (6), and Musica Sacra (6). Those three cover the hard shapes and it got 24 of 24, but a
+recall claim resting on three sites is a smaller claim than "seven sites, nothing missed" sounds. I
+also hand-verified two of Musica Sacra's six inferred years against the event pages, not all six.
+This does not change the GO: every failure this spike found sits in FINDING and FETCHING the page,
+not in reading it. It does mean the recall number should be re-tested in season, when more sources
+have real listings up.
+
 - **Bargemusic** prints no dates at all: concerts sit in cells of a month grid, and the date is
   implied by cell position. It reconstructed all six, and correctly dated the two trailing cells as
   **August 1 and 2** rather than July 1 and 2 (which would have been in the past). It also reported,
