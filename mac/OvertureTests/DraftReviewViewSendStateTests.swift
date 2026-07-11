@@ -107,6 +107,68 @@ struct DraftReviewViewSalutationReviewTests {
     }
 }
 
+// #733: guard against repeatedly re-prepping the same prospect.
+@MainActor
+@Suite("DraftReviewView re-prep cooldown (#733)")
+struct DraftReviewViewReprepCooldownTests {
+    private func item(status: ReviewStatus = .drafted, reprepDraftRequested: Bool = false,
+                      reprepContactsRequested: Bool = false, reprepLastServedAt: Date? = nil) -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: status, draftSubject: "S", draftBody: "Hi",
+                 reprepDraftRequested: reprepDraftRequested, reprepContactsRequested: reprepContactsRequested,
+                 reprepLastServedAt: reprepLastServedAt)
+    }
+
+    @Test func reprepMenuIsDisabledWhileARequestIsAlreadyPending() throws {
+        let view = DraftReviewView(item: item(reprepDraftRequested: true), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let menu = try view.inspect().find(ViewType.Menu.self)
+        #expect(try menu.isDisabled() == true)
+    }
+
+    @Test func reprepMenuIsEnabledWhenNothingIsPending() throws {
+        let view = DraftReviewView(item: item(), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let menu = try view.inspect().find(ViewType.Menu.self)
+        #expect(try menu.isDisabled() == false)
+    }
+
+    // Mirrors the #718 salutation-override precedent above: prove tapping a re-prep choice within
+    // the cooldown does NOT fire onReprep directly (the confirm alert must gate it), rather than
+    // trying to inspect inside the native .alert itself.
+    @Test func tappingAReprepChoiceWithinCooldownDoesNotFireTheCallbackWithoutConfirming() throws {
+        var requestedMode: ReprepMode?
+        let recentlyServed = Date().addingTimeInterval(-3600)   // 1h ago, well within the 24h cooldown
+        let view = DraftReviewView(item: item(reprepLastServedAt: recentlyServed), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onReprep: { mode in requestedMode = mode },
+                                   onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let button = try view.inspect().find(button: "Find contacts only")
+        try button.tap()
+
+        #expect(requestedMode == nil)
+    }
+
+    @Test func tappingAReprepChoiceOutsideCooldownFiresTheCallbackDirectly() throws {
+        var requestedMode: ReprepMode?
+        let longAgo = Date().addingTimeInterval(-48 * 3600)   // 48h ago, past the 24h cooldown
+        let view = DraftReviewView(item: item(reprepLastServedAt: longAgo), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onReprep: { mode in requestedMode = mode },
+                                   onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let button = try view.inspect().find(button: "Find contacts only")
+        try button.tap()
+
+        #expect(requestedMode == .contactsOnly)
+    }
+}
+
 // #388: a contact whose address looks like the host venue shows a dismissible warning, listed for
 // EVERY flagged contact (not just the primary one contactLine shows), since a secondary contact
 // (e.g. a presenter) would otherwise be invisible before send.

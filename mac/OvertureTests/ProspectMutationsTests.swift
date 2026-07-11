@@ -399,6 +399,48 @@ struct ProspectMutationsTests {
         #expect(feedback.message != nil)
     }
 
+    // #733: guard against repeatedly re-prepping the same prospect. Bulk silently skips anything
+    // already pending or served within the cooldown, rather than a per-prospect confirm dialog.
+    @Test func bulkReprepSkipsAlreadyPendingAndInCooldownProspects() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let ready = makeProspect(ctx, key: "ready", status: .drafted)
+        ready.draftBody = "Hi"
+        let alreadyPending = makeProspect(ctx, key: "pending", status: .drafted)
+        alreadyPending.draftBody = "Hi"
+        alreadyPending.reprepDraftRequested = true
+        let inCooldown = makeProspect(ctx, key: "cooldown", status: .drafted)
+        inCooldown.draftBody = "Hi"
+        inCooldown.reprepLastServedAt = now.addingTimeInterval(-3600)   // 1h ago, well within 24h
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.bulkReprep(.both, prospects: [ready, alreadyPending, inCooldown],
+                                     context: ctx, feedback: feedback, now: now)
+
+        #expect(ready.reprepDraftRequested == true)
+        #expect(ready.reprepContactsRequested == true)
+        #expect(alreadyPending.reprepContactsRequested == false)   // untouched: already pending
+        #expect(inCooldown.reprepDraftRequested == false)          // untouched: in cooldown
+        #expect(inCooldown.reprepContactsRequested == false)
+    }
+
+    @Test func bulkReprepAllEligibleSkippedGivesADistinctMessage() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let inCooldown = makeProspect(ctx, key: "cooldown", status: .drafted)
+        inCooldown.draftBody = "Hi"
+        inCooldown.reprepLastServedAt = now.addingTimeInterval(-3600)
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.bulkReprep(.both, prospects: [inCooldown], context: ctx, feedback: feedback, now: now)
+
+        #expect(inCooldown.reprepDraftRequested == false)
+        #expect(feedback.message != nil)
+        #expect(feedback.message != ActionAck.bulkReprepNothingEligible)   // distinct from "nothing has a draft at all"
+    }
+
     // #388: dismissing a specific contact's venue-match guess clears it for THAT recipient only.
     @Test func dismissVenueMatchClearsTheFlagForThatRecipient() throws {
         let ctx = ModelContext(try container())

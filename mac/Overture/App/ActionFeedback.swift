@@ -86,20 +86,35 @@ enum ActionAck {
 
     static let bulkReprepNothingEligible = "No drafted or approved prospects to re-prep"
 
+    // #733: everything that has a draft and isn't contacted/dismissed is already pending or was
+    // re-prepped too recently, so nothing new got queued. Distinct from bulkReprepNothingEligible
+    // (which means nothing has a draft at all), so Dan isn't told "nothing to re-prep" when there
+    // genuinely was something, just not right now.
+    static func bulkReprepAllSkipped(count: Int) -> String {
+        let prospectWord = count == 1 ? "prospect" : "prospects"
+        return "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
+    }
+
     // #367: the bulk confirmation must say when the batch was narrowed (some prospects already
     // sent, so they only got the contacts half) rather than silently applying less than asked.
-    static func bulkReprepQueued(mode: ReprepMode, total: Int, draftGrantedCount: Int) -> String {
+    // #733: skippedCount folds in anything already pending or in the re-prep cooldown, so a
+    // partial batch never reads as if everything asked for was queued.
+    static func bulkReprepQueued(mode: ReprepMode, total: Int, draftGrantedCount: Int, skippedCount: Int = 0) -> String {
         let prospectWord = total == 1 ? "prospect" : "prospects"
+        let skippedSuffix = skippedCount > 0
+            ? " (\(skippedCount) skipped: already pending or re-prepped recently)" : ""
         guard mode != .contactsOnly else {
-            return "Queued \(total) \(prospectWord) to find new contacts"
+            return "Queued \(total) \(prospectWord) to find new contacts" + skippedSuffix
         }
         let narrowedCount = total - draftGrantedCount
         guard narrowedCount > 0 else {
-            return "Queued \(total) \(prospectWord) to redraft" + (mode == .both ? " and find new contacts" : "")
+            return "Queued \(total) \(prospectWord) to redraft"
+                 + (mode == .both ? " and find new contacts" : "") + skippedSuffix
         }
         let base = mode == .both ? "redraft and find new contacts" : "redraft"
         return "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
              + "\(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
+             + skippedSuffix
     }
 
     // #499: a non-send mutation (keep/dismiss, draft edit, manual outcome, booking confirm, ...)

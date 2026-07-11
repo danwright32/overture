@@ -99,10 +99,10 @@ struct RootView: View {
         !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
     }
 
-    // #367: the bulk action's scope, mirroring ProspectMutations.bulkReprep's own filter so the
+    // #367/#733: shares ProspectMutations.bulkReprepEligible with bulkReprep itself, so the
     // menu's disabled state always agrees with what a tap would actually do.
     private var eligibleForBulkReprep: [Prospect] {
-        allProspects.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
+        ProspectMutations.bulkReprepEligible(allProspects, now: Date())
     }
 
     private func bulkReprep(_ mode: ReprepMode) {

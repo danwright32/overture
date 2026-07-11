@@ -78,6 +78,9 @@ final class Prospect {
     // once the run produces any result for this prospect, served or not.
     var reprepDraftRequested: Bool = false
     var reprepContactsRequested: Bool = false
+    // #733: when a Prep run last produced a result for this prospect (a normal fresh draft OR a
+    // served re-prep), so the UI can warn before re-prepping something that was just researched.
+    var reprepLastServedAt: Date? = nil
 
     // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
     // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
