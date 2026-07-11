@@ -42,6 +42,10 @@ struct ProspectRowView: View {
     var onRejectBooking: () -> Void = {}
     // #611: dismisses the "already has its own photographer" fit-risk flag as a false positive.
     var onDismissAlreadyCoveredFlag: () -> Void = {}
+    // #753: Dan's verdict on a performer match. Confirming unlocks the warm drafting tone; rejecting
+    // reverts the score to exactly what the scout had (#752).
+    var onConfirmPerformerMatch: () -> Void = {}
+    var onDismissPerformerMatch: () -> Void = {}
     // Only ever passed non nil by Archive (the Queue never shows a dismissed prospect), so
     // this has zero effect on any existing Queue row.
     var onRestore: (() -> Void)? = nil
@@ -75,6 +79,7 @@ struct ProspectRowView: View {
                     confidenceFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
+                    performerMatchFlag
                     autoBookedTag
                     links
                 }
@@ -322,6 +327,44 @@ struct ProspectRowView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Prep's research found this show may already have its own photographer. Tap if that's wrong.")
+            .padding(.top, 2)
+        }
+    }
+
+    // #753: Prep matched this show's PERFORMER (not its org) to someone Dan has already shot, and
+    // warmed the lead accordingly (#585). Unlike alreadyCoveredFlag, this one has ALREADY moved
+    // fitScore/tier, so the row must be able to both explain the change and take it back.
+    //
+    // Two states, because an unconfirmed match is deliberately half-trusted (#752): it ranks the lead
+    // warm right away (reversible, useful) but is held back from the drafting tone until Dan says it
+    // is right (irreversible once an email goes out). So an unreviewed match ASKS in gold, the same
+    // "needs your sign-off" idiom as bookingSuggestionFlag, and a confirmed one simply STATES in
+    // forest, while still offering the reject action in case he changes his mind.
+    @ViewBuilder private var performerMatchFlag: some View {
+        if let note = item.performerMatchNote,
+           item.relationshipCorrectedByPerformerMatch,
+           !item.performerMatchDismissed {
+            let confirmed = item.performerMatchReviewed
+            Menu {
+                if !confirmed { Button("Looks right") { onConfirmPerformerMatch() } }
+                Button("Wrong match") { onDismissPerformerMatch() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: confirmed
+                          ? "person.crop.circle.badge.checkmark"
+                          : "person.crop.circle.badge.questionmark")
+                    Text(note)
+                }
+                .font(OVType.tag)
+                .foregroundStyle(confirmed ? OVColor.forest : OVColor.gold)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill((confirmed ? OVColor.forest : OVColor.gold).opacity(0.12)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(confirmed
+                  ? "You confirmed this performer is a past client, so the fit score counts it and a draft can write to them as a returning client."
+                  : "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it.")
             .padding(.top, 2)
         }
     }

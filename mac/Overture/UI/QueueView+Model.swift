@@ -49,6 +49,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // dismissible without changing fitScore/tier or the whole prospect's status.
     var alreadyCoveredNote: String? = nil
     var alreadyCoveredDismissed: Bool = false
+    // #753: Prep matched this show's PERFORMER (not its org) to a past client and warmed the lead.
+    // Unlike alreadyCovered, this one ALREADY changed fitScore/tier, so the row has to be able to
+    // both explain it and take it back. Unreviewed means the warm drafting tone is still held back
+    // until Dan confirms (#752).
+    var relationshipCorrectedByPerformerMatch: Bool = false
+    var performerMatchNote: String? = nil
+    var performerMatchDismissed: Bool = false
+    var performerMatchReviewed: Bool = false
     // #407: an old draft still carrying an un-strippable inline greeting; sending is blocked
     // entirely (Recipient.isSendablePending) until this clears itself on a fresh migration pass.
     var draftNeedsSalutationReview: Bool = false
@@ -557,6 +565,10 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,
+            relationshipCorrectedByPerformerMatch: p.relationshipCorrectedByPerformerMatch,
+            performerMatchNote: p.performerMatchNote,
+            performerMatchDismissed: p.performerMatchDismissed,
+            performerMatchReviewed: p.performerMatchReviewed,
             draftNeedsSalutationReview: p.draftNeedsSalutationReview,
             salutationReviewOverridden: p.isSalutationReviewOverridden,
             outcomeSourceRaw: p.outcomeSourceRaw,

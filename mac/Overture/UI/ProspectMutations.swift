@@ -299,6 +299,21 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #753/#752: Dan's verdict on a performer match. The real work lives on the model, which owns the
+    // snapshot revert and the reviewed flag, so these stay thin and there is exactly one implementation
+    // of each.
+    static func confirmPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.confirmPerformerMatch()
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
+    static func dismissPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.dismissPerformerMatch()
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #718: Dan's deliberate, confirmed override of the #407 salutation-review send block, for
     // when SalutationStrip's heuristic flagged text he's confident is fine to send as-is. Records
     // the EXACT current draftBody rather than a bare boolean (see
