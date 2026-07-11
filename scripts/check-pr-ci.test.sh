@@ -99,6 +99,52 @@ RUNNER_CHECKED=0; RUNNER_STATUS=""; RUNNER_BUSY=""
 out="$(classify_check_run "swift-tests" "in_progress" "444" "")"
 assert_contains "runner-offline: reported as stalled, unreachable" "${out}" "Stalled. Runner appears unreachable, status is offline (pending 6m40s)"
 
+# --- skipped (#761): a PR that touches no Swift, fixtures or CI-script file does not run
+# swift-tests at all, so the job reports conclusion "skipped". That is an INTENTIONAL skip
+# (the path filter in ci.yml decided the Mac tests prove nothing about this change), not a
+# failure, and it must not block the merge. Before this, `skipped` fell into the catch-all
+# arm and was treated as not-passed, which is what left every Dependabot PR unmergeable.
+#
+# NOTE: classify_check_run mutates EXIT_CODE in its CALLER, so it has to be invoked directly
+# here, not inside a command substitution. `out="$(classify_check_run ...)"` runs it in a
+# subshell, where the mutation is discarded and every EXIT_CODE assertion would pass vacuously.
+# The existing scenarios above only assert on printed text, so they never hit this.
+assert_exit_code() {
+  local desc="$1" expected="$2"
+  if [[ "${EXIT_CODE}" -eq "${expected}" ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc} (EXIT_CODE=${EXIT_CODE}, expected ${expected})"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+EXIT_CODE=0
+out="$(classify_check_run "swift-tests" "completed" "555" "skipped")"
+assert_contains "skipped swift-tests: reported as skipped" "${out}" "Skipped"
+
+# It must NEVER read as "Passed": the whole point of this script is that Dan can tell a check
+# that actually ran and went green apart from one that never ran at all (the repo's own
+# "a pending check and a stuck one look identical" rule).
+if [[ "${out}" == *"Passed"* ]]; then
+  echo "FAIL - a skipped check must not be reported as Passed: ${out}"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a skipped swift-tests is not reported as Passed"
+fi
+
+EXIT_CODE=0
+classify_check_run "swift-tests" "completed" "555" "skipped" >/dev/null
+assert_exit_code "an intentionally skipped swift-tests does not block the merge" 0
+
+# --- a skipped check that is NOT swift-tests is still not a pass. Only the Mac job has a
+# legitimate path-filtered skip; anything else skipping is unexpected and must be surfaced.
+EXIT_CODE=0
+classify_check_run "typecheck-and-test" "completed" "666" "skipped" >/dev/null
+assert_exit_code "an unexpectedly skipped check still blocks the merge" 1
+
+EXIT_CODE=0
+
 # --- check_mergeable (#625): a PR with a real merge conflict never gets CI checks at all, so
 # polling check-runs for one just times out reporting "No checks found yet" for the full
 # MAX_WAIT_SECONDS. check_mergeable lets main() fail fast on that specific case instead. ---
