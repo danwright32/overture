@@ -2,11 +2,12 @@ import Testing
 import Foundation
 @testable import Overture
 
-// The Swift reader half of the shared local-history contract (#166). Decodes the SAME committed
-// fixture the TS scout reads (src/lib/localHistoryContract.test.ts via parseLocalHistory) and
-// asserts the same logical result, so a format change one reader hasn't caught up to fails here (or
-// there) instead of silently treating every org as cold in production (the #104 / #109 trap). This
-// is the exact decode ScoutService.loadLocalHistory performs. Mirrors DownbeatExportContractTests.
+// The local-history contract (#166). Used to also be read by a TypeScript mirror
+// (localHistoryContract.test.ts via parseLocalHistory) decoding the same committed fixture, so a
+// format change one reader hadn't caught up to would fail here or there instead of silently
+// treating every org as cold in production (the #104 / #109 trap); that mirror was retired in
+// #493 once the app was confirmed to scout natively, so the app is now the only reader. This is
+// the exact decode ScoutService.loadLocalHistory performs. Mirrors DownbeatExportContractTests.
 @Suite("Local history contract fixtures")
 struct LocalHistoryContractTests {
     private func fixtureDirectory() -> URL {

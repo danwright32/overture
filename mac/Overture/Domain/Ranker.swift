@@ -1,8 +1,9 @@
 import Foundation
 
-// Fit-score ranker, ported from the engine's ranker.ts (kept identical so the native
-// scout scores exactly as the TypeScript tests specify). Pure, deterministic scoring
-// of an already-classified candidate. See PLAN.md section 4.
+// Fit-score ranker. Pure, deterministic scoring of an already-classified candidate. Used to be
+// kept identical to a TypeScript mirror (ranker.ts); that mirror was retired in #493 once the
+// app was confirmed to scout natively, so RankerFixtureTests (fixtures/ranker/cases.json) is now
+// this logic's only locked spec, not a cross-language drift guard. See PLAN.md section 4.
 
 enum Production: String, Decodable, Sendable { case selfProduced = "self", agency, unknown }
 enum Profile: String, Decodable, Sendable { case strong, neutral, weak }

@@ -1,9 +1,9 @@
 import Foundation
 
-// Repeat-client verdict, ported from historyMatch.ts. Matches a discovered group
-// against the canonical Downbeat clients (booked) and the imported booking history
-// (contacted / DNC-suppression). Confident matches set the relationship; a fuzzy
-// match becomes a "possible" flag for Dan to confirm, never scored.
+// Repeat-client verdict. Matches a discovered group against the canonical Downbeat clients
+// (booked) and the imported booking history (contacted / DNC-suppression). Confident matches
+// set the relationship; a fuzzy match becomes a "possible" flag for Dan to confirm, never
+// scored. Used to be kept identical to a TypeScript mirror (historyMatch.ts), retired in #493.
 
 // Minimal booking-history record the matcher needs (group name + status). The local
 // history file the app reads carries these; status is "booked" / "contacted" / "dnc".

@@ -2,12 +2,13 @@ import Testing
 import Foundation
 @testable import Overture
 
-// The shared cross-language drift guard (#492). Decodes the SAME committed cases the TypeScript
-// side asserts (src/lib/groupNameMatchContract.test.ts) against this side's own implementation,
-// so a one-sided change to normalization or matching fails this suite (or the TS one) instead of
-// silently reclassifying a warm past client as cold with nothing catching it (the ~79 percent
-// warm versus ~1.6 percent cold conversion signal). See fixtures/group-name-match/README.md.
-@Suite("Group-name match cross-language fixture")
+// Locked normalization/matching spec (#492). Used to also guard a TypeScript mirror
+// (groupNameMatch.ts), decoding the same committed cases so a one-sided change would fail this
+// suite or the TS one instead of silently reclassifying a warm past client as cold with nothing
+// catching it (the ~79 percent warm versus ~1.6 percent cold conversion signal); that mirror was
+// retired in #493. This suite is now GroupNameMatch.swift's only locked spec, not a
+// cross-language drift guard. See fixtures/group-name-match/README.md.
+@Suite("Group-name match locked fixture")
 struct GroupNameDriftTests {
     private struct NormalizeCase: Decodable {
         let input: String
