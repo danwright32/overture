@@ -721,6 +721,9 @@ struct RootView: View {
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         if outcome.saveFailed { notes.append("couldn't save, try again") }
+        // #754: the performer matcher ran against missing or unreadable reference data, so a past
+        // client may have read as a cold lead. Silent here means invisible forever.
+        if let matchDataWarning = outcome.matchDataWarning { notes.append(matchDataWarning) }
         // #249: fail closed if the distiller leaked a real name into the voice guidance; quarantine
         // the contaminated section so it can't feed a future draft, and warn Dan.
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,

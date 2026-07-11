@@ -23,6 +23,29 @@ enum PrepImporter {
         var unmatchedKeys: [String] = []
         // #499: set when a context.save() failed, so this run's matches/drafts may not persist.
         var saveFailed = false
+        // #754: the performer matcher's reference data (the Downbeat client export, the booking
+        // history) was missing, stale or corrupt, so a performer who IS a past client may have read
+        // as a cold lead. Surfaced rather than swallowed: an empty match result otherwise looks
+        // exactly like a healthy run that genuinely found nothing.
+        var matchDataWarning: String? = nil
+    }
+
+    // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
+    // and both are written by other processes. Says what the breakage COSTS Dan (a warm lead reading
+    // as cold), not merely that a file is unreadable, because the cost is the part he can act on.
+    // Pure, so the wording and the combinations are testable without touching the filesystem.
+    static func matchDataWarning(clientHealth: DownbeatBridge.Health, historyUnreadable: Bool) -> String? {
+        var problems: [String] = []
+        switch clientHealth {
+        case .ok: break
+        case .missing: problems.append("no Downbeat client export was found")
+        case .unreadable: problems.append("the Downbeat client export couldn't be read")
+        case .stale(let days): problems.append("the Downbeat client export is \(days) days old")
+        }
+        if historyUnreadable { problems.append("the booking history couldn't be read") }
+        guard !problems.isEmpty else { return nil }
+        return problems.joined(separator: " and ")
+            + ", so a performer who is a past client may have read as cold"
     }
 
     @MainActor
@@ -310,13 +333,22 @@ enum PrepImporter {
     }
 
     @MainActor
-    static func ingestFile(at url: URL, into context: ModelContext) throws -> Outcome {
+    static func ingestFile(at url: URL, into context: ModelContext,
+                           downbeatURL: URL = DownbeatBridge.defaultURL,
+                           historyURL: URL = LocalHistory.importedURL) throws -> Outcome {
         let data = try Data(contentsOf: url)
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        return ingest(try PrepResultsDecoder.decode(data), into: context,
-                      clients: loaded.clients,
-                      history: LocalHistory.forMatching(existing: existing))
+        let loaded = DownbeatBridge.loadWithHealth(from: downbeatURL, now: Date())
+        let history = LocalHistory.forMatchingWithHealth(existing: existing, importedFrom: historyURL)
+
+        var outcome = ingest(try PrepResultsDecoder.decode(data), into: context,
+                             clients: loaded.clients, history: history.records)
+        // #754: the health verdict used to be computed here and then thrown away, so a missing or
+        // corrupt client export meant every performer match silently found nothing and a real past
+        // client read as a cold lead, with no symptom Dan could ever have noticed.
+        outcome.matchDataWarning = matchDataWarning(clientHealth: loaded.health,
+                                                    historyUnreadable: history.unreadable)
+        return outcome
     }
 
     static var defaultURL: URL {
