@@ -200,4 +200,38 @@ describe("appHistoryRecords", () => {
       { groupName: "Warm Lead", status: "warm" },
     ]);
   });
+
+  // #762: the CSV's Email column was parsed and then thrown away on the way to the app, so a
+  // performer matched through past outreach (rather than through the Downbeat client list) had no
+  // address to corroborate against. That is the branch most exposed to matching the wrong person
+  // with the same name, since the booking history is older and broader than the client list.
+  it("carries the email through, so a performer match can be corroborated", () => {
+    const csv =
+      "Name of Group,Date of shoot,Email,Venue,First Contact,Type of Contact,Status\n" +
+      "Kento Hong,,kento@example.com,,Cold Email (Me to Them),Direct Email,Booked\n";
+    expect(appHistoryRecords(parseBookingCsv(csv))).toEqual([
+      { groupName: "Kento Hong", status: "booked", email: "kento@example.com" },
+    ]);
+  });
+
+  // Absent stays absent rather than becoming an empty string: the app treats an empty address as
+  // "no signal", and a key that is simply not there says the same thing without the ambiguity.
+  it("omits the email key entirely when the cell is blank", () => {
+    const csv =
+      "Name of Group,Date of shoot,Email,Venue,First Contact,Type of Contact,Status\n" +
+      "Booked Choir,,,,Cold Email (Me to Them),Direct Email,Booked\n";
+    const records = appHistoryRecords(parseBookingCsv(csv));
+    expect(records[0]).toEqual({ groupName: "Booked Choir", status: "booked" });
+    expect("email" in records[0]).toBe(false);
+  });
+
+  // The CSV really does carry two-email cells (the parser's own header comment says so).
+  it("keeps a two-email cell intact for the app to split", () => {
+    const csv =
+      "Name of Group,Date of shoot,Email,Venue,First Contact,Type of Contact,Status\n" +
+      '"Duo Act",,"a@example.com, b@example.com",,Cold Email (Me to Them),Direct Email,Booked\n';
+    expect(appHistoryRecords(parseBookingCsv(csv))[0].email).toBe(
+      "a@example.com, b@example.com",
+    );
+  });
 });

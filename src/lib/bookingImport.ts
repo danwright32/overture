@@ -68,8 +68,17 @@ export function mapBookingRow(row: Record<string, string>): HistoryRecord {
   };
 }
 
-// One row the app reads from overture-history.json: a group name and a ranking status.
-export type AppHistoryRecord = { groupName: string; status: string };
+// One row the app reads from overture-history.json: a group name, a ranking status, and (#762) the
+// contact address, when the sheet has one. The address exists so the app can CORROBORATE a
+// performer-name match: the booking history is older and broader than the Downbeat client list, so a
+// performer matched through it is the case most exposed to hitting a different person of the same
+// name. Optional, and omitted entirely when blank, so an older file (and the app's own empty-address
+// "no signal" rule) still reads correctly.
+export type AppHistoryRecord = {
+  groupName: string;
+  status: string;
+  email?: string;
+};
 
 // Maps a booking row's outcome (Status) and relationship (First Contact) onto the app's
 // ranking vocabulary, or null for a cold pitch that got silence (neutral, no record kept).
@@ -99,7 +108,12 @@ function isHardLost(reason: string | null | undefined): boolean {
 export function appHistoryRecords(records: HistoryRecord[]): AppHistoryRecord[] {
   return records.flatMap((r) => {
     const status = appStatus(r);
-    return status ? [{ groupName: r.group_name, status }] : [];
+    if (!status) return [];
+    const email = (r.email ?? "").trim();
+    // Spread rather than always writing the key, so a blank cell produces no `email` at all instead
+    // of an empty string. Absent and empty mean the same thing to the app ("no signal"), and saying
+    // it one way keeps the file honest.
+    return [{ groupName: r.group_name, status, ...(email ? { email } : {}) }];
   });
 }
 
