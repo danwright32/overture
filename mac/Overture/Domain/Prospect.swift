@@ -178,6 +178,13 @@ final class Prospect {
     var performerMatchPreviousMatchedClientName: String? = nil
     var performerMatchPreviousDownbeatClientId: String? = nil
 
+    // #384: Dan passed on this exact show before (same org, same venue), so the fit score carries a
+    // penalty. Scout-owned and refreshed every run, like the rest of the scoring inputs. Stored rather
+    // than recomputed on demand because ClassificationOverride rebuilds the ranking Candidate from
+    // this prospect's own fields: without it, the penalty would silently evaporate the moment Dan
+    // corrected the discipline. Defaulted so existing records migrate cleanly.
+    var passedOnThisShow: Bool = false
+
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
     // time so Dan can reject that exact match. Defaulted so existing records migrate cleanly.
     var autoBookedFromBookingId: String? = nil

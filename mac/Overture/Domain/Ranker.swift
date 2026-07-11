@@ -29,6 +29,33 @@ struct Candidate: Decodable, Sendable {
     var profile: Profile
     var coverage: Coverage
     var discipline: Discipline
+    // #384: Dan already passed on THIS show (same org, same venue). Its own axis, NOT a
+    // priorRelationship value, because the two are orthogonal: he can have booked an org happily and
+    // still not want their particular annual show. As a relationship it would just be outranked by
+    // "booked" and never apply to the orgs he works with most.
+    var passedOnThisShow: Bool = false
+
+    // Spelled out because providing init(from:) below stops Swift synthesising these. A nested enum
+    // does not suppress the memberwise init, so every existing Candidate(...) call site is unaffected.
+    enum CodingKeys: String, CodingKey {
+        case reachable, priorRelationship, production, profile, coverage, discipline, passedOnThisShow
+    }
+}
+
+// Decoded in an EXTENSION so the memberwise init survives (declaring init(from:) in the body would
+// suppress it). passedOnThisShow is decodeIfPresent, so every ranker fixture written before #384
+// still decodes rather than throwing on a missing key.
+extension Candidate {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        reachable = try c.decode(Bool.self, forKey: .reachable)
+        priorRelationship = try c.decode(PriorRelationship.self, forKey: .priorRelationship)
+        production = try c.decode(Production.self, forKey: .production)
+        profile = try c.decode(Profile.self, forKey: .profile)
+        coverage = try c.decode(Coverage.self, forKey: .coverage)
+        discipline = try c.decode(Discipline.self, forKey: .discipline)
+        passedOnThisShow = try c.decodeIfPresent(Bool.self, forKey: .passedOnThisShow) ?? false
+    }
 }
 
 struct FitResult: Equatable, Sendable {
@@ -75,12 +102,20 @@ enum Ranker {
         }
     }
 
+    // #384: Dan already told us he doesn't want this show. A nudge below the high-fit cutoff (5), not
+    // a burial (Dan's call): a typical strong show scores 9, so this lands it at 4, stopping it being
+    // promoted while leaving it near the top of the longshots, where a change of heart next season
+    // costs nothing. Deliberately much lighter than a hard loss (-20): his taste is not the same thing
+    // as a client's rejection.
+    static func passedPoints(_ passed: Bool) -> Int { passed ? -5 : 0 }
+
     static func scoreFit(_ c: Candidate) -> FitResult {
         let score = priorPoints(c.priorRelationship)
             + productionPoints(c.production)
             + profilePoints(c.profile)
             + coveragePoints(c.coverage)
             + disciplinePoints(c.discipline)
+            + passedPoints(c.passedOnThisShow)
         let tier: Tier = score >= highTierThreshold ? .high : .longshot
         return FitResult(excluded: !c.reachable, score: score, tier: tier)
     }

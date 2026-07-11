@@ -82,5 +82,19 @@
     "expectedExcluded": true,
     "expectedScore": 20,
     "expectedTier": "high"
+  },
+  {
+    "description": "#384: a show Dan passed on drops just below the high-fit cutoff, from 9 to 4",
+    "candidate": { "reachable": true, "priorRelationship": "none", "production": "self", "profile": "strong", "coverage": "likely_uncovered", "discipline": "dance", "passedOnThisShow": true },
+    "expectedExcluded": false,
+    "expectedScore": 4,
+    "expectedTier": "longshot"
+  },
+  {
+    "description": "#384: the pass is a separate axis, so a booked org still ranks high after the penalty",
+    "candidate": { "reachable": true, "priorRelationship": "booked", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other", "passedOnThisShow": true },
+    "expectedExcluded": false,
+    "expectedScore": 15,
+    "expectedTier": "high"
   }
 ]

@@ -26,7 +26,10 @@ enum ClassificationOverride {
             production: resolvedProduction,
             profile: profile,
             coverage: coverage,
-            discipline: resolvedDiscipline
+            discipline: resolvedDiscipline,
+            // #384: carried through, or correcting a discipline would silently drop the penalty on a
+            // show Dan already passed on and hand it back its old score.
+            passedOnThisShow: p.passedOnThisShow
         )
     }
 

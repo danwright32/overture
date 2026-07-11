@@ -135,7 +135,10 @@ enum ScoutService {
         for e in events {
             let c = EventClassifier.classify(e)
             if c.confidence == .uncertain { uncertain += 1 }
-            let verdict = HistoryMatch.matchRelationship(name: e.title, clients: clients, history: history)
+            // #384: the venue is what aims a "don't want to shoot this" pass at ONE show rather than
+            // at the whole org.
+            let verdict = HistoryMatch.matchRelationship(name: e.title, venue: e.venue,
+                                                         clients: clients, history: history)
             switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict, blocked: blocked) {
             case .skip:
                 skipped += 1
@@ -278,6 +281,7 @@ enum ScoutService {
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs)
         prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
+        prospect.passedOnThisShow = p.passedOnThisShow
         return prospect
     }
 
@@ -292,6 +296,9 @@ enum ScoutService {
         existing.fitReason = p.fitReason
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
+        // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
+        // (via ClassificationOverride.rescored) and by the fresh score in p.
+        existing.passedOnThisShow = p.passedOnThisShow
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
         // NOTE: never touch confidenceReviewedByDan here; Dan owns that acknowledgement.
         // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
