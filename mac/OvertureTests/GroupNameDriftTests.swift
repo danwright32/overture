@@ -50,4 +50,39 @@ struct GroupNameDriftTests {
             #expect(GroupNameMatch.isPossible(c.a, c.b) == c.possible)
         }
     }
+
+    // #774: normalize strips everything outside a-z, so an accented org name used to shred into junk
+    // tokens ("Sinfónica" to "sinf" and "nica") and could never match, silently scoring a real repeat
+    // client as a cold lead. This is the ORG path, which #755 deliberately left alone.
+    @Test func anAccentedOrgNameMatchesItsPlainSpelling() {
+        #expect(GroupNameMatch.normalize("Orquesta Sinfónica") == "orquesta sinfonica")
+        #expect(GroupNameMatch.isConfident("Théâtre du Châtelet", "Theatre du Chatelet"))
+    }
+
+    // Folding touches combining marks, NOT punctuation, so the long-dash separators that
+    // stripProgramSubtitle depends on must survive it. If they didn't, a "Presenter, long dash,
+    // Program" name would stop collapsing to just the presenter, and every venue-versus-booking-sheet
+    // match would break (#105).
+    //
+    // The separators are written as escapes, not literal characters, only because the repo's style
+    // hook forbids those characters in source: here they are DATA (the thing under test), not prose.
+    @Test func foldingLeavesTheDashSeparatorsStripProgramSubtitleNeeds() {
+        let emDash = "\u{2014}"
+        let enDash = "\u{2013}"
+
+        #expect(GroupNameMatch.normalize("Every Voice Choirs \(emDash) Earth Day Jazz") == "every voice choirs")
+        #expect(GroupNameMatch.normalize("Orquesta Sinfónica \(emDash) Gala Nocturna") == "orquesta sinfonica")
+        #expect(GroupNameMatch.normalize("Théâtre du Châtelet \(enDash) Saison 2026") == "theatre du chatelet")
+    }
+
+    // The shared matcher is also what suppresses do-not-contact orgs, so folding has to help there
+    // too: a DNC org whose name carries an accent must still suppress, not silently slip through.
+    @Test func anAccentedDoNotContactOrgStillSuppresses() {
+        let verdict = HistoryMatch.matchRelationship(
+            name: "Théâtre du Châtelet",
+            clients: [],
+            history: [HistoryRecord(groupName: "Theatre du Chatelet", status: "dnc")])
+
+        #expect(verdict.suppressed)
+    }
 }

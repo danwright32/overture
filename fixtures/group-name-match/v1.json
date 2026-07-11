@@ -9,6 +9,18 @@
       "expected": "the royal gala"
     },
     {
+      "input": "Orquesta Sinfónica Nacional",
+      "expected": "orquesta sinfonica nacional"
+    },
+    {
+      "input": "Théâtre du Châtelet",
+      "expected": "theatre du chatelet"
+    },
+    {
+      "input": "Antonín Dvořák Society",
+      "expected": "antonin dvorak society"
+    },
+    {
       "input": "Spring Gala Concert\nPresented by Every Voice Choirs",
       "expected": "every voice choirs"
     },
@@ -53,6 +65,18 @@
     {
       "a": "Every Voice Choirs - Earth Day Jazz",
       "b": "Every Voice Choirs",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Antonín Dvořák Society",
+      "b": "Antonin Dvorak Society",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Orquesta Sinfónica Nacional",
+      "b": "Orquesta Sinfonica Nacional",
       "confident": true,
       "possible": false
     },
