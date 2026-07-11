@@ -299,6 +299,21 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #769: Dan marks (or releases) the whole ORG, not just this show. The real work lives in
+    // OrgDoNotContact, which needs every prospect so it can reach the org's OTHER shows: protecting
+    // the next scout while leaving three of their shows drafted and ready to send in the queue would
+    // be a feature that looks like it works and still sends the email.
+    static func setOrgDoNotContact(_ item: QueueItem, _ on: Bool, prospects: [Prospect],
+                                   context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        if on {
+            OrgDoNotContact.mark(orgOf: model, in: prospects)
+        } else {
+            OrgDoNotContact.unmark(orgOf: model, in: prospects)
+        }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #753/#752: Dan's verdict on a performer match. The real work lives on the model, which owns the
     // snapshot revert and the reviewed flag, so these stay thin and there is exactly one implementation
     // of each.

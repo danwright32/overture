@@ -20,6 +20,8 @@ struct DraftReviewView: View {
     var onDismissReply: () -> Void = {}
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    // #769: Dan's answer to "was that this show, or the whole org?"
+    var onSetOrgDoNotContact: (Bool) -> Void = { _ in }
     // Per-contact conversation state (#652): a distinct vocabulary from onMarkContact's terminal
     // outcomes, mirroring FollowUpsView's own set/confirm split.
     var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
@@ -54,6 +56,7 @@ struct DraftReviewView: View {
     var highlightedRecipientId: String? = nil
 
     @State private var editing = false
+    @State private var askAboutWholeOrg = false   // #769
     @State private var draftSubject = ""
     @State private var draftBody = ""
     @State private var editingReplyFor: String?    // recipient id whose reply draft is being edited (#423 E)
@@ -87,6 +90,22 @@ struct DraftReviewView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(OVColor.surfaceSunk.opacity(0.5))
         )
+        // #769: "Not interested" is genuinely ambiguous, and the two readings have wildly different
+        // consequences: one closes a show, the other means never email these people again. Guessing
+        // either way is wrong (silently burn an org who only meant this show, or keep pitching one who
+        // asked you to stop). So ask, once, in the moment Dan has actually read the reply.
+        //
+        // The default is the SAFE, reversible reading: it takes a deliberate second click to mark a
+        // whole org, and the destructive role makes that click feel like what it is.
+        .confirmationDialog("Did they mean this show, or the whole organisation?",
+                            isPresented: $askAboutWholeOrg, titleVisibility: .visible) {
+            Button("Just this show") { }
+            Button("Never contact \(item.groupName) again", role: .destructive) {
+                onSetOrgDoNotContact(true)
+            }
+        } message: {
+            Text("If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row.")
+        }
     }
 
     @ViewBuilder private var contactLine: some View {
@@ -455,7 +474,14 @@ struct DraftReviewView: View {
                         Button("In conversation") { onMarkContact(c.id, nil, false) }
                         Button("Booked") { onMarkContact(c.id, .booked, false) }
                         Button("Closed (not now)") { onMarkContact(c.id, .declinedSoft, false) }
-                        Button("Closed (not interested)") { onMarkContact(c.id, .declinedHard, false) }
+                        Button("Closed (not interested)") {
+                            onMarkContact(c.id, .declinedHard, false)
+                            // #769: "not interested" is ambiguous, and the two readings have wildly
+                            // different consequences. Ask once, here, in the moment Dan has actually
+                            // read the reply, rather than guessing or relying on him to remember an
+                            // org-level action later, which is exactly when he won't.
+                            askAboutWholeOrg = true
+                        }
                         Button("Bounced") { onMarkContact(c.id, nil, true) }
                         Divider()
                         // #399: distinct from every option above, none of which mean "stop pursuing
