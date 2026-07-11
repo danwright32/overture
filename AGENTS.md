@@ -41,6 +41,13 @@ already drifting from the Swift version it mirrored.
   indistinguishable at a glance from a real pass. Confirm a scoped run by grepping its
   output for the specific test name, or just run the full suite via
   `run-tests-locked.sh`, which completes in a few seconds.
+- To actually LOOK at the app, use `mac/scripts/run-debug.sh` (#567): it regenerates the
+  project, quits any Debug instance still running (a stale one silently holds the Debug store's
+  single-writer lock, so a fresh launch comes up in the degraded "another copy is using its data"
+  state and the change under test looks broken), builds Debug, verifies the built bundle really
+  carries the Debug identity, and only then launches it, printing the exact `.app` path and the
+  store it will touch. It refuses to launch a bundle claiming the Release identity, which would
+  open the LIVE store. Release has its own installer, `mac/build-install.sh`.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
