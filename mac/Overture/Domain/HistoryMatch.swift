@@ -190,9 +190,11 @@ enum HistoryMatch {
         // Booking history carries no email (#762), so name alone decides. Strongest relationship
         // wins, same as matchRelationship: a real relationship (warm) beats a lost outcome on the
         // same person.
+        // Per-LINE matching (#755): a history entry is messy free text and may list one performer per
+        // line, so the org path's "read the org line" rule would never see the second soloist.
         let confident = history.filter {
             !isStatus($0.status, "dnc")
-                && GroupNameMatch.isConfidentPersonName(performerName, $0.groupName)
+                && GroupNameMatch.isConfidentPersonName(performerName, inEntry: $0.groupName)
         }
         let signals = confident.map { relationship(forStatus: $0.status) }
         if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }),

@@ -87,6 +87,44 @@ enum GroupNameMatch {
         return Double(shared) / Double(union) >= 0.5
     }
 
+    // A trailing word that names a ROLE, not a person (#755). Dan's booking history stores a soloist
+    // as "Kento Hong, violin", so without this the strict rule below can never match the person
+    // "Kento Hong" to the record that IS him. Found by running the matcher against his real history
+    // (see PerformerMatchPrecisionCheckTests): it matched 2 of 13 real past performers, because
+    // almost every soloist is filed with their instrument.
+    //
+    // Deliberately a closed vocabulary rather than "drop the last token": dropping blindly would turn
+    // the org "Jane Doe Ensemble" into the person "Jane Doe", which is exactly the false positive the
+    // strict rule exists to prevent.
+    private static let roleWords: Set<String> = [
+        "violin", "viola", "cello", "violoncello", "bass", "contrabass", "doublebass",
+        "piano", "fortepiano", "harpsichord", "organ", "guitar", "lute", "harp", "accordion",
+        "flute", "piccolo", "recorder", "oboe", "clarinet", "bassoon", "saxophone",
+        "trumpet", "horn", "trombone", "tuba", "percussion", "drums", "marimba", "vibraphone",
+        "soprano", "mezzo", "alto", "contralto", "tenor", "baritone", "countertenor",
+        "voice", "vocals", "vocalist", "conductor", "composer", "narrator", "director", "soloist",
+    ]
+
+    // Accents folded to their plain letters before anything else (#755). normalize() below strips
+    // everything outside a-z, so "Asunción" would otherwise shred into the junk tokens "asunci" and
+    // "n" and could never match itself. In classical music an accented name is not an edge case, it
+    // is most of the roster, and this was caught by the real-data precision check: the second soloist
+    // of a real recital ("Victor Santiago Asunción, Piano") was the one name in his own history the
+    // matcher could not find.
+    //
+    // A fixed locale, not .current, so the result never depends on Dan's system settings.
+    private static func foldAccents(_ s: String) -> String {
+        s.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    // A person's name with accents folded and any trailing role words removed. Never strips below two
+    // tokens, so a name can't be eroded into a single word that would then collide with half the world.
+    static func personNameTokens(_ name: String) -> [String] {
+        var t = tokens(foldAccents(name))
+        while t.count > 2, let last = t.last, roleWords.contains(last) { t.removeLast() }
+        return t
+    }
+
     // Person names, matched STRICTLY (#749). isConfident above accepts token containment, which is
     // right for orgs ("New York Ballet" really is "New York Theatre Ballet") and wrong for people:
     // it would match the person "Jane Doe" to the org "Jane Doe Ensemble", and warm a lead off a
@@ -95,9 +133,24 @@ enum GroupNameMatch {
     // ("Vega, Marisol") matches. Deliberately a SEPARATE entry point: the org call sites keep the
     // looser containment rule, unchanged.
     static func isConfidentPersonName(_ a: String, _ b: String) -> Bool {
-        let ta = Set(tokens(a))
-        let tb = Set(tokens(b))
+        let ta = Set(personNameTokens(a))
+        let tb = Set(personNameTokens(b))
         if ta.isEmpty || tb.isEmpty { return false }
         return ta == tb
+    }
+
+    // Match a performer against a messy, multi-LINE booking-history entry (#755). normalize() picks a
+    // single org line out of such an entry, which is right for org matching and wrong here: Dan files
+    // a two-soloist recital as one entry with a performer per line, so the second soloist sits on a
+    // line the org path never even looks at. Every line is its own candidate person name.
+    //
+    // Still full token-set equality per line, which is what keeps the precision: an org merely NAMED
+    // AFTER someone ("Abby Whiteside Foundation") has a leftover token and so is not that person.
+    static func isConfidentPersonName(_ performer: String, inEntry entry: String) -> Bool {
+        let target = Set(personNameTokens(performer))
+        guard !target.isEmpty else { return false }
+        return entry
+            .split(separator: "\n")
+            .contains { Set(personNameTokens(String($0))) == target }
     }
 }
