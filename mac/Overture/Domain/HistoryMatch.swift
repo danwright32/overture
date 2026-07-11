@@ -187,15 +187,16 @@ enum HistoryMatch {
             }
         }
 
-        // Booking history carries no email, so name alone decides. Strongest relationship wins, same
-        // as matchRelationship: a real relationship (warm) beats a lost outcome on the same person,
-        // and a bare cold send stays `contacted` (neutral, 0), never warm (#70).
+        // Booking history carries no email (#762), so name alone decides. Strongest relationship
+        // wins, same as matchRelationship: a real relationship (warm) beats a lost outcome on the
+        // same person.
         let confident = history.filter {
             !isStatus($0.status, "dnc")
                 && GroupNameMatch.isConfidentPersonName(performerName, $0.groupName)
         }
         let signals = confident.map { relationship(forStatus: $0.status) }
-        if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }) {
+        if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }),
+           isWorthCorrecting(best) {
             return PerformerMatchVerdict(
                 relationship: best, downbeatClientId: nil, matchedClientName: nil,
                 matchedPerformerName: performerName, emailCorroborated: false,
@@ -204,5 +205,20 @@ enum HistoryMatch {
         }
 
         return .noMatch
+    }
+
+    // The upgrade-only floor (#763, Dan's call). This is a WARM-lead detector, so a relationship has
+    // to actually be worth more than a cold lead to count as a find. Two statuses would otherwise
+    // produce a "match" that is worse than useless:
+    //
+    //  - `contacted` scores 0 (#70: a bare send that got silence is not warm). It would change the
+    //    fit score by nothing, yet still set the sticky lock and raise a dismissible flag for Dan,
+    //    which is how you train someone to ignore the flag.
+    //  - `lostHard` scores -20. Silently downgrading a lead is not this feature's job.
+    //
+    // Reading the floor off Ranker.priorPoints rather than listing statuses keeps it honest if the
+    // weights are ever retuned: whatever the ranker considers better than cold is what counts here.
+    private static func isWorthCorrecting(_ r: PriorRelationship) -> Bool {
+        Ranker.priorPoints(r) > Ranker.priorPoints(.none)
     }
 }
