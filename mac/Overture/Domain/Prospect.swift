@@ -151,6 +151,33 @@ final class Prospect {
     var alreadyCoveredNote: String? = nil
     var alreadyCoveredDismissed: Bool = false
 
+    // Performer-name warm-lead detection (#749, plan #748, issue #585). Prep matched this
+    // performance's PERFORMER (not its org) to a past client, and corrected the relationship the
+    // org-name matcher had scored cold. Defaulted so existing records migrate cleanly.
+    //
+    // relationshipCorrectedByPerformerMatch is the sticky guard, and it is the load-bearing one: the
+    // next scout re-derives priorRelationship from the ORG name, which by definition still doesn't
+    // match, so without this lock every correction would be silently reverted on the next run and the
+    // draft would sit warm next to a cold tier with nothing explaining it. Phase 2 (#750) makes
+    // ScoutService.apply honor it.
+    var relationshipCorrectedByPerformerMatch: Bool = false
+    var matchedPerformerName: String? = nil
+    var performerMatchNote: String? = nil
+    // Dismissed: Dan says this specific match is WRONG (reverts the correction from the snapshot
+    // below). Reviewed: Dan has merely SEEN it. Deliberately distinct, because Phase 4 (#752) gates
+    // the warm drafting tone on reviewed, not on the mere absence of a dismissal. Both reset to false
+    // whenever a new match fires, so a re-prep that finds a DIFFERENT performer is judged afresh
+    // rather than inheriting a verdict Dan passed on something else (the #611 alreadyCovered shape).
+    var performerMatchDismissed: Bool = false
+    var performerMatchReviewed: Bool = false
+    // Pre-correction snapshot, so dismissing restores exactly what the scout had scored rather than
+    // guessing at an inverse. Written only when a correction is actually applied.
+    var performerMatchPreviousRelationship: String? = nil
+    var performerMatchPreviousFitScore: Int? = nil
+    var performerMatchPreviousTier: String? = nil
+    var performerMatchPreviousMatchedClientName: String? = nil
+    var performerMatchPreviousDownbeatClientId: String? = nil
+
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
     // time so Dan can reject that exact match. Defaulted so existing records migrate cleanly.
     var autoBookedFromBookingId: String? = nil

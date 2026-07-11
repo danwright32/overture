@@ -1,0 +1,245 @@
+{
+  "clients": [
+    {
+      "id": "client-marisol",
+      "displayName": "Marisol Vega",
+      "shortName": null,
+      "email": "marisol@vegaviolin.com",
+      "contractEmail": "",
+      "phoneNumber": null,
+      "isTaxExempt": null,
+      "hasLeftReview": false,
+      "specialBehaviors": [],
+      "notes": null,
+      "hostingSite": "marisolvega.smugmug.com"
+    },
+    {
+      "id": "client-priya",
+      "displayName": "Priya Raman",
+      "shortName": null,
+      "email": "",
+      "contractEmail": "",
+      "phoneNumber": null,
+      "isTaxExempt": null,
+      "hasLeftReview": false,
+      "specialBehaviors": [],
+      "notes": null,
+      "hostingSite": "priyaraman.smugmug.com"
+    },
+    {
+      "id": "client-doe-ensemble",
+      "displayName": "Jane Doe Ensemble",
+      "shortName": null,
+      "email": "",
+      "contractEmail": "",
+      "phoneNumber": null,
+      "isTaxExempt": null,
+      "hasLeftReview": false,
+      "specialBehaviors": [],
+      "notes": null,
+      "hostingSite": "janedoeensemble.smugmug.com"
+    },
+    {
+      "id": "client-orchestra",
+      "displayName": "Northside Chamber Orchestra",
+      "shortName": "NCO",
+      "email": "office@northsidechamber.org",
+      "contractEmail": "contracts@northsidechamber.org",
+      "phoneNumber": null,
+      "isTaxExempt": null,
+      "hasLeftReview": false,
+      "specialBehaviors": [],
+      "notes": null,
+      "hostingSite": "nco.smugmug.com"
+    }
+  ],
+  "history": [
+    { "groupName": "Tomas Iyer", "status": "warm" },
+    { "groupName": "Hollis Grant", "status": "dnc" },
+    { "groupName": "Lena Whitfield", "status": "contacted" }
+  ],
+  "cases": [
+    {
+      "name": "a solo-artist Downbeat client matches on the performer's full name",
+      "performerName": "Marisol Vega",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": "client-marisol",
+        "matchedClientName": "Marisol Vega",
+        "matchedPerformerName": "Marisol Vega",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a matching email corroborates the name match",
+      "performerName": "Marisol Vega",
+      "performerEmail": "marisol@vegaviolin.com",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": "client-marisol",
+        "matchedClientName": "Marisol Vega",
+        "matchedPerformerName": "Marisol Vega",
+        "emailCorroborated": true
+      }
+    },
+    {
+      "name": "email corroboration is case-insensitive",
+      "performerName": "Marisol Vega",
+      "performerEmail": "MARISOL@VegaViolin.COM",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": "client-marisol",
+        "matchedClientName": "Marisol Vega",
+        "matchedPerformerName": "Marisol Vega",
+        "emailCorroborated": true
+      }
+    },
+    {
+      "name": "a conflicting email is evidence against the match, so the name match is suppressed",
+      "performerName": "Marisol Vega",
+      "performerEmail": "someone.else@example.com",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "no email on file for the client, so the name alone decides",
+      "performerName": "Priya Raman",
+      "performerEmail": "priya@example.com",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": "client-priya",
+        "matchedClientName": "Priya Raman",
+        "matchedPerformerName": "Priya Raman",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "surname-first program listings still match (token order is not significant)",
+      "performerName": "Vega, Marisol",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "booked",
+        "downbeatClientId": "client-marisol",
+        "matchedClientName": "Marisol Vega",
+        "matchedPerformerName": "Vega, Marisol",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "token containment is NOT a person match, though the org matcher would accept it",
+      "performerName": "Jane Doe",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "an agency-produced performance never enters the matcher at all",
+      "performerName": "Marisol Vega",
+      "performerEmail": "marisol@vegaviolin.com",
+      "production": "agency",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "an unknown-production performance never enters the matcher at all",
+      "performerName": "Marisol Vega",
+      "performerEmail": "marisol@vegaviolin.com",
+      "production": "unknown",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a warm booking-history record matches on the performer's name",
+      "performerName": "Tomas Iyer",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "warm",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Tomas Iyer",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a bare cold contact stays neutral, never warm",
+      "performerName": "Lena Whitfield",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "contacted",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Lena Whitfield",
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a do-not-contact record neither suppresses nor produces a positive relationship",
+      "performerName": "Hollis Grant",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "an unrelated performer matches nothing",
+      "performerName": "Rowan Delacroix",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "an empty performer name never matches",
+      "performerName": "",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    }
+  ]
+}
