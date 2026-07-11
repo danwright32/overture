@@ -287,24 +287,59 @@ enum ScoutService {
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL
-        existing.priorRelationship = p.priorRelationship
         existing.profile = p.profile
         existing.coverage = p.coverage
         existing.fitReason = p.fitReason
-        existing.matchedClientName = p.matchedClientName
-        existing.downbeatClientId = p.downbeatClientId
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
         // NOTE: never touch confidenceReviewedByDan here; Dan owns that acknowledgement.
         // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
+
+        // Two guards run over this prospect, and they are ORTHOGONAL: Dan can correct a prospect's
+        // discipline at any time, unrelated to whether a performer match separately corrected its
+        // relationship, and nothing stops both being true at once. So the two field groups resolve
+        // INDEPENDENTLY, in order, rather than as nested branches. Checking classificationOverriddenByDan
+        // first as an outer short-circuit would send a doubly-flagged prospect down the recompute-from-
+        // the-fresh-org-match path and silently revert the performer correction, which is the exact
+        // failure this guard exists to prevent, just triggered by an unrelated Dan action (#750).
+
+        // Step A: the relationship identity. Gated only by the performer-match lock and this run's org
+        // match; classificationOverriddenByDan has no say here.
+        if p.orgMatchConfident {
+            // A fresh, confident ORG match outranks a standing performer guess, so it wins and clears
+            // the correction. The lock is a guard against silent reversion, never a permanent one-way
+            // override.
+            existing.priorRelationship = p.priorRelationship
+            existing.matchedClientName = p.matchedClientName
+            existing.downbeatClientId = p.downbeatClientId
+            if existing.relationshipCorrectedByPerformerMatch { existing.clearPerformerMatch() }
+        } else if existing.hasActivePerformerMatch {
+            // The org name still matches nothing (it never did, which is why Prep had to look at the
+            // performer at all). Leave Prep's correction exactly as it stands.
+        } else {
+            existing.priorRelationship = p.priorRelationship
+            existing.matchedClientName = p.matchedClientName
+            existing.downbeatClientId = p.downbeatClientId
+        }
+
+        // Step B: the score. Runs AFTER Step A, so `existing.priorRelationship` already holds whichever
+        // value won above, and every branch below scores against the truth rather than a stale org guess.
         if existing.classificationOverriddenByDan {
-            // Dan corrected the classification: keep his discipline/production values and
-            // re-score from them (plus the freshly-updated profile/coverage/priorRelationship)
-            // so fit stays meaningful without reverting his correction.
+            // Dan corrected the classification: keep his discipline/production values and re-score from
+            // them (plus the freshly-updated profile/coverage and the Step A relationship) so fit stays
+            // meaningful without reverting his correction. Because rescored() reads priorRelationship
+            // straight off `existing`, this one call already reflects a protected performer match, with
+            // no combined-rule branch needed. That is what makes the two guards compose.
             let refit = ClassificationOverride.rescored(existing, discipline: nil, production: nil)
             existing.fitScore = refit.score
             existing.tier = refit.tier.rawValue
+        } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {
+            // Protect the score Prep computed from the performer match; the scout's own fresh score was
+            // derived from an org match that found nothing, so copying it would undo the correction by
+            // the back door while Step A left the relationship looking corrected.
+            existing.discipline = p.discipline
+            existing.production = p.production
         } else {
             existing.discipline = p.discipline
             existing.production = p.production
