@@ -99,3 +99,77 @@ struct DraftCheckTests {
         #expect(!DraftCheck.findings(in: good).contains { $0 == .concessionLanguage })
     }
 }
+
+// #789: the two findings that BLOCK the send rather than merely warning. Both are facts about the
+// text that a stranger will read, and both are unambiguous enough that a false block is close to
+// impossible: a link to a site that isn't Dan's (a 404, or worse, someone else's site, in a cold
+// pitch), and an unfilled template slot the drafter left behind. Everything else DraftCheck knows,
+// INCLUDING the non-canonical rate, stays advisory (Dan's call: the rate check fires on any dollar
+// figure, so a draft mentioning a ticket price would have been blocked though it read perfectly).
+@Suite("Draft lint: blocking findings")
+struct DraftLintBlockingTests {
+    @Test func onlyTheLinkAndPlaceholderFindingsBlock() {
+        #expect(DraftIssue.foreignLink.isBlocking)
+        #expect(DraftIssue.placeholder.isBlocking)
+        #expect(!DraftIssue.nonCanonicalRate.isBlocking)
+        #expect(!DraftIssue.emDash.isBlocking)
+        #expect(!DraftIssue.performativeEnthusiasm.isBlocking)
+        #expect(!DraftIssue.concessionLanguage.isBlocking)
+        #expect(!DraftIssue.presumesBooking.isBlocking)
+        #expect(!DraftIssue.coldHedge.isBlocking)
+        #expect(!DraftIssue.asksForKnownFact.isBlocking)
+    }
+
+    // A body that trips only an advisory finding must stay SENDABLE: blockingFindings is the
+    // send gate, and widening it to every finding would stop Dan on an em dash.
+    @Test func blockingFindingsIgnoresAdvisoryOnes() {
+        let advisoryOnly = "My rate is $500 an hour, and I'd love to be there."
+        #expect(!DraftCheck.findings(in: advisoryOnly).isEmpty)
+        #expect(DraftCheck.blockingFindings(in: advisoryOnly).isEmpty)
+    }
+
+    @Test func blocksALinkToAHostThatIsNotDans() {
+        #expect(DraftCheck.blockingFindings(in: "Tickets at https://www.carnegiehall.org/tickets.") == [.foreignLink])
+        #expect(DraftCheck.blockingFindings(in: "See my gallery at pixieset.com/aurora.") == [.foreignLink])
+        #expect(DraftCheck.blockingFindings(in: "More at www.example.org.") == [.foreignLink])
+    }
+
+    @Test func allowsDansOwnGalleryLinks() {
+        // The five galleries the runbook maps disciplines onto, with and without scheme/www.
+        #expect(DraftCheck.blockingFindings(in: "Recent work: danwrightphotography.com/music").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Recent work: https://danwrightphotography.com/performing-arts").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Recent work: https://www.danwrightphotography.com/dance.").isEmpty)
+    }
+
+    // The matcher must not read ordinary prose as a link. A missing space after a period is the
+    // dangerous one ("arts.The"), since it looks exactly like host.tld.
+    @Test func doesNotReadOrdinaryProseAsALink() {
+        #expect(DraftCheck.blockingFindings(in: "I photograph the performing arts.The show is in May.").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Documentary coverage, e.g. no flash, no staging.").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "I shoot music.Comedy is new for me.").isEmpty)
+    }
+
+    // An email address is not a link: it can't 404, and Dan's own address appears in a signature.
+    // A foreign address (a contact he was told to write to) must not block the send either.
+    @Test func doesNotTreatAnEmailAddressAsALink() {
+        #expect(DraftCheck.blockingFindings(in: "Reach me at dan@danwrightphotography.com.").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Copy tickets@carnegiehall.org if that's easier.").isEmpty)
+    }
+
+    @Test func blocksALeftoverBracketedPlaceholder() {
+        #expect(DraftCheck.blockingFindings(in: "I saw [GROUP] is performing at [VENUE].") == [.placeholder])
+        #expect(DraftCheck.blockingFindings(in: "Hi [NAME], I photograph performances.") == [.placeholder])
+    }
+
+    @Test func doesNotFlagOrdinaryPunctuationAsAPlaceholder() {
+        #expect(DraftCheck.blockingFindings(in: "I photograph performances (quietly, no flash).").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "The rate is $250 an hour plus tax.").isEmpty)
+    }
+
+    @Test func reportsBothBlockersWhenBothArePresent() {
+        let bad = "Hi [NAME], see my work at https://smugmug.com/dan."
+        let found = DraftCheck.blockingFindings(in: bad)
+        #expect(found.contains(.placeholder))
+        #expect(found.contains(.foreignLink))
+    }
+}

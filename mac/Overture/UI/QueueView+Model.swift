@@ -64,6 +64,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftNeedsSalutationReview: Bool = false
     // #718: Dan's deliberate override of the block above, for the exact draft text he confirmed.
     var salutationReviewOverridden: Bool = false
+    // #789: blocking lint findings in the text a still-pending recipient would actually receive
+    // (each recipient's own, so a performer's override body counts). Gathered across recipients
+    // because Send is a per-show button; `draftLintBlocked` is what actually holds the send.
+    var draftLintBlockers: [DraftIssue] = []
+    var draftLintBlocked: Bool = false
     var outcomeSourceRaw: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
@@ -574,6 +579,9 @@ extension QueueItem {
             performerMatchReviewed: p.performerMatchReviewed,
             draftNeedsSalutationReview: p.draftNeedsSalutationReview,
             salutationReviewOverridden: p.isSalutationReviewOverridden,
+            draftLintBlockers: DraftIssue.orderedBlockers(
+                Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers))),
+            draftLintBlocked: p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint },
             outcomeSourceRaw: p.outcomeSourceRaw,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,

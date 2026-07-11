@@ -340,6 +340,20 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #789: Dan's deliberate, confirmed override of the draft-lint send block, for a finding he has
+    // read and judged fine (or a link he knows is right). Records the EXACT outgoing text of each
+    // blocked recipient rather than a bare boolean (see Recipient.isLintOverridden), so a later edit
+    // to different text silently reinstates the block with no extra reset logic. Only recipients that
+    // are actually blocked and still pending are touched: a clean recipient gains no stale override,
+    // and one already sent is left alone.
+    static func overrideDraftLint(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        for r in model.recipients where r.sendState == .pending && r.isBlockedByDraftLint {
+            r.lintOverriddenBody = r.effectiveBody
+        }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())

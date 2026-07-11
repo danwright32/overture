@@ -17,6 +17,8 @@ struct DraftReviewView: View {
     // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
     // two-step alert (showOverrideConfirm below) rather than firing on a single tap.
     var onOverrideSalutationReview: () -> Void = {}
+    // #789: Dan's confirmed override of the draft-lint send block, same two-step alert shape.
+    var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
@@ -67,6 +69,14 @@ struct DraftReviewView: View {
     @State private var addContactEmail = ""
     @State private var addContactName = ""
     @State private var showOverrideConfirm = false
+    @State private var showLintOverrideConfirm = false
+
+    // Names the actual finding rather than saying "there's a problem": the whole point is that Dan
+    // can tell at a glance whether it's a bad link or a leftover placeholder, and fix it in one edit.
+    private var draftLintBlockMessage: String {
+        let what = item.draftLintBlockers.map(\.label).joined(separator: " and ")
+        return "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
+    }
     // #733: guard against repeatedly re-prepping the same prospect.
     @State private var showReprepCooldownConfirm = false
     @State private var pendingReprepMode: ReprepMode?
@@ -225,10 +235,16 @@ struct DraftReviewView: View {
     // Dan's review is judgment, not cleanup. Only on an unedited draft from the run: once
     // Dan edits it, it's his.
     @ViewBuilder private var draftCheckFlags: some View {
+        // #789: the BLOCKING findings show whatever the draft's provenance. The advisory ones below
+        // are about voice, and once Dan edits the text the voice is his; but a dead link or an
+        // unfilled placeholder is a fact about the words a stranger will read, no matter who typed
+        // them, so his own edit gets flagged too (and it is what actually holds the send).
+        issueFlags(item.draftLintBlockers)
         if !item.draftEditedByDan, let body = item.draftBody {
             issueFlags(DraftCheck.findings(in: body,
                                            knownsDate: item.performanceDate != nil,
-                                           knownsVenue: item.venue != nil))
+                                           knownsVenue: item.venue != nil)
+                .filter { !$0.isBlocking })
         }
     }
 
@@ -310,6 +326,20 @@ struct DraftReviewView: View {
                         Text("Sending despite the greeting warning you confirmed.")
                             .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                     }
+                    // #789: same shape as the salutation block above. A fact about the words, not a
+                    // guess Dan can dismiss as wrong: it clears itself the moment the text is fixed.
+                    // He can still override it, but only through a deliberate two-step confirm, and
+                    // the message afterwards tones down rather than disappearing, so there is a
+                    // visible trail that the send happened despite it.
+                    if item.draftLintBlocked {
+                        Text(draftLintBlockMessage)
+                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                        Button("Override") { showLintOverrideConfirm = true }
+                            .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                    } else if !item.draftLintBlockers.isEmpty {
+                        Text("Sending despite the draft warning you confirmed.")
+                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                    }
                     if let line = SendFailureLine.text(for: item.sendError) {
                         Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                     }
@@ -342,6 +372,14 @@ struct DraftReviewView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is.")
+        }
+        // #789: the draft lint's own override, deliberately a separate confirm from the greeting one
+        // above, so the reason Dan is waving something through is never ambiguous.
+        .alert("Send anyway?", isPresented: $showLintOverrideConfirm) {
+            Button("Send Anyway") { onOverrideDraftLint() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(draftLintBlockMessage) Confirm you've checked it and it's fine to send as-is.")
         }
         // #733: guard against repeatedly re-prepping the same prospect.
         .alert("Redo this re-prep?", isPresented: $showReprepCooldownConfirm) {

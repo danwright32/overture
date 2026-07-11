@@ -319,6 +319,21 @@ Theatre) stay as printed.
 - band → danwrightphotography.com/bands
 - comedy → danwrightphotography.com/comedy
 
+**Two of these rules are now enforced at send, not just asked for (#789).** The app lints the body
+it is about to mail (`DraftCheck.blockingFindings`, gating `Recipient.isSendablePending`) and
+REFUSES to send a draft that carries either of these, until Dan fixes the text or deliberately
+overrides the block:
+
+- **A link to any host other than danwrightphotography.com.** The gallery links above are the only
+  URLs a draft may contain. There is no pricing page, no contract page, and no client-gallery host
+  to point at, so any other link is one the drafter invented, and a 404 in a cold pitch costs the
+  lead. Write the rate out in the words instead (see the pricing note above); never link it.
+- **An unfilled placeholder**, like `[VENUE]` or `[NAME]`. Fill every slot from the work-list, or
+  rewrite the sentence without it. Square brackets never appear in a finished draft.
+
+This lint reads the text that will ACTUALLY be mailed, which for a `provenance: "performer"` contact
+is that contact's own `overrideBody` (below), not the shared `draft.body`. Both are held to it.
+
 **Drafting for a performer contact directly (#634, #639-643).** The shared `draft.body`
 above is written in the third person because it was designed for a third party being
 told about the act (the act's own marketing contact, a presenter), and it still serves
