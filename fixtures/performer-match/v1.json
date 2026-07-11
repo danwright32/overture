@@ -56,7 +56,9 @@
   "history": [
     { "groupName": "Tomas Iyer", "status": "warm" },
     { "groupName": "Hollis Grant", "status": "dnc" },
-    { "groupName": "Lena Whitfield", "status": "contacted" }
+    { "groupName": "Lena Whitfield", "status": "contacted" },
+    { "groupName": "Devon Marsh", "status": "lost_hard" },
+    { "groupName": "Aiko Tanaka", "status": "lost_soft" }
   ],
   "cases": [
     {
@@ -190,15 +192,41 @@
       }
     },
     {
-      "name": "a bare cold contact stays neutral, never warm",
+      "name": "a bare cold contact that went nowhere is not a match at all, it would flag nothing",
       "performerName": "Lena Whitfield",
       "performerEmail": "",
       "production": "self",
       "expect": {
-        "relationship": "contacted",
+        "relationship": "none",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": "Lena Whitfield",
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a hard-lost performer is not a match either, this detector never downgrades a lead",
+      "performerName": "Devon Marsh",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a softly-lost performer IS a match, they engaged and are worth more than a cold lead",
+      "performerName": "Aiko Tanaka",
+      "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "lost_soft",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Aiko Tanaka",
         "emailCorroborated": false
       }
     },

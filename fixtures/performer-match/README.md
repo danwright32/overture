@@ -27,6 +27,13 @@ regress by "improving" the matcher:
    verdict has no `suppressed` field, so a do-not-contact record reached through a performer name
    neither drops the performance nor lends it a positive relationship. Do-not-contact suppression
    remains the org-level `HistoryMatch.matchRelationship`'s job alone.
+4. **Only a relationship worth more than a cold lead counts as a match at all** (#763, the
+   upgrade-only floor). A performer whose only history is a `contacted` row (a cold send that got
+   silence, worth 0 points) is NOT a match: correcting it would move the score by nothing while still
+   setting the sticky lock and raising a flag for Dan, which is how you teach someone to ignore the
+   flag. A `lost_hard` row (worth -20) is not a match either; a warm-lead detector has no business
+   quietly downgrading a lead. The floor is read off `Ranker.priorPoints`, not a hardcoded status
+   list, so it stays honest if the ranker's weights are ever retuned.
 
 The production gate is enforced inside the matcher rather than at the call site: an agency-produced
 or unknown-production performance returns no match without ever being compared, so a future caller

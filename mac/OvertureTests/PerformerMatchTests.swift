@@ -126,6 +126,44 @@ struct PerformerMatchTests {
         #expect(!GroupNameMatch.isConfident("New York", "New York Theatre Ballet"))
     }
 
+    // The upgrade-only floor (#763), asserted directly against the matcher rather than only through
+    // the fixture table. A history status at or below a cold lead must produce NO match: not a
+    // zero-value match, not a flag, nothing. Anything above it must still come through.
+    @Test func aHistoryStatusWorthNoMoreThanAColdLeadProducesNoMatchAtAll() {
+        func verdict(status: String) -> PerformerMatchVerdict {
+            HistoryMatch.matchPerformer(
+                performerName: "Lena Whitfield",
+                performerEmail: "",
+                production: .selfProduced,
+                clients: [],
+                history: [HistoryRecord(groupName: "Lena Whitfield", status: status)]
+            )
+        }
+
+        // Worth 0: a bare send that got silence (#70). Correcting it would move the score by nothing
+        // while still locking the fields and flagging Dan.
+        #expect(verdict(status: "contacted") == .noMatch)
+        // Worth -20: this detector finds warm leads, it does not quietly downgrade cold ones.
+        #expect(verdict(status: "lost_hard") == .noMatch)
+        // An unrecognized status reads as `contacted` (neutral), so it must not match either.
+        #expect(verdict(status: "who knows") == .noMatch)
+
+        // Above the floor, matching is unaffected.
+        #expect(verdict(status: "warm").relationship == .warm)
+        #expect(verdict(status: "lost_soft").relationship == .lostSoft)
+        #expect(verdict(status: "booked").relationship == .booked)
+    }
+
+    // Pinned against Ranker.priorPoints rather than a status list, so this fails loudly if the
+    // ranker is ever retuned in a way that changes which relationships clear the floor.
+    @Test func onlyARelationshipWorthMoreThanAColdLeadCountsAsAMatch() {
+        #expect(Ranker.priorPoints(.contacted) == Ranker.priorPoints(PriorRelationship.none))
+        #expect(Ranker.priorPoints(.lostHard) < Ranker.priorPoints(PriorRelationship.none))
+        #expect(Ranker.priorPoints(.lostSoft) > Ranker.priorPoints(PriorRelationship.none))
+        #expect(Ranker.priorPoints(.warm) > Ranker.priorPoints(PriorRelationship.none))
+        #expect(Ranker.priorPoints(.booked) > Ranker.priorPoints(PriorRelationship.none))
+    }
+
     @Test func personNameMatchingIgnoresTokenOrderButNotExtraTokens() {
         #expect(GroupNameMatch.isConfidentPersonName("Vega, Marisol", "Marisol Vega"))
         #expect(GroupNameMatch.isConfidentPersonName("marisol vega", "Marisol Vega"))
