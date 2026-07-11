@@ -10,6 +10,12 @@ import Foundation
 struct HistoryRecord: Codable, Equatable, Sendable {
     var groupName: String
     var status: String?
+    // #762: the contact address from the booking sheet, when it had one. Exists so a performer-name
+    // match found through the HISTORY can be corroborated the same way one found through the Downbeat
+    // client list already is. That is the branch most exposed to hitting a different person of the
+    // same name, because the history is older and broader than the client list. Optional, so an older
+    // file with no addresses still decodes. May hold two addresses in one cell (the booking CSV does).
+    var email: String? = nil
 }
 
 struct PossibleMatch: Equatable, Sendable {
@@ -122,14 +128,22 @@ enum HistoryMatch {
     // Does the performer's own email agree with what Downbeat holds for this client?
     private enum EmailAgreement { case corroborates, conflicts, noSignal }
 
-    // DownbeatClient.email/.contractEmail are non-optional Strings, so "absent" is the empty
-    // string, not nil. An empty address on either side is no signal at all, NOT a conflict.
-    private static func emailAgreement(performerEmail: String, client: DownbeatClient) -> EmailAgreement {
+    // An empty address on either side is no signal at all, NOT a conflict. (DownbeatClient's
+    // email/contractEmail are non-optional Strings, so "absent" there is the empty string, not nil.)
+    private static func emailAgreement(performerEmail: String, onFile: [String]) -> EmailAgreement {
         let performer = normalizedEmail(performerEmail)
         guard !performer.isEmpty else { return .noSignal }
-        let onFile = [client.email, client.contractEmail].map(normalizedEmail).filter { !$0.isEmpty }
-        guard !onFile.isEmpty else { return .noSignal }
-        return onFile.contains(performer) ? .corroborates : .conflicts
+        let known = onFile.map(normalizedEmail).filter { !$0.isEmpty }
+        guard !known.isEmpty else { return .noSignal }
+        return known.contains(performer) ? .corroborates : .conflicts
+    }
+
+    // One booking-sheet cell can hold two addresses (#762): the CSV really is written that way.
+    private static func addresses(in raw: String?) -> [String] {
+        (raw ?? "")
+            .split(whereSeparator: { $0 == "," || $0 == ";" || $0 == "/" || $0.isWhitespace })
+            .map(String.init)
+            .filter { $0.contains("@") }
     }
 
     private static func normalizedEmail(_ raw: String) -> String {
@@ -167,7 +181,8 @@ enum HistoryMatch {
             // Two different people share a name more often than one person changes their email, so a
             // conflicting address is evidence AGAINST the match and nothing is corrected (Dan's call,
             // precision-first). A missing address on either side just leaves the name to decide.
-            switch emailAgreement(performerEmail: performerEmail, client: client) {
+            switch emailAgreement(performerEmail: performerEmail,
+                                  onFile: [client.email, client.contractEmail]) {
             case .conflicts:
                 return .noMatch
             case .corroborates:
@@ -196,13 +211,29 @@ enum HistoryMatch {
             !isStatus($0.status, "dnc")
                 && GroupNameMatch.isConfidentPersonName(performerName, inEntry: $0.groupName)
         }
+        // The history carries the address from the booking sheet too now (#762), so this branch gets
+        // the same corroboration the client branch has always had. It is the branch that needed it
+        // most: the history is older and broader than the client list, so a name hit here is the one
+        // most likely to be a DIFFERENT person who merely shares the name.
+        //
+        // A conflict anywhere suppresses the WHOLE match, exactly as it does for a client. It means
+        // someone with this name is demonstrably not our performer, which makes the name itself
+        // ambiguous. Dropping only the conflicting row and matching on a quieter one would let the
+        // match back in through the side door and quietly defeat the rule Dan chose.
+        let agreements = confident.map {
+            emailAgreement(performerEmail: performerEmail, onFile: addresses(in: $0.email))
+        }
+        if agreements.contains(.conflicts) { return .noMatch }
+        let corroborated = agreements.contains(.corroborates)
+
         let signals = confident.map { relationship(forStatus: $0.status) }
         if let best = signals.max(by: { Ranker.priorPoints($0) < Ranker.priorPoints($1) }),
            isWorthCorrecting(best) {
             return PerformerMatchVerdict(
                 relationship: best, downbeatClientId: nil, matchedClientName: nil,
-                matchedPerformerName: performerName, emailCorroborated: false,
+                matchedPerformerName: performerName, emailCorroborated: corroborated,
                 note: "Matched performer '\(performerName)' to a past booking-history record."
+                    + (corroborated ? " Their email matches the address on file." : "")
             )
         }
 

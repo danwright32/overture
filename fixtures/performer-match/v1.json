@@ -54,7 +54,7 @@
     }
   ],
   "history": [
-    { "groupName": "Tomas Iyer", "status": "warm" },
+    { "groupName": "Tomas Iyer", "status": "warm", "email": "tomas@iyerviolin.com" },
     { "groupName": "Hollis Grant", "status": "dnc" },
     { "groupName": "Lena Whitfield", "status": "contacted" },
     { "groupName": "Devon Marsh", "status": "lost_hard" },
@@ -237,6 +237,32 @@
       "name": "a do-not-contact record neither suppresses nor produces a positive relationship",
       "performerName": "Hollis Grant",
       "performerEmail": "",
+      "production": "self",
+      "expect": {
+        "relationship": "none",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": null,
+        "emailCorroborated": false
+      }
+    },
+    {
+      "name": "a history record's email corroborates the match, same as a client's does",
+      "performerName": "Tomas Iyer",
+      "performerEmail": "tomas@iyerviolin.com",
+      "production": "self",
+      "expect": {
+        "relationship": "warm",
+        "downbeatClientId": null,
+        "matchedClientName": null,
+        "matchedPerformerName": "Tomas Iyer",
+        "emailCorroborated": true
+      }
+    },
+    {
+      "name": "a conflicting history email suppresses the match, the same rule as for a client",
+      "performerName": "Tomas Iyer",
+      "performerEmail": "someone.else@example.com",
       "production": "self",
       "expect": {
         "relationship": "none",

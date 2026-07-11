@@ -20,9 +20,14 @@ regress by "improving" the matcher:
    matter, so a surname-first program listing ("Vega, Marisol") matches.
 2. **A conflicting email suppresses an otherwise-good name match.** Two different people share a
    name more often than one person changes their email, so a mismatch between the performer's email
-   and the address on file for that Downbeat client is treated as evidence against the match, and
-   nothing is auto-corrected (Dan's call, precision-first). An empty address on either side is not a
-   conflict; the name alone decides.
+   and the address on file is treated as evidence against the match, and nothing is auto-corrected
+   (Dan's call, precision-first). An empty address on either side is not a conflict; the name alone
+   decides. As of #762 this applies to the booking history as well as the Downbeat client list, and
+   the history is where it matters most: it is older and broader than the client list, so a name hit
+   in it is the one most likely to be a different person who merely shares the name. A conflict on
+   ANY name-matching record suppresses the whole match, rather than just dropping that record;
+   otherwise the match walks back in through a quieter row carrying no address, and the rule is
+   silently defeated.
 3. **This path can never suppress a performance.** It is positive-match-only by construction: the
    verdict has no `suppressed` field, so a do-not-contact record reached through a performer name
    neither drops the performance nor lends it a positive relationship. Do-not-contact suppression

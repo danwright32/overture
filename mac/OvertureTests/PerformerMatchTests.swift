@@ -98,6 +98,41 @@ struct PerformerMatchTests {
         }
     }
 
+    // #762: a booking-sheet cell really can hold two addresses, so either of them corroborates.
+    @Test func eitherAddressInATwoEmailHistoryCellCorroborates() {
+        let history = [HistoryRecord(groupName: "Duo Act Member", status: "booked",
+                                     email: "a@example.com, b@example.com")]
+
+        for address in ["a@example.com", "B@Example.com"] {
+            let verdict = HistoryMatch.matchPerformer(
+                performerName: "Duo Act Member", performerEmail: address,
+                production: .selfProduced, clients: [], history: history)
+            #expect(verdict.relationship == .booked)
+            #expect(verdict.emailCorroborated)
+        }
+
+        // And an address in neither slot still conflicts, so the match is suppressed.
+        let stranger = HistoryMatch.matchPerformer(
+            performerName: "Duo Act Member", performerEmail: "c@example.com",
+            production: .selfProduced, clients: [], history: history)
+        #expect(stranger == .noMatch)
+    }
+
+    // A conflict on ANY confidently name-matching record suppresses the whole match, rather than
+    // just dropping that record. Otherwise the match walks back in through a quieter row that
+    // happens to carry no address, and the rule Dan chose is silently defeated.
+    @Test func aConflictOnOneRecordSuppressesEvenWhenAQuieterRecordWouldHaveMatched() {
+        let history = [
+            HistoryRecord(groupName: "Alex Rivera", status: "booked", email: "the.real.alex@example.com"),
+            HistoryRecord(groupName: "Alex Rivera", status: "warm"),   // no address: would say yes alone
+        ]
+        let verdict = HistoryMatch.matchPerformer(
+            performerName: "Alex Rivera", performerEmail: "a.different.alex@example.com",
+            production: .selfProduced, clients: [], history: history)
+
+        #expect(verdict == .noMatch)
+    }
+
     // The corroborating email is only worth surfacing when it actually corroborated something.
     @Test func aCorroboratedMatchSaysSoInItsNote() throws {
         let fixture = try loadFixture()

@@ -1,0 +1,7 @@
+[
+  { "groupName": "Aurora Strings", "status": "booked", "email": "hello@aurorastrings.org" },
+  { "groupName": "Kento Hong, violin", "status": "lost_soft", "email": "kento@example.com" },
+  { "groupName": "Duo Act", "status": "booked", "email": "a@example.com, b@example.com" },
+  { "groupName": "City Brass Band", "status": "contacted" },
+  { "groupName": "Unknown Status Co", "status": null }
+]

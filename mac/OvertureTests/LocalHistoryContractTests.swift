@@ -40,6 +40,30 @@ struct LocalHistoryContractTests {
         }
     }
 
+    // #762: the booking sheet's Email column now rides along, so a performer matched through the
+    // HISTORY can be corroborated the same way one matched through the Downbeat client list already
+    // is. Additive and optional: v1 above has no addresses at all and must still decode, so an
+    // existing overture-history.json keeps working without a re-import.
+    @Test func decodesTheV2FixtureCarryingContactAddresses() throws {
+        let history = try JSONDecoder().decode([HistoryRecord].self, from: try fixture("v2.json"))
+        #expect(history.count == 5)
+
+        #expect(history[0].groupName == "Aurora Strings")
+        #expect(history[0].email == "hello@aurorastrings.org")
+
+        // A performer filed with their instrument, which is exactly the shape #755 taught the person
+        // matcher to read.
+        #expect(history[1].groupName == "Kento Hong, violin")
+        #expect(history[1].email == "kento@example.com")
+
+        // One cell really can hold two addresses; the app splits them, the importer does not.
+        #expect(history[2].email == "a@example.com, b@example.com")
+
+        // An omitted email decodes to nil, not a crash and not an empty string.
+        #expect(history[3].email == nil)
+        #expect(history[4].email == nil)
+    }
+
     @Test func decodesTheV1FixtureToTheAgreedLogicalShape() throws {
         let history = try JSONDecoder().decode([HistoryRecord].self, from: try fixture("v1.json"))
         #expect(history.count == 6)
