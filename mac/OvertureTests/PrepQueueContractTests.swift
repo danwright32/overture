@@ -112,4 +112,51 @@ struct PrepQueueContractTests {
         #expect(decoded.items[0].reprepMode == "draft_only")
         #expect(decoded.items[1].reprepMode == "contacts_only")
     }
+
+    // MARK: - Negative paths (#747)
+    //
+    // The enumeration guard only proves every committed fixture decodes. A guard that cannot fail is
+    // not a guard, so these prove a DRIFTED fixture would actually be caught rather than waved
+    // through. The app writes this file, so the risk is not a hostile input: it is a fixture quietly
+    // losing a field that the Prep run (a Claude Code workflow, not code) depends on, with the guard
+    // reporting green the whole time.
+
+    private func decoding(_ json: String) throws -> PrepQueue {
+        try JSONDecoder().decode(PrepQueue.self, from: Data(json.utf8))
+    }
+
+    // naturalKey is the OPAQUE token the run must echo back verbatim into PrepResults; rebuilding it
+    // is the documented silent-mismatch trap. An item without one is unusable.
+    @Test func anItemMissingItsNaturalKeyIsRejected() {
+        let keyless = """
+        {"version":3,"generatedAt":"now","items":[
+          {"groupName":"G","discipline":"music","priorRelationship":"none"}]}
+        """
+        #expect(throws: (any Error).self) { try decoding(keyless) }
+    }
+
+    @Test func anItemMissingARequiredResearchFieldIsRejected() {
+        // groupName is what the Prep run actually researches; without it the item is a dead token.
+        let nameless = """
+        {"version":3,"generatedAt":"now","items":[
+          {"naturalKey":"k","discipline":"music","priorRelationship":"none"}]}
+        """
+        #expect(throws: (any Error).self) { try decoding(nameless) }
+    }
+
+    // production and reprepMode are genuinely optional (v2/v3 additions), so their absence must NOT
+    // be an error. This pins the line between "optional by design" and "missing and broken".
+    @Test func theOptionalV2AndV3FieldsMayBeAbsent() throws {
+        let minimal = """
+        {"version":3,"generatedAt":"now","items":[
+          {"naturalKey":"k","groupName":"G","discipline":"music","priorRelationship":"none"}]}
+        """
+        let decoded = try decoding(minimal)
+        #expect(decoded.items[0].production == nil)
+        #expect(decoded.items[0].reprepMode == nil)
+    }
+
+    @Test func garbageIsRejectedRatherThanReadAsAnEmptyQueue() {
+        #expect(throws: (any Error).self) { try decoding("not json") }
+    }
 }

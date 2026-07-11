@@ -73,4 +73,47 @@ struct PrepProgressContractTests {
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(PrepProgressDecoder.loadCurrent(from: url) == nil)
     }
+
+    // MARK: - Negative paths (#747)
+    //
+    // The enumeration guard only proves every committed fixture decodes. A guard that cannot fail is
+    // not a guard, so these prove a drifted fixture would be caught.
+    //
+    // This contract has two layers with DELIBERATELY different failure behavior, and the distinction
+    // is the thing worth pinning: `decode` is strict and throws, while `loadCurrent` is best-effort
+    // and returns nil. That is not an inconsistency. The toolbar reads a file a separate workflow may
+    // be writing at that exact instant, so a torn read must degrade to "nothing to show" rather than
+    // throw. Anything reading it as a CONTRACT still has to see the failure.
+
+    private func decoding(_ json: String) throws -> PrepProgress {
+        try PrepProgressDecoder.decode(Data(json.utf8))
+    }
+
+    @Test func aProgressFileMissingARequiredCountIsRejected() {
+        #expect(throws: (any Error).self) { try decoding(#"{"version":1,"total":10}"#) }
+        #expect(throws: (any Error).self) { try decoding(#"{"version":1,"completed":3}"#) }
+        #expect(throws: (any Error).self) { try decoding(#"{"total":10,"completed":3}"#) }
+    }
+
+    // A count that arrives as a string rather than a number is exactly the drift a hand-written
+    // workflow produces, and it must not decode into a zero.
+    @Test func aCountOfTheWrongTypeIsRejectedRatherThanCoercedToZero() {
+        #expect(throws: (any Error).self) {
+            try decoding(#"{"version":1,"total":"10","completed":"3"}"#)
+        }
+    }
+
+    // The strict layer throws; the toolbar layer stays silent. Both, on the same bad bytes.
+    @Test func theToolbarDegradesToNothingToShowOnTheSameBytesTheContractRejects() throws {
+        let torn = #"{"version":1,"total":10,"comple"#   // a half-written file, mid-flush
+
+        #expect(throws: (any Error).self) { try decoding(torn) }
+
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("prep-progress-torn-\(UUID().uuidString).json")
+        try Data(torn.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(PrepProgressDecoder.loadCurrent(from: url) == nil)
+    }
 }
