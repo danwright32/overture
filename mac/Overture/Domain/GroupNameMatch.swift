@@ -1,9 +1,11 @@
 import Foundation
 
-// Name matching for repeat-client detection, ported from groupNameMatch.ts. Calendar
-// names are messy (presenter + program title, often multi-line); these normalize them
-// and decide confident vs merely-possible matches. Precision first: only confident
-// matches drive scoring; possibles are flagged for review.
+// Name matching for repeat-client detection. Calendar names are messy (presenter + program
+// title, often multi-line); these normalize them and decide confident vs merely-possible
+// matches. Precision first: only confident matches drive scoring; possibles are flagged for
+// review. Used to be kept identical to a TypeScript mirror (groupNameMatch.ts); that mirror was
+// retired in #493, so GroupNameDriftTests (fixtures/group-name-match/v1.json) is now this
+// logic's only locked spec, not a cross-language drift guard.
 
 enum GroupNameMatch {
     static func normalize(_ name: String) -> String {

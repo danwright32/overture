@@ -96,12 +96,12 @@ struct RankerTests {
     }
 }
 
-// Shared cross-language scoring fixture (#490). Ranker.swift is a hand port of ranker.ts (the app
-// scouts natively; the TypeScript engine is a reference mirror, see docs/scout-runbook.md), so the
-// two pure scoring functions need to agree even though neither reads the other's output at
-// runtime. The SAME cases decoded here are decoded by src/lib/ranker.test.ts, so a one sided change
-// to either side's point table fails whichever suite did not make the matching change.
-@Suite("Ranker shared fixture")
+// Locked scoring-ladder spec (#490). Used to also be decoded by a TypeScript mirror
+// (ranker.ts/ranker.test.ts) so a one-sided change to either side's point table would fail
+// whichever suite didn't make the matching change; that mirror was retired in #493 once the app
+// was confirmed to scout natively. This suite is now Ranker.swift's only locked spec, not a
+// cross-language drift guard (see fixtures/ranker/README.md).
+@Suite("Ranker locked fixture")
 struct RankerFixtureTests {
     private struct FixtureCase: Decodable {
         let description: String

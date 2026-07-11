@@ -2,10 +2,11 @@ import Testing
 import Foundation
 @testable import Overture
 
-// The Swift half of the shared Downbeat-export contract (#113). Decodes the SAME committed
-// fixtures as src/lib/downbeatExportContract.test.ts and asserts the same logical result, so a
-// format change that one reader hasn't caught up to fails here (or there) instead of silently
-// treating every client as cold in production (the #109 regression). blockedDates is consumed
+// The Downbeat-export contract (#113). Used to also be decoded by a TypeScript mirror
+// (downbeatExportContract.test.ts) against the same committed fixtures, so a format change one
+// reader hadn't caught up to would fail here or there instead of silently treating every client
+// as cold in production (the #109 regression); that mirror was retired in #493 once the app was
+// confirmed to scout natively, so the app is now the only reader. blockedDates is consumed
 // elsewhere on the Swift side, so this reader only pins clients/venues/bookings.
 @Suite("Downbeat export contract fixtures")
 struct DownbeatExportContractTests {
