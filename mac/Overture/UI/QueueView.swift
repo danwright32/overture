@@ -319,8 +319,9 @@ struct QueueView: View {
     // a label (never colour alone), with a roll-up so needs-attention is unmissable.
     private var agentInputs: AgentInputs {
         AgentInputs(
-            // #338: the SAME criteria StageNavigation uses to pick which prospects a pill's tap
-            // focuses on, so the count shown always matches what tapping it navigates to.
+            // #338/#370: the SAME criteria StageNavigation uses to pick which prospects a pill's
+            // tap focuses on, so the count shown always matches what tapping it navigates to.
+            toTriage: StageNavigation.naturalKeys(forStage: "Scout", in: prospects).count,
             keptToPrep: StageNavigation.naturalKeys(forStage: "Prep", in: prospects).count,
             prepRunning: PrepQueueService.isRunning(now: Date()),
             toReview: StageNavigation.naturalKeys(forStage: "Review", in: prospects).count,

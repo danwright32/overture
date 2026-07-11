@@ -58,6 +58,20 @@ struct StageNavigationTests {
         #expect(keys == Set(["kept-no-draft", "flagged-drafted", "flagged-approved"]))
     }
 
+    // #370: the freshly scouted, undecided triage (status .new) gets its own stage, distinct from
+    // Prep (which only ever counted kept-undrafted prospects, never .new ones).
+    @MainActor
+    @Test func scoutStageIsNewProspects() throws {
+        let ctx = makeContext()
+        _ = prospect(ctx, key: "new-1", status: .new, hasDraft: false)
+        _ = prospect(ctx, key: "new-2", status: .new, hasDraft: false)
+        _ = prospect(ctx, key: "kept-no-draft", status: .queued, hasDraft: false)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let keys = Set(StageNavigation.naturalKeys(forStage: "Scout", in: all))
+        #expect(keys == Set(["new-1", "new-2"]))
+    }
+
     @MainActor
     @Test func reviewStageIsDrafted() throws {
         let ctx = makeContext()
