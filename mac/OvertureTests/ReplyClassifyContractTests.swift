@@ -9,10 +9,40 @@ import Foundation
 // fixtures are its spec; the contract tests pin the Swift side and that naturalKey is echoed verbatim.
 @Suite("Reply classify contract fixtures")
 struct ReplyClassifyContractTests {
-    private func fixture(_ name: String) throws -> Data {
-        let repoRoot = URL(fileURLWithPath: #filePath)
+    private func fixtureDirectory() -> URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/reply-classify/\(name)"))
+            .appendingPathComponent("fixtures/reply-classify")
+    }
+
+    private func fixture(_ name: String) throws -> Data {
+        try Data(contentsOf: fixtureDirectory().appendingPathComponent(name))
+    }
+
+    private func fixtureFileNames() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: fixtureDirectory().path)
+            .filter { $0.hasSuffix(".json") }
+    }
+
+    // #491/#744: enumerates whatever is actually committed, so a new fixture file with no
+    // matching decode case fails here instead of silently shipping with zero coverage on this side.
+    // The directory holds both queue and results fixtures side by side, told apart by filename
+    // prefix the way the rest of this suite already does.
+    @Test func decodesEveryCommittedFixtureWithoutThrowing() throws {
+        let names = try fixtureFileNames()
+        #expect(!names.isEmpty)
+        for name in names.filter({ $0.hasPrefix("queue") }) {
+            let data = try fixture(name)
+            #expect(throws: Never.self) {
+                try JSONDecoder().decode(ReplyClassifyQueue.self, from: data)
+            }
+        }
+        for name in names.filter({ $0.hasPrefix("results") }) {
+            let data = try fixture(name)
+            #expect(throws: Never.self) {
+                try ReplyClassifyResultsDecoder.decode(data)
+            }
+        }
     }
 
     @Test func replyIntentMapsToConversationState() {

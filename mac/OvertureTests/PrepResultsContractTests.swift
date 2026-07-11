@@ -9,12 +9,34 @@ import Foundation
 // lockstep instead of the workflow silently writing a file the app can't ingest (the #109 class).
 @Suite("Prep results contract fixtures")
 struct PrepResultsContractTests {
-    private func fixture(_ name: String) throws -> Data {
-        let repoRoot = URL(fileURLWithPath: #filePath)
+    private func fixtureDirectory() -> URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // OvertureTests
             .deletingLastPathComponent()   // mac
             .deletingLastPathComponent()   // repo root
-        return try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/prep-results/\(name)"))
+            .appendingPathComponent("fixtures/prep-results")
+    }
+
+    private func fixture(_ name: String) throws -> Data {
+        try Data(contentsOf: fixtureDirectory().appendingPathComponent(name))
+    }
+
+    private func fixtureFileNames() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: fixtureDirectory().path)
+            .filter { $0.hasSuffix(".json") }
+    }
+
+    // #491/#744: enumerates whatever is actually committed, so a new fixture file with no
+    // matching decode case fails here instead of silently shipping with zero coverage on this side.
+    @Test func decodesEveryCommittedFixtureWithoutThrowing() throws {
+        let names = try fixtureFileNames()
+        #expect(!names.isEmpty)
+        for name in names {
+            let data = try fixture(name)
+            #expect(throws: Never.self) {
+                try PrepResultsDecoder.decode(data)
+            }
+        }
     }
 
     // The legacy v1 shape carried a single `contact` object. v2 (#392) replaces it with `contacts[]`,
