@@ -124,6 +124,135 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationOverriddenByDan == true)
     }
 
+    // The performer-match guard (#750, plan #748, issue #585). Fixtures below share one event, so a
+    // re-scout of it produces the natural key these prospects are stored under.
+    private let choirEvent = ExtractedEvent(title: "Indianapolis Children's Choir",
+                                            presenter: "Indianapolis Children's Choir",
+                                            venue: "Stern Auditorium / Perelman Stage",
+                                            performanceDate: "2026-06-24",
+                                            sourceUrl: "https://example.com/b")
+
+    private var choirKey: String {
+        Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
+                                performanceDate: "2026-06-24",
+                                venue: "Stern Auditorium / Perelman Stage")
+    }
+
+    // A prospect Prep already corrected via a performer match: the org name still matches nothing,
+    // but the performer behind it is a past client, so the relationship reads booked.
+    private func performerCorrectedChoirProspect() -> Prospect {
+        let p = Prospect(naturalKey: choirKey, groupName: "Indianapolis Children's Choir",
+                         discipline: "music", venue: "Stern Auditorium / Perelman Stage",
+                         performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "booked", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 27, tier: "high",
+                         fitReason: "performer match", matchedClientName: "Marisol Vega",
+                         possibleMatchSource: nil, possibleMatchName: nil)
+        p.downbeatClientId = "client-marisol"
+        p.relationshipCorrectedByPerformerMatch = true
+        p.matchedPerformerName = "Marisol Vega"
+        p.performerMatchNote = "Matched performer 'Marisol Vega' to Downbeat client Marisol Vega."
+        return p
+    }
+
+    private func choirRow(_ ctx: ModelContext) throws -> Prospect {
+        let key = choirKey
+        return try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first!
+    }
+
+    // THE regression this whole phase exists for. The scout re-derives the relationship from the ORG
+    // name, which by definition still doesn't match, so without the lock every performer-match
+    // correction is silently reverted on the very next run: a warm draft next to a cold tier, with
+    // nothing explaining it. All five fields must survive untouched.
+    @Test func aPerformerMatchCorrectionSurvivesTheNextScout() throws {
+        let ctx = ModelContext(try container())
+        ctx.insert(performerCorrectedChoirProspect())
+        try ctx.save()
+
+        // Re-scout with no clients and no history, so the fresh org match is nothing at all.
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], into: ctx)
+
+        let refreshed = try choirRow(ctx)
+        #expect(refreshed.priorRelationship == "booked")
+        #expect(refreshed.matchedClientName == "Marisol Vega")
+        #expect(refreshed.downbeatClientId == "client-marisol")
+        #expect(refreshed.fitScore == 27)
+        #expect(refreshed.tier == "high")
+        #expect(refreshed.relationshipCorrectedByPerformerMatch)
+    }
+
+    // The two flags are orthogonal: Dan can correct a prospect's discipline at any time, unrelated to
+    // whether a performer match separately corrected its relationship. Resolving them as nested
+    // branches (checking Dan's override first, as an outer short-circuit) would send this prospect
+    // down the recompute-from-the-fresh-org-match path and reproduce the exact self-destruct above,
+    // just triggered by an unrelated Dan action. Neither flag may clobber the other.
+    @Test func dansClassificationOverrideAndThePerformerMatchLockDoNotClobberEachOther() throws {
+        let ctx = ModelContext(try container())
+        let p = performerCorrectedChoirProspect()
+        p.discipline = "dance"                  // Dan's correction, not the classifier's guess
+        p.classificationOverriddenByDan = true
+        p.fitScore = 5                          // deliberately stale, must be recomputed below
+        p.tier = "longshot"
+        ctx.insert(p)
+        try ctx.save()
+
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], into: ctx)
+
+        let refreshed = try choirRow(ctx)
+        // The performer-match lock still protects the relationship identity.
+        #expect(refreshed.priorRelationship == "booked")
+        #expect(refreshed.matchedClientName == "Marisol Vega")
+        #expect(refreshed.downbeatClientId == "client-marisol")
+        // Dan's discipline still survives too.
+        #expect(refreshed.discipline == "dance")
+        // And the score is re-derived from BOTH: dance 3 + self 2 + strong 2 + likely_uncovered 2 = 9,
+        // plus the protected booked prior (20) = 29. Not the stale 5, and not a cold org-based score.
+        #expect(refreshed.fitScore == 29)
+        #expect(refreshed.tier == "high")
+    }
+
+    // The lock is not a permanent one-way override. A fresh, confident ORG match is a stronger signal
+    // than a standing performer guess, so it wins and clears the lock (and its note) rather than
+    // being blocked by it.
+    @Test func aFreshConfidentOrgMatchOverridesAndClearsThePerformerLock() throws {
+        let ctx = ModelContext(try container())
+        ctx.insert(performerCorrectedChoirProspect())
+        try ctx.save()
+
+        let client = DownbeatClient(id: "client-choir", displayName: "Indianapolis Children's Choir",
+                                    shortName: nil, email: "", contractEmail: "", phoneNumber: nil,
+                                    isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
+                                    notes: nil, hostingSite: "")
+        _ = ScoutService.apply(events: [choirEvent], clients: [client], history: [], blocked: [], into: ctx)
+
+        let refreshed = try choirRow(ctx)
+        #expect(refreshed.priorRelationship == "booked")
+        #expect(refreshed.matchedClientName == "Indianapolis Children's Choir")   // the ORG, not the performer
+        #expect(refreshed.downbeatClientId == "client-choir")
+        // The stale performer correction is gone, note and all, not left to contradict the org match.
+        #expect(!refreshed.relationshipCorrectedByPerformerMatch)
+        #expect(refreshed.matchedPerformerName == nil)
+        #expect(refreshed.performerMatchNote == nil)
+    }
+
+    // Dan said the match was wrong. A dismissed lock protects nothing, so the scout goes back to
+    // exactly today's behavior and the cold org verdict lands.
+    @Test func aDismissedPerformerMatchNoLongerProtectsAnything() throws {
+        let ctx = ModelContext(try container())
+        let p = performerCorrectedChoirProspect()
+        p.performerMatchDismissed = true
+        ctx.insert(p)
+        try ctx.save()
+
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], into: ctx)
+
+        let refreshed = try choirRow(ctx)
+        #expect(refreshed.priorRelationship == "none")
+        #expect(refreshed.matchedClientName == nil)
+        #expect(refreshed.downbeatClientId == nil)
+        #expect(refreshed.fitScore != 27)   // re-scored cold, not left at the performer-match score
+    }
+
     // #133: a kept Carnegie prospect that drops out of the feed accrues misses and, after two
     // consecutive ones, reads as gone — while one that's still present stays at zero.
     @Test func disappearedCarnegieProspectAccruesMissesAcrossScouts() throws {

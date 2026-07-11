@@ -358,6 +358,31 @@ final class Prospect {
         Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
     }
 
+    // Wipe every trace of a performer match (#750). Used when a fresh, confident ORG match supersedes
+    // the correction: the lock, the note Dan reads, and the snapshot the dismiss path would revert to
+    // all describe a finding that no longer applies, and leaving any of them behind means the UI
+    // explains this prospect's warm tier with a performer who had nothing to do with it. The single
+    // owner of this reset, so the Phase 4 dismiss/revert path reuses it rather than growing a second
+    // copy that forgets a field.
+    func clearPerformerMatch() {
+        relationshipCorrectedByPerformerMatch = false
+        matchedPerformerName = nil
+        performerMatchNote = nil
+        performerMatchDismissed = false
+        performerMatchReviewed = false
+        performerMatchPreviousRelationship = nil
+        performerMatchPreviousFitScore = nil
+        performerMatchPreviousTier = nil
+        performerMatchPreviousMatchedClientName = nil
+        performerMatchPreviousDownbeatClientId = nil
+    }
+
+    // The performer-match correction is live: it was made, Dan hasn't said it was wrong, and so the
+    // scout must not revert it (#750).
+    var hasActivePerformerMatch: Bool {
+        relationshipCorrectedByPerformerMatch && !performerMatchDismissed
+    }
+
     // The performance's recipients (#409): each act contact, presenter, or manual add Dan emails
     // separately over the shared body, now their own rows (the `recipients` @Relationship above).
     // These helpers mutate the relationship directly; deletions go through the model context so a
