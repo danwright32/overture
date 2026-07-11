@@ -383,6 +383,49 @@ final class Prospect {
         relationshipCorrectedByPerformerMatch && !performerMatchDismissed
     }
 
+    // Dan says this match is WRONG (#752). Restore exactly what the scout had scored, from the
+    // snapshot taken when the correction was applied, rather than guessing at an inverse. Clearing
+    // the lock releases Phase 2's guard, so ordinary org-name matching resumes on the next scout run
+    // instead of protecting a correction Dan has rejected.
+    //
+    // The FINDING itself (matchedPerformerName, performerMatchNote) deliberately survives: it is the
+    // record that stops PrepImporter re-applying this same rejected match the next time it ingests
+    // the same evidence. Keeping the finding and tracking the rejection separately is the
+    // alreadyCoveredNote/alreadyCoveredDismissed shape (#611).
+    func dismissPerformerMatch() {
+        guard relationshipCorrectedByPerformerMatch else { return }
+        if let relationship = performerMatchPreviousRelationship { priorRelationship = relationship }
+        if let score = performerMatchPreviousFitScore { fitScore = score }
+        if let previousTier = performerMatchPreviousTier { tier = previousTier }
+        matchedClientName = performerMatchPreviousMatchedClientName
+        downbeatClientId = performerMatchPreviousDownbeatClientId
+        relationshipCorrectedByPerformerMatch = false
+        performerMatchDismissed = true
+    }
+
+    // Dan says this match is RIGHT (#752, his call: an explicit confirmation, never merely having
+    // laid eyes on the prospect). Only this unlocks the warm drafting tone, so an email can sound
+    // like it is going to a returning client only because Dan actively said the match was correct.
+    // Changes nothing about the score, which the correction already applied.
+    func confirmPerformerMatch() {
+        guard relationshipCorrectedByPerformerMatch else { return }
+        performerMatchReviewed = true
+        performerMatchDismissed = false
+    }
+
+    // The relationship the DRAFTER is allowed to see (#752). The correction is sticky by design, so it
+    // survives into a later Prep cycle's redraft, and that run picks its tone from this value. Until
+    // Dan confirms the match, the drafter sees the cold value the scout originally had, so an
+    // unconfirmed guess can change how the lead is RANKED (useful immediately) but never how an email
+    // SOUNDS (irreversible once sent). Read by PrepQueueService, the single writer of the queue's
+    // priorRelationship field.
+    var priorRelationshipForDrafting: String {
+        guard relationshipCorrectedByPerformerMatch, !performerMatchReviewed else {
+            return priorRelationship
+        }
+        return performerMatchPreviousRelationship ?? PriorRelationship.none.rawValue
+    }
+
     // The performance's recipients (#409): each act contact, presenter, or manual add Dan emails
     // separately over the shared body, now their own rows (the `recipients` @Relationship above).
     // These helpers mutate the relationship directly; deletions go through the model context so a

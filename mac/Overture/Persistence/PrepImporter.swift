@@ -260,10 +260,14 @@ enum PrepImporter {
 
             // "Assume it runs twice." Re-ingesting the same prep-results file must not re-fire: a second
             // pass would snapshot the ALREADY-CORRECTED values as the "previous" ones, destroying the
-            // only record of what the scout originally had, and would silently un-review (or un-dismiss)
-            // a finding Dan already judged. Only genuinely NEW evidence, a different performer, acts.
-            // Mirrors alreadyCoveredNote's "only touch when the evidence actually differs" rule (#611).
-            if p.relationshipCorrectedByPerformerMatch && p.matchedPerformerName == matchedName { continue }
+            // only record of what the scout originally had, and would silently un-review a finding Dan
+            // already judged. Only genuinely NEW evidence, a different performer, acts. Mirrors
+            // alreadyCoveredNote's "only touch when the evidence actually differs" rule (#611).
+            //
+            // Keyed on the recorded performer NAME, not on relationshipCorrectedByPerformerMatch:
+            // dismissing a match clears that lock (#752) while keeping the name, so checking the lock
+            // would let the very next ingest of the same file resurrect a match Dan had just rejected.
+            if p.matchedPerformerName == matchedName { continue }
 
             // The upgrade-only floor, and the REAL backstop against a downgrade: the do-not-contact
             // exclusion in the matcher does not provide this, because the ordinary history path still
