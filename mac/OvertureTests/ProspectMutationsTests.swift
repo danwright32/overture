@@ -354,6 +354,30 @@ struct ProspectMutationsTests {
         #expect(p.isSalutationReviewOverridden == true)
     }
 
+    // #789: overriding the draft-lint block records the EXACT outgoing text of each BLOCKED, still
+    // PENDING recipient. A clean recipient must gain no override (a stale one would silently wave
+    // through a future bad edit to its text), and an already-sent one is left alone entirely.
+    @Test func overrideDraftLintRecordsOnlyTheBlockedPendingRecipientsText() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        p.draftBody = "See my work at https://smugmug.com/dan."
+        let blocked = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
+        let clean = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
+        clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com/music."
+        let alreadySent = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
+        alreadySent.sendState = .sent
+        p.setRecipients([blocked, clean, alreadySent])
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        ProspectMutations.overrideDraftLint(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(blocked.lintOverriddenBody == "See my work at https://smugmug.com/dan.")
+        #expect(blocked.isSendablePending)
+        #expect(clean.lintOverriddenBody == nil)
+        #expect(alreadySent.lintOverriddenBody == nil)
+    }
+
     // #367: the per-prospect re-prep action just delegates to ReprepRequest.apply and saves.
     @Test func reprepAppliesTheRequestedModeAndSaves() throws {
         let ctx = ModelContext(try container())

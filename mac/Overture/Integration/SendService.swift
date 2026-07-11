@@ -34,11 +34,12 @@ enum SendService {
     @discardableResult
     private static func deliver(_ recipient: Recipient, of prospect: Prospect,
                                 now: Date, sender: MailSender) async -> Bool {
-        guard let email = recipient.email, !email.isEmpty, let body = prospect.draftBody else { return false }
+        guard let email = recipient.email, !email.isEmpty, prospect.draftBody != nil else { return false }
         // #641 (#634 Phase C): a directly-addressed performer's own second-person draft wins over the
         // shared third-person body, for BOTH the actual outgoing mail and the voice-learning snapshot
-        // below (freezeSentCopy), computed once so neither can drift from what was really sent.
-        let effectiveBody = (recipient.provenance == .performer ? recipient.overrideBody : nil) ?? body
+        // below (freezeSentCopy). Recipient.effectiveBody owns that choice now (#789), so the text the
+        // draft lint judges is by construction the same text this sends.
+        guard let effectiveBody = recipient.effectiveBody else { return false }
 
         // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
         // MainActor this check-then-claim-then-persist is atomic with respect to any other call

@@ -107,6 +107,66 @@ struct DraftReviewViewSalutationReviewTests {
     }
 }
 
+// #789: the draft-lint block on the review surface. Same two-step shape as the salutation block
+// above (a plain statement of fact plus a deliberate Override), but it must NAME the finding, and,
+// unlike the advisory voice warnings, it must still show on a draft Dan edited himself.
+@MainActor
+@Suite("DraftReviewView draft lint block (#789)")
+struct DraftReviewViewDraftLintTests {
+    private func item(blockers: [DraftIssue], blocked: Bool, editedByDan: Bool = false) -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .approved, draftSubject: "S", draftBody: "See https://smugmug.com/dan",
+                 draftEditedByDan: editedByDan,
+                 hasPendingRecipient: !blocked,
+                 draftLintBlockers: blockers, draftLintBlocked: blocked)
+    }
+
+    private func view(_ item: QueueItem, onOverride: @escaping () -> Void = {}) -> DraftReviewView {
+        DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+                        onOverrideDraftLint: onOverride, outboundSendSince: nil)
+    }
+
+    @Test func aBlockedDraftNamesTheFindingRatherThanSayingSomethingIsWrong() throws {
+        let texts = try view(item(blockers: [.foreignLink], blocked: true))
+            .inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("won't send") })
+        #expect(texts.contains { $0.contains(DraftIssue.foreignLink.label) })
+    }
+
+    @Test func aCleanDraftShowsNoBlock() throws {
+        let texts = try view(item(blockers: [], blocked: false))
+            .inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("won't send") })
+    }
+
+    @Test func aBlockedDraftOffersAnOverrideThatDoesNotFireOnASingleTap() throws {
+        var overridden = false
+        let v = view(item(blockers: [.placeholder], blocked: true), onOverride: { overridden = true })
+        let button = try v.inspect().find(button: "Override")
+        try button.tap()
+        #expect(overridden == false)   // must open the confirm alert, not send
+    }
+
+    @Test func anOverriddenBlockKeepsAVisibleTrailInsteadOfDisappearing() throws {
+        let texts = try view(item(blockers: [.foreignLink], blocked: false))
+            .inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect((try? view(item(blockers: [.foreignLink], blocked: false)).inspect().find(button: "Override")) == nil)
+        #expect(texts.contains { $0.contains("despite") })
+    }
+
+    // Dan's #789 call: the advisory voice warnings hide once he edits ("it's his text now"), but a
+    // blocking finding is a fact about the words a stranger reads, so his own edit still shows it.
+    @Test func aBlockerStillShowsOnADraftDanEditedHimself() throws {
+        let texts = try view(item(blockers: [.placeholder], blocked: true, editedByDan: true))
+            .inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains(DraftIssue.placeholder.label) })
+    }
+}
+
 // #733: guard against repeatedly re-prepping the same prospect.
 @MainActor
 @Suite("DraftReviewView re-prep cooldown (#733)")

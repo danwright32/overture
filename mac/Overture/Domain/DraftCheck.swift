@@ -4,7 +4,7 @@ import Foundation
 // rules the drafter runbook enforces, applied in the app so a draft that slips through
 // gets flagged for Dan before approval. Complements (doesn't replace) the agentic
 // self-critique in the Prep run.
-enum DraftIssue: Equatable, Hashable, Sendable {
+enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case performativeEnthusiasm   // AI-tell warmth: "love to", "thrilled", "!", etc.
     case emDash                   // brand voice: no em dashes
     case presumesBooking          // assumes the client already decided to hire him
@@ -12,6 +12,8 @@ enum DraftIssue: Equatable, Hashable, Sendable {
     case asksForKnownFact         // asks the contact for the date/venue Overture already holds (#456)
     case concessionLanguage       // offers a discount or free/complimentary work (#39/#458)
     case nonCanonicalRate         // states a rate other than the canonical $250/hr + tax (#39/#458)
+    case foreignLink              // links a host that is not Dan's own site (#789)
+    case placeholder              // a template slot the drafter never filled: "[VENUE]" (#789)
 
     var label: String {
         switch self {
@@ -22,7 +24,33 @@ enum DraftIssue: Equatable, Hashable, Sendable {
         case .asksForKnownFact: return "Asks for the date or venue Overture already knows"
         case .concessionLanguage: return "Offers a discount or free/complimentary work"
         case .nonCanonicalRate: return "States a rate other than $250 an hour plus tax"
+        case .foreignLink: return "Links a site that is not danwrightphotography.com"
+        case .placeholder: return "Contains an unfilled placeholder like [VENUE]"
         }
+    }
+
+    // #789: a blocking finding stops the send (Recipient.isSendablePending) instead of merely
+    // warning; everything else stays advisory. The bar Dan set is that a block must be as close to
+    // impossible to false-positive as a text check gets, because the cost of a wrong block is his
+    // time and the cost of a missed one is a stranger reading it. Both blockers clear that bar: they
+    // are facts about the text, not judgments about its tone.
+    //
+    // nonCanonicalRate is DELIBERATELY advisory despite #789 proposing it as a blocker. It fires on
+    // any dollar figure that is not 250, so a draft that merely mentions a ticket price or a travel
+    // figure reads perfectly and would still have been blocked. Same for concessionLanguage, whose
+    // matcher fires on the bare word "flexible".
+    var isBlocking: Bool {
+        switch self {
+        case .foreignLink, .placeholder: return true
+        case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
+             .asksForKnownFact, .concessionLanguage, .nonCanonicalRate: return false
+        }
+    }
+
+    // A stable order for the blockers gathered across several recipients, so the warning rows can't
+    // reshuffle between redraws (a Set's order would).
+    static func orderedBlockers(_ found: Set<DraftIssue>) -> [DraftIssue] {
+        allCases.filter { $0.isBlocking && found.contains($0) }
     }
 }
 
@@ -56,13 +84,65 @@ enum DraftCheck {
         if asksKnownDate || asksKnownVenue { issues.append(.asksForKnownFact) }
         if hasConcession(text) { issues.append(.concessionLanguage) }
         if hasNonCanonicalRate(text) { issues.append(.nonCanonicalRate) }
+        if hasForeignLink(body) { issues.append(.foreignLink) }
+        if hasPlaceholder(body) { issues.append(.placeholder) }
         return issues
+    }
+
+    // #789: only the findings that BLOCK the send. Deliberately takes no `knowns*` context: a
+    // blocker must be judgeable from the text alone, so this is safe to call anywhere the body is
+    // known (the send gate, the queue, the UI) without threading the prospect's facts through.
+    static func blockingFindings(in body: String) -> [DraftIssue] {
+        findings(in: body).filter(\.isBlocking)
     }
 
     private static func hasConcession(_ text: String) -> Bool {
         if concession.contains(where: text.contains) { return true }
         // "free" as a standalone word, but not the warm phrase "feel free".
         return text.range(of: #"(?<!feel )\bfree\b"#, options: .regularExpression) != nil
+    }
+
+    // #789. The ONLY host a draft may link is Dan's own site: the runbook maps each discipline onto
+    // one of its five galleries and there is no pricing page and no client-gallery host to point at,
+    // so any other host is something the drafter invented. A 404 (or someone else's site) in a cold
+    // pitch is exactly the unforced error that costs the lead.
+    static let allowedLinkHost = "danwrightphotography.com"
+
+    // Deliberately NOT a general URL grammar. Prose is full of things that look like hosts once you
+    // relax the rules ("the performing arts.The show", "e.g. no flash"), and a false block costs Dan
+    // an override on text that was already fine. So a token only counts as a link when it is
+    // unmistakable: it carries a scheme, or a `www.` prefix, or it ends in a real TLD.
+    private static let linkPatterns = [
+        #"(?i)https?://([A-Za-z0-9.-]+)"#,
+        #"(?i)\bwww\.([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)"#,
+        #"(?i)\b([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:com|org|net|io|co|us|nyc|info|edu|gov))\b"#,
+    ]
+    // An email address is not a link: it cannot 404, Dan's own appears in a signature, and a foreign
+    // one may be a contact he was told to write to. Stripped BEFORE the link scan so the host inside
+    // it ("tickets@carnegiehall.org") is never read as a link to that site.
+    private static let emailPattern = #"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#
+
+    private static func hasForeignLink(_ body: String) -> Bool {
+        let text = body.replacingOccurrences(of: emailPattern, with: " ",
+                                             options: .regularExpression)
+        for pattern in linkPatterns {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                var host = ns.substring(with: m.range(at: 1)).lowercased()
+                if host.hasPrefix("www.") { host.removeFirst(4) }
+                while host.hasSuffix(".") { host.removeLast() }
+                if host != allowedLinkHost { return true }
+            }
+        }
+        return false
+    }
+
+    // A template slot the drafter left unfilled ("Hi [NAME]", "at [VENUE]"). Square brackets carry no
+    // ordinary meaning in Dan's prose, so their mere presence is the signal; no vocabulary to keep
+    // in sync with whatever the drafter happens to name its slots.
+    private static func hasPlaceholder(_ body: String) -> Bool {
+        body.range(of: #"\[[^\]\n]{1,60}\]"#, options: .regularExpression) != nil
     }
 
     // The canonical rate is "$250 an hour plus tax, one-hour minimum" (#39). Any other dollar

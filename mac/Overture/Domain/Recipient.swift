@@ -72,6 +72,13 @@ final class Recipient {
     // PrepImporter clears this whenever a re-ingested contact's provenance is no longer .performer.
     var overrideBody: String?
 
+    // #789: the EXACT text Dan explicitly confirmed is fine to send despite a blocking lint finding.
+    // A copy of the text rather than a bare boolean, so a later edit to DIFFERENT text silently
+    // invalidates the override with no migration bookkeeping (isLintOverridden below); the same
+    // shape as Prospect.draftSalutationReviewOverriddenBody (#718). Per RECIPIENT, not per prospect,
+    // because the text that reaches each one can differ (see effectiveBody).
+    var lintOverriddenBody: String?
+
     // #388: a heuristic guess (VenueContactGuard) that this contact's address belongs to the host
     // venue, not the act/presenter, set on ingest and blocking sendability until Dan dismisses it
     // (a weaker signal than the runbook's own STRICT venue-disqualify rule for the AI, so it's
@@ -274,13 +281,41 @@ final class Recipient {
     // Recipient unit test in this file) is unaffected, since there is nothing to check. #388: a
     // recipient whose address looks like the host venue (VenueContactGuard, set at ingest) is
     // blocked until Dan dismisses that specific guess as wrong.
+    // #789 adds the draft lint: a recipient whose OWN outgoing text carries a blocking finding is
+    // held back until Dan either fixes the text or deliberately overrides it, the same way #407's
+    // salutation flag blocks above.
     var isSendablePending: Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
             && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            && !isBlockedByDraftLint
     }
+
+    // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
+    // second-person draft (#634 Phase C) wins over the shared third-person body; for everyone else
+    // it IS the shared body. SendService.deliver reads this to compose the mail, and the lint below
+    // reads the same property to judge it, so what is CHECKED can never drift from what is SENT.
+    var effectiveBody: String? {
+        (provenance == .performer ? overrideBody : nil) ?? prospect?.draftBody
+    }
+
+    // #789: the blocking lint findings in that text. Derived live rather than stored at ingest on
+    // purpose: it is a pure function of text already on disk, so it can never go stale, it needs no
+    // migration, and it covers Dan's own edits and a performer's override body for free.
+    var draftLintBlockers: [DraftIssue] {
+        guard let body = effectiveBody, !body.isEmpty else { return [] }
+        return DraftCheck.blockingFindings(in: body)
+    }
+
+    // True only when the current outgoing text is the EXACT text Dan overrode; a mismatch (edited
+    // since, or never overridden) means the block still applies.
+    var isLintOverridden: Bool {
+        lintOverriddenBody != nil && lintOverriddenBody == effectiveBody
+    }
+
+    var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
 
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
