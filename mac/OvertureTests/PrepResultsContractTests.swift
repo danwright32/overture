@@ -174,4 +174,48 @@ struct PrepResultsContractTests {
         #expect(multi.contacts?[1].confidence == "medium")
         #expect(multi.contacts?[1].sourceUrl == nil)
     }
+
+    // MARK: - Negative paths (#747)
+    //
+    // The enumeration guard above only proves a POSITIVE: every committed fixture decodes. That
+    // says nothing about whether the decoder would REJECT a bad file, and a guard that cannot fail
+    // is not a guard. The TypeScript side has had these rejection cases since #509
+    // (src/lib/fixtureShape.test.ts); this is the Swift half.
+    //
+    // Note what is deliberately NOT tested: "a v1 file carrying a v2 field". Swift's Codable ignores
+    // unknown keys by design, so it cannot reject that, and pretending otherwise would be a test that
+    // asserts a behavior the language does not have. That case is genuinely covered on the TypeScript
+    // side, which reads the same committed fixtures. What Swift CAN enforce is the version gate and
+    // its required fields, so that is what these prove.
+
+    private func decoding(_ json: String) throws -> PrepResults {
+        try PrepResultsDecoder.decode(Data(json.utf8))
+    }
+
+    @Test func aVersionAboveTheSupportedRangeIsRejected() {
+        let future = #"{"version":99,"generatedAt":"now","results":[]}"#
+        #expect(throws: PrepResultsError.unsupportedVersion(99)) { try decoding(future) }
+    }
+
+    // The gate is a closed RANGE, so it has a floor as well as a ceiling. A version 0 file is not a
+    // very old file, it is a broken one.
+    @Test func aVersionBelowTheSupportedRangeIsRejected() {
+        let ancient = #"{"version":0,"generatedAt":"now","results":[]}"#
+        #expect(throws: PrepResultsError.unsupportedVersion(0)) { try decoding(ancient) }
+    }
+
+    // naturalKey is the OPAQUE token the run must echo back verbatim. A result without one cannot be
+    // matched to any prospect, so it must fail loudly rather than decode into a keyless orphan.
+    @Test func aResultMissingItsNaturalKeyIsRejected() {
+        let keyless = #"{"version":6,"generatedAt":"now","results":[{"draft":{"subject":"s","body":"b"}}]}"#
+        #expect(throws: (any Error).self) { try decoding(keyless) }
+    }
+
+    @Test func aFileMissingItsVersionIsRejected() {
+        #expect(throws: (any Error).self) { try decoding(#"{"generatedAt":"now","results":[]}"#) }
+    }
+
+    @Test func garbageIsRejectedRatherThanReadAsEmpty() {
+        #expect(throws: (any Error).self) { try decoding("this is not json at all") }
+    }
 }

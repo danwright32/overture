@@ -96,4 +96,45 @@ struct VoiceFeedbackContractTests {
         #expect(reply?.outcome == "booked")
         #expect(cold != nil)                                 // a kindless cold pair coexists
     }
+
+    // MARK: - Negative paths (#747)
+    //
+    // The enumeration guard only proves every committed fixture decodes. A guard that cannot fail is
+    // not a guard, so these prove a drifted fixture would actually be caught. This file feeds the
+    // voice distiller, so a pair that quietly loses a field does not crash anything: it silently
+    // teaches the drafter from incomplete data, which is worse.
+
+    private func decoding(_ json: String) throws -> VoiceFeedback {
+        try JSONDecoder().decode(VoiceFeedback.self, from: Data(json.utf8))
+    }
+
+    @Test func aPairMissingARequiredFieldIsRejected() {
+        // sentAt is the ordering key and outcome is what tells the distiller which edits actually
+        // landed. Neither is optional, and a pair without one must not decode into a half-pair.
+        let noSentAt = """
+        {"version":3,"generatedAt":"now","pairs":[
+          {"naturalKey":"k","discipline":"music","outcome":"booked"}]}
+        """
+        #expect(throws: (any Error).self) { try decoding(noSentAt) }
+
+        let noOutcome = """
+        {"version":3,"generatedAt":"now","pairs":[
+          {"naturalKey":"k","discipline":"music","sentAt":"2026-07-01T00:00:00Z"}]}
+        """
+        #expect(throws: (any Error).self) { try decoding(noOutcome) }
+    }
+
+    // kind is a genuine v3 optional (absent means a cold opener), so its absence must NOT be an
+    // error. Pins the line between "optional by design" and "missing and broken".
+    @Test func theOptionalKindFieldMayBeAbsent() throws {
+        let coldOnly = """
+        {"version":3,"generatedAt":"now","pairs":[
+          {"naturalKey":"k","discipline":"music","sentAt":"2026-07-01T00:00:00Z","outcome":"booked"}]}
+        """
+        #expect(try decoding(coldOnly).pairs[0].kind == nil)
+    }
+
+    @Test func garbageIsRejectedRatherThanReadAsNoPairs() {
+        #expect(throws: (any Error).self) { try decoding("not json") }
+    }
 }

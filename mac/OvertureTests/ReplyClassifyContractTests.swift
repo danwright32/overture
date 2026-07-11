@@ -154,4 +154,47 @@ struct ReplyClassifyContractTests {
         #expect(v2.version == 2)
         #expect(v2.results[0].draftBody == nil)
     }
+
+    // MARK: - Negative paths (#747)
+    //
+    // The enumeration guard only proves every committed fixture decodes. It says nothing about
+    // whether a BAD file would be rejected, and a guard that cannot fail is not a guard. Mirrors the
+    // rejection cases the TypeScript side has had since #509 (src/lib/fixtureShape.test.ts).
+
+    private func decoding(_ json: String) throws -> ReplyClassifyResults {
+        try ReplyClassifyResultsDecoder.decode(Data(json.utf8))
+    }
+
+    @Test func aVersionOutsideTheSupportedRangeIsRejected() {
+        #expect(throws: ReplyClassifyResultsError.unsupportedVersion(99)) {
+            try decoding(#"{"version":99,"generatedAt":"now","results":[]}"#)
+        }
+        #expect(throws: ReplyClassifyResultsError.unsupportedVersion(0)) {
+            try decoding(#"{"version":0,"generatedAt":"now","results":[]}"#)
+        }
+    }
+
+    @Test func aResultMissingItsNaturalKeyIsRejected() {
+        #expect(throws: (any Error).self) {
+            try decoding(#"{"version":3,"generatedAt":"now","results":[{"intent":"interested"}]}"#)
+        }
+    }
+
+    // intent is deliberately a plain String so an UNKNOWN value still decodes (it is a non-binding
+    // hint, never an auto-resolution). Its absence is a different matter: the result exists to carry
+    // one, so a result without it is malformed, not merely unrecognized.
+    @Test func anUnknownIntentStillDecodesButAMissingOneDoesNot() throws {
+        let unknown = try decoding(
+            #"{"version":3,"generatedAt":"now","results":[{"naturalKey":"k","intent":"who_knows"}]}"#)
+        #expect(unknown.results[0].intent == "who_knows")
+        #expect(unknown.results[0].replyIntent == nil)   // unrecognized, so no binding intent
+
+        #expect(throws: (any Error).self) {
+            try decoding(#"{"version":3,"generatedAt":"now","results":[{"naturalKey":"k"}]}"#)
+        }
+    }
+
+    @Test func garbageIsRejectedRatherThanReadAsEmpty() {
+        #expect(throws: (any Error).self) { try decoding("not json") }
+    }
 }
