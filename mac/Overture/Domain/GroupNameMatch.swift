@@ -8,8 +8,21 @@ import Foundation
 // logic's only locked spec, not a cross-language drift guard.
 
 enum GroupNameMatch {
+    // Accents fold to their plain letters before anything else (#774). The strip below removes
+    // everything outside a-z, so without this "Sinfónica" shreds into the junk tokens "sinf" and
+    // "nica" and can never match itself, and an org with an accent in its name silently reads as a
+    // cold lead. #755 fixed this for people only; orgs had the same bug.
+    //
+    // Folding touches combining marks, not punctuation, so the em/en dash separators stripProgramSubtitle
+    // relies on survive it untouched (the locked fixture proves this: its one non-ASCII case is an em dash).
+    //
+    // A fixed locale, not .current, so the result never depends on Dan's system settings.
+    private static func foldAccents(_ s: String) -> String {
+        s.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
     static func normalize(_ name: String) -> String {
-        var s = orgLine(name)
+        var s = orgLine(foldAccents(name))
         s = s.replacingOccurrences(of: #"(?i)^\s*presented by\s+"#, with: "", options: .regularExpression)
         s = stripProgramSubtitle(s)
         s = s.lowercased()
@@ -105,22 +118,12 @@ enum GroupNameMatch {
         "voice", "vocals", "vocalist", "conductor", "composer", "narrator", "director", "soloist",
     ]
 
-    // Accents folded to their plain letters before anything else (#755). normalize() below strips
-    // everything outside a-z, so "Asunción" would otherwise shred into the junk tokens "asunci" and
-    // "n" and could never match itself. In classical music an accented name is not an edge case, it
-    // is most of the roster, and this was caught by the real-data precision check: the second soloist
-    // of a real recital ("Victor Santiago Asunción, Piano") was the one name in his own history the
-    // matcher could not find.
-    //
-    // A fixed locale, not .current, so the result never depends on Dan's system settings.
-    private static func foldAccents(_ s: String) -> String {
-        s.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US_POSIX"))
-    }
-
-    // A person's name with accents folded and any trailing role words removed. Never strips below two
-    // tokens, so a name can't be eroded into a single word that would then collide with half the world.
+    // A person's name with any trailing role words removed. Never strips below two tokens, so a name
+    // can't be eroded into a single word that would then collide with half the world. Accent folding
+    // is normalize()'s job now (#774): it used to be duplicated here, back when only the person path
+    // needed it.
     static func personNameTokens(_ name: String) -> [String] {
-        var t = tokens(foldAccents(name))
+        var t = tokens(name)
         while t.count > 2, let last = t.last, roleWords.contains(last) { t.removeLast() }
         return t
     }
