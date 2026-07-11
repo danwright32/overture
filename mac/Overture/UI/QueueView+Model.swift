@@ -53,6 +53,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Unlike alreadyCovered, this one ALREADY changed fitScore/tier, so the row has to be able to
     // both explain it and take it back. Unreviewed means the warm drafting tone is still held back
     // until Dan confirms (#752).
+    // #769: this org asked Dan to stop emailing them. Every one of their shows is off-limits.
+    var orgDoNotContact: Bool = false
     var relationshipCorrectedByPerformerMatch: Bool = false
     var performerMatchNote: String? = nil
     var performerMatchDismissed: Bool = false
@@ -565,6 +567,7 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,
+            orgDoNotContact: p.orgDoNotContact,
             relationshipCorrectedByPerformerMatch: p.relationshipCorrectedByPerformerMatch,
             performerMatchNote: p.performerMatchNote,
             performerMatchDismissed: p.performerMatchDismissed,

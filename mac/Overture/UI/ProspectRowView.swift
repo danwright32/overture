@@ -42,6 +42,8 @@ struct ProspectRowView: View {
     var onRejectBooking: () -> Void = {}
     // #611: dismisses the "already has its own photographer" fit-risk flag as a false positive.
     var onDismissAlreadyCoveredFlag: () -> Void = {}
+    // #769: Dan marks (or releases) the whole ORG as do-not-contact, not just this show.
+    var onSetOrgDoNotContact: (Bool) -> Void = { _ in }
     // #753: Dan's verdict on a performer match. Confirming unlocks the warm drafting tone; rejecting
     // reverts the score to exactly what the scout had (#752).
     var onConfirmPerformerMatch: () -> Void = {}
@@ -77,6 +79,7 @@ struct ProspectRowView: View {
                     tags
                     relatedRunNote
                     confidenceFlag
+                    orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
                     performerMatchFlag
@@ -99,6 +102,7 @@ struct ProspectRowView: View {
                     onOverrideSalutationReview: onOverrideSalutationReview,
                     onDismissReply: onDismissReply,
                     onMarkContact: onMarkContact,
+                    onSetOrgDoNotContact: onSetOrgDoNotContact,
                     onSetRecipientConversationState: onSetRecipientConversationState,
                     onConfirmRecipientConversationState: onConfirmRecipientConversationState,
                     onDismissContactReply: onDismissContactReply,
@@ -327,6 +331,30 @@ struct ProspectRowView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Prep's research found this show may already have its own photographer. Tap if that's wrong.")
+            .padding(.top, 2)
+        }
+    }
+
+    // #769: this org asked Dan to stop emailing them. The most consequential state a row can carry, so
+    // it is stated plainly rather than tucked into a menu, and it stays releasable: a mis-click here
+    // must not silently cost him an org forever.
+    @ViewBuilder private var orgDoNotContactFlag: some View {
+        if item.orgDoNotContact {
+            Menu {
+                Button("Allow contact again") { onSetOrgDoNotContact(false) }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "hand.raised.fill")
+                    Text("Do not contact")
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.rust)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.rust.opacity(0.16)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("This org asked not to be contacted, so none of their shows will be scouted or emailed. Tap to allow contact again.")
             .padding(.top, 2)
         }
     }

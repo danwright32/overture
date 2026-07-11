@@ -178,6 +178,14 @@ final class Prospect {
     var performerMatchPreviousMatchedClientName: String? = nil
     var performerMatchPreviousDownbeatClientId: String? = nil
 
+    // #769: this ORG asked Dan to stop emailing them. Dan-owned; the scout never touches it. Distinct
+    // from any performance-level loss: "not this show" and "never contact us again" are genuinely
+    // different messages, and conflating them would either burn orgs who only meant the former or keep
+    // pitching ones who meant the latter. Set on every prospect of the org (see OrgDoNotContact), so
+    // the derived "dnc" history record survives whichever show Dan happened to be looking at.
+    // Defaulted so existing records migrate cleanly.
+    var orgDoNotContact: Bool = false
+
     // #384: Dan passed on this exact show before (same org, same venue), so the fit score carries a
     // penalty. Scout-owned and refreshed every run, like the rest of the scoring inputs. Stored rather
     // than recomputed on demand because ClassificationOverride rebuilds the ranking Candidate from
@@ -334,6 +342,11 @@ final class Prospect {
     // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
     // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
     var isClosed: Bool {
+        // #769: the org asked Dan to stop. Nothing routine may fire again, on any of their shows. This
+        // is the load-bearing line: without it a do-not-contact org would keep receiving follow-ups
+        // and reminders on a show already sent, which is precisely the email that issue exists to
+        // prevent. Suppressing the untried recipients only stops FIRST sends.
+        if orgDoNotContact { return true }
         switch performanceStatus {
         case .booked, .lostDoorOpen, .lostNotInterested: return true
         case .active, .new: return outcome == .lostSoft || outcome == .lostHard
