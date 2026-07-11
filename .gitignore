@@ -49,3 +49,6 @@ mac/Overture.xcodeproj/xcuserdata/
 mac/Overture.xcodeproj/project.xcworkspace/xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# Transient artifacts from Playwright MCP browser sessions (page snapshots, console logs)
+.playwright-mcp/
