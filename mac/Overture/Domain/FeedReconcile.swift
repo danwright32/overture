@@ -14,9 +14,9 @@ enum FeedReconcile {
     // feed (a transient Carnegie glitch) can't cancel a still-real show on its own.
     static let goneThreshold = 2
 
-    // The hosts the scout actually covers today. Only prospects from these sources are
-    // reconciled, so a Carnegie scout never flags a future prospect sourced elsewhere.
-    static let scoutedHosts: Set<String> = ["carnegiehall.org"]
+    // #801: `scoutedHosts` (a substring match on "carnegiehall.org") is GONE. Provenance is
+    // Prospect.sourceIds, recorded when the show was ingested, not guessed from its URL at reconcile
+    // time. A host string could only ever answer "did this come from the one source we had".
 
     // A run's feed must be at least this fraction of the last healthy run's size for its absences
     // to be trusted. Below it, the feed looks partial/degraded (a truncated page, a flaky fetch
@@ -70,28 +70,65 @@ enum FeedReconcile {
         return FeedHealthState(baseline: state.baseline, degradedStreak: streak, lastDegradedCount: currentCount)
     }
 
-    // `seenSourceURLs` is the set of listing URLs in this run's RAW feed (before our own
-    // blocked-date / DNC / unreachable filtering). A prospect is "still listed" if it was
-    // upserted (seenKeys) OR any of its listing URLs is in the raw feed, so a show we merely
-    // filtered out this run is NOT mistaken for one the venue cancelled.
+    // What ONE source reported about its OWN feed this run (#801).
     //
-    // `currentFeedCount`/`baselineFeedCount` gate on feed health: a degraded (suspiciously small)
-    // feed is skipped entirely, so its absences never accrue misses (#150). Defaults (0/0) mean
-    // "no baseline" and trust the feed, preserving callers that don't pass them.
-    static func reconcile(stored: [Prospect], seenKeys: Set<String>,
-                          seenSourceURLs: Set<String> = [],
-                          currentFeedCount: Int = 0, baselineFeedCount: Int = 0,
-                          today: String,
-                          scoutedHosts: Set<String> = scoutedHosts) {
-        guard feedIsTrustworthy(currentCount: currentFeedCount, baseline: baselineFeedCount) else { return }
+    // A report exists only for a source that was actually checked and returned something. A source that
+    // failed, that was skipped because its page had not changed, or that was deferred over the run's
+    // budget has no report at all, and so cannot cause anything to be marked gone. Silence from a
+    // source nobody asked is not evidence.
+    struct SourceReport: Equatable, Sendable {
+        var sourceId: String
+        // What this source listed: the natural keys we upserted from it, and the listing URLs in its
+        // RAW feed (before our own blocked-date / do-not-contact / unreachable filtering, so a show we
+        // merely filtered out this run is never mistaken for one the venue cancelled).
+        var seenKeys: Set<String>
+        var seenSourceURLs: Set<String>
+        // Judged against THIS source's own baseline. A merged multi-source count must never feed a
+        // shared baseline: one healthy source's big season would mask another's dead scraper, and both
+        // of the failures Dan named live inside that one mistake.
+        var feedCount: Int
+        var baseline: Int
+        var successfulCheckCount: Int
+        var verdict: PageVerdict
+
+        // Whether this source's SILENCE about a show can be believed. That is a far higher bar than
+        // whether it can be believed about what it CAN see (`seenKeys`, always believed). Four ways a
+        // source that genuinely ran still has nothing to say about a show being absent:
+        var absenceIsEvidence: Bool {
+            // A quiet off-season, an unreadable page, or a page with no dated content tells us nothing
+            // about whether any particular show was cancelled.
+            guard verdict == .upcomingListings else { return false }
+            // An empty feed is a broken fetch, not "every show cancelled".
+            guard feedCount > 0 else { return false }
+            // A brand-new source imports a whole season on its first check and may legitimately look
+            // different on its second. It cannot mark anything gone before it has a history of its own.
+            guard successfulCheckCount >= WatchedSource.warmupRuns else { return false }
+            // A suspiciously small feed against this source's own baseline is a degraded fetch (#150).
+            return feedIsTrustworthy(currentCount: feedCount, baseline: baseline)
+        }
+    }
+
+    // Marks shows that have dropped out of every feed that ever carried them (#133, per-source #801).
+    //
+    // The rule, stated once: absence is evidence of cancellation ONLY when every source that ever
+    // claimed this show was asked this run, and none of them has it.
+    //
+    // Presence and blame are deliberately different questions, judged against different sets. ANY
+    // source that reported can prove a show is alive, even one too degraded to be trusted about what is
+    // missing. Only a source whose silence is evidence can take one away.
+    static func reconcile(stored: [Prospect], reports: [SourceReport], today: String) {
+        let seenKeys = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenKeys) }
+        let seenSourceURLs = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenSourceURLs) }
+        let believable = Set(reports.filter(\.absenceIsEvidence).map(\.sourceId))
+
         for p in stored {
             if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs) {
-                p.missedScoutCount = 0                       // present this run: definitely live
-            } else if isFromScoutedSource(p, hosts: scoutedHosts) && isFuture(p, today: today) {
-                p.missedScoutCount += 1                       // gone from the venue's feed entirely
+                p.missedScoutCount = 0                                  // listed somewhere: definitely live
+            } else if isFuture(p, today: today), everyOwnerWasAskedAndNoneHasIt(p, believable: believable) {
+                p.missedScoutCount += 1
             }
-            // Past performances and other-source prospects are left untouched: their absence is
-            // not evidence of cancellation.
+            // Everything else is left untouched. A past performance, a show whose sources were not all
+            // checked, and a show nobody claims are all cases where absence proves nothing.
         }
     }
 
@@ -101,9 +138,16 @@ enum FeedReconcile {
         return urls.contains { seenSourceURLs.contains($0) }
     }
 
-    private static func isFromScoutedSource(_ p: Prospect, hosts: Set<String>) -> Bool {
-        guard let url = p.sourceListingURL else { return false }
-        return hosts.contains { url.contains($0) }
+    // The conservative half of the rule, and the reason a show co-listed by a venue and a presenter
+    // cannot be marked gone by the venue alone: the presenter might still be listing it, and we did not
+    // ask. A show is gone only when everyone who ever claimed it has been asked and none of them has it.
+    private static func everyOwnerWasAskedAndNoneHasIt(_ p: Prospect, believable: Set<String>) -> Bool {
+        // A prospect nobody claims (created by Prep, or predating #800) can never be marked gone: no
+        // source's silence is about it. This guard is load-bearing, not defensive: allSatisfy is
+        // VACUOUSLY TRUE of an empty list, so without it every sourceless prospect would be blamed on
+        // every run and marked gone, which is the exact class of bug this whole phase exists to prevent.
+        guard !p.sourceIds.isEmpty else { return false }
+        return p.sourceIds.allSatisfy(believable.contains)
     }
 
     // Future = any night of the (possibly multi-night) run is today or later. A run whose opening

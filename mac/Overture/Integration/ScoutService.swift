@@ -63,20 +63,38 @@ enum ScoutService {
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = LocalHistory.forMatching(existing: existing)
-        let health = feedHealthState(in: defaults)
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
-        // #771: everything this run finds came from Carnegie. The id is a constant rather than a lookup
-        // because the row need not exist for the scout to name its own source; Phase 4 is what starts
-        // iterating real WatchedSource rows and passing each one's id here.
-        var outcome = apply(events: events, clients: loaded.clients, history: history,
-                            blocked: blocked, baselineFeedCount: health.baseline,
-                            sourceIds: [WatchedSource.carnegieId], into: context)
+
+        // #801: Carnegie's feed health lives on ITS OWN ROW now, not in three global UserDefaults keys.
+        // The keys could only ever describe "the feed" (singular): the moment a second source exists, a
+        // shared baseline is structurally unable to tell one source's dead scraper from another's big
+        // season, and both of the failures Dan named live inside that one flaw. The row was seeded from
+        // those keys by WatchedSourceBackfill (#800), so the #150/#152 self-heal machinery carries on
+        // with its own tuned history rather than restarting from zero.
+        let source = carnegieRow(in: context)
+        let health = FeedReconcile.FeedHealthState(
+            baseline: source?.baselineFeedCount ?? 0,
+            degradedStreak: source?.degradedStreak ?? 0,
+            lastDegradedCount: source?.lastDegradedCount ?? 0)
+
+        var outcome = apply(
+            events: events, clients: loaded.clients, history: history, blocked: blocked,
+            feed: FeedCheck(sourceId: WatchedSource.carnegieId,
+                            baseline: health.baseline,
+                            // A store whose backfill has not run yet has no row and therefore no
+                            // history. It is treated as still in its warmup, so it can find and rank
+                            // shows but cannot mark any of them gone: exactly what "we have no feed
+                            // history to judge an absence against" should mean.
+                            successfulCheckCount: source?.successfulCheckCount ?? 0),
+            sourceIds: [WatchedSource.carnegieId], into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
-        // Fold this run into the feed-health state: a full feed re-baselines immediately, and a feed
-        // that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
+
+        // Fold this run into the source's feed-health state: a full feed re-baselines immediately, and a
+        // feed that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
         // too, so a genuine sustained calendar shrink self-heals without one bad fetch ratcheting the
         // baseline down (#150/#152).
-        recordFeedHealthState(FeedReconcile.updatedHealth(health, currentCount: events.count), in: defaults)
+        recordCheck(on: source, events: events.count, health: health, now: Date())
+
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -93,12 +111,45 @@ enum ScoutService {
         return outcome
     }
 
+    // Carnegie's watchlist row, or nil on a store whose #800 backfill has not run yet (and in a test
+    // container that does not declare the model at all).
+    private static func carnegieRow(in context: ModelContext) -> WatchedSource? {
+        let id = WatchedSource.carnegieId
+        let descriptor = FetchDescriptor<WatchedSource>(predicate: #Predicate { $0.sourceId == id })
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    // Records that this source was checked, and folds the run into its own feed-health history. Not
+    // saved here: apply() already saved, and the caller's own save covers this (a lost health update is
+    // recoverable, unlike a lost prospect).
+    private static func recordCheck(on source: WatchedSource?, events: Int,
+                                    health: FeedReconcile.FeedHealthState, now: Date) {
+        guard let source else { return }
+        let updated = FeedReconcile.updatedHealth(health, currentCount: events)
+        source.baselineFeedCount = updated.baseline
+        source.degradedStreak = updated.degradedStreak
+        source.lastDegradedCount = updated.lastDegradedCount
+        source.lastCheckedAt = now
+        source.lastSucceededAt = now
+        source.health = .ok
+        source.lastFailure = nil
+        // The warmup counter (#801). A source cannot mark anything gone until it has this many checks of
+        // its own, so a brand-new source's first big import cannot look like a mass cancellation on its
+        // second run.
+        source.successfulCheckCount += 1
+    }
+
     // #800: the accessors below are `nonisolated`. They touch nothing but UserDefaults, which is
     // thread-safe, and they were main-actor-isolated only by inheritance from this enum. The launch-time
     // WatchedSourceBackfill has to read this state to seed it onto Carnegie's row, and it runs outside
     // the main actor like every other migration in LaunchMigrations. Reading these keys through their
     // own accessors is the point: the alternative is the backfill hardcoding the same key strings, which
     // is exactly how two copies of a name drift apart.
+    //
+    // #801: the scout no longer WRITES the three feed-health keys; Carnegie's row owns that state now.
+    // They are kept, read-only, for exactly one reason: WatchedSourceBackfill reads them to seed the row
+    // on a store that has not migrated yet, and a store can migrate at any future launch. Deleting them
+    // would silently reset Carnegie's tuned #150/#152 history to zero for anyone who upgrades late.
 
     nonisolated static let lastScoutKey = "scoutLastRunAt"
     // Store/read injectable so the persistence is testable without polluting the global
@@ -143,6 +194,21 @@ enum ScoutService {
         defaults.set(state.lastDegradedCount, forKey: lastDegradedFeedCountKey)
     }
 
+    // What the source whose events these are knows about its OWN feed, which is the only thing that
+    // licenses the reconcile to read a stored show's absence as a cancellation (#801).
+    //
+    // nil means "these events are not a sweep of anybody's feed": a hand-added lead (#799) reports on
+    // the one page Dan pasted and says nothing whatever about what Carnegie is still listing. With no
+    // feed check there are no reports, so nothing can be marked gone. That makes #826 (two leads in a
+    // row marking Dan's live Carnegie shows as disappeared) structurally impossible rather than
+    // guarded by a flag a future caller could forget.
+    struct FeedCheck: Equatable, Sendable {
+        var sourceId: String
+        var baseline: Int
+        var successfulCheckCount: Int
+        var verdict: PageVerdict = .upcomingListings
+    }
+
     // Application of already-extracted events with injected data, so the full
     // classify -> match -> assemble -> upsert chain is testable without network/WebKit.
     @discardableResult
@@ -151,21 +217,16 @@ enum ScoutService {
         clients: [DownbeatClient],
         history: [HistoryRecord],
         blocked: Set<String>,
-        baselineFeedCount: Int = 0,
+        feed: FeedCheck? = nil,
         // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
         // the wall clock. The reconcile already needed today's date; now one value serves both.
         today: String = QueueModel.easternToday(),
         // #771: the source(s) this run's events came from, stamped onto every prospect it inserts and
         // UNIONED onto every one it updates. Empty means "we did not record it", which is what every
-        // prospect predating #800 carries, and what a Prep-created one carries: an empty list can never
-        // satisfy Phase 3's "at least one of its sourceIds checked successfully this run", so it never
-        // accrues a miss. That is exactly today's behavior for a non-Carnegie URL.
+        // prospect predating #800 carries, and what a Prep-created one carries. An empty list can never
+        // satisfy the reconcile's "every source that owns this show was asked", so it never accrues a
+        // miss. That is exactly today's behavior for a non-Carnegie URL.
         sourceIds: [String] = [],
-        // #826: whether `events` is a SWEEP of a source's whole feed, which is the only thing that
-        // licenses the reconcile at the bottom of this function to read an absence as a cancellation.
-        // True for the scout. False for a hand-added lead (#799), which reports on the one page Dan
-        // pasted and says nothing whatever about what Carnegie is still listing.
-        reconcilesFeed: Bool = true,
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
@@ -285,27 +346,31 @@ enum ScoutService {
         }
 
         // Reconcile stored prospects against this run's feed: mark ones that dropped out (#133).
-        // Only when the feed actually returned events: an empty feed is a broken/glitching feed,
-        // not "every show cancelled", so it must never accrue misses.
         //
-        // #826: and only when `events` is a whole feed in the first place. A hand-added lead (#799)
-        // comes through this same function on purpose, so that blocked dates, the #769 do-not-contact
-        // suppression and the #798 upcoming-only guard all apply to it exactly as they do to a scouted
-        // show. The reconcile is the one stage that must NOT come along: judged against a single pasted
-        // page, every upcoming Carnegie show is "missing" and accrues a miss, and two leads in a row
-        // marked Dan's live, un-cancelled shows as disappeared and hid them from his queue. The health
-        // guard below could not catch it, because a lead confirm passes no baseline and
-        // feedIsTrustworthy trusts any feed it has no baseline to judge against.
-        if reconcilesFeed, !events.isEmpty {
+        // #801: this now happens only when a SOURCE swept its own feed and said so (`feed`). A
+        // hand-added lead (#799) comes through this same function on purpose, so that blocked dates,
+        // the #769 do-not-contact suppression and the #798 upcoming-only guard all apply to it exactly
+        // as they do to a scouted show. But it sweeps nobody's feed, so it produces no report, and with
+        // no report nothing can be marked gone. That is what makes #826 impossible rather than merely
+        // guarded: there is no flag left for a future caller to forget to set.
+        //
+        // Every remaining judgement (is this feed big enough to be believed, is this source past its
+        // warmup, does a verdict of "quiet off-season" count as evidence) lives in SourceReport, judged
+        // against THIS source's own baseline.
+        if let feed {
             let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-            // Presence is judged against the RAW feed's listing URLs, not just what we upserted,
-            // so a show we filtered out this run (newly blocked date / DNC) isn't mistaken for
-            // one the venue cancelled (#133).
-            let seenSourceURLs = Set(events.compactMap { $0.sourceUrl })
-            FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys,
-                                    seenSourceURLs: seenSourceURLs,
-                                    currentFeedCount: events.count, baselineFeedCount: baselineFeedCount,
-                                    today: today)
+            let report = FeedReconcile.SourceReport(
+                sourceId: feed.sourceId,
+                seenKeys: seenKeys,
+                // Presence is judged against the RAW feed's listing URLs, not just what we upserted, so
+                // a show we filtered out this run (newly blocked date, do-not-contact) isn't mistaken
+                // for one the venue cancelled (#133).
+                seenSourceURLs: Set(events.compactMap { $0.sourceUrl }),
+                feedCount: events.count,
+                baseline: feed.baseline,
+                successfulCheckCount: feed.successfulCheckCount,
+                verdict: feed.verdict)
+            FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
         }
         do {
             try context.save()

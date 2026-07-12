@@ -146,10 +146,15 @@ struct ScoutSourceInjectionTests {
     // feature than to bolt it on after.
     @Test func runScoutImportsWhatTheSourceReturnsWithoutTouchingTheLiveAppsSettings() async throws {
         let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self]),
+            for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let scratch = UserDefaults(suiteName: "ScoutSourceInjectionTests")!
         scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
+
+        // Carnegie's row, as the #800 backfill leaves it on a real store.
+        let carnegie = WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
+                                     kind: .algolia)
+        ctx.insert(carnegie)
 
         let stub = StubSourceExtractor(listing: ExtractedListing(
             events: [ExtractedEvent(title: "Indianapolis Children's Choir",
@@ -164,12 +169,58 @@ struct ScoutSourceInjectionTests {
         #expect(outcome.inserted == 1)
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 1)
 
-        // The run's bookkeeping went to the scratch domain, which is the whole point: the live app's
-        // last-scout time and feed baseline are untouched by the suite.
+        // The last-scout time still goes to the scratch domain, which is the whole point of injecting
+        // it: the live app's own is untouched by the suite.
         #expect(ScoutService.lastScoutedAt(in: scratch) != nil)
-        #expect(ScoutService.lastHealthyFeedCount(in: scratch) == 1)
+
+        // #801: the FEED HEALTH no longer goes to a global key at all. It is folded into the source's
+        // own row, which is what lets a second source's dead scraper stop being masked by this one's
+        // big season.
+        #expect(carnegie.baselineFeedCount == 1)
+        #expect(carnegie.successfulCheckCount == 1)
+        #expect(carnegie.health == .ok)
+        #expect(carnegie.lastSucceededAt != nil)
+        #expect(ScoutService.lastHealthyFeedCount(in: scratch) == 0)   // the old global key is dead
 
         scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
+    }
+
+    // A source cannot mark anything gone until it has a feed history of its own. One successful check is
+    // not a history: this run is the FIRST, so the show it did not list this time cannot be cancelled on
+    // its say-so. Without the warmup, a brand-new source's first big import would look like a mass
+    // cancellation on its second run.
+    @Test func aSourceOnItsFirstCheckCannotMarkAnythingGone() async throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self, WatchedSource.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let scratch = UserDefaults(suiteName: "ScoutWarmupTests")!
+        scratch.removePersistentDomain(forName: "ScoutWarmupTests")
+
+        ctx.insert(WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
+                                 kind: .algolia))
+        let stored = Prospect(naturalKey: "already-here", groupName: "Already Here", discipline: "music",
+                              venue: "Weill Recital Hall", performanceDate: "2099-12-01",
+                              sourceListingURL: "https://www.carnegiehall.org/event/here",
+                              websiteURL: nil, priorRelationship: "none", production: "self",
+                              profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
+                              fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                              possibleMatchName: nil)
+        stored.sourceIds = [WatchedSource.carnegieId]
+        ctx.insert(stored)
+
+        // A perfectly healthy feed that simply does not list the stored show.
+        let stub = StubSourceExtractor(listing: ExtractedListing(
+            events: [ExtractedEvent(title: "Someone Else", presenter: "Someone Else",
+                                    venue: "Merkin Hall", performanceDate: "2099-09-19",
+                                    sourceUrl: "https://org.example/other")],
+            verdict: .upcomingListings))
+
+        _ = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
+
+        #expect(stored.missedScoutCount == 0)
+        #expect(stored.disappearedFromFeed == false)
+
+        scratch.removePersistentDomain(forName: "ScoutWarmupTests")
     }
 }
 
