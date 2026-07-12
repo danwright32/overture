@@ -221,6 +221,15 @@ final class Prospect {
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
 
+    // #804: the model that wrote the draft currently on this show.
+    //
+    // Dan pinned drafting to the strong TIER rather than an exact version, so he picks up each new Opus
+    // as it ships and accepts that his voice can shift with it. That trade is only reasonable because
+    // this exists: when an email reads oddly he can tell whether the model changed underneath him,
+    // instead of sensing that something did and having no way to check. Defaulted, so drafts written
+    // before this existed migrate cleanly and simply carry no trace.
+    var draftModel: String? = nil
+
     // #792: contacts on this show held back by a review guard and waiting on Dan. A show can be
     // genuinely contacted (somebody was emailed) AND still have somebody waiting, and both facts have to
     // survive at once: the bug was that the first silently erased the second.

@@ -104,6 +104,10 @@ enum PrepImporter {
                     p.draftSubject = d.subject
                     p.draftBody = d.body
                     p.draftVariant = d.variant
+                    // #804: stamped on the SAME branch as the text itself, so the trace can never end up
+                    // describing words it did not write. A draft Dan hand-edited never reaches here (his
+                    // version wins, above), so it keeps the trace of whatever wrote the text he edited.
+                    p.draftModel = results.model
                     // A fresh draft returns the prospect to "needs review", but never silently
                     // un-approves one Dan already approved... except #367's whole point is that a
                     // real redraft DOES require re-review even from .approved, so Dan can't send
