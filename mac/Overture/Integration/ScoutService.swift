@@ -46,8 +46,12 @@ enum ScoutService {
         }
     }
 
-    static func runScout(into context: ModelContext) async throws -> Outcome {
-        let events = try await CarnegieExtractor().extract()
+    // #799: the source is now injected rather than named here. It still defaults to Carnegie, which is
+    // the only source that exists until Phase 2 gives the watchlist its rows, but the seam is what
+    // lets the scout iterate sources later without this function knowing any of their names.
+    static func runScout(into context: ModelContext,
+                         extractor: any SourceExtractor = CarnegieExtractor()) async throws -> Outcome {
+        let events = try await extractor.extract().events
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
