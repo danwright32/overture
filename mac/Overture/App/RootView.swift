@@ -735,6 +735,15 @@ struct RootView: View {
                 // (#22/#23). Silent degradation is the thing we are avoiding.
                 warningMessage = outcome.warning
 
+                // #802, Dan's 3rd decision: SHOW him the do-not-contact guard working. An org that asked
+                // him to stop can still turn up on a venue's calendar he legitimately watches, and #769
+                // suppresses each of those silently. Silent is the problem: on the one mistake that
+                // cannot be taken back he would rather see the guard working than trust that it is.
+                //
+                // Deliberately the STATUS line and not the warning line. Nothing is wrong, nothing needs
+                // fixing, and putting a receipt in the warning slot would teach him to dismiss warnings.
+                statusMessage = SuppressionReport.summary(for: outcome.suppressedOrgs)
+
                 // #802: the native half is done and shown. The pages that CHANGED are being read by a
                 // detached run right now, and its results land minutes later, so follow it to completion
                 // and ingest at once. Without this, Dan's scout would report Carnegie's numbers and then

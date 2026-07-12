@@ -32,6 +32,12 @@ enum ScoutService {
         // must never report a total that silently omits half of what it was supposed to check.
         var sources: [SourceResult] = []
 
+        // #802, Dan's 3rd decision: the orgs that asked him to stop whose shows still turned up on a
+        // calendar he watches. The #769 guard suppressed them, silently, and silent is the problem: on
+        // the one mistake that cannot be taken back he would rather SEE the guard working than trust it.
+        // This is a receipt, not a warning: nothing is wrong and nothing needs doing.
+        var suppressedOrgs: [SuppressedOrg] = []
+
         // #802: the run found changed pages and could not hand them off to be read (the runner is not
         // configured, or a previous run is still going). NOT a per-source failure: those calendars are
         // healthy and it is the app that cannot read them. Marking them failing would send Dan to debug
@@ -95,7 +101,14 @@ enum ScoutService {
             collapsedIntoRun += other.collapsedIntoRun
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
+            suppressedOrgs.append(contentsOf: other.suppressedOrgs)
         }
+    }
+
+    // An org Dan told Overture to stop contacting, whose shows a watched calendar is still listing.
+    struct SuppressedOrg: Equatable, Sendable {
+        var orgName: String
+        var showCount: Int
     }
 
     // What one watched source did this run. Every source that was supposed to be checked appears here,
@@ -493,6 +506,7 @@ enum ScoutService {
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
+        var suppressedShows: [String] = []      // #802: by org name, folded into one line each below
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
         var seenKeys = Set<String>()
@@ -507,8 +521,14 @@ enum ScoutService {
             let verdict = HistoryMatch.matchRelationship(name: e.title, venue: e.venue,
                                                          clients: clients, history: history)
             switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict, blocked: blocked) {
-            case .skip:
+            case .skip(let reason):
                 skipped += 1
+                // Only a REFUSAL is reported. A blocked date is skipped too, and it means something
+                // entirely different; a report where the lines do not all mean "somebody asked you to
+                // stop" is a report that has to be read carefully, which means it will not be.
+                if reason == .suppressed {
+                    suppressedShows.append(Prospect.decodeHTMLEntities(e.title))
+                }
             case .prospect(var p):
                 p.sourceIds = sourceIds        // #771: stamped here; `decide` stays pure and clockless
                 prospects.append(p)
@@ -635,16 +655,26 @@ enum ScoutService {
                 verdict: feed.verdict)
             FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
         }
+        // Several shows by the same org become ONE line with a count. Four separate lines saying the
+        // same thing is how a report becomes wallpaper.
+        let suppressed = Dictionary(grouping: suppressedShows, by: { $0 })
+            .map { SuppressedOrg(orgName: $0.key, showCount: $0.value.count) }
+            .sorted { ($0.showCount, $1.orgName) > ($1.showCount, $0.orgName) }
+
         do {
             try context.save()
         } catch {
             // #499: everything above was classified/upserted in memory but never persisted.
-            return Outcome(found: events.count, inserted: inserted, updated: updated,
-                           skipped: skipped, uncertain: uncertain,
-                           collapsedIntoRun: collapsedIntoRun, saveFailed: true)
+            var outcome = Outcome(found: events.count, inserted: inserted, updated: updated,
+                                  skipped: skipped, uncertain: uncertain,
+                                  collapsedIntoRun: collapsedIntoRun, saveFailed: true)
+            outcome.suppressedOrgs = suppressed
+            return outcome
         }
-        return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
-                       uncertain: uncertain, collapsedIntoRun: collapsedIntoRun)
+        var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
+                              uncertain: uncertain, collapsedIntoRun: collapsedIntoRun)
+        outcome.suppressedOrgs = suppressed
+        return outcome
     }
 
     // Matches an existing prospect that shares ANY of the given run member URLs, checking
