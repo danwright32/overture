@@ -23,6 +23,16 @@ chmod +x "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan
 defaults write com.danwright.overture scoutExtractRunnerScriptPath "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/scripts/scout-extract-run.sh"
 ```
 
+3. **The Debug build needs its own copy of that setting.** Debug and Release have different bundle
+   identities, so `UserDefaults.standard` resolves to a DIFFERENT preferences domain in each, and the
+   command above configures the Release app only. Launch the Debug build (which is the only safe way to
+   try a change: `mac/scripts/run-debug.sh`) and the feature reports "the runner isn't set up", for no
+   visible reason. Nothing is broken; it is looking somewhere else.
+
+```
+defaults write com.danwright.overture.debug scoutExtractRunnerScriptPath "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/scripts/scout-extract-run.sh"
+```
+
 ## What the run does
 
 The app has already fetched each page, normalized it, hashed it, and written it to disk. **The run does
