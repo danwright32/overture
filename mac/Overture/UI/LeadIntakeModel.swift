@@ -78,7 +78,7 @@ final class LeadIntakeModel {
         // We already know how this one ends, so do not spend a fetch and a Claude run rediscovering a
         // login wall (verified: a raw fetch of a public Instagram post is ~600KB of login page).
         if LeadIntake.knownUnreadableHost(url) != nil {
-            phase = .problem(LeadIntake.unreadableMessage)
+            phase = .problem(LeadIntake.loginWalledMessage)
             return
         }
         // Dan's rule: a link he has already handed over is not re-read. Handing over a lead means the
@@ -94,22 +94,55 @@ final class LeadIntakeModel {
         phase = .working(startedAt: now)
         let sourceId = Self.sourceId(for: url)
 
+        let page: FetchedPage
+        let path: URL
         do {
-            let page = try await fetch(url)
-            let path = try pin(page, sourceId)
-            try launch([ScoutExtractQueueItem(sourceId: sourceId,
-                                              orgName: url.host,
-                                              listingsURL: page.finalURL,
-                                              pagePath: path.path)])
+            page = try await fetch(url)
+
+            // Caught natively, BEFORE a Claude run is spent. A page whose bytes carry only a navigation
+            // shell (a Wix or Squarespace site that draws its calendar in JavaScript) has nothing in it
+            // to read. Handing it to the AI wastes a minute and an invocation to be told what we already
+            // know, and invites the worst outcome there is: a confident WRONG "no events on this page"
+            // about a page that is full of events we cannot see. That is exactly what happened to Dan on
+            // his first real lead, and he was told his org's page was not an events page. It was.
+            guard PageNormalizer.carriesReadableContent(page.normalizedHTML) else {
+                phase = .problem(LeadIntake.unreadableMessage)
+                return
+            }
+            path = try pin(page, sourceId)
         } catch let error as SourceFetchError {
             phase = .problem(error.errorDescription ?? "Couldn't read that page.")
-            return
-        } catch let error as ScoutExtractService.ExtractLaunchError {
-            phase = .problem(error.errorDescription ?? "Couldn't start the reader.")
             return
         } catch {
             phase = .problem("Couldn't read that page: \(error.localizedDescription)")
             return
+        }
+
+        // A run that is still FINISHING is a reason to wait a few seconds, not a reason to refuse Dan's
+        // next lead. He hit this: the previous run had already given him an answer but its process was
+        // still exiting, so it still held the lock, and the app told him to go away and try again. The
+        // lock exists to stop two runs clobbering one results file, not to bounce the user.
+        let item = ScoutExtractQueueItem(sourceId: sourceId, orgName: url.host,
+                                         listingsURL: page.finalURL, pagePath: path.path)
+        var waited: TimeInterval = 0
+        while true {
+            do {
+                try launch([item])
+                break
+            } catch ScoutExtractService.ExtractLaunchError.alreadyRunning {
+                guard waited <= giveUpAfter else {
+                    phase = .problem("Overture is still reading a previous page. Give it a moment and try again.")
+                    return
+                }
+                await sleep(pollEvery)
+                waited += max(pollEvery, 1)
+            } catch let error as ScoutExtractService.ExtractLaunchError {
+                phase = .problem(error.errorDescription ?? "Couldn't start the reader.")
+                return
+            } catch {
+                phase = .problem("Couldn't start the reader: \(error.localizedDescription)")
+                return
+            }
         }
 
         await waitForResults(sourceId: sourceId, startedAt: now,

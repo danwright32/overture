@@ -85,8 +85,12 @@ struct LeadIntakeTests {
         guard case .unreadable(let message) = outcome else {
             Issue.record("expected .unreadable, got \(outcome)"); return
         }
-        #expect(message.lowercased().contains("org") || message.lowercased().contains("venue"))
-        #expect(message.lowercased().contains("paste") || message.lowercased().contains("instead"))
+        // Honest about whose fault it is (ours, not the page's) and useful about where to go next.
+        #expect(message.lowercased().contains("venue") || message.lowercased().contains("ticket"))
+        #expect(message.lowercased().contains("can't read"))
+        // It must NOT tell him to paste "the org's own site": on the real case that triggered this
+        // (his ensemble's Wix site), that is precisely what he had just pasted.
+        #expect(!message.lowercased().contains("the org's own site"))
     }
 
     @Test func anInstagramLinkIsRecognizedBeforeWeEvenFetchIt() {
