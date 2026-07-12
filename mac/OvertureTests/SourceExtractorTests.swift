@@ -132,6 +132,45 @@ struct ScoutSourceInjectionTests {
         #expect(stub.callCount == 1)     // the injected source really is the one the scout asked
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)   // and nothing was written
     }
+
+    // The SUCCESS path of the scout's entry point, which had no test at all: a source returns shows,
+    // and they land in the store through the real classify/assemble/upsert chain.
+    //
+    // It was untestable rather than untested. `runScout` recorded the last-scout time and the
+    // feed-health baseline into `UserDefaults.standard`, which under the test host is the LIVE app's
+    // own preference domain, so running it from a test would have scribbled on Dan's real app. The
+    // stored settings are injected now, so the whole run drives against a scratch domain instead.
+    //
+    // This matters ahead of Phase 4, which turns this same function into the loop that walks every
+    // watched source. Better to have the seam before it becomes the most important function in the
+    // feature than to bolt it on after.
+    @Test func runScoutImportsWhatTheSourceReturnsWithoutTouchingTheLiveAppsSettings() async throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let scratch = UserDefaults(suiteName: "ScoutSourceInjectionTests")!
+        scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
+
+        let stub = StubSourceExtractor(listing: ExtractedListing(
+            events: [ExtractedEvent(title: "Indianapolis Children's Choir",
+                                    presenter: "Indianapolis Children's Choir",
+                                    venue: "Merkin Hall", performanceDate: "2099-09-19",
+                                    sourceUrl: "https://org.example/show")],
+            verdict: .upcomingListings))
+
+        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
+
+        #expect(outcome.found == 1)
+        #expect(outcome.inserted == 1)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 1)
+
+        // The run's bookkeeping went to the scratch domain, which is the whole point: the live app's
+        // last-scout time and feed baseline are untouched by the suite.
+        #expect(ScoutService.lastScoutedAt(in: scratch) != nil)
+        #expect(ScoutService.lastHealthyFeedCount(in: scratch) == 1)
+
+        scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
+    }
 }
 
 // The test double the plan calls for, so every extraction rule downstream is testable without a

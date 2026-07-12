@@ -49,15 +49,21 @@ enum ScoutService {
     // #799: the source is now injected rather than named here. It still defaults to Carnegie, which is
     // the only source that exists until Phase 2 gives the watchlist its rows, but the seam is what
     // lets the scout iterate sources later without this function knowing any of their names.
+    // `defaults` is injected for the same reason the extractor is: this function records the last-scout
+    // time and the feed-health baseline, and under the test host `UserDefaults.standard` is the LIVE
+    // app's own preference domain. So the scout's entry point had no success-path test, not because it
+    // was unimportant but because testing it would have written into Dan's real app. A scratch domain
+    // fixes that, which matters before Phase 4 turns this into the loop over every watched source.
     static func runScout(into context: ModelContext,
-                         extractor: any SourceExtractor = CarnegieExtractor()) async throws -> Outcome {
+                         extractor: any SourceExtractor = CarnegieExtractor(),
+                         defaults: UserDefaults = .standard) async throws -> Outcome {
         let events = try await extractor.extract().events
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = LocalHistory.forMatching(existing: existing)
-        let health = feedHealthState()
+        let health = feedHealthState(in: defaults)
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
         var outcome = apply(events: events, clients: loaded.clients, history: history,
                             blocked: blocked, baselineFeedCount: health.baseline, into: context)
@@ -66,7 +72,7 @@ enum ScoutService {
         // that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
         // too, so a genuine sustained calendar shrink self-heals without one bad fetch ratcheting the
         // baseline down (#150/#152).
-        recordFeedHealthState(FeedReconcile.updatedHealth(health, currentCount: events.count))
+        recordFeedHealthState(FeedReconcile.updatedHealth(health, currentCount: events.count), in: defaults)
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -79,7 +85,7 @@ enum ScoutService {
             }
         }
         // Record that a scout completed, so the masthead can show freshness (#35).
-        recordScout(at: Date())
+        recordScout(at: Date(), in: defaults)
         return outcome
     }
 
