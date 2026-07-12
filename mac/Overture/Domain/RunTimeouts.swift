@@ -20,6 +20,13 @@ enum RunTimeouts {
     // Scout: an in-process run; a normal scout returns in well under this, so passing it means stuck.
     static let scout: TimeInterval = 3 * 60
 
+    // Scout extract (#799): a DETACHED run that reads several pinned listings pages and follows each
+    // event's own detail page for the venue and exact date. Nothing like the in-process scout above,
+    // whose comment ("an in-process run") is exactly why it must not reuse that ceiling: a legitimate
+    // mid-batch run would be declared stalled and its marker freed, letting a second run start and
+    // clobber the shared results file. Matched to replyClassify, the other heavy detached run.
+    static let scoutExtract: TimeInterval = 10 * 60
+
     // Gmail OAuth connect: the visible "looks stuck" warning, set below GmailAuthManager's hard 120s
     // internal give-up so Dan gets a heads-up to check the browser sign-in window before connect()
     // self-aborts and surfaces its failure alert.
