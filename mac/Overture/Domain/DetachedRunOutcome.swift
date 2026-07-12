@@ -41,6 +41,10 @@ enum RunLog {
         StoreLocation.handoffDirectory.appendingPathComponent("reply-classify-run.log")
     }
 
+    static var scoutExtractURL: URL {
+        StoreLocation.handoffDirectory.appendingPathComponent("scout-extract-run.log")
+    }
+
     static func tail(_ n: Int, in text: String) -> String {
         guard n > 0, !text.isEmpty else { return "" }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
