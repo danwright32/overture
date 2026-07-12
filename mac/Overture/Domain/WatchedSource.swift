@@ -107,6 +107,18 @@ final class WatchedSource {
     // second; it must not be able to mark anything gone before it has a baseline to judge against.
     static let warmupRuns = 3
 
+    // The id for a newly watched calendar. Derived from its host, so it is stable, readable in a queue
+    // file and a pinned page's filename, and cannot collide with the two reserved ids above.
+    //
+    // Never derived from the full URL: an org that publishes /events and /calendar would otherwise get
+    // two ids for one organization. The host is what identifies them, which is the same rule the
+    // already-watching check uses.
+    static func newSourceId(for listingsURL: String) -> String {
+        let host = URL(string: listingsURL)?.host?.lowercased()
+            .replacingOccurrences(of: "www.", with: "") ?? "source"
+        return ScoutPagePin.safeName(host)
+    }
+
     var kind: SourceKind {
         get { SourceKind(rawValue: kindRaw) ?? .html }
         set { kindRaw = newValue.rawValue }
