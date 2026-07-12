@@ -13,6 +13,8 @@ import Foundation
 enum ScoutExtractService {
     enum ExtractLaunchError: LocalizedError, Equatable {
         case nothingToExtract, runnerUnavailable, alreadyRunning
+        // #849: a test tried to launch a REAL detached Claude run. Refused, loudly.
+        case refusedUnderTest
 
         var errorDescription: String? {
             switch self {
@@ -25,6 +27,9 @@ enum ScoutExtractService {
                 return "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
             case .alreadyRunning:
                 return "A scout-extract run is already in progress. Wait for it to finish."
+            case .refusedUnderTest:
+                // Dan will never see this. It is for whoever wrote the test that tried it.
+                return "A test tried to launch a real Claude run. Inject the launch seam instead."
             }
         }
     }
@@ -58,6 +63,17 @@ enum ScoutExtractService {
                              markerURL: URL = defaultMarkerURL,
                              defaults: UserDefaults = .standard,
                              launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+        // #849: refused BEFORE anything is written, when a test is about to use the LIVE handoff paths.
+        // Precise on purpose: a test that injects temp paths and a fake launcher is safe, and several
+        // legitimately do exactly that. What must never happen is the suite writing a real queue file
+        // into the directory the running app reads (a stale one from a test called "fine" is what later
+        // hung Dan's Add-a-lead sheet on a source it had never asked about).
+        //
+        // The real launcher carries the same guard, as defence in depth: this one stops the file, that
+        // one stops the process.
+        if AppEnvironment.isRunningUnderTests, queueURL == ScoutExtractQueueBuilder.defaultURL {
+            throw ExtractLaunchError.refusedUnderTest
+        }
         guard !isRunning(markerURL: markerURL, now: now) else { throw ExtractLaunchError.alreadyRunning }
         guard !items.isEmpty else { throw ExtractLaunchError.nothingToExtract }
 
@@ -92,7 +108,17 @@ enum ScoutExtractService {
         return items.count
     }
 
+    // #849: the guard lives HERE, in the one function that actually spawns a process, and not in
+    // startExtract around it. A test that injects a fake launcher and temp paths is perfectly safe and
+    // several legitimately do exactly that; what must never happen is the REAL launcher running under
+    // test. The suite was doing it on every run, including CI, because tests that injected the extractor
+    // and the fetch but not the launch got this one by default.
+    //
+    // It THROWS rather than quietly no-opping: a silent success would let a test believe it had launched
+    // a run and then assert against a results file nobody asked for, which is a subtler version of the
+    // same bug.
     private static func launchRunner() throws {
+        guard !AppEnvironment.isRunningUnderTests else { throw ExtractLaunchError.refusedUnderTest }
         guard let script = DetachedRunner.scriptURL(defaultsKey: "scoutExtractRunnerScriptPath"),
               FileManager.default.isExecutableFile(atPath: script.path) else {
             throw ExtractLaunchError.runnerUnavailable

@@ -321,8 +321,14 @@ enum ScoutPagePin {
             .appendingPathComponent("overture-scout-page-\(safeName(sourceId)).html")
     }
 
+    // #849: a test writing a real pinned page into the live handoff directory is how a stale file ended
+    // up there and later hung the Add-a-lead sheet on a source it had never asked about. Refused at the
+    // source, so no future test can leave one behind by forgetting to inject the seam.
+    enum PinError: Error, Equatable { case refusedUnderTest }
+
     @discardableResult
     static func write(_ page: FetchedPage, forSourceId sourceId: String) throws -> URL {
+        guard !AppEnvironment.isRunningUnderTests else { throw PinError.refusedUnderTest }
         let target = url(forSourceId: sourceId)
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)

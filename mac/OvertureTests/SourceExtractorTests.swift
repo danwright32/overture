@@ -178,6 +178,12 @@ struct ScoutSourceInjectionTests {
                 return FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString,
                                    contentHash: "new")
             },
+            // #849: STUBBED. These defaulted to the real ScoutPagePin.write and the real
+            // ScoutExtractService.startExtract, so this test pinned a page into Dan's live handoff
+            // directory and launched a real, token-spending Claude run on every single run of the suite,
+            // including CI. The stale results file it left behind is what later hung his Add-a-lead sheet.
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
+            launch: { _ in },
             defaults: scratch)
 
         // Every source is accounted for. The run did not stop at the broken one.
@@ -208,6 +214,8 @@ struct ScoutSourceInjectionTests {
                 FetchedPage(normalizedHTML: "<p>new shows</p>", finalURL: url.absoluteString,
                             contentHash: "changed")
             },
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },   // #849
+            launch: { _ in },
             defaults: scratch)
 
         let org = outcome.sources.first { $0.sourceId == "org" }

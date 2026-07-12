@@ -7,6 +7,13 @@ struct PrepResults: Codable, Equatable, Sendable {
     var version: Int
     var generatedAt: String
     var results: [PrepResult]
+    // #804: which model wrote these drafts. Stamped by the RUNNER SCRIPT after the run (lib/models.sh),
+    // never by the model itself: asking a model to write down which model it is invites it to be
+    // confidently wrong about the one fact the record exists to establish.
+    //
+    // Optional, so a results file from before this existed still decodes and still lands Dan's draft. A
+    // gap in the record is never a reason to drop his work on the floor.
+    var model: String? = nil
 }
 
 struct PrepResult: Codable, Equatable, Sendable {

@@ -14,6 +14,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # See lib/runner-setup.sh (#552): shared support-dir resolution, log redirection, and early-guard
 # structure with reply-classify-run.sh.
 . "$(dirname "$0")/lib/runner-setup.sh"
+# #804: which model this run uses, and the helper that records it. One place, so a model choice
+# cannot be right in two runners and wrong in the third.
+. "$(dirname "$0")/lib/models.sh"
 open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -60,6 +63,10 @@ resolve_claude
 # Headless Claude Code run. Tools limited to what the run needs.
 cd "$PROJECT_DIR"
 "$CLAUDE" -p "$PROMPT" \
+  --model "${OVERTURE_MODEL_DRAFTING}" \
   --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill"
+
+# #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
+record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
 
 echo "prep run finished -> $RESULTS"
