@@ -438,3 +438,44 @@ already suppresses each of those, one at a time, so no email can go out.
 That protection is real but silent. Dan wants it **visible**: a report of orgs that asked him to stop
 whose shows are still turning up on calendars he watches. On the one mistake that cannot be taken
 back, he would rather see the suppression working than trust that it is.
+
+---
+
+# Dan's 4th decision, taken during Phase 4 (2026-07-12)
+
+## The daily run watches for free. Only a scout Dan starts spends tokens.
+
+Binding, and it overrides Phase 4 above wherever they conflict.
+
+Dan asked the right question when Phase 4 reached the point of making the daily auto-scout a
+token-spending run: he intends to run a scout by hand every Saturday, so does an automatic one
+still earn its keep?
+
+It does, but not as written. The reason to keep a daily run was never speed. On Carnegie's 90-day
+window a Saturday cadence costs at most six days of lead time. The reason is the promise the whole
+watchlist rests on: nothing Dan asked to watch is ever quietly dropped. A source that 404s, gets
+redesigned, or starts returning nothing must be noticed in a day, not in a week, and not never
+because he skipped a Saturday.
+
+But after Phase 4 the expensive half of a scout is ONLY the AI extraction, and extraction only
+happens on a page whose content actually changed. Fetching a page and hashing it is free. So the
+daily run and the token spend do not have to be the same event, and splitting them gives Dan both
+things he wants:
+
+- **The daily automatic run watches, for free.** It fetches and hashes every active source, records
+  health and any typed failure on the row, and flags which sources have listings we have not read
+  yet. It NEVER launches a `claude -p` run. Carnegie still ingests fully on it, because Carnegie's
+  extraction is native Algolia JSON and costs nothing: today's behavior is preserved exactly.
+- **A scout Dan starts reads.** It does everything the daily run does, and then reads the pages whose
+  hash actually changed. Cheap by construction, because an unchanged page is never sent to a model.
+
+This also removes the risk Phase 4's own text worried about: an extract batch can no longer eat the
+Max-plan capacity Prep needs while Dan is not watching, because an extract batch cannot start unless
+he started it.
+
+`sourceCheckBudget` survives as a backstop on the run Dan starts (he could add fifty sources and then
+press Scout), not as the load-bearing cost control it was written as.
+
+Consequence for `ScoutSchedule.swift`'s header ("the scout is read-only (no sending), so auto-running
+it is safe"): it stays TRUE, and for a better reason than before. The automatic run is not only
+non-sending, it is also non-spending.
