@@ -60,6 +60,11 @@ struct RootView: View {
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
     @State private var showSources = false
+    // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
+    // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
+    // reading calendars for minutes with nothing on screen at all, and nothing to say if that run hung.
+    // CLAUDE.md's rule is binding, and this was a straight violation of it.
+    @State private var readingStartedAt: Date?
 
     private var followUpsDue: Int {
         FollowUp.dueRecipients(from: allProspects, now: Date()).count
@@ -216,6 +221,18 @@ struct RootView: View {
                         if isScanning {
                             LiveRunLabel(base: "Scouting", since: scoutStartedAt,
                                          timeout: RunTimeouts.scout)
+                        } else if let readingStartedAt {
+                            // #803: the detached half. Judged against RunTimeouts.scoutExtract (10
+                            // minutes), NOT RunTimeouts.scout (3, correct for an in-process run and
+                            // wrong for a batch that follows detail pages), or a perfectly healthy run
+                            // would be declared stuck at three minutes. `runAlive` is the run's own
+                            // marker heartbeat, so a slow-but-living run never flips to "looks stuck"
+                            // while a dead one does.
+                            LiveRunLabel(base: "Reading calendars", since: readingStartedAt,
+                                         timeout: RunTimeouts.scoutExtract,
+                                         progressDetail: ScoutExtractProgressDecoder.label(
+                                             from: ScoutExtractProgressDecoder.loadCurrent()),
+                                         runAlive: { ScoutExtractService.isRunning(now: Date()) })
                         } else if PrepQueueService.isRunning(now: Date()) {
                             // #354: real "N of M" progress from the run's own progress file,
                             // instead of a bare indefinite spinner.
@@ -754,7 +771,12 @@ struct RootView: View {
                 isScanning = false
                 scoutStartedAt = nil
                 if outcome.sources.contains(where: { $0.state == .queuedForReading }) {
+                    // Visible for the whole of it: a counter that ticks, a real "3 of 9" from the run's
+                    // own progress file, and a stalled state if the run dies. Before this, the scout
+                    // looked finished while it was still working.
+                    readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
                     await watchScoutExtractRun()
+                    readingStartedAt = nil
                 }
                 return
             } catch {
