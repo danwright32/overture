@@ -35,7 +35,8 @@ struct LeadIntakeModelTests {
                        launch: @escaping ([ScoutExtractQueueItem]) throws -> Void = { _ in },
                        results: @escaping (String) -> ScoutExtractResults? = { _ in nil })
     -> LeadIntakeModel {
-        LeadIntakeModel(fetch: fetch,
+        LeadIntakeModel(defaults: UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!,
+                        fetch: fetch,
                         pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                         launch: launch,
                         readResults: results)
@@ -142,6 +143,65 @@ struct LeadIntakeModelTests {
         #expect(stored.count == 1)
         #expect(stored.first?.groupName.contains("Brooklyn") == true)
         #expect(stored.first?.tier != nil)          // ranked by the normal pipeline, not hand-inserted
+    }
+
+    // Dan's rule, end to end: a link he has actually added is refused the second time, and told plainly
+    // why (the org gets watched, so re-reading buys nothing). This also makes the stale-results race
+    // unreachable, which is why it replaces a freshness check rather than sitting beside one.
+    @Test func aLinkAlreadyAddedIsRefusedTheSecondTime() async throws {
+        let ctx = try context()
+        let scratch = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
+        let event = ScoutExtractEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
+                                      venue: "Merkin Hall", performanceDate: "2026-09-19",
+                                      sourceUrl: "https://org.example/a")
+        let make = { LeadIntakeModel(defaults: scratch,
+                                     fetch: LeadIntakeModelTests.okFetch,
+                                     pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
+                                     launch: { _ in },
+                                     readResults: { id in self.results(.upcomingListings, [event], id: id) }) }
+
+        let first = make()
+        first.urlText = "https://org.example/events"
+        await first.start(now: Date())
+        #expect(first.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 1)
+
+        // Same page, spelled the way a person actually re-pastes it (www, trailing slash).
+        let second = make()
+        second.urlText = "https://www.org.example/events/"
+        await second.start(now: Date())
+
+        guard case .problem(let msg) = second.phase else {
+            Issue.record("expected .problem, got \(second.phase)"); return
+        }
+        #expect(msg.lowercased().contains("already"))
+    }
+
+    // ...but a link that never produced anything is NOT "handed over". A page that failed to read, or
+    // whose shows he dropped, must be retryable: refusing it would strand him with no way back in.
+    @Test func aLinkThatProducedNothingCanBeTriedAgain() async throws {
+        let ctx = try context()
+        let scratch = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
+        let event = ScoutExtractEvent(title: "A", presenter: "A", venue: "Merkin Hall",
+                                      performanceDate: "2026-09-19", sourceUrl: "https://org.example/a")
+        let make = { LeadIntakeModel(defaults: scratch,
+                                     fetch: LeadIntakeModelTests.okFetch,
+                                     pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
+                                     launch: { _ in },
+                                     readResults: { id in self.results(.upcomingListings, [event], id: id) }) }
+
+        let first = make()
+        first.urlText = "https://org.example/events"
+        await first.start(now: Date())
+        first.selected = []                                   // he dropped everything
+        #expect(first.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 0)
+
+        let second = make()
+        second.urlText = "https://org.example/events"
+        await second.start(now: Date())
+
+        guard case .review = second.phase else {
+            Issue.record("expected .review (retryable), got \(second.phase)"); return
+        }
     }
 
     @Test func confirmingNothingAddsNothing() async throws {

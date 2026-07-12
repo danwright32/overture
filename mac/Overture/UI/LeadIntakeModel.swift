@@ -28,8 +28,10 @@ final class LeadIntakeModel {
     private let pin: (FetchedPage, String) throws -> URL
     private let launch: ([ScoutExtractQueueItem]) throws -> Void
     private let readResults: (String) -> ScoutExtractResults?
+    private let defaults: UserDefaults
 
-    init(fetch: @escaping (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
+    init(defaults: UserDefaults = .standard,
+         fetch: @escaping (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
          pin: @escaping (FetchedPage, String) throws -> URL = { try ScoutPagePin.write($0, forSourceId: $1) },
          launch: @escaping ([ScoutExtractQueueItem]) throws -> Void = { items in
              try ScoutExtractService.startExtract(items: items, now: Date())
@@ -38,6 +40,7 @@ final class LeadIntakeModel {
              guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL) else { return nil }
              return try? ScoutExtractResultsDecoder.decode(data)
          }) {
+        self.defaults = defaults
         self.fetch = fetch
         self.pin = pin
         self.launch = launch
@@ -76,6 +79,15 @@ final class LeadIntakeModel {
         // login wall (verified: a raw fetch of a public Instagram post is ~600KB of login page).
         if LeadIntake.knownUnreadableHost(url) != nil {
             phase = .problem(LeadIntake.unreadableMessage)
+            return
+        }
+        // Dan's rule: a link he has already handed over is not re-read. Handing over a lead means the
+        // org is worth watching, and the watchlist re-checks it; spending another fetch and another
+        // Claude run on the same page buys nothing. It also makes the stale-results race unreachable
+        // (a second run under the same id could otherwise find the FIRST run's results file and hand
+        // back its shows instantly, without waiting).
+        if LeadSubmissions.contains(url, in: defaults) {
+            phase = .problem("You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own.")
             return
         }
 
@@ -153,6 +165,12 @@ final class LeadIntakeModel {
                                          blocked: Set(loaded.blockedDates),
                                          today: today, into: context)
         let added = outcome.inserted + outcome.updated
+        // Recorded only now, not at submit: a link that failed to read, or whose shows Dan dropped, is
+        // one he must be able to try again. Only a link that actually produced something counts as
+        // handed over.
+        if added > 0, let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            LeadSubmissions.record(url, in: defaults)
+        }
         phase = .added(added)
         return added
     }
