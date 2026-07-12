@@ -85,14 +85,15 @@ struct ProspectProvenanceTests {
         #expect(try stored(ctx).first?.sourceIds == [WatchedSource.carnegieId])
     }
 
-    // A hand-added lead is its own pseudo-source. It has no feed, which is exactly why Phase 3 exempts
-    // it from reconcile permanently, and why #826 had to hold the reconcile back today.
+    // A hand-added lead is its own pseudo-source. It has no feed, which is why it passes no `feed:`
+    // (#801): with no feed check there is no source report, and with no report the reconcile can mark
+    // nothing gone. That is what makes #826 structurally impossible rather than merely guarded.
     @Test func aHandAddedLeadIsStampedManual() throws {
         let ctx = try context()
         ScoutService.apply(events: [event("Second Ending Ensemble", url: "https://org.example/1")],
                            clients: [], history: [], blocked: [],
                            today: ScoutTestClock.beforeAllFixtures,
-                           sourceIds: [WatchedSource.manualId], reconcilesFeed: false, into: ctx)
+                           sourceIds: [WatchedSource.manualId], into: ctx)
 
         #expect(try stored(ctx).first?.sourceIds == [WatchedSource.manualId])
     }

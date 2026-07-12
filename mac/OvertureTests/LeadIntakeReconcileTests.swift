@@ -45,6 +45,13 @@ struct LeadIntakeReconcileTests {
             })
     }
 
+    // A sweep of Carnegie's whole feed, by a source with a feed history of its own: the only thing
+    // licensed to read a stored show's absence as a cancellation (#801).
+    private func carnegieSweep() -> ScoutService.FeedCheck {
+        ScoutService.FeedCheck(sourceId: WatchedSource.carnegieId, baseline: 0,
+                               successfulCheckCount: WatchedSource.warmupRuns)
+    }
+
     // A real, future Carnegie show, put in the store the way the scout puts it there.
     private func storeACarnegieProspect(in ctx: ModelContext) -> Prospect {
         let carnegie = ExtractedEvent(
@@ -52,7 +59,8 @@ struct LeadIntakeReconcileTests {
             venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-09-19",
             sourceUrl: "https://www.carnegiehall.org/Calendar/2026/09/19/Vienna-Philharmonic-0800PM")
         ScoutService.apply(events: [carnegie], clients: [], history: [], blocked: [],
-                           today: ScoutTestClock.beforeAllFixtures, into: ctx)
+                           feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
+                           sourceIds: [WatchedSource.carnegieId], into: ctx)
         return (try! ctx.fetch(FetchDescriptor<Prospect>())).first { $0.groupName.contains("Vienna") }!
     }
 
@@ -110,7 +118,8 @@ struct LeadIntakeReconcileTests {
             sourceUrl: "https://www.carnegiehall.org/Calendar/2026/09/26/Berlin-Philharmonic-0800PM")
         for _ in 0..<FeedReconcile.goneThreshold {
             ScoutService.apply(events: [stillListed], clients: [], history: [], blocked: [],
-                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+                               feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
+                               sourceIds: [WatchedSource.carnegieId], into: ctx)
         }
 
         #expect(carnegie.missedScoutCount == FeedReconcile.goneThreshold)

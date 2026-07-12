@@ -11,6 +11,14 @@ struct ScoutServiceTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // #801: a sweep of Carnegie's whole feed by a source past its warmup, which is the only thing
+    // licensed to read a stored show's absence as a cancellation. Without a `feed:` the run reports on
+    // nobody's feed and can mark nothing gone, which is exactly what a hand-added lead does (#826).
+    private func carnegieSweep(baseline: Int = 0) -> ScoutService.FeedCheck {
+        ScoutService.FeedCheck(sourceId: WatchedSource.carnegieId, baseline: baseline,
+                               successfulCheckCount: WatchedSource.warmupRuns)
+    }
+
     private let liveEvents = [
         ExtractedEvent(title: "Boston & New York International Music Competition Winners' Recital",
                        presenter: "Jam Generation", venue: "Weill Recital Hall",
@@ -264,22 +272,22 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
         #expect(try xRow().missedScoutCount == 0)
 
         // X is absent from a healthy (non-empty) feed: one miss, not yet gone.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 1)
         #expect(try xRow().disappearedFromFeed == false)
 
         // Absent again: two misses, now gone.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().disappearedFromFeed == true)
 
         // X reappears: counter resets.
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
@@ -293,12 +301,12 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
 
         // Tiny feed (only y) but a large healthy baseline → feed looks degraded → X is NOT a miss.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], baselineFeedCount: 80, today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(baseline: 80), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
