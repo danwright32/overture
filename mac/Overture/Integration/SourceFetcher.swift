@@ -39,6 +39,11 @@ struct FetchedPage: Equatable, Sendable {
     // browser does. Worth knowing per source: rendering is seconds and a whole WebKit instance, so a
     // source that always needs it is a source that costs more.
     var wasRendered: Bool = false
+    // Set when the page Dan gave us had nothing readable on it and we followed its TICKET LINK to the
+    // page that did. Dan must be told: he pasted his ensemble's site and got a listing off Lincoln
+    // Center's, and silently swapping the page under him would be exactly the kind of quiet cleverness
+    // that makes a tool untrustworthy.
+    var followedTicketLinkFrom: String? = nil
 }
 
 enum SourceFetcher {
@@ -46,7 +51,8 @@ enum SourceFetcher {
     // hidden browser (RenderedPage).
     static func fetch(_ url: URL,
                       session: URLSession = .shared,
-                      render: ((URL) async throws -> String)? = nil) async throws -> FetchedPage {
+                      render: ((URL) async throws -> String)? = nil,
+                      allowTicketLinkHop: Bool = true) async throws -> FetchedPage {
         let (data, response): (Data, URLResponse)
         do {
             var request = URLRequest(url: url)
@@ -100,21 +106,45 @@ enum SourceFetcher {
         // Squarespace, and most of the small arts orgs Dan pitches), so load it the way a browser does,
         // let its scripts run, and read the finished page instead.
         let renderer = render ?? { try await RenderedPage.html(for: $0) }
-        do {
-            let renderedHTML = try await renderer(finalURL)
-            let renderedNormalized = PageNormalizer.normalize(renderedHTML)
-            return FetchedPage(normalizedHTML: renderedNormalized,
-                               finalURL: finalURL.absoluteString,
-                               contentHash: PageNormalizer.contentHash(renderedNormalized),
-                               wasRendered: true)
-        } catch {
-            // A browser that hangs, crashes, or is unavailable must not take the whole fetch down with
-            // it. The raw page is still the best thing we have, and returning it lets the honest
-            // "I can't read this page" path run instead of an opaque failure.
-            return FetchedPage(normalizedHTML: normalized,
-                               finalURL: finalURL.absoluteString,
-                               contentHash: PageNormalizer.contentHash(normalized))
+        var best = normalized
+        var rendered = false
+        if let renderedHTML = try? await renderer(finalURL) {
+            best = PageNormalizer.normalize(renderedHTML)
+            rendered = true
+            if PageNormalizer.carriesReadableContent(best) {
+                return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
+                                   contentHash: PageNormalizer.contentHash(best), wasRendered: true)
+            }
         }
+        // A browser that hangs, crashes or is unavailable must not take the whole fetch down with it:
+        // `best` stays the raw page, and the honest "I can't read this" path can still run.
+
+        // Still nothing. Now look at where the page's LINKS go. Dan's own first lead is exactly this: his
+        // ensemble's show page is a poster IMAGE and a "BUY TIX HERE" button, and the button points at
+        // lincolncenter.org, which carries the whole listing (Alice Tully Hall, the date, the programme).
+        // The information was never on the ensemble's site at all: THE LINK IS THE LEAD. "A poster and a
+        // buy button" is how a great many small ensembles publish a show.
+        //
+        // One hop only, and never back to the site we just failed to read (TicketLink), so this cannot
+        // wander or loop.
+        // Look in the RENDERED page first (it is the fuller one), but fall back to the raw page, because
+        // a render that half-succeeds can drop the very link we need. A test caught exactly that: the
+        // rendered page came back as an image and nothing else, and the "BUY TIX HERE" link that was
+        // sitting in the raw HTML all along would have been thrown away with it.
+        let ticketCandidate = TicketLink.candidate(in: best, from: finalURL)
+            ?? TicketLink.candidate(in: normalized, from: finalURL)
+
+        if allowTicketLinkHop, let ticket = ticketCandidate {
+            if var followed = try? await fetch(ticket, session: session, render: render,
+                                               allowTicketLinkHop: false),
+               PageNormalizer.carriesReadableContent(followed.normalizedHTML) {
+                followed.followedTicketLinkFrom = finalURL.absoluteString
+                return followed
+            }
+        }
+
+        return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
+                           contentHash: PageNormalizer.contentHash(best), wasRendered: rendered)
     }
 
     private static func sameSite(_ a: String, _ b: String) -> Bool {

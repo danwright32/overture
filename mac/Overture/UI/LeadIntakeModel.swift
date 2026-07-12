@@ -23,6 +23,12 @@ final class LeadIntakeModel {
     private(set) var phase: Phase = .idle
     var selected: Set<String> = []
 
+    // Set when the page Dan pasted had nothing readable on it and we followed its ticket link to the
+    // page that did. He MUST be told: he pasted his ensemble's site and the listing came off Lincoln
+    // Center's. Silently swapping the page under him would be exactly the kind of quiet cleverness that
+    // makes a tool impossible to trust.
+    private var followedFromNote: String?
+
     // Injected seams (defaults are the real thing).
     private let fetch: (URL) async throws -> FetchedPage
     private let pin: (FetchedPage, String) throws -> URL
@@ -66,6 +72,7 @@ final class LeadIntakeModel {
         phase = .idle
         selected = []
         urlText = ""
+        followedFromNote = nil
     }
 
     func start(now: Date, pollEvery: TimeInterval = 2, giveUpAfter: TimeInterval = RunTimeouts.scoutExtract,
@@ -108,6 +115,10 @@ final class LeadIntakeModel {
             guard PageNormalizer.carriesReadableContent(page.normalizedHTML) else {
                 phase = .problem(LeadIntake.unreadableMessage)
                 return
+            }
+            if page.followedTicketLinkFrom != nil, let host = URL(string: page.finalURL)?.host {
+                followedFromNote =
+                    "I couldn't read that page, so I followed its ticket link and read \(host) instead."
             }
             path = try pin(page, sourceId)
         } catch let error as SourceFetchError {
@@ -167,7 +178,7 @@ final class LeadIntakeModel {
     private func apply(_ outcome: LeadIntake.Outcome) {
         switch outcome {
         case .found(let events, let note):
-            phase = .review(events, note: note)
+            phase = .review(events, note: [followedFromNote, note].compactMap { $0 }.joined(separator: " "))
             selected = Set(events.map(key(for:)))     // all checked; he unchecks what he doesn't want
         case .foundButUnusable(let rejected, _):
             // NOT "no shows". The page had shows and none has a real venue, which means this source's
