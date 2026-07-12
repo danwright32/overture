@@ -20,7 +20,12 @@ struct OvertureApp: App {
     @State private var addLead = AddLeadPresenter()
 
     init() {
-        let schema = Schema([Prospect.self, Recipient.self])
+        // #800: WatchedSource joins the schema. Additive (a new entity plus a defaulted [String] on
+        // Prospect), so SwiftData's lightweight migration handles it, which is the only migration this
+        // app has ever had: there is no MigrationPlan or VersionedSchema anywhere in it. That makes the
+        // launch-time backup below the ONLY safety net, which is why this migration was rehearsed
+        // against a clone of the live store before it shipped rather than trusted.
+        let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self])
         var container: ModelContainer? = nil
         var lock: StoreLock? = nil
         var reason: String? = nil

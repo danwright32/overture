@@ -36,6 +36,9 @@ struct AssembledProspect: Equatable, Sendable {
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
+    // #771: which source surfaced this. Set by ScoutService.apply from the run it belongs to, never by
+    // `decide`, which stays pure and knows nothing about sources.
+    var sourceIds: [String] = []
 }
 
 enum SkipReason: String, Equatable, Sendable { case blocked, suppressed, unreachable }

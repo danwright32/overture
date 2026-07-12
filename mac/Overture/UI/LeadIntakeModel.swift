@@ -217,7 +217,8 @@ final class LeadIntakeModel {
                                          clients: loaded.clients,
                                          history: LocalHistory.forMatching(existing: existing),
                                          blocked: Set(loaded.blockedDates),
-                                         today: today, reconcilesFeed: false, into: context)
+                                         today: today, sourceIds: [WatchedSource.manualId],
+                                         reconcilesFeed: false, into: context)
         let added = outcome.inserted + outcome.updated
         // Recorded only now, not at submit: a link that failed to read, or whose shows Dan dropped, is
         // one he must be able to try again. Only a link that actually produced something counts as
