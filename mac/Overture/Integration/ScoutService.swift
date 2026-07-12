@@ -28,72 +28,161 @@ enum ScoutService {
         // scout found or reconciled may not have persisted.
         var saveFailed: Bool = false
 
+        // #802: what happened to each watched source this run. A run is no longer one number, and it
+        // must never report a total that silently omits half of what it was supposed to check.
+        var sources: [SourceResult] = []
+
+        var failedSources: [SourceResult] { sources.filter { $0.state.isFailure } }
+
         // The single warning to show after a run, if any. A save failure takes precedence over
         // everything else: the run may have found and processed events that never persisted, the
-        // most actionable problem. Zero events here means the feed was reached and parsed but
-        // nothing matched, distinct from a connection failure (the thrown-error path, see
-        // ScoutFailure). For a 90-day window that's unusual and usually means the feed's data
-        // format changed. Takes precedence over a client-list warning (with no events there is
-        // nothing to match) (#27, #126).
+        // most actionable problem (#499).
+        //
+        // #802: `found == 0` STOPS being a global warning. Under a watchlist, zero is the NORMAL
+        // off-season answer (5 of the 7 sites in the #770 spike, in July) and is also exactly what a
+        // fully hash-skipped run legitimately returns. Firing "the feed's data format may have changed"
+        // on every quiet week would train Dan to ignore the one warning that matters. It now fires only
+        // for a source that HAS a healthy baseline and still came back with nothing, which for
+        // Carnegie's 90-day window is the same unusual event it always was (#27, #126).
         var warning: String? {
             if saveFailed {
                 return "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
             }
-            if found == 0 {
+            // A source that could not be checked is the most actionable thing after a save failure, and
+            // it is named, every run, for as long as it keeps failing. A dead source and a quiet season
+            // must never look alike.
+            if let failures = failureWarning { return failures }
+            if silentlyEmptyFeed {
                 return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
             }
             return clientListWarning
         }
+
+        private var failureWarning: String? {
+            let failed = failedSources
+            guard !failed.isEmpty else { return nil }
+            let lines = failed.map { "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")" }
+            return failed.count == 1
+                ? "One source couldn't be checked. \(lines[0])"
+                : "\(failed.count) sources couldn't be checked.\n\n" + lines.joined(separator: "\n")
+        }
+
+        // A source that has succeeded before (so it has a baseline to be judged against) and came back
+        // empty anyway. A brand-new source with no history has nothing unusual about an empty first
+        // check, and a quiet off-season is not a defect.
+        private var silentlyEmptyFeed: Bool {
+            sources.contains { $0.state == .ingested(found: 0) && $0.hadBaseline }
+        }
+
+        // Folds one source's ingest into the run's totals. The counts stay additive so the #797 identity
+        // (found == inserted + updated + skipped + collapsedIntoRun) still holds across the whole run,
+        // which is what makes a silently vanished show impossible to miss.
+        mutating func merge(_ other: Outcome) {
+            found += other.found
+            inserted += other.inserted
+            updated += other.updated
+            skipped += other.skipped
+            uncertain += other.uncertain
+            collapsedIntoRun += other.collapsedIntoRun
+            saveFailed = saveFailed || other.saveFailed
+            sources.append(contentsOf: other.sources)
+        }
     }
 
-    // #799: the source is now injected rather than named here. It still defaults to Carnegie, which is
-    // the only source that exists until Phase 2 gives the watchlist its rows, but the seam is what
-    // lets the scout iterate sources later without this function knowing any of their names.
-    // `defaults` is injected for the same reason the extractor is: this function records the last-scout
-    // time and the feed-health baseline, and under the test host `UserDefaults.standard` is the LIVE
-    // app's own preference domain. So the scout's entry point had no success-path test, not because it
-    // was unimportant but because testing it would have written into Dan's real app. A scratch domain
-    // fixes that, which matters before Phase 4 turns this into the loop over every watched source.
+    // What one watched source did this run. Every source that was supposed to be checked appears here,
+    // including the ones that were not checked, because "not checked today" reporting as silence is the
+    // failure this whole feature exists to prevent.
+    struct SourceResult: Equatable, Sendable {
+        var sourceId: String
+        var orgName: String
+        var state: State
+        // Whether this source had a feed history before this run, which is what makes an empty result
+        // from it unusual rather than merely quiet.
+        var hadBaseline: Bool = false
+
+        enum State: Equatable, Sendable {
+            case ingested(found: Int)     // ran natively and its shows are in the store (Carnegie)
+            case unchanged               // its page has not changed since we last read it: nothing to do
+            case queuedForReading        // its page changed and Dan started this run: it is being read
+            case changedNotRead          // its page changed, but this was the free daily run
+            case deferred                // over this run's budget. NOT checked. Not fine, not failing.
+            case failed(SourceFailure)   // named, recorded on the row, and never fatal to the source
+
+            var isFailure: Bool { if case .failed = self { return true }; return false }
+
+            var failureMessage: String? {
+                if case .failed(let f) = self { return f.message }
+                return nil
+            }
+        }
+    }
+
+    // #802: the loop. `runScout` walks every ACTIVE watched source rather than opening with one
+    // hardcoded call to Carnegie.
+    //
+    // Two rules govern it, and both are the opposite of what the old single-source version did:
+    //
+    // 1. ONE SOURCE'S FAILURE NEVER KILLS THE RUN. It used to throw on the first fetch error, which was
+    //    correct when there was exactly one source and its failure meant the run had nothing to do. With
+    //    a watchlist, throwing means source 9 being down silently costs Dan sources 10 through 20. Every
+    //    per-source failure is now caught, typed, written onto that source's row, counted into the
+    //    outcome, and reported by name. The run continues.
+    // 2. THE RUN NEVER REPORTS A NUMBER THAT OMITS HALF OF ITSELF. Every source appears in
+    //    `outcome.sources`, including the ones that were deferred or that failed, because "not checked
+    //    today" quietly reporting as silence is the exact failure this feature exists to prevent.
+    //
+    // `depth` carries Dan's 4th decision: the automatic daily run WATCHES (fetch, hash, health) and
+    // spends nothing, and only a scout he started READS the pages that changed. Carnegie ingests fully
+    // on both, because its Algolia path is native and free.
+    //
+    // Everything is injected (the extractor, the fetch, the defaults) so the whole loop is a real unit
+    // test with no network: under the test host `UserDefaults.standard` is the LIVE app's own preference
+    // domain, so a test that used the real one would scribble on Dan's app.
     static func runScout(into context: ModelContext,
+                         depth: ScoutDepth = .readChanged,
                          extractor: any SourceExtractor = CarnegieExtractor(),
+                         fetch: (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
+                         budget: Int = SourceSchedule.defaultBudget,
+                         now: Date = Date(),
                          defaults: UserDefaults = .standard) async throws -> Outcome {
-        let events = try await extractor.extract().events
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = LocalHistory.forMatching(existing: existing)
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
 
-        // #801: Carnegie's feed health lives on ITS OWN ROW now, not in three global UserDefaults keys.
-        // The keys could only ever describe "the feed" (singular): the moment a second source exists, a
-        // shared baseline is structurally unable to tell one source's dead scraper from another's big
-        // season, and both of the failures Dan named live inside that one flaw. The row was seeded from
-        // those keys by WatchedSourceBackfill (#800), so the #150/#152 self-heal machinery carries on
-        // with its own tuned history rather than restarting from zero.
-        let source = carnegieRow(in: context)
-        let health = FeedReconcile.FeedHealthState(
-            baseline: source?.baselineFeedCount ?? 0,
-            degradedStreak: source?.degradedStreak ?? 0,
-            lastDegradedCount: source?.lastDegradedCount ?? 0)
+        let watchlist = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        let plan = SourceSchedule.plan(sources: watchlist, depth: depth, budget: budget, now: now)
 
-        var outcome = apply(
-            events: events, clients: loaded.clients, history: history, blocked: blocked,
-            feed: FeedCheck(sourceId: WatchedSource.carnegieId,
-                            baseline: health.baseline,
-                            // A store whose backfill has not run yet has no row and therefore no
-                            // history. It is treated as still in its warmup, so it can find and rank
-                            // shows but cannot mark any of them gone: exactly what "we have no feed
-                            // history to judge an absence against" should mean.
-                            successfulCheckCount: source?.successfulCheckCount ?? 0),
-            sourceIds: [WatchedSource.carnegieId], into: context)
+        var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+
+        // The native sources (Carnegie, and only Carnegie). Free, synchronous, and fully ingested on
+        // every run including the automatic one, so today's behavior is preserved exactly.
+        //
+        // A store whose #800 backfill has not run yet has no rows at all. It still scouts Carnegie, from
+        // the injected extractor, so the app is never dead in the window between upgrading and the first
+        // launch migration.
+        let nativeSources: [WatchedSource?] = plan.native.isEmpty && watchlist.isEmpty ? [nil] : plan.native
+        for source in nativeSources {
+            outcome.merge(await runNative(source, extractor: extractor, clients: loaded.clients,
+                                          history: history, blocked: blocked, now: now, into: context))
+        }
+
+        // The html sources: fetch, hash, and decide. No AI here, ever: reading a changed page is the next
+        // slice, and it only happens on a run Dan started.
+        for source in plan.fetch {
+            outcome.sources.append(await check(source, fetch: fetch, depth: depth, now: now))
+        }
+
+        // Deferred is a visible state, never silence. A source over budget was NOT checked, and Dan has
+        // to be able to see that, or it could go unchecked for weeks while reporting as healthy.
+        for source in plan.deferred {
+            outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
+                                                state: .deferred))
+        }
+
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
-
-        // Fold this run into the source's feed-health state: a full feed re-baselines immediately, and a
-        // feed that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
-        // too, so a genuine sustained calendar shrink self-heals without one bad fetch ratcheting the
-        // baseline down (#150/#152).
-        recordCheck(on: source, events: events.count, health: health, now: Date())
 
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
@@ -109,6 +198,100 @@ enum ScoutService {
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date(), in: defaults)
         return outcome
+    }
+
+    // One native source: extract, classify, upsert, reconcile. Its failure is recorded and reported,
+    // never thrown, so a source that is down cannot cost Dan the rest of his watchlist.
+    private static func runNative(_ source: WatchedSource?, extractor: any SourceExtractor,
+                                  clients: [DownbeatClient], history: [HistoryRecord],
+                                  blocked: Set<String>, now: Date,
+                                  into context: ModelContext) async -> Outcome {
+        let sourceId = source?.sourceId ?? WatchedSource.carnegieId
+        let orgName = source?.orgName ?? "Carnegie Hall"
+
+        let events: [ExtractedEvent]
+        do {
+            events = try await extractor.extract().events
+        } catch {
+            // Typed, named, on the row, and the loop carries on. `ScoutFailure` used to present this as
+            // the death of the whole scout, because with one source it was.
+            let failure = SourceFailure.fetch(fetchError(from: error))
+            source?.lastCheckedAt = now
+            source?.health = .failing
+            source?.lastFailure = failure
+            var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+            outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure))]
+            return outcome
+        }
+
+        // #801: this source's feed health lives on its own row, seeded from the three old global keys by
+        // WatchedSourceBackfill. A merged baseline could never tell one source's dead scraper from
+        // another's big season.
+        let health = FeedReconcile.FeedHealthState(
+            baseline: source?.baselineFeedCount ?? 0,
+            degradedStreak: source?.degradedStreak ?? 0,
+            lastDegradedCount: source?.lastDegradedCount ?? 0)
+        let hadBaseline = health.baseline > 0
+
+        var outcome = apply(
+            events: events, clients: clients, history: history, blocked: blocked,
+            feed: FeedCheck(sourceId: sourceId,
+                            baseline: health.baseline,
+                            // No row yet means no history, so it is treated as still in its warmup: it
+                            // can find and rank shows but cannot mark any of them gone, which is exactly
+                            // what "we have no feed history to judge an absence against" should mean.
+                            successfulCheckCount: source?.successfulCheckCount ?? 0),
+            sourceIds: [sourceId], into: context)
+
+        // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
+        // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
+        // re-baselines too, so a genuine sustained calendar shrink self-heals without one bad fetch
+        // ratcheting the baseline down (#150/#152).
+        recordCheck(on: source, events: events.count, health: health, now: now)
+
+        outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
+                                        state: .ingested(found: events.count),
+                                        hadBaseline: hadBaseline)]
+        return outcome
+    }
+
+    // One html source: fetch it, hash it, and decide. Never throws, and never reads: reading a changed
+    // page happens only on a run Dan started, and lands in the next slice.
+    private static func check(_ source: WatchedSource,
+                              fetch: (URL) async throws -> FetchedPage,
+                              depth: ScoutDepth, now: Date) async -> SourceResult {
+        guard let listings = source.listingsURL, let url = URL(string: listings) else {
+            // A watched source with no usable address cannot be checked, and saying so is the whole
+            // point: silence here would be a source Dan believes is being watched and is not.
+            let failure = SourceFailure.verdict(.unreadable)
+            source.lastCheckedAt = now
+            source.health = .failing
+            source.lastFailure = failure
+            return SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure))
+        }
+
+        let result: Result<FetchedPage, SourceFetchError>
+        do {
+            result = .success(try await fetch(url))
+        } catch {
+            result = .failure(fetchError(from: error))
+        }
+
+        let state: SourceResult.State
+        switch SourceCheck.decide(source: source, result: result, depth: depth, now: now) {
+        case .unchanged:          state = .unchanged
+        case .changedButNotRead:  state = .changedNotRead
+        case .read:               state = .queuedForReading
+        case .failed(let f):      state = .failed(f)
+        }
+        return SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
+                            hadBaseline: source.baselineFeedCount > 0)
+    }
+
+    // Anything a source's extractor or fetcher throws that is not already typed is a connectivity
+    // problem as far as the row is concerned. Named, not swallowed.
+    private static func fetchError(from error: Error) -> SourceFetchError {
+        (error as? SourceFetchError) ?? .unreachable
     }
 
     // Carnegie's watchlist row, or nil on a store whose #800 backfill has not run yet (and in a test

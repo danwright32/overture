@@ -667,16 +667,20 @@ struct RootView: View {
     private func autoScoutIfDue() {
         guard ScoutSchedule.shouldAutoScout(enabled: autoScoutEnabled, isScanning: isScanning,
                                             lastScoutedAt: ScoutService.lastScoutedAt(), now: Date()) else { return }
-        runScout(auto: true)
+        // #802, Dan's 4th decision: the automatic run WATCHES and spends nothing. It fetches and hashes
+        // every source, so a dead one is noticed within a day rather than whenever he next scouts by
+        // hand, and it never launches a claude -p run. Carnegie still fully ingests on it: its Algolia
+        // path is native and free, so today's behavior is preserved exactly.
+        runScout(auto: true, depth: .watchOnly)
     }
 
-    private func runScout(auto: Bool = false) {
+    private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged) {
         isScanning = true
         scoutStartedAt = Date()
         scoutSummary = nil
         Task {
             do {
-                let outcome = try await ScoutService.runScout(into: context)
+                let outcome = try await ScoutService.runScout(into: context, depth: depth)
                 var parts = ["\(outcome.found) found"]
                 if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
                 if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
