@@ -1,0 +1,18 @@
+{
+  "generatedAt" : "2026-07-11T18:04:00Z",
+  "items" : [
+    {
+      "listingsURL" : "https://chelseasymphony.org/concerts/",
+      "orgName" : "The Chelsea Symphony",
+      "pagePath" : "/Users/dan/Library/Application Support/overture-scout-page-chelsea-symphony.html",
+      "sourceId" : "chelsea-symphony"
+    },
+    {
+      "listingsURL" : "https://www.bargemusic.org/calendar-tickets/",
+      "orgName" : "Bargemusic",
+      "pagePath" : "/Users/dan/Library/Application Support/overture-scout-page-bargemusic.html",
+      "sourceId" : "bargemusic"
+    }
+  ],
+  "version" : 1
+}

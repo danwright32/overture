@@ -1,0 +1,32 @@
+{
+  "generatedAt" : "2026-07-11T18:09:00Z",
+  "results" : [
+    {
+      "events" : [],
+      "note" : "Every concert on the page sits under a 'Previous Concerts This Season' heading; the 2026-2027 season is not posted yet.",
+      "sourceId" : "chelsea-symphony",
+      "verdict" : "all_past"
+    },
+    {
+      "events" : [
+        {
+          "performanceDate" : "2026-07-25",
+          "presenter" : "Bargemusic",
+          "sourceUrl" : "https://www.bargemusic.org/concert/complete-beethoven-piano-sonatas-part-2/",
+          "title" : "Complete Beethoven Piano Sonatas with Conversation Part 2",
+          "venue" : "Bargemusic"
+        },
+        {
+          "performanceDate" : "2026-08-01",
+          "presenter" : "Bargemusic",
+          "sourceUrl" : "https://www.bargemusic.org/concert/vienna-meets-bohemia/",
+          "title" : "Vienna Meets Bohemia: Piano Trios of Haydn, Brahms, and Dvorak",
+          "venue" : "Bargemusic"
+        }
+      ],
+      "sourceId" : "bargemusic",
+      "verdict" : "upcoming_listings"
+    }
+  ],
+  "version" : 1
+}
