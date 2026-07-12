@@ -41,9 +41,13 @@ RELEASE_BUNDLE_ID="com.danwright.overture"
 # must never, under any circumstance, kill the resident app that holds the live store.
 debug_app_pids() {
   local ps_output="$1"
+  # `|| true`: a grep that matches nothing exits 1, and the caller runs under `set -euo pipefail`, so
+  # that 1 would propagate out of the command substitution and kill the script before it built
+  # anything. Finding no running Debug instance is the NORMAL case (a clean start with nothing stale
+  # to quit), not an error, so it must be an empty answer with a zero status.
   echo "${ps_output}" \
     | grep -F "/Build/Products/${CONFIG}/${APP_NAME}/Contents/MacOS/Overture" \
-    | awk '{print $1}'
+    | awk '{print $1}' || true
 }
 
 # The identity the built bundle actually claims. A Debug bundle claiming the Release identity would
