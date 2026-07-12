@@ -37,12 +37,35 @@ enum LeadIntake {
         case nothingCameBack
     }
 
-    static func outcome(from results: ScoutExtractResults, sourceId: String) -> Outcome {
+    // `onlyForOrg` is set when we had to follow a link OFF the org's own site (its page was unreadable)
+    // onto somebody else's, and it is the fix for the worst bug this feature has produced.
+    //
+    // Dan pasted his ensemble's show page. We followed its ticket link to Lincoln Center, whose page
+    // carries an "Alice Tully Hall upcoming events" sidebar, and came back with FOUR SHOWS, all real,
+    // all at the right hall, and not one of them his ensemble: they belong to the Chamber Music Society
+    // and to Lincoln Center Presents. His ensemble's own concert had already happened, so the honest
+    // answer was "nothing upcoming for them".
+    //
+    // A venue page is a page about MANY organizations. The moment we wander onto one, only the org we
+    // came for is the lead. (When Dan pastes a venue's calendar DELIBERATELY, there is no constraint and
+    // every show counts: he is watching the hall, not one act.)
+    static func outcome(from results: ScoutExtractResults, sourceId: String,
+                        onlyForOrg: String? = nil) -> Outcome {
         guard let verdict = results.verdict(for: sourceId) else { return .nothingCameBack }
 
-        let usable = results.events(for: sourceId)
+        let all = results.events(for: sourceId)
+        let usable = onlyForOrg.map { org in all.filter { belongsTo(org, $0) } } ?? all
         let rejected = results.rejectedEvents(for: sourceId)
         let note = results.results.first { $0.sourceId == sourceId }?.note
+
+        // The page HAD shows, and none of them are the org's. That is not "an empty page" and it is not
+        // a failure: it usually means their concert has passed and the hall has moved on. Say exactly
+        // that, naming them, rather than handing Dan the hall's other tenants.
+        if usable.isEmpty, !all.isEmpty, let org = onlyForOrg {
+            return .noUpcomingShows(
+                "Nothing upcoming for \(org) on that page. The other shows there belong to the venue's own programme, not to them, so I've left them out."
+                + (note.map { " \($0)" } ?? ""))
+        }
 
         if !usable.isEmpty { return .found(usable, note: note) }
         if !rejected.isEmpty { return .foundButUnusable(rejected, note: note) }
@@ -88,6 +111,31 @@ enum LeadIntake {
     // post returns roughly 600KB of login-wall HTML, with no Open Graph tags, no caption, and no event
     // content of any kind.
     private static let unreadableHosts = ["instagram.com", "facebook.com", "x.com", "twitter.com"]
+
+    // Does this show belong to the org we came for? Uses the same confident-name-match bar the scout's
+    // own repeat-client matching uses: a merely similar name is never authoritative enough to act on.
+    // A venue lists a show either under the act's name in the TITLE ("Second Ending Ensemble: Mahler 1")
+    // or as the presenter, so both are checked.
+    // The characters a venue puts between the act and the programme. Built from scalars rather than a
+    // literal because the repo's style guard forbids a dash character in source strings, and it is
+    // right to: every previous one has been prose, not punctuation for a parser.
+    private static let titleSeparators: CharacterSet = {
+        var set = CharacterSet(charactersIn: ":|")
+        set.insert(charactersIn: "-")                       // hyphen
+        set.insert(Unicode.Scalar(0x2013)!)                 // en dash
+        set.insert(Unicode.Scalar(0x2014)!)                 // em dash
+        return set
+    }()
+
+    private static func belongsTo(_ org: String, _ event: ExtractedEvent) -> Bool {
+        if GroupNameMatch.isConfident(org, event.title) { return true }
+        if let presenter = event.presenter, GroupNameMatch.isConfident(org, presenter) { return true }
+        // A venue often prefixes the act: "Second Ending Ensemble: Mahler 1 Titan". A confident match on
+        // the whole title can fail there, so the title's leading segment gets its own look.
+        let lead = event.title.components(separatedBy: titleSeparators).first?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        return !lead.isEmpty && GroupNameMatch.isConfident(org, lead)
+    }
 
     static func knownUnreadableHost(_ url: URL) -> String? {
         guard var host = url.host?.lowercased() else { return nil }

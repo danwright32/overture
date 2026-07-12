@@ -54,6 +54,19 @@ For each item in the work-list:
 
 2. **Extract every upcoming performance.** Today or later. Never invent one that is not on the page.
 
+   **If the item carries `onlyForOrg`, return ONLY that organization's performances.** Everything else
+   on the page is somebody else's show, however real it looks.
+
+   This is not hypothetical. The app sets `onlyForOrg` when it had to follow a link off an org's own
+   site (unreadable) onto a VENUE's page, and a venue page is a page about many organizations. Lincoln
+   Center's page for one ensemble's concert also carries an "Alice Tully Hall upcoming events" sidebar.
+   A run that returned those handed Dan four concerts that were real, at the right hall, and presented
+   by the Chamber Music Society and Lincoln Center Presents: not the org he was tracking at all.
+
+   If the org's own concert on that page has already happened, the honest answer is that they have
+   nothing upcoming. Say so in the `note` and return no events. Do NOT reach for the hall's other shows
+   to have something to return.
+
 3. **Follow each event's own link** (`WebFetch`) for the **venue** and the **exact date**. The listings
    page usually carries neither, and Overture needs the venue: it drives classification and the pitch
    itself. Never guess a venue.

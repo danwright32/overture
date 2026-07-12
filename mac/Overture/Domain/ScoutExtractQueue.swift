@@ -26,10 +26,21 @@ struct ScoutExtractQueueItem: Codable, Equatable, Sendable {
     var orgName: String?        // research only: gives the run something to recognize on the page
     var listingsURL: String?    // where the pinned page came from; resolves the page's relative links
     var pagePath: String        // absolute path to the pinned HTML the run must Read
+    // v2: return ONLY this organization's performances from this page, and ignore everything else on it.
+    //
+    // Set when the app had to follow a link OFF an org's own site (its page was unreadable) onto a
+    // VENUE's page. A venue page is a page about many organizations: Lincoln Center's page for one
+    // ensemble's concert also carries an "Alice Tully Hall upcoming events" sidebar. Without this, the
+    // run returns the hall's other tenants (real shows, right hall, wrong org) and Dan is handed four
+    // strangers' concerts to pitch. That happened.
+    //
+    // Absent means no constraint: Dan pasted a venue's calendar deliberately and every show on it counts,
+    // because he is watching the hall, not one act.
+    var onlyForOrg: String? = nil
 }
 
 enum ScoutExtractQueueBuilder {
-    static let version = 1
+    static let version = 2
 
     static func build(items: [ScoutExtractQueueItem], generatedAt: String) -> ScoutExtractQueue {
         ScoutExtractQueue(version: version, generatedAt: generatedAt, items: items)
