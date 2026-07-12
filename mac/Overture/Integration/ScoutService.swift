@@ -131,6 +131,9 @@ enum ScoutService {
         history: [HistoryRecord],
         blocked: Set<String>,
         baselineFeedCount: Int = 0,
+        // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
+        // the wall clock. The reconcile already needed today's date; now one value serves both.
+        today: String = QueueModel.easternToday(),
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
@@ -182,6 +185,31 @@ enum ScoutService {
         for gr in grouped {
             guard prospects.indices.contains(gr.row.id) else { continue }
             let p = prospects[gr.row.id]
+
+            // #798: the upcoming-only guard, and it lives HERE, at the run, on purpose.
+            //
+            // Carnegie's feed only ever returned a forward 90-day window, so nothing ever needed
+            // this. An arbitrary org's page is the opposite: the #770 spike found 5 of 7 real sites
+            // still displaying LAST season's dates, and one listing 11 concerts under a "Previous
+            // Concerts This Season" heading. Without this, the first check of a new source floods the
+            // queue with shows that already happened.
+            //
+            // Judged on the run's LAST night (`runEndDate ?? performanceDate`), so a run already
+            // underway survives. Putting the same rule at the EVENT (inside ProspectAssembler.decide)
+            // would look equivalent and would corrupt the store: past nights would be dropped BEFORE
+            // grouping, so a live run would lose its opening night, its natural key would shift to
+            // the next remaining night on every scout, and each run would re-key or duplicate the
+            // same show. Dan's call (2026-07-11): a run underway keeps its OPENING-night date; the
+            // queue already renders it as a run ("Jul 9 to 12"), so it reads as still running.
+            //
+            // An undated listing cannot be judged past, and "date to be confirmed" is a normal state
+            // on an org's season page, so it is kept rather than silently dropped.
+            let lastNight = gr.runEndDate ?? gr.row.performanceDate
+            if let lastNight, lastNight < today {
+                skipped += gr.memberIds.count      // every night accounted for, none silently vanished
+                continue
+            }
+
             // Every night of the run beyond the one being upserted is folded into it, not lost:
             // counted so `found` always reconciles against what actually happened to each event.
             collapsedIntoRun += max(0, gr.memberIds.count - 1)
@@ -234,7 +262,7 @@ enum ScoutService {
             FeedReconcile.reconcile(stored: allStored, seenKeys: seenKeys,
                                     seenSourceURLs: seenSourceURLs,
                                     currentFeedCount: events.count, baselineFeedCount: baselineFeedCount,
-                                    today: QueueModel.easternToday())
+                                    today: today)
         }
         do {
             try context.save()

@@ -40,7 +40,7 @@ struct ScoutRunIdentityTests {
                            sourceUrl: "https://org.example/season"),
         ]
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(outcome.found == 3)
@@ -70,7 +70,7 @@ struct ScoutRunIdentityTests {
                            sourceUrl: "https://org.example/gala-guest"),
         ]
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(stored.count == 1)                  // was 0: the whole run was dropped by the guard
@@ -98,8 +98,8 @@ struct ScoutRunIdentityTests {
                            sourceUrl: "https://org.example/season"),
         ]
 
-        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
-        let second = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let second = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(second.inserted == 0)
         #expect(second.updated == 2)
@@ -121,13 +121,13 @@ struct ScoutRunIdentityTests {
         let first = [ExtractedEvent(title: "Indianapolis Children's Choir",
                                     presenter: "Indianapolis Children's Choir", venue: "Weill Recital Hall",
                                     performanceDate: "2026-10-03", sourceUrl: "https://org.example/show")]
-        _ = ScoutService.apply(events: first, clients: [], history: [], blocked: [], into: ctx)
+        _ = ScoutService.apply(events: first, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         // Same show, same listing URL, same date: only the venue's NAME changed in the feed.
         let renamed = [ExtractedEvent(title: "Indianapolis Children's Choir",
                                       presenter: "Indianapolis Children's Choir", venue: "Zankel Hall",
                                       performanceDate: "2026-10-03", sourceUrl: "https://org.example/show")]
-        let outcome = ScoutService.apply(events: renamed, clients: [], history: [], blocked: [], into: ctx)
+        let outcome = ScoutService.apply(events: renamed, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.inserted == 1)      // NOT rescued in place: a new row, and the old one remains
         #expect(outcome.updated == 0)
@@ -147,7 +147,7 @@ struct ScoutRunIdentityTests {
                            venue: "Bargemusic", performanceDate: "2026-12-05",
                            sourceUrl: "https://org.example/season"),
         ]
-        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
                                           performanceDate: "2026-10-03", venue: "Merkin Hall")
@@ -155,7 +155,7 @@ struct ScoutRunIdentityTests {
         kept?.status = .queued
         try ctx.save()
 
-        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], into: ctx)
+        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
         #expect(refreshed?.status == .queued)
