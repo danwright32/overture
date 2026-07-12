@@ -113,24 +113,107 @@ struct SourceExtractorTests {
 // real app's UserDefaults. (That is also why the rest of the scout is tested through `apply`, which
 // takes its inputs injected and touches nothing global.)
 //
-// The behavior under test is the one that matters for a watchlist: a source that throws must THROW,
-// not quietly become "this source returned no events". Those are opposite facts about a source's
+// The behavior under test is the one that matters for a watchlist: a source that fails must be NAMED,
+// never quietly become "this source returned no events". Those are opposite facts about a source's
 // health, and conflating them is how a dead source hides behind a quiet off-season.
+//
+// #802 changed the MECHANISM and kept the principle. It used to throw, which was right when there was
+// one source and its failure meant the run had nothing left to do. With a watchlist, throwing means
+// source 9 being down silently costs Dan sources 10 through 20. So the failure is now typed, written
+// onto that source's row, and reported by name in the outcome, and the run carries on.
 @MainActor
-@Suite("Scout source injection (#799)")
+@Suite("Scout source injection (#799, #802)")
 struct ScoutSourceInjectionTests {
-    @Test func runScoutUsesTheSourceItIsGivenAndSurfacesItsFailure() async throws {
+    @Test func runScoutUsesTheSourceItIsGivenAndNamesItsFailureWithoutKillingTheRun() async throws {
         let ctx = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self]),
+            for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let carnegie = WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
+                                     kind: .algolia)
+        ctx.insert(carnegie)
         let stub = StubSourceExtractor(error: StubSourceExtractor.Failure.unreachable)
+        let scratch = UserDefaults(suiteName: "ScoutSourceFailureTests")!
+        scratch.removePersistentDomain(forName: "ScoutSourceFailureTests")
 
-        await #expect(throws: StubSourceExtractor.Failure.self) {
-            _ = try await ScoutService.runScout(into: ctx, extractor: stub)
-        }
+        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
 
         #expect(stub.callCount == 1)     // the injected source really is the one the scout asked
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)   // and nothing was written
+
+        // The failure is a NAMED fact about this source, not an absence of events.
+        #expect(outcome.failedSources.map(\.sourceId) == [WatchedSource.carnegieId])
+        #expect(outcome.warning?.contains("Carnegie Hall") == true)
+        #expect(carnegie.health == .failing)
+        #expect(carnegie.lastFailure != nil)
+
+        // And it stays watched. Only an org's refusal or Dan's own removal takes a source off the list.
+        #expect(carnegie.isActive)
+
+        // Crucially, NOT the empty-feed warning: "we could not reach it" and "it had nothing on" are
+        // the two facts this whole design exists to keep apart.
+        #expect(outcome.warning?.localizedCaseInsensitiveContains("data format") == false)
+
+        scratch.removePersistentDomain(forName: "ScoutSourceFailureTests")
+    }
+
+    // The rule the loop exists for: one source going down must not cost Dan the rest of his watchlist.
+    @Test func oneSourceFailingDoesNotStopTheOthersFromBeingChecked() async throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self, WatchedSource.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        ctx.insert(WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
+                                 kind: .algolia))
+        for org in ["broken", "fine"] {
+            ctx.insert(WatchedSource(sourceId: org, orgName: org,
+                                     listingsURL: "https://\(org).example/events", kind: .html))
+        }
+        let scratch = UserDefaults(suiteName: "ScoutLoopTests")!
+        scratch.removePersistentDomain(forName: "ScoutLoopTests")
+
+        let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
+        let outcome = try await ScoutService.runScout(
+            into: ctx, extractor: stub,
+            fetch: { url in
+                if url.absoluteString.contains("broken") { throw SourceFetchError.http(500) }
+                return FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString,
+                                   contentHash: "new")
+            },
+            defaults: scratch)
+
+        // Every source is accounted for. The run did not stop at the broken one.
+        #expect(outcome.sources.count == 3)
+        #expect(outcome.failedSources.map(\.sourceId) == ["broken"])
+
+        let fine = outcome.sources.first { $0.sourceId == "fine" }
+        #expect(fine?.state == .queuedForReading)   // its page changed and Dan started this run
+
+        scratch.removePersistentDomain(forName: "ScoutLoopTests")
+    }
+
+    // Dan's 4th decision, at the level of the whole run: the automatic daily scout checks every source
+    // and reads none of them. It costs nothing, and a dead source is still noticed within a day.
+    @Test func theAutomaticDailyRunChecksEverySourceAndReadsNone() async throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([Prospect.self, WatchedSource.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        ctx.insert(WatchedSource(sourceId: "org", orgName: "Org",
+                                 listingsURL: "https://org.example/events", kind: .html))
+        let scratch = UserDefaults(suiteName: "ScoutWatchOnlyTests")!
+        scratch.removePersistentDomain(forName: "ScoutWatchOnlyTests")
+
+        let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
+        let outcome = try await ScoutService.runScout(
+            into: ctx, depth: .watchOnly, extractor: stub,
+            fetch: { url in
+                FetchedPage(normalizedHTML: "<p>new shows</p>", finalURL: url.absoluteString,
+                            contentHash: "changed")
+            },
+            defaults: scratch)
+
+        let org = outcome.sources.first { $0.sourceId == "org" }
+        #expect(org?.state == .changedNotRead)   // noticed, flagged, and not a token spent on it
+
+        scratch.removePersistentDomain(forName: "ScoutWatchOnlyTests")
     }
 
     // The SUCCESS path of the scout's entry point, which had no test at all: a source returns shows,
