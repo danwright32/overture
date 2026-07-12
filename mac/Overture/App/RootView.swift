@@ -59,6 +59,7 @@ struct RootView: View {
     // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
+    @State private var showSources = false
 
     private var followUpsDue: Int {
         FollowUp.dueRecipients(from: allProspects, now: Date()).count
@@ -275,6 +276,15 @@ struct RootView: View {
                     }
                     .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
                 }
+                // #800: read-only for now. Phase 4 adds a source, Phase 5 lets Dan stop watching one.
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showSources = true
+                    } label: {
+                        ToolbarHoverLabel(title: "Sources", systemImage: "list.bullet.rectangle")
+                    }
+                    .help("The calendars Overture re-checks on every scout, and how each one is doing")
+                }
                 // #344: connected is the steady state Dan will see almost always, so it collapses to
                 // a bare icon; disconnected stays a prominent, labeled call to action since it
                 // blocks sending.
@@ -399,6 +409,7 @@ struct RootView: View {
                 onHighlightConsumed: { followUpsHighlightRecipientId = nil })
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
+            .sheet(isPresented: $showSources) { SourcesView() }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)

@@ -80,8 +80,8 @@ struct ToolbarConsolidationGuardTests {
     @Test func toolbarButtonsUseTheHoverExpandLabel() {
         #expect(!rootView.isEmpty)
         let occurrences = rootView.components(separatedBy: "ToolbarHoverLabel(").count - 1
-        // Dismissed, Due, What converts, Voice guidance, the merged Scout/Prep idle state, the
-        // disconnected-Gmail CTA, and the OmniFocus menu's idle state: seven call sites.
-        #expect(occurrences == 7)
+        // Dismissed, Due, What converts, Voice guidance, Sources (#800), the merged Scout/Prep idle
+        // state, the disconnected-Gmail CTA, and the OmniFocus menu's idle state: eight call sites.
+        #expect(occurrences == 8)
     }
 }
