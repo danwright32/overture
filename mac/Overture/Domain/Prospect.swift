@@ -226,6 +226,24 @@ final class Prospect {
     // Defaulted so existing records migrate cleanly.
     var missedScoutCount: Int = 0
 
+    // Which watched sources surfaced this show (#771). The `sourceId` of a WatchedSource row, or the
+    // reserved "manual" for a lead Dan added by hand. Defaulted so existing records migrate cleanly
+    // without an explicit migration plan (the same precedent as runSourceURLs above); the #800 backfill
+    // then stamps every stored Carnegie show, which is where every prospect in the store today did in
+    // fact come from.
+    //
+    // A LIST, and never a @Relationship, for two separate reasons:
+    //
+    // Many, because the upsert chain deliberately MERGES the same show arriving from a venue's calendar
+    // and from the presenter's own site into one row. A single id could only remember one of them, and
+    // Phase 3's per-source reconcile would then find the show absent from the other source's feed and
+    // accrue misses toward disappearedFromFeed on a live show Dan may already have drafted and emailed.
+    //
+    // Plain strings, because a @Relationship(deleteRule: .cascade) from a source row to its prospects
+    // would mean the one action Dan asked for (stop watching a permanently dead source) deletes every
+    // prospect it ever surfaced, cascading into Recipient, including sent emails and live reply threads.
+    var sourceIds: [String] = []
+
     init(
         naturalKey: String,
         groupName: String,

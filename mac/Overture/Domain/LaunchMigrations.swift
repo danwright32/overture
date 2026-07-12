@@ -21,6 +21,11 @@ enum LaunchMigrations {
         // Choral folded into Music (#350), an editorial taxonomy decision. Idempotent: guarded by
         // "any prospect still stored as choral". Does not touch fitScore/tier (Dan's call).
         DisciplineMigration.run(in: context)
+        // #800/#771: Carnegie becomes row one of the watchlist, inheriting its own feed-health history,
+        // and every prospect already in the store is stamped with the source it actually came from.
+        // Idempotent: guarded by "is there a Carnegie row yet", and it never drops a source id a
+        // prospect already carries.
+        WatchedSourceBackfill.run(in: context)
         do {
             try context.save()
             return true

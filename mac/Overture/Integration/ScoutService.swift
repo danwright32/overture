@@ -65,8 +65,12 @@ enum ScoutService {
         let history = LocalHistory.forMatching(existing: existing)
         let health = feedHealthState(in: defaults)
         let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
+        // #771: everything this run finds came from Carnegie. The id is a constant rather than a lookup
+        // because the row need not exist for the scout to name its own source; Phase 4 is what starts
+        // iterating real WatchedSource rows and passing each one's id here.
         var outcome = apply(events: events, clients: loaded.clients, history: history,
-                            blocked: blocked, baselineFeedCount: health.baseline, into: context)
+                            blocked: blocked, baselineFeedCount: health.baseline,
+                            sourceIds: [WatchedSource.carnegieId], into: context)
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
         // Fold this run into the feed-health state: a full feed re-baselines immediately, and a feed
         // that stays degraded at a stable smaller level across selfHealThreshold scouts re-baselines
@@ -89,13 +93,20 @@ enum ScoutService {
         return outcome
     }
 
-    static let lastScoutKey = "scoutLastRunAt"
+    // #800: the accessors below are `nonisolated`. They touch nothing but UserDefaults, which is
+    // thread-safe, and they were main-actor-isolated only by inheritance from this enum. The launch-time
+    // WatchedSourceBackfill has to read this state to seed it onto Carnegie's row, and it runs outside
+    // the main actor like every other migration in LaunchMigrations. Reading these keys through their
+    // own accessors is the point: the alternative is the backfill hardcoding the same key strings, which
+    // is exactly how two copies of a name drift apart.
+
+    nonisolated static let lastScoutKey = "scoutLastRunAt"
     // Store/read injectable so the persistence is testable without polluting the global
     // defaults (test side effects stay in a transient suite).
-    static func recordScout(at date: Date, in defaults: UserDefaults = .standard) {
+    nonisolated static func recordScout(at date: Date, in defaults: UserDefaults = .standard) {
         defaults.set(date, forKey: lastScoutKey)
     }
-    static func lastScoutedAt(in defaults: UserDefaults = .standard) -> Date? {
+    nonisolated static func lastScoutedAt(in defaults: UserDefaults = .standard) -> Date? {
         defaults.object(forKey: lastScoutKey) as? Date
     }
 
@@ -104,11 +115,11 @@ enum ScoutService {
     // recordFeedHealthState (a degraded run can't ratchet it down, but a sustained shrink re-baselines
     // it, #152). These two accessors remain for direct baseline reads/writes and tests. Injectable
     // defaults keep test side effects contained.
-    static let lastHealthyFeedCountKey = "scoutLastHealthyFeedCount"
-    static func recordHealthyFeedCount(_ count: Int, in defaults: UserDefaults = .standard) {
+    nonisolated static let lastHealthyFeedCountKey = "scoutLastHealthyFeedCount"
+    nonisolated static func recordHealthyFeedCount(_ count: Int, in defaults: UserDefaults = .standard) {
         defaults.set(count, forKey: lastHealthyFeedCountKey)
     }
-    static func lastHealthyFeedCount(in defaults: UserDefaults = .standard) -> Int {
+    nonisolated static func lastHealthyFeedCount(in defaults: UserDefaults = .standard) -> Int {
         defaults.integer(forKey: lastHealthyFeedCountKey)   // 0 when unset = no baseline yet
     }
 
@@ -116,17 +127,17 @@ enum ScoutService {
     // have held at a stable smaller level, and the size of the most recent one. Stored beside the
     // baseline (which keeps reusing lastHealthyFeedCountKey) so the self-heal decision survives
     // between scouts. Injectable defaults keep test side effects contained.
-    static let degradedStreakKey = "scoutDegradedStreakCount"
-    static let lastDegradedFeedCountKey = "scoutLastDegradedFeedCount"
+    nonisolated static let degradedStreakKey = "scoutDegradedStreakCount"
+    nonisolated static let lastDegradedFeedCountKey = "scoutLastDegradedFeedCount"
 
-    static func feedHealthState(in defaults: UserDefaults = .standard) -> FeedReconcile.FeedHealthState {
+    nonisolated static func feedHealthState(in defaults: UserDefaults = .standard) -> FeedReconcile.FeedHealthState {
         FeedReconcile.FeedHealthState(
             baseline: defaults.integer(forKey: lastHealthyFeedCountKey),
             degradedStreak: defaults.integer(forKey: degradedStreakKey),
             lastDegradedCount: defaults.integer(forKey: lastDegradedFeedCountKey))
     }
 
-    static func recordFeedHealthState(_ state: FeedReconcile.FeedHealthState, in defaults: UserDefaults = .standard) {
+    nonisolated static func recordFeedHealthState(_ state: FeedReconcile.FeedHealthState, in defaults: UserDefaults = .standard) {
         defaults.set(state.baseline, forKey: lastHealthyFeedCountKey)
         defaults.set(state.degradedStreak, forKey: degradedStreakKey)
         defaults.set(state.lastDegradedCount, forKey: lastDegradedFeedCountKey)
@@ -144,6 +155,12 @@ enum ScoutService {
         // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
         // the wall clock. The reconcile already needed today's date; now one value serves both.
         today: String = QueueModel.easternToday(),
+        // #771: the source(s) this run's events came from, stamped onto every prospect it inserts and
+        // UNIONED onto every one it updates. Empty means "we did not record it", which is what every
+        // prospect predating #800 carries, and what a Prep-created one carries: an empty list can never
+        // satisfy Phase 3's "at least one of its sourceIds checked successfully this run", so it never
+        // accrues a miss. That is exactly today's behavior for a non-Carnegie URL.
+        sourceIds: [String] = [],
         // #826: whether `events` is a SWEEP of a source's whole feed, which is the only thing that
         // licenses the reconcile at the bottom of this function to read an absence as a cancellation.
         // True for the scout. False for a hand-added lead (#799), which reports on the one page Dan
@@ -168,7 +185,8 @@ enum ScoutService {
             switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict, blocked: blocked) {
             case .skip:
                 skipped += 1
-            case .prospect(let p):
+            case .prospect(var p):
+                p.sourceIds = sourceIds        // #771: stamped here; `decide` stays pure and clockless
                 prospects.append(p)
             }
         }
@@ -363,6 +381,7 @@ enum ScoutService {
         prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
+        prospect.sourceIds = p.sourceIds        // #771
         return prospect
     }
 
@@ -437,6 +456,16 @@ enum ScoutService {
         existing.runEndDate = p.runEndDate
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs
+
+        // #771: UNION, never replace, and this is the only correct home for it. The chain above
+        // deliberately merges the same show arriving from a venue's calendar and from the presenter's
+        // own site into this one row. Assigning p.sourceIds here would make the row remember only
+        // whichever source ran last, and Phase 3's per-source reconcile would then find the show absent
+        // from the forgotten source's feed and accrue misses toward disappearedFromFeed on a live show
+        // Dan may already have drafted and emailed. Sorted so the stored order is stable rather than
+        // whatever the Set happened to hash to.
+        existing.sourceIds = Array(Set(existing.sourceIds).union(p.sourceIds)).sorted()
+
         existing.ingestedAt = Date()
     }
 
