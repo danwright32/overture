@@ -12,6 +12,7 @@ import Testing
 //
 // Source guards are this project's convention for a wiring fact with no separate behavioral surface
 // (MastheadGuardTests, ToolbarConsolidationGuardTests, ProspectRowGuardTests).
+@MainActor
 @Suite("The automatic scout never spends tokens (#802)")
 struct AutoScoutSpendGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
