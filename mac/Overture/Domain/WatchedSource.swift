@@ -44,6 +44,14 @@ final class WatchedSource {
     // The warmup counter (Phase 3): a source accrues no misses until it has a feed history of its own.
     var successfulCheckCount: Int
 
+    // #802: this source's listings page has changed since the last time we successfully ingested it.
+    // Set by any check that sees a new hash; cleared only by an ingest that actually saved.
+    //
+    // It exists because of Dan's 4th decision: the free daily run fetches and hashes every source but
+    // never reads one, so it needs somewhere to say "there is something here we have not read yet"
+    // without spending a token to find out what. Defaulted, so existing rows migrate cleanly.
+    var hasUnreadChanges: Bool = false
+
     // The three UserDefaults keys of the #150/#152 self-heal machinery, per source. A merged
     // multi-source feed count must never feed a shared baseline: one healthy source's big season would
     // mask another source's dead scraper, which is the exact failure this whole model exists to make
