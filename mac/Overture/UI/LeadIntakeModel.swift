@@ -200,6 +200,11 @@ final class LeadIntakeModel {
     // insert. That is what keeps blocked dates, the #769 do-not-contact suppression, the #798
     // upcoming-only guard and the #797 run identity applying to a hand-added lead exactly as they do to
     // a scouted one. One pipeline, not two, and a refused org cannot be smuggled in by hand.
+    //
+    // #826: with ONE stage of that pipeline held back. `reconcilesFeed: false` says what is true: this
+    // is one page Dan pasted, not a sweep of a venue's calendar, so a stored show being absent from it
+    // is evidence of nothing. Without it, adding a lead counted a miss against every upcoming Carnegie
+    // show, and two leads in a row marked them disappeared and hid them from the queue.
     @discardableResult
     func confirm(into context: ModelContext, today: String = QueueModel.easternToday()) -> Int {
         guard case .review(let events, _) = phase else { return 0 }
@@ -212,7 +217,7 @@ final class LeadIntakeModel {
                                          clients: loaded.clients,
                                          history: LocalHistory.forMatching(existing: existing),
                                          blocked: Set(loaded.blockedDates),
-                                         today: today, into: context)
+                                         today: today, reconcilesFeed: false, into: context)
         let added = outcome.inserted + outcome.updated
         // Recorded only now, not at submit: a link that failed to read, or whose shows Dan dropped, is
         // one he must be able to try again. Only a link that actually produced something counts as
