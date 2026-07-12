@@ -148,7 +148,7 @@ struct IngestPersistenceTests {
         let event = ExtractedEvent(title: "Every Voice Choirs", presenter: nil,
             venue: "Merkin Hall", performanceDate: "2026-03-11", sourceUrl: "https://x")
         _ = ScoutService.apply(events: [event], clients: [client], history: [],
-                               blocked: [], into: context)
+                               blocked: [], today: ScoutTestClock.beforeAllFixtures, into: context)
         let saved = try context.fetch(FetchDescriptor<Prospect>())
         #expect(saved.first?.downbeatClientId == "CID-1")
     }
