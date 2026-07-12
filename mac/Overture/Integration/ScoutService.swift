@@ -13,6 +13,14 @@ enum ScoutService {
         var updated: Int
         var skipped: Int
         var uncertain: Int
+        // #797: nights folded into a multi-night run rather than upserted on their own. Deliberately
+        // NOT counted as `skipped`, which means "decided not to pursue" (a blocked date, a
+        // do-not-contact org); a collapsed night was pursued, as part of its run. Kept separate so
+        // every event the scout found is accounted for exactly once:
+        //     found == inserted + updated + skipped + collapsedIntoRun
+        // That identity is what makes a silently vanished show impossible to miss (it was the bug
+        // this counter was added to catch), so it is asserted directly in the tests.
+        var collapsedIntoRun: Int = 0
         // Set when the Downbeat past-client export was missing, unreadable, or stale, so
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
@@ -125,7 +133,7 @@ enum ScoutService {
         baselineFeedCount: Int = 0,
         into context: ModelContext
     ) -> Outcome {
-        var inserted = 0, updated = 0, skipped = 0, uncertain = 0
+        var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
         var seenKeys = Set<String>()
@@ -147,9 +155,12 @@ enum ScoutService {
             }
         }
 
-        // Phase 2: collapse multi-night runs so only the opening night is upserted.
-        let rows = prospects.map { p in
+        // Phase 2: collapse multi-night runs so only the representative night is upserted. Each row
+        // carries its INDEX into `prospects` as its identity (#797), which is how a grouped run finds
+        // its way back to the prospect it came from.
+        let rows = prospects.enumerated().map { i, p in
             RunGrouping.RunRow(
+                id: i,
                 groupName: p.groupName,
                 venue: p.venue,
                 performanceDate: p.performanceDate,
@@ -158,25 +169,22 @@ enum ScoutService {
         }
         let grouped = RunGrouping.group(rows)
 
-        // Build a lookup from sourceListingURL to AssembledProspect so we can find the
-        // prospect that corresponds to each grouped run's opening night.
-        var prospectByURL: [String: AssembledProspect] = [:]
-        var prospectsWithoutURL: [AssembledProspect] = []
-        for p in prospects {
-            if let url = p.sourceListingURL {
-                prospectByURL[url] = p
-            } else {
-                prospectsWithoutURL.append(p)
-            }
-        }
-
-        // Phase 3: upsert one prospect per grouped run (opening night only).
-        // We iterate grouped runs (already one per run) rather than per-night prospects.
+        // Phase 3: upsert one prospect per grouped run. Every prospect is in exactly one run
+        // (RunGrouping emits a group for every row, dated or not), so identity resolves all of them
+        // and there is no leftover case to handle separately.
+        //
+        // #797: this used to resolve through a [sourceListingURL: AssembledProspect] dictionary, and
+        // lost shows two ways. A listing URL is not unique, so an org publishing its whole season on
+        // ONE page collapsed into a single prospect, last write wins, the rest gone and not even
+        // counted. And a run whose representative row had no URL (representativeRow picks the
+        // SHORTEST title, which can be the unlinked night) failed the URL guard and the whole run was
+        // dropped, member nights included.
         for gr in grouped {
-            guard let openingURL = gr.row.sourceListingURL,
-                  let p = prospectByURL[openingURL] else {
-                continue
-            }
+            guard prospects.indices.contains(gr.row.id) else { continue }
+            let p = prospects[gr.row.id]
+            // Every night of the run beyond the one being upserted is folded into it, not lost:
+            // counted so `found` always reconciles against what actually happened to each event.
+            collapsedIntoRun += max(0, gr.memberIds.count - 1)
 
             // Fold run metadata onto the assembled prospect.
             var enriched = p
@@ -191,14 +199,17 @@ enum ScoutService {
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing)
                 updated += 1
-            } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, in: context) {
+            } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
+                                                      venue: enriched.venue, in: context) {
                 // No exact key match, but a stored record shares one of this run's member
                 // URLs: re-key to the new opening-night key and update in place so Dan's
                 // keep/dismiss decision survives across run-window shifts (#132).
                 anyMatch.naturalKey = key
                 apply(enriched, to: anyMatch)
                 updated += 1
-            } else if let drifted = matchByStableSource(url: enriched.sourceListingURL, date: enriched.performanceDate, in: context) {
+            } else if let drifted = matchByStableSource(url: enriched.sourceListingURL,
+                                                       date: enriched.performanceDate,
+                                                       venue: enriched.venue, in: context) {
                 // No exact key match, but the same source listing + date already exists:
                 // the venue tweaked the title between runs. Re-key to the new title and
                 // update in place so Dan's keep/dismiss decision survives (#29).
@@ -211,19 +222,6 @@ enum ScoutService {
             }
         }
 
-        // Handle the rare case of a prospect with no source URL (cannot be grouped).
-        for p in prospectsWithoutURL {
-            let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: p.performanceDate, venue: p.venue)
-            seenKeys.insert(key)
-            let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-            if let existing = (try? context.fetch(descriptor))?.first {
-                apply(p, to: existing)
-                updated += 1
-            } else {
-                context.insert(make(p, key: key))
-                inserted += 1
-            }
-        }
         // Reconcile stored prospects against this run's feed: mark ones that dropped out (#133).
         // Only when the feed actually returned events: an empty feed is a broken/glitching feed,
         // not "every show cancelled", so it must never accrue misses.
@@ -243,31 +241,61 @@ enum ScoutService {
         } catch {
             // #499: everything above was classified/upserted in memory but never persisted.
             return Outcome(found: events.count, inserted: inserted, updated: updated,
-                           skipped: skipped, uncertain: uncertain, saveFailed: true)
+                           skipped: skipped, uncertain: uncertain,
+                           collapsedIntoRun: collapsedIntoRun, saveFailed: true)
         }
-        return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped, uncertain: uncertain)
+        return Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
+                       uncertain: uncertain, collapsedIntoRun: collapsedIntoRun)
     }
 
     // Matches an existing prospect that shares ANY of the given run member URLs, checking
     // both the stored sourceListingURL and the stored runSourceURLs (#132). Used when the
-    // run's opening night has shifted between scouts so no exact natural key matches.
-    private static func matchByAnyRunURL(_ urls: [String], in context: ModelContext) -> Prospect? {
+    // run's opening night has shifted between scouts so no exact natural key matches: the caller
+    // then RE-KEYS that stored record, which is why this must be certain it is the same show.
+    //
+    // #797: a shared URL alone is not that certainty. An org that publishes its whole season on ONE
+    // page gives every show the same listing URL, so URL-only matching handed back an UNRELATED act
+    // and the caller re-keyed it, mutating one stored row over and over: twenty shows in, one row
+    // out, and Dan's keep/dismiss on it silently transplanted onto a different act.
+    //
+    // The act and the venue must agree too. That is exactly what a genuine #132 run-window shift
+    // preserves (the same act, at the same venue, on moved dates), so the case this exists for still
+    // matches, while a season page full of strangers no longer does.
+    private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
+                                         in context: ModelContext) -> Prospect? {
         let candidates = Set(urls)
         guard !candidates.isEmpty else { return nil }
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         return all.first { p in
-            if let u = p.sourceListingURL, candidates.contains(u) { return true }
-            return !Set(p.runSourceURLs).isDisjoint(with: candidates)
+            let sharesURL = (p.sourceListingURL.map { candidates.contains($0) } ?? false)
+                || !Set(p.runSourceURLs).isDisjoint(with: candidates)
+            guard sharesURL else { return false }
+            return sameVenue(p.venue, venue) && GroupNameMatch.isConfident(p.groupName, groupName)
         }
+    }
+
+    // Venue equality for the re-key guards: a missing venue on both sides still counts as "the same
+    // venue" (it is the same absence of information, which is the pre-#797 behavior for that case).
+    private static func sameVenue(_ a: String?, _ b: String?) -> Bool {
+        let canon: (String?) -> String = { ($0 ?? "").lowercased().trimmingCharacters(in: .whitespaces) }
+        return canon(a) == canon(b)
     }
 
     // A prospect identified by its stable source listing (URL + date), used to recognize
     // the same event when its display title has drifted (#29). Fetch-all + filter is fine
     // for the local store's size and avoids optional-predicate gymnastics.
-    private static func matchByStableSource(url: String?, date: String?, in context: ModelContext) -> Prospect? {
+    //
+    // #797: the venue must agree as well. On a season page every show shares one listing URL, so URL
+    // + date alone would re-key one show onto a DIFFERENT act that happens to play the same night.
+    // The title is deliberately NOT checked here: recognizing a drifted title is this matcher's
+    // entire purpose, so the act name is the one thing it cannot rely on.
+    private static func matchByStableSource(url: String?, date: String?, venue: String?,
+                                            in context: ModelContext) -> Prospect? {
         guard let url, !url.isEmpty else { return nil }
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all.first { $0.sourceListingURL == url && $0.performanceDate == date }
+        return all.first {
+            $0.sourceListingURL == url && $0.performanceDate == date && sameVenue($0.venue, venue)
+        }
     }
 
     private static func make(_ p: AssembledProspect, key: String) -> Prospect {

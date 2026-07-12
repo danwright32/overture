@@ -8,6 +8,12 @@ import Foundation
 // its differently-titled sub-event (e.g. a "Guest Artist:" night) still merge.
 enum RunGrouping {
     struct RunRow: Equatable, Sendable {
+        // #797: the row's own identity, assigned by the caller. The caller used to find its way back
+        // from a grouped run to the event it came from through `sourceListingURL`, but a listing URL
+        // is NOT unique (an org that publishes a whole season on one page gives every show the same
+        // one) and is not even always present. Both cost real shows, silently. Identity does what a
+        // URL was never able to.
+        var id: Int = 0
         var groupName: String
         var venue: String?
         var performanceDate: String?
@@ -19,6 +25,10 @@ enum RunGrouping {
         var runEndDate: String?
         var partOfRelatedRun: Bool
         var runSourceURLs: [String]
+        // #797: every row that went INTO this run, representative included. `runSourceURLs` cannot
+        // serve: it is a compactMap over the members' URLs, so it silently omits exactly the
+        // URL-less members. This is what lets the caller account for the nights it collapsed.
+        var memberIds: [Int] = []
     }
 
     private static let gapDays = 3
@@ -80,13 +90,15 @@ enum RunGrouping {
                     row: open,
                     runEndDate: run.count > 1 ? run.last?.performanceDate : nil,
                     partOfRelatedRun: related,
-                    runSourceURLs: run.compactMap { $0.sourceListingURL }
+                    runSourceURLs: run.compactMap { $0.sourceListingURL },
+                    memberIds: run.map(\.id)
                 ))
             }
         }
         for r in undated {
             out.append(GroupedRun(row: r, runEndDate: nil, partOfRelatedRun: false,
-                                  runSourceURLs: r.sourceListingURL.map { [$0] } ?? []))
+                                  runSourceURLs: r.sourceListingURL.map { [$0] } ?? [],
+                                  memberIds: [r.id]))
         }
         return out
     }
