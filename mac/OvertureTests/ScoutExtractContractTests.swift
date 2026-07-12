@@ -53,6 +53,23 @@ struct ScoutExtractContractTests {
         }
     }
 
+    // v2: the queue can name the ONE org whose shows count on this page. It exists because a VENUE page
+    // is a page about many organizations: Lincoln Center's page for one ensemble's concert also carries
+    // an "Alice Tully Hall upcoming events" sidebar, and without this the run returned the hall's other
+    // tenants (real shows, right hall, WRONG ORG) as if they were the lead.
+    @Test func theQueueCanConstrainAPageToOneOrgsShows() throws {
+        let queue = try JSONDecoder().decode(ScoutExtractQueue.self, from: fixture("queue-v2.json"))
+        #expect(queue.version == 2)
+        #expect(queue.items.first?.onlyForOrg == "Second Ending Ensemble")
+    }
+
+    // Additive, so the older shape still decodes: an absent constraint means "every show on this page
+    // counts", which is exactly right when Dan pasted a venue's own calendar on purpose.
+    @Test func aQueueWithNoConstraintStillDecodesAndMeansNoConstraint() throws {
+        let queue = try JSONDecoder().decode(ScoutExtractQueue.self, from: fixture("queue-v1.json"))
+        #expect(queue.items.allSatisfy { $0.onlyForOrg == nil })
+    }
+
     @Test func theQueuePointsTheRunAtAPinnedPageAndAnOpaqueSourceId() throws {
         let queue = try JSONDecoder().decode(ScoutExtractQueue.self, from: fixture("queue-v1.json"))
 

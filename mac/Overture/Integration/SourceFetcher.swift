@@ -44,6 +44,10 @@ struct FetchedPage: Equatable, Sendable {
     // Center's, and silently swapping the page under him would be exactly the kind of quiet cleverness
     // that makes a tool untrustworthy.
     var followedTicketLinkFrom: String? = nil
+    // WHO the lead is about, read from the page Dan actually pasted. Only set when we had to leave that
+    // page: a venue page is a page about MANY organizations, and without this we hand him the hall's
+    // other tenants (which is exactly what happened).
+    var onlyForOrg: String? = nil
 }
 
 enum SourceFetcher {
@@ -139,6 +143,9 @@ enum SourceFetcher {
                                                allowTicketLinkHop: false),
                PageNormalizer.carriesReadableContent(followed.normalizedHTML) {
                 followed.followedTicketLinkFrom = finalURL.absoluteString
+                // We are now reading somebody else's page (a venue's). Remember whose lead this is, or
+                // the venue's whole calendar comes back as if it belonged to the org Dan pasted.
+                followed.onlyForOrg = OrgIdentity.name(inPage: html, url: finalURL)
                 return followed
             }
         }

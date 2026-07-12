@@ -28,6 +28,8 @@ final class LeadIntakeModel {
     // Center's. Silently swapping the page under him would be exactly the kind of quiet cleverness that
     // makes a tool impossible to trust.
     private var followedFromNote: String?
+    // Whose lead this is, when we had to leave the page Dan pasted (see SourceFetcher.onlyForOrg).
+    private var onlyForOrg: String?
 
     // Injected seams (defaults are the real thing).
     private let fetch: (URL) async throws -> FetchedPage
@@ -73,6 +75,7 @@ final class LeadIntakeModel {
         selected = []
         urlText = ""
         followedFromNote = nil
+        onlyForOrg = nil
     }
 
     func start(now: Date, pollEvery: TimeInterval = 2, giveUpAfter: TimeInterval = RunTimeouts.scoutExtract,
@@ -119,6 +122,7 @@ final class LeadIntakeModel {
             if page.followedTicketLinkFrom != nil, let host = URL(string: page.finalURL)?.host {
                 followedFromNote =
                     "I couldn't read that page, so I followed its ticket link and read \(host) instead."
+                onlyForOrg = page.onlyForOrg
             }
             path = try pin(page, sourceId)
         } catch let error as SourceFetchError {
@@ -133,8 +137,9 @@ final class LeadIntakeModel {
         // next lead. He hit this: the previous run had already given him an answer but its process was
         // still exiting, so it still held the lock, and the app told him to go away and try again. The
         // lock exists to stop two runs clobbering one results file, not to bounce the user.
-        let item = ScoutExtractQueueItem(sourceId: sourceId, orgName: url.host,
-                                         listingsURL: page.finalURL, pagePath: path.path)
+        let item = ScoutExtractQueueItem(sourceId: sourceId, orgName: onlyForOrg ?? url.host,
+                                         listingsURL: page.finalURL, pagePath: path.path,
+                                         onlyForOrg: onlyForOrg)
         var waited: TimeInterval = 0
         while true {
             do {
@@ -165,7 +170,7 @@ final class LeadIntakeModel {
         var waited: TimeInterval = 0
         while waited <= giveUpAfter {
             if let results = readResults(sourceId), results.verdict(for: sourceId) != nil {
-                apply(LeadIntake.outcome(from: results, sourceId: sourceId))
+                apply(LeadIntake.outcome(from: results, sourceId: sourceId, onlyForOrg: onlyForOrg))
                 return
             }
             await sleep(pollEvery)
