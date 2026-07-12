@@ -306,10 +306,15 @@ enum ProspectMutations {
     static func setOrgDoNotContact(_ item: QueueItem, _ on: Bool, prospects: [Prospect],
                                    context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        // #802: the refusal now also takes the org off the WATCHLIST, or a standing watchlist would
+        // re-check their calendar every run forever and keep putting their shows in front of Dan.
+        // Nothing would send, but that is not what "we'll leave you alone" means. The sources are
+        // fetched here because this is where a ModelContext exists; OrgDoNotContact stays pure.
+        let sources = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
         if on {
-            OrgDoNotContact.mark(orgOf: model, in: prospects)
+            OrgDoNotContact.mark(orgOf: model, in: prospects, sources: sources)
         } else {
-            OrgDoNotContact.unmark(orgOf: model, in: prospects)
+            OrgDoNotContact.unmark(orgOf: model, in: prospects, sources: sources)
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }

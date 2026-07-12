@@ -10,12 +10,23 @@ import SwiftData
 // row lands in, and it is a tested domain rule, so this view has no logic of its own to get wrong.
 struct SourcesView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
+
+    // #802: the sheet is where the watchlist is MANAGED, because it was previously the only place it
+    // could be seen and nowhere it could be changed: a calendar could only join by pasting a lead, and
+    // unticking "keep watching" on that sheet was a dead end with no way back.
+    @State private var showAdd = false
+    @State private var newOrgName = ""
+    @State private var newURL = ""
+    @State private var addMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
+
+            if showAdd { addForm; Divider().overlay(OVColor.line) }
 
             if sources.isEmpty {
                 empty
@@ -46,9 +57,52 @@ struct SourcesView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
+            Button(showAdd ? "Cancel" : "Watch a calendar") { showAdd.toggle(); addMessage = nil }
+                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
             Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
+    }
+
+    private var addForm: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            TextField("Organization", text: $newOrgName)
+                .textFieldStyle(.roundedBorder).font(.system(size: 12))
+            TextField("Their events or season page", text: $newURL)
+                .textFieldStyle(.roundedBorder).font(.system(size: 12))
+            Text("Their calendar, not one show: a single show's page never changes again, so watching it would watch nothing.")
+                .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let addMessage {
+                Text(addMessage).font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Spacer()
+                Button("Watch it") { addSource() }
+            }
+        }
+        .padding(OVSpacing.md)
+        .background(OVColor.surfaceSunk)
+    }
+
+    private func addSource() {
+        switch WatchlistEditing.add(orgName: newOrgName, listingsURL: newURL, into: context) {
+        case .added, .resumed:
+            newOrgName = ""; newURL = ""; showAdd = false; addMessage = nil
+        case .alreadyWatching(let orgName):
+            addMessage = "Already watching \(orgName)'s calendar."
+        case .refused(let orgName):
+            // He must SEE this. Silently declining would look exactly like a bug, and this is the one
+            // thing in the whole feature that must not be got wrong quietly.
+            addMessage = "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
+        case .invalidURL:
+            addMessage = "That doesn't look like a web address."
+        case .needsName:
+            addMessage = "Give the organization a name so you can recognize it here."
+        }
     }
 
     private var empty: some View {
@@ -104,6 +158,14 @@ struct SourcesView: View {
             if let failure = source.lastFailure {
                 Text(failure.message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // A permanently dead source needs a way out that is DAN'S choice, or a failing source would
+            // be reported at him every run forever with nothing he could do about it. Recorded as his
+            // decision, never as a refusal: Carnegie is excluded because it has no page to watch.
+            if source.isActive, source.kind != .algolia {
+                Button("Stop watching") { WatchlistEditing.stopWatching(source, in: context) }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
             }
         }
         .padding(.horizontal, OVSpacing.sm)

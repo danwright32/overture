@@ -30,7 +30,25 @@ enum OrgDoNotContact {
     // Crucially this cleans up the PRESENT as well as the future. Protecting the next scout while
     // leaving three of the org's other shows drafted and ready to send in the queue would be a
     // feature that looks like it works and still sends the email.
-    static func mark(orgOf prospect: Prospect, in all: [Prospect]) {
+    // #802: `sources` is the watchlist. The refusal now takes the org OFF it, because a standing
+    // watchlist would otherwise re-check their calendar every run, forever, and keep putting their shows
+    // in front of Dan. Nothing would send, but reading about people who asked him to go away is not what
+    // "we'll leave you alone" means.
+    //
+    // WHICH source comes off is the part that would be easy to get backwards, so it is stated plainly: a
+    // source is deactivated only when its OWN NAME is the refusing org. NEVER the source that merely
+    // surfaced the prospect. If a Brooklyn choir performing at Symphony Space refuses him, and Symphony
+    // Space's calendar is what surfaced them, dropping THAT source would blind Dan to Symphony Space's
+    // entire calendar because one act on it refused. That is his own "watch a venue, but pitch the
+    // presenter" rule, applied to refusals.
+    static func mark(orgOf prospect: Prospect, in all: [Prospect], sources: [WatchedSource] = []) {
+        for source in sourcesOwnedBy(prospect.groupName, in: sources) {
+            source.isActive = false
+            source.inactiveReason = .orgRefusal
+            // Emphatically NOT `failing`. There is nothing wrong with them; they asked to be left alone,
+            // and the Sources sheet must never render that as a broken scraper, because the natural
+            // response to broken is to go and fix it.
+        }
         for p in sameOrg(as: prospect.groupName, in: all) {
             p.orgDoNotContact = true
 
@@ -55,9 +73,23 @@ enum OrgDoNotContact {
     // The shows this dismissed stay dismissed, and are restored from Archive the usual way. Silently
     // resurrecting Dan's dismissals would be its own unpleasant surprise, and un-suppressing a
     // recipient he has since dealt with differently would be worse.
-    static func unmark(orgOf prospect: Prospect, in all: [Prospect]) {
+    static func unmark(orgOf prospect: Prospect, in all: [Prospect], sources: [WatchedSource] = []) {
+        for source in sourcesOwnedBy(prospect.groupName, in: sources) {
+            // Only a source stopped BY THE REFUSAL is resumed. One Dan deliberately removed as dead
+            // stays removed: those are different decisions, and releasing a mis-clicked refusal is not
+            // an instruction to resurrect a website he gave up on.
+            guard source.inactiveReason == .orgRefusal else { continue }
+            source.isActive = true
+            source.inactiveReason = nil
+        }
         for p in sameOrg(as: prospect.groupName, in: all) {
             p.orgDoNotContact = false
         }
+    }
+
+    // The sources whose OWN name is this org. Confident match only, the same bar `sameOrg` uses: a
+    // merely similar name is never authoritative enough to act on, in either direction.
+    private static func sourcesOwnedBy(_ orgName: String, in sources: [WatchedSource]) -> [WatchedSource] {
+        sources.filter { GroupNameMatch.isConfident(orgName, $0.orgName) }
     }
 }
