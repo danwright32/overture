@@ -35,10 +35,18 @@ struct FetchedPage: Equatable, Sendable {
     var normalizedHTML: String
     var finalURL: String
     var contentHash: String
+    // #806: true when the plain download carried nothing readable and we had to load the page the way a
+    // browser does. Worth knowing per source: rendering is seconds and a whole WebKit instance, so a
+    // source that always needs it is a source that costs more.
+    var wasRendered: Bool = false
 }
 
 enum SourceFetcher {
-    static func fetch(_ url: URL, session: URLSession = .shared) async throws -> FetchedPage {
+    // `render` is injected so the fallback is a real unit test with no WebKit. It defaults to the real
+    // hidden browser (RenderedPage).
+    static func fetch(_ url: URL,
+                      session: URLSession = .shared,
+                      render: ((URL) async throws -> String)? = nil) async throws -> FetchedPage {
         let (data, response): (Data, URLResponse)
         do {
             var request = URLRequest(url: url)
@@ -77,9 +85,36 @@ enum SourceFetcher {
             ?? String(data: data, encoding: .isoLatin1)
             ?? ""
         let normalized = PageNormalizer.normalize(html)
-        return FetchedPage(normalizedHTML: normalized,
-                           finalURL: finalURL.absoluteString,
-                           contentHash: PageNormalizer.contentHash(normalized))
+
+        // #806. If the download carried something to read, we are done, and the browser is never touched.
+        // That matters: rendering costs seconds and a whole WebKit instance per source, and the watchlist
+        // re-checks dozens of sources on a schedule, so "just render everything" would quietly make the
+        // daily run an order of magnitude slower for no gain on the sources that work fine.
+        if PageNormalizer.carriesReadableContent(normalized) {
+            return FetchedPage(normalizedHTML: normalized,
+                               finalURL: finalURL.absoluteString,
+                               contentHash: PageNormalizer.contentHash(normalized))
+        }
+
+        // Nothing readable came down the wire. The page is probably drawn by JavaScript (Wix,
+        // Squarespace, and most of the small arts orgs Dan pitches), so load it the way a browser does,
+        // let its scripts run, and read the finished page instead.
+        let renderer = render ?? { try await RenderedPage.html(for: $0) }
+        do {
+            let renderedHTML = try await renderer(finalURL)
+            let renderedNormalized = PageNormalizer.normalize(renderedHTML)
+            return FetchedPage(normalizedHTML: renderedNormalized,
+                               finalURL: finalURL.absoluteString,
+                               contentHash: PageNormalizer.contentHash(renderedNormalized),
+                               wasRendered: true)
+        } catch {
+            // A browser that hangs, crashes, or is unavailable must not take the whole fetch down with
+            // it. The raw page is still the best thing we have, and returning it lets the honest
+            // "I can't read this page" path run instead of an opaque failure.
+            return FetchedPage(normalizedHTML: normalized,
+                               finalURL: finalURL.absoluteString,
+                               contentHash: PageNormalizer.contentHash(normalized))
+        }
     }
 
     private static func sameSite(_ a: String, _ b: String) -> Bool {

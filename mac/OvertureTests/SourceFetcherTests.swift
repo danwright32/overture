@@ -179,6 +179,89 @@ struct SourceFetcherTests {
         #expect(PageNormalizer.carriesReadableContent(PageNormalizer.normalize(realCalendar)))
     }
 
+    // #806: when the plain download carries nothing to read, load the page the way a BROWSER does (let
+    // its JavaScript run) and read the finished page instead.
+    //
+    // This is what stands between Dan and his own ensemble's site, and between the watchlist and a whole
+    // class of the orgs he pitches: small arts organizations live on Wix and Squarespace, whose calendars
+    // exist only after their scripts run.
+    @Test func aJavaScriptDrawnSiteIsRenderedAndThenReadable() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("""
+        <html><body>
+        <script>/* the calendar is built here, at runtime */</script>
+        <div><a href="/">Home</a> <a href="/events">Upcoming Events</a> <a href="/contact">Contact</a></div>
+        <div>© 2025. Proudly created with Wix.com</div>
+        </body></html>
+        """.utf8)
+
+        // What that page looks like once a browser has run it.
+        let rendered = """
+        <html><body><h1>Upcoming Events</h1>
+        <div><h3>October 3, 2026</h3><p>Second Ending Ensemble at Merkin Hall: piano trios of Haydn,
+        Brahms and Dvorak, with a conversation afterwards.</p></div>
+        <div><h3>November 14, 2026</h3><p>Mozart and Schubert, works for violin and piano.</p></div>
+        </body></html>
+        """
+
+        var renderedCount = 0
+        let page = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                 render: { _ in renderedCount += 1; return rendered })
+
+        #expect(renderedCount == 1)                                 // the fallback fired
+        #expect(page.wasRendered)
+        #expect(page.normalizedHTML.contains("Second Ending Ensemble"))
+        #expect(page.normalizedHTML.contains("October 3"))
+        #expect(PageNormalizer.carriesReadableContent(page.normalizedHTML))
+    }
+
+    // ...and the browser must NOT be used when the plain download already works. Rendering costs seconds
+    // and a whole WebKit instance per source; the watchlist re-checks dozens of sources on a schedule, so
+    // "render everything, it's simpler" would quietly make the daily run an order of magnitude slower.
+    @Test func aPlainPageIsNeverRenderedBecauseItDoesNotNeedToBe() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("""
+        <html><body><h1>Concerts for July 2026</h1>
+        <table><tr><td><div>11</div><a href="/c/a">Immortal Gifts: Mozart and Schubert</a></td></tr></table>
+        </body></html>
+        """.utf8)
+
+        var renderedCount = 0
+        let page = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                 render: { _ in renderedCount += 1; return "" })
+
+        #expect(renderedCount == 0)          // never touched the browser
+        #expect(!page.wasRendered)
+        #expect(page.normalizedHTML.contains("Immortal Gifts"))
+    }
+
+    // If even the browser cannot produce anything readable, we say so honestly rather than pretending.
+    // A page behind a login renders to a sign-in form, and that is not a calendar.
+    @Test func aPageThatIsUnreadableEvenAfterRenderingStaysUnreadable() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("<html><body><div>Sign in</div></body></html>".utf8)
+
+        let page = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                 render: { _ in "<html><body><form>Sign in</form></body></html>" })
+
+        #expect(page.wasRendered)                                        // we tried
+        #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))   // and it is still nothing
+    }
+
+    // A browser that hangs, crashes, or is simply unavailable must not take the fetch down with it: the
+    // raw page is still the best thing we have, and returning it lets the honest "I can't read this"
+    // path run instead of an opaque crash.
+    @Test func aRenderFailureFallsBackToTheRawPageRatherThanThrowing() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("<html><body><div>Home</div></body></html>".utf8)
+
+        let page = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                 render: { _ in throw SourceFetchError.unreachable })
+
+        #expect(!page.wasRendered)
+        #expect(page.normalizedHTML.contains("Home"))
+    }
+
     // The hash is the cost model. A page whose CONTENT has not changed must hash the same even though
     // its bytes differ, because sites churn whitespace, script nonces and analytics blobs on every
     // request. If the hash moved on every fetch, the AI would re-read every source every day forever
