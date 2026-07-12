@@ -6,8 +6,9 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var isScanning = false
     @State private var scoutStartedAt: Date?   // when the current scan began, for the live elapsed counter (#435)
-    // #799: the Add-a-lead sheet (paste a link to a show Dan found himself).
-    @State private var showAddLead = false
+    // #799: shared with the menu-bar command (OvertureApp), because a toolbar-menu shortcut never
+    // registers with the system and the keyboard route has to work.
+    @Environment(AddLeadPresenter.self) private var addLead
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
     @State private var statusMessage: String?
     // #346: the scout outcome ("N found · N unsure", or a failure status) gets its own state so
@@ -161,7 +162,7 @@ struct RootView: View {
                 // follow-up (a late reply on a different contact) after it's left the Queue entirely.
                 if let key = OvertureDeepLink.leadKey(from: url) { routeDeepLink(toKey: key) }
             }
-            .sheet(isPresented: $showAddLead) { AddLeadSheet() }
+            .sheet(isPresented: Bindable(addLead).isPresented) { AddLeadSheet() }
             .toolbar {
                 ToolbarItem(placement: .status) {
                     if omniFocusFailedAt > 0 {
@@ -187,11 +188,11 @@ struct RootView: View {
                             .disabled(isScanning)
                         // #799: a lead Dan found himself (a link to the show, or to the org's events
                         // page). It goes through the same classify/rank/upsert chain as a scouted one.
-                        // Cmd+L, not Cmd+N: Cmd+N is claimed by AppKit's standard "new window" action,
-                        // so a binding on it silently never fires (verified by pressing it in the Debug
-                        // build and watching nothing happen).
-                        Button("Add a lead...") { showAddLead = true }
-                            .keyboardShortcut("l", modifiers: .command)
+                        // The shortcut lives on the MENU-BAR command (OvertureApp), not here: a
+                        // keyboardShortcut on a Button inside a toolbar Menu draws the "⌘L" and never
+                        // registers with the system, so the key did nothing at all. This item stays as
+                        // the clickable route, and drives the same presenter.
+                        Button("Add a lead...") { addLead.request() }
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                         Divider()
                         Button {
