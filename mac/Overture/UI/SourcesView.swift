@@ -153,6 +153,17 @@ struct SourcesView: View {
                 Text(url).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
             }
 
+            // #803: CHECKED and READ are different things, and the sheet could not tell them apart. The
+            // free daily run fetches and hashes every calendar and reads none of them, so a source can
+            // report "checked an hour ago" for weeks while nobody has looked at what is on it. That is
+            // the design, but invisible it becomes a leak: shows sitting unread on a calendar that
+            // reports as perfectly healthy.
+            let readState = SourceReadState.of(source)
+            Text(readState.label)
+                .font(.system(size: 11))
+                .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+
             // A named failure, never a bare "broken". A source Dan cannot act on is a source he will
             // learn to ignore.
             if let failure = source.lastFailure {
