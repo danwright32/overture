@@ -43,7 +43,7 @@ struct CarnegieExtractorTests {
             (200, pageJSON(title: "Event 1", url: "/calendar/2026/07/02/b", nbPages: 2)),
         ]
         let extractor = CarnegieExtractor(session: stubSession())
-        let events = try await extractor.extract(now: Date(timeIntervalSince1970: 1782356400))
+        let events = try await extractor.extractEvents(now: Date(timeIntervalSince1970: 1782356400))
         #expect(events.map(\.title) == ["Event 0", "Event 1"])
         #expect(events[0].performanceDate == "2026-07-01")
         #expect(StubURLProtocol.callCount == 2)
@@ -54,7 +54,7 @@ struct CarnegieExtractorTests {
         StubURLProtocol.responses = [(500, Data())]
         let extractor = CarnegieExtractor(session: stubSession())
         await #expect(throws: CarnegieExtractorError.self) {
-            _ = try await extractor.extract(now: Date(timeIntervalSince1970: 1782356400))
+            _ = try await extractor.extractEvents(now: Date(timeIntervalSince1970: 1782356400))
         }
     }
 }

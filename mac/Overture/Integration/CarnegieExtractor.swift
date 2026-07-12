@@ -4,16 +4,28 @@ enum CarnegieExtractorError: Error { case badResponse }
 
 // Pulls the next ~90 days of Carnegie performances by querying the venue's public Algolia
 // calendar index directly (see AlgoliaCalendar). Replaces the old hidden-WebKit DOM scrape,
-// which only ever saw the ~3 days the /events page renders at once. Keeps the same async
-// `extract()` surface so ScoutService is unchanged.
-final class CarnegieExtractor {
+// which only ever saw the ~3 days the /events page renders at once.
+//
+// #799: now the first conformer of `SourceExtractor`, so the scout iterates sources instead of naming
+// this one. It KEEPS its Algolia path rather than being pushed through the generic HTML extractor:
+// the index exposes 90 days and the rendered page exposes about three, so "removing the special case"
+// for purity would cost 87 days of lead time. Carnegie needs a source ROW, not a shared parser.
+final class CarnegieExtractor: SourceExtractor {
     private let session: URLSession
 
     init(session: URLSession = .shared) {
         self.session = session
     }
 
-    func extract(now: Date = Date()) async throws -> [ExtractedEvent] {
+    // A structured feed can only ever be "here are the upcoming events" or "there are none", so the
+    // verdict is derived rather than guessed (ExtractedListing.fromStructuredFeed). It can never
+    // report .allPast (it queries a forward window) or .unreadable (it parses JSON, not a rendered
+    // page), and it must not pretend otherwise: those verdicts route source health.
+    func extract() async throws -> ExtractedListing {
+        ExtractedListing.fromStructuredFeed(try await extractEvents())
+    }
+
+    func extractEvents(now: Date = Date()) async throws -> [ExtractedEvent] {
         let (start, end) = AlgoliaCalendar.windowBoundsMs(today: now)
         var all: [ExtractedEvent] = []
         var page = 0
