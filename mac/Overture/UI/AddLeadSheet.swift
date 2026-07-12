@@ -16,6 +16,10 @@ struct AddLeadSheet: View {
 
     @State private var model = LeadIntakeModel()
     @FocusState private var urlFocused: Bool
+    // #768: the watchlist as it stands, so the sheet can tell Dan that this org is already watched, or
+    // that they asked him to stop. Only the view can supply these, so the model takes them as an input
+    // rather than reaching for a context of its own.
+    @Query private var watched: [WatchedSource]
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -28,6 +32,7 @@ struct AddLeadSheet: View {
                 working(startedAt: startedAt)
             case .review(let events, let note):
                 review(events, note: note)
+                    .onAppear { model.prepareWatchProposal(existing: watched) }
             case .problem(let message):
                 problem(message)
             case .added(let count):
@@ -91,6 +96,52 @@ struct AddLeadSheet: View {
         }
     }
 
+    // #768: handing over a lead means "I care about these people, keep looking at them", so Overture
+    // proposes to keep watching their calendar. Dan confirms, because the two things it cannot know are
+    // exactly the ones that matter: whether this is a recurring calendar or a touring act's itinerary,
+    // and whether the link is the org's calendar or just one show's page.
+    @ViewBuilder
+    private var watchProposal: some View {
+        switch model.watchVerdict {
+        case .propose:
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                Divider().overlay(OVColor.line)
+                Toggle(isOn: $model.watchThisCalendar) {
+                    Text("Keep watching this calendar")
+                        .font(OVType.body).foregroundStyle(OVColor.ink)
+                }
+                .toggleStyle(.checkbox)
+
+                Text("Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing.")
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if model.watchThisCalendar {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Organization", text: $model.watchOrgName)
+                            .textFieldStyle(.roundedBorder).font(OVType.meta)
+                        TextField("Calendar page", text: $model.watchURL)
+                            .textFieldStyle(.roundedBorder).font(OVType.meta)
+                        Text("This should be their events or season page, not one show. A single show's page never changes again, so watching it would watch nothing.")
+                            .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        case .alreadyWatching(let orgName):
+            Text("Already watching \(orgName)'s calendar, so their shows turn up on their own.")
+                .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+        case .refused(let orgName):
+            // He must SEE this. Silently declining to watch them would look identical to a bug.
+            Text("\(orgName) asked not to be contacted, so Overture won't watch their calendar.")
+                .font(OVType.meta).foregroundStyle(OVColor.rust)
+                .fixedSize(horizontal: false, vertical: true)
+        case .nothingToWatch, .none:
+            EmptyView()
+        }
+    }
+
     private func review(_ events: [ExtractedEvent], note: String?) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             Text(events.count == 1 ? "Found 1 show" : "Found \(events.count) shows")
@@ -119,6 +170,8 @@ struct AddLeadSheet: View {
                 Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            watchProposal
 
             HStack {
                 Spacer()

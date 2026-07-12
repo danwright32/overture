@@ -31,6 +31,24 @@ final class LeadIntakeModel {
     // Whose lead this is, when we had to leave the page Dan pasted (see SourceFetcher.onlyForOrg).
     private var onlyForOrg: String?
 
+    // #768/#802: the calendar behind this lead, which Overture PROPOSES to keep watching.
+    //
+    // Handing over a lead means "I care about these people, keep looking at them", so its calendar should
+    // join the watchlist. But Dan confirms, because two things Overture cannot know are exactly the ones
+    // that matter: whether this is a recurring NYC calendar or a touring act's itinerary (an itinerary is
+    // mostly not in New York and re-reading it daily pays for nothing), and whether the URL is the org's
+    // CALENDAR or just one show's page (a single show's page never changes again, so watching it would
+    // be watching nothing, forever, while reporting as perfectly healthy).
+    var watchThisCalendar = true          // Overture proposes; he unticks it
+    var watchOrgName = ""                 // both editable: a guess shown to him, never written silently
+    var watchURL = ""
+    private(set) var watchVerdict: WatchedSourceProposal.Verdict?
+
+    // What we actually read, kept so the proposal can be built from it.
+    private var readEvents: [ExtractedEvent] = []
+    private var readPageURL: String?
+    private var readVerdict: PageVerdict?
+
     // Injected seams (defaults are the real thing).
     private let fetch: (URL) async throws -> FetchedPage
     private let pin: (FetchedPage, String) throws -> URL
@@ -60,6 +78,27 @@ final class LeadIntakeModel {
         "\(event.title)|\(event.performanceDate ?? "")|\(event.venue ?? "")"
     }
 
+    // #768/#802: work out what to propose watching, and prefill the editable fields with it. Called by
+    // the sheet when it reaches the review step, because only the view can supply the existing sources.
+    //
+    // The proposal is a SUGGESTION. `confirm` re-derives it from the store before writing anything, so a
+    // refused org cannot be re-added even if this went wrong or the UI was somehow stale.
+    func prepareWatchProposal(existing: [WatchedSource]) {
+        guard let pageURL = readPageURL, let verdict = readVerdict else {
+            watchVerdict = nil
+            return
+        }
+        let v = WatchedSourceProposal.verdict(pageURL: pageURL, verdict: verdict,
+                                              events: readEvents, existing: existing)
+        watchVerdict = v
+        if case .propose(let orgName, let listingsURL) = v {
+            if watchOrgName.isEmpty { watchOrgName = orgName }
+            if watchURL.isEmpty { watchURL = listingsURL }
+        } else {
+            watchThisCalendar = false     // nothing to propose, so nothing is ticked
+        }
+    }
+
     var startedAt: Date? {
         if case .working(let at) = phase { return at }
         return nil
@@ -76,6 +115,13 @@ final class LeadIntakeModel {
         urlText = ""
         followedFromNote = nil
         onlyForOrg = nil
+        watchThisCalendar = true
+        watchOrgName = ""
+        watchURL = ""
+        watchVerdict = nil
+        readEvents = []
+        readPageURL = nil
+        readVerdict = nil
     }
 
     func start(now: Date, pollEvery: TimeInterval = 2, giveUpAfter: TimeInterval = RunTimeouts.scoutExtract,
@@ -124,6 +170,7 @@ final class LeadIntakeModel {
                     "I couldn't read that page, so I followed its ticket link and read \(host) instead."
                 onlyForOrg = page.onlyForOrg
             }
+            readPageURL = page.finalURL
             path = try pin(page, sourceId)
         } catch let error as SourceFetchError {
             phase = .problem(error.errorDescription ?? "Couldn't read that page.")
@@ -169,7 +216,8 @@ final class LeadIntakeModel {
                                 giveUpAfter: TimeInterval, sleep: (TimeInterval) async -> Void) async {
         var waited: TimeInterval = 0
         while waited <= giveUpAfter {
-            if let results = readResults(sourceId), results.verdict(for: sourceId) != nil {
+            if let results = readResults(sourceId), let verdict = results.verdict(for: sourceId) {
+                readVerdict = verdict
                 apply(LeadIntake.outcome(from: results, sourceId: sourceId, onlyForOrg: onlyForOrg))
                 return
             }
@@ -185,6 +233,7 @@ final class LeadIntakeModel {
         case .found(let events, let note):
             phase = .review(events, note: [followedFromNote, note].compactMap { $0 }.joined(separator: " "))
             selected = Set(events.map(key(for:)))     // all checked; he unchecks what he doesn't want
+            readEvents = events
         case .foundButUnusable(let rejected, _):
             // NOT "no shows". The page had shows and none has a real venue, which means this source's
             // detail pages are not being read. Naming it is what makes it fixable.
@@ -228,8 +277,44 @@ final class LeadIntakeModel {
         if added > 0, let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             LeadSubmissions.record(url, in: defaults)
         }
+        startWatchingIfConfirmed(in: context)
         phase = .added(added)
         return added
+    }
+
+    // #768: the calendar behind this lead joins the watchlist, so the next show these people put on is
+    // found without Dan having to trip over it.
+    //
+    // The verdict is re-derived from the STORE here, not trusted from the sheet. That is deliberate: the
+    // one mistake in this whole feature that cannot be taken back is re-adding an organization that asked
+    // Dan to stop, and a pasted lead is exactly the route by which it would happen (he pastes a show he
+    // liked, having forgotten they wrote to him last spring). A UI flag is not where that guarantee
+    // belongs. If the fresh verdict is anything but "propose", nothing is written, whatever the sheet
+    // said.
+    private func startWatchingIfConfirmed(in context: ModelContext) {
+        guard watchThisCalendar else { return }
+        guard let pageURL = readPageURL, let pageVerdict = readVerdict else { return }
+
+        let url = watchURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = watchOrgName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty, !name.isEmpty, URL(string: url)?.host != nil else { return }
+
+        let existing = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        // Checked against the page we READ, not against whatever Dan may have typed into the URL field:
+        // the refusal and already-watching rules are about the organization, and a different spelling of
+        // their address must not get past them.
+        guard case .propose = WatchedSourceProposal.verdict(pageURL: pageURL, verdict: pageVerdict,
+                                                            events: readEvents, existing: existing)
+        else { return }
+        // And once more against what he actually typed, so a hand-edited URL cannot land on an org that
+        // is already watched or that refused him.
+        guard case .propose = WatchedSourceProposal.verdict(pageURL: url, verdict: pageVerdict,
+                                                            events: readEvents, existing: existing)
+        else { return }
+
+        context.insert(WatchedSource(sourceId: WatchedSource.newSourceId(for: url), orgName: name,
+                                     listingsURL: url, kind: .html))
+        try? context.save()
     }
 
     // A stable, safe id for the pinned page and the work-list. Derived from the URL so re-pasting the
