@@ -204,8 +204,9 @@ enum ScoutService {
             //
             // An undated listing cannot be judged past, and "date to be confirmed" is a normal state
             // on an org's season page, so it is kept rather than silently dropped.
-            let lastNight = gr.runEndDate ?? gr.row.performanceDate
-            if let lastNight, lastNight < today {
+            let lastNight = EasternDate.runLastNight(runEndDate: gr.runEndDate,
+                                                     performanceDate: gr.row.performanceDate)
+            if EasternDate.runHasPassed(lastNight: lastNight, today: today) {
                 skipped += gr.memberIds.count      // every night accounted for, none silently vanished
                 continue
             }
