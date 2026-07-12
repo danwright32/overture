@@ -317,6 +317,28 @@ final class Recipient {
 
     var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
 
+    // #792: a real contact, with a real address, held back by one of the review guards and waiting on a
+    // single glance from Dan.
+    //
+    // This is NOT the same as "not sendable", and conflating the two is the bug. `isSendablePending` is
+    // false for a contact that is FINISHED (already sent, deliberately suppressed, no address at all)
+    // and equally false for one that is WAITING. SendService reads it to decide the show is contacted,
+    // so a held contact made the whole show read as fully Sent and leave the queue, while that person
+    // never received anything and nothing afterwards surfaced them. The held contact is usually the one
+    // worth emailing: the act's own address, held back by a heuristic Dan only has to look at to dismiss.
+    //
+    // A contact paused because the org REPLIED is deliberately not counted. Nothing is blocking it; Dan
+    // is choosing not to email again while a conversation is live, and nagging him about that would be
+    // nagging him about a thing that is working.
+    var isBlockedAwaitingReview: Bool {
+        guard sendState == .pending, email?.isEmpty == false, !pausedByReply else { return false }
+        return (prospect?.draftNeedsSalutationReview == true && prospect?.isSalutationReviewOverridden != true)
+            || (looksLikeVenue && !looksLikeVenueDismissed)
+            || (looksLikePressContact && !looksLikePressContactDismissed)
+            || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            || isBlockedByDraftLint
+    }
+
     // Deterministic send order. SwiftData to-many relationships are UNORDERED, so the send queue and
     // the manual-send picker must impose a stable order or "the next recipient" (and which address each
     // click sends) would vary run to run. Act/performer contacts go first (mutually exclusive per

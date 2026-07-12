@@ -19,7 +19,14 @@ enum StageNavigation {
         case "Review":
             return prospects.filter { $0.status == .drafted }.map(\.naturalKey)
         case "Send":
-            return prospects.filter { $0.status == .approved && $0.sentAt == nil }.map(\.naturalKey)
+            // #792: a show whose only remaining contact is held by a review guard has usually ALREADY
+            // been sent to somebody else, so it is `.contacted` and would not appear here. That is
+            // precisely how the held contact became invisible: the pill counts it and tapping the pill
+            // took Dan nowhere. The header rule above is the one that matters here, so the two stay in
+            // lockstep: what the pill shows is what tapping it navigates to.
+            return prospects.filter {
+                ($0.status == .approved && $0.sentAt == nil) || $0.blockedContactCount > 0
+            }.map(\.naturalKey)
         default:
             return []
         }
