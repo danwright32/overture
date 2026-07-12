@@ -17,10 +17,30 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     var generatedAt: String
     var results: [ScoutExtractResult]
 
-    // Only the events the run actually attributed to THIS source. An id the app never queued (a key
-    // the run rebuilt instead of echoing) resolves to nothing at all, rather than to somebody else's
-    // events: a silent mismatch must read as absence, never as the wrong show.
+    // The USABLE events this run attributed to THIS source. An id the app never queued (a key the run
+    // rebuilt instead of echoing) resolves to nothing at all, rather than to somebody else's events: a
+    // silent mismatch must read as absence, never as the wrong show.
+    //
+    // The guard is applied HERE, at the boundary, not left as a helper an ingest might forget to call.
+    // Enforcing it by construction is the whole point, because the failure it prevents IS a step being
+    // silently skipped: an event with no real venue (Bargemusic's listings page carries numeric venue
+    // ids) reads as perfectly well-formed and would put the wrong place in an email. See
+    // ExtractedEventGuard.
     func events(for sourceId: String) -> [ExtractedEvent] {
+        rawEvents(for: sourceId).filter(ExtractedEventGuard.isUsable)
+    }
+
+    // What was thrown out, and why, so it can be reported against the source that produced it. A source
+    // that returns six shows and not one venue is a source whose detail pages are not being read: that
+    // is an actionable fact about the SOURCE. Six quietly venue-less prospects would just poison the
+    // queue with emails naming the wrong place.
+    func rejectedEvents(for sourceId: String) -> [RejectedEvent] {
+        rawEvents(for: sourceId).compactMap { event in
+            ExtractedEventGuard.rejection(for: event).map { RejectedEvent(title: event.title, reason: $0) }
+        }
+    }
+
+    private func rawEvents(for sourceId: String) -> [ExtractedEvent] {
         results.first { $0.sourceId == sourceId }?.events.map(\.asExtractedEvent) ?? []
     }
 

@@ -48,6 +48,19 @@ For each item in the work-list:
    page usually carries neither, and Overture needs the venue: it drives classification and the pitch
    itself. Never guess a venue.
 
+   **An event without a real venue is DROPPED.** This is enforced in code (`ExtractedEventGuard`), not
+   merely asked for here, so skipping this step does not produce slightly-worse events: it produces
+   *no* events, and the source is reported as one whose detail pages are not being read.
+
+   The reason is Bargemusic, and it is not hypothetical. Its listings page names no venue at all: each
+   concert carries a numeric venue id. Following the detail page yields "Brooklyn Bridge Park Boathouse
+   at Pier 5, Brooklyn, NY", and the concert is not even on the barge. Take the venue from the listing
+   and every pitch names the wrong place, with nothing downstream able to notice.
+
+   If a detail page genuinely does not name the venue, say so in the `note` and leave `venue` null.
+   Do not invent one, and do not pass through a numeric id, "TBD", or "unknown": all of those are
+   rejected anyway, and an honest null tells Dan the truth about the source.
+
 4. **Judge the page and report one verdict.** This is the part that matters most, because an empty
    event list is ambiguous and all three readings occur in the wild:
 
