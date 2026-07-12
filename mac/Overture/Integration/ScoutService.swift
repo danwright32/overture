@@ -144,6 +144,11 @@ enum ScoutService {
         // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
         // the wall clock. The reconcile already needed today's date; now one value serves both.
         today: String = QueueModel.easternToday(),
+        // #826: whether `events` is a SWEEP of a source's whole feed, which is the only thing that
+        // licenses the reconcile at the bottom of this function to read an absence as a cancellation.
+        // True for the scout. False for a hand-added lead (#799), which reports on the one page Dan
+        // pasted and says nothing whatever about what Carnegie is still listing.
+        reconcilesFeed: Bool = true,
         into context: ModelContext
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
@@ -264,7 +269,16 @@ enum ScoutService {
         // Reconcile stored prospects against this run's feed: mark ones that dropped out (#133).
         // Only when the feed actually returned events: an empty feed is a broken/glitching feed,
         // not "every show cancelled", so it must never accrue misses.
-        if !events.isEmpty {
+        //
+        // #826: and only when `events` is a whole feed in the first place. A hand-added lead (#799)
+        // comes through this same function on purpose, so that blocked dates, the #769 do-not-contact
+        // suppression and the #798 upcoming-only guard all apply to it exactly as they do to a scouted
+        // show. The reconcile is the one stage that must NOT come along: judged against a single pasted
+        // page, every upcoming Carnegie show is "missing" and accrues a miss, and two leads in a row
+        // marked Dan's live, un-cancelled shows as disappeared and hid them from his queue. The health
+        // guard below could not catch it, because a lead confirm passes no baseline and
+        // feedIsTrustworthy trusts any feed it has no baseline to judge against.
+        if reconcilesFeed, !events.isEmpty {
             let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
             // Presence is judged against the RAW feed's listing URLs, not just what we upserted,
             // so a show we filtered out this run (newly blocked date / DNC) isn't mistaken for
