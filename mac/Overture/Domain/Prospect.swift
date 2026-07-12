@@ -221,6 +221,13 @@ final class Prospect {
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
 
+    // #792: contacts on this show held back by a review guard and waiting on Dan. A show can be
+    // genuinely contacted (somebody was emailed) AND still have somebody waiting, and both facts have to
+    // survive at once: the bug was that the first silently erased the second.
+    var blockedContactCount: Int {
+        recipients.filter(\.isBlockedAwaitingReview).count
+    }
+
     // Consecutive scouts where this prospect's source was scouted but it was absent from the
     // feed (#133). Reset to 0 whenever it reappears. Past performances are never counted.
     // Defaulted so existing records migrate cleanly.

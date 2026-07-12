@@ -288,6 +288,19 @@ struct DraftReviewView: View {
             if item.isSent && !item.hasPendingRecipient {
                 Label("Sent", systemImage: "paperplane.fill")
                     .font(OVType.meta).foregroundStyle(OVColor.forest)
+
+                // #792: "Sent" was the whole of it, and a contact held back by a review guard is not
+                // sendable, so the show read as fully done while that person never received anything.
+                // The held contact is usually the one worth emailing (the act's own address, held by a
+                // heuristic Dan need only glance at), so both facts are said at once: it went, AND
+                // somebody is still waiting on him.
+                if item.blockedContactCount > 0 {
+                    let n = item.blockedContactCount
+                    Label("\(n) contact\(n == 1 ? "" : "s") held for a check",
+                          systemImage: "exclamationmark.triangle")
+                        .font(OVType.meta).foregroundStyle(OVColor.gold)
+                        .help("A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email.")
+                }
                 Spacer()
                 if item.isAutoReplied {
                     Button("Not a real reply") { onDismissReply() }

@@ -39,6 +39,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
     // the button must persist until the LAST recipient goes, so it gates on this, not on `isSent`.
     var hasPendingRecipient: Bool = false
+    // #792: contacts on this show held back by a review guard, each waiting on one glance from Dan. A
+    // show can be genuinely Sent AND still have somebody waiting; the bug was that the row said only the
+    // first, so the person waiting vanished with the show.
+    var blockedContactCount: Int = 0
     var sendError: String? = nil
     var lostReason: String? = nil
     var classificationConfidence: String = Confidence.confident.rawValue
@@ -564,6 +568,7 @@ extension QueueItem {
             performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
+            blockedContactCount: p.blockedContactCount,
             sendError: p.sendError,
             lostReason: p.lostReason,
             classificationConfidence: p.classificationConfidence,

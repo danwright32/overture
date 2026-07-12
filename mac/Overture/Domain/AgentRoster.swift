@@ -31,6 +31,11 @@ struct AgentInputs: Sendable {
     var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
     var stuckSends: Int = 0   // #475/#476: claimed .sending, never resolved (outcome unknown)
     var degradedReplyTracking: Int = 0   // #483: sent, but no usable threadId so replies can't be auto-detected
+    // #792: real contacts held back by a review guard (the venue guess, the press contact, the
+    // duplicate, the salutation review, the draft lint), each waiting on one glance from Dan. They used
+    // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
+    // "sendable", so it left the queue and nothing ever surfaced the person still waiting.
+    var blockedContacts: Int = 0
 }
 
 enum AgentRoster {
@@ -96,6 +101,15 @@ enum AgentRoster {
             let n = i.degradedReplyTracking
             return AgentStatus(name: "Send", state: .needsAttention,
                                detail: "\(n) sent but can't be watched for replies: check Gmail")
+        }
+        // #792: a contact held back by a review guard. It ranks BELOW a real failure (a send that failed,
+        // or one whose outcome is unknown, needs Dan's eyes more urgently than a heuristic he only has to
+        // glance at) and ABOVE an ordinary queue of approved sends, because an approved send is waiting on
+        // a click and this one is waiting on a decision he does not yet know he owes.
+        if i.blockedContacts > 0 {
+            let n = i.blockedContacts
+            return AgentStatus(name: "Send", state: .needsAttention,
+                               detail: "\(n) contact\(n == 1 ? "" : "s") held for a check")
         }
         if i.readyToSend > 0 {
             let detail = i.gmailConnected

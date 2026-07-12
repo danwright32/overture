@@ -325,7 +325,11 @@ struct QueueView: View {
             keptToPrep: StageNavigation.naturalKeys(forStage: "Prep", in: prospects).count,
             prepRunning: PrepQueueService.isRunning(now: Date()),
             toReview: StageNavigation.naturalKeys(forStage: "Review", in: prospects).count,
-            readyToSend: StageNavigation.naturalKeys(forStage: "Send", in: prospects).count,
+            // #792: counted directly rather than through StageNavigation, which now also targets shows
+            // whose only remaining contact is HELD by a review guard. Those are a different fact needing
+            // a different sentence ("held for a check", not "ready to send"), and folding them in here
+            // would tell Dan a show is approved and waiting on a click when it is neither.
+            readyToSend: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
             gmailConnected: GmailAuthManager.shared.isConnected,
             sendErrors: prospects.filter { $0.sendError != nil }.count,
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: Date()).count,
@@ -338,7 +342,11 @@ struct QueueView: View {
             },
             degradedReplyTracking: prospects.reduce(0) { sum, p in
                 sum + p.recipients.filter(\.replyTrackingDegraded).count
-            }
+            },
+            // #792: counted across EVERY prospect, not just the ones still in the queue. That is the
+            // whole point: the show a held contact belongs to has usually already left the queue reading
+            // "Sent", which is exactly how the person still waiting became invisible.
+            blockedContacts: prospects.reduce(0) { $0 + $1.blockedContactCount }
         )
     }
 
