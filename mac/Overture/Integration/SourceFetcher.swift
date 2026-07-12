@@ -113,10 +113,18 @@ enum PageNormalizer {
 
     static func normalize(_ html: String) -> String {
         var s = html
+        // `(?s)` is load-bearing, not a flourish: without it `.` does not cross a NEWLINE, so only
+        // single-line scripts were stripped. Real scripts span lines. On a real Wix site that left 32
+        // script blocks intact (246KB of JavaScript instead of 32KB of page), and the run, handed a
+        // quarter-megabyte of code, reasonably reported "no events here". Dan was told his org's page
+        // was not an events page. It was. WE were unreadable, not the site.
+        //
+        // A confident, plausible, WRONG answer from a step that reported success is the worst failure
+        // this system can produce, and the tests missed it because every fixture script fit on one line.
         s = s.replacingOccurrences(
-            of: "<(script|style|noscript|svg|head)[^>]*>.*?</\\1>", with: " ",
+            of: "(?s)<(script|style|noscript|svg|head)[^>]*>.*?</\\1>", with: " ",
             options: [.regularExpression, .caseInsensitive])
-        s = s.replacingOccurrences(of: "<!--.*?-->", with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: "(?s)<!--.*?-->", with: " ", options: .regularExpression)
         s = stripAttributes(from: s)
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,6 +144,52 @@ enum PageNormalizer {
     static func contentHash(_ normalized: String) -> String {
         SHA256.hash(data: Data(contentProjection(normalized).utf8))
             .map { String(format: "%02x", $0) }.joined()
+    }
+
+    // Does this page actually carry anything to read?
+    //
+    // Dan's first real lead was a Wix site (secondendingensemble.com). Once the scripts are stripped,
+    // what remains is a NAVIGATION SHELL: "Home / Our Story / Prior Performances / Upcoming Events /
+    // Contact ... © 2025 ... Proudly created with Wix.com", and nothing else. The shows are drawn by
+    // JavaScript and are simply not in the bytes we fetched.
+    //
+    // The app can see that for itself, and must. Handing a shell to a Claude run spends a minute and an
+    // invocation to be told what we already know, and invites the worst possible outcome: a CONFIDENT
+    // WRONG ANSWER ("no events on this page") about a page that is full of events we cannot see. That
+    // is exactly what happened to Dan, and he was told his org's page was not an events page. It was.
+    //
+    // The rule is deliberately NOT "the text is short". A first cut used a length floor and a test
+    // caught it immediately: a small org with three concerts on its page has less visible text than a
+    // Wix shell has boilerplate, so a length rule would declare REAL sources unreadable. Wrongly
+    // refusing a real page is far worse than wasting a run on a shell.
+    //
+    // A page is only refused when it is BOTH too thin to hold listings AND carries no date of any kind.
+    // Any genuine events page mentions a date somewhere: a month heading, a year, an ISO timestamp. A
+    // JS-drawn shell mentions none, because its content is not there at all. Both conditions together
+    // mean there is simply nothing here to read.
+    static let thinTextFloor = 800
+
+    static func carriesReadableContent(_ normalized: String) -> Bool {
+        let text = visibleText(normalized)
+        if text.count >= thinTextFloor { return true }
+        return mentionsADate(text)
+    }
+
+    private static func mentionsADate(_ text: String) -> Bool {
+        let patterns = [
+            "(?i)\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}\\b",  // "Oct 3"
+            "(?i)\\b(january|february|march|april|may|june|july|august|september|october|november|december)\\b",
+            "\\b20\\d{2}-\\d{2}-\\d{2}\\b",                                                       // ISO
+            "(?i)\\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*day\\b",                                   // "Saturday"
+        ]
+        return patterns.contains { text.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    static func visibleText(_ normalized: String) -> String {
+        normalized
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // Text plus link targets, whitespace-collapsed: the two things a change to the actual listings

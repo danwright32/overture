@@ -65,8 +65,23 @@ enum LeadIntake {
     static let noUpcomingMessage =
         "No upcoming shows on that page. That's normal off-season: the organization may not have announced its next season yet."
 
+    // Honest about WHOSE fault it is, and useful about what to do next.
+    //
+    // The first version said "paste the org's own site instead", which is what Dan HAD pasted: his
+    // ensemble's site draws its calendar with JavaScript, so the shows are not in the bytes we fetch.
+    // Telling him to try the thing he just tried is worse than useless; it implies he did something
+    // wrong. He did not. We are the blind ones, and the message should say so and point somewhere that
+    // can actually work: the venue's own page, or the ticket link, which is usually on the very page we
+    // could not read. (#806 is the real fix: render the page first, the way a browser does.)
     static let unreadableMessage =
-        "I can't read that page (it loads its calendar in a way I can't see, or it's behind a login). Paste the org's own site or the venue's event page instead."
+        "I can't read that page: the site builds its calendar with JavaScript, so the shows aren't in what I download. Nothing's wrong with your link. Try the venue's page for the show, or a ticket link (Eventbrite and the like) if there is one."
+
+    // A DIFFERENT cause needs a different message. Instagram and Facebook do not draw their content
+    // with JavaScript so much as hide it behind a login: a raw fetch returns ~600KB of sign-in page.
+    // Telling Dan his ensemble's site "builds its calendar with JavaScript" when he pasted an Instagram
+    // link would be confidently wrong, which is the exact failure this whole session has been about.
+    static let loginWalledMessage =
+        "I can't read that: it's behind a login, so I only get the sign-in page. Paste the org's own site or the venue's event page instead."
 
     // Hosts we already know we cannot read, so we say so IMMEDIATELY rather than spending a fetch and a
     // Claude run to rediscover a login wall. Verified, not assumed: a raw fetch of a public Instagram

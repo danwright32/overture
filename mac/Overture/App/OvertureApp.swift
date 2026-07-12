@@ -13,6 +13,12 @@ struct OvertureApp: App {
     // any window. The container is handed to it via AppDelegate.sharedContainer below.
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    // #799: whether the Add-a-lead sheet is open. Owned here, not in RootView, because the menu-bar
+    // command below has to reach it: a keyboardShortcut on a Button inside a TOOLBAR MENU renders the
+    // "⌘L" and never registers with the system, so the key did nothing at all (verified with a real
+    // key press in the built app). A menu-bar command registers.
+    @State private var addLead = AddLeadPresenter()
+
     init() {
         let schema = Schema([Prospect.self, Recipient.self])
         var container: ModelContainer? = nil
@@ -72,13 +78,21 @@ struct OvertureApp: App {
     var body: some Scene {
         Window("Overture", id: "main") {
             if let modelContainer {
-                RootView().modelContainer(modelContainer)
+                RootView().modelContainer(modelContainer).environment(addLead)
             } else {
                 StoreUnavailableView(reason: degradedReason ?? "Overture's data is unavailable.")
             }
         }
         .defaultSize(width: 860, height: 720)
         .windowResizability(.contentMinSize)
+        // #799: a REAL menu-bar command, which is the only kind whose keyboard shortcut actually
+        // registers. Also more discoverable than a toolbar menu.
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("Add a Lead...") { addLead.request() }
+                    .keyboardShortcut("l", modifiers: .command)
+            }
+        }
         // #336: the styled in-content wordmark is the app's name; hide the redundant
         // title-bar label so "Overture" doesn't appear stacked twice.
         .windowStyle(.hiddenTitleBar)

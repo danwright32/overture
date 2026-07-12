@@ -80,6 +80,43 @@ struct SourceFetcherTests {
         #expect(page.normalizedHTML.contains("Aurora Strings"))
     }
 
+    // THE BUG DAN HIT ON HIS FIRST REAL LEAD, and the reason it slipped through: every test above uses
+    // a script that fits on ONE LINE. Real scripts do not. NSRegularExpression's `.` does not cross a
+    // newline unless you ask it to, so a multi-line <script> was never stripped at all.
+    //
+    // On secondendingensemble.com (a Wix site) that left 32 script blocks intact: the "normalized" page
+    // was 246KB instead of 32KB, and the run was handed a quarter-megabyte of JavaScript and reasonably
+    // concluded there were no events on it. Dan was told "that doesn't look like an events page". It
+    // was, and the page was fine. WE were unreadable, not the site.
+    //
+    // The failure mode is the worst kind: a confident, plausible, WRONG answer, from a step that
+    // reported success.
+    @Test func aMultiLineScriptIsStrippedToo() {
+        let html = """
+        <html><body>
+        <script>
+          var config = {
+            tracking: "megabytes of this",
+            nonce: "abc123"
+          };
+        </script>
+        <style>
+          .a { color: red }
+        </style>
+        <div>Second Ending Ensemble</div>
+        <a href="/show/1">Oct 3</a>
+        </body></html>
+        """
+        let out = PageNormalizer.normalize(html)
+
+        #expect(!out.contains("megabytes"))          // was: left fully intact
+        #expect(!out.contains("tracking"))
+        #expect(!out.contains("color: red"))
+        #expect(!out.lowercased().contains("<script"))
+        #expect(out.contains("Second Ending Ensemble"))   // and the real content survives
+        #expect(out.contains("Oct 3"))
+    }
+
     // Why the tag structure must survive: Bargemusic prints NO dates at all. Each concert sits in a
     // cell of a month grid and its date is implied by WHICH cell. Strip to plain text and that
     // information is destroyed. Verified on the real page: normalizing this way cut it from ~17,900
@@ -96,6 +133,50 @@ struct SourceFetcherTests {
         #expect(out.contains("<td><div>10</div></td>"))
         #expect(out.contains("11"))
         #expect(out.contains("Immortal Gifts"))
+    }
+
+    // The second half of what Dan hit: secondendingensemble.com is a Wix site, and once the scripts are
+    // correctly stripped, what remains is a NAVIGATION SHELL. Its entire visible text is "Home / Our
+    // Story / Prior Performances / Upcoming Events / Contact ... © 2025 ... Proudly created with
+    // Wix.com". The shows are drawn by JavaScript and are simply not in the bytes we fetched.
+    //
+    // The app can see that for itself, natively, and must: handing this to a Claude run wastes a minute
+    // and a Claude invocation to be told what we already know, and invites a CONFIDENT WRONG ANSWER
+    // ("no events on this page") about a page that is full of events we cannot see.
+    //
+    // So: a page with essentially no readable content is UNREADABLE, and we say so honestly, rather
+    // than blaming the page for not being an events page.
+    @Test func aJavaScriptOnlyShellIsRecognizedAsUnreadableRatherThanEmpty() {
+        let wixShell = """
+        <html><body>
+        <script>window.__INITIAL_STATE__ = {"lots":"of state"};</script>
+        <div><a href="/">Home</a> <a href="/story">Our Story</a>
+        <a href="/upcoming-events">Upcoming Events</a> <a href="/contact">Contact</a></div>
+        <div>© 2025 by Second Ending LLC. Proudly created with Wix.com</div>
+        </body></html>
+        """
+        #expect(!PageNormalizer.carriesReadableContent(PageNormalizer.normalize(wixShell)))
+    }
+
+    // ...and a real page must NOT be mistaken for a shell, or real sources get declared unreadable and
+    // the feature quietly stops working on exactly the small orgs Dan cares about.
+    //
+    // This is the test that killed the first version of the rule. A length floor looked obviously
+    // right, and it would have called THIS page (a small org, three concerts, less text than a Wix
+    // shell has boilerplate) unreadable. Wrongly refusing a real page is far worse than wasting a run
+    // on a shell, so the rule refuses only a page that is BOTH too thin AND mentions no date at all.
+    @Test func aRealPageIsNotMistakenForAShell() {
+        let realCalendar = """
+        <html><body><h1>Concerts for July 2026</h1>
+        <table><tr>
+          <td><div>11</div><h3><a href="/c/a">Immortal Gifts: Mozart and Schubert, works for violin and piano</a></h3></td>
+          <td><div>12</div><h3><a href="/c/b">Complete Beethoven Piano Sonatas with Conversation, Part 2</a></h3></td>
+          <td><div>25</div><h3><a href="/c/c">Vienna Meets Bohemia: Piano Trios of Haydn, Brahms and Dvorak</a></h3></td>
+        </tr></table>
+        <p>All concerts are admission free. Doors open 20 minutes before the concert.</p>
+        </body></html>
+        """
+        #expect(PageNormalizer.carriesReadableContent(PageNormalizer.normalize(realCalendar)))
     }
 
     // The hash is the cost model. A page whose CONTENT has not changed must hash the same even though

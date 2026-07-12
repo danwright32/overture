@@ -27,8 +27,29 @@ struct LeadIntakeModelTests {
                                                          events: events, note: nil)])
     }
 
+    // A page with REAL content in it. It has to be: the model now refuses, natively, to spend a Claude
+    // run on a page whose bytes carry only a navigation shell (the Wix case Dan hit on his first real
+    // lead), so a one-character fixture would be rejected as unreadable and every test below would be
+    // exercising the wrong path.
+    private static let realPageHTML =
+        "<h1>Upcoming concerts</h1>"
+        + "<p>Second Ending Ensemble presents an evening of chamber music at Merkin Hall, with works "
+        + "by Brahms and Dvorak, followed by a conversation with the performers. Doors open at seven "
+        + "and the programme begins at half past. Tickets are available at the box office or online, "
+        + "and members of the ensemble stay afterwards to talk with anyone who would like to.</p>"
+        + "<ul>"
+        + "<li><a href=\"/show/1\">October 3: Piano Trios of Haydn, Brahms and Dvorak, with guests "
+        + "from the orchestra, in the recital hall on the second floor</a></li>"
+        + "<li><a href=\"/show/2\">November 14: Mozart and Schubert, works for violin and piano, "
+        + "an evening built around the late chamber works of both composers</a></li>"
+        + "<li><a href=\"/show/3\">December 5: Complete Beethoven Piano Sonatas with Conversation, "
+        + "Part 2, the second of five evenings running through the spring</a></li>"
+        + "</ul>"
+        + "<p>All concerts begin at half past seven. The hall is fully accessible, and there is a "
+        + "lift to the second floor from the lobby entrance on the street.</p>"
+
     private static func okFetch(_ url: URL) async throws -> FetchedPage {
-        FetchedPage(normalizedHTML: "x", finalURL: url.absoluteString, contentHash: "h")
+        FetchedPage(normalizedHTML: realPageHTML, finalURL: url.absoluteString, contentHash: "h")
     }
 
     private func model(fetch: @escaping (URL) async throws -> FetchedPage = LeadIntakeModelTests.okFetch,
@@ -59,6 +80,9 @@ struct LeadIntakeModelTests {
         await m.start(now: Date())
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
+        // A login wall, NOT a JavaScript-drawn calendar. Two different causes, two different messages:
+        // telling him an Instagram link "builds its calendar with JavaScript" would be confidently wrong.
+        #expect(msg.lowercased().contains("login"))
         #expect(msg.lowercased().contains("paste") || msg.lowercased().contains("instead"))
     }
 
@@ -202,6 +226,70 @@ struct LeadIntakeModelTests {
         guard case .review = second.phase else {
             Issue.record("expected .review (retryable), got \(second.phase)"); return
         }
+    }
+
+    // What Dan hit on his second link: the FIRST run had already written its results and shown him an
+    // answer, but its process was still exiting, so it still held the lock. His next attempt was
+    // refused outright with "a scout-extract run is already in progress. Wait for it to finish."
+    //
+    // That is a dead end dressed as an error. He did the right thing, the app knew what he wanted, and
+    // it told him to go away and try again. A run that is finishing is a reason to WAIT (a few seconds),
+    // not a reason to refuse: the lock exists to stop two runs clobbering one results file, not to stop
+    // Dan queueing his next lead.
+    @Test func aRunThatIsStillFinishingIsWaitedOutRatherThanRefused() async {
+        let event = ScoutExtractEvent(title: "Second Ending Ensemble", presenter: "Second Ending Ensemble",
+                                      venue: "Merkin Hall", performanceDate: "2026-10-03",
+                                      sourceUrl: "https://org.example/a")
+        var attempts = 0
+        let m = model(launch: { _ in
+                          attempts += 1
+                          // Busy for the first two tries, as a run finishes up; free on the third.
+                          if attempts < 3 { throw ScoutExtractService.ExtractLaunchError.alreadyRunning }
+                      },
+                      results: { id in self.results(.upcomingListings, [event], id: id) })
+        m.urlText = "https://org.example/events"
+
+        await m.start(now: Date(), pollEvery: 0, sleep: { _ in })
+
+        guard case .review(let events, _) = m.phase else {
+            Issue.record("expected .review after waiting out the busy run, got \(m.phase)"); return
+        }
+        #expect(events.count == 1)
+        #expect(attempts == 3)          // it waited and retried rather than giving up on the first no
+    }
+
+    // ...but it must not wait FOREVER. A run that is genuinely wedged has to end in something Dan can
+    // act on, not an eternal "still working" that is indistinguishable from progress.
+    @Test func aRunThatNeverFreesTheLockEventuallySaysSo() async {
+        let m = model(launch: { _ in throw ScoutExtractService.ExtractLaunchError.alreadyRunning })
+        m.urlText = "https://org.example/events"
+
+        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 0, sleep: { _ in })
+
+        guard case .problem(let msg) = m.phase else {
+            Issue.record("expected .problem, got \(m.phase)"); return
+        }
+        #expect(msg.lowercased().contains("still") || msg.lowercased().contains("in progress"))
+    }
+
+    // The Wix case, caught natively before a Claude run is spent: a page whose bytes carry only a
+    // navigation shell is UNREADABLE, and says so honestly, rather than being handed to the AI to
+    // produce a confident wrong "no events here" about a page full of events we cannot see.
+    @Test func aJavaScriptOnlySiteIsCalledUnreadableWithoutSpendingARun() async {
+        var launched = false
+        let shell = FetchedPage(
+            normalizedHTML: "<div><a>Home</a><a>Our Story</a><a>Contact</a></div><div>Wix.com</div>",
+            finalURL: "https://www.secondendingensemble.com/", contentHash: "h")
+        let m = model(fetch: { _ in shell }, launch: { _ in launched = true })
+        m.urlText = "https://www.secondendingensemble.com/"
+
+        await m.start(now: Date())
+
+        guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
+        #expect(!launched)                                    // no Claude run spent on a page we cannot read
+        #expect(msg.lowercased().contains("can't read") || msg.lowercased().contains("cannot read"))
+        // And it must NOT blame the page for not being an events page: it IS one; we are the blind ones.
+        #expect(!msg.lowercased().contains("not their events page"))
     }
 
     @Test func confirmingNothingAddsNothing() async throws {
