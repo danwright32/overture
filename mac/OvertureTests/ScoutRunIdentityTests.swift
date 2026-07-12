@@ -106,6 +106,34 @@ struct ScoutRunIdentityTests {
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 2)
     }
 
+    // The DELIBERATE cost of #797's re-key guard, pinned so it is a recorded decision rather than a
+    // surprise later. The URL-rescue path (#132) exists to update a stored show in place when its key
+    // no longer matches, which is what preserves Dan's keep/dismiss. It now demands that the ACT and
+    // the VENUE agree, so a venue that RENAMES itself in the feed no longer rescues: the show is
+    // inserted afresh and the old row is left behind.
+    //
+    // That is the trade Dan chose (2026-07-11), and the reasoning matters more than the assertion: a
+    // duplicate he can SEE beats a stored show silently overwritten by a different act, which is
+    // exactly what the looser URL-only match did on a season page. If this test ever fails because
+    // someone relaxed the guard, re-read #797 before "fixing" it.
+    @Test func aRenamedVenueNoLongerRescuesAndInsertsAfresh() throws {
+        let ctx = ModelContext(try container())
+        let first = [ExtractedEvent(title: "Indianapolis Children's Choir",
+                                    presenter: "Indianapolis Children's Choir", venue: "Weill Recital Hall",
+                                    performanceDate: "2026-10-03", sourceUrl: "https://org.example/show")]
+        _ = ScoutService.apply(events: first, clients: [], history: [], blocked: [], into: ctx)
+
+        // Same show, same listing URL, same date: only the venue's NAME changed in the feed.
+        let renamed = [ExtractedEvent(title: "Indianapolis Children's Choir",
+                                      presenter: "Indianapolis Children's Choir", venue: "Zankel Hall",
+                                      performanceDate: "2026-10-03", sourceUrl: "https://org.example/show")]
+        let outcome = ScoutService.apply(events: renamed, clients: [], history: [], blocked: [], into: ctx)
+
+        #expect(outcome.inserted == 1)      // NOT rescued in place: a new row, and the old one remains
+        #expect(outcome.updated == 0)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 2)
+    }
+
     // Dan's keep/dismiss must survive a re-scout of a shared-URL season. This is the whole reason
     // the upsert exists, and the shared URL is exactly the case where a careless fix (re-keying on
     // the URL) would clobber his decision by pointing two shows at one stored record.
