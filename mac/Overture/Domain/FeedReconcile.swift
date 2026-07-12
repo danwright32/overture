@@ -106,11 +106,14 @@ enum FeedReconcile {
         return hosts.contains { url.contains($0) }
     }
 
-    // Future = any night of the (possibly multi-night) run is today or later. A run whose
-    // opening night has passed but whose end date is still ahead is still a live show.
+    // Future = any night of the (possibly multi-night) run is today or later. A run whose opening
+    // night has passed but whose end date is still ahead is still a live show. #798: the same rule
+    // the scout's import guard applies, so it is defined once (EasternDate.runIsLive) rather than
+    // twice. An undated prospect is not live, so it never accrues misses on a date nobody has.
     private static func isFuture(_ p: Prospect, today: String) -> Bool {
-        let last = p.runEndDate ?? p.performanceDate
-        guard let last else { return false }
-        return last >= today
+        EasternDate.runIsLive(
+            lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
+                                                performanceDate: p.performanceDate),
+            today: today)
     }
 }
