@@ -292,6 +292,30 @@ struct LeadIntakeModelTests {
         #expect(!msg.lowercased().contains("not their events page"))
     }
 
+    // If Overture reads a DIFFERENT page than the one Dan pasted, it has to say so. He pasted his
+    // ensemble's site; the listing came off Lincoln Center's. Silently swapping the page under him would
+    // be exactly the kind of quiet cleverness that makes a tool impossible to trust.
+    @Test func followingATicketLinkIsDisclosedNotDoneQuietly() async {
+        let event = ScoutExtractEvent(title: "Second Ending Ensemble: Mahler 1", presenter: "Second Ending Ensemble",
+                                      venue: "Alice Tully Hall", performanceDate: "2026-10-03",
+                                      sourceUrl: "https://lincolncenter.org/e/1")
+        var page = FetchedPage(normalizedHTML: LeadIntakeModelTests.realPageHTML,
+                               finalURL: "https://lincolncenter.org/venue/alice-tully-hall/second-ending-290",
+                               contentHash: "h")
+        page.followedTicketLinkFrom = "https://www.secondendingensemble.com/single-project-1"
+
+        let m = model(fetch: { _ in page },
+                      results: { id in self.results(.upcomingListings, [event], id: id) })
+        m.urlText = "https://www.secondendingensemble.com/single-project-1"
+
+        await m.start(now: Date())
+
+        guard case .review(_, let note) = m.phase else { Issue.record("expected .review"); return }
+        let text = try! #require(note)
+        #expect(text.contains("lincolncenter.org"))          // names the page it actually read
+        #expect(text.lowercased().contains("ticket link"))   // and says WHY it read that one
+    }
+
     @Test func confirmingNothingAddsNothing() async throws {
         let ctx = try context()
         let event = ScoutExtractEvent(title: "A", presenter: "A", venue: "Merkin Hall",

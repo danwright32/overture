@@ -11,6 +11,9 @@ final class PageStubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var contentType: String? = "text/html; charset=utf-8"
     nonisolated(unsafe) static var finalURL: String? = nil     // set to simulate a redirect
     nonisolated(unsafe) static var transportError: Error? = nil
+    // #806 follow-up: serve DIFFERENT pages for different URLs, so the ticket-link hop (page A links to
+    // page B; B is the one with the listing) can be exercised for real.
+    nonisolated(unsafe) static var bodiesByURL: [String: String] = [:]
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -25,7 +28,8 @@ final class PageStubURLProtocol: URLProtocol {
         if let ct = Self.contentType { headers["Content-Type"] = ct }
         let resp = HTTPURLResponse(url: url, statusCode: Self.status, httpVersion: nil, headerFields: headers)!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Self.body)
+        let body = Self.bodiesByURL[request.url?.absoluteString ?? ""].map { Data($0.utf8) } ?? Self.body
+        client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -33,7 +37,7 @@ final class PageStubURLProtocol: URLProtocol {
 
     static func reset() {
         status = 200; body = Data(); contentType = "text/html; charset=utf-8"
-        finalURL = nil; transportError = nil
+        finalURL = nil; transportError = nil; bodiesByURL = [:]
     }
 }
 
@@ -260,6 +264,78 @@ struct SourceFetcherTests {
 
         #expect(!page.wasRendered)
         #expect(page.normalizedHTML.contains("Home"))
+    }
+
+    // The hop itself, at the fetch level: Dan's real chain, in miniature. His ensemble's show page has
+    // nothing to read (it is a poster IMAGE and a "BUY TIX HERE" button, even after rendering), and that
+    // button points at Lincoln Center, which carries the whole listing.
+    //
+    // THE INFORMATION WAS NEVER ON THE ENSEMBLE'S SITE AT ALL. The link is the lead.
+    @Test func aPageWithNothingToReadFollowsItsTicketLinkToThePageThatHasIt() async throws {
+        PageStubURLProtocol.reset()
+        let ensemble = "https://www.secondendingensemble.com/single-project-1"
+        let lincoln = "https://lincolncenter.org/venue/alice-tully-hall/second-ending-290"
+        PageStubURLProtocol.bodiesByURL = [
+            ensemble: """
+            <html><body><div><a href="/">Home</a></div><img src="poster.jpg">
+            <a href="\(lincoln)">BUY TIX HERE</a>
+            <div>© 2025. Proudly created with Wix.com</div></body></html>
+            """,
+            lincoln: """
+            <html><body><h1>Second Ending Ensemble: Mahler 1 "Titan"</h1>
+            <p>Alice Tully Hall, October 3, 2026 at 7:30pm. The ensemble performs Mahler's first
+            symphony in a chamber arrangement, alongside works written for the group, in a programme
+            running about ninety minutes with one interval. Tickets from the box office.</p></body></html>
+            """,
+        ]
+
+        let page = try await SourceFetcher.fetch(URL(string: ensemble)!, session: stubSession(),
+                                                 render: { _ in "<html><body><img></body></html>" })
+
+        #expect(page.normalizedHTML.contains("Mahler"))                  // we ended up on the right page
+        #expect(page.normalizedHTML.contains("Alice Tully Hall"))
+        #expect(page.finalURL == lincoln)
+        #expect(page.followedTicketLinkFrom == ensemble)                 // and we can SAY so to Dan
+        #expect(PageNormalizer.carriesReadableContent(page.normalizedHTML))
+    }
+
+    // It must not hop from the page it hopped TO: one hop, then stop. A ticketing page that links to
+    // another ticketing page is not an invitation to crawl the internet on Dan's behalf.
+    @Test func theHopHappensOnceAndDoesNotKeepGoing() async throws {
+        PageStubURLProtocol.reset()
+        let a = "https://org.example/show"
+        let b = "https://www.eventbrite.com/e/1"
+        let c = "https://www.ticketmaster.com/e/2"
+        PageStubURLProtocol.bodiesByURL = [
+            a: "<html><body><a href=\"\(b)\">Buy Tickets</a></body></html>",
+            b: "<html><body><a href=\"\(c)\">Buy Tickets</a></body></html>",   // still nothing to read
+            c: "<html><body><h1>The listing nobody should reach</h1></body></html>",
+        ]
+
+        let page = try await SourceFetcher.fetch(URL(string: a)!, session: stubSession(),
+                                                 render: { _ in "<html><body></body></html>" })
+
+        // It hopped to B, found B unreadable too, and STOPPED. It did not chain on to C.
+        #expect(!page.normalizedHTML.contains("nobody should reach"))
+        // And because the hop bought nothing, it keeps the page Dan actually gave us and admits defeat,
+        // rather than substituting a ticketing page that helps him no more than the original did.
+        #expect(page.finalURL == a)
+        #expect(page.followedTicketLinkFrom == nil)
+        #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))
+    }
+
+    // A page with nothing readable and NO ticket link stays honestly unreadable, rather than following
+    // something at random. Reading the wrong page and presenting it as the lead is worse than admitting
+    // we cannot read this one.
+    @Test func withNoTicketLinkThePageStaysHonestlyUnreadable() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("<html><body><div>Home</div><div>Contact</div></body></html>".utf8)
+
+        let page = try await SourceFetcher.fetch(url, session: stubSession(),
+                                                 render: { _ in "<html><body><div>Home</div></body></html>" })
+
+        #expect(page.followedTicketLinkFrom == nil)
+        #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))
     }
 
     // The hash is the cost model. A page whose CONTENT has not changed must hash the same even though
