@@ -384,3 +384,57 @@ The ideal version adds two things this plan defers. First, a headless-browser fa
 ## Grounding
 - Repo readable: True
 - No Supabase schema exists in this project (persistence is a local SwiftData store), so the schema probe reporting unreachable is expected, not a grounding gap.
+
+---
+
+# Dan's decisions on the escalated questions (2026-07-11)
+
+The panel deliberately refused to decide these three. Dan settled them after the run. They are
+binding on the phases below and override anything above that contradicts them.
+
+## 1. A multi-night run already underway: keep the opening-night date, but SAY it is still running
+
+No re-keying forward to the next remaining night (no new matcher, no collision risk with a genuine
+second run by the same act at the same venue). The show keeps its opening-night date.
+
+But it must not simply read as "past". Dan's addition: **make it clear it is a multi-night run.** The
+queue has to surface the run's end date, so a show still running reads as "runs through the 20th"
+rather than looking like a lead that has already gone. `runEndDate` and `partOfRelatedRun` already
+exist on the model (`RunGrouping`), so this is a display requirement, not a data one.
+
+## 2. Extraction cost: pin the model AND strip the page, but VERIFY the strip first
+
+The spike's ~25k input tokens per source is an artifact of sending the entire raw HTML, scripts and
+styles included. The actual event content in those same pages was 558 to 5,565 characters of visible
+text (roughly 150 to 1,400 tokens). Something like 90 to 95 percent of that spend is markup the model
+never needed.
+
+Two levers, both to be applied:
+
+- **Pin extraction to a cheap fast model (Haiku).** Today `prep-run.sh:62` calls `claude -p` with no
+  `--model` flag, so every detached run silently inherits the CLI default. Extraction is a mechanical
+  task with a strict output schema, which is exactly the cheap-model case. Drafting is where an
+  expensive model earns its keep, because voice matters there. Nothing about that distinction was
+  deliberate; it was inherited.
+- **Strip scripts and styles before sending the page.** Roughly 25k tokens down to 2-4k.
+
+**The strip is UNTESTED and must be proven before it is trusted.** The spike's hardest case
+(Bargemusic) prints no dates at all: the model reconstructed them from which CELL OF A TABLE each
+concert sat in. That is structural information, and an over-aggressive strip would destroy exactly
+the case that impressed us. Re-run that case against the stripped input and compare against the known
+ground truth (6 concerts, with the trailing cells correctly dated to August, not July) BEFORE
+adopting it. If the strip breaks it, keep the structure and take the Haiku saving alone.
+
+With both levers a changed source costs roughly 2-4k tokens on a cheap model. The per-run
+`sourceCheckBudget` cap stays as a backstop (default 20 changed sources), but it stops being the
+load-bearing cost control it was written as.
+
+## 3. A refused org still appearing on a watched calendar: make it visible, do not just suppress it
+
+When a presenter asks Dan to stop, their own source comes off the list, but their shows can still
+appear on a VENUE calendar he legitimately keeps watching (Carnegie). The #769 do-not-contact record
+already suppresses each of those, one at a time, so no email can go out.
+
+That protection is real but silent. Dan wants it **visible**: a report of orgs that asked him to stop
+whose shows are still turning up on calendars he watches. On the one mistake that cannot be taken
+back, he would rather see the suppression working than trust that it is.
