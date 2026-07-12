@@ -82,6 +82,22 @@ assert_equals "no Debug instance running yields nothing (the normal first-launch
   "" \
   "$(debug_app_pids "  100 /Applications/Overture.app/Contents/MacOS/Overture")"
 
+# ...and it must EXIT ZERO while doing so. This is not pedantry: the helper ends in `grep | awk`, and
+# a grep that matches nothing exits 1. Its caller (quit_running_debug_instances) runs under
+# `set -euo pipefail`, so that 1 propagates out of the command substitution and kills the whole script
+# BEFORE it builds anything.
+#
+# Which means the one tool whose entire job is "let me actually look at the app" was broken in the
+# COMMON case: a clean start, with no stale instance to quit. It only worked when a stale Debug
+# instance happened to be lying around, which is the case it exists to clean up. Found while trying to
+# look at the #799 Add-a-lead sheet.
+#
+# The assertion above passes even when this is broken, because this file relaxes `set -e` after
+# sourcing. The exit status is the thing that has to be pinned.
+debug_app_pids "  100 /Applications/Overture.app/Contents/MacOS/Overture" >/dev/null
+assert_equals "finding nothing exits 0, so a caller under 'set -e' survives a clean start" \
+  "0" "$?"
+
 # An unrelated process that merely mentions Overture must not be killed.
 assert_equals "ignores an unrelated process that only mentions the app by name" \
   "" \
