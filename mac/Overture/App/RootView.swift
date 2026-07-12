@@ -602,6 +602,51 @@ struct RootView: View {
         }
     }
 
+    // #802: the scout's reading half. The extract run is detached, so without this the pages it read
+    // would sit in a results file nobody opens until the next launch, and Dan's scout would look like it
+    // had found nothing. Mirrors watchPrepRun deliberately: wait for the live run, then ingest at once,
+    // or say plainly that it finished without producing anything.
+    //
+    // A run that finished empty is NOT silence. It is the one shape of failure that would otherwise be
+    // indistinguishable from every watched calendar happening to be quiet.
+    private func watchScoutExtractRun() async {
+        while ScoutExtractService.isRunning(now: Date()) {
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+        }
+        let started = ScoutExtractService.lastRunStartedAt
+        let resultsMod = try? ScoutExtractResultsDecoder.defaultURL
+            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
+        case .producedResults:
+            ingestScoutExtract()
+        case .finishedEmpty:
+            let tail = RunLog.tail(8, from: RunLog.scoutExtractURL)
+            warningMessage = "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
+                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+        case .idle:
+            break
+        }
+    }
+
+    private func ingestScoutExtract() {
+        guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL),
+              let results = try? ScoutExtractResultsDecoder.decode(data) else { return }
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let outcome = ScoutExtractIngest.ingest(
+            results, clients: loaded.clients,
+            history: LocalHistory.forMatching(existing: existing),
+            blocked: ScoutService.mergedBlockedDates(exportBlocked: loaded.blockedDates,
+                                                     localOverride: []),
+            into: context)
+
+        let added = outcome.inserted + outcome.updated
+        scoutSummary = added > 0 ? "\(added) from watched calendars" : "Nothing new on the watched calendars"
+        // A source whose page could not be read is named here, every run, exactly as one that could not
+        // be fetched is. A broken calendar and a quiet one must never look alike.
+        warningMessage = outcome.warning
+    }
+
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
     // a finished draft only surfaced on the NEXT app launch (the bare spinner spun until then). Mirrors
     // watchPrepRun: wait for the live run, then ingest immediately (clearing the per-recipient spinner)
@@ -685,10 +730,24 @@ struct RootView: View {
                 if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
                 if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
                 scoutSummary = parts.joined(separator: " · ")
-                // Surface a scout warning if any: zero events extracted (#27) or a
-                // missing/stale past-client export (#22/#23). Silent degradation is the
-                // thing we are avoiding.
+                // Surface a scout warning if any: a source that couldn't be checked (#802), an
+                // established feed that came back empty (#27), or a missing/stale past-client export
+                // (#22/#23). Silent degradation is the thing we are avoiding.
                 warningMessage = outcome.warning
+
+                // #802: the native half is done and shown. The pages that CHANGED are being read by a
+                // detached run right now, and its results land minutes later, so follow it to completion
+                // and ingest at once. Without this, Dan's scout would report Carnegie's numbers and then
+                // sit on a results file it never opened, and the watched calendars would look empty.
+                //
+                // Dan sees Carnegie immediately and the watched calendars when they land. He is never
+                // shown a total that silently omits half the run.
+                isScanning = false
+                scoutStartedAt = nil
+                if outcome.sources.contains(where: { $0.state == .queuedForReading }) {
+                    await watchScoutExtractRun()
+                }
+                return
             } catch {
                 // A scheduled run failing stays quiet (a status line); a manual run shows
                 // the modal Dan expects after clicking (#77).

@@ -113,6 +113,36 @@ struct ScoutOutcomeWarningTests {
         #expect(o.warning?.localizedCaseInsensitiveContains("save") == true)
     }
 
+    // MARK: - Pages that changed and could not be handed off to be read (#802)
+
+    // The runner not being configured is the first thing Dan will hit, and it MUST be loud. A watchlist
+    // that quietly never reads anything is indistinguishable from one where every calendar is quiet,
+    // and he would go on believing his sources were being watched.
+    @Test func failingToHandOffTheChangedPagesIsSaidOutLoud() {
+        var o = outcome(found: 5, sources: [source(.queuedForReading, id: "org")])
+        o.extractLaunchFailure = "The reader isn't set up yet."
+
+        #expect(o.warning == "The reader isn't set up yet.")
+    }
+
+    // It outranks a per-source failure, because it is the APP that is broken rather than a calendar, and
+    // because it has a one-step fix.
+    @Test func aFailedHandOffOutranksAFailingSource() {
+        var o = outcome(found: 5, sources: [source(.failed(.fetch(.http(404))), id: "bargemusic")])
+        o.extractLaunchFailure = "The reader isn't set up yet."
+
+        #expect(o.warning == "The reader isn't set up yet.")
+    }
+
+    // But a save failure still outranks even that: shows were processed and never persisted.
+    @Test func aSaveFailureStillOutranksAFailedHandOff() {
+        var o = outcome(found: 5)
+        o.extractLaunchFailure = "The reader isn't set up yet."
+        o.saveFailed = true
+
+        #expect(o.warning?.localizedCaseInsensitiveContains("save") == true)
+    }
+
     // MARK: - The healthy run
 
     @Test func withEventsTheClientListWarningPassesThrough() {

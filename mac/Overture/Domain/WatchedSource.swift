@@ -52,6 +52,15 @@ final class WatchedSource {
     // without spending a token to find out what. Defaulted, so existing rows migrate cleanly.
     var hasUnreadChanges: Bool = false
 
+    // The hash of the page we pinned and handed to the extract run, held until that run comes back.
+    //
+    // It has to be remembered, because the results file does not echo it and the ingest happens minutes
+    // later in a different process: by then the live page may have changed again, so re-hashing it would
+    // stamp a hash for bytes nobody ever read. Promoted to `lastContentHash` ONLY by an ingest that
+    // actually saved. A run that dies before reaching this source leaves it set, so the next run picks
+    // the source up again rather than skipping it forever. Defaulted, so existing rows migrate cleanly.
+    var pendingContentHash: String? = nil
+
     // The three UserDefaults keys of the #150/#152 self-heal machinery, per source. A merged
     // multi-source feed count must never feed a shared baseline: one healthy source's big season would
     // mask another source's dead scraper, which is the exact failure this whole model exists to make

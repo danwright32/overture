@@ -32,6 +32,12 @@ enum ScoutService {
         // must never report a total that silently omits half of what it was supposed to check.
         var sources: [SourceResult] = []
 
+        // #802: the run found changed pages and could not hand them off to be read (the runner is not
+        // configured, or a previous run is still going). NOT a per-source failure: those calendars are
+        // healthy and it is the app that cannot read them. Marking them failing would send Dan to debug
+        // twelve working websites.
+        var extractLaunchFailure: String? = nil
+
         var failedSources: [SourceResult] { sources.filter { $0.state.isFailure } }
 
         // The single warning to show after a run, if any. A save failure takes precedence over
@@ -48,9 +54,12 @@ enum ScoutService {
             if saveFailed {
                 return "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
             }
-            // A source that could not be checked is the most actionable thing after a save failure, and
-            // it is named, every run, for as long as it keeps failing. A dead source and a quiet season
-            // must never look alike.
+            // The run found new listings and could not read them. It outranks a per-source failure
+            // because it is the app that is broken, not a calendar, and because it has a one-step fix.
+            if let extractLaunchFailure { return extractLaunchFailure }
+            // A source that could not be checked is the most actionable thing after that, and it is
+            // named, every run, for as long as it keeps failing. A dead source and a quiet season must
+            // never look alike.
             if let failures = failureWarning { return failures }
             if silentlyEmptyFeed {
                 return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
@@ -142,6 +151,13 @@ enum ScoutService {
                          depth: ScoutDepth = .readChanged,
                          extractor: any SourceExtractor = CarnegieExtractor(),
                          fetch: (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
+                         // Injected for the same reason the fetch is: pinning writes a file to the
+                         // handoff directory and launching starts a real Claude run, so a test that used
+                         // the real ones would litter Dan's store and spend his tokens.
+                         pin: (FetchedPage, String) throws -> URL = { try ScoutPagePin.write($0, forSourceId: $1) },
+                         launch: ([ScoutExtractQueueItem]) throws -> Void = {
+                             _ = try ScoutExtractService.startExtract(items: $0, now: Date())
+                         },
                          budget: Int = SourceSchedule.defaultBudget,
                          now: Date = Date(),
                          defaults: UserDefaults = .standard) async throws -> Outcome {
@@ -169,10 +185,32 @@ enum ScoutService {
                                           history: history, blocked: blocked, now: now, into: context))
         }
 
-        // The html sources: fetch, hash, and decide. No AI here, ever: reading a changed page is the next
-        // slice, and it only happens on a run Dan started.
+        // The html sources: fetch, hash, and decide. Nothing is READ here: this loop is free, and it runs
+        // identically on the daily automatic scout and on one Dan started.
+        var toRead: [(source: WatchedSource, page: FetchedPage)] = []
         for source in plan.fetch {
-            outcome.sources.append(await check(source, fetch: fetch, depth: depth, now: now))
+            let (result, page) = await check(source, fetch: fetch, depth: depth, now: now)
+            outcome.sources.append(result)
+            if let page { toRead.append((source, page)) }
+        }
+
+        // ONE batched detached run for every page that changed, never N subprocesses: one hung source
+        // must not be able to block the marker guard or leave a bare indefinite spinner. Only reachable
+        // at `.readChanged`, because `check` only ever hands back a page to read on a run Dan started.
+        //
+        // A failure to LAUNCH is not swallowed, and it is deliberately NOT recorded as a failure of the
+        // sources. The runner not being configured is the first thing Dan will hit, and those twelve
+        // calendars are perfectly healthy: it is the app that cannot read them. Marking them "failing"
+        // would send him to debug twelve working websites. It is a run-level problem, named as one, and
+        // every source keeps its pending hash and its unread flag so the next run reads them all once
+        // the runner is fixed. What must never happen is silence: a watchlist that quietly never reads
+        // anything is indistinguishable from one where every calendar happens to be quiet.
+        if !toRead.isEmpty {
+            do {
+                try queueForReading(toRead, pin: pin, launch: launch)
+            } catch {
+                outcome.extractLaunchFailure = extractLaunchMessage(error)
+            }
         }
 
         // Deferred is a visible state, never silence. A source over budget was NOT checked, and Dan has
@@ -255,11 +293,16 @@ enum ScoutService {
         return outcome
     }
 
-    // One html source: fetch it, hash it, and decide. Never throws, and never reads: reading a changed
-    // page happens only on a run Dan started, and lands in the next slice.
+    // One html source: fetch it, hash it, and decide. Never throws. Returns the page ONLY when this run
+    // is going to read it, so the caller cannot accidentally spend a token on a run Dan did not start.
     private static func check(_ source: WatchedSource,
                               fetch: (URL) async throws -> FetchedPage,
-                              depth: ScoutDepth, now: Date) async -> SourceResult {
+                              depth: ScoutDepth, now: Date) async -> (SourceResult, FetchedPage?) {
+        func result(_ state: SourceResult.State) -> SourceResult {
+            SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
+                         hadBaseline: source.baselineFeedCount > 0)
+        }
+
         guard let listings = source.listingsURL, let url = URL(string: listings) else {
             // A watched source with no usable address cannot be checked, and saying so is the whole
             // point: silence here would be a source Dan believes is being watched and is not.
@@ -267,25 +310,62 @@ enum ScoutService {
             source.lastCheckedAt = now
             source.health = .failing
             source.lastFailure = failure
-            return SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure))
+            return (result(.failed(failure)), nil)
         }
 
-        let result: Result<FetchedPage, SourceFetchError>
+        let fetched: Result<FetchedPage, SourceFetchError>
         do {
-            result = .success(try await fetch(url))
+            fetched = .success(try await fetch(url))
         } catch {
-            result = .failure(fetchError(from: error))
+            fetched = .failure(fetchError(from: error))
         }
 
-        let state: SourceResult.State
-        switch SourceCheck.decide(source: source, result: result, depth: depth, now: now) {
-        case .unchanged:          state = .unchanged
-        case .changedButNotRead:  state = .changedNotRead
-        case .read:               state = .queuedForReading
-        case .failed(let f):      state = .failed(f)
+        switch SourceCheck.decide(source: source, result: fetched, depth: depth, now: now) {
+        case .unchanged:
+            return (result(.unchanged), nil)
+        case .changedButNotRead:
+            return (result(.changedNotRead), nil)
+        case .failed(let f):
+            return (result(.failed(f)), nil)
+        case .read(let page):
+            // Remember the hash of the bytes we are about to hand to the run. It cannot be recomputed at
+            // ingest: that happens minutes later in another process, by which time the live page may have
+            // moved on, and re-hashing would stamp a hash for bytes nobody ever read.
+            source.pendingContentHash = page.contentHash
+            return (result(.queuedForReading), page)
         }
-        return SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
-                            hadBaseline: source.baselineFeedCount > 0)
+    }
+
+    // Pin each changed page to disk and hand the batch to ONE detached run.
+    //
+    // The app fetched and hashed these bytes itself, and the run is pointed at exactly those bytes on
+    // disk. That is what keeps the listing SET (which shows exist, which are gone: the thing that
+    // re-keys prospects and drives the reconcile) determined by what the app hashed, rather than by
+    // whatever a website happened to serve an agent a second later.
+    private static func queueForReading(_ pages: [(source: WatchedSource, page: FetchedPage)],
+                                        pin: (FetchedPage, String) throws -> URL,
+                                        launch: ([ScoutExtractQueueItem]) throws -> Void) throws {
+        let items: [ScoutExtractQueueItem] = try pages.map { source, page in
+            let pinned = try pin(page, source.sourceId)
+            return ScoutExtractQueueItem(sourceId: source.sourceId,
+                                         orgName: source.orgName,
+                                         listingsURL: source.listingsURL,
+                                         pagePath: pinned.path)
+        }
+        try launch(items)
+    }
+
+    // Named, actionable, and never a stack trace. "Runner not configured" is the first thing Dan will
+    // hit and it has a one-step fix, so it must not surface as a Swift error description.
+    private static func extractLaunchMessage(_ error: Error) -> String {
+        switch error {
+        case ScoutExtractService.ExtractLaunchError.runnerUnavailable:
+            return "The reader that pulls listings off a page isn't set up yet, so the pages that changed couldn't be read. See docs/scout-extract-runbook.md. Nothing was lost: they'll be read on the next scout once it's configured."
+        case ScoutExtractService.ExtractLaunchError.alreadyRunning:
+            return "A previous run is still reading pages. The pages that changed will be read on the next scout."
+        default:
+            return "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
+        }
     }
 
     // Anything a source's extractor or fetcher throws that is not already typed is a connectivity
