@@ -64,7 +64,19 @@ For EVERY item in the work-list:
        no_dated_content   it carries no dated listings at all (often the wrong page entirely)
        unreadable         the bytes carry no event data (e.g. a calendar drawn by JavaScript, or a
                           login wall). Say so; do not pretend to have read it.
-  5. Update $PROGRESS after each item: {\"version\":1,\"total\":N,\"completed\":K}.
+  5. PAGINATION: a listings page often carries links to further pages (/P20, /P40, ?page=2). Read the
+     FIRST page only, and say so in that source's note ("page 1 of N; later pages not read"). Do not
+     follow them. It is a deliberate rule, not a gap: the app hashes the bytes of the page it fetched,
+     so what lives beyond them is not part of the set it is reconciling against, and a run that wanders
+     off across an unbounded number of pages is the one that never comes back.
+  6. Update $PROGRESS after each item: {\"version\":1,\"total\":N,\"completed\":K}.
+
+YOU MUST ALWAYS write $RESULTS BEFORE YOU FINISH. This run is DETACHED: nobody is reading your output
+and nobody can answer you. A question is not an output. Never stop to ask which of two things to do:
+decide, do it, and record the decision in that source's `note`. If you are unsure, a result with a
+verdict and an honest note is worth everything, and a question is worth nothing, because the work is
+thrown away and the app is left waiting for a file that never arrives. That has already happened once:
+twenty correctly extracted shows were lost to a question about pagination.
 
 Copy each item's sourceId VERBATIM into its result. Never rebuild it: a reconstructed id matches
 nothing on the way home and the work vanishes silently.

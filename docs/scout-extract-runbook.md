@@ -97,7 +97,25 @@ For each item in the work-list:
    A quiet source and a broken source must never look the same to Dan. The verdict is the only thing
    that tells them apart.
 
-5. **Update the progress file** after each item, so the app can show "3 of 9" rather than a spinner.
+5. **Pagination: read the first page only.** A listings page often links to further pages (`/P20`,
+   `/P40`, `?page=2`). Do not follow them. Read page one and say so in that source's `note` ("page 1 of
+   N; later pages not read"). This is a deliberate rule, not a gap: the app fetched and hashed the bytes
+   of ONE page, and what lies beyond them is not part of the set it reconciles against. A run that
+   wanders off across an unbounded number of pages is the one that never comes back.
+
+6. **Update the progress file** after each item, so the app can show "3 of 9" rather than a spinner.
+
+## The rule that lost twenty shows
+
+**Always write the results file before you finish. A question is not an output.**
+
+This run is DETACHED. Nobody is reading its output and nobody can answer it. On 2026-07-12 it read a
+paginated Kaufman Music Center page, extracted 20 events correctly, and then stopped to ask which of two
+things it should do about the further pages. Nobody was there. It exited having written nothing, twenty
+correct extractions were thrown away, and the app sat polling for a file that would never arrive.
+
+So: never stop to ask. Decide, do it, and record the decision in the `note`. A result with a verdict and
+an honest note is worth everything. A question is worth nothing, because the work does not survive it.
 
 ## The one rule that silently loses work
 
