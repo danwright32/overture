@@ -37,7 +37,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "drafted", status: .drafted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.naturalKeys(forStage: "Prep", in: all)
+        let keys = StageNavigation.naturalKeys(for: .prep, in: all)
         #expect(keys == ["kept-no-draft"])
     }
 
@@ -54,7 +54,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "unflagged-drafted", status: .drafted, hasDraft: true)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = Set(StageNavigation.naturalKeys(forStage: "Prep", in: all))
+        let keys = Set(StageNavigation.naturalKeys(for: .prep, in: all))
         #expect(keys == Set(["kept-no-draft", "flagged-drafted", "flagged-approved"]))
     }
 
@@ -72,7 +72,7 @@ struct StageNavigationTests {
         // which was "upcoming" the day the test was written and is now three weeks past, so a wall-clock
         // default would correctly filter them out and the test would go red for a reason unrelated to its
         // subject. Inject, do not re-date: re-dating fixtures into the future only rots again (#811).
-        let keys = Set(StageNavigation.naturalKeys(forStage: "Scout", in: all, today: "2026-06-01"))
+        let keys = Set(StageNavigation.naturalKeys(for: .scout, in: all, today: "2026-06-01"))
         #expect(keys == Set(["new-1", "new-2"]))
     }
 
@@ -84,7 +84,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "queued", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = Set(StageNavigation.naturalKeys(forStage: "Review", in: all))
+        let keys = Set(StageNavigation.naturalKeys(for: .review, in: all))
         #expect(keys == Set(["drafted-1", "drafted-2"]))
     }
 
@@ -96,18 +96,20 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "drafted", status: .drafted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.naturalKeys(forStage: "Send", in: all)
+        let keys = StageNavigation.naturalKeys(for: .sendApproved, in: all)
         #expect(keys == ["waiting-to-send"])
     }
 
+    // Follow-ups filters no queue rows on purpose: it opens FollowUpsView, which lists the due
+    // recipients itself. #863 replaced the stage NAME with a focus enum, so "Nonsense" is no longer
+    // expressible and needs no test; a stage that resolves nothing, deliberately, still does.
     @MainActor
-    @Test func unknownStageNameReturnsNoKeys() throws {
+    @Test func followUpsResolvesNoQueueKeys() throws {
         let ctx = makeContext()
         _ = prospect(ctx, key: "x", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.naturalKeys(forStage: "Follow-ups", in: all).isEmpty)
-        #expect(StageNavigation.naturalKeys(forStage: "Nonsense", in: all).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .followUps, in: all).isEmpty)
     }
 }
 
@@ -146,7 +148,7 @@ struct PastShowsLeaveTheScoutQueueTests {
         let gone = show("june", date: "2026-06-27")
         let upcoming = show("september", date: "2026-09-19")
 
-        let keys = StageNavigation.naturalKeys(forStage: "Scout", in: [gone, upcoming], today: today)
+        let keys = StageNavigation.naturalKeys(for: .scout, in: [gone, upcoming], today: today)
 
         #expect(keys == ["september"])
     }
@@ -157,7 +159,7 @@ struct PastShowsLeaveTheScoutQueueTests {
     @Test func aRunStillRunningTonightIsStillWaitingOnHim() {
         let running = show("run", date: "2026-07-09", runEnd: "2026-07-20")
 
-        #expect(StageNavigation.naturalKeys(forStage: "Scout", in: [running], today: today) == ["run"])
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [running], today: today) == ["run"])
     }
 
     // An undated show cannot be judged past, and "date to be confirmed" is a normal state on an org's
@@ -165,7 +167,7 @@ struct PastShowsLeaveTheScoutQueueTests {
     @Test func anUndatedShowIsNeverAssumedToHaveHappened() {
         let undated = show("tbc", date: nil)
 
-        #expect(StageNavigation.naturalKeys(forStage: "Scout", in: [undated], today: today) == ["tbc"])
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [undated], today: today) == ["tbc"])
     }
 
     // Only the untriaged ones. A show he already kept or dismissed is not waiting on him whatever its
@@ -173,6 +175,6 @@ struct PastShowsLeaveTheScoutQueueTests {
     @Test func aShowHeAlreadyDecidedOnIsNotWaitingEither() {
         let kept = show("kept", date: "2026-09-19", status: .queued)
 
-        #expect(StageNavigation.naturalKeys(forStage: "Scout", in: [kept], today: today).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [kept], today: today).isEmpty)
     }
 }

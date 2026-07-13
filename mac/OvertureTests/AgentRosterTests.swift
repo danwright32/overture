@@ -66,16 +66,21 @@ struct AgentRosterTests {
     // #475/#476: an interrupted send (crash, or a save that never landed) must outrank even a
     // confirmed failure: Dan doesn't yet know whether it actually went out, so it needs his eyes
     // on Gmail, not just a retry.
+    // #863: counted in SHOWS, and worded in shows, because the number is a promise about how many rows
+    // tapping the pill lands Dan on. Counting the recipients underneath (two unconfirmed sends on one
+    // show) promised him two rows and delivered one.
     @Test func sendFlagsAStuckSendAheadOfAConfirmedFailure() {
         var i = calm; i.stuckSends = 1
         #expect(status("Send", i).state == .error)
-        #expect(status("Send", i).detail == "1 send unconfirmed: check Gmail")
+        #expect(status("Send", i).detail == "1 show with an unconfirmed send: check Gmail")
+        #expect(status("Send", i).focus == .sendStuck)
 
         i.stuckSends = 2
-        #expect(status("Send", i).detail == "2 sends unconfirmed: check Gmail")
+        #expect(status("Send", i).detail == "2 shows with an unconfirmed send: check Gmail")
 
         i.sendErrors = 1   // a stuck send still wins even alongside a confirmed failure
-        #expect(status("Send", i).detail == "2 sends unconfirmed: check Gmail")
+        #expect(status("Send", i).detail == "2 shows with an unconfirmed send: check Gmail")
+        #expect(status("Send", i).focus == .sendStuck)
     }
 
     // #483: a send that went out but came back with no usable threadId can never be watched
@@ -84,10 +89,14 @@ struct AgentRosterTests {
     @Test func sendFlagsDegradedReplyTrackingWhenAThreadIdCouldNotBeRecovered() {
         var i = calm; i.degradedReplyTracking = 1
         #expect(status("Send", i).state == .needsAttention)
-        #expect(status("Send", i).detail == "1 sent but can't be watched for replies: check Gmail")
+        #expect(status("Send", i).detail == "1 show sent, but replies can't be tracked: check Gmail")
+        // #863: these shows are already SENT, so they are neither approved nor holding a blocked
+        // contact. Keyed by the pill's name, the tap resolved the approved queue, which contains none
+        // of them: the pill stated a number and took him nowhere.
+        #expect(status("Send", i).focus == .sendDegraded)
 
         i.degradedReplyTracking = 2
-        #expect(status("Send", i).detail == "2 sent but can't be watched for replies: check Gmail")
+        #expect(status("Send", i).detail == "2 shows sent, but replies can't be tracked: check Gmail")
     }
 
     @Test func stuckSendsAndSendErrorsOutrankDegradedReplyTracking() {
