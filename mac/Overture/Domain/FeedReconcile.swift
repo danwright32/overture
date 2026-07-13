@@ -206,12 +206,34 @@ enum FeedReconcile {
     // cannot be marked gone by the venue alone: the presenter might still be listing it, and we did not
     // ask. A show is gone only when everyone who ever claimed it has been asked and none of them has it.
     private static func everyOwnerWasAskedAndNoneHasIt(_ p: Prospect, believable: Set<String>) -> Bool {
-        // A prospect nobody claims (created by Prep, or predating #800) can never be marked gone: no
-        // source's silence is about it. This guard is load-bearing, not defensive: allSatisfy is
-        // VACUOUSLY TRUE of an empty list, so without it every sourceless prospect would be blamed on
-        // every run and marked gone, which is the exact class of bug this whole phase exists to prevent.
-        guard !p.sourceIds.isEmpty else { return false }
-        return p.sourceIds.allSatisfy(believable.contains)
+        let owners = feedOwners(of: p)
+        // A prospect nobody claims (created by Prep, predating #800, or known only from a page Dan
+        // pasted) can never be marked gone: no source's silence is about it. This guard is load-bearing,
+        // not defensive: allSatisfy is VACUOUSLY TRUE of an empty list, so without it every sourceless
+        // prospect would be blamed on every run and marked gone, which is the exact class of bug this
+        // whole phase exists to prevent.
+        guard !owners.isEmpty else { return false }
+        return owners.allSatisfy(believable.contains)
+    }
+
+    // #888: the sources answerable for whether this show still EXISTS, which is not the same list as the
+    // sources it came FROM.
+    //
+    // `manualId` ("manual") is stamped on every show Dan adds by pasting a link (#799). It has no
+    // WatchedSource row, sweeps nobody's feed, and never files a report, so it could never appear in
+    // `believable`. Left in the owner list it poisoned allSatisfy permanently: a lead-added show was
+    // immune to ever being marked gone, and STAYED immune even after a real watched source began listing
+    // it, because `apply` unions sourceIds on update (#771) and the "manual" element never washed out.
+    //
+    // So it is PROVENANCE (where this show came from) and not OWNERSHIP (whose silence is evidence). A
+    // pasted lead reports on the one page Dan handed us and says nothing whatever about what a venue is
+    // still listing, which is exactly the reasoning that makes #826 structurally impossible.
+    //
+    // A show known ONLY from a pasted lead therefore has no owners at all, and the guard above keeps it
+    // immune. That is #826's protection and it does not regress: this can only ever make a show more
+    // cancellable, and only once a source that genuinely sweeps a feed has claimed it.
+    private static func feedOwners(of p: Prospect) -> [String] {
+        p.sourceIds.filter { $0 != WatchedSource.manualId }
     }
 
     // Future = any night of the (possibly multi-night) run is today or later. A run whose opening
