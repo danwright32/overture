@@ -80,15 +80,74 @@ rules_for() {
         "its final sentence, intact	real, verifiable contacts."
       ;;
     reply-classify-run.sh)
+      # #872: this run answers a real person who wrote back to Dan, and until then it had NO voice skill
+      # and no voice rules: it was inventing his voice from the phrase "in Dan's voice".
       printf '%s\n' \
         "all four intents, intact	interested, wants_to_book, has_question, or declined" \
         "the #438 rule: never ask for what Overture already knows	NEVER ask the contact for the date" \
         "and its positive half: reference them instead	REFERENCE them, never request them" \
+        "the instruction to draft from Dan's one voice definition	dan-wright-brand-voice" \
+        "the rule that the skill is authoritative	skill is AUTHORITATIVE" \
+        "the hard rule that costs him most when broken	no em dashes" \
+        "the hard rule against inventing facts	NO fabrication" \
         "the #119/#249 leak guard on raw past emails	NEVER quote or paraphrase raw past email pairs" \
         "the rule that BOTH ids are echoed, never rebuilt	Copy each item's naturalKey AND recipientId verbatim" \
-        "its final sentence, intact	draft from the runbook's voice rules alone."
+        "its final sentence, intact	the guidance file only ever nudges."
       ;;
   esac
+}
+
+# #872: an instruction the run cannot physically obey.
+#
+# A prompt that says "invoke the dan-wright-brand-voice skill" inside a run whose --allowedTools do not
+# include Skill is not an instruction, it is a wish. The model cannot call the tool, so it does the next
+# best thing and INVENTS the voice, which is indistinguishable from working right up until Dan reads a
+# draft that does not sound like him. The failure is silent by construction, so it has to be caught here.
+assert_tools_can_obey_the_prompt() {
+  local script="$1"
+  local body region
+  body="$(cat "${SCRIPT_DIR}/${script}")"
+  region="$(prompt_region "${script}")"
+
+  if [[ "${region}" != *"skill"* && "${region}" != *"Skill"* ]]; then
+    echo "ok - ${script}: asks for no skill, so it needs no Skill tool"
+    return
+  fi
+  local tools
+  tools="$(printf '%s' "${body}" | grep -o -- '--allowedTools "[^"]*"' | head -1)"
+  if [[ "${tools}" == *"Skill"* ]]; then
+    echo "ok - ${script}: its prompt invokes a skill AND the run is allowed the Skill tool"
+  else
+    fail "${script}: the prompt invokes a skill but the run cannot call one" \
+         "allowedTools is ${tools:-missing}. The model would silently invent Dan's voice instead."
+  fi
+}
+
+# #872: no em dashes anywhere the drafting runs read.
+#
+# Dan's rule is absolute and the brand-voice skill states it: no em dashes, ever. These prompts and
+# runbooks are the instructions for the runs that write in his voice, and a model reads its instructions
+# as a REGISTER as much as a rule list. Telling it "no em dashes" in a document littered with them is the
+# one instruction guaranteed to be undermined by its own delivery.
+#
+# The pattern is built from its BYTES rather than written literally, so this file, which enforces the
+# no-dash rule, does not itself have to contain the characters it forbids. (Dan's pre-push hook checks
+# every changed line for exactly these, and a guard that has to be exempted from the rule it guards is a
+# guard nobody will trust for long.) U+2014 EM DASH, U+2013 EN DASH.
+DASH_CLASS="[$(printf '\xe2\x80\x94\xe2\x80\x93')]"
+
+assert_no_dashes() {
+  local file="$1" label="$2" content
+  # The one exception, and it is not prose: a literal section heading that must match Dan's live
+  # overture-voice-guidance.md byte for byte. Changing it here without changing his file would send the
+  # run looking for a heading that does not exist, which is a real bug in place of a punctuation one.
+  content="$(sed 's/## Dan.s notes (authoritative [^)]*)//' "${file}")"
+  if printf '%s' "${content}" | grep -q "${DASH_CLASS}"; then
+    fail "${label} contains an em or en dash" \
+         "$(printf '%s' "${content}" | grep -n "${DASH_CLASS}" | head -2)"
+  else
+    echo "ok - ${label} carries no dashes for the model to imitate into Dan's emails"
+  fi
 }
 
 for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
@@ -140,6 +199,15 @@ for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
            "bash rewrote the prompt on its way out. Check for backticks, \$( ), or raw double quotes."
     fi
   done < <(rules_for "${script}")
+
+  assert_tools_can_obey_the_prompt "${script}"
+  assert_no_dashes "${SCRIPT_DIR}/${script}" "${script}'s prompt"
+done
+
+# The runbooks are read by the runs too, and the drafting ones are read in order to write in Dan's voice.
+echo "--- the runbooks the runs read"
+for book in prep-runbook.md reply-classify-runbook.md scout-extract-runbook.md; do
+  assert_no_dashes "${SCRIPT_DIR}/../../docs/${book}" "docs/${book}"
 done
 
 if [[ ${FAILURES} -gt 0 ]]; then

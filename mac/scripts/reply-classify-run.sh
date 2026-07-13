@@ -45,26 +45,36 @@ PROMPT="You are the Overture reply-classify + reply-drafter run (v3). Follow $RU
 work-list at $QUEUE. For EVERY item: (1) classify the reply's intent as exactly one of interested,
 wants_to_book, has_question, or declined; (2) DRAFT a short reply in Dan's voice that responds to what
 the contact actually wrote, emitting draftSubject and draftBody. NEVER ask the contact for the date,
-venue, or location (#438): each item carries venue and performanceDate (the show Overture already knows) —
+venue, or location (#438): each item carries venue and performanceDate (the show Overture already knows).
 REFERENCE them, never request them (e.g. 'your March 10 concert at Carnegie Hall', never 'let me know the
-date'). Read Dan's distilled voice guidance at
-$VOICE and apply ONLY those distilled tendencies — NEVER quote or paraphrase raw past email pairs
-(the #119/#249 leak guard). Copy each item's naturalKey AND recipientId verbatim so each result attaches
-to the right contact. Write the complete v3 ReplyClassifyResults JSON (version 3; each result =
-{naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and nothing else to that file.
-If $VOICE is absent, draft from the runbook's voice rules alone.
+date').
+
+#872: Dan's VOICE is defined in exactly one place. Invoke the dan-wright-brand-voice skill and draft from
+it, the same way the Prep run does. This reply goes to a real person who wrote back to him, so it is his
+voice or it is nobody's. The skill is AUTHORITATIVE and wins over everything else here. Its hard rules
+are absolute: no em dashes, contractions throughout, and NO fabrication (never invent a fact about the
+show, the contact, or Dan's availability). Then read his distilled voice guidance at
+$VOICE and apply those tendencies only as secondary nudges, never over the skill, and NEVER quote or
+paraphrase raw past email pairs (the #119/#249 leak guard). Copy each item's naturalKey AND recipientId
+verbatim so each result attaches to the right contact. Write the complete v3 ReplyClassifyResults JSON
+(version 3; each result = {naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and
+nothing else to that file. If $VOICE is absent, draft from the skill alone: it is the authority, and the
+guidance file only ever nudges.
 "
 
 resolve_claude
 
-# Headless Claude Code run; reading the reply text and writing the results is all it needs.
+# Headless Claude Code run. Read (the work-list and the voice guidance), Write (the results), and #872:
+# Skill, so this run can invoke dan-wright-brand-voice. Without that tool the prompt's instruction to use
+# the skill is one the model cannot obey, and it would silently fall back to inventing his voice, which
+# is exactly what it was doing before.
 cd "$PROJECT_DIR"
 # #868: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
 # took the whole script down with it, right here, before anything below could react.
 CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_REPLY_CLASSIFY}" \
-  --allowedTools "Read,Write" || CLAUDE_STATUS=$?
+  --allowedTools "Read,Write,Skill" || CLAUDE_STATUS=$?
 
 # #868: a results file that does not parse is moved aside, so the app reports an empty run instead of
 # failing to decode it in silence. Nothing is invented in its place: a fabricated intent would drive a
