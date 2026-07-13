@@ -57,6 +57,11 @@ struct FetchedPage: Equatable, Sendable {
     // silently shorter sweep is the one failure this feature could add that destroys real data.
     var monthsRead: [String] = []
     var monthsUnread: [String] = []
+    // #900. Months the calendar NAMES and whose links we cannot follow at all, so there was never a page
+    // to fetch or fail. Distinct from `monthsUnread`, which is a month we had a URL for and could not
+    // read: that one may work tomorrow, this one never will until the app learns the shape. Dan can act
+    // on this (paste that month's own link), which he cannot on a 404.
+    var monthsUnreachable: [String] = []
 }
 
 enum SourceFetcher {
@@ -93,14 +98,24 @@ enum SourceFetcher {
               let finalURL = URL(string: landing.finalURL)
         else { return landing }
 
-        let months = CalendarMonthIndex.monthPages(in: landing.normalizedHTML, at: finalURL,
-                                                   now: now, horizon: monthHorizon)
+        let index = CalendarMonthIndex.index(in: landing.normalizedHTML, at: finalURL,
+                                             now: now, horizon: monthHorizon)
         // Not a month calendar. The overwhelmingly common case (a show page, an org's homepage), and it
         // must cost exactly nothing: no extra fetch, no change to the document or its hash.
-        guard months.count > 1 else { return landing }
+        //
+        // `monthsUnreachable` rides along even here, and this is the case it exists for (#900): a calendar
+        // whose month links we cannot follow yields NO pages, comes straight down this path, and is read
+        // one month deep. It is only metadata, so it moves neither the document nor the hash.
+        guard index.pages.count > 1 else {
+            var out = landing
+            out.monthsUnreachable = index.unreachableMonths
+            return out
+        }
 
-        return await stitch(months: months, landing: landing, landingURL: finalURL,
-                            session: session, render: render, now: now)
+        var out = await stitch(months: index.pages, landing: landing, landingURL: finalURL,
+                               session: session, render: render, now: now)
+        out.monthsUnreachable = index.unreachableMonths
+        return out
     }
 
     // Reads each month of the calendar and joins them into ONE document with ONE hash.

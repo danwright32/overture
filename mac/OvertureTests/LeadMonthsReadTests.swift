@@ -42,10 +42,11 @@ struct LeadMonthsReadTests {
                         readResults: { _ in nil })
     }
 
-    private func page(read: [String], unread: [String]) -> FetchedPage {
+    private func page(read: [String], unread: [String], unreachable: [String] = []) -> FetchedPage {
         FetchedPage(normalizedHTML: Self.calendarHTML,
                     finalURL: "https://www.kaufmanmusiccenter.org/mch/calendar/",
-                    contentHash: "h", monthsRead: read, monthsUnread: unread)
+                    contentHash: "h", monthsRead: read, monthsUnread: unread,
+                    monthsUnreachable: unreachable)
     }
 
     private func start(_ m: LeadIntakeModel) async {
@@ -81,5 +82,44 @@ struct LeadMonthsReadTests {
         await start(m)
 
         #expect(m.monthsNote == nil)
+    }
+
+    // #900. THE CASE THAT SAID NOTHING AT ALL. The calendar's month links are a shape we cannot follow
+    // (a query, a fragment, an opaque next), so there was never a page to fetch and never one to fail.
+    // Nothing went wrong anywhere, and Dan was handed one month of a four month season.
+    //
+    // Which is indistinguishable, on the sheet, from a hall with a quiet autumn. So it is named.
+    @Test func aCalendarWeCannotPageThroughSaysSoRatherThanLookingQuiet() async {
+        let m = model(page(read: [], unread: [], unreachable: ["2026-08", "2026-09", "2026-10"]))
+        await start(m)
+
+        let note = try! #require(m.monthsNote)
+        #expect(note.contains("August 2026"))
+        #expect(note.contains("October 2026"))
+        #expect(note.lowercased().contains("calendar"))
+    }
+
+    // ...and it is ACTIONABLE. A month whose link we cannot follow is not a dead end for Dan the way a
+    // 404 is: that month's page is right there on the site, and he can paste it himself. Telling him a
+    // month is missing without telling him what to do about it just makes him feel worse.
+    @Test func heIsToldWhatHeCanDoAboutAMonthWeCannotReach() async {
+        let m = model(page(read: [], unread: [], unreachable: ["2026-10"]))
+        await start(m)
+
+        #expect(m.monthsNote?.lowercased().contains("paste") == true)
+    }
+
+    // The two shortfalls are DIFFERENT and must not be collapsed into one sentence. October 404'd (it may
+    // well work tomorrow); November's link is a shape we cannot follow (it never will, until the app
+    // learns it). Only one of them is worth Dan pasting a link for.
+    @Test func aMonthThat404edAndAMonthWeCannotReachAreToldApart() async {
+        let m = model(page(read: ["2026-07", "2026-08"], unread: ["2026-10"], unreachable: ["2026-11"]))
+        await start(m)
+
+        let note = try! #require(m.monthsNote)
+        #expect(note.lowercased().contains("couldn't read"))
+        #expect(note.contains("October 2026"))
+        #expect(note.contains("November 2026"))
+        #expect(note.range(of: "October 2026")!.lowerBound < note.range(of: "November 2026")!.lowerBound)
     }
 }
