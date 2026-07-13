@@ -483,6 +483,11 @@ enum ScoutService {
         var baseline: Int
         var successfulCheckCount: Int
         var verdict: PageVerdict = .upcomingListings
+        // #887: events this run threw away (no venue, so their detail page was never read). A run that
+        // dropped shows may still ADD and UPDATE, but its silence about a show is not evidence the show
+        // was cancelled. Defaulted to a clean sweep, so a caller that does not know cannot accidentally
+        // claim one.
+        var rejectedCount: Int = 0
     }
 
     // Application of already-extracted events with injected data, so the full
@@ -652,7 +657,8 @@ enum ScoutService {
                 feedCount: events.count,
                 baseline: feed.baseline,
                 successfulCheckCount: feed.successfulCheckCount,
-                verdict: feed.verdict)
+                verdict: feed.verdict,
+                rejectedCount: feed.rejectedCount)
             FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
         }
         // Several shows by the same org become ONE line with a count. Four separate lines saying the

@@ -67,10 +67,17 @@ enum ScoutExtractIngest {
             // watchlist at all.
             let applied = ScoutService.apply(
                 events: events, clients: clients, history: history, blocked: blocked,
+                // #887: the events this run THREW AWAY are handed over with the ones it kept. They were
+                // rejected for having no venue, which almost always means their own detail page was never
+                // read, so this run does not know what else it failed to reach. It may add and update; it
+                // may not conclude that anything was cancelled. Available here all along
+                // (rejectedEvents(for:) existed for exactly this) and consumed only by the lead sheet,
+                // which is why the scout could quietly mark Dan's live shows gone.
                 feed: ScoutService.FeedCheck(sourceId: source.sourceId,
                                              baseline: health.baseline,
                                              successfulCheckCount: source.successfulCheckCount,
-                                             verdict: result.verdict),
+                                             verdict: result.verdict,
+                                             rejectedCount: results.rejectedEvents(for: source.sourceId).count),
                 today: today, sourceIds: [source.sourceId], into: context)
             outcome.merge(applied)
 

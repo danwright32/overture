@@ -90,11 +90,29 @@ enum FeedReconcile {
         var baseline: Int
         var successfulCheckCount: Int
         var verdict: PageVerdict
+        // #887: how many events this run THREW AWAY (ExtractedEventGuard rejected them, almost always
+        // because their detail page was never read, so they carry no venue). Defaulted, because a caller
+        // that does not know is a caller reporting a clean sweep, and every existing one is.
+        var rejectedCount: Int = 0
 
         // Whether this source's SILENCE about a show can be believed. That is a far higher bar than
         // whether it can be believed about what it CAN see (`seenKeys`, always believed). Four ways a
         // source that genuinely ran still has nothing to say about a show being absent:
         var absenceIsEvidence: Bool {
+            // #887: this run threw events away. They were rejected for having no venue, which almost
+            // always means their own detail page was never read, and a run that failed to read some
+            // detail pages does not know how many OTHERS it silently failed to reach. Its silence about
+            // a show is therefore worth nothing.
+            //
+            // The degradation guard below cannot cover this, and that is the whole point of a separate
+            // check rather than trusting it: minHealthyFraction is 0.5, so a run that read only 60 of a
+            // source's 80 shows still reports 75% of baseline and sails straight through. Losing one
+            // quarter of a source is the single most likely partial failure and the one #150 cannot see.
+            //
+            // Strict zero, deliberately. A source with one perpetually venue-less listing will never
+            // cancel anything, and that is the right way round: a show left in Dan's queue is a nuisance,
+            // and a live show he has already emailed being marked gone is not.
+            guard rejectedCount == 0 else { return false }
             // A quiet off-season, an unreadable page, or a page with no dated content tells us nothing
             // about whether any particular show was cancelled.
             guard verdict == .upcomingListings else { return false }
