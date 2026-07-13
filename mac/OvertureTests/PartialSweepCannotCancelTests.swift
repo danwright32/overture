@@ -49,10 +49,40 @@ struct PartialSweepCannotCancelTests {
         #expect(r.absenceIsEvidence)   // <- the hole #887 closes
     }
 
-    // A single dropped event is still a run whose detail pages were not fully read. It says nothing about
-    // how many OTHER shows it silently failed to reach, so it does not get to cancel anything either.
-    @Test func evenOneDroppedEventWithholdsTheRightToCancel() {
-        #expect(report(feedCount: 79, baseline: 80, rejected: 1).absenceIsEvidence == false)
+    // Dan's call (2026-07-13), replacing the strict zero this shipped with. A small number of dropped
+    // events is normal and permanent on a real calendar: a "venue TBA" listing has no venue and never
+    // will, and under a strict zero such a source could NEVER mark anything cancelled, ever, and nothing
+    // would say so. That is the "rule that silently never fires" problem (#888) built in on purpose.
+    //
+    // So a SMALL fraction is tolerated. One TBA listing among 79 real ones tells us nothing is wrong.
+    @Test func oneStrayDropOnABigCalendarStillCancelsNormally() {
+        #expect(report(feedCount: 79, baseline: 80, rejected: 1).absenceIsEvidence)
+    }
+
+    // The boundary, pinned. At the threshold it is still trusted; past it, it is not.
+    @Test func theToleranceEndsExactlyWhereItSaysItDoes() {
+        // 1 of 20 = 5.0%, exactly at the line.
+        #expect(report(feedCount: 19, baseline: 20, rejected: 1).absenceIsEvidence)
+        // 2 of 20 = 10%, past it.
+        #expect(report(feedCount: 18, baseline: 20, rejected: 2).absenceIsEvidence == false)
+    }
+
+    // THE original bug must still be caught. 20 of 80 dropped is 25%, far past the tolerance, and this is
+    // the case the #150 guard could not see (60 of 80 is 75% of baseline, comfortably "healthy").
+    @Test func theToleranceIsNowhereNearWideEnoughToLetTheOriginalBugBack() {
+        #expect(report(feedCount: 60, baseline: 80, rejected: 20).absenceIsEvidence == false)
+    }
+
+    // A small source is still effectively strict, and that is correct rather than a wart: on a six-show
+    // calendar, ONE unread detail page means a sixth of everything we know about that source is missing.
+    @Test func aSmallSourceIsStillStrictBecauseOneDropIsALotOfIt() {
+        #expect(report(feedCount: 5, baseline: 6, rejected: 1).absenceIsEvidence == false)
+    }
+
+    // A run that returned NOTHING but rejects is not a 100%-rejected sweep to be reasoned about, it is a
+    // broken run. It may not cancel anything.
+    @Test func aRunThatDroppedEverythingCancelsNothing() {
+        #expect(report(feedCount: 0, baseline: 80, rejected: 80).absenceIsEvidence == false)
     }
 
     // The healthy path must keep working, or this guard would quietly turn the reconcile off entirely,
