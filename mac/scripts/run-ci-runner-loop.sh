@@ -36,6 +36,12 @@ RETRY_DELAY=30
 LIVENESS_INTERVAL="${OVERTURE_CI_LIVENESS_INTERVAL:-60}"
 LIVENESS_STRIKES="${OVERTURE_CI_LIVENESS_STRIKES:-3}"
 
+# How often to check whether run.sh is simply DONE, which is the normal path and costs nothing to
+# look at. Kept far shorter than the probe interval on purpose: the supervisor must not make a
+# healthy run slower. Checking GitHub every 60s is right; noticing a finished job only every 60s
+# left the runner idle and unavailable for ~50s after every single job (seen live, 2026-07-13).
+LIVENESS_TICK="${OVERTURE_CI_LIVENESS_TICK:-5}"
+
 log() {
   echo "$(date -u +%FT%TZ) $1"
 }
@@ -84,10 +90,16 @@ is_zombie() {
 # Wait for run.sh, but never forever. Returns 0 if it exited on its own (the normal path: one job
 # done), 1 if it was killed as a zombie.
 supervise_run() {
-  local pid="$1" strikes=0 state
+  local pid="$1" strikes=0 state since_probe=0
   while kill -0 "${pid}" 2>/dev/null; do
-    sleep "${LIVENESS_INTERVAL}"
+    sleep "${LIVENESS_TICK}"
     kill -0 "${pid}" 2>/dev/null || break     # it finished while we slept: the normal path
+
+    # The cheap check runs on every tick; the API call only on the probe interval. Conflating the two
+    # is what left the runner idle for ~50s after every job.
+    since_probe=$((since_probe + LIVENESS_TICK))
+    (( since_probe < LIVENESS_INTERVAL )) && continue
+    since_probe=0
 
     state="$(runner_state)"
     strikes="$(next_strikes "${state}" "${strikes}")"
