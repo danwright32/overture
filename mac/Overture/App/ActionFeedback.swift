@@ -11,20 +11,43 @@ import SwiftData
 final class ActionFeedback {
     enum Tone { case info, warning }
 
+    // #845: an acknowledgment that can be TAKEN BACK. "Stopped watching Bargemusic. [Undo]".
+    //
+    // Optional and defaulted, so every existing call site is unchanged: almost nothing needs this, and a
+    // banner that offered an action on every message would train Dan to ignore the one that matters.
+    struct Action {
+        let label: String
+        let perform: () -> Void
+    }
+
     private(set) var message: String?
     private(set) var tone: Tone = .info
+    private(set) var action: Action?
     // Bumped on every acknowledge (even a repeat of the same text) so the banner can restart its
     // auto-dismiss timer by keying a .task on it.
     private(set) var revision = 0
 
-    func acknowledge(_ message: String, tone: Tone = .info) {
+    // The action is REPLACED on every acknowledgment, never merely overwritten when a new one supplies
+    // its own. An Undo that outlived its own message would be inherited by the next one, and a button
+    // labelled "Undo" sitting under "Follow-up sent to Aurora Strings" would silently resume a source Dan
+    // stopped ten minutes ago. It belongs to the sentence it came with, and dies with it.
+    func acknowledge(_ message: String, tone: Tone = .info, action: Action? = nil) {
         self.message = message
         self.tone = tone
+        self.action = action
         revision += 1
     }
 
     func clear() {
         message = nil
+        action = nil
+    }
+
+    // How long the banner stays up. A message offering Dan a DECISION has to outlast a glance: 3.2
+    // seconds is right for "Sent" (which asks nothing of him) and useless for an Undo he has to notice,
+    // read, and reach for. Here rather than in the banner view, where no test could reach it (#863/#885).
+    static func dismissAfter(hasAction: Bool) -> TimeInterval {
+        hasAction ? 10 : 3.2
     }
 }
 
@@ -145,6 +168,18 @@ enum ActionAck {
     static func recipientRemoved(name: String?, org: String) -> String {
         let who = (name?.isEmpty == false) ? name! : "the contact"
         return "Removed \(who) from \(org)."
+    }
+
+    // #845: stopping a source is fully reversible, and the button gave no sign of it. Says what was kept,
+    // because that is the part that makes the click safe to make: nothing is destroyed, the row and its
+    // feed history stay, and it can be watched again whenever Dan likes. The Undo beside this sentence is
+    // the immediate way back; the "Watch again" button on the row is the one that never expires.
+    static func stoppedWatching(org: String) -> String {
+        "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
+    }
+
+    static func resumedWatching(org: String) -> String {
+        "Watching \(org) again."
     }
 }
 

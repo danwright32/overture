@@ -43,6 +43,54 @@ struct ActionFeedbackTests {
         f.clear()
         #expect(f.message == nil)
     }
+
+    // MARK: - An acknowledgment that can be taken back (#845)
+
+    @Test("an acknowledgment can carry an action, and running it does what it says")
+    func actionRuns() {
+        let f = ActionFeedback()
+        var undone = false
+        f.acknowledge("Stopped watching Bargemusic",
+                      action: .init(label: "Undo") { undone = true })
+
+        #expect(f.action?.label == "Undo")
+        f.action?.perform()
+        #expect(undone)
+    }
+
+    // THE STALE UNDO, which is the way this goes wrong and quietly does real damage.
+    //
+    // The banner is one shared surface. If an Undo outlived the message it belonged to, the next
+    // acknowledgment (a send, a save failure) would inherit it, and a button labelled "Undo" sitting under
+    // "Follow-up sent to Bargemusic" would silently resume a source Dan stopped ten minutes ago. Every
+    // acknowledgment replaces the action, and an acknowledgment with no action HAS no action.
+    @Test("a later acknowledgment never inherits the previous one's action")
+    func actionNeverOutlivesItsMessage() {
+        let f = ActionFeedback()
+        f.acknowledge("Stopped watching Bargemusic", action: .init(label: "Undo") {})
+        f.acknowledge("Follow-up sent to Aurora Strings")
+
+        #expect(f.action == nil)
+    }
+
+    @Test("clear removes the action too")
+    func clearResetsTheAction() {
+        let f = ActionFeedback()
+        f.acknowledge("Stopped watching Bargemusic", action: .init(label: "Undo") {})
+        f.clear()
+
+        #expect(f.action == nil)
+    }
+
+    // An undoable message has to outlast a glance. The banner's normal life is 3.2 seconds, which is fine
+    // for "Sent" (which asks nothing of Dan) and far too short for one offering him a decision. The rule
+    // lives here rather than in the banner view, where no test could reach it (#863/#885).
+    @Test("a message offering an action stays up long enough to use it")
+    func anUndoableMessageStaysLonger() {
+        #expect(ActionFeedback.dismissAfter(hasAction: true)
+                > ActionFeedback.dismissAfter(hasAction: false))
+        #expect(ActionFeedback.dismissAfter(hasAction: true) >= 8)
+    }
 }
 
 @Suite("Action acknowledgment copy (#285)")

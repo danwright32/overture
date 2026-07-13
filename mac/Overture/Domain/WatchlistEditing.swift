@@ -68,6 +68,33 @@ enum WatchlistEditing {
         try? context.save()
     }
 
+    // #845: the way back, in place.
+    //
+    // Reversing a stop was already possible and graceless: retype the org name and the URL into the add
+    // form, which matches the row by host and revives it. Dan could not see that from the button he had
+    // just clicked, so a fully reversible action read as a permanent one, and he hesitated over the one
+    // action #802's design expects him to take (a failing source NEVER auto-deactivates, precisely so that
+    // removing it stays his deliberate choice).
+    //
+    // This is the same revival, reached by identity rather than by retyping a URL, so an Undo in the
+    // banner and a "Watch again" button on the row can both offer it.
+    //
+    // The refusal is re-checked HERE, not left to the sheet that draws the buttons. The Sources sheet only
+    // offers them on a source Dan stopped himself, which is correct and is not the point: an org that
+    // asked him to stop must be unable to return to the watchlist BY ANY ROUTE, and a guarantee that lives
+    // in a view is a guarantee that lasts until the next view. This is the one mistake here that cannot be
+    // taken back, because it ends with somebody being emailed who asked not to be.
+    @discardableResult
+    static func resumeWatching(_ source: WatchedSource, in context: ModelContext) -> Result {
+        if source.isActive { return .alreadyWatching(orgName: source.orgName) }
+        guard source.inactiveReason != .orgRefusal else { return .refused(orgName: source.orgName) }
+
+        source.isActive = true
+        source.inactiveReason = nil
+        try? context.save()
+        return .resumed
+    }
+
     private static func sameHost(_ urlString: String?, as other: String) -> Bool {
         func host(_ s: String?) -> String? {
             guard let s, let h = URL(string: s)?.host?.lowercased() else { return nil }

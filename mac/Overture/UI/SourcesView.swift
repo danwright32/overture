@@ -11,6 +11,7 @@ import SwiftData
 struct SourcesView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(ActionFeedback.self) private var feedback
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
 
     // #802: the sheet is where the watchlist is MANAGED, because it was previously the only place it
@@ -47,6 +48,9 @@ struct SourcesView: View {
         }
         .frame(width: 560)
         .background(OVColor.canvas)
+        // #845: its own banner. A sheet is a separate window on macOS, so the one on the main view cannot
+        // cover it, and the Undo this sheet offers would have been drawn behind it (#285).
+        .actionFeedbackBanner()
     }
 
     private var header: some View {
@@ -86,6 +90,31 @@ struct SourcesView: View {
         }
         .padding(OVSpacing.md)
         .background(OVColor.surfaceSunk)
+    }
+
+    // #845: stopping says what it did AND offers the way back, in the same breath. The Undo is the
+    // immediate correction (a mis-click Dan sees at once); the "Watch again" button on the row is the one
+    // that never expires, because a banner he looked away from is a banner he did not read.
+    private func stopWatching(_ source: WatchedSource) {
+        WatchlistEditing.stopWatching(source, in: context)
+        feedback.acknowledge(ActionAck.stoppedWatching(org: source.orgName),
+                             action: .init(label: "Undo") { resumeWatching(source) })
+    }
+
+    private func resumeWatching(_ source: WatchedSource) {
+        // The result is not ignored: a refusal must never pass silently as though it worked. The sheet
+        // only draws these controls on a source Dan stopped himself, so this should be unreachable, and
+        // "should be unreachable" is exactly the kind of claim that turns into a source quietly back on
+        // the watchlist that asked not to be.
+        switch WatchlistEditing.resumeWatching(source, in: context) {
+        case .resumed, .alreadyWatching:
+            feedback.acknowledge(ActionAck.resumedWatching(org: source.orgName))
+        case .refused(let orgName):
+            feedback.acknowledge("\(orgName) asked not to be contacted, so Overture won't watch them again.",
+                                 tone: .warning)
+        case .added, .invalidURL, .needsName:
+            break
+        }
     }
 
     private func addSource() {
@@ -222,11 +251,40 @@ struct SourcesView: View {
                 HStack {
                     Spacer()
                     Button {
-                        WatchlistEditing.stopWatching(source, in: context)
+                        stopWatching(source)
                     } label: {
                         Text("Stop watching")
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkSoft)
+                            .padding(.horizontal, OVSpacing.sm)
+                            .padding(.vertical, 4)
+                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            }
+
+            // #845: the way back, on the row itself.
+            //
+            // Stopping was always reversible (the row, its feed history and the source id stamped on every
+            // prospect it ever surfaced all survive), but the only route back was to retype the org name
+            // and the URL into the add form, and nothing on this sheet said even that. So a reversible
+            // action read as a permanent one, and #802 rests on Dan being willing to take it: a failing
+            // source is never auto-deactivated, precisely so that removing it stays his deliberate choice.
+            //
+            // ONLY on a source Dan stopped himself. An org that asked him to stop is a different section
+            // and a different state, and it never gets this button. WatchlistEditing.resumeWatching
+            // enforces that too, because a guarantee that lives in a view lasts until the next view.
+            if SourceGrade(source) == .removed {
+                HStack {
+                    Spacer()
+                    Button {
+                        resumeWatching(source)
+                    } label: {
+                        Text("Watch again")
+                            .font(.system(size: 11))
+                            .foregroundStyle(OVColor.forest)
                             .padding(.horizontal, OVSpacing.sm)
                             .padding(.vertical, 4)
                             .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
