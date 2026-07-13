@@ -83,6 +83,11 @@ final class WatchedSource {
 
     var pageCount: Int
     var addedAt: Date
+    // #875: the last run's own account of this source, verbatim, as it wrote it. Kept whole (sentence
+    // AND log tail); SourceNote decides which half Dan reads where.
+    //
+    // This field already existed and was dead: declared, set to nil, never read or written. It is the
+    // note, so it becomes the note, rather than a second field doing the same job beside it.
     var notes: String?
 
     // The line the Sources sheet shows, or nothing when this source read everything. Decided beside the
@@ -91,6 +96,11 @@ final class WatchedSource {
     var readabilityNote: String? {
         SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount)
     }
+
+    // #875: what the run itself said about this source, in words, and the raw log behind it. Same rule as
+    // above: decided here, never in the view.
+    var runNote: String? { SourceNote.summary(notes) }
+    var runNoteDetail: String? { SourceNote.detail(notes) }
 
     init(sourceId: String, orgName: String, listingsURL: String? = nil, kind: SourceKind,
          addedAt: Date = Date()) {
