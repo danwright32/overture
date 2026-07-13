@@ -124,8 +124,11 @@ struct SourcesView: View {
             }
             .foregroundStyle(grade.isBroken ? OVColor.rust : OVColor.ink)
 
-            Text(grade.explanation).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
+            // #841: only where it says something the heading and the sheet's subtitle do not.
+            if let explanation = grade.explanation {
+                Text(explanation).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VStack(spacing: 0) {
                 ForEach(rows) { source in
@@ -158,11 +161,18 @@ struct SourcesView: View {
             // report "checked an hour ago" for weeks while nobody has looked at what is on it. That is
             // the design, but invisible it becomes a leak: shows sitting unread on a calendar that
             // reports as perfectly healthy.
+            //
+            // #840: said only when it adds something. Read in the same run that checked it (a native
+            // feed, or any source a scout just read) is one event, and Dan's Carnegie row described it
+            // twice: "Checked 8 hours ago", then "Read 8 hours ago". Repetition teaches him to skim, and
+            // the state this exists to surface is the one line here he must never skim past.
             let readState = SourceReadState.of(source)
-            Text(readState.label)
-                .font(.system(size: 11))
-                .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)
-                .fixedSize(horizontal: false, vertical: true)
+            if readState.isWorthShowing(lastCheckedAt: source.lastCheckedAt) {
+                Text(readState.label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // A named failure, never a bare "broken". A source Dan cannot act on is a source he will
             // learn to ignore.
@@ -174,9 +184,30 @@ struct SourcesView: View {
             // A permanently dead source needs a way out that is DAN'S choice, or a failing source would
             // be reported at him every run forever with nothing he could do about it. Recorded as his
             // decision, never as a refusal: Carnegie is excluded because it has no page to watch.
+            //
+            // #842: it has to LOOK like something he can do. Styled as an 11pt plain line under three
+            // other 11pt lines, it read as a fourth statement of fact, and it is the only way a source
+            // ever leaves the watchlist: #802 rests on a failing source never auto-deactivating, so Dan
+            // removing it himself is the deliberate escape hatch. An escape hatch he cannot see is not
+            // one. Same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, so
+            // "you can do this" looks the same everywhere in the app, and sitting on its own trailing
+            // line rather than in the metadata stack.
             if source.isActive, source.kind != .algolia {
-                Button("Stop watching") { WatchlistEditing.stopWatching(source, in: context) }
-                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                HStack {
+                    Spacer()
+                    Button {
+                        WatchlistEditing.stopWatching(source, in: context)
+                    } label: {
+                        Text("Stop watching")
+                            .font(.system(size: 11))
+                            .foregroundStyle(OVColor.inkSoft)
+                            .padding(.horizontal, OVSpacing.sm)
+                            .padding(.vertical, 4)
+                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
             }
         }
         .padding(.horizontal, OVSpacing.sm)
