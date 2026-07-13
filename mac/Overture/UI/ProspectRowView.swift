@@ -450,7 +450,19 @@ struct ProspectRowView: View {
 
     private var actions: some View {
         HStack(spacing: OVSpacing.xs) {
-            if item.status == .dismissed, let onRestore {
+            // #864: a show Overture retired because its last night passed is NOT a cut Dan made, and it
+            // offers no Restore. Restoring it would put it back as undecided, and the next launch would
+            // retire it again for the same unchangeable reason: a button that quietly undoes itself. The
+            // date has passed; there is nothing to put it back into.
+            if item.dismissReason == .wentBy {
+                Label("Went by", systemImage: "clock.arrow.circlepath")
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.inkFaint)
+                    .padding(.horizontal, OVSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
+                    .help("This performance happened before you triaged it, so it is no longer waiting on you")
+            } else if item.status == .dismissed, let onRestore {
                 Label("Dismissed", systemImage: "archivebox")
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.inkFaint)
@@ -490,7 +502,9 @@ struct ProspectRowView: View {
                 // that excludes the Kept case. Nesting it inside "else if item.isKept { } else { Dismiss }"
                 // silently removed Dismiss for every already-kept prospect in the live Queue.
                 Menu {
-                    ForEach(DismissReason.allCases, id: \.self) { reason in
+                    // #864: `danCanChoose`, not `allCases`. "Went by" is Overture's own reason for a show
+                    // whose date passed untriaged; Dan cannot decide that a date has passed.
+                    ForEach(DismissReason.danCanChoose, id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
                     }
                 } label: {

@@ -39,18 +39,9 @@ enum StageNavigation {
             // #861: "waiting to be triaged" is a question about TIME, not just status. The pill counted
             // every show still marked new, so Dan's backlog read 102 when 25 of them were June shows
             // already three weeks gone: work that could not be done, and he went looking for it.
-            guard p.status == .new else { return false }
-            // Judged on the run's LAST night, the same rule the ingest guard (#798) and the reconcile
-            // both use, so there is one answer to "is this show over" rather than three. A run that
-            // opened in the past but is still playing tonight is still a lead.
-            let lastNight = EasternDate.runLastNight(runEndDate: p.runEndDate,
-                                                     performanceDate: p.performanceDate)
-            // An undated show is NOT past. `runIsLive` answers false for a nil date, which is right for
-            // the reconcile (a show with no date can never be marked "gone from the feed") and exactly
-            // wrong here: dropping it would silently lose a real lead whose date is simply not announced
-            // yet. So the question asked here is "has it demonstrably happened", not "is it live".
-            guard lastNight != nil else { return true }
-            return EasternDate.runIsLive(lastNight: lastNight, today: today)
+            // #864: the exact complement of what the launch retirement sweeps up, by construction, both
+            // asking Prospect.hasGoneBy. An untriaged show is either waiting on him or already gone.
+            return p.status == .new && !p.hasGoneBy(today: today)
 
         case .prep:
             return PrepQueueBuilder.needsPrep(status: p.status, hasDraft: p.hasDraft,

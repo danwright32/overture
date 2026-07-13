@@ -237,6 +237,27 @@ final class Prospect {
         recipients.filter(\.isBlockedAwaitingReview).count
     }
 
+    // #864: the typed reason, so callers stop hand-rolling `DismissReason(rawValue: dismissReasonRaw ?? "")`.
+    var dismissReason: DismissReason? {
+        get { dismissReasonRaw.flatMap(DismissReason.init(rawValue:)) }
+        set { dismissReasonRaw = newValue?.rawValue }
+    }
+
+    // #861/#864: "has this show demonstrably happened?", asked in exactly one place.
+    //
+    // The Scout pill asks it to decide what is still waiting on Dan, and the launch retirement asks it to
+    // decide what has rotted. They are the same question, and if they ever answered it differently a show
+    // could be retired while still being counted, or counted while already retired. Judged on the run's
+    // LAST night (EasternDate, #798), so a run that opened last week but plays through next week is still
+    // a live lead. An UNDATED show has not happened: "date to be confirmed" is a normal state on a season
+    // page, and treating it as past would silently throw away a real lead whose date is not announced yet.
+    func hasGoneBy(today: String) -> Bool {
+        EasternDate.runHasPassed(
+            lastNight: EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate),
+            today: today
+        )
+    }
+
     // Consecutive scouts where this prospect's source was scouted but it was absent from the
     // feed (#133). Reset to 0 whenever it reappears. Past performances are never counted.
     // Defaulted so existing records migrate cleanly.

@@ -89,6 +89,9 @@ enum ConversationState: String, CaseIterable, Sendable {
 }
 
 // The reasons Dan can give when dismissing, mirroring the engine's dismiss_reason set.
+// #864: `wentBy` is the one Overture writes for itself, and the only one that is not a decision at all:
+// the show's last night passed while it sat untriaged. It is a fact about the calendar, so it must never
+// read as a judgement Dan made (it gets its own Archive bucket, and teaches LocalHistory nothing).
 enum DismissReason: String, CaseIterable, Sendable {
     case dateConflict = "date_conflict"
     case dayDoesntWork = "day_doesnt_work"
@@ -96,6 +99,7 @@ enum DismissReason: String, CaseIterable, Sendable {
     case dontWantToShoot = "dont_want_to_shoot"   // #351: personal taste, distinct from "Not a fit"
     case alreadyBooked = "already_booked"
     case duplicate
+    case wentBy = "went_by"
 
     var label: String {
         switch self {
@@ -105,6 +109,11 @@ enum DismissReason: String, CaseIterable, Sendable {
         case .dontWantToShoot: return "Don't want to shoot this"
         case .alreadyBooked: return "Already booked"
         case .duplicate: return "Duplicate"
+        case .wentBy: return "Went by"
         }
     }
+
+    // The reasons Dan can pick himself. `wentBy` is Overture's own, never offered as a choice: he cannot
+    // decide that a date has passed.
+    static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy } }
 }
