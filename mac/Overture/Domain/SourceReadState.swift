@@ -30,6 +30,37 @@ enum SourceReadState: Equatable, Sendable {
         return false
     }
 
+    // #840: does this line tell Dan anything the CHECKED line above it does not?
+    //
+    // His Carnegie row read "Checked 8 hours ago" and then "Read 8 hours ago": one event, described
+    // twice. A successful run stamps `lastCheckedAt` and `lastSucceededAt` from the same instant, so when
+    // they are the same instant, reading and checking were the same act and there is nothing to add. The
+    // free daily run stamps only `lastCheckedAt`, which is exactly when the two diverge and exactly when
+    // this line starts earning its place.
+    //
+    // Decided on the FACTS, not on the source's kind. A native feed's shows arrive with the check, so it
+    // falls out silent on its own, and if one ever were checked without being read, the row would say so
+    // rather than stay quiet because of what type it is.
+    //
+    // Copy that repeats itself teaches Dan to skim, and the line this protects (listings changed, nobody
+    // has read them) is the one line here that must never be skimmed past.
+    func isWorthShowing(lastCheckedAt: Date?) -> Bool {
+        switch self {
+        case .unreadChangesWaiting:
+            // Not a fact about time, and the whole reason the line exists. Always said, always loud.
+            return true
+        case .neverRead:
+            // "Never checked" already tells him nobody has read it. Said twice, it says nothing.
+            return lastCheckedAt != nil
+        case .read(let at):
+            guard let checked = lastCheckedAt else { return true }   // read but never checked: say so
+            // Within the same second is the same run. A tolerance rather than exact equality only
+            // because these round-trip through the store as a stored interval, never because two
+            // separate events could land this close: the daily check and a scout are hours apart.
+            return abs(at.timeIntervalSince(checked)) >= 1
+        }
+    }
+
     var label: String { label(now: Date()) }
 
     func label(now: Date) -> String {

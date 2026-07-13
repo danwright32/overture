@@ -77,10 +77,16 @@ enum SourceGrade: Equatable, Sendable, CaseIterable {
     }
 
     // What the section means, so a quiet section is never mistaken for an empty one.
-    var explanation: String {
+    // #841: nil where the heading and the sheet's own subtitle already say it. "Watching" IS the default
+    // state the subtitle describes ("the calendars Overture re-checks on every scout"), so its line was
+    // that subtitle restated five lines lower.
+    //
+    // The others keep theirs, and they are not decoration: they are the sections where a wrong reading
+    // costs something. Above all "Stopped at their request", which must never be read as "broken".
+    var explanation: String? {
         switch self {
         case .watching:
-            return "Checked on every scout."
+            return nil
         case .failing:
             return "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
         case .neverChecked:
