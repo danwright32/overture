@@ -21,6 +21,13 @@ enum PrepImporter {
         // distinct from skippedEdited/skippedRecipientEdits (which mean Dan's own edit wins).
         var skippedOutOfScope = 0
         var unmatchedKeys: [String] = []
+        // #876: the shows the app QUEUED that the run never answered. The exact mirror image of
+        // unmatchedKeys (a result matching no prospect); this is a prospect matching no result.
+        //
+        // They keep their un-drafted state and the next run picks them up again, so nothing is lost, but
+        // in silence a show the model chokes on every time is retried forever and the only symptom is a
+        // Prep pill whose count never quite goes down. Self-healing is not the same as visible.
+        var missingKeys: [String] = []
         // #499: set when a context.save() failed, so this run's matches/drafts may not persist.
         var saveFailed = false
         // #754: the performer matcher's reference data (the Downbeat client export, the booking
@@ -339,20 +346,43 @@ enum PrepImporter {
     @MainActor
     static func ingestFile(at url: URL, into context: ModelContext,
                            downbeatURL: URL = DownbeatBridge.defaultURL,
-                           historyURL: URL = LocalHistory.importedURL) throws -> Outcome {
+                           historyURL: URL = LocalHistory.importedURL,
+                           queueURL: URL = PrepQueueBuilder.defaultURL) throws -> Outcome {
         let data = try Data(contentsOf: url)
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let loaded = DownbeatBridge.loadWithHealth(from: downbeatURL, now: Date())
         let history = LocalHistory.forMatchingWithHealth(existing: existing, importedFrom: historyURL)
 
-        var outcome = ingest(try PrepResultsDecoder.decode(data), into: context,
+        let results = try PrepResultsDecoder.decode(data)
+        var outcome = ingest(results, into: context,
                              clients: loaded.clients, history: history.records)
         // #754: the health verdict used to be computed here and then thrown away, so a missing or
         // corrupt client export meant every performer match silently found nothing and a real past
         // client read as a cold lead, with no symptom Dan could ever have noticed.
         outcome.matchDataWarning = matchDataWarning(clientHealth: loaded.health,
                                                     historyUnreadable: history.unreadable)
+        // #876: what did the app ASK for that never came back? Computed from the queue the app itself
+        // wrote, never from anything the run reported about itself.
+        outcome.missingKeys = shortfall(results: results, url: url, queueURL: queueURL)
         return outcome
+    }
+
+    // #876. Every read here is best-effort on purpose: an unreadable queue means we have no record of
+    // what was asked, which is a gap in the app's own bookkeeping and never a reason to drop Dan's drafts
+    // or to invent a failure. It reports nothing rather than guessing.
+    @MainActor
+    private static func shortfall(results: PrepResults, url: URL, queueURL: URL) -> [String] {
+        guard let queueData = try? Data(contentsOf: queueURL),
+              let queue = try? JSONDecoder().decode(PrepQueue.self, from: queueData) else { return [] }
+        return PrepShortfall.missingKeys(
+            queuedKeys: queue.items.map(\.naturalKey),
+            answeredKeys: results.results.map(\.naturalKey),
+            queueGeneratedAt: ISO8601DateFormatter().date(from: queue.generatedAt),
+            // The FILE's modification time, not the generatedAt the run wrote inside it: the run is a
+            // fallible process reporting on itself, and the one fact this guard exists to establish is
+            // exactly the one it should not be trusted to state.
+            resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        )
     }
 
     static var defaultURL: URL {
