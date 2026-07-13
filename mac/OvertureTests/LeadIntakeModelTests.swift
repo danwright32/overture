@@ -10,6 +10,10 @@ import SwiftData
 @MainActor
 @Suite("Lead intake model (#799)")
 struct LeadIntakeModelTests {
+    // #859: start() now imports what it found, so it needs a store even in the tests that never get that
+    // far (a bad link, a login wall, a fetch failure). A throwaway in-memory one.
+    private var scratch: ModelContext { try! context() }
+
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
@@ -66,7 +70,7 @@ struct LeadIntakeModelTests {
     @Test func aBlankOrNonsenseLinkIsRefusedBeforeAnythingIsSpent() async {
         let m = model()
         m.urlText = "not a url"
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(msg.lowercased().contains("link"))
@@ -77,7 +81,7 @@ struct LeadIntakeModelTests {
     @Test func anInstagramLinkIsRefusedImmediatelyWithSomethingActionable() async {
         let m = model()
         m.urlText = "https://www.instagram.com/p/abc123/"
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         // A login wall, NOT a JavaScript-drawn calendar. Two different causes, two different messages:
@@ -90,7 +94,7 @@ struct LeadIntakeModelTests {
     @Test func aFetchFailureSurfacesItsRealReason() async {
         let m = model(fetch: { _ in throw SourceFetchError.http(404) })
         m.urlText = "https://org.example/events"
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(msg.contains("404"))
@@ -101,7 +105,7 @@ struct LeadIntakeModelTests {
     @Test func aRedirectToAnotherSiteIsNamedAsSuch() async {
         let m = model(fetch: { _ in throw SourceFetchError.redirectedAway("www.thirdstreet.nyc") })
         m.urlText = "https://thirdstreetmusicschool.org/events"
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(msg.contains("thirdstreet.nyc"))
@@ -112,24 +116,30 @@ struct LeadIntakeModelTests {
     @Test func anUnconfiguredRunnerSaysSoRatherThanHanging() async {
         let m = model(launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable })
         m.urlText = "https://org.example/events"
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(msg.lowercased().contains("runner") || msg.lowercased().contains("set up"))
     }
 
-    @Test func aReadablePageEndsInSomethingToConfirm() async {
+    // #859: a readable page ends in the shows being IN the queue. It used to end in a list of checkboxes
+    // for Dan to pick from, and those same shows then arrived in the scout queue for him to keep or
+    // dismiss: two triage passes over one set of shows. The queue is already the triage surface.
+    @Test func aReadablePageEndsWithTheShowsAlreadyInTheQueue() async throws {
+        let ctx = try context()
         let event = ScoutExtractEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
-                                      venue: "Merkin Hall", performanceDate: "2026-09-19",
+                                      venue: "Merkin Hall", performanceDate: "2099-09-19",
                                       sourceUrl: "https://org.example/a")
         let m = model(results: { id in self.results(.upcomingListings, [event], id: id) })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date())
+        await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
-        guard case .review(let events, _) = m.phase else { Issue.record("expected .review, got \(m.phase)"); return }
-        #expect(events.count == 1)
-        #expect(m.selected.count == 1)     // everything checked by default; he unchecks what he doesn't want
+        guard case .added(let count, _) = m.phase else {
+            Issue.record("expected .added, got \(m.phase)"); return
+        }
+        #expect(count == 1)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 1)
     }
 
     // Off-season is not a failure, and the message must not read like one.
@@ -137,36 +147,33 @@ struct LeadIntakeModelTests {
         let m = model(results: { id in self.results(.allPast, [], id: id) })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(msg.lowercased().contains("no upcoming"))
         #expect(!msg.lowercased().contains("error"))
     }
 
-    // Confirming writes through the REAL pipeline, and only what Dan left checked.
-    @Test func onlyTheShowsDanKeepsCheckedAreAdded() async throws {
+    // #859: EVERY show it found goes in, and it goes in through the REAL pipeline rather than a
+    // hand-built insert, which is what keeps blocked dates, the do-not-contact suppression and the
+    // upcoming-only guard applying to a hand-added lead. That routing is what makes importing everything
+    // safe rather than reckless.
+    @Test func everyShowFoundIsAddedThroughTheRealPipeline() async throws {
         let ctx = try context()
         let a = ScoutExtractEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
-                                  venue: "Merkin Hall", performanceDate: "2026-09-19",
+                                  venue: "Merkin Hall", performanceDate: "2099-09-19",
                                   sourceUrl: "https://org.example/a")
         let b = ScoutExtractEvent(title: "Manhattan Girls Chorus", presenter: "Manhattan Girls Chorus",
-                                  venue: "Bargemusic", performanceDate: "2026-10-03",
+                                  venue: "Bargemusic", performanceDate: "2099-10-03",
                                   sourceUrl: "https://org.example/b")
         let m = model(results: { id in self.results(.upcomingListings, [a, b], id: id) })
         m.urlText = "https://org.example/events"
-        await m.start(now: Date())
 
-        guard case .review(let events, _) = m.phase else { Issue.record("expected .review"); return }
-        m.selected = [m.key(for: events[0])]        // he drops the second one
+        await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
-        let added = m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
-
-        #expect(added == 1)
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
-        #expect(stored.count == 1)
-        #expect(stored.first?.groupName.contains("Brooklyn") == true)
-        #expect(stored.first?.tier != nil)          // ranked by the normal pipeline, not hand-inserted
+        #expect(stored.count == 2)                  // both, without Dan picking either
+        #expect(stored.allSatisfy { $0.tier.isEmpty == false })   // ranked by the pipeline, not inserted
     }
 
     // Dan's rule, end to end: a link he has actually added is refused the second time, and told plainly
@@ -186,13 +193,13 @@ struct LeadIntakeModelTests {
 
         let first = make()
         first.urlText = "https://org.example/events"
-        await first.start(now: Date())
-        #expect(first.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 1)
+        await first.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 1)   // #859: landed by start()
 
         // Same page, spelled the way a person actually re-pastes it (www, trailing slash).
         let second = make()
         second.urlText = "https://www.org.example/events/"
-        await second.start(now: Date())
+        await second.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = second.phase else {
             Issue.record("expected .problem, got \(second.phase)"); return
@@ -204,28 +211,29 @@ struct LeadIntakeModelTests {
     // whose shows he dropped, must be retryable: refusing it would strand him with no way back in.
     @Test func aLinkThatProducedNothingCanBeTriedAgain() async throws {
         let ctx = try context()
-        let scratch = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
-        let event = ScoutExtractEvent(title: "A", presenter: "A", venue: "Merkin Hall",
-                                      performanceDate: "2026-09-19", sourceUrl: "https://org.example/a")
-        let make = { LeadIntakeModel(defaults: scratch,
+        let defaults = UserDefaults(suiteName: "LeadIntakeModelTests-\(UUID().uuidString)")!
+        // A page that reads fine and carries no usable shows: nothing lands, so nothing was handed over.
+        let make = { LeadIntakeModel(defaults: defaults,
                                      fetch: LeadIntakeModelTests.okFetch,
                                      pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                                      launch: { _ in },
-                                     readResults: { id in self.results(.upcomingListings, [event], id: id) }) }
+                                     readResults: { id in self.results(.upcomingListings, [], id: id) }) }
 
         let first = make()
         first.urlText = "https://org.example/events"
-        await first.start(now: Date())
-        first.selected = []                                   // he dropped everything
-        #expect(first.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 0)
+        await first.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)      // nothing to hand over
 
+        // So he can try it again. It reaches the SAME honest ending (that org has nothing upcoming), and
+        // crucially not "you've already added that link", which would strand him with no way back in.
         let second = make()
         second.urlText = "https://org.example/events"
-        await second.start(now: Date())
+        await second.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
-        guard case .review = second.phase else {
-            Issue.record("expected .review (retryable), got \(second.phase)"); return
+        guard case .problem(let msg) = second.phase else {
+            Issue.record("expected the same honest ending, got \(second.phase)"); return
         }
+        #expect(msg.lowercased().contains("already") == false, "a link that gave him nothing is not handed over")
     }
 
     // What Dan hit on his second link: the FIRST run had already written its results and shown him an
@@ -249,11 +257,12 @@ struct LeadIntakeModelTests {
                       results: { id in self.results(.upcomingListings, [event], id: id) })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date(), pollEvery: 0, sleep: { _ in })
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures, pollEvery: 0, sleep: { _ in })
 
-        guard case .review(let events, _) = m.phase else {
-            Issue.record("expected .review after waiting out the busy run, got \(m.phase)"); return
+        guard case .added(let count, _) = m.phase else {
+            Issue.record("expected .added after waiting out the busy run, got \(m.phase)"); return
         }
+        let events = Array(repeating: 0, count: count)   // it landed them; the count is the fact here
         #expect(events.count == 1)
         #expect(attempts == 3)          // it waited and retried rather than giving up on the first no
     }
@@ -264,7 +273,7 @@ struct LeadIntakeModelTests {
         let m = model(launch: { _ in throw ScoutExtractService.ExtractLaunchError.alreadyRunning })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 0, sleep: { _ in })
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures, pollEvery: 0, giveUpAfter: 0, sleep: { _ in })
 
         guard case .problem(let msg) = m.phase else {
             Issue.record("expected .problem, got \(m.phase)"); return
@@ -283,7 +292,7 @@ struct LeadIntakeModelTests {
         let m = model(fetch: { _ in shell }, launch: { _ in launched = true })
         m.urlText = "https://www.secondendingensemble.com/"
 
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
         guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
         #expect(!launched)                                    // no Claude run spent on a page we cannot read
@@ -308,24 +317,23 @@ struct LeadIntakeModelTests {
                       results: { id in self.results(.upcomingListings, [event], id: id) })
         m.urlText = "https://www.secondendingensemble.com/single-project-1"
 
-        await m.start(now: Date())
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 
-        guard case .review(_, let note) = m.phase else { Issue.record("expected .review"); return }
+        guard case .added(_, let note) = m.phase else { Issue.record("expected .added"); return }
         let text = try! #require(note)
         #expect(text.contains("lincolncenter.org"))          // names the page it actually read
         #expect(text.lowercased().contains("ticket link"))   // and says WHY it read that one
     }
 
-    @Test func confirmingNothingAddsNothing() async throws {
+    // #859: a page that yields NO usable shows adds nothing, and says so. There is no "confirm" left to
+    // withhold, so the guard has to live in the import itself.
+    @Test func aPageWithNoUsableShowsAddsNothing() async throws {
         let ctx = try context()
-        let event = ScoutExtractEvent(title: "A", presenter: "A", venue: "Merkin Hall",
-                                      performanceDate: "2026-09-19", sourceUrl: "https://org.example/a")
-        let m = model(results: { id in self.results(.upcomingListings, [event], id: id) })
+        let m = model(results: { id in self.results(.upcomingListings, [], id: id) })
         m.urlText = "https://org.example/events"
-        await m.start(now: Date())
-        m.selected = []
 
-        #expect(m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 0)
+        await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
     }
 }
@@ -343,6 +351,13 @@ struct LeadIntakeModelTests {
 @MainActor
 @Suite("The lead sheet stops waiting on a run that is already dead (#848)")
 struct LeadIntakeDeadRunTests {
+    // #859: start() imports what it found, so it needs a store even here, where the point is that it
+    // finds nothing.
+    private var scratch: ModelContext {
+        ModelContext(try! ModelContainer(for: Schema([Prospect.self]),
+                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
     private static let realPageHTML =
         "<h1>Upcoming concerts</h1>"
         + "<p>Second Ending Ensemble presents an evening of chamber music at Merkin Hall, with works "
@@ -373,7 +388,7 @@ struct LeadIntakeDeadRunTests {
         let m = model(alive: { false })          // its heartbeat is gone: the process has exited
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures, pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
 
         guard case .problem(let message) = m.phase else {
             Issue.record("expected .problem, got \(m.phase)"); return
@@ -408,12 +423,12 @@ struct LeadIntakeDeadRunTests {
                       })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures, pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
 
-        guard case .review(let events, _) = m.phase else {
+        guard case .added(let count, _) = m.phase else {
             Issue.record("a slow run must be waited for, not killed. Got \(m.phase)"); return
         }
-        #expect(events.count == 1)
+        #expect(count == 1)
     }
 
     // The race that would make this worse than the bug: the run writes its results and exits between two
@@ -435,11 +450,11 @@ struct LeadIntakeDeadRunTests {
                       })
         m.urlText = "https://org.example/events"
 
-        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures, pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
 
-        guard case .review(let events, _) = m.phase else {
+        guard case .added(let count, _) = m.phase else {
             Issue.record("a finished run's results must be read, not discarded. Got \(m.phase)"); return
         }
-        #expect(events.count == 1)
+        #expect(count == 1)
     }
 }
