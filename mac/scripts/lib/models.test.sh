@@ -47,19 +47,30 @@ source "${SCRIPT_DIR}/models.sh"
 # wrote a draft rather than sensing that something changed.
 assert_equals "drafting uses the strong tier" "opus" "${OVERTURE_MODEL_DRAFTING}"
 
-# The mechanical runs: a strict output schema and no judgment. Reading a page for its listings and
-# classifying a reply's intent are exactly the cheap-model case, and drafting is exactly not.
+# The mechanical run: a strict output schema and no judgment. Reading a page for its listings is exactly
+# the cheap-model case. Drafting is exactly not.
 assert_equals "reading a calendar is mechanical" "haiku" "${OVERTURE_MODEL_EXTRACTION}"
-assert_equals "classifying a reply is mechanical" "haiku" "${OVERTURE_MODEL_REPLY_CLASSIFY}"
 
-# The whole point: drafting must NOT quietly become the cheap model, and the mechanical runs must not
-# quietly become the expensive one.
-if [[ "${OVERTURE_MODEL_DRAFTING}" == "${OVERTURE_MODEL_EXTRACTION}" ]]; then
-  echo "FAIL - drafting and extraction must not share a model: one is Dan's voice, the other is a parser"
-  FAILURES=$((FAILURES + 1))
-else
-  echo "ok - drafting and the mechanical runs are deliberately different models"
-fi
+# #874: the reply run is NAMED for the classification half of its job, and that is what hid this. It also
+# DRAFTS the reply, in Dan's voice, to a person who has already written back to him: a warmer lead than
+# any cold pitch, and by this file's own definition that is drafting, not a mechanical read. It ran on the
+# cheap tier for exactly as long as nobody said the second half of its name out loud.
+#
+# Asserted against the DRAFTING tier rather than the literal "opus", so the reply drafter follows Dan
+# wherever he pins drafting next instead of quietly falling behind it a second time.
+assert_equals "a reply to a warm lead is DRAFTING, so it uses the drafting tier" \
+  "${OVERTURE_MODEL_DRAFTING}" "${OVERTURE_MODEL_REPLY_CLASSIFY}"
+
+# The whole point: nothing that writes words to a stranger may quietly become the cheap model, and the
+# mechanical run must not quietly become the expensive one.
+for var in OVERTURE_MODEL_DRAFTING OVERTURE_MODEL_REPLY_CLASSIFY; do
+  if [[ "${!var}" == "${OVERTURE_MODEL_EXTRACTION}" ]]; then
+    echo "FAIL - ${var} must not share the extraction model: one is Dan's voice, the other is a parser"
+    FAILURES=$((FAILURES + 1))
+  else
+    echo "ok - ${var} is deliberately not the mechanical model"
+  fi
+done
 
 # Every runner actually PASSES it. A model constant nobody references is worse than none: it reads as
 # solved while every run still inherits the CLI default.

@@ -18,11 +18,23 @@
 # tell what wrote a draft rather than merely sensing that something changed.
 OVERTURE_MODEL_DRAFTING="opus"
 
-# The mechanical runs. Reading a page for its listings and classifying a reply's intent are tasks with a
-# strict output schema and no judgment, which is exactly the cheap-fast-model case. Drafting is exactly
-# not, and nothing about that distinction was ever deliberate before: it was inherited.
+# The mechanical run. Reading a page for its listings is a task with a strict output schema and no
+# judgment, which is exactly the cheap-fast-model case. Drafting is exactly not, and nothing about that
+# distinction was ever deliberate before: it was inherited.
 OVERTURE_MODEL_EXTRACTION="haiku"
-OVERTURE_MODEL_REPLY_CLASSIFY="haiku"
+
+# The reply run. Its NAME says classify, and for a while that is all this file heard: it sat with the
+# mechanical runs above, on the cheap tier. But it also DRAFTS the reply, in Dan's voice, to somebody who
+# has already written back to him. That is a warmer lead than any cold pitch, and a cold pitch gets Opus.
+#
+# So it is pinned to the DRAFTING tier, and pinned by REFERENCE, not by repeating the word "opus": the two
+# already drifted apart once while both looked deliberate, and a copy of a value is exactly how that
+# happens. Where Dan takes drafting, his replies go too.
+#
+# Dan's call (2026-07-13), knowing it costs more per reply: the classification is one word per item, while
+# the drafting reads the runbook, invokes his brand-voice skill, and writes the email. Splitting the run
+# in two would have paid a second full context load to keep the cheap half cheap, and saved almost nothing.
+OVERTURE_MODEL_REPLY_CLASSIFY="${OVERTURE_MODEL_DRAFTING}"
 
 # Records the model a run actually used, into that run's own results file.
 #
