@@ -14,6 +14,11 @@ final class PageStubURLProtocol: URLProtocol {
     // #806 follow-up: serve DIFFERENT pages for different URLs, so the ticket-link hop (page A links to
     // page B; B is the one with the listing) can be exercised for real.
     nonisolated(unsafe) static var bodiesByURL: [String: String] = [:]
+    // #858: a month page that 404s while the others answer, and a count of what was actually asked for.
+    // The count is what proves the watchlist still fetches ONE page: an assertion about the returned
+    // document could pass while three extra requests went out behind it.
+    nonisolated(unsafe) static var statusByURL: [String: Int] = [:]
+    nonisolated(unsafe) static var requestedURLs: [String] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -23,12 +28,15 @@ final class PageStubURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: e)
             return
         }
+        let requested = request.url?.absoluteString ?? ""
+        Self.requestedURLs.append(requested)
         let url = URL(string: Self.finalURL ?? request.url!.absoluteString)!
         var headers: [String: String] = [:]
         if let ct = Self.contentType { headers["Content-Type"] = ct }
-        let resp = HTTPURLResponse(url: url, statusCode: Self.status, httpVersion: nil, headerFields: headers)!
+        let status = Self.statusByURL[requested] ?? Self.status
+        let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers)!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        let body = Self.bodiesByURL[request.url?.absoluteString ?? ""].map { Data($0.utf8) } ?? Self.body
+        let body = Self.bodiesByURL[requested].map { Data($0.utf8) } ?? Self.body
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
@@ -38,6 +46,7 @@ final class PageStubURLProtocol: URLProtocol {
     static func reset() {
         status = 200; body = Data(); contentType = "text/html; charset=utf-8"
         finalURL = nil; transportError = nil; bodiesByURL = [:]
+        statusByURL = [:]; requestedURLs = []
     }
 }
 

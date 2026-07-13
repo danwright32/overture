@@ -97,11 +97,27 @@ For each item in the work-list:
    A quiet source and a broken source must never look the same to Dan. The verdict is the only thing
    that tells them apart.
 
-5. **Pagination: read the first page only.** A listings page often links to further pages (`/P20`,
-   `/P40`, `?page=2`). Do not follow them. Read page one and say so in that source's `note` ("page 1 of
-   N; later pages not read"). This is a deliberate rule, not a gap: the app fetched and hashed the bytes
-   of ONE page, and what lies beyond them is not part of the set it reconciles against. A run that
-   wanders off across an unbounded number of pages is the one that never comes back.
+5. **Pagination: never follow a listings link; read every month the app already fetched.** The app walks
+   a calendar's own month index itself (#858) and hands you the result, so a pinned page may hold
+   SEVERAL months, each wrapped in a section under a marker naming it:
+
+   ```
+   <!-- overture-month 2026-10 https://example.org/calendar/2026/10/ -->
+   ```
+
+   Read every marked section and return the shows from all of them as one set under that one `sourceId`.
+   Do not stop at the first, and do not report "page 1 of N".
+
+   Never follow a link to another listings page (`/P20`, `?page=2`, "next month") yourself. That rule has
+   not changed and the reason has not either: the app fetched and hashed the bytes it handed you, so
+   anything you wander off to find is not part of the set it reconciles against, and a run that wanders
+   across an unbounded number of pages is the one that never comes back. (Following each EVENT's own
+   detail page for its venue and date is a different thing, and is still required.)
+
+   Why the app does the walking: Kaufman's calendar shows only the month you land on. In July that is 6
+   shows, while August, September and October hold 30 more, and those later months are the pitchable
+   ones. The app reads four months and stitches them, so the listing set still comes from bytes the app
+   fetched and hashed.
 
 6. **Update the progress file** after each item, so the app can show "3 of 9" rather than a spinner.
 

@@ -62,7 +62,8 @@ rules_for() {
         "the ALWAYS-write rule	ALWAYS write" \
         "the never-stop-and-ask rule	Never stop to ask" \
         "the whole decide-and-record sentence	record the decision in that source's note" \
-        "the pagination rule	FIRST page only" \
+        "the rule against following pagination links	NEVER follow a link to another listings page" \
+        "the #858 rule that every stitched month gets read	Read EVERY marked section" \
         "the rule that a sourceId is echoed, never rebuilt	Copy each item's sourceId VERBATIM" \
         "its final sentence, intact	one short line on anything that made this hard"
       ;;
