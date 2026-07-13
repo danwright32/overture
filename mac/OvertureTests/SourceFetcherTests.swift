@@ -357,6 +357,82 @@ struct SourceFetcherTests {
         #expect(PageNormalizer.contentHash(monday) != PageNormalizer.contentHash(wednesday))
     }
 
+    // A site's own navigation is content, and we were deleting it. Verified on the live Kaufman Music
+    // Center calendar (2026-07-13): the way to reach its other twenty-four months is not an `href` at
+    // all, it is `<option value="https://.../2026/10/">`. `value` was not in the allow-list, so every
+    // one of those month links was stripped before anything could read it. Nothing failed; the pinned
+    // page simply held less than the site served.
+    //
+    // You cannot follow navigation that has already been deleted from the bytes you kept, which is why
+    // multi-page calendars (#858) could not be built on top of this.
+    // The markup here is COPIED VERBATIM from what Kaufman actually serves, indentation, line breaks,
+    // bare `selected` and all. That is deliberate. The last bug in this normalizer survived a green
+    // suite precisely because every fixture had been tidied onto one line, so the fixtures agreed with
+    // the code and both disagreed with the web. A real `<option>` carries a boolean attribute with no
+    // `="value"` after the one we want, and its text sits on the next line; a tidied fixture proves
+    // nothing about either.
+    @Test func normalizingKeepsTheLinksASiteUsesToReachItsOwnOtherPages() {
+        let html = """
+        <select>
+            <option value="https://www.kaufmanmusiccenter.org/mch/calendar/2026/07/" selected>
+            July 2026
+        </option>
+            <option value="https://www.kaufmanmusiccenter.org/mch/calendar/2026/10/">
+            October 2026
+        </option>
+        </select>
+        <link rel="next" href="/mch/calendar/2026/08/">
+        """
+        let out = PageNormalizer.normalize(html)
+
+        #expect(out.contains("value=\"https://www.kaufmanmusiccenter.org/mch/calendar/2026/10/\""))
+        #expect(out.contains("value=\"https://www.kaufmanmusiccenter.org/mch/calendar/2026/07/\""))
+        #expect(out.contains("rel=\"next\""))
+        #expect(out.contains("October 2026"))
+    }
+
+    // The one real risk in keeping those attributes, stated and then locked rather than believed: the
+    // hash must not move. `contentProjection` is the visible text plus `href` values, and the visible
+    // text has every tag stripped out of it, so an attribute can never reach either half. Keeping more
+    // attributes therefore cannot churn the hash, cannot break the "skip unchanged pages" saving, and
+    // cannot cost a single token.
+    //
+    // If a later change ever routes attributes into the projection, this is the test that says so.
+    @Test func keepingNavigationAttributesCannotMoveTheContentHash() {
+        let bare = PageNormalizer.normalize("""
+        <select><option>October 2026</option></select>
+        <a href="/c/1">Immortal Gifts</a>
+        """)
+        let navigable = PageNormalizer.normalize("""
+        <select><option value="/calendar/2026/10/">October 2026</option></select>
+        <a rel="bookmark" title="Immortal Gifts" href="/c/1">Immortal Gifts</a>
+        """)
+        #expect(PageNormalizer.contentHash(bare) == PageNormalizer.contentHash(navigable))
+    }
+
+    // Why `<head>` stays stripped, which is the question #892 left open.
+    //
+    // Preserving it looks like the same idea (a `<link rel="next">` lives up there), but it is the
+    // opposite: `<head>` is full of ASSET hrefs, and `contentProjection` reads every href. The live
+    // Kaufman page serves `<link rel="stylesheet" href="/ui/css/main.2026-07-09-13-37-08.css">`, whose
+    // URL carries the site's BUILD TIMESTAMP. Keep the head and that timestamp lands in the hash, so
+    // every CSS redeploy makes an unchanged calendar look changed and buys a full AI re-read of it.
+    //
+    // That is the exact silent 10x this file's hash comment exists to prevent, so it gets a test and not
+    // a comment. A stylesheet is not a listing; the head's hrefs are not content.
+    @Test func aRedeployedStylesheetInTheHeadCannotMakeAnUnchangedCalendarLookChanged() {
+        func page(cssBuild: String) -> String {
+            PageNormalizer.normalize("""
+            <html>
+            <head><link rel="stylesheet" href="/ui/css/main.\(cssBuild).css"></head>
+            <body><a href="/c/1">Immortal Gifts</a></body>
+            </html>
+            """)
+        }
+        #expect(PageNormalizer.contentHash(page(cssBuild: "2026-07-09-13-37-08"))
+                == PageNormalizer.contentHash(page(cssBuild: "2026-08-22-09-04-11")))
+    }
+
     // Every failure is NAMED. A source that 404s, rate-limits us, or serves a PDF must be visibly
     // broken, never silently empty: a dead source and a quiet off-season look identical otherwise, and
     // the spike found the quiet off-season is the NORMAL state (5 of 7 real sites).
