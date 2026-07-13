@@ -63,6 +63,17 @@ struct ReplyClassifyResults: Codable, Equatable, Sendable {
     var version: Int
     var generatedAt: String
     var results: [ReplyClassifyResult]
+    // #846: which model wrote these reply drafts. Stamped by the RUNNER SCRIPT after the run
+    // (lib/models.sh record_model), never by the model itself: asking a model to write down which model
+    // it is invites it to be confidently wrong about the one fact the record exists to establish.
+    //
+    // The script has written this since #804. This struct did not decode it, so it was read off disk and
+    // dropped on the floor, and the reply half of that record silently never existed. Mirrors
+    // PrepResults.model.
+    //
+    // Optional, so a results file from before the stamp still decodes and still lands Dan's draft. A gap
+    // in the record is never a reason to drop his work.
+    var model: String? = nil
 }
 
 struct ReplyClassifyResult: Codable, Equatable, Sendable {

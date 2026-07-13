@@ -51,7 +51,16 @@ enum ReplyClassifyImporter {
                         if let s = r.draftSubject { rec.replyDraftSubject = s }
                         // A fresh AI draft is not Dan's edit, so clear any stale "edited" marker:
                         // otherwise this AI body would be wrongly protected on the next run.
-                        if let b = r.draftBody { rec.replyDraftBody = b; rec.replyDraftEditedByDan = false }
+                        //
+                        // #846: the model stamp rides the SAME assignment as the text it describes, so the
+                        // trace can never end up naming a model for words it did not write. A reply Dan
+                        // hand-edited never reaches this branch (his version wins, above), so it keeps the
+                        // trace of whatever wrote the text he edited. Mirrors PrepImporter.
+                        if let b = r.draftBody {
+                            rec.replyDraftBody = b
+                            rec.replyDraftEditedByDan = false
+                            rec.replyDraftModel = results.model
+                        }
                     }
                     // #653: this recipient's OWN conversation-state suggestion, based on its OWN reply.
                     // suggestConversationState already no-ops if Dan set this recipient's state by hand.

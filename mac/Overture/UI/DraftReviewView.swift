@@ -218,8 +218,17 @@ struct DraftReviewView: View {
                         .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if item.draftEditedByDan {
-                    Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                // #846: Dan's call (2026-07-13) that these stay SEPARATE tags. Both facts are true at
+                // once on a draft he edited: he edited it, AND a model wrote the text he edited (which
+                // PrepImporter deliberately preserves). The trace is the quieter of the two, so it reads
+                // as provenance rather than as a claim about his edit.
+                HStack(spacing: 6) {
+                    if item.draftEditedByDan {
+                        Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                    }
+                    if let trace = item.draftTraceLabel {
+                        Text(trace).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
+                    }
                 }
                 // #367: a re-prep still awaiting the next Prep run, distinct from "Edited" (this
                 // just means a run is pending, not that Dan has touched the text).
@@ -605,8 +614,16 @@ struct DraftReviewView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(OVSpacing.sm)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
-                if c.replyDraftEditedByDan {
-                    Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                // #846: same two separate tags as the cold draft above, for the same reason. A reply goes
+                // to somebody who already wrote back to him, so it is the LAST place the trace should be
+                // missing (#874).
+                HStack(spacing: 6) {
+                    if c.replyDraftEditedByDan {
+                        Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                    }
+                    if let trace = c.replyDraftTraceLabel {
+                        Text(trace).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
+                    }
                 }
                 // #456 / #459: flag a reply draft that asks for the date/venue this show already carries,
                 // same as the cold path, but suppressed once Dan edits (logic in replyDraftFindings).

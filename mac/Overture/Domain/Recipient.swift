@@ -169,6 +169,13 @@ final class Recipient {
     // draft: once set, the deterministic DraftCheck warnings stop nagging on text he already owns. A
     // fresh AI draft clears it again so warnings reappear on text he hasn't touched.
     var replyDraftEditedByDan: Bool = false
+    // #846: which model wrote this reply, mirroring Prospect.draftModel for the cold draft. The runner
+    // has stamped it into the results file since #804; the app decoded it nowhere and threw it away, so
+    // the reply half of that record never existed. A reply goes to somebody who already wrote back to
+    // Dan, which is a warmer lead than any cold pitch (#874), and it is exactly where he would want to
+    // check what wrote the words. Defaulted, so replies drafted before this migrate cleanly carrying no
+    // trace.
+    var replyDraftModel: String? = nil
 
     // The reply-draft voice-learning pair (#463), mirroring Prospect.originalDraft*/sentBody for the cold
     // draft. originalReplyDraftBody is the AI's reply before Dan's first substantive edit; sentReplyBody
