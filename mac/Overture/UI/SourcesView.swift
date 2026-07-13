@@ -193,6 +193,20 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #875: the RUN'S OWN account of this source, which until now was decoded and thrown away
+            // while Dan was shown only the generic sentence for the verdict. The generic line says WHAT
+            // happened ("The run ended before reading this page"); this one says WHY, and why is the only
+            // part he can act on.
+            //
+            // The sentence goes in the row and the raw log tail goes on hover (Dan's call, 2026-07-13):
+            // a failing source would otherwise unroll six lines of shell output into the sheet and make
+            // every row around it unreadable. Both halves are decided in SourceNote, never here (#863).
+            if let note = source.runNote {
+                Text(note).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(source.runNoteDetail ?? note)
+            }
+
             // A permanently dead source needs a way out that is DAN'S choice, or a failing source would
             // be reported at him every run forever with nothing he could do about it. Recorded as his
             // decision, never as a refusal: Carnegie is excluded because it has no page to watch.

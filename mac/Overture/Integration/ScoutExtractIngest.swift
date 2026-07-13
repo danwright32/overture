@@ -35,6 +35,12 @@ enum ScoutExtractIngest {
             // absence, never as the wrong show.
             guard let source = row(for: result.sourceId, in: context) else { continue }
 
+            // #875: the run's own explanation, kept rather than discarded. Written for EVERY result, on
+            // the failure path and the healthy one alike, and overwritten each run so it always describes
+            // the LAST thing that happened rather than accumulating a history nobody asked for. A source
+            // that recovers must stop explaining a failure it no longer has.
+            source.notes = result.note
+
             // A page we could not read is a FAILURE, and its hash is not stamped. Stamping it would mean
             // never looking at this source again: it would report as unchanged forever, having never
             // once been read. `SourceFailure(verdict:)` is what decides which verdicts mean broken, and
