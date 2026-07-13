@@ -23,6 +23,22 @@ enum FeedReconcile {
     // that still returned 200), and trusting its absences would wrongly cancel real shows (#150).
     static let minHealthyFraction = 0.5
 
+    // #887: how much of a run's OWN output may have been thrown away (ExtractedEventGuard rejected it,
+    // almost always because its detail page was never read) before that run's silence about a show stops
+    // being worth anything.
+    //
+    // Dan's call (2026-07-13). This shipped as a strict zero, and strict zero was wrong in a way worth
+    // recording: a "venue TBA" listing has no venue and never will, so a real calendar carrying one would
+    // have been unable to mark ANYTHING cancelled, ever, with nothing anywhere saying the cancellation
+    // check had switched itself off for that source. That is #888's "a rule that silently never fires",
+    // deliberately built in.
+    //
+    // Five percent, so one stray listing among dozens is tolerated and the failure that started all this
+    // (20 of 80 shows unread, 25%) is nowhere near it. A SMALL source stays effectively strict, and that
+    // is right rather than a wart: on a six-show calendar, one unread detail page is a sixth of
+    // everything we know about that source.
+    static let maxRejectedFraction = 0.05
+
     // Whether this run's feed is large enough, relative to the last healthy run, to trust which
     // shows are MISSING from it. No baseline yet (first scout) trusts the feed.
     static func feedIsTrustworthy(currentCount: Int, baseline: Int, fraction: Double = minHealthyFraction) -> Bool {
@@ -95,8 +111,22 @@ enum FeedReconcile {
         // that does not know is a caller reporting a clean sweep, and every existing one is.
         var rejectedCount: Int = 0
 
+        // #887: was this run able to actually READ most of what it looked at? A run that threw a large
+        // share of its own events away (no venue, so their detail page was never read) does not know how
+        // many OTHERS it silently failed to reach, so its silence about a show is worth nothing.
+        //
+        // A run that kept nothing at all is a broken run, not a fully-rejected sweep to be reasoned
+        // about, and it never gets the tolerance. (feedCount == 0 is refused below in any case; this
+        // makes the arithmetic honest rather than leaning on that.)
+        var rejectedIsWithinTolerance: Bool {
+            guard rejectedCount > 0 else { return true }
+            let produced = feedCount + rejectedCount
+            guard produced > 0, feedCount > 0 else { return false }
+            return Double(rejectedCount) / Double(produced) <= FeedReconcile.maxRejectedFraction
+        }
+
         // Whether this source's SILENCE about a show can be believed. That is a far higher bar than
-        // whether it can be believed about what it CAN see (`seenKeys`, always believed). Four ways a
+        // whether it can be believed about what it CAN see (`seenKeys`, always believed). Five ways a
         // source that genuinely ran still has nothing to say about a show being absent:
         var absenceIsEvidence: Bool {
             // #887: this run threw events away. They were rejected for having no venue, which almost
@@ -109,10 +139,15 @@ enum FeedReconcile {
             // source's 80 shows still reports 75% of baseline and sails straight through. Losing one
             // quarter of a source is the single most likely partial failure and the one #150 cannot see.
             //
-            // Strict zero, deliberately. A source with one perpetually venue-less listing will never
-            // cancel anything, and that is the right way round: a show left in Dan's queue is a nuisance,
-            // and a live show he has already emailed being marked gone is not.
-            guard rejectedCount == 0 else { return false }
+            // Tolerated up to maxRejectedFraction of everything this run produced, no further. See that
+            // constant for why it is not zero: a strict zero disabled cancellation forever, and silently,
+            // on any calendar carrying a permanent "venue TBA" listing.
+            //
+            // Measured against what the RUN returned (kept + thrown away), not against the baseline: this
+            // asks "how much of what you just looked at could you not actually read", which is a question
+            // about THIS run's reliability, and it stays right even on a source whose calendar genuinely
+            // grew or shrank since the baseline was taken.
+            guard rejectedIsWithinTolerance else { return false }
             // A quiet off-season, an unreadable page, or a page with no dated content tells us nothing
             // about whether any particular show was cancelled.
             guard verdict == .upcomingListings else { return false }
