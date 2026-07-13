@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 // Ingests a Prep results file into the local store: matches each result to an existing
 // prospect by natural key and fills in the found contact and the drafted email. A
@@ -384,6 +385,52 @@ enum PrepImporter {
             resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
         )
     }
+
+    // #884: consume a results file exactly ONCE, and return nil for one the app has already read.
+    //
+    // `ingestPrep()` runs on every launch against whatever results file is still on disk, and that file is
+    // never deleted. The importer is idempotent about the DATA it writes, which is why re-reading looked
+    // free. It is not, in three ways, and the third is the serious one:
+    //
+    //   - The shortfall re-announces. "2 didn't come back, they'll be retried" reappears every launch about
+    //     a run that may be days old, so the warning #876 added to make a silent failure VISIBLE becomes
+    //     one Dan learns to scroll past. Same for "didn't match".
+    //   - The good news re-announces. `drafted` does not settle to zero: nothing in `ingest` asks whether a
+    //     prospect was already drafted, so it re-applies and re-counts every draft, every launch.
+    //   - IT UN-APPROVES HIS WORK. `ingest` sends a prospect's status back to `.drafted` from `.approved`,
+    //     on purpose, because a REAL redraft carries changed text that must be reviewed again (#367). But
+    //     `draftBlockedBySend` only shields a prospect that has already been SENT, so an approved,
+    //     not-yet-sent draft is quietly knocked back to "needs review" on the next launch. Dan approves a
+    //     draft, quits, reopens, and the decision he made is gone with nothing said.
+    //
+    // Keyed on a fingerprint of the BYTES, not the file's modification time: an mtime we cannot read (or
+    // one a copy or a restore moved) leaves us guessing, whereas the bytes are the thing we are deciding
+    // about and we have to read them anyway. Two genuinely different runs cannot collide here, since each
+    // writes its own `generatedAt` into the file.
+    //
+    // A run whose save FAILED is never marked consumed. Nothing Dan can see actually landed, so the retry
+    // on the next launch is the only thing that rescues that run's work.
+    @MainActor
+    @discardableResult
+    static func consumeIfNew(at url: URL = defaultURL,
+                             into context: ModelContext,
+                             defaults: UserDefaults = .standard,
+                             ingest: (URL, ModelContext) throws -> Outcome = {
+                                 try ingestFile(at: $0, into: $1)
+                             }) -> Outcome? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let fingerprint = Self.fingerprint(data)
+        guard fingerprint != defaults.string(forKey: consumedKey) else { return nil }
+        guard let outcome = try? ingest(url, context) else { return nil }
+        if !outcome.saveFailed { defaults.set(fingerprint, forKey: consumedKey) }
+        return outcome
+    }
+
+    static func fingerprint(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static let consumedKey = "prep.consumedResultsFingerprint"
 
     static var defaultURL: URL {
         StoreLocation.handoffDirectory
