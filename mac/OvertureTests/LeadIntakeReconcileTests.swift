@@ -110,9 +110,11 @@ struct LeadIntakeReconcileTests {
             venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-09-26",
             sourceUrl: "https://www.carnegiehall.org/Calendar/2026/09/26/Berlin-Philharmonic-0800PM")
         for _ in 0..<FeedReconcile.goneThreshold {
-            ScoutService.apply(events: [stillListed], clients: [], history: [], blocked: [],
-                               feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
-                               sourceIds: [WatchedSource.carnegieId], into: ctx)
+            // #888 part B: applySweep, the single-source pairing of upsert + reconcile. `apply` alone is
+            // now an upsert and reconciles nothing, which is exactly what runNative uses this for.
+            ScoutService.applySweep(events: [stillListed], clients: [], history: [], blocked: [],
+                                    feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
+                                    sourceIds: [WatchedSource.carnegieId], into: ctx)
         }
 
         #expect(carnegie.missedScoutCount == FeedReconcile.goneThreshold)

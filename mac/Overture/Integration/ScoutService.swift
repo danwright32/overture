@@ -44,6 +44,18 @@ enum ScoutService {
         // twelve working websites.
         var extractLaunchFailure: String? = nil
 
+        // #888 part B: what THIS source swept, carried home so the caller can reconcile every source it
+        // landed in ONE pass. Nil when this apply had no feed to report on (the lead path), which is
+        // what keeps a pasted lead structurally unable to mark anything gone (#826).
+        var report: FeedReconcile.SourceReport? = nil
+
+        // Every source's report from a merged run. `merge` collects them (see below), so a caller that
+        // landed six sources can hand all six to one reconcile and finally satisfy "every owner was
+        // asked", which a single-report reconcile never could.
+        var reports: [FeedReconcile.SourceReport] = []
+
+        var allReports: [FeedReconcile.SourceReport] { reports + [report].compactMap { $0 } }
+
         var failedSources: [SourceResult] { sources.filter { $0.state.isFailure } }
 
         // The single warning to show after a run, if any. A save failure takes precedence over
@@ -102,6 +114,10 @@ enum ScoutService {
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
             suppressedOrgs.append(contentsOf: other.suppressedOrgs)
+            // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
+            // the whole point: a caller that landed six sources must be able to hand all six to one
+            // reconcile, or "every owner was asked" can never be true of a co-listed show.
+            reports.append(contentsOf: other.allReports)
         }
     }
 
@@ -284,7 +300,10 @@ enum ScoutService {
             lastDegradedCount: source?.lastDegradedCount ?? 0)
         let hadBaseline = health.baseline > 0
 
-        var outcome = apply(
+        // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
+        // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
+        // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
+        var outcome = applySweep(
             events: events, clients: clients, history: history, blocked: blocked,
             feed: FeedCheck(sourceId: sourceId,
                             baseline: health.baseline,
@@ -490,8 +509,43 @@ enum ScoutService {
         var rejectedCount: Int = 0
     }
 
+    // #888 part B: one source sweeping its own feed, applied AND reconciled.
+    //
+    // `apply` is an UPSERT: it lands events and hands back what this source swept. Reconciling is a
+    // whole-run decision, because "every owner of this show was asked and none has it" cannot be judged
+    // one source at a time (that is the bug: with a single-element report list, `believable` was never
+    // larger than one source, so a co-listed show could never be marked gone by anybody).
+    //
+    // A caller with SEVERAL sources (ScoutExtractIngest) therefore applies each, then reconciles once
+    // with all their reports. A caller with exactly ONE (the native Carnegie sweep) uses this, so the
+    // pairing lives in production code rather than being re-assembled by every call site, where it could
+    // drift or simply be forgotten. Forgetting it is silent: shows would just quietly stop being marked
+    // gone, and nothing would fail.
+    @discardableResult
+    static func applySweep(
+        events: [ExtractedEvent],
+        clients: [DownbeatClient],
+        history: [HistoryRecord],
+        blocked: Set<String>,
+        feed: FeedCheck,
+        today: String = QueueModel.easternToday(),
+        sourceIds: [String] = [],
+        into context: ModelContext
+    ) -> Outcome {
+        let outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
+                            feed: feed, today: today, sourceIds: sourceIds, into: context)
+        if let report = outcome.report {
+            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+            FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
+        }
+        return outcome
+    }
+
     // Application of already-extracted events with injected data, so the full
     // classify -> match -> assemble -> upsert chain is testable without network/WebKit.
+    //
+    // #888 part B: this UPSERTS and hands back what the source swept (`Outcome.report`). It does NOT
+    // reconcile: see applySweep above for why that is now the caller's decision.
     @discardableResult
     static func apply(
         events: [ExtractedEvent],
@@ -645,9 +699,20 @@ enum ScoutService {
         // Every remaining judgement (is this feed big enough to be believed, is this source past its
         // warmup, does a verdict of "quiet off-season" count as evidence) lives in SourceReport, judged
         // against THIS source's own baseline.
-        if let feed {
-            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-            let report = FeedReconcile.SourceReport(
+        // #888 part B: the report is RETURNED, and the caller reconciles. It used to be reconciled right
+        // here, one source at a time, with a single-element list. So `believable` was never larger than
+        // one source, and a show owned by TWO could never satisfy the rule's "every owner was asked",
+        // whatever either source said. The careful, conservative half of this design was dead code that
+        // read as working.
+        //
+        // A caller that has several sources' reports (ScoutExtractIngest, which lands a whole batched
+        // extract run) now reconciles ONCE with all of them, so a co-listed show can finally be judged.
+        //
+        // A caller with NO feed (the lead path, #799) gets no report and so cannot reconcile at all.
+        // That is still what makes #826 structurally impossible rather than guarded by a flag somebody
+        // could forget: there is nothing to forget, because there is nothing to pass.
+        let report: FeedReconcile.SourceReport? = feed.map { feed in
+            FeedReconcile.SourceReport(
                 sourceId: feed.sourceId,
                 seenKeys: seenKeys,
                 // Presence is judged against the RAW feed's listing URLs, not just what we upserted, so
@@ -659,7 +724,6 @@ enum ScoutService {
                 successfulCheckCount: feed.successfulCheckCount,
                 verdict: feed.verdict,
                 rejectedCount: feed.rejectedCount)
-            FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
         }
         // Several shows by the same org become ONE line with a count. Four separate lines saying the
         // same thing is how a report becomes wallpaper.
@@ -671,6 +735,10 @@ enum ScoutService {
             try context.save()
         } catch {
             // #499: everything above was classified/upserted in memory but never persisted.
+            //
+            // #888 part B: and so it carries NO report. A run whose writes did not land has not swept
+            // anything, and letting it reconcile would judge a show absent from a feed that was never
+            // actually recorded. Deliberately not merely "safe": there is nothing to reconcile against.
             var outcome = Outcome(found: events.count, inserted: inserted, updated: updated,
                                   skipped: skipped, uncertain: uncertain,
                                   collapsedIntoRun: collapsedIntoRun, saveFailed: true)
@@ -680,6 +748,7 @@ enum ScoutService {
         var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
                               uncertain: uncertain, collapsedIntoRun: collapsedIntoRun)
         outcome.suppressedOrgs = suppressed
+        outcome.report = report
         return outcome
     }
 
