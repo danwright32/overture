@@ -183,6 +183,90 @@ HEALTHY_EXIT=$?
 
 assert_equals "a healthy runner listening a long time is never killed" "0" "${HEALTHY_EXIT}"
 
+# --- #886: a runner that cannot register must become VISIBLE, not retry forever in silence ----------
+#
+# #881 cured the deadlock. It did not make a FAILING runner visible, and the two are different: a
+# runner that never manages to register is not running CI at all, and today it retries every 30s
+# forever while the only evidence sits in a LaunchAgent log nobody reads. That is the same class of
+# silent failure #881 was about, one level up.
+#
+# (What the 401 "Bad credentials" in that log actually was: the ZOMBIE's own dead credentials, not a
+# bad minting token. `failed to mint` and `config.sh failed` never appear in the loop's log even once,
+# so the gh token always worked and registration always succeeded. The 401s sit immediately before
+# "the runner registration has been deleted from the server", which is #881's zombie, and they stop
+# for good the moment its supervisor healed it. So the credential is not the bug. The SILENCE is.)
+
+ESCALATE_AFTER=3
+
+assert_equals "one failed cycle is routine, and must not cry wolf" \
+  "quiet" "$(registration_alarm 1)"
+assert_equals "two is still routine (a blip, a token minted just as GitHub hiccuped)" \
+  "quiet" "$(registration_alarm 2)"
+assert_equals "three consecutive failures is a broken runner, and says so" \
+  "alarm" "$(registration_alarm 3)"
+assert_equals "and it keeps saying so rather than falling quiet again" \
+  "alarm" "$(registration_alarm 9)"
+assert_equals "a cycle that succeeded resets the count to nothing" \
+  "quiet" "$(registration_alarm 0)"
+
+# The alarm has to LAND somewhere Dan will see, or it is just another line in a log nobody reads,
+# which is the whole complaint. It writes a marker naming the failure and when it started.
+ALARM_DIR="$(mktemp -d)"
+RUNNER_ALARM_FILE="${ALARM_DIR}/ci-runner-alarm.txt"
+
+raise_registration_alarm 4 "config.sh failed"
+
+if [[ -f "${RUNNER_ALARM_FILE}" ]] && grep -q "4" "${RUNNER_ALARM_FILE}" \
+   && grep -q "config.sh failed" "${RUNNER_ALARM_FILE}"; then
+  echo "ok - the alarm writes a marker naming the failure and how many cycles it has lasted"
+else
+  echo "FAIL - the alarm left nothing Dan could ever see"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# ...and clears itself the moment the runner registers again, or Dan is left staring at an alarm for a
+# problem that fixed itself, which teaches him to ignore the next one.
+clear_registration_alarm
+if [[ -f "${RUNNER_ALARM_FILE}" ]]; then
+  echo "FAIL - a recovered runner still shows an alarm"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a runner that recovers clears its own alarm"
+fi
+
+# THE WIRE. Counting, deciding and raising being individually right is worth nothing if the loop's
+# failure path does not put them together, and a rule that is never called is the failure this repo has
+# already shipped once (#887). So drive the actual path the loop takes, not the pieces.
+FAILED_REGISTRATIONS=0
+rm -f "${RUNNER_ALARM_FILE}"
+
+on_registration_failure "config.sh failed" >/dev/null
+on_registration_failure "config.sh failed" >/dev/null
+if [[ -f "${RUNNER_ALARM_FILE}" ]]; then
+  echo "FAIL - two failures cried wolf; a blip must stay quiet"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - the loop's own failure path stays quiet through a blip"
+fi
+
+on_registration_failure "config.sh failed" >/dev/null
+if [[ -f "${RUNNER_ALARM_FILE}" ]] && grep -q "3 times in a row" "${RUNNER_ALARM_FILE}"; then
+  echo "ok - the loop's own failure path raises the alarm on the third consecutive failure"
+else
+  echo "FAIL - the loop failed to register three times and told nobody"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# And a runner that comes back clears it, through the same path the loop actually uses.
+on_registration_success
+if [[ -f "${RUNNER_ALARM_FILE}" ]]; then
+  echo "FAIL - the loop's success path left a stale alarm standing"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - the loop's own success path clears the alarm"
+fi
+rm -rf "${ALARM_DIR}"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

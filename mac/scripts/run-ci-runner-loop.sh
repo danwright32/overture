@@ -42,8 +42,74 @@ LIVENESS_STRIKES="${OVERTURE_CI_LIVENESS_STRIKES:-3}"
 # left the runner idle and unavailable for ~50s after every single job (seen live, 2026-07-13).
 LIVENESS_TICK="${OVERTURE_CI_LIVENESS_TICK:-5}"
 
+# #886. A runner that cannot REGISTER retries every 30s forever, and says so only in a LaunchAgent log
+# nobody reads. #881 cured the deadlock (a live process holding a dead session); it did not make a
+# runner that is simply failing visible, and those are different: a runner that never registers is not
+# running CI at all, and the first anyone knows of it is a PR that will not merge.
+#
+# On the 401s in that log, since they are what prompted this and the diagnosis matters: they were the
+# ZOMBIE's own dead credentials, not a bad minting token. `failed to mint` and `config.sh failed` appear
+# in the loop's log exactly zero times, so the gh token always worked and registration always succeeded.
+# The 401s sit immediately before "the runner registration has been deleted from the server", which is
+# #881's zombie signature, and they stopped for good the moment its supervisor healed it. The credential
+# was never the bug. The SILENCE around a failing runner is.
+#
+# Three, not one: an unlucky cycle (a network blip, GitHub hiccuping as a token is minted) is routine and
+# must not cry wolf, or Dan learns to ignore the alarm and it stops meaning anything.
+ESCALATE_AFTER="${OVERTURE_CI_ESCALATE_AFTER:-3}"
+RUNNER_ALARM_FILE="${OVERTURE_CI_ALARM_FILE:-$HOME/Library/Application Support/Overture/ci-runner-alarm.txt}"
+
 log() {
   echo "$(date -u +%FT%TZ) $1"
+}
+
+# Whether this many CONSECUTIVE failed registration cycles is still routine, or is a broken runner.
+registration_alarm() {
+  local consecutive="$1"
+  if (( consecutive >= ESCALATE_AFTER )); then echo "alarm"; else echo "quiet"; fi
+}
+
+# Say it somewhere Dan will actually see. A louder line in the same log would change nothing: the whole
+# complaint is that the log is where failures go to be unread.
+raise_registration_alarm() {
+  local consecutive="$1" reason="$2"
+  mkdir -p "$(dirname "${RUNNER_ALARM_FILE}")"
+  {
+    echo "Overture's CI runner has failed to register ${consecutive} times in a row."
+    echo "Last failure: ${reason}"
+    echo "Since: $(date -u +%FT%TZ)"
+    echo "CI cannot run while this is true, so swift-tests will sit queued and nothing will merge."
+    echo "Logs: ~/Library/Logs/OvertureCIRunner/"
+  } > "${RUNNER_ALARM_FILE}"
+
+  # Best effort, and deliberately not fatal: a notification that fails must never take down the runner
+  # loop that is still trying to recover.
+  osascript -e "display notification \"Failed to register ${consecutive} times. CI cannot run.\" with title \"Overture CI runner\"" >/dev/null 2>&1 || true
+}
+
+# A runner that recovers clears its own alarm. Leaving it up would have Dan chasing a problem that
+# fixed itself, which is the fastest way to teach him to ignore the next one.
+clear_registration_alarm() {
+  rm -f "${RUNNER_ALARM_FILE}"
+}
+
+# The whole failure path in one place, so the WIRE is a test and not a hope: counting, deciding and
+# raising have to happen TOGETHER, and a rule that is right but never called is the failure this repo
+# has already shipped (#887). Both callers below go through here.
+FAILED_REGISTRATIONS=0
+
+on_registration_failure() {
+  local reason="$1"
+  FAILED_REGISTRATIONS=$((FAILED_REGISTRATIONS + 1))
+  log "${reason} (${FAILED_REGISTRATIONS} in a row), retrying in ${RETRY_DELAY}s"
+  if [[ "$(registration_alarm "${FAILED_REGISTRATIONS}")" == "alarm" ]]; then
+    raise_registration_alarm "${FAILED_REGISTRATIONS}" "${reason}"
+  fi
+}
+
+on_registration_success() {
+  FAILED_REGISTRATIONS=0
+  clear_registration_alarm
 }
 
 gh_as_danwright32() {
@@ -133,7 +199,7 @@ main() {
     log "minting a fresh registration token for ${REPO}"
     TOKEN="$(gh_as_danwright32 api -X POST "repos/${REPO}/actions/runners/registration-token" --jq .token)"
     if [[ -z "${TOKEN}" || "${TOKEN}" == "null" ]]; then
-      log "failed to mint a registration token, retrying in ${RETRY_DELAY}s"
+      on_registration_failure "could not mint a registration token"
       sleep "${RETRY_DELAY}"
       continue
     fi
@@ -147,10 +213,14 @@ main() {
     if ! ./config.sh --url "https://github.com/${REPO}" --token "${TOKEN}" \
         --name "${RUNNER_NAME}" --labels "${RUNNER_LABEL}" --work _work \
         --unattended --ephemeral --replace; then
-      log "config.sh failed, retrying in ${RETRY_DELAY}s"
+      on_registration_failure "config.sh failed"
       sleep "${RETRY_DELAY}"
       continue
     fi
+
+    # Registered. Whatever was wrong is over, and an alarm left standing for a problem that fixed itself
+    # is how Dan learns to ignore the next one.
+    on_registration_success
 
     log "listening for one job as ${RUNNER_NAME} (label: ${RUNNER_LABEL})"
     ./run.sh &
