@@ -26,6 +26,12 @@ enum LaunchMigrations {
         // Idempotent: guarded by "is there a Carnegie row yet", and it never drops a source id a
         // prospect already carries.
         WatchedSourceBackfill.run(in: context)
+        // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
+        // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
+        // backfills above, this one is not a one-time migration: it runs every launch, because a show
+        // goes by every day. Idempotent for the same reason they are (a retired show is no longer `new`,
+        // so a second pass cannot see it). It returns how many it touched, for a caller that wants to say.
+        WentByRetirement.run(in: context)
         do {
             try context.save()
             return true

@@ -116,9 +116,29 @@ struct ProspectRowRestoreGuardTests {
             Issue.record("actions view not found")
             return
         }
-        let body = prospectRow[actionsRange.lowerBound...].prefix(600)
+        let body = prospectRow[actionsRange.lowerBound...].prefix(1600)
         #expect(body.contains("item.status == .dismissed"))
         #expect(body.contains("Restore"))
+    }
+
+    // #864: a show Overture retired because its date passed is stored as dismissed, so it would fall into
+    // the Restore branch above and offer a button that the next launch silently undoes. Its own branch
+    // has to come FIRST. Order is the whole guarantee here, so the guard checks the order, not just that
+    // both branches exist.
+    @Test func aRetiredShowIsBranchedOnBeforeTheRestoreBranch() {
+        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+            Issue.record("actions view not found")
+            return
+        }
+        let body = String(prospectRow[actionsRange.lowerBound...].prefix(1600))
+        guard let wentBy = body.range(of: "item.dismissReason == .wentBy"),
+              let dismissed = body.range(of: "item.status == .dismissed") else {
+            Issue.record("expected both the went-by branch and the dismissed branch in actions")
+            return
+        }
+        #expect(wentBy.lowerBound < dismissed.lowerBound,
+                "a retired show must be caught before the Restore branch, or it offers a Restore that undoes itself")
+        #expect(!body.contains("Went by\", systemImage: \"archivebox\""))
     }
 
     @Test func dismissMenuIsNotNestedInElseIfKept() {  // #499 regression

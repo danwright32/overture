@@ -25,6 +25,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let possibleMatchSource: String?
     let possibleMatchName: String?
     let status: ReviewStatus
+    // #864: why it was dismissed, when it was. `wentBy` is Overture's own: the show's last night
+    // passed while it sat untriaged. Archive needs it to keep a retirement apart from a cut Dan made.
+    var dismissReason: DismissReason? = nil
 
     // Trigger 2: the drafted email, when present. Contact identity (name/role/email/confidence/
     // method/form URL) lives per-recipient on `contacts` now (#654); see `primaryContact`.
@@ -561,6 +564,7 @@ extension QueueItem {
             possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
             status: p.status,
+            dismissReason: p.dismissReason,
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,

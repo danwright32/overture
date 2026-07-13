@@ -11,6 +11,11 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
     case lostNotInterested
     case booked
     case dismissed
+    // #864: a show whose last night passed while it sat untriaged. Overture retired it; Dan never
+    // decided anything. Its own bucket, because Dismissed means "I cut this", and it is also where he
+    // goes to undo a cut he made by mistake (#28). Filling that list with shows he never even looked at
+    // would bury the one he is actually looking for.
+    case wentBy
 
     var label: String {
         switch self {
@@ -20,10 +25,14 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
         case .lostNotInterested: return "Closed (not interested)"
         case .booked: return "Booked"
         case .dismissed: return "Dismissed"
+        case .wentBy: return "Went by"
         }
     }
 
     static func of(_ item: QueueItem) -> ArchiveStatus {
+        // Checked before .dismissed: a retired show IS stored as dismissed (that is how it leaves the
+        // queue and stops being counted), and its reason is the only thing that distinguishes it.
+        if item.dismissReason == .wentBy { return .wentBy }
         guard item.status != .dismissed else { return .dismissed }
         switch item.performanceStatus {
         case .new: return .new
