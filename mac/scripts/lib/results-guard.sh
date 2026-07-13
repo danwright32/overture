@@ -21,6 +21,43 @@
 # Either way the source's content hash is NOT stamped and its unread flag stays set, so the next scout
 # reads it again rather than skipping it forever.
 
+# quarantine_unreadable_results <results>   (#868)
+#
+# A results file that does not parse is not results, and leaving it in place is the quietest failure in
+# the whole app. The file is FRESH, so `DetachedRunOutcome.phase` reads it as a run that produced
+# results; the app then decodes it, fails, and returns in silence (`guard let ... else { return }`). No
+# warning, no error, nothing. The existing "the run finished but didn't produce any results" message,
+# which already carries the tail of the run log, never fires precisely BECAUSE a file is sitting there.
+#
+# Moving it aside restores that message: no results file means the run reads as what it actually was. The
+# bytes are kept as `.corrupt`, because they are the only evidence of what the run really did.
+#
+# This is the guarantee prep and reply get, and it is deliberately NOT the one scout gets. Their results
+# have no per-item failure worth synthesizing: an empty prep result would CLAIM the run researched a show
+# and found nobody, about a show nobody ever looked at, and a fabricated reply intent would drive a
+# conversation state off a decision no model made. Scout is different: its results are per-source and its
+# ingest latches a content hash, so naming the sources it lost is both possible and load-bearing.
+quarantine_unreadable_results() {
+  local results="$1"
+
+  [ -f "${results}" ] || return 0                    # no file: already handled on its own path
+  command -v node >/dev/null 2>&1 || return 0        # no node: degrade to today's behaviour, never worse
+
+  node -e '
+    const fs = require("fs");
+    const file = process.argv[1];
+    const raw = fs.readFileSync(file, "utf8");
+    try {
+      JSON.parse(raw);
+    } catch {
+      // Kept, never deleted: this is the only record of what the run produced, and the reason it failed
+      // is somewhere in it.
+      fs.renameSync(file, file + ".corrupt");
+      console.log(`results file did not parse; moved aside to ${file}.corrupt so the run reports as empty`);
+    }
+  ' "${results}" 2>/dev/null || true
+}
+
 # ensure_every_queued_source_reported <queue> <results> <log> <exit-status>
 #
 # Guarantees every sourceId in the queue has a result in the results file. Never fails the run it is

@@ -165,6 +165,109 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
+# --- quarantine_unreadable_results (#868) -------------------------------------------------------------
+#
+# The prep and reply runs have no per-item failure to synthesize: an empty prep result would CLAIM the
+# run researched a show and found nobody, about a show nobody looked at. So they get the other half of
+# the guarantee instead.
+#
+# A results file that does not parse is not results, and leaving it in place is the quietest failure in
+# the app. The file is FRESH, so the app reads it as a run that produced results, its decode fails, and
+# `guard let ... else { return }` returns in silence: no warning, no error, nothing. The existing "the
+# run finished but didn't produce any results" message, which already carries the log tail, never fires,
+# precisely BECAUSE a file is sitting there.
+#
+# Moving it aside restores that message. The bytes are kept, because they are the only evidence of what
+# the run actually did.
+
+PREP_RESULTS="${TMP}/prep-results.json"
+
+# The silent black hole: unparsable results.
+printf '%s' '{"version":6,"results":[{"naturalKey":"aurora|2026-03-10|carn' > "${PREP_RESULTS}"
+quarantine_unreadable_results "${PREP_RESULTS}"
+
+if [[ -f "${PREP_RESULTS}" ]]; then
+  echo "FAIL - an unparsable results file must not be left where the app will read it as a fresh success"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - an unparsable results file is moved aside, so the app's empty-run warning fires instead of silence"
+fi
+assert_contains "and its bytes are kept as evidence of what the run actually did" \
+  "$(cat "${PREP_RESULTS}.corrupt" 2>/dev/null || echo MISSING)" '"naturalKey":"aurora|2026-03-10|carn'
+
+# A GOOD results file must never be touched. This runs on every run, including every successful one, so
+# a false positive here would throw away Dan's drafts.
+cat > "${PREP_RESULTS}" <<'JSON'
+{"version":6,"generatedAt":"2026-07-12T00:00:00Z","results":[
+  {"naturalKey":"aurora|2026-03-10|carnegie-hall","contacts":[],"draft":{"subject":"S","body":"B","variant":"rate_stated"}}
+]}
+JSON
+good_before="$(cat "${PREP_RESULTS}")"
+quarantine_unreadable_results "${PREP_RESULTS}"
+assert_equals "a results file that parses is left exactly as the run wrote it" \
+  "${good_before}" "$(cat "${PREP_RESULTS}" 2>/dev/null || echo GONE)"
+
+# An empty results array is a legitimate answer (the run found nothing), not a corrupt file.
+printf '%s' '{"version":6,"generatedAt":"2026-07-12T00:00:00Z","results":[]}' > "${PREP_RESULTS}"
+quarantine_unreadable_results "${PREP_RESULTS}"
+assert_equals "an empty but valid results file is not corrupt" \
+  '{"version":6,"generatedAt":"2026-07-12T00:00:00Z","results":[]}' \
+  "$(cat "${PREP_RESULTS}" 2>/dev/null || echo GONE)"
+
+# Never make a bad run worse: no file, and no node.
+rm -f "${PREP_RESULTS}"
+if quarantine_unreadable_results "${PREP_RESULTS}"; then
+  echo "ok - no results file at all is already handled on its own path, so this is a no-op"
+else
+  echo "FAIL - a missing results file must not fail the run"
+  FAILURES=$((FAILURES + 1))
+fi
+
+printf '%s' 'not json {' > "${PREP_RESULTS}"
+if PATH="/nonexistent" quarantine_unreadable_results "${PREP_RESULTS}"; then
+  echo "ok - a machine with no node degrades quietly instead of failing the run"
+else
+  echo "FAIL - the guard must never turn a bad run into a worse one"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# --- every runner is actually wired up ---------------------------------------------------------------
+#
+# A guard no runner calls is worse than none: it reads as solved while every run still fails the same way.
+RUNNERS_DIR="${SCRIPT_DIR}/.."
+for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
+  body="$(cat "${RUNNERS_DIR}/${script}")"
+  assert_contains "${script} sources the shared guard" "${body}" 'lib/results-guard.sh'
+  # #856/#868: under set -e a dead claude took the whole script down at that line, before anything could
+  # notice what had been lost. The status has to be CAPTURED for any guard to run at all.
+  assert_contains "${script} captures claude's exit status instead of dying on it" "${body}" 'CLAUDE_STATUS=$?'
+done
+
+# The two runners get DIFFERENT guarantees, on purpose, because their results mean different things.
+#
+# Prep and reply: quarantine an unparsable file, so the run reports as empty rather than decoding into
+# silence. Nothing is invented in its place, because there is nothing honest to invent: an empty prep
+# result would claim the run researched a show and found nobody, and a fabricated reply intent would
+# drive a conversation state off a decision no model ever made.
+for script in prep-run.sh reply-classify-run.sh; do
+  assert_contains "${script} quarantines a results file that does not parse" \
+    "$(cat "${RUNNERS_DIR}/${script}")" 'quarantine_unreadable_results'
+done
+
+# Scout gets the STRONGER one, and therefore not this one: it rewrites even a corrupt file into an honest
+# per-source result (keeping the corrupt bytes), because its results are per-source and its ingest latches
+# a content hash. Naming the sources it lost is both possible and load-bearing there; merely reporting
+# "empty" would leave each source's health unjudged.
+scout_body="$(cat "${RUNNERS_DIR}/scout-extract-run.sh")"
+assert_contains "scout-extract reports every source the run never came back with" \
+  "${scout_body}" 'ensure_every_queued_source_reported'
+if [[ "${scout_body}" == *'quarantine_unreadable_results'* ]]; then
+  echo "FAIL - scout must not merely quarantine: that would throw away its per-source not_read report"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - scout keeps its stronger per-source guarantee rather than degrading to an empty run"
+fi
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

@@ -17,6 +17,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #804: which model this run uses, and the helper that records it. One place, so a model choice
 # cannot be right in two runners and wrong in the third.
 . "$(dirname "$0")/lib/models.sh"
+# #868: a results file that does not parse is not results. Left in place it reads as a fresh, successful
+# run and the app fails to decode it in total silence.
+. "$(dirname "$0")/lib/results-guard.sh"
 open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -63,11 +66,22 @@ resolve_claude
 
 # Headless Claude Code run. Tools limited to what the run needs.
 cd "$PROJECT_DIR"
+# #868: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
+# (a crash, an API error, an out-of-memory kill) took the whole script down with it, right here, before
+# anything below could react to what had been lost.
+CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_DRAFTING}" \
-  --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill"
+  --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill" || CLAUDE_STATUS=$?
+
+# #868: if the run wrote a results file that does not parse, move it aside. Left where it is, the app
+# reads a FRESH file as a run that produced results, its decode fails, and it says nothing at all. Moved,
+# the run reports as what it was, with the tail of this log. Prep is the worst place for that silence:
+# this is the run that finds the contacts and writes the drafts.
+quarantine_unreadable_results "$RESULTS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
 record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
 
-echo "prep run finished -> $RESULTS"
+echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
+exit "$CLAUDE_STATUS"
