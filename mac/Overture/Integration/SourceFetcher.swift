@@ -181,7 +181,16 @@ enum SourceFetcher {
 // whitespace on every request must NOT look like a page that changed, or the "skip unchanged pages"
 // saving quietly becomes zero and every source is re-read by an AI every day forever.
 enum PageNormalizer {
-    private static let meaningfulAttributes = ["href", "datetime", "content", "title"]
+    // `value` and `rel` are here because a site's own NAVIGATION is content, and an allow-list that
+    // omits them deletes it. On the live Kaufman Music Center calendar the route to its other months is
+    // not an `href` at all, it is `<option value="https://.../mch/calendar/2026/10/">`; all twenty-four
+    // were being stripped before anything could read them. You cannot follow navigation that is already
+    // gone from the bytes you kept, which is what blocked multi-page calendars (#858).
+    //
+    // Keeping them is free. See `contentProjection`: the hash is taken over visible text plus `href`
+    // values, and visible text has every tag stripped out of it, so an attribute reaches neither half.
+    // No attribute added here can move the hash or cost a token. That is locked by a test, not assumed.
+    private static let meaningfulAttributes = ["href", "datetime", "content", "title", "value", "rel"]
 
     static func normalize(_ html: String) -> String {
         var s = html
@@ -193,6 +202,14 @@ enum PageNormalizer {
         //
         // A confident, plausible, WRONG answer from a step that reported success is the worst failure
         // this system can produce, and the tests missed it because every fixture script fit on one line.
+        //
+        // `head` stays on this list, and #892 asked whether it should. It should. Keeping it looks like
+        // the same idea as keeping `rel` (a `<link rel="next">` lives up there), and it is the opposite:
+        // the head is full of ASSET hrefs, and `contentProjection` reads every href it can see. Kaufman
+        // serves `<link rel="stylesheet" href="/ui/css/main.2026-07-09-13-37-08.css">`, whose URL is a
+        // BUILD TIMESTAMP. Keep the head and that timestamp is in the hash, so every CSS redeploy makes
+        // an unchanged calendar look changed and buys a full AI re-read of it. A stylesheet is not a
+        // listing. Attributes are free (they never reach the hash); the head's hrefs are not.
         s = s.replacingOccurrences(
             of: "(?s)<(script|style|noscript|svg|head)[^>]*>.*?</\\1>", with: " ",
             options: [.regularExpression, .caseInsensitive])
