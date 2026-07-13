@@ -31,7 +31,7 @@ the workflow's runbook is its spec.
 | `overture-prep-progress.json` | `prep-run.sh` (seeds it) + Prep run (workflow, updates it) | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename) |
+| `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename), `HandoffCleanupTests.swift` (retention) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
 | `overture-scout-extract-results.json` | Scout-extract run (workflow) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` (seeds it) + scout-extract run (workflow, updates it) | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
@@ -44,6 +44,26 @@ uncertain events. See Per contract below.
 
 "App" is the SwiftUI Mac app (`mac/Overture/`). "Workflow" is a Claude Code run on Dan's Max
 plan, not code.
+
+## How long these files stay (#821)
+
+Most of the files above are overwritten by the next run that produces them, so they never pile up.
+Two are not, and both are kept on purpose:
+
+- `overture-scout-page-<sourceId>.html`, the pinned page. Kept after its run too: when a source comes
+  back with nonsense, it is the only record of what that page actually said. A watched source
+  overwrites its own pin every read (the name is derived from its id), but a lead pin is written per
+  pasted URL (`LeadIntakeModel.sourceId(for:)`), so those accumulate one per distinct link, and a
+  source dropped from the watchlist orphans its pin.
+- `<results>.corrupt`, the bytes of a results file that would not parse (`quarantine_unreadable_results`
+  in `mac/scripts/lib/results-guard.sh`, #868). The only evidence of what that run really did.
+
+`HandoffCleanup.sweep` deletes both at launch once they are more than 14 days old, next to the store
+backup rotation and for the same reason. It is scoped by NAME first and age second: the handoff
+directory also holds the booking history, the Gmail tokens, and Dan's voice guidance, so a sweep that
+went by age alone would eventually take them and the loss would be silent. Nothing else in the folder
+is a candidate at any age. It cannot reach a pin an in-flight run is about to read: those are minutes
+old, never days.
 
 ## CI coverage
 
