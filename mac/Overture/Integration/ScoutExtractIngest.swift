@@ -103,6 +103,30 @@ enum ScoutExtractIngest {
                 state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
         }
 
+        // #888 part B: ONE reconcile, with EVERY source this run landed.
+        //
+        // This used to happen inside `apply`, once per source, with a single-element report list. So
+        // `believable` was never larger than one source, and a show co-listed by two could never satisfy
+        // "every owner was asked and none has it" on any run, whatever either source said. The careful,
+        // conservative half of FeedReconcile was dead code that read as working.
+        //
+        // Batched here, so a show that both Kaufman and Merkin have dropped can finally be seen as gone,
+        // while a show whose second owner was NOT in this run stays untouched, because that source might
+        // still be listing it and nobody asked.
+        //
+        // Deliberately AFTER the whole loop and not inside it: a partial batch would arm exactly the
+        // half-informed conclusion this rule exists to prevent.
+        //
+        // KNOWN LIMIT, stated rather than hidden: the native (Carnegie) sweep reconciles separately, in
+        // runScout, minutes before this file even exists. So a show co-listed by Carnegie AND a watched
+        // HTML calendar is still never marked gone. That is the SAFE direction and no worse than before,
+        // but it is not the whole rule, and somebody should know that before assuming it is.
+        let reports = outcome.allReports
+        if !reports.isEmpty {
+            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+            FeedReconcile.reconcile(stored: allStored, reports: reports, today: today)
+        }
+
         return outcome
     }
 

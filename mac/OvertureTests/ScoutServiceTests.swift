@@ -272,22 +272,22 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
         #expect(try xRow().missedScoutCount == 0)
 
         // X is absent from a healthy (non-empty) feed: one miss, not yet gone.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 1)
         #expect(try xRow().disappearedFromFeed == false)
 
         // Absent again: two misses, now gone.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().disappearedFromFeed == true)
 
         // X reappears: counter resets.
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
@@ -301,12 +301,12 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.apply(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
 
         // Tiny feed (only y) but a large healthy baseline → feed looks degraded → X is NOT a miss.
-        _ = ScoutService.apply(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(baseline: 80), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(baseline: 80), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
