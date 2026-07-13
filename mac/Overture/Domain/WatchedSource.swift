@@ -69,9 +69,28 @@ final class WatchedSource {
     var degradedStreak: Int
     var lastDegradedCount: Int
 
+    // #891: what the last run that READ this source managed to read, and what it could not (an event whose
+    // own detail page was never reached comes back with no venue and is dropped).
+    //
+    // Persisted rather than merely reported in the run summary, because the consequence persists: past
+    // FeedReconcile's tolerance this source has forfeited the right to mark anything cancelled (#887), and
+    // it keeps forfeiting it until it can read its pages again. A fact Dan can only see in the seconds
+    // after a scout is a fact he will never see, because that is not when he opens the Sources sheet.
+    //
+    // Defaulted, so existing rows migrate cleanly and simply carry no history.
+    var lastReadableCount: Int = 0
+    var lastUnreadableCount: Int = 0
+
     var pageCount: Int
     var addedAt: Date
     var notes: String?
+
+    // The line the Sources sheet shows, or nothing when this source read everything. Decided beside the
+    // data and NOT in the view (#863/#885), and drawn from the same tolerance the reconcile used, so the
+    // sheet can never tell Dan cancellation is working on a source where it is switched off.
+    var readabilityNote: String? {
+        SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount)
+    }
 
     init(sourceId: String, orgName: String, listingsURL: String? = nil, kind: SourceKind,
          addedAt: Date = Date()) {
@@ -90,6 +109,8 @@ final class WatchedSource {
         self.baselineFeedCount = 0
         self.degradedStreak = 0
         self.lastDegradedCount = 0
+        self.lastReadableCount = 0
+        self.lastUnreadableCount = 0
         self.pageCount = 1
         self.addedAt = addedAt
         self.notes = nil

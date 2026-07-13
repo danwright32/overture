@@ -181,6 +181,18 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #891: shows on this calendar whose own page Overture could not open. A source quietly
+            // returning half its shows unreadable is BROKEN, not quiet, and those two looked identical
+            // here. Past the tolerance it has also stopped being able to mark anything gone (#887), and
+            // the sentence says so, because that consequence is the part Dan can act on.
+            //
+            // Gold, not rust: this is a source degrading, not a source that failed. The wording is decided
+            // in SourceReadability, never here (#863/#885).
+            if let readability = source.readabilityNote {
+                Text(readability).font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // A permanently dead source needs a way out that is DAN'S choice, or a failing source would
             // be reported at him every run forever with nothing he could do about it. Recorded as his
             // decision, never as a refusal: Carnegie is excluded because it has no page to watch.
