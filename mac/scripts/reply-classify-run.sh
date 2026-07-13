@@ -17,6 +17,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #804: which model this run uses, and the helper that records it. One place, so a model choice
 # cannot be right in two runners and wrong in the third.
 . "$(dirname "$0")/lib/models.sh"
+# #868: a results file that does not parse is not results. Left in place it reads as a fresh, successful
+# run and the app fails to decode it in total silence.
+. "$(dirname "$0")/lib/results-guard.sh"
 open_run_log "reply-classify-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -56,11 +59,20 @@ resolve_claude
 
 # Headless Claude Code run; reading the reply text and writing the results is all it needs.
 cd "$PROJECT_DIR"
+# #868: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
+# took the whole script down with it, right here, before anything below could react.
+CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_REPLY_CLASSIFY}" \
-  --allowedTools "Read,Write"
+  --allowedTools "Read,Write" || CLAUDE_STATUS=$?
+
+# #868: a results file that does not parse is moved aside, so the app reports an empty run instead of
+# failing to decode it in silence. Nothing is invented in its place: a fabricated intent would drive a
+# conversation state off a decision no model ever made.
+quarantine_unreadable_results "$RESULTS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
 record_model "$RESULTS" "${OVERTURE_MODEL_REPLY_CLASSIFY}"
 
-echo "reply-classify run finished -> $RESULTS"
+echo "reply-classify run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
+exit "$CLAUDE_STATUS"
