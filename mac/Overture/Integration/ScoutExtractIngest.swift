@@ -92,7 +92,12 @@ enum ScoutExtractIngest {
                 continue
             }
 
-            recordSuccess(on: source, events: events.count, health: health, now: now)
+            recordSuccess(on: source, events: events.count, health: health, now: now,
+                          // #891: recorded on the SAME branch as the run's success, so the count can never
+                          // describe a run other than the one that produced it. A source that recovers
+                          // overwrites this with a zero and stops complaining, which it must: a warning
+                          // that never clears becomes furniture, and this is the one line Dan must not skim.
+                          unreadable: results.rejectedEvents(for: source.sourceId).count)
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
                 state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
@@ -104,7 +109,11 @@ enum ScoutExtractIngest {
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that
     // worked (the warmup that eventually lets this source mark a show as gone).
     private static func recordSuccess(on source: WatchedSource, events: Int,
-                                      health: FeedReconcile.FeedHealthState, now: Date) {
+                                      health: FeedReconcile.FeedHealthState, now: Date,
+                                      unreadable: Int = 0) {
+        source.lastReadableCount = events
+        source.lastUnreadableCount = unreadable
+
         let updated = FeedReconcile.updatedHealth(health, currentCount: events)
         source.baselineFeedCount = updated.baseline
         source.degradedStreak = updated.degradedStreak

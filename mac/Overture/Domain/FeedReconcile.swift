@@ -39,6 +39,24 @@ enum FeedReconcile {
     // everything we know about that source.
     static let maxRejectedFraction = 0.05
 
+    // #887/#891: could this run READ enough of what it looked at for its silence about a show to mean
+    // anything? A run that threw a large share of its own events away (no venue, so their detail page was
+    // never read) does not know how many OTHERS it silently failed to reach.
+    //
+    // A free function, and the ONE place this line is drawn. The Sources sheet has to tell Dan when a
+    // source has lost the ability to mark shows gone (#891), and a display that re-derived the tolerance
+    // for itself would eventually disagree with the reconcile, telling him cancellation is working on a
+    // source where it is switched off. Worse than saying nothing.
+    //
+    // A run that kept NOTHING is a broken run, not a fully-rejected sweep to be reasoned about, and never
+    // gets the tolerance.
+    static func rejectedIsWithinTolerance(readable: Int, unreadable: Int,
+                                          fraction: Double = maxRejectedFraction) -> Bool {
+        guard unreadable > 0 else { return true }
+        guard readable > 0 else { return false }
+        return Double(unreadable) / Double(readable + unreadable) <= fraction
+    }
+
     // Whether this run's feed is large enough, relative to the last healthy run, to trust which
     // shows are MISSING from it. No baseline yet (first scout) trusts the feed.
     static func feedIsTrustworthy(currentCount: Int, baseline: Int, fraction: Double = minHealthyFraction) -> Bool {
@@ -111,18 +129,11 @@ enum FeedReconcile {
         // that does not know is a caller reporting a clean sweep, and every existing one is.
         var rejectedCount: Int = 0
 
-        // #887: was this run able to actually READ most of what it looked at? A run that threw a large
-        // share of its own events away (no venue, so their detail page was never read) does not know how
-        // many OTHERS it silently failed to reach, so its silence about a show is worth nothing.
-        //
-        // A run that kept nothing at all is a broken run, not a fully-rejected sweep to be reasoned
-        // about, and it never gets the tolerance. (feedCount == 0 is refused below in any case; this
-        // makes the arithmetic honest rather than leaning on that.)
+        // #887/#891: was this run able to actually READ most of what it looked at? Delegated to the free
+        // function above, which is the ONE place this line is drawn, because the Sources sheet has to tell
+        // Dan the same thing (#891) and a second copy of the rule would eventually disagree with this one.
         var rejectedIsWithinTolerance: Bool {
-            guard rejectedCount > 0 else { return true }
-            let produced = feedCount + rejectedCount
-            guard produced > 0, feedCount > 0 else { return false }
-            return Double(rejectedCount) / Double(produced) <= FeedReconcile.maxRejectedFraction
+            FeedReconcile.rejectedIsWithinTolerance(readable: feedCount, unreadable: rejectedCount)
         }
 
         // Whether this source's SILENCE about a show can be believed. That is a far higher bar than
