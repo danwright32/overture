@@ -321,7 +321,11 @@ struct QueueView: View {
         AgentInputs(
             // #338/#370: the SAME criteria StageNavigation uses to pick which prospects a pill's
             // tap focuses on, so the count shown always matches what tapping it navigates to.
-            toTriage: StageNavigation.naturalKeys(forStage: "Scout", in: prospects).count,
+            // #861: counted through StageNavigation so the pill's NUMBER and the pill's CLICK can never
+            // disagree again. They did: it counted 102 when 25 were June shows already gone, then
+            // navigated him to shows the queue rightly refused to render.
+            toTriage: StageNavigation.naturalKeys(forStage: "Scout", in: prospects,
+                                                  today: QueueModel.easternToday()).count,
             keptToPrep: StageNavigation.naturalKeys(forStage: "Prep", in: prospects).count,
             prepRunning: PrepQueueService.isRunning(now: Date()),
             toReview: StageNavigation.naturalKeys(forStage: "Review", in: prospects).count,
