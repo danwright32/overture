@@ -34,6 +34,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftEditedByDan: Bool = false
+    // #846: which model wrote this draft (Prospect.draftModel). Read via draftTraceLabel below.
+    var draftModel: String? = nil
     var outcome: Outcome = .noResponse
     // Phase F (#424): the show's status derived from its contacts, snapshotted at build time.
     var performanceStatus: PerformanceStatus = .new
@@ -141,6 +143,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var primaryContact: RecipientSnapshot? {
         contacts.first(where: { $0.provenance == .act || $0.provenance == .performer }) ?? contacts.first
     }
+
+    // #846: "Drafted by opus", or nothing at all when this draft carries no trace. Decided here rather
+    // than in the SwiftUI body (#863), and shared with the reply draft via DraftTrace so the two surfaces
+    // cannot drift into saying it differently.
+    var draftTraceLabel: String? { DraftTrace.label(for: draftModel) }
 }
 
 // One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
@@ -166,6 +173,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
+    // #846: which model wrote this reply (Recipient.replyDraftModel). Read via replyDraftTraceLabel.
+    var replyDraftModel: String? = nil
     // #642 (#634 Phase D): a performer's direct-address draft, so the review screen can show Dan
     // exactly what this specific contact will receive instead of the shared draft body. Only ever
     // set when provenance == .performer; defaulted so existing call sites don't need updating.
@@ -210,6 +219,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
 
     // The AI reply drafter has produced a draft Dan can send or copy (#420 C6).
     var hasReplyDraft: Bool { (replyDraftBody?.isEmpty == false) }
+
+    // #846: "Drafted by opus" for THIS reply, or nothing when it carries no trace. Same DraftTrace rule
+    // as the cold draft: one implementation, so the two surfaces cannot drift into saying it differently.
+    var replyDraftTraceLabel: String? { DraftTrace.label(for: replyDraftModel) }
 
     // The deterministic self-check findings to surface on the reply draft (#456), or none once Dan has
     // edited it: it's his text then, the same suppression the cold path applies via draftEditedByDan
@@ -568,6 +581,7 @@ extension QueueItem {
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
+            draftModel: p.draftModel,
             outcome: p.outcome,
             performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
@@ -615,6 +629,7 @@ extension RecipientSnapshot {
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
+                  replyDraftModel: r.replyDraftModel,
                   overrideBody: r.overrideBody,
                   conversationState: r.conversationState,
                   conversationStateSource: r.conversationStateSource,
