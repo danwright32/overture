@@ -1,0 +1,27 @@
+{
+  "generatedAt" : "2026-07-12T22:04:11Z",
+  "model" : "haiku",
+  "results" : [
+    {
+      "events" : [
+        {
+          "performanceDate" : "2026-09-19",
+          "presenter" : "Kaufman Music Center",
+          "sourceUrl" : "https://www.kaufmanmusiccenter.org/mch/event/a-recital/",
+          "title" : "A Recital",
+          "venue" : "Merkin Hall"
+        }
+      ],
+      "note" : "Read page 1 of 4; later pages not read.",
+      "sourceId" : "kaufman-music-center",
+      "verdict" : "upcoming_listings"
+    },
+    {
+      "events" : [],
+      "note" : "The run exited with status 137 and produced no results for this source. It has NOT been read, and the next scout will try it again. Last lines of the run log: reading kaufman-music-center | wrote 1 event | reading bargemusic | Killed: 9",
+      "sourceId" : "bargemusic",
+      "verdict" : "not_read"
+    }
+  ],
+  "version" : 1
+}

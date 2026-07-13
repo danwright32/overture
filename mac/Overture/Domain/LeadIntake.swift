@@ -82,6 +82,12 @@ enum LeadIntake {
                 "That page doesn't list any dated events. It may not be their events page: try the link that shows their season or calendar.")
         case .unreadable:
             return .unreadable(unreadableMessage)
+        case .notRead:
+            // #856: unreachable from here. A lead's page is read by the app itself, in process, and
+            // `notRead` is only ever written by the detached scout-extract runner about a source its run
+            // died before opening. Handled rather than crashed, because a lead Dan is trying to add is
+            // the worst possible place to trap.
+            return .unreadable(unreadableMessage)
         }
     }
 

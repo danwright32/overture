@@ -17,6 +17,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #804: which model this run uses, and the helper that records it. One place, so a model choice
 # cannot be right in two runners and wrong in the third.
 . "$(dirname "$0")/lib/models.sh"
+# #856: the guarantee that this run cannot vanish. Every queued source comes back with a result, even
+# when the model writes none.
+. "$(dirname "$0")/lib/results-guard.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -84,19 +87,33 @@ nothing on the way home and the work vanishes silently.
 Write the complete v1 ScoutExtractResults JSON to $RESULTS and nothing else to that file:
 {\"version\":1,\"generatedAt\":\"<ISO8601>\",\"results\":[{\"sourceId\":\"...\",\"verdict\":\"...\",
 \"events\":[{\"title\":\"...\",\"presenter\":\"...\",\"venue\":\"...\",\"performanceDate\":\"YYYY-MM-DD\",
-\"sourceUrl\":\"...\"}],\"note\":\"one short line on anything that made this hard\"}]}"
+\"sourceUrl\":\"...\"}],\"note\":\"one short line on anything that made this hard\"}]}
+"
 
 resolve_claude
 
 # Headless Claude Code run. Read (the pinned pages), Write (results + progress), WebFetch (each event's
 # detail page, for the venue and exact date, which the listings page usually lacks). No Bash, no Skill,
 # no WebSearch: this run reads files, follows links it was given, and writes two files.
+#
+# #856: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
+# (a crash, an API error, an out-of-memory kill) took the whole script down with it, right here, before
+# anything could write down what had been asked for and lost. The run vanished, and the app was left
+# polling for a file that was never coming.
 cd "$PROJECT_DIR"
+CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_EXTRACTION}" \
-  --allowedTools "Read,Write,WebFetch"
+  --allowedTools "Read,Write,WebFetch" || CLAUDE_STATUS=$?
+
+# #856: whatever the model did or failed to do, every source this run was GIVEN now has a result. A
+# source the run never came back with is written down as `not_read`, with the tail of this log, so a lost
+# run reads as a reported failure instead of a silence. Runs before record_model so the stamp lands on
+# the file the app will actually read.
+ensure_every_queued_source_reported "$QUEUE" "$RESULTS" "$LOG" "$CLAUDE_STATUS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
 record_model "$RESULTS" "${OVERTURE_MODEL_EXTRACTION}"
 
-echo "scout-extract run finished -> $RESULTS"
+echo "scout-extract run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
+exit "$CLAUDE_STATUS"

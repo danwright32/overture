@@ -49,7 +49,8 @@ $VOICE and apply ONLY those distilled tendencies — NEVER quote or paraphrase r
 (the #119/#249 leak guard). Copy each item's naturalKey AND recipientId verbatim so each result attaches
 to the right contact. Write the complete v3 ReplyClassifyResults JSON (version 3; each result =
 {naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and nothing else to that file.
-If $VOICE is absent, draft from the runbook's voice rules alone."
+If $VOICE is absent, draft from the runbook's voice rules alone.
+"
 
 resolve_claude
 

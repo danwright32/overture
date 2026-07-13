@@ -30,6 +30,29 @@ no event data and no model can help).
 Without the verdict, a quiet source and a dead one are indistinguishable, which is the one failure Dan
 said must never happen.
 
+## The fifth verdict, and its second writer (#856)
+
+`not_read` is the only verdict the RUN never writes. `scout-extract-run.sh` writes it, about the run,
+after the run has ended, for any queued `sourceId` that did not come back (see
+`mac/scripts/lib/results-guard.sh`). So the results file has two writers: the model for what it read,
+and the script for what the run lost. The runbook deliberately never mentions `not_read`, because the
+model is in no position to make that claim about itself.
+
+It exists because instructions are not a guarantee. Three times in one evening a run did real work and
+produced nothing: it stopped to ask a question (#847), it hit a broken prompt (#853), and it left the
+app polling for a file that never came (#848). "The run vanished" must not be a state the app can be
+in, so the script speaks for what the model did not.
+
+**It is not `unreadable`, and that distinction is the whole point.** `unreadable` means the page itself
+is broken, and the app says so to Dan in those exact words ("that calendar is drawn by JavaScript"). A
+page nobody opened is not a broken page. Reusing `unreadable` here would send him to fix a calendar
+that was never the problem, and teach him to distrust the failing list, which is exactly where the one
+genuinely broken source has to be visible. Both are failures in the sense that matters (the content
+hash is NOT stamped and the unread flag stays set, so the next scout reads the page again), but they
+say different things because they ARE different things.
+
+`results-not-read-v1.json` is that file: one source the run read, one it never reached.
+
 ## Shape
 
 `queue-v1.json`: what the app writes. The run does NOT fetch the page. The app fetches it, writes it

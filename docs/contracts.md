@@ -33,7 +33,7 @@ the workflow's runbook is its spec.
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
-| `overture-scout-extract-results.json` | Scout-extract run (workflow) | App (`ScoutExtractResultsDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
+| `overture-scout-extract-results.json` | Scout-extract run (workflow) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` (seeds it) + scout-extract run (workflow, updates it) | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 
