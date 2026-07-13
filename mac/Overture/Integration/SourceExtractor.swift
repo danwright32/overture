@@ -27,11 +27,22 @@ import Foundation
 //
 // The verdict routes source HEALTH. It is NOT the upcoming-only filter: #798's guard is, it runs on
 // every scout, and it does not trust any extractor's claim about what is upcoming.
+// What the run was able to establish about a page. The first four are the model's to report, and are the
+// only four the runbook offers it.
+//
+// #856: `notRead` is the SCRIPT's, and the model is never told it exists. It means the run ended without
+// coming back with anything for this source at all (it crashed, or it stopped to ask a question, or it
+// hit a broken prompt), so nobody has looked at the page. It is deliberately NOT `unreadable`: that one
+// means the page itself is broken, and the app tells Dan so in those words ("that calendar is drawn by
+// JavaScript"). A page nobody opened is not a broken page, and saying it is would send him to fix
+// something that was never wrong, and teach him to distrust the failing list, which is exactly where the
+// genuinely broken source has to be visible.
 enum PageVerdict: String, Codable, Equatable, Sendable, CaseIterable {
     case upcomingListings = "upcoming_listings"
     case allPast = "all_past"
     case noDatedContent = "no_dated_content"
     case unreadable = "unreadable"
+    case notRead = "not_read"
 }
 
 // Deliberately a plain Sendable struct and never a @Model: `ScoutService` is @MainActor and SwiftData

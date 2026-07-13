@@ -56,7 +56,8 @@ the dan-wright-brand-voice skill; apply the voice guidance only as secondary nud
 wins). Copy each item's naturalKey verbatim. After finishing each item, overwrite $PROGRESS with
 its completed count incremented by one, per the runbook's 'Update progress' step (total is already
 seeded, never change it). Write the complete PrepResults JSON to $RESULTS and nothing else to that
-file. Do the web research needed to find real, verifiable contacts."
+file. Do the web research needed to find real, verifiable contacts.
+"
 
 resolve_claude
 

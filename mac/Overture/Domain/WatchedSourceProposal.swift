@@ -39,7 +39,10 @@ enum WatchedSourceProposal {
         // A page we could not read is not a calendar we can watch. Adding it would mean a source that
         // reports as failing every run forever with nothing Dan can do about it.
         switch pageVerdict {
-        case .unreadable, .noDatedContent: return .nothingToWatch
+        // #856: `notRead` cannot arise here (a proposal comes from the app reading the page itself, in
+        // process, never from a detached run's results file), but it groups with these for the same
+        // reason: we have not seen this calendar, so we are in no position to propose watching it.
+        case .unreadable, .noDatedContent, .notRead: return .nothingToWatch
         // `allPast` IS worth watching: a season that has finished is exactly the calendar that will have
         // an autumn on it. That is the whole reason to keep looking rather than pitch once and forget.
         case .upcomingListings, .allPast: break

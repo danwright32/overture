@@ -184,7 +184,10 @@ enum SourceFailure: Equatable, Sendable {
     init?(verdict: PageVerdict) {
         switch verdict {
         case .upcomingListings, .allPast: return nil
-        case .noDatedContent, .unreadable: self = .verdict(verdict)
+        // #856: `notRead` is a failure for the reason that matters most here: the hash must NOT be
+        // stamped and the unread flag must stay set, so the next scout reads the page rather than
+        // skipping it forever on the strength of a run that never opened it.
+        case .noDatedContent, .unreadable, .notRead: self = .verdict(verdict)
         }
     }
 
@@ -236,6 +239,11 @@ enum SourceFailure: Equatable, Sendable {
             return "That page has no dated listings on it. It may be the wrong page for this org."
         case .verdict(.unreadable):
             return "That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
+        case .verdict(.notRead):
+            // #856: says what actually happened, and nothing more. The page is very probably fine; the
+            // RUN died before opening it. Claiming the calendar is broken would send Dan to fix a page
+            // that was never the problem.
+            return "The run ended before reading this page, so it has not been read. The next scout will try it again."
         case .verdict(let v):
             return "The page came back as \(v.rawValue)."
         }

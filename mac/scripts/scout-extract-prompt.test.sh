@@ -52,10 +52,22 @@ assert_contains "pagination has a stated rule" "paginat"
 # run failed, and nothing in a Swift test could ever have seen it.
 #
 # So: no backticks in any prompt. Ever. Same for $( ), which substitutes just as silently.
+#
+# #856: every prompt must CLOSE on a line of its own (a lone double quote), because that is what bounds
+# the sed range below. None of the three did. The range ran off the end of every prompt and swallowed the
+# whole rest of the script, so this guard was reading the runner's own code as if it were prompt text:
+# it passed only because no comment below a prompt happened to contain a backtick, and it would have
+# eval'd any code that did. A guard that silently checks the wrong text is worse than no guard, because
+# it reports safety it never established.
 for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
-  body="$(cat "${SCRIPT_DIR}/${script}")"
-  # Only the PROMPT itself: the script's own $(dirname ...) plumbing above it is legitimate.
   prompt_body="$(sed -n '/^PROMPT=/,/^"$/p' "${SCRIPT_DIR}/${script}")"
+  if [[ "$(printf '%s' "${prompt_body}" | tail -1)" == '"' ]]; then
+    echo "ok - ${script}'s prompt closes on its own line, so this guard reads the prompt and not the script"
+  else
+    echo "FAIL - ${script}'s PROMPT does not close on a line of its own"
+    echo "  the sed range runs to end of file, so every check below is reading the script's code as prompt text"
+    FAILURES=$((FAILURES + 1))
+  fi
   if [[ "${prompt_body}" == *'`'* ]]; then
     echo "FAIL - ${script}'s prompt contains a backtick, which bash executes as a command"
     echo "  the model would receive the sentence with that word silently deleted"
