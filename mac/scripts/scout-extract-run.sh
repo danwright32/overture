@@ -67,11 +67,20 @@ For EVERY item in the work-list:
        no_dated_content   it carries no dated listings at all (often the wrong page entirely)
        unreadable         the bytes carry no event data (e.g. a calendar drawn by JavaScript, or a
                           login wall). Say so; do not pretend to have read it.
-  5. PAGINATION: a listings page often carries links to further pages (/P20, /P40, ?page=2). Read the
-     FIRST page only, and say so in that source's note (page 1 of N; later pages not read). Do not
-     follow them. It is a deliberate rule, not a gap: the app hashes the bytes of the page it fetched,
-     so what lives beyond them is not part of the set it is reconciling against, and a run that wanders
-     off across an unbounded number of pages is the one that never comes back.
+  5. PAGINATION: NEVER follow a link to another listings page (/P20, ?page=2, a next-month link). The app
+     has already fetched every page you are meant to read, and it hands them to you in the pinned file.
+     A pinned page may therefore contain SEVERAL MONTHS of one calendar, each wrapped in a section under
+     a marker comment naming it:
+
+         <!-- overture-month 2026-10 https://example.org/calendar/2026/10/ -->
+
+     Read EVERY marked section and return the shows from ALL of them, as one set for that one sourceId.
+     Do not stop at the first section, and do not report it as page 1 of N.
+
+     Following links yourself is forbidden for a reason that has not changed: the app hashes the bytes it
+     fetched, so anything you wander off to find is not part of the set it reconciles against, and a run
+     that wanders across an unbounded number of pages is the one that never comes back. (Following each
+     EVENT's own detail page, per step 3, is different and still required.)
   6. Update $PROGRESS after each item: {\"version\":1,\"total\":N,\"completed\":K}.
 
 YOU MUST ALWAYS write $RESULTS BEFORE YOU FINISH. This run is DETACHED: nobody is reading your output

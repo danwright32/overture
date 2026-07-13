@@ -48,15 +48,129 @@ struct FetchedPage: Equatable, Sendable {
     // page: a venue page is a page about MANY organizations, and without this we hand him the hall's
     // other tenants (which is exactly what happened).
     var onlyForOrg: String? = nil
+    // #858: which months of a calendar this document actually contains ("2026-07", "2026-08", ...), and
+    // which ones we tried to read and could not.
+    //
+    // `monthsUnread` is the important one, and it is a list rather than a count on purpose. A month we
+    // failed to fetch means FEWER shows came back, and "fewer shows" is precisely what the reconcile
+    // reads as "those shows were cancelled". So the shortfall has to be able to say its own name. A
+    // silently shorter sweep is the one failure this feature could add that destroys real data.
+    var monthsRead: [String] = []
+    var monthsUnread: [String] = []
 }
 
 enum SourceFetcher {
     // `render` is injected so the fallback is a real unit test with no WebKit. It defaults to the real
     // hidden browser (RenderedPage).
+    //
+    // `monthHorizon` is #858, and its DEFAULT OF 1 (no pagination) is a safety property, not an
+    // oversight. Reading four months of a calendar is only safe on a path that cannot cancel anything.
+    //
+    // The watchlist can: it feeds `FeedReconcile`, where a source's SILENCE about a show marks that show
+    // gone (`goneThreshold = 2`), and a red-team pass found the stitched page opens a hole none of those
+    // gates can see. If the AI reads three of four stitched months, it simply returns fewer shows;
+    // nothing failed, nothing was rejected, so `rejectedIsWithinTolerance` is happy, and 16 of 30 events
+    // still clears `feedIsTrustworthy`'s 50% bar. Two runs of that and fourteen live October concerts are
+    // struck from Dan's queue with no error anywhere. Verifying that the RUN read every month it was
+    // handed needs a per-page verdict in the handoff contract, which does not exist yet.
+    //
+    // So pagination is opt-in, and today only the paste-a-lead path opts in. That path never reconciles
+    // and never cancels (`LeadIntakeModel` applies with no `feed:`), so the hole cannot open there.
     static func fetch(_ url: URL,
                       session: URLSession = .shared,
                       render: ((URL) async throws -> String)? = nil,
-                      allowTicketLinkHop: Bool = true) async throws -> FetchedPage {
+                      allowTicketLinkHop: Bool = true,
+                      monthHorizon: Int = 1,
+                      now: Date = Date()) async throws -> FetchedPage {
+        let landing = try await fetchSinglePage(url, session: session, render: render,
+                                                allowTicketLinkHop: allowTicketLinkHop)
+
+        // Not asked to paginate, or we are no longer on the page Dan gave us. A ticket-link hop means we
+        // are reading somebody else's page (a venue's) on behalf of one org's lead, and walking THAT
+        // site's calendar would hand back the hall's other tenants, which is the exact confusion the hop
+        // already carries `onlyForOrg` to prevent.
+        guard monthHorizon > 1, landing.followedTicketLinkFrom == nil,
+              let finalURL = URL(string: landing.finalURL)
+        else { return landing }
+
+        let months = CalendarMonthIndex.monthPages(in: landing.normalizedHTML, at: finalURL,
+                                                   now: now, horizon: monthHorizon)
+        // Not a month calendar. The overwhelmingly common case (a show page, an org's homepage), and it
+        // must cost exactly nothing: no extra fetch, no change to the document or its hash.
+        guard months.count > 1 else { return landing }
+
+        return await stitch(months: months, landing: landing, landingURL: finalURL,
+                            session: session, render: render, now: now)
+    }
+
+    // Reads each month of the calendar and joins them into ONE document with ONE hash.
+    //
+    // One document because that is what keeps this safe: the listing SET has to come from bytes the APP
+    // fetched and hashed (see the note at the top of this file). Four pages the app fetched and hashed
+    // together preserve that property exactly, and the handoff contract (one source, one pinned page,
+    // one verdict) does not have to change at all.
+    private static func stitch(months: [URL], landing: FetchedPage, landingURL: URL,
+                               session: URLSession,
+                               render: ((URL) async throws -> String)?,
+                               now: Date) async -> FetchedPage {
+        var sections: [String] = []
+        var read: [String] = []
+        var unread: [String] = []
+
+        for month in months {
+            let label = CalendarMonthIndex.Month(pathOf: month)?.label ?? month.absoluteString
+
+            // The month page we are already holding. Re-fetching it would be a wasted request and, on a
+            // site that rotates a token per request, would not even return the same bytes.
+            if sameMonthPage(month, as: landingURL, now: now) {
+                sections.append(section(label: label, url: month, html: landing.normalizedHTML))
+                read.append(label)
+                continue
+            }
+
+            guard let page = try? await fetchSinglePage(month, session: session, render: render,
+                                                        allowTicketLinkHop: false) else {
+                // NAMED, never merely absent. A month we could not read means fewer shows came back, and
+                // fewer shows is what the reconcile reads as "these were cancelled". A shortfall that
+                // cannot say its own name is the one way this feature destroys data.
+                unread.append(label)
+                continue
+            }
+            sections.append(section(label: label, url: month, html: page.normalizedHTML))
+            read.append(label)
+        }
+
+        let combined = sections.joined(separator: "\n")
+        var out = landing
+        out.normalizedHTML = combined
+        out.contentHash = PageNormalizer.contentHash(combined)
+        out.monthsRead = read
+        out.monthsUnread = unread
+        return out
+    }
+
+    // Each month is announced in the pinned page, so the run reading it can tell which month a listing
+    // belongs to. Bargemusic's lesson applies with force here: a calendar cell's date is often implied by
+    // WHICH grid it sits in, and four grids in one file with no headings would make every date ambiguous.
+    private static func section(label: String, url: URL, html: String) -> String {
+        "<!-- overture-month \(label) \(url.absoluteString) -->\n<section title=\"\(label)\">\(html)</section>"
+    }
+
+    private static func sameMonthPage(_ a: URL, as b: URL, now: Date) -> Bool {
+        guard let ha = a.host, let hb = b.host, sameSite(ha, hb) else { return false }
+        func canon(_ p: String) -> String { p.hasSuffix("/") ? p : p + "/" }
+        if canon(a.path) == canon(b.path) { return true }
+        // The landing page (/mch/calendar/) IS a month page: it serves whichever month we are in, which
+        // is the first month of the window. Its path does not carry the month, so compare what it MEANS
+        // rather than what it says, or we would fetch the current month twice.
+        guard let ma = CalendarMonthIndex.Month(pathOf: a) else { return false }
+        return CalendarMonthIndex.Month(pathOf: b) == nil && ma == CalendarMonthIndex.Month(now)
+    }
+
+    private static func fetchSinglePage(_ url: URL,
+                                        session: URLSession,
+                                        render: ((URL) async throws -> String)?,
+                                        allowTicketLinkHop: Bool) async throws -> FetchedPage {
         let (data, response): (Data, URLResponse)
         do {
             var request = URLRequest(url: url)

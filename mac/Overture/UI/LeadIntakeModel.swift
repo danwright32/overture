@@ -31,6 +31,12 @@ final class LeadIntakeModel {
     // Center's. Silently swapping the page under him would be exactly the kind of quiet cleverness that
     // makes a tool impossible to trust.
     private var followedFromNote: String?
+    // #858: which months of a calendar were read, and which could not be. Same reasoning as the note
+    // above, twice over. He pasted ONE page and is getting four months, so say so. And a month that
+    // failed to load must be NAMED: three months coming back instead of four just looks like a venue
+    // with a quiet autumn, and the spike found the quiet season is the normal state, which is exactly
+    // what an unread month can hide inside.
+    private(set) var monthsNote: String?
     // Whose lead this is, when we had to leave the page Dan pasted (see SourceFetcher.onlyForOrg).
     private var onlyForOrg: String?
 
@@ -65,7 +71,13 @@ final class LeadIntakeModel {
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard,
-         fetch: @escaping (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
+         // #858: the lead path, and ONLY the lead path, reads four months of a calendar. It can afford to:
+         // it applies its shows with no `feed:`, so it never reconciles and never marks anything
+         // cancelled. The watchlist keeps `SourceFetcher`'s default of one page, because there a
+         // silently short sweep can strike live shows from Dan's queue. See the note on `fetch`.
+         fetch: @escaping (URL) async throws -> FetchedPage = {
+             try await SourceFetcher.fetch($0, monthHorizon: CalendarMonthIndex.defaultHorizon)
+         },
          pin: @escaping (FetchedPage, String) throws -> URL = { try ScoutPagePin.write($0, forSourceId: $1) },
          launch: @escaping ([ScoutExtractQueueItem]) throws -> Void = { items in
              try ScoutExtractService.startExtract(items: items, now: Date())
@@ -119,10 +131,46 @@ final class LeadIntakeModel {
         ScoutExtractProgressDecoder.label(from: ScoutExtractProgressDecoder.loadCurrent())
     }
 
+    // The months of a calendar this lead actually read, in Dan's words rather than "2026-07".
+    //
+    // Silent on a page that was never a calendar (a single show page, an org homepage): a note that
+    // fires on every lead is a note nobody reads, and then the one that matters gets skipped too.
+    static func monthsNote(read: [String], unread: [String]) -> String? {
+        guard read.count > 1 || !unread.isEmpty else { return nil }
+
+        var parts: [String] = []
+        if let first = read.first, let last = read.last, read.count > 1 {
+            parts.append("I read \(read.count) months of that calendar (\(name(first)) to \(name(last))).")
+        }
+        if !unread.isEmpty {
+            // Named, not merely missing. Three months back instead of four looks exactly like a venue
+            // with a quiet autumn, and Dan would never know to look again.
+            parts.append("I couldn't read \(list(unread.map(name))), so anything on in "
+                         + "\(unread.count == 1 ? "that month" : "those months") isn't here.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    // "2026-10" -> "October 2026"
+    private static func name(_ label: String) -> String {
+        let bits = label.split(separator: "-")
+        guard bits.count == 2, let year = Int(bits[0]), let month = Int(bits[1]),
+              (1...12).contains(month) else { return label }
+        let months = ["January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December"]
+        return "\(months[month - 1]) \(year)"
+    }
+
+    private static func list(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + (items.last ?? "")
+    }
+
     func reset() {
         phase = .idle
         urlText = ""
         followedFromNote = nil
+        monthsNote = nil
         onlyForOrg = nil
         watchThisCalendar = true
         watchOrgName = ""
@@ -186,6 +234,7 @@ final class LeadIntakeModel {
                     "I couldn't read that page, so I followed its ticket link and read \(host) instead."
                 onlyForOrg = page.onlyForOrg
             }
+            monthsNote = Self.monthsNote(read: page.monthsRead, unread: page.monthsUnread)
             readPageURL = page.finalURL
             path = try pin(page, sourceId)
         } catch let error as SourceFetchError {
@@ -272,7 +321,8 @@ final class LeadIntakeModel {
     private func apply(_ outcome: LeadIntake.Outcome) {
         switch outcome {
         case .found(let events, let note):
-            phase = .review(events, note: [followedFromNote, note].compactMap { $0 }.joined(separator: " "))
+            phase = .review(events, note: [followedFromNote, monthsNote, note]
+                .compactMap { $0 }.joined(separator: " "))
             readEvents = events
         case .foundButUnusable(let rejected, _):
             // NOT "no shows". The page had shows and none has a real venue, which means this source's
