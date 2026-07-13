@@ -54,6 +54,11 @@ final class LeadIntakeModel {
     private let pin: (FetchedPage, String) throws -> URL
     private let launch: ([ScoutExtractQueueItem]) throws -> Void
     private let readResults: (String) -> ScoutExtractResults?
+    // #848: is the detached run still alive? Its heartbeat marker, injected so a dead run is a real unit
+    // test. The wait loop below used to watch only for RESULTS, so a run that finished having written
+    // nothing looked identical to one still working, and Dan watched a live counter tick upward on a
+    // process that had exited three minutes earlier.
+    private let isRunAlive: () -> Bool
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard,
@@ -65,12 +70,14 @@ final class LeadIntakeModel {
          readResults: @escaping (String) -> ScoutExtractResults? = { _ in
              guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL) else { return nil }
              return try? ScoutExtractResultsDecoder.decode(data)
-         }) {
+         },
+         isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) }) {
         self.defaults = defaults
         self.fetch = fetch
         self.pin = pin
         self.launch = launch
         self.readResults = readResults
+        self.isRunAlive = isRunAlive
     }
 
     // A stable identity for a found show, so Dan's checkbox survives a redraw.
@@ -216,15 +223,35 @@ final class LeadIntakeModel {
                                 giveUpAfter: TimeInterval, sleep: (TimeInterval) async -> Void) async {
         var waited: TimeInterval = 0
         while waited <= giveUpAfter {
+            // Results FIRST, always. #848: a run can write its results and exit between two polls, and
+            // its answer is right there on disk. Checking liveness before reading would report a fast,
+            // perfectly successful run as having produced nothing, which would be worse than the bug this
+            // is fixing.
             if let results = readResults(sourceId), let verdict = results.verdict(for: sourceId) {
                 readVerdict = verdict
                 apply(LeadIntake.outcome(from: results, sourceId: sourceId, onlyForOrg: onlyForOrg))
                 return
             }
+
+            // #848: only now, and only if it is actually DEAD. The run's process has exited and it left
+            // nothing for the source we asked about, so waiting is pointless and pretending otherwise is
+            // a lie: Dan watched a live-looking counter tick to 2:59 on a run that had been over for
+            // three minutes, and it would have counted to ten before blaming a timeout that never
+            // happened. Still-alive and failed have to look different, and this is where they stopped to.
+            if !isRunAlive() {
+                let tail = RunLog.tail(8, from: RunLog.scoutExtractURL)
+                phase = .problem(
+                    "The reader finished without producing anything for that page, so nothing was read."
+                    + " Try again, and if it keeps happening the page may be one it can't make sense of."
+                    + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)"))
+                return
+            }
+
             await sleep(pollEvery)
             waited += pollEvery
         }
-        // A run that never came back is NOT "no shows found". Say which one it was.
+        // Still beating, and out of patience. A DIFFERENT fault from the one above, with a different
+        // fix, so it keeps its own sentence: this run really is hung.
         phase = .problem("The reader didn't finish in time. It may still be running; try again in a minute.")
     }
 

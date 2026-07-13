@@ -329,3 +329,117 @@ struct LeadIntakeModelTests {
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
     }
 }
+
+// #848: the run FINISHED and wrote nothing for the source we asked about, and the sheet kept spinning.
+//
+// Dan watched "Reading the page 0 of 1... 2:59" tick upward on a run whose process had already exited
+// three minutes earlier. It would have counted to ten minutes and then blamed a timeout, which is not
+// what happened: the run finished fast and produced nothing.
+//
+// The app had everything it needed to know that. The run's heartbeat marker was gone, so `isRunning` was
+// already false. The wait loop simply never asked, and treated "no results yet" as "still working".
+// CLAUDE.md's rule is explicit that still-alive and failed must be visibly distinct, and seven minutes of
+// a live-looking counter on a dead run is the exact defect it exists to prevent.
+@MainActor
+@Suite("The lead sheet stops waiting on a run that is already dead (#848)")
+struct LeadIntakeDeadRunTests {
+    private static let realPageHTML =
+        "<h1>Upcoming concerts</h1>"
+        + "<p>Second Ending Ensemble presents an evening of chamber music at Merkin Hall, with works "
+        + "by Brahms and Dvorak, followed by a conversation with the performers. Doors open at seven "
+        + "and the programme begins at half past. Tickets are available at the box office or online.</p>"
+        + "<ul><li><a href=\"/show/1\">October 3: Piano Trios of Haydn, Brahms and Dvorak, in the "
+        + "recital hall on the second floor</a></li></ul>"
+        + "<p>All concerts begin at half past seven. The hall is fully accessible.</p>"
+
+    private func model(alive: @escaping () -> Bool,
+                       results: @escaping (String) -> ScoutExtractResults? = { _ in nil })
+    -> LeadIntakeModel {
+        LeadIntakeModel(
+            defaults: UserDefaults(suiteName: "LeadIntakeDeadRunTests-\(UUID().uuidString)")!,
+            fetch: { url in
+                FetchedPage(normalizedHTML: Self.realPageHTML, finalURL: url.absoluteString,
+                            contentHash: "h")
+            },
+            pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
+            launch: { _ in },
+            readResults: results,
+            isRunAlive: alive)
+    }
+
+    // THE test. The run is gone and it left nothing for us. Say so at once, and say what actually
+    // happened, rather than counting to ten minutes and then blaming a timeout that did not occur.
+    @Test func aRunThatDiedWithoutResultsIsReportedAtOnce() async {
+        let m = model(alive: { false })          // its heartbeat is gone: the process has exited
+        m.urlText = "https://org.example/events"
+
+        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+
+        guard case .problem(let message) = m.phase else {
+            Issue.record("expected .problem, got \(m.phase)"); return
+        }
+        // What actually happened: it finished, and it produced nothing.
+        #expect(message.localizedCaseInsensitiveContains("finished"))
+        // NOT a timeout. That is a different fault with a different fix, and saying it would send Dan
+        // off to wait for a run that is already dead.
+        #expect(message.localizedCaseInsensitiveContains("in time") == false)
+    }
+
+    // A run that is still genuinely alive must NOT be cut short just because it has not written yet. The
+    // whole point of the heartbeat is to tell a slow run from a dead one, and getting this backwards
+    // would kill every run that takes longer than one poll.
+    @Test func aSlowButLivingRunIsLeftAlone() async {
+        var polls = 0
+        let m = model(alive: { true },           // still beating
+                      results: { id in
+                          polls += 1
+                          // It writes on the third poll: slow, not dead.
+                          guard polls >= 3 else { return nil }
+                          return ScoutExtractResults(
+                              version: 1, generatedAt: "2026-07-12T00:00:00Z",
+                              results: [ScoutExtractResult(
+                                  sourceId: id, verdict: .upcomingListings,
+                                  events: [ScoutExtractEvent(title: "Second Ending Ensemble",
+                                                             presenter: "Second Ending Ensemble",
+                                                             venue: "Merkin Hall",
+                                                             performanceDate: "2099-10-03",
+                                                             sourceUrl: "https://org.example/1")],
+                                  note: nil)])
+                      })
+        m.urlText = "https://org.example/events"
+
+        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+
+        guard case .review(let events, _) = m.phase else {
+            Issue.record("a slow run must be waited for, not killed. Got \(m.phase)"); return
+        }
+        #expect(events.count == 1)
+    }
+
+    // The race that would make this worse than the bug: the run writes its results and exits between two
+    // polls. The results are RIGHT THERE. Reading them must win over noticing the process is gone, or a
+    // fast, perfectly successful run would be reported as having produced nothing.
+    @Test func aRunThatFinishedAndWroteResultsIsReadEvenThoughItIsNoLongerAlive() async {
+        let m = model(alive: { false },          // already exited...
+                      results: { id in           // ...but it left us exactly what we asked for
+                          ScoutExtractResults(
+                              version: 1, generatedAt: "2026-07-12T00:00:00Z",
+                              results: [ScoutExtractResult(
+                                  sourceId: id, verdict: .upcomingListings,
+                                  events: [ScoutExtractEvent(title: "Second Ending Ensemble",
+                                                             presenter: "Second Ending Ensemble",
+                                                             venue: "Merkin Hall",
+                                                             performanceDate: "2099-10-03",
+                                                             sourceUrl: "https://org.example/1")],
+                                  note: nil)])
+                      })
+        m.urlText = "https://org.example/events"
+
+        await m.start(now: Date(), pollEvery: 0, giveUpAfter: 600, sleep: { _ in })
+
+        guard case .review(let events, _) = m.phase else {
+            Issue.record("a finished run's results must be read, not discarded. Got \(m.phase)"); return
+        }
+        #expect(events.count == 1)
+    }
+}
