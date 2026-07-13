@@ -17,7 +17,8 @@ struct OvertureApp: App {
     // command below has to reach it: a keyboardShortcut on a Button inside a TOOLBAR MENU renders the
     // "⌘L" and never registers with the system, so the key did nothing at all (verified with a real
     // key press in the built app). A menu-bar command registers.
-    @State private var addLead = AddLeadPresenter()
+    // Built in init() from the store itself (#899), so it cannot claim a store the app does not have.
+    @State private var addLead: AddLeadPresenter
 
     init() {
         // #800: WatchedSource joins the schema. Additive (a new entity plus a defaulted [String] on
@@ -75,6 +76,9 @@ struct OvertureApp: App {
         self.modelContainer = container
         self.storeLock = lock
         self.degradedReason = reason
+        // #899: with no store there is no RootView, and so no sheet for the Add-a-Lead command to open.
+        // The command lives on the scene and would still be there, still enabled, firing into nothing.
+        _addLead = State(initialValue: AddLeadPresenter(store: container))
         // Hand the opened store to the app-level scheduler owner (#265). nil in the degraded state, so
         // the delegate simply doesn't start the scheduler.
         AppDelegate.sharedContainer = container
@@ -96,6 +100,11 @@ struct OvertureApp: App {
             CommandGroup(after: .newItem) {
                 Button("Add a Lead...") { addLead.request() }
                     .keyboardShortcut("l", modifiers: .command)
+                    // #899: greyed out when there is no store, because there is then no sheet for it to
+                    // open and it would fire into nothing, with no error and no explanation. An action
+                    // Dan cannot take must not look available. The rule is AddLeadPresenter's, not this
+                    // view's (#863/#885).
+                    .disabled(!addLead.canAddLead)
             }
         }
         // #336: the styled in-content wordmark is the app's name; hide the redundant
