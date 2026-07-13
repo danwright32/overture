@@ -97,6 +97,34 @@ Once Phase 3 lands, its job should target this runner with a label like
 (`mac/scripts/run-tests-locked.sh`) also needs `flock` installed on this Mac
 (`brew install flock`; not present by default).
 
+## When swift-tests sits queued forever (#881)
+
+**A live runner process is not evidence of a live runner.** On 2026-07-13 the process was up and its
+log's last line said `Listening for Jobs`, while GitHub listed zero runners: it was holding a session
+GitHub no longer recognised, so it would never be assigned a job, and `run.sh` would never exit. The
+loop blocked on `wait` forever. Nothing merged until the agent was restarted by hand.
+
+The authority is GitHub's list, never `ps`:
+
+```
+gh api repos/danwright32/overture/actions/runners --jq '{count: .total_count, runners: [.runners[] | {name, status, busy}]}'
+```
+
+`count: 0` while the process is running means it is a zombie. The loop now supervises its own wait and
+kills a listener GitHub has stopped listing for `OVERTURE_CI_LIVENESS_STRIKES` consecutive checks
+(default 3, one per `OVERTURE_CI_LIVENESS_INTERVAL` seconds, default 60), logging a loud `ALERT:` line
+before it does. So this should now self-heal within a few minutes.
+
+If it ever needs doing by hand anyway:
+
+```
+launchctl kickstart -k gui/$(id -u)/com.danwright.overture.ci-runner
+```
+
+Note that a run failing at `swift-tests` / **"Set up job"** (rather than on an actual test) is the same
+fault wearing a different face: it is the runner, not the diff. `scripts/check-pr-ci.sh` tells a genuinely
+pending check apart from a stalled one, and `scripts/merge-when-green.sh` refuses to merge on a stall.
+
 ## Tearing it down
 
 ```
