@@ -10,7 +10,7 @@ and writes the results file the app ingests for review. The app never supervises
 - **Read:** `~/Library/Application Support/Overture/overture-reply-classify-queue.json`
   (`ReplyClassifyQueue` version `3`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `replyText`, and `recipientId`. `venue` and `performanceDate` are the show
-  details Overture already knows — see the "never ask for known facts" rule below).
+  details Overture already knows: see the "never ask for known facts" rule below).
 - **Write:** `~/Library/Application Support/Overture/overture-reply-classify-results.json`
   (`ReplyClassifyResults` version `2`: `results[]` each with `naturalKey`, `intent`, and the
   `recipientId` echoed back when the queue item carried one).
@@ -27,12 +27,12 @@ decode under the tolerant gate. Match those shapes exactly.
 
 Read `replyText` and classify the sender's intent as EXACTLY ONE of:
 
-- `wants_to_book` — they want to go ahead / lock a date / confirm the shoot. The highest-value read;
+- `wants_to_book`: they want to go ahead / lock a date / confirm the shoot. The highest-value read;
   a clear yes.
-- `interested` — warm and engaged but not yet committing (asking to see more, "we'd love to at some
+- `interested`: warm and engaged but not yet committing (asking to see more, "we'd love to at some
   point", positive but non-committal).
-- `has_question` — they are waiting on an answer from Dan (rate, availability, logistics, scope).
-- `declined` — a no for this occasion (booked someone else, no budget, not a fit, "not this time").
+- `has_question`: they are waiting on an answer from Dan (rate, availability, logistics, scope).
+- `declined`: a no for this occasion (booked someone else, no budget, not a fit, "not this time").
 
 Judge the genuine intent, not surface politeness: a warm-sounding note that ends in a no is
 `declined`; a brief "what's your rate?" is `has_question`. When a reply mixes signals, pick the
@@ -87,14 +87,28 @@ Rules:
 - Each work-list item carries a `recipientId`. Echo BOTH `naturalKey` and `recipientId` verbatim on the
   result so each draft attaches to the right contact. The queue emits one item per replied recipient,
   so two contacts on one show are drafted independently.
+- **Dan's voice is defined in exactly one place: the `dan-wright-brand-voice` skill. Invoke it, and draft
+  from it (#872).** This is the same skill the Prep run uses, and for the same reason: a reply goes to a
+  real person who wrote back to him, so it is his voice or it is nobody's. Until #872 this run had no
+  skill and no voice rules at all, and this line told it to "draft from the voice rules in this runbook
+  alone" when the runbook held none. It was inventing his voice from the phrase "in Dan's voice".
+
+  Hard rules, from the skill, and absolute:
+  - **No em dashes.** Ever. Use commas, colons, periods, or restructure the sentence.
+  - **Contractions throughout.** He writes the way he talks.
+  - **NO fabrication.** Never invent a fact about the show, the contact, the coverage, or Dan's
+    availability. Everything in a draft must be something Overture actually knows or that he actually
+    offers.
+
 - Read Dan's distilled voice guidance at `~/Library/Application Support/Overture/overture-voice-guidance.md`
-  and apply ONLY those distilled tendencies. NEVER quote or paraphrase raw past email pairs (the
-  #119/#249 leak guard) — the guidance file is already the safe, distilled form. If the file is absent,
-  draft from the voice rules in this runbook alone.
+  and apply those tendencies ONLY as secondary nudges: the skill is authoritative and wins wherever the
+  two differ, exactly as in Prep. NEVER quote or paraphrase raw past email pairs (the #119/#249 leak
+  guard): the guidance file is already the safe, distilled form. If the file is absent, draft from the
+  skill alone. It is the authority; the guidance file only ever nudges.
 - Keep drafts short, warm, and concrete; include Dan's standing facts only when relevant (rate, two-week
   delivery, unobtrusive no-flash coverage). A `declined` reply still gets a brief, gracious draft.
 - **NEVER ask the contact for the date, venue, or location (#438).** Every prospect is a specific known
-  show: the queue item carries `venue` and `performanceDate`. REFERENCE them, never request them — write
+  show: the queue item carries `venue` and `performanceDate`. REFERENCE them, never request them: write
   "your March 10 concert at Carnegie Hall", never "let me know the date and I'll confirm availability".
   Asking for a fact Overture already holds reads as careless and undercuts the researched-your-show
   impression the whole approach is built on. Ask only about genuinely-unknown things (e.g. confirming

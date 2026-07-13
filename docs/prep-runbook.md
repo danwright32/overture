@@ -34,9 +34,9 @@ before this was codified.
 - **Read (optional, #119 voice learning):**
   `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
-  setup — skip the learning step when so. See "Once per run" below.
+  setup. Skip the learning step when so. See "Once per run" below.
 - **Write (optional, #119 voice learning):**
-  `~/Library/Application Support/Overture/overture-voice-guidance.md` — the distilled,
+  `~/Library/Application Support/Overture/overture-voice-guidance.md`: the distilled,
   anonymized voice tendencies, an editable artifact. You regenerate ONLY its
   auto-generated section; Dan's own notes section is preserved untouched.
 - **Update as you go (#354):**
@@ -50,7 +50,7 @@ before this was codified.
   just at the end. Never touch `total`.
 
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result
-byte-for-byte. NEVER rebuild it from group/date/venue — that is the silent-mismatch
+byte-for-byte. NEVER rebuild it from group/date/venue: that is the silent-mismatch
 trap. The human-readable fields are for research only.
 
 Canonical samples of the queue, results, and progress files (the cross-language contract
@@ -68,9 +68,9 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
    actually sent), plus `discipline`, `sentAt`, and `outcome` (#245: "booked" / "replied" /
    "no_response" / etc.). A pair may also carry `kind` (#463): `"reply"` is an inbound-reply
    Dan rewrote and sent, absent/`"cold"` is a cold opener. Treat the two registers separately
-   — a reply is short and responsive, a cold opener introduces him — and don't carry an
+   (a reply is short and responsive, a cold opener introduces him), and don't carry an
    opener's structure into a reply or vice versa. If the file is absent or `pairs` is empty,
-   SKIP this whole section and draft from the skill alone — there is nothing to learn yet (the
+   SKIP this whole section and draft from the skill alone: there is nothing to learn yet (the
    normal state on a fresh setup). Pairs are already ordered winners-first, but weight them
    yourself too: an edit on a `booked` or `replied` email is a stronger lesson than one that
    got no response.
@@ -78,7 +78,7 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
 2. **Distill ANONYMIZED tendencies.** For each pair, compare the AI draft against what Dan
    sent and capture the PATTERN of the change, never the content: tone (does he level it
    out, cool it down?), length (does he cut, tighten?), word choice (what he swaps in or
-   out, e.g. "cover" → "photograph"), structure (what he drops — throat-clearing,
+   out, e.g. "cover" → "photograph"), structure (what he drops: throat-clearing,
    over-explaining), punctuation.
 
    STRIP EVERY SPECIFIC. The bodies carry org names, venues, contact names, production
@@ -100,7 +100,7 @@ toward send-ready over time. Do this ONCE per run; apply the result to every dra
 
 4. **Apply it when drafting, strictly subordinate.** Precedence, strongest first: the
    `dan-wright-brand-voice` skill (authoritative), then Dan's notes, then the
-   auto-observed tendencies (the weakest signal — gentle nudges only). A tendency NEVER
+   auto-observed tendencies (the weakest signal, gentle nudges only). A tendency NEVER
    overrides the skill or Dan's notes and NEVER reintroduces anything the skill forbids
    (e.g. performative enthusiasm). On any conflict, the skill wins.
 
@@ -126,7 +126,7 @@ run.
 ### 1. Find the contact (waterfall, PLAN.md §5)
 
 **Who you are reaching: the performing ACT (or, for a self-produced show, its named
-lead performer(s)) — never the host venue (#366 / #368).** The default target is the
+lead performer(s)), never the host venue (#366 / #368).** The default target is the
 act named in `groupName` (the performers / ensemble / company putting on the show). The
 `venue` field is only WHERE the show happens, never who Dan is pitching.
 
@@ -146,7 +146,7 @@ item's `production` field first:
     members, or no performer names available at all), fall through to the standard
     single-act waterfall below with `provenance: "act"`, exactly as for a non-self-produced
     show. This is a judgment call from what the listing actually shows, not a hardcoded
-    headcount — when genuinely unsure, prefer the act waterfall.
+    headcount. When genuinely unsure, prefer the act waterfall.
   - Partial results are fine: emit whichever performers you actually found (0, 1, or 2);
     never block trying to find every one. Dan reviews every draft and can hand-add anyone
     missed via the manual-recipient path.
@@ -292,11 +292,11 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   check only, you aren't expected to recall drafts from a previous day's run.
 
 Hard rules: no em dashes; contractions throughout; NO fabrication (only what's real
-from the listing — never invent performer states); never volunteer the dance
+from the listing, never invent performer states); never volunteer the dance
 rate-flexibility in a cold email.
 
 **Never ask for a fact Overture already holds (#438).** Each queue item carries `venue` and
-`performanceDate` (every prospect is a specific known show). REFERENCE them, never request them —
+`performanceDate` (every prospect is a specific known show). REFERENCE them, never request them:
 "your March 10 concert at Carnegie Hall", never "let me know the date and venue". Asking for known
 details reads as careless and undercuts the researched-your-specific-show impression the targeting
 is built on. A draft must never request ANY field the work-list already supplies.
@@ -404,4 +404,4 @@ confirm the headless `claude -p` launch and the results file land.
   run emits outside what the item's `reprepMode` actually asked for, so getting `reprepMode` wrong
   degrades gracefully rather than silently overwriting something Dan didn't want touched.
 - Results that match no kept prospect are surfaced by the app ("N didn't match"), not
-  swallowed — a sign the key was rebuilt instead of copied.
+  swallowed: a sign the key was rebuilt instead of copied.
