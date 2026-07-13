@@ -153,10 +153,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         DispatchQueue.main.async { [weak self] in self?.updateDockPresence() }
     }
 
+    // The decision, the ordering and the activation all live in DockPresence, where they are tested. This
+    // only supplies the real NSApp. (Promoting out of the menu-bar-only presence does NOT make the app
+    // active, and an inactive app owns no menu bar, so none of its shortcuts fire: that is the Cmd+L bug.)
     private func updateDockPresence() {
-        let visible = NSApp.windows.contains(where: isMainContentWindow)
-        let policy = DockPresence.policy(mainWindowVisible: visible)
-        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+        DockPresence.apply(
+            mainWindowVisible: NSApp.windows.contains(where: isMainContentWindow),
+            current: NSApp.activationPolicy(),
+            setPolicy: { NSApp.setActivationPolicy($0) },
+            activate: { NSApp.activate(ignoringOtherApps: true) })
     }
 
     // The main Overture window only (#334 chose to exclude the onboarding window): a visible,
