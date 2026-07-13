@@ -16,12 +16,15 @@ final class LeadIntakeModel {
         case working(startedAt: Date)            // fetching, then the detached run is reading it
         case review([ExtractedEvent], note: String?)
         case problem(String)                     // every unhappy ending, NAMED, never a silent spinner
-        case added(Int)
+        // #859: carries the note too. Dan MUST still be told when the page he pasted could not be read
+        // and Overture followed its ticket link and read somebody else's site instead. Silently swapping
+        // the page under him is exactly the quiet cleverness that makes a tool impossible to trust, and
+        // that warning used to live on the review step, which no longer exists.
+        case added(Int, note: String?)
     }
 
     var urlText: String = ""
     private(set) var phase: Phase = .idle
-    var selected: Set<String> = []
 
     // Set when the page Dan pasted had nothing readable on it and we followed its ticket link to the
     // page that did. He MUST be told: he pasted his ensemble's site and the listing came off Lincoln
@@ -118,7 +121,6 @@ final class LeadIntakeModel {
 
     func reset() {
         phase = .idle
-        selected = []
         urlText = ""
         followedFromNote = nil
         onlyForOrg = nil
@@ -131,7 +133,14 @@ final class LeadIntakeModel {
         readVerdict = nil
     }
 
-    func start(now: Date, pollEvery: TimeInterval = 2, giveUpAfter: TimeInterval = RunTimeouts.scoutExtract,
+    // #859: `into` and `today` are here because the run now LANDS the shows itself. Dan does not pick
+    // them: the sheet used to show every show with a checkbox and make him choose, and those same shows
+    // then arrived in the scout queue for him to keep or dismiss. Two triage passes over one set of
+    // shows, on the flow whose whole point is to be quick. The queue is already the triage surface, and
+    // it is where he already is. His words: "I'm scouting it twice technically."
+    func start(into context: ModelContext, now: Date,
+               today: String = QueueModel.easternToday(),
+               pollEvery: TimeInterval = 2, giveUpAfter: TimeInterval = RunTimeouts.scoutExtract,
                sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) async {
         let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed), url.scheme?.hasPrefix("http") == true, url.host != nil else {
@@ -217,6 +226,11 @@ final class LeadIntakeModel {
 
         await waitForResults(sourceId: sourceId, startedAt: now,
                              pollEvery: pollEvery, giveUpAfter: giveUpAfter, sleep: sleep)
+
+        // #859: whatever it found is his, now. No checkboxes, no second pass.
+        if case .review(let events, let note) = phase {
+            importAll(events, note: note, into: context, today: today)
+        }
     }
 
     private func waitForResults(sourceId: String, startedAt: Date, pollEvery: TimeInterval,
@@ -259,7 +273,6 @@ final class LeadIntakeModel {
         switch outcome {
         case .found(let events, let note):
             phase = .review(events, note: [followedFromNote, note].compactMap { $0 }.joined(separator: " "))
-            selected = Set(events.map(key(for:)))     // all checked; he unchecks what he doesn't want
             readEvents = events
         case .foundButUnusable(let rejected, _):
             // NOT "no shows". The page had shows and none has a real venue, which means this source's
@@ -272,41 +285,54 @@ final class LeadIntakeModel {
         }
     }
 
-    // Confirmed shows go in through the EXISTING classify/assemble/upsert chain, never a hand-built
-    // insert. That is what keeps blocked dates, the #769 do-not-contact suppression, the #798
-    // upcoming-only guard and the #797 run identity applying to a hand-added lead exactly as they do to
-    // a scouted one. One pipeline, not two, and a refused org cannot be smuggled in by hand.
+    // Shows go in through the EXISTING classify/assemble/upsert chain, never a hand-built insert. That
+    // is what keeps blocked dates, the #769 do-not-contact suppression, the #798 upcoming-only guard and
+    // the #797 run identity applying to a hand-added lead exactly as they do to a scouted one. One
+    // pipeline, not two, and a refused org cannot be smuggled in by hand. It matters more now that
+    // nobody picks the shows (#859): whatever a page carries, the same gates decide what survives.
     //
-    // #826: with ONE stage of that pipeline held back, and #801 is what makes that structural rather
-    // than a flag. This call passes no `feed:`, because a page Dan pasted is not a sweep of anybody's
-    // calendar, so a stored show's absence from it is evidence of nothing. With no feed check there is
-    // no source report, and with no source report the reconcile cannot mark anything gone. Before that,
-    // adding a lead counted a miss against every upcoming Carnegie show, and two leads in a row marked
-    // Dan's live shows disappeared and hid them from his queue.
+    // With ONE stage held back (#826): no `feed:`, because a page Dan pasted is not a sweep of anybody's
+    // calendar, so a stored show's absence from it is evidence of nothing. Before that guard, adding a
+    // lead counted a miss against every upcoming Carnegie show, and two leads in a row marked his live
+    // shows as disappeared and hid them from his queue.
+    // #859: every show it found goes in. Dan does not pick them.
+    //
+    // The route is the SAME classify / assemble / upsert chain a scouted show takes, and that is what
+    // makes auto-importing safe rather than reckless: blocked dates, the #769 do-not-contact suppression,
+    // and the #798 upcoming-only guard all still apply. Nothing here can smuggle a refused org into his
+    // queue, however many shows a page carries. `reconcilesFeed` stays off (#826): one pasted page is
+    // not a sweep of anybody's calendar.
     @discardableResult
-    func confirm(into context: ModelContext, today: String = QueueModel.easternToday()) -> Int {
-        guard case .review(let events, _) = phase else { return 0 }
-        let chosen = events.filter { selected.contains(key(for: $0)) }
-        guard !chosen.isEmpty else { return 0 }
-
+    private func importAll(_ events: [ExtractedEvent], note: String?, into context: ModelContext,
+                           today: String) -> Int {
+        guard !events.isEmpty else {
+            phase = .added(0, note: note)
+            return 0
+        }
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let outcome = ScoutService.apply(events: chosen,
+        let outcome = ScoutService.apply(events: events,
                                          clients: loaded.clients,
                                          history: LocalHistory.forMatching(existing: existing),
                                          blocked: Set(loaded.blockedDates),
                                          today: today, sourceIds: [WatchedSource.manualId],
                                          into: context)
         let added = outcome.inserted + outcome.updated
-        // Recorded only now, not at submit: a link that failed to read, or whose shows Dan dropped, is
-        // one he must be able to try again. Only a link that actually produced something counts as
-        // handed over.
+
+        // Recorded only now, not at submit: a link that failed to read is one he must be able to try
+        // again. Only a link that actually produced something counts as handed over.
         if added > 0, let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             LeadSubmissions.record(url, in: defaults)
         }
-        startWatchingIfConfirmed(in: context)
-        phase = .added(added)
+        phase = .added(added, note: note)
         return added
+    }
+
+    // #859: the shows have already landed. This is the one decision left, and the only one the queue
+    // cannot make for him: whether to keep watching this organization's calendar. Called from the screen
+    // that tells him the shows arrived.
+    func finishWatching(into context: ModelContext) {
+        startWatchingIfConfirmed(in: context)
     }
 
     // #768: the calendar behind this lead joins the watchlist, so the next show these people put on is

@@ -54,8 +54,9 @@ struct LeadStartsWatchingTests {
         return m
     }
 
+    // #859: start() lands the shows itself. The proposal is then built on the screen that tells him so.
     private func drive(_ m: LeadIntakeModel, _ ctx: ModelContext) async {
-        await m.start(now: Date())
+        await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
         let sources = (try? ctx.fetch(FetchDescriptor<WatchedSource>())) ?? []
         m.prepareWatchProposal(existing: sources)
     }
@@ -87,7 +88,7 @@ struct LeadStartsWatchingTests {
         m.watchThisCalendar = true
         m.watchOrgName = "Bargemusic"
         m.watchURL = "https://bargemusic.org/events"
-        m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
+        m.finishWatching(into: ctx)
 
         let all = try sources(ctx)
         #expect(all.count == 1)                    // no second row
@@ -106,7 +107,7 @@ struct LeadStartsWatchingTests {
                                            listingsURL: "https://bargemusic.org/events"))
         #expect(m.watchThisCalendar)               // Overture proposes; he need only accept
 
-        m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
+        m.finishWatching(into: ctx)
 
         let watched = try #require(try sources(ctx).first)
         #expect(watched.orgName == "Bargemusic")
@@ -123,7 +124,7 @@ struct LeadStartsWatchingTests {
         await drive(m, ctx)
 
         m.watchThisCalendar = false
-        m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
+        m.finishWatching(into: ctx)
 
         #expect(try sources(ctx).isEmpty)                                  // nothing watched
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty == false)  // but the show landed
@@ -140,7 +141,7 @@ struct LeadStartsWatchingTests {
         await drive(m, ctx)
 
         #expect(m.watchVerdict == .alreadyWatching(orgName: "Bargemusic"))
-        m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
+        m.finishWatching(into: ctx)
 
         #expect(try sources(ctx).count == 1)   // still one row, not two for the same organization
     }
@@ -157,7 +158,7 @@ struct LeadStartsWatchingTests {
         #expect(m.watchVerdict == .nothingToWatch)
         #expect(m.watchThisCalendar == false)
 
-        m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures)
+        m.finishWatching(into: ctx)
         #expect(try sources(ctx).isEmpty)
     }
 

@@ -74,11 +74,7 @@ struct LeadIntakeReconcileTests {
                                      sourceUrl: "https://org.example/a")
         let m = model(lead)
         m.urlText = "https://org.example/events"
-        await m.start(now: Date())
-        guard case .review(let events, _) = m.phase else { Issue.record("expected .review, got \(m.phase)"); return }
-        m.selected = [m.key(for: events[0])]
-
-        #expect(m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 1)
+        await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)   // #859: lands it
 
         // The lead said nothing about Carnegie. Carnegie's show is untouched.
         #expect(carnegie.missedScoutCount == 0)
@@ -95,10 +91,7 @@ struct LeadIntakeReconcileTests {
                                          sourceUrl: "https://org.example/\(i)")
             let m = model(lead)
             m.urlText = "https://org.example/events-\(i)"
-            await m.start(now: Date())
-            guard case .review(let events, _) = m.phase else { Issue.record("expected .review"); return }
-            m.selected = [m.key(for: events[0])]
-            #expect(m.confirm(into: ctx, today: ScoutTestClock.beforeAllFixtures) == 1)
+            await m.start(into: ctx, now: Date(), today: ScoutTestClock.beforeAllFixtures)
         }
 
         #expect(carnegie.missedScoutCount == 0)

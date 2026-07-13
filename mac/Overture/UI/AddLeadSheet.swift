@@ -30,13 +30,16 @@ struct AddLeadSheet: View {
                 entry
             case .working(let startedAt):
                 working(startedAt: startedAt)
-            case .review(let events, let note):
-                review(events, note: note)
-                    .onAppear { model.prepareWatchProposal(existing: watched) }
+            case .review:
+                // #859: transient. start() imports what it found and moves straight to .added, because
+                // the scout queue is already the triage surface and Dan should not pick the same shows
+                // twice.
+                working(startedAt: Date())
             case .problem(let message):
                 problem(message)
-            case .added(let count):
-                added(count)
+            case .added(let count, let note):
+                added(count, note: note)
+                    .onAppear { model.prepareWatchProposal(existing: watched) }
             }
         }
         .padding(OVSpacing.lg)
@@ -142,56 +145,6 @@ struct AddLeadSheet: View {
         }
     }
 
-    private func review(_ events: [ExtractedEvent], note: String?) -> some View {
-        VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            Text(events.count == 1 ? "Found 1 show" : "Found \(events.count) shows")
-                .font(OVType.body).foregroundStyle(OVColor.ink)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(events.enumerated()), id: \.offset) { _, event in
-                        Toggle(isOn: binding(for: event)) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(event.title).font(OVType.body).foregroundStyle(OVColor.ink)
-                                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                                Text([QueueModel.runDateLabel(start: event.performanceDate, end: nil),
-                                      event.venue ?? ""]
-                                        .filter { !$0.isEmpty }.joined(separator: "  ·  "))
-                                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                            }
-                        }
-                        .toggleStyle(.checkbox)
-                    }
-                }
-            }
-            .frame(maxHeight: 260)
-
-            if let note, !note.isEmpty {
-                Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            watchProposal
-
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
-                Button {
-                    model.confirm(into: context)
-                } label: {
-                    Text(model.selected.isEmpty ? "Add" : "Add \(model.selected.count)")
-                        .font(OVType.meta).foregroundStyle(OVColor.onForest)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
-                        .background(Capsule().fill(OVColor.forest))
-                }
-                .buttonStyle(.plain)
-                .disabled(model.selected.isEmpty)
-            }
-        }
-    }
-
-    // Every unhappy ending is NAMED and actionable. An org between seasons reads as normal, not as a
-    // failure; an unreadable page says what to paste instead. Never a spinner that ends in silence.
     private func problem(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             Text(message).font(OVType.body).foregroundStyle(OVColor.inkSoft)
@@ -205,17 +158,31 @@ struct AddLeadSheet: View {
         }
     }
 
-    private func added(_ count: Int) -> some View {
+    private func added(_ count: Int, note: String?) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             Text(count == 1 ? "Added 1 show to the queue." : "Added \(count) shows to the queue.")
                 .font(OVType.body).foregroundStyle(OVColor.ink)
             Text("They're ranked and waiting with everything else.")
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+
+            // He must still be told when the page he pasted could not be read and Overture followed its
+            // ticket link to a different site. Silently swapping the page under him is the kind of quiet
+            // cleverness that makes a tool impossible to trust.
+            if let note, !note.isEmpty {
+                Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // #859: the shows are already his. This is the one decision left, and the only one the queue
+            // cannot make for him.
+            watchProposal
+
             HStack {
                 Spacer()
-                Button("Add another") { model.reset(); urlFocused = true }
+                Button("Add another") { model.finishWatching(into: context); model.reset(); urlFocused = true }
                     .buttonStyle(.plain).foregroundStyle(OVColor.forest)
                 Button {
+                    model.finishWatching(into: context)
                     dismiss()
                 } label: {
                     Text("Done").font(OVType.meta).foregroundStyle(OVColor.onForest)
@@ -227,15 +194,7 @@ struct AddLeadSheet: View {
         }
     }
 
-    private func binding(for event: ExtractedEvent) -> Binding<Bool> {
-        let key = model.key(for: event)
-        return Binding(get: { model.selected.contains(key) },
-                       set: { on in
-                           if on { model.selected.insert(key) } else { model.selected.remove(key) }
-                       })
-    }
-
     private func start() {
-        Task { await model.start(now: Date()) }
+        Task { await model.start(into: context, now: Date()) }
     }
 }
