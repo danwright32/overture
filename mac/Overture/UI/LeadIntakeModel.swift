@@ -135,8 +135,8 @@ final class LeadIntakeModel {
     //
     // Silent on a page that was never a calendar (a single show page, an org homepage): a note that
     // fires on every lead is a note nobody reads, and then the one that matters gets skipped too.
-    static func monthsNote(read: [String], unread: [String]) -> String? {
-        guard read.count > 1 || !unread.isEmpty else { return nil }
+    static func monthsNote(read: [String], unread: [String], unreachable: [String] = []) -> String? {
+        guard read.count > 1 || !unread.isEmpty || !unreachable.isEmpty else { return nil }
 
         var parts: [String] = []
         if let first = read.first, let last = read.last, read.count > 1 {
@@ -147,6 +147,20 @@ final class LeadIntakeModel {
             // with a quiet autumn, and Dan would never know to look again.
             parts.append("I couldn't read \(list(unread.map(name))), so anything on in "
                          + "\(unread.count == 1 ? "that month" : "those months") isn't here.")
+        }
+        if !unreachable.isEmpty {
+            // #900, and the difference from the sentence above is the whole point. That one is a month
+            // whose page we asked for and did not get. This one is a month we never had a link to at all:
+            // the calendar names it, but pages by a route this app cannot follow, so nothing failed
+            // anywhere and Dan was handed one month of a season.
+            //
+            // Which is why this sentence ends with something he can DO. A 404 is a dead end, but this
+            // month's page is right there on the site, and pasting it is a lead like any other.
+            let one = unreachable.count == 1
+            parts.append("That calendar has more months on it (\(list(unreachable.map(name)))), but it "
+                         + "moves between them in a way I can't follow yet, so I only read the month it "
+                         + "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
+                         + "read it.")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
@@ -234,7 +248,8 @@ final class LeadIntakeModel {
                     "I couldn't read that page, so I followed its ticket link and read \(host) instead."
                 onlyForOrg = page.onlyForOrg
             }
-            monthsNote = Self.monthsNote(read: page.monthsRead, unread: page.monthsUnread)
+            monthsNote = Self.monthsNote(read: page.monthsRead, unread: page.monthsUnread,
+                                         unreachable: page.monthsUnreachable)
             readPageURL = page.finalURL
             path = try pin(page, sourceId)
         } catch let error as SourceFetchError {

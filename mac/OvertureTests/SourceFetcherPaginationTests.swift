@@ -180,4 +180,71 @@ struct SourceFetcherPaginationTests {
 
         #expect(PageStubURLProtocol.requestedURLs == ["https://example.org/show"])
     }
+
+    // #900. A calendar that pages by QUERY (?month=2026-10) instead of by path. We cannot follow it, so
+    // one page is all we get, exactly as before. The change is that the page now says so.
+    //
+    // Asserted on the REQUESTS as well as the result, because the tempting bug here is the opposite of
+    // the old one: having NAMED October, start guessing at a URL for it. The original #858 premise did
+    // exactly that and was wrong (its assumed /P20 answers 200 with page one's content, so the guesser
+    // would have fetched the same page four times and called it a complete sweep). Naming a month is not
+    // a licence to invent its address.
+    @Test func aCalendarWeCannotPageThroughNamesItsMonthsAndStillFetchesOnce() async throws {
+        let options = ["07": "July", "08": "August", "09": "September", "10": "October"]
+            .sorted { $0.key < $1.key }
+            .map { "<option value=\"?month=2026-\($0.key)\">\($0.value) 2026</option>" }
+            .joined()
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.bodiesByURL = [
+            "https://merkin.example.org/calendar": """
+            <html><body><h1>Calendar</h1><select>\(options)</select>
+            <div><a href="/event/immortal-gifts">Immortal Gifts</a> July 18, 7:30 pm</div>
+            <p>Concerts at Merkin Hall on the Upper West Side of Manhattan, with tickets, discounts,
+            directions and rental spaces available on this site throughout the whole season.</p>
+            </body></html>
+            """,
+        ]
+
+        let page = try await SourceFetcher.fetch(URL(string: "https://merkin.example.org/calendar")!,
+                                                 session: stubSession(), monthHorizon: 4, now: july2026())
+
+        #expect(page.monthsUnreachable == ["2026-08", "2026-09", "2026-10"])
+        #expect(page.monthsRead.isEmpty)                                    // nothing was stitched
+        #expect(PageStubURLProtocol.requestedURLs == ["https://merkin.example.org/calendar"])
+    }
+
+    // ...and the verdict costs nothing. It is metadata: it must not touch the document or move the hash.
+    //
+    // The hash is the cost model. If noticing an unreachable month moved it, every calendar of this shape
+    // would look changed on every check and buy a full AI re-read, every day, forever, and nothing would
+    // look broken. So the SAME page is fetched down both paths (the watchlist's, which never paginates
+    // and never looks; the lead's, which does both) and the bytes and the hash must be identical. Only
+    // the metadata may differ. This also pins the watchlist path itself: it stays blind to all of this,
+    // which is what keeps a stitched page away from the reconcile that can cancel Dan's shows (#897).
+    @Test func noticingAnUnreachableMonthMovesNeitherTheDocumentNorTheHash() async throws {
+        func fetchOnce(monthHorizon: Int) async throws -> FetchedPage {
+            PageStubURLProtocol.reset()
+            PageStubURLProtocol.bodiesByURL = [
+                "https://merkin.example.org/calendar": """
+                <html><body><h1>Calendar</h1>
+                <select><option value="?month=2026-10">October 2026</option></select>
+                <div><a href="/event/immortal-gifts">Immortal Gifts</a> July 18, 7:30 pm</div>
+                <p>Concerts at Merkin Hall on the Upper West Side of Manhattan, with tickets, discounts,
+                directions and rental spaces available on this site throughout the whole season.</p>
+                </body></html>
+                """,
+            ]
+            return try await SourceFetcher.fetch(URL(string: "https://merkin.example.org/calendar")!,
+                                                 session: stubSession(), monthHorizon: monthHorizon,
+                                                 now: july2026())
+        }
+
+        let watchlist = try await fetchOnce(monthHorizon: 1)
+        let lead = try await fetchOnce(monthHorizon: 4)
+
+        #expect(lead.monthsUnreachable == ["2026-10"])          // the lead path sees it...
+        #expect(watchlist.monthsUnreachable.isEmpty)            // ...and the watchlist path never looks
+        #expect(lead.normalizedHTML == watchlist.normalizedHTML)
+        #expect(lead.contentHash == watchlist.contentHash)
+    }
 }
