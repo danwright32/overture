@@ -829,9 +829,11 @@ struct RootView: View {
     // kept prospects and moving them to .drafted for review. Surfaces results that
     // matched no prospect instead of letting them vanish (a separate fallible run).
     private func ingestPrep() {
-        let url = PrepImporter.defaultURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        guard let outcome = try? PrepImporter.ingestFile(at: url, into: context) else { return }
+        // #884: consumed ONCE. This used to re-read whatever results file was still on disk on every
+        // single launch, which re-announced an old run's shortfall ("2 didn't come back") days after the
+        // fact, re-announced its drafts, and (the real damage) knocked an approved-but-unsent draft back
+        // to "needs review", silently undoing Dan's own approval. Nothing to consume, nothing to say.
+        guard let outcome = PrepImporter.consumeIfNew(into: context) else { return }
         // #876: every sentence derived from the run's own outcome now lives in PrepRunSummary, where a
         // test can read it. Built here in the view body, this copy was unreachable by any test, which is
         // exactly the shape #863 warns about.
