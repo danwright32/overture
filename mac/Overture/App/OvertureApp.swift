@@ -56,6 +56,17 @@ struct OvertureApp: App {
                 // copy. Only prune old backups once the open below actually succeeds, so an
                 // undetected corrupted store never causes its own last-good backups to be
                 // rotated away.
+                // #821: the same launch-time housekeeping window, for the files Overture writes and then
+                // never reads again: the pinned pages the extract run worked from, and the bytes of a run
+                // whose results would not parse. Both are kept deliberately, and until now by nobody: a
+                // lead pin is written per pasted URL and stayed forever. Fourteen days, so a source
+                // behaving oddly can still be checked against the page the app actually read.
+                //
+                // Before the store opens, like the backup, and for the same reason: this is the quiet
+                // moment. It cannot reach a pin an in-flight run is about to read, which is minutes old,
+                // never days.
+                HandoffCleanup.sweep(handoffDirectory: StoreLocation.handoffDirectory, now: Date())
+
                 container = StoreBackup.performLaunchBackup(
                     dataDirectory: StoreLocation.dataDirectory, now: Date(), keep: 10
                 ) {

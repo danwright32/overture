@@ -59,6 +59,21 @@ struct TestsNeverTouchTheRealStoreTests {
             atPath: ScoutPagePin.url(forSourceId: "would-be-real").path) == false)
     }
 
+    // #821: the same hazard, in reverse. The pin refuses to WRITE into the live handoff directory under
+    // test; the launch-time sweep must refuse to DELETE from it. A suite that quietly reaches into Dan's
+    // real folder and removes his files is the same bug wearing the other sign, and it would be a far
+    // quieter one: nothing appears where it should not, something merely stops being there.
+    //
+    // The refusal is REPORTED, not silent, precisely so this can assert on it. A guard whose only
+    // evidence is "nothing happened" cannot be told apart from a folder that had nothing to sweep.
+    @Test func sweepingTheLiveHandoffDirectoryIsRefusedUnderTest() {
+        let result = HandoffCleanup.sweep(handoffDirectory: StoreLocation.handoffDirectory, now: Date())
+
+        #expect(result.refusedUnderTest)
+        #expect(result.deleted.isEmpty)
+        #expect(result.failed.isEmpty)
+    }
+
     // The guard has to be the REAL condition, not a flag a test could set. If this ever reads false
     // inside the suite, both guards above are dead and neither would fail: they would simply stop
     // guarding, silently, which is exactly how the original bug survived a full day of green runs.

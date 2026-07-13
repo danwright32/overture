@@ -149,6 +149,10 @@ same rule for the same reason.
 | `overture-scout-page-<sourceId>.html` | the app (the pinned page you read) |
 | `scout-extract-run.log` | the script (shown to Dan when a run finishes empty) |
 
+The pinned page and any `.corrupt` results file are swept by the app at launch once they are more than
+14 days old (`HandoffCleanup`, #821). Recent ones stay, deliberately: they are the only record of what
+a run actually read and what it produced when something went wrong.
+
 ## Tools
 
 `--allowedTools "Read,Write,WebFetch"`. No `Bash`, no `Skill`, no `WebSearch`: this run reads files,
