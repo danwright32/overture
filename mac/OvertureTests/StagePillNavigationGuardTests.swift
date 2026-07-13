@@ -24,9 +24,13 @@ struct StagePillNavigationGuardTests {
         #expect(body.contains("Button"))
     }
 
-    // Prep/Review/Send route through the same criteria AgentRoster uses for their counts.
-    @Test func stagePillsUseStageNavigation() {
-        #expect(queueView.contains("StageNavigation.naturalKeys(forStage:"))
+    // Prep/Review/Send route through the same criteria AgentRoster uses for their counts. #863: routed by
+    // the pill's FOCUS, not its name, so the Send pill's tap follows whichever of its five problems it is
+    // actually reporting instead of always resolving the approved queue.
+    @Test func stagePillsNavigateByTheirFocus() {
+        #expect(queueView.contains("StageNavigation.naturalKeys(for: status.focus"))
+        #expect(!queueView.contains("naturalKeys(forStage:"),
+                "the name-keyed API cannot express Send's five states and must not come back")
     }
 
     // Follow-ups reuses the existing FollowUpsView sheet instead of a second filtered-list

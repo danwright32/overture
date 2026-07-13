@@ -237,9 +237,13 @@ struct QueueView: View {
 
     // #338: tapping a stage pill (Prep/Review/Send) focuses the queue on exactly the prospects in
     // that stage, reusing the same #308 focused-list view instead of a second filtering mechanism.
+    // #863: routed by the pill's FOCUS, not its name. Send reports whichever of five problems is most
+    // urgent, each naming a different set of shows; by name, its tap could only ever resolve one of
+    // them, so "3 sent, but replies can't be tracked" landed Dan in the approved queue, which contains
+    // none of them.
     private func focusOnStage(_ status: AgentStatus) {
         focusedHeading = "\(status.name): \(status.detail)"
-        focusedKeys = StageNavigation.naturalKeys(forStage: status.name, in: prospects)
+        focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today, now: Date())
     }
 
     // #236: land on a deep-linked lead: switch to the pipeline holding it, clear filters that would
@@ -317,40 +321,19 @@ struct QueueView: View {
 
     // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus
     // a label (never colour alone), with a roll-up so needs-attention is unmissable.
+    // #863: lifted wholesale into AgentInputs.from, which builds every count by calling the same
+    // StageNavigation predicate the pill's tap resolves. It used to be spelled out here, inside a
+    // SwiftUI view, where no test could reach it, which is exactly why the invariant drifted twice
+    // (#792, #861) with the rule stating itself in StageNavigation's header the whole time.
+    // Counted across EVERY prospect, not just the ones still in the queue: a held contact's show has
+    // usually already left the queue reading "Sent", which is how the person waiting became invisible.
     private var agentInputs: AgentInputs {
-        AgentInputs(
-            // #338/#370: the SAME criteria StageNavigation uses to pick which prospects a pill's
-            // tap focuses on, so the count shown always matches what tapping it navigates to.
-            // #861: counted through StageNavigation so the pill's NUMBER and the pill's CLICK can never
-            // disagree again. They did: it counted 102 when 25 were June shows already gone, then
-            // navigated him to shows the queue rightly refused to render.
-            toTriage: StageNavigation.naturalKeys(forStage: "Scout", in: prospects,
-                                                  today: QueueModel.easternToday()).count,
-            keptToPrep: StageNavigation.naturalKeys(forStage: "Prep", in: prospects).count,
-            prepRunning: PrepQueueService.isRunning(now: Date()),
-            toReview: StageNavigation.naturalKeys(forStage: "Review", in: prospects).count,
-            // #792: counted directly rather than through StageNavigation, which now also targets shows
-            // whose only remaining contact is HELD by a review guard. Those are a different fact needing
-            // a different sentence ("held for a check", not "ready to send"), and folding them in here
-            // would tell Dan a show is approved and waiting on a click when it is neither.
-            readyToSend: prospects.filter { $0.status == .approved && $0.sentAt == nil }.count,
+        let now = Date()
+        return AgentInputs.from(
+            prospects: prospects, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
-            sendErrors: prospects.filter { $0.sendError != nil }.count,
-            followUpsDue: FollowUp.dueRecipients(from: prospects, now: Date()).count,
-            stalledReplyDrafts: prospects.reduce(0) { sum, p in
-                let runAlive = ReplyClassifyService.isRunning(now: Date())
-                return sum + p.recipients.filter { $0.isReplyDraftStalled(now: Date(), runAlive: runAlive) }.count
-            },
-            stuckSends: prospects.reduce(0) { sum, p in
-                sum + p.recipients.filter { $0.isSendStuck(now: Date()) }.count
-            },
-            degradedReplyTracking: prospects.reduce(0) { sum, p in
-                sum + p.recipients.filter(\.replyTrackingDegraded).count
-            },
-            // #792: counted across EVERY prospect, not just the ones still in the queue. That is the
-            // whole point: the show a held contact belongs to has usually already left the queue reading
-            // "Sent", which is exactly how the person still waiting became invisible.
-            blockedContacts: prospects.reduce(0) { $0 + $1.blockedContactCount }
+            prepRunning: PrepQueueService.isRunning(now: now),
+            replyRunAlive: ReplyClassifyService.isRunning(now: now)
         )
     }
 

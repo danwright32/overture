@@ -211,7 +211,10 @@ struct BlockedContactNavigationTests {
         contacted.recipients.append(held)
         ctx.insert(held)
 
-        let keys = StageNavigation.naturalKeys(forStage: "Send", in: [contacted])
+        // #863: the Send pill's tap is keyed by what it is currently REPORTING, not by its name, because
+        // it reports whichever of five problems is most urgent and each names a different set of shows.
+        // A held contact is `.sendBlocked`.
+        let keys = StageNavigation.naturalKeys(for: .sendBlocked, in: [contacted])
 
         #expect(keys == ["contacted"])
     }
@@ -220,7 +223,7 @@ struct BlockedContactNavigationTests {
         let ctx = try context()
         let approved = show(ctx, key: "approved", status: .approved)
 
-        #expect(StageNavigation.naturalKeys(forStage: "Send", in: [approved]) == ["approved"])
+        #expect(StageNavigation.naturalKeys(for: .sendApproved, in: [approved]) == ["approved"])
     }
 
     // A contacted show with NOTHING held is finished, and must not come back into the Send stage. The
@@ -230,7 +233,8 @@ struct BlockedContactNavigationTests {
         let done = show(ctx, key: "done", status: .contacted)
         done.sentAt = Date()
 
-        #expect(StageNavigation.naturalKeys(forStage: "Send", in: [done]).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .sendBlocked, in: [done]).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .sendApproved, in: [done]).isEmpty)
     }
 }
 

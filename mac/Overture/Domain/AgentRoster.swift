@@ -13,6 +13,13 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
     let name: String
     let state: AgentState
     let detail: String
+    // #863: what this pill is CURRENTLY about, and how many shows that is. Send reports whichever of
+    // five problems is most urgent, and each names a different set of shows, so the pill's tap has to
+    // follow the sentence it actually chose, not the pill's name. `count` is the number that sentence
+    // states, and it is always a count of SHOWS, so it equals the rows a tap lands on: a pill that
+    // says 3 and lands Dan on 2 rows is the same broken promise as one that lands him on none.
+    let focus: StageFocus
+    let count: Int
     // #565: true only for the Send status's "N approved, connect Gmail to send" case, so a tap on
     // the chip can route to the actual Gmail-connect flow (#488) instead of just filtering the
     // queue. A structured flag, not a text match on `detail`, which is prose meant to change freely.
@@ -36,6 +43,39 @@ struct AgentInputs: Sendable {
     // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
     // "sendable", so it left the queue and nothing ever surfaced the person still waiting.
     var blockedContacts: Int = 0
+}
+
+// #863: every count a pill can show is built HERE, from the same prospects StageNavigation resolves
+// its targets from, rather than inline in QueueView. It lived in the view, which is why the invariant
+// in StageNavigation's header ("what a pill shows is what tapping it navigates to") could drift twice
+// (#792, #861) without a single test noticing: a SwiftUI view's computed property has no seam a test
+// can reach. Everything the roster needs that is NOT a prospect (is Gmail connected, is a run alive)
+// is passed in, so this stays pure and testable.
+extension AgentInputs {
+    static func from(prospects: [Prospect], now: Date, today: String,
+                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
+        // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
+        // lands on come from one predicate and cannot answer the same question differently.
+        func count(_ focus: StageFocus) -> Int {
+            StageNavigation.naturalKeys(for: focus, in: prospects, today: today, now: now).count
+        }
+        return AgentInputs(
+            toTriage: count(.scout),
+            keptToPrep: count(.prep),
+            prepRunning: prepRunning,
+            toReview: count(.review),
+            readyToSend: count(.sendApproved),
+            gmailConnected: gmailConnected,
+            sendErrors: count(.sendErrors),
+            followUpsDue: FollowUp.dueRecipients(from: prospects, now: now).count,
+            stalledReplyDrafts: prospects.reduce(0) { sum, p in
+                sum + p.recipients.filter { $0.isReplyDraftStalled(now: now, runAlive: replyRunAlive) }.count
+            },
+            stuckSends: count(.sendStuck),
+            degradedReplyTracking: count(.sendDegraded),
+            blockedContacts: count(.sendBlocked)
+        )
+    }
 }
 
 enum AgentRoster {
@@ -69,38 +109,58 @@ enum AgentRoster {
     // itself already surfaces its own live state via ScoutStatus/isScanning elsewhere); this pill
     // only reflects its OUTPUT, the backlog still awaiting a keep/dismiss decision.
     private static func scout(_ i: AgentInputs) -> AgentStatus {
-        if i.toTriage > 0 { return AgentStatus(name: "Scout", state: .needsAttention, detail: "\(i.toTriage) to triage") }
-        return AgentStatus(name: "Scout", state: .idle, detail: "Nothing new")
+        if i.toTriage > 0 {
+            return AgentStatus(name: "Scout", state: .needsAttention, detail: "\(i.toTriage) to triage",
+                               focus: .scout, count: i.toTriage)
+        }
+        return AgentStatus(name: "Scout", state: .idle, detail: "Nothing new", focus: .scout, count: 0)
     }
 
     private static func prep(_ i: AgentInputs) -> AgentStatus {
-        if i.prepRunning { return AgentStatus(name: "Prep", state: .working, detail: "Finding contacts and drafting…") }
-        if i.keptToPrep > 0 { return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep") }
-        return AgentStatus(name: "Prep", state: .idle, detail: "Nothing waiting")
+        if i.prepRunning {
+            return AgentStatus(name: "Prep", state: .working, detail: "Finding contacts and drafting…",
+                               focus: .prep, count: i.keptToPrep)
+        }
+        if i.keptToPrep > 0 {
+            return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep",
+                               focus: .prep, count: i.keptToPrep)
+        }
+        return AgentStatus(name: "Prep", state: .idle, detail: "Nothing waiting", focus: .prep, count: 0)
     }
 
     private static func review(_ i: AgentInputs) -> AgentStatus {
-        if i.toReview > 0 { return AgentStatus(name: "Review", state: .needsAttention, detail: "\(i.toReview) draft\(i.toReview == 1 ? "" : "s") to review") }
-        return AgentStatus(name: "Review", state: .idle, detail: "Nothing to review")
+        if i.toReview > 0 {
+            return AgentStatus(name: "Review", state: .needsAttention,
+                               detail: "\(i.toReview) draft\(i.toReview == 1 ? "" : "s") to review",
+                               focus: .review, count: i.toReview)
+        }
+        return AgentStatus(name: "Review", state: .idle, detail: "Nothing to review", focus: .review, count: 0)
     }
 
+    // #863: every branch here now names the SHOWS it is about, and hands that focus to the pill, so the
+    // tap follows the sentence. Each count is a count of shows for the same reason: the number Dan reads
+    // is a promise about how many rows he is about to land on. "3 contacts held" landing him on 2 rows
+    // breaks that promise just as surely as landing him on none.
     private static func send(_ i: AgentInputs) -> AgentStatus {
         // An interrupted send outranks even a confirmed failure (#475/#476): Dan doesn't yet know
         // whether it actually went out, so it needs his eyes on Gmail, not just a retry.
         if i.stuckSends > 0 {
             let n = i.stuckSends
             return AgentStatus(name: "Send", state: .error,
-                               detail: "\(n) send\(n == 1 ? "" : "s") unconfirmed: check Gmail")
+                               detail: "\(n) \(shows(n)) with an unconfirmed send: check Gmail",
+                               focus: .sendStuck, count: n)
         }
         if i.sendErrors > 0 {
-            return AgentStatus(name: "Send", state: .error, detail: "\(i.sendErrors) failed to send")
+            return AgentStatus(name: "Send", state: .error, detail: "\(i.sendErrors) failed to send",
+                               focus: .sendErrors, count: i.sendErrors)
         }
         // #483: the send went out fine, just with no usable threadId to watch for a reply. Not a
         // failure, but silent otherwise, so it still has to surface.
         if i.degradedReplyTracking > 0 {
             let n = i.degradedReplyTracking
             return AgentStatus(name: "Send", state: .needsAttention,
-                               detail: "\(n) sent but can't be watched for replies: check Gmail")
+                               detail: "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail",
+                               focus: .sendDegraded, count: n)
         }
         // #792: a contact held back by a review guard. It ranks BELOW a real failure (a send that failed,
         // or one whose outcome is unknown, needs Dan's eyes more urgently than a heuristic he only has to
@@ -109,26 +169,39 @@ enum AgentRoster {
         if i.blockedContacts > 0 {
             let n = i.blockedContacts
             return AgentStatus(name: "Send", state: .needsAttention,
-                               detail: "\(n) contact\(n == 1 ? "" : "s") held for a check")
+                               detail: "\(n) \(shows(n)) with a contact held for a check",
+                               focus: .sendBlocked, count: n)
         }
         if i.readyToSend > 0 {
             let detail = i.gmailConnected
                 ? "\(i.readyToSend) approved, ready to send"
                 : "\(i.readyToSend) approved, connect Gmail to send"
             return AgentStatus(name: "Send", state: .needsAttention, detail: detail,
+                               focus: .sendApproved, count: i.readyToSend,
                                needsGmailConnect: !i.gmailConnected)
         }
-        return AgentStatus(name: "Send", state: .idle, detail: "Nothing to send")
+        return AgentStatus(name: "Send", state: .idle, detail: "Nothing to send",
+                           focus: .sendApproved, count: 0)
     }
 
+    private static func shows(_ n: Int) -> String { n == 1 ? "show" : "shows" }
+
+    // #863: the one pill exempt from "the number equals the rows you land on", because it does not land
+    // Dan on rows at all: it opens FollowUpsView, which lists the due RECIPIENTS. So a recipient count is
+    // the honest one here, and .followUps deliberately resolves no queue keys.
     private static func followUps(_ i: AgentInputs) -> AgentStatus {
         // A dead reply-drafter run takes priority: it's an abnormal stall Dan should clear (#431).
         if i.stalledReplyDrafts > 0 {
             let n = i.stalledReplyDrafts
             return AgentStatus(name: "Follow-ups", state: .needsAttention,
-                               detail: "\(n) reply draft\(n == 1 ? "" : "s") stalled")
+                               detail: "\(n) reply draft\(n == 1 ? "" : "s") stalled",
+                               focus: .followUps, count: n)
         }
-        if i.followUpsDue > 0 { return AgentStatus(name: "Follow-ups", state: .needsAttention, detail: "\(i.followUpsDue) nudge\(i.followUpsDue == 1 ? "" : "s") due") }
-        return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due")
+        if i.followUpsDue > 0 {
+            return AgentStatus(name: "Follow-ups", state: .needsAttention,
+                               detail: "\(i.followUpsDue) nudge\(i.followUpsDue == 1 ? "" : "s") due",
+                               focus: .followUps, count: i.followUpsDue)
+        }
+        return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due", focus: .followUps, count: 0)
     }
 }
