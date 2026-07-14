@@ -13,6 +13,30 @@ import SwiftData
 // lives in a view is a guarantee that lasts until the next view.
 @MainActor
 enum WatchlistEditing {
+
+    // #885: the do-not-contact refusal, written ONCE.
+    //
+    // SourcesView's own header calls this "the one thing in the whole feature that must not be got wrong
+    // quietly", and it was written out by hand in three view bodies across two files, in two different
+    // wordings, with no test on any of them. The type that RETURNS `.refused(orgName)` is the type that
+    // should say what a refusal means.
+    static func refusedMessage(orgName: String) -> String {
+        "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
+    }
+
+    // Resuming a stopped source is a different action, and keeps its own true sentence: "again" is doing
+    // real work in it, and would be a lie on a source being added for the first time.
+    static func resumeRefusedMessage(orgName: String) -> String {
+        "\(orgName) asked not to be contacted, so Overture won't watch them again."
+    }
+
+    static func alreadyWatchingMessage(orgName: String) -> String {
+        "Already watching \(orgName)'s calendar."
+    }
+
+    static let invalidURLMessage = "That doesn't look like a web address."
+
+    static let needsNameMessage = "Give the organization a name so you can recognize it here."
     enum Result: Equatable, Sendable {
         case added
         case resumed                       // a source Dan had stopped, revived with its history intact

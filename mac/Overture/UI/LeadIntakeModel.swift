@@ -435,6 +435,16 @@ final class LeadIntakeModel {
         try? context.save()
     }
 
+    // #885: the sheet's two sentences, out of AddLeadSheet's body and into the model that already
+    // produced the count they are about.
+    static func addedNote(count: Int) -> String {
+        "Added \(Plural.count(count, "show")) to the queue."
+    }
+
+    static func alreadyWatchingNote(orgName: String) -> String {
+        "Already watching \(orgName)'s calendar, so their shows turn up on their own."
+    }
+
     // A stable, safe id for the pinned page and the work-list. Derived from the URL so re-pasting the
     // same link reuses the same pin rather than littering the handoff folder.
     static func sourceId(for url: URL) -> String {

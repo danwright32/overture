@@ -62,16 +62,17 @@ struct OutcomePatternsView: View {
 
     private func patternRow(name: String, tally: OutcomeTally) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(label(for: name)).font(OVType.groupName).foregroundStyle(OVColor.ink)
+            Text(OutcomePatterns.slugLabel(name)).font(OVType.groupName).foregroundStyle(OVColor.ink)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                let lowSample = OutcomePatterns.isLowSample(tally)
-                Text("\(tally.booked) booked of \(tally.contacted)\(lowSample ? "" : percent(tally.bookingRate))")
+                // #885: the sentences and the low-sample suppression are OutcomePatterns', not this
+                // view's. What is left here is layout.
+                Text(OutcomePatterns.bookedLine(tally))
                     .foregroundStyle(OVColor.ink)
-                if lowSample {
+                if OutcomePatterns.isLowSample(tally) {
                     Text("too few to tell").foregroundStyle(OVColor.inkFaint)
                 } else {
-                    Text("\(tally.replied + tally.booked) replied\(percent(tally.responseRate))")
+                    Text(OutcomePatterns.repliedLine(tally))
                         .foregroundStyle(OVColor.inkSoft)
                     bookingSplit(name: name, tally: tally)
                 }
@@ -126,13 +127,4 @@ struct OutcomePatternsView: View {
         .frame(width: 280, alignment: .leading)
     }
 
-    private func percent(_ rate: Double?) -> String {
-        guard let rate else { return "" }
-        return " · \(Int((rate * 100).rounded()))%"
-    }
-
-    private func label(for name: String) -> String {
-        // Values are short slugs ("self", "agency", "music", "high"); a readable cap is enough.
-        name.replacingOccurrences(of: "_", with: " ").capitalized
-    }
 }

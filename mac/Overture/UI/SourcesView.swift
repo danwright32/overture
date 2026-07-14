@@ -110,7 +110,7 @@ struct SourcesView: View {
         case .resumed, .alreadyWatching:
             feedback.acknowledge(ActionAck.resumedWatching(org: source.orgName))
         case .refused(let orgName):
-            feedback.acknowledge("\(orgName) asked not to be contacted, so Overture won't watch them again.",
+            feedback.acknowledge(WatchlistEditing.resumeRefusedMessage(orgName: orgName),
                                  tone: .warning)
         case .added, .invalidURL, .needsName:
             break
@@ -122,15 +122,16 @@ struct SourcesView: View {
         case .added, .resumed:
             newOrgName = ""; newURL = ""; showAdd = false; addMessage = nil
         case .alreadyWatching(let orgName):
-            addMessage = "Already watching \(orgName)'s calendar."
+            addMessage = WatchlistEditing.alreadyWatchingMessage(orgName: orgName)
         case .refused(let orgName):
             // He must SEE this. Silently declining would look exactly like a bug, and this is the one
-            // thing in the whole feature that must not be got wrong quietly.
-            addMessage = "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
+            // thing in the whole feature that must not be got wrong quietly. #885: the sentence itself
+            // lives with the rule that produces it, and is now written once rather than three times.
+            addMessage = WatchlistEditing.refusedMessage(orgName: orgName)
         case .invalidURL:
-            addMessage = "That doesn't look like a web address."
+            addMessage = WatchlistEditing.invalidURLMessage
         case .needsName:
-            addMessage = "Give the organization a name so you can recognize it here."
+            addMessage = WatchlistEditing.needsNameMessage
         }
     }
 
@@ -302,9 +303,6 @@ struct SourcesView: View {
     // "Never" is a real answer and is said out loud, rather than being left as a blank cell that reads
     // like a rendering bug.
     private func lastChecked(_ source: WatchedSource) -> String {
-        guard let at = source.lastCheckedAt else { return "Never checked" }
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return "Checked \(f.localizedString(for: at, relativeTo: Date()))"
+        SourceReadState.lastCheckedLine(at: source.lastCheckedAt, now: Date())   // #885
     }
 }

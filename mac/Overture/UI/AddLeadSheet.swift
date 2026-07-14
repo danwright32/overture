@@ -132,12 +132,12 @@ struct AddLeadSheet: View {
                 }
             }
         case .alreadyWatching(let orgName):
-            Text("Already watching \(orgName)'s calendar, so their shows turn up on their own.")
+            Text(LeadIntakeModel.alreadyWatchingNote(orgName: orgName))
                 .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                 .fixedSize(horizontal: false, vertical: true)
         case .refused(let orgName):
             // He must SEE this. Silently declining to watch them would look identical to a bug.
-            Text("\(orgName) asked not to be contacted, so Overture won't watch their calendar.")
+            Text(WatchlistEditing.refusedMessage(orgName: orgName))
                 .font(OVType.meta).foregroundStyle(OVColor.rust)
                 .fixedSize(horizontal: false, vertical: true)
         case .nothingToWatch, .none:
@@ -160,7 +160,7 @@ struct AddLeadSheet: View {
 
     private func added(_ count: Int, note: String?) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            Text(count == 1 ? "Added 1 show to the queue." : "Added \(count) shows to the queue.")
+            Text(LeadIntakeModel.addedNote(count: count))
                 .font(OVType.body).foregroundStyle(OVColor.ink)
             Text("They're ranked and waiting with everything else.")
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)

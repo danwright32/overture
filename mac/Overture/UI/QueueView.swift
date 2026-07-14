@@ -504,11 +504,12 @@ struct QueueView: View {
 
     private var emptyState: some View {
         VStack(spacing: OVSpacing.xs) {
-            Text(items.isEmpty ? "Nothing scouted yet" : "Nothing matches this filter")
+            // #885: "there is nothing" and "your filter hid it" are different problems with different
+            // fixes, and telling them apart is the whole job of this copy (EmptyState).
+            let empty = EmptyState.queue(hasAnyItems: !items.isEmpty)
+            Text(empty.title)
                 .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Text(items.isEmpty
-                 ? "Run the scout to comb the venue calendars. Ranked candidates land here for review."
-                 : "Try a different discipline, or clear the high-fit filter.")
+            Text(empty.detail)
                 .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

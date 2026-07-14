@@ -42,3 +42,28 @@ struct OnboardingState: Equatable, Sendable {
             .appendingPathComponent("Library/LaunchAgents/com.danwright.overture.plist")
     }
 }
+
+// #885: onboarding's status lines, out of the view.
+//
+// Every failure branch here is REMEDIATION: it tells Dan where to go and what to click. Copy that is
+// only ever seen when something has gone wrong is copy nobody exercises by accident, which is exactly
+// why it has to be the kind a test can read.
+extension OnboardingState {
+    static func notificationsStatus(granted: Bool) -> String {
+        granted
+            ? "Notifications allowed."
+            : "Not allowed. Enable Overture in System Settings ▸ Notifications."
+    }
+
+    static func omniFocusStatus(granted: Bool) -> String {
+        granted
+            ? "OmniFocus permission granted."
+            : "Still not granted. Allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
+    }
+
+    // The real reason travels with the failure, rather than a generic "couldn't connect" that leaves him
+    // nothing to act on.
+    static func gmailConnectFailed(reason: String) -> String {
+        "Couldn't connect Gmail: \(reason)"
+    }
+}

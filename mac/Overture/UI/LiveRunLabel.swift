@@ -60,7 +60,7 @@ struct LiveRunLabel: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .imageScale(.small)
-            styled(Text("\(base) looks stuck (\(elapsed))"))
+            styled(Text(RunProgress.stalledLabel(base, elapsed: elapsed)))
             if let onRetry {
                 Button("Retry", action: onRetry)
                     .controlSize(.small)

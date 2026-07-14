@@ -82,3 +82,18 @@ enum SourceReadState: Equatable, Sendable {
         return f.localizedString(for: date, relativeTo: now)
     }
 }
+
+// #885: the "when was this last looked at" line, out of SourcesView's body. It sat three lines below
+// SourceReadState.label and source.readabilityNote, both properly domain-owned; this was the one sibling
+// that was not, and it built its own formatter in the view each time.
+//
+// "Never" is a real answer and is said out loud, rather than left as a blank cell that reads like a
+// rendering bug.
+extension SourceReadState {
+    static func lastCheckedLine(at lastCheckedAt: Date?, now: Date) -> String {
+        guard let lastCheckedAt else { return "Never checked" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return "Checked \(formatter.localizedString(for: lastCheckedAt, relativeTo: now))"
+    }
+}

@@ -154,11 +154,10 @@ struct ArchiveView: View {
 
     private var emptyState: some View {
         VStack(spacing: OVSpacing.xs) {
-            Text(items.isEmpty ? "Nothing scouted yet" : "Nothing matches this filter")
+            let empty = EmptyState.archive(hasAnyItems: !items.isEmpty)   // #885
+            Text(empty.title)
                 .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Text(items.isEmpty
-                 ? "Shows land here once Overture has tracked at least one."
-                 : "Try a different status filter, or clear the search.")
+            Text(empty.detail)
                 .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
