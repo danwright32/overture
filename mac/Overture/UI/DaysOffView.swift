@@ -20,8 +20,7 @@ struct DaysOffView: View {
     // Built fresh on each render from the export plus the rows above, so the sheet cannot show a calendar
     // that disagrees with the one the scout will use.
     private var calendar: BlockedCalendar {
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        return ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context)
+        ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context)
     }
 
     @State private var showAdd = false

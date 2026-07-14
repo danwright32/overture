@@ -60,8 +60,15 @@ enum DayOffEditing {
         }
     }
 
+    // `export` is a parameter, not a hidden read, so the sweep below is testable without a file on disk.
+    // It defaults to the real one, so no call site can accidentally sweep against an empty calendar and
+    // quietly drop every booked shoot from the verdict.
+    typealias Export = (bookings: [OvertureBooking], blockedDates: [String])
+
     @discardableResult
-    static func add(start: String, end: String, note: String?, into context: ModelContext) -> Result {
+    static func add(start: String, end: String, note: String?,
+                    export: Export = DownbeatBridge.loadedExport(),
+                    into context: ModelContext) -> Result {
         guard let startDate = EasternDate.date(from: start),
               let endDate = EasternDate.date(from: end) else { return .invalidDate }
         guard endDate >= startDate else { return .endsBeforeItStarts }
@@ -71,18 +78,63 @@ enum DayOffEditing {
         context.insert(DayOff(startDate: start, endDate: end,
                               note: (trimmed?.isEmpty ?? true) ? nil : trimmed))
         try? context.save()
+        // Blocking a week flags the shows in that week NOW, not on the next scout. Without this Dan blocks
+        // his vacation, sees nothing change in the queue, and reasonably concludes it did not work, while
+        // every show in that week stays draftable and sendable in the meantime.
+        ConflictSweep.reapplyAll(export: export, in: context)
         return .added
     }
 
-    static func remove(_ dayOff: DayOff, in context: ModelContext) {
+    static func remove(_ dayOff: DayOff, export: Export = DownbeatBridge.loadedExport(),
+                       in context: ModelContext) {
         context.delete(dayOff)
         try? context.save()
+        ConflictSweep.reapplyAll(export: export, in: context)
+    }
+
+    // The stored rows themselves, for the sheet that lists them.
+    static func rows(in context: ModelContext) -> [DayOff] {
+        (try? context.fetch(FetchDescriptor<DayOff>(sortBy: [SortDescriptor(\.startDate)]))) ?? []
     }
 
     // What the scout reads: the stored rows as pure ranges, so BlockedCalendar (and every test of it)
     // never touches SwiftData.
     static func ranges(in context: ModelContext) -> [DayOffRange] {
-        let rows = (try? context.fetch(FetchDescriptor<DayOff>(sortBy: [SortDescriptor(\.startDate)]))) ?? []
-        return rows.map { DayOffRange(startDate: $0.startDate, endDate: $0.endDate, note: $0.note) }
+        rows(in: context).map { DayOffRange(startDate: $0.startDate, endDate: $0.endDate, note: $0.note) }
+    }
+}
+
+// #901: re-judging the shows already in the store against a calendar that just CHANGED.
+//
+// The scout computes a show's conflict when the show arrives. That is only half the story, because the
+// other input is the calendar, and Dan edits that one himself. Without this, he blocks his vacation, looks
+// at the queue, sees nothing flagged, and reasonably concludes it did not work, while every show in that
+// week stays draftable and sendable until the next scout happens to run.
+//
+// It is called from DayOffEditing.add and .remove, which are the two things Dan actually touches, rather
+// than from the sheet that draws them: a guard and its wiring are two separate claims (#887), and a wire
+// that lives in a view is a wire no test can pull.
+@MainActor
+enum ConflictSweep {
+
+    // Every stored prospect, re-judged. Returns how many CHANGED, so a caller can say so if it wants to.
+    //
+    // Dan's own clearances survive by construction: setScoutConflict compares the new key against the one
+    // he cleared, so a show he already waved through stays waved through, and one whose clash has changed
+    // under him blocks again. That is the same rule the scout applies, because it is the same call.
+    @discardableResult
+    static func reapplyAll(export: DayOffEditing.Export, in context: ModelContext) -> Int {
+        let calendar = ScoutService.blockedCalendar(export: export, context: context)
+        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+
+        var changed = 0
+        for p in prospects {
+            let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate)?.key
+            guard key != p.conflictKey else { continue }
+            p.setScoutConflict(key)
+            changed += 1
+        }
+        if changed > 0 { try? context.save() }
+        return changed
     }
 }

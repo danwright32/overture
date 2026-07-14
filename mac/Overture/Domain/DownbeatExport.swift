@@ -120,6 +120,14 @@ enum DownbeatBridge {
         }
     }
 
+    // #901: just the two halves the blocked calendar is built from. A convenience over loadWithHealth, so
+    // the three places that need the export in order to judge a date (the scout, the Days off sheet, and
+    // the sweep that runs when Dan edits his days off) do not each re-destructure the same tuple.
+    static func loadedExport() -> (bookings: [OvertureBooking], blockedDates: [String]) {
+        let loaded = loadWithHealth(now: Date())
+        return (loaded.bookings, loaded.blockedDates)
+    }
+
     // Reads whatever clients it can, plus a health verdict. Never throws: a missing or
     // bad export yields empty clients so the scout still runs, with the warning surfaced.
     static func loadWithHealth(from url: URL = defaultURL, now: Date,

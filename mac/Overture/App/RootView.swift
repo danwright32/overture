@@ -86,9 +86,8 @@ struct RootView: View {
     // types in himself. Asked of DaysOffAttention, never decided here, so the toolbar and the sheet it
     // opens cannot come to different answers.
     private var noBookedShootData: Bool {
-        let loaded = DownbeatBridge.loadWithHealth(now: Date())
-        return DaysOffAttention.needsALook(
-            ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context))
+        DaysOffAttention.needsALook(
+            ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context))
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
