@@ -90,11 +90,18 @@ final class WatchedSource {
     // note, so it becomes the note, rather than a second field doing the same job beside it.
     var notes: String?
 
-    // The line the Sources sheet shows, or nothing when this source read everything. Decided beside the
-    // data and NOT in the view (#863/#885), and drawn from the same tolerance the reconcile used, so the
-    // sheet can never tell Dan cancellation is working on a source where it is switched off.
+    // The line the Sources sheet shows, or nothing when this source read everything and came back its usual
+    // size. Decided beside the data and NOT in the view (#863/#885), and drawn from the same rules the
+    // reconcile used, so the sheet can never tell Dan cancellation is working on a source where it is
+    // switched off.
+    //
+    // #897: the baseline goes in too, because a shrunken feed switches cancelling off just as an unreadable
+    // one does. `baselineFeedCount` is the post-run value, which is the RIGHT one to compare against: a run
+    // too small to be believed leaves the baseline where it was (updatedHealth), so this asks exactly the
+    // question the next reconcile will ask, and clears itself the moment the smaller size is accepted.
     var readabilityNote: String? {
-        SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount)
+        SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount,
+                               baseline: baselineFeedCount)
     }
 
     // #875: what the run itself said about this source, in words, and the raw log behind it. Same rule as

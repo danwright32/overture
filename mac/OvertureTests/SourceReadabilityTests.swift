@@ -21,15 +21,16 @@ import SwiftData
 @Suite("Telling Dan a source's shows could not be read (#891)")
 struct SourceReadabilityTests {
 
-    // A source that read everything says nothing. Silence must mean healthy, or the line is noise.
+    // A source that read everything, at its usual size, says nothing. Silence must mean healthy, or the
+    // line is noise.
     @Test func aSourceThatReadEveryShowSaysNothing() {
-        #expect(SourceReadability.note(readable: 40, unreadable: 0) == nil)
+        #expect(SourceReadability.note(readable: 40, unreadable: 0, baseline: 40) == nil)
     }
 
     // A stray unreadable listing is worth stating, but it has NOT cost the source anything: it is inside
     // the tolerance, so cancellation still works. The copy must not imply otherwise.
     @Test func aStrayUnreadableShowIsMentionedWithoutAlarm() {
-        let note = SourceReadability.note(readable: 39, unreadable: 1)
+        let note = SourceReadability.note(readable: 39, unreadable: 1, baseline: 40)
 
         #expect(note == "1 of 40 shows couldn't be read.")
     }
@@ -37,20 +38,51 @@ struct SourceReadabilityTests {
     // THE case. Past the tolerance, this source can no longer mark anything cancelled, and saying only
     // "12 shows couldn't be read" would hide the consequence, which is the part Dan can act on.
     @Test func aSourceThatLostTooManyShowsSaysWhatThatCostIt() {
-        let note = SourceReadability.note(readable: 68, unreadable: 12)
+        let note = SourceReadability.note(readable: 68, unreadable: 12, baseline: 80)
 
         #expect(note == "12 of 80 shows couldn't be read, so Overture won't mark anything from this source as gone until it can.")
+    }
+
+    // #897: the OTHER way a source loses its cancelling, and it must be as visible as the first. This run
+    // read everything it found and simply found half a calendar, which is what a page that half loads looks
+    // like. Overture will not believe it until it holds, and a capability switching itself off with no
+    // symptom is the exact bug (#888) this line exists to prevent.
+    @Test func aSourceThatCameBackHalfSizeSaysWhatThatCostIt() {
+        let note = SourceReadability.note(readable: 16, unreadable: 0, baseline: 30)
+
+        #expect(note == "16 shows listed, down from the usual 30, so Overture won't mark anything from this source as gone until the smaller calendar holds.")
+    }
+
+    // A calendar that lost a show or two is normal, still credible, and still cancels. No line.
+    @Test func aNormalSizedCalendarSaysNothing() {
+        #expect(SourceReadability.note(readable: 29, unreadable: 0, baseline: 30) == nil)
+    }
+
+    // A source growing is never suspicious, and must never be reported as if it were.
+    @Test func aGrowingCalendarSaysNothing() {
+        #expect(SourceReadability.note(readable: 45, unreadable: 0, baseline: 30) == nil)
+    }
+
+    // Both at once: unread pages ALSO shrink the feed count, so a heavily unread run trips both rules. The
+    // unread pages are the CAUSE, so that is what Dan is told; naming the shrink would describe a symptom
+    // and hide the thing he can act on.
+    @Test func whenBothAreTrueTheUnreadPagesAreNamedBecauseTheyAreTheCause() {
+        let note = SourceReadability.note(readable: 10, unreadable: 20, baseline: 30)
+
+        #expect(note?.contains("couldn't be read") == true)
+        #expect(note?.contains("down from the usual") == false)
     }
 
     // The line the display draws MUST be the line the reconcile drew. If these two ever disagree, Dan is
     // told cancellation is working on a source where it is switched off, which is worse than saying
     // nothing at all. Same function, not a second copy of the rule.
-    @Test func theDisplayAgreesWithTheReconcileExactly() {
+    @Test func theDisplayAgreesWithTheReconcileAboutUnreadPages() {
         for unreadable in 0...20 {
             let readable = 80 - unreadable
             let reconcileWillCancel = FeedReconcile.rejectedIsWithinTolerance(
                 readable: readable, unreadable: unreadable)
-            let noteSaysItWont = SourceReadability.note(readable: readable, unreadable: unreadable)?
+            let noteSaysItWont = SourceReadability.note(readable: readable, unreadable: unreadable,
+                                                        baseline: 80)?
                 .contains("won't mark anything") ?? false
 
             #expect(reconcileWillCancel != noteSaysItWont,
@@ -58,11 +90,36 @@ struct SourceReadabilityTests {
         }
     }
 
+    // #897: the same agreement, on the size rule, checked against the reconcile's REAL verdict rather than
+    // against a re-derivation of the rule. A sheet that quietly drifts from absenceIsEvidence is the one
+    // failure this whole file exists to prevent.
+    @Test func theDisplayAgreesWithTheReconcileAboutAShrunkenFeed() {
+        for readable in 1...45 {
+            let report = FeedReconcile.SourceReport(
+                sourceId: "kaufman", seenKeys: [], seenSourceURLs: [],
+                feedCount: readable, baseline: 30,
+                successfulCheckCount: WatchedSource.warmupRuns,
+                verdict: .upcomingListings, rejectedCount: 0)
+            let noteSaysItWont = SourceReadability.note(readable: readable, unreadable: 0, baseline: 30)?
+                .contains("won't mark anything") ?? false
+
+            #expect(report.absenceIsEvidence != noteSaysItWont,
+                    "a feed of \(readable) against a baseline of 30: the sheet and the reconcile disagree")
+        }
+    }
+
     // A run that read NOTHING is a broken run, and it never gets the tolerance (#887).
     @Test func aRunThatReadNothingSaysSo() {
-        let note = SourceReadability.note(readable: 0, unreadable: 6)
+        let note = SourceReadability.note(readable: 0, unreadable: 6, baseline: 30)
 
         #expect(note?.contains("won't mark anything") == true)
+    }
+
+    // An EMPTY feed is deliberately not the shrink case. A source with nothing upcoming is in a quiet
+    // off-season or is plain broken, and its health and its own run note already say so. Reporting it here
+    // as a shrunken calendar would put a permanent alarming line on every off-season source all summer.
+    @Test func anEmptyFeedIsNotReportedAsAShrunkenCalendar() {
+        #expect(SourceReadability.note(readable: 0, unreadable: 0, baseline: 30) == nil)
     }
 }
 
@@ -111,6 +168,45 @@ struct SourceReadabilityPersistenceTests {
         #expect(s.lastReadableCount == 1)
         #expect(s.lastUnreadableCount == 1)
         #expect(s.readabilityNote?.contains("won't mark anything") == true)   // 50%, far past tolerance
+    }
+
+    // #897, through the REAL ingest, because the rule and the WIRE that carries it to Dan are two separate
+    // claims and only one of them was ever tested. SourceReadability.note could be perfect and
+    // WatchedSource.readabilityNote could pass it a baseline of zero, and every other test in this file
+    // would still pass while the sheet said nothing at all. That exact cut has gone unnoticed here before
+    // (#887's guard, green across 1,829 tests).
+    //
+    // So: a real source that usually lists 30 shows reads its page, gets 16, and Dan is told, in the row he
+    // will actually look at, that it cannot mark anything gone until that smaller calendar holds.
+    @Test func aRunThatCameBackHalfSizeSaysSoOnTheSourceItself() throws {
+        let ctx = try context()
+        let s = source(ctx)
+        s.baselineFeedCount = 30
+        s.successfulCheckCount = WatchedSource.warmupRuns
+
+        ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
+
+        #expect(s.lastReadableCount == 16)
+        #expect(s.baselineFeedCount == 30)          // NOT re-baselined to 16: the shrink is not believed yet
+        #expect(s.readabilityNote == "16 shows listed, down from the usual 30, so Overture won't mark anything from this source as gone until the smaller calendar holds.")
+    }
+
+    // ...and it stops saying it the moment the smaller calendar is believed, or the line becomes permanent
+    // furniture on a source that is working perfectly well at its new size.
+    @Test func aShrunkenSourceStopsComplainingOnceItsNewSizeIsBelieved() throws {
+        let ctx = try context()
+        let s = source(ctx)
+        s.baselineFeedCount = 30
+        s.successfulCheckCount = WatchedSource.warmupRuns
+
+        for read in 0..<FeedReconcile.selfHealThreshold {
+            s.pendingContentHash = "hash-\(read)"   // its page changed again, and again it lists 16
+            s.hasUnreadChanges = true
+            ingest((1...16).map { event("Show \($0)", venue: "Merkin Hall") }, into: ctx)
+        }
+
+        #expect(s.baselineFeedCount == 16)          // the shrink held, so 16 is simply what this source is
+        #expect(s.readabilityNote == nil)
     }
 
     // A source that recovers must STOP saying it is broken, or the warning becomes permanent furniture and

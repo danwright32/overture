@@ -16,22 +16,45 @@ import Foundation
 // test can reach, and two of those have already drifted here under a green suite (#863, #885).
 enum SourceReadability {
 
-    // The line for Dan, or nothing at all when everything was read. Silence has to mean healthy, or the
-    // line is noise he learns to skim, and this is the one line he must never skim past.
-    static func note(readable: Int, unreadable: Int) -> String? {
-        guard unreadable > 0 else { return nil }
+    // The line for Dan, or nothing at all when the last run read everything and came back its usual size.
+    // Silence has to mean healthy, or the line is noise he learns to skim, and this is the one line he must
+    // never skim past.
+    //
+    // Two different things can switch a source's cancelling off, so both are said, and only ever one at a
+    // time: whichever is actually doing it. Ordered by cause, not severity. Events thrown away are missing
+    // from the feed count as well, so heavy unread pages ALSO shrink the feed; naming the shrink in that
+    // case would describe a symptom and hide the thing Dan can act on.
+    static func note(readable: Int, unreadable: Int, baseline: Int) -> String? {
         let total = readable + unreadable
+
+        // #887: too much of what this run looked at came back unread. It cannot know what else it missed.
+        if unreadable > 0,
+           !FeedReconcile.rejectedIsWithinTolerance(readable: readable, unreadable: unreadable) {
+            // Saying only "12 shows couldn't be read" would hide the consequence, and the consequence is the
+            // part Dan can actually act on: this source can no longer tell him a show has been cancelled,
+            // and it will not be able to until it can read its own pages again.
+            return "\(unreadable) of \(total) shows couldn't be read, "
+                + "so Overture won't mark anything from this source as gone until it can."
+        }
+
+        // #897: the run read what it found, but found far less than this source normally lists. A half
+        // loaded page looks exactly like a calendar that emptied out, so Overture believes neither until the
+        // smaller size holds (FeedReconcile.updatedHealth re-baselines after selfHealThreshold reads, and
+        // this line clears itself the moment it does).
+        //
+        // Drawn from the SAME rule the reconcile just used, never a second copy of it, so the sheet can
+        // never tell Dan cancellation is working on a source where it is switched off. An empty feed is
+        // deliberately not this case: that is a broken fetch or a quiet off-season, which the source's own
+        // health and run note already speak for.
+        if readable > 0,
+           !FeedReconcile.isCredibleNewBaseline(currentCount: readable, baseline: baseline) {
+            return "\(readable) shows listed, down from the usual \(baseline), "
+                + "so Overture won't mark anything from this source as gone until the smaller calendar holds."
+        }
 
         // Inside the tolerance: worth stating, but it has cost the source nothing, and the copy must not
         // imply that it has. A "venue TBA" listing is a normal, permanent feature of a real calendar.
-        guard !FeedReconcile.rejectedIsWithinTolerance(readable: readable, unreadable: unreadable) else {
-            return "\(unreadable) of \(total) shows couldn't be read."
-        }
-
-        // Past it. Saying only "12 shows couldn't be read" would hide the consequence, and the
-        // consequence is the part Dan can actually act on: this source can no longer tell him a show has
-        // been cancelled, and it will not be able to until it can read its own pages again.
-        return "\(unreadable) of \(total) shows couldn't be read, "
-            + "so Overture won't mark anything from this source as gone until it can."
+        guard unreadable > 0 else { return nil }
+        return "\(unreadable) of \(total) shows couldn't be read."
     }
 }
