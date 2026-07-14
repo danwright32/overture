@@ -323,6 +323,13 @@ enum QueueModel {
 
     static func fitLabel(isHighFit: Bool) -> String { isHighFit ? "HIGH FIT" : "LONG SHOT" }
 
+    // #885 (guard sweep): the bookings filter's own label, and the AI's read of an incoming reply. The
+    // second one is a claim about what a MODEL concluded, so the words matter: "AI read" says whose
+    // conclusion it is, which is the difference between a hint and a fact.
+    static func confirmBookingsLabel(count: Int) -> String { "Confirm bookings (\(count))" }
+
+    static func aiReadNote(hint: String) -> String { "AI read: \(replyIntentLabel(hint))" }
+
     // Both branches promise something about what the DRAFT will do, which is why they are worth a test:
     // one says a returning-client draft is now allowed, the other says it is not yet.
     static func performerMatchHelp(confirmed: Bool) -> String {

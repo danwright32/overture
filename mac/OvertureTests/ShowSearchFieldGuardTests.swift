@@ -50,8 +50,11 @@ struct ShowSearchFieldNoResultsGuardTests {
         #expect(!src.contains("showDropdown = isFocused && !matches.isEmpty"))
     }
 
+    // #885: the SENTENCE moved to ShowSearch.noMatchesNote, where a test can read it rather than merely
+    // confirm its presence in a view. Same protection, checked on the wire: the empty branch still
+    // renders that note, so a zero-result search can never silently show nothing at all.
     @Test func popoverContentShowsANoMatchesMessageWhenEmpty() {
         #expect(src.contains("matches.isEmpty"))
-        #expect(src.contains("No matches"))
+        #expect(src.contains("ShowSearch.noMatchesNote"))
     }
 }

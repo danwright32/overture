@@ -126,3 +126,11 @@ enum DismissReason: String, CaseIterable, Sendable {
     // decide that a date has passed.
     static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy } }
 }
+
+// #885: the conversation menu's summary line. It lowercases a domain label to sit inside a sentence,
+// which is a copy transform, and it was happening in a view.
+extension ConversationState {
+    static func looksLikeNote(_ state: ConversationState) -> String {
+        "Looks like \(state.label.lowercased())"
+    }
+}

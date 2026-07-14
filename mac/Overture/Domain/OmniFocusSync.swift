@@ -219,3 +219,9 @@ enum OmniFocusSync {
         return parts.joined(separator: "\n")
     }
 }
+
+// #885 (guard sweep): a failed sync carries the real reason rather than a generic apology, because the
+// reason (a revoked Automation permission, a moved app) is the only part Dan can act on.
+extension OmniFocusSync {
+    static func failureMessage(reason: String) -> String { "OmniFocus sync failed: \(reason)" }
+}

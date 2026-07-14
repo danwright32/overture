@@ -25,3 +25,9 @@ enum DueWork {
                                                                  config: reminder).count)
     }
 }
+
+// #885: the toolbar pill's own title. It hides its count when there is nothing due, so a zero never sits
+// on the masthead pretending to be work.
+extension DueWork {
+    static func badgeTitle(count: Int) -> String { count == 0 ? "Due" : "Due (\(count))" }
+}

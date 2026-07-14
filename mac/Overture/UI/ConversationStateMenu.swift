@@ -37,7 +37,7 @@ struct ConversationStateControl: View {
     var body: some View {
         if let currentState, stateSource == .auto {
             HStack(spacing: 4) {
-                Text("Looks like \(currentState.label.lowercased())").foregroundStyle(OVColor.inkSoft)
+                Text(ConversationState.looksLikeNote(currentState)).foregroundStyle(OVColor.inkSoft)
                 Button("Confirm", action: onConfirm)
                     .buttonStyle(.plain).foregroundStyle(OVColor.forest)
                 ConversationStateMenu(currentState: currentState, label: "Change", onSet: onSet)

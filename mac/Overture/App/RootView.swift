@@ -271,7 +271,7 @@ struct RootView: View {
                     Button {
                         showFollowUps = true
                     } label: {
-                        ToolbarHoverLabel(title: followUpsDue == 0 ? "Due" : "Due (\(followUpsDue))",
+                        ToolbarHoverLabel(title: DueWork.badgeTitle(count: followUpsDue),
                                           systemImage: "arrow.uturn.right")
                     }
                     .help("Follow-ups and active conversations due for a touch")
@@ -318,7 +318,7 @@ struct RootView: View {
                         }
                     }
                     .disabled(gmailConnected || isConnectingGmail)
-                    .help(gmailConnected ? "Gmail is connected for sending" : "Authorize your photography Gmail so you can send approved emails")
+                    .help(GmailCopy.connectionHelp(connected: gmailConnected))
                 }
                 // #355: the automatic sync's enabled/last-synced state is now glanceable, and the
                 // rarely-needed manual force-run moves out of the prominent toolbar into this menu.
@@ -812,7 +812,7 @@ struct RootView: View {
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
                 OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
-                if force { errorMessage = "OmniFocus sync failed: \(error)" }
+                if force { errorMessage = OmniFocusSync.failureMessage(reason: "\(error)") }
             }
             omniFocusSyncStartedAt = nil
         }

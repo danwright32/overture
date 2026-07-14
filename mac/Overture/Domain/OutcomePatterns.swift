@@ -111,3 +111,11 @@ enum OutcomePatterns {
                                      venue: $0.venue) }
     }
 }
+
+// #885 (guard sweep): the booking split's two lines. "Auto-detected" versus "confirmed by you" is a
+// provenance claim about where a booking came from (#117), and Dan audits it by clicking through.
+extension OutcomePatterns {
+    static func autoDetectedLine(_ tally: OutcomeTally) -> String { "\(tally.bookedAuto) auto-detected" }
+
+    static func confirmedByYouLine(_ tally: OutcomeTally) -> String { "\(tally.bookedManual) confirmed by you" }
+}

@@ -61,7 +61,7 @@ struct SourcesView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
-            Button(showAdd ? "Cancel" : "Watch a calendar") { showAdd.toggle(); addMessage = nil }
+            Button(WatchlistEditing.addButtonTitle(isOpen: showAdd)) { showAdd.toggle(); addMessage = nil }
                 .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
             Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
         }

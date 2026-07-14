@@ -91,7 +91,7 @@ struct OutcomePatternsView: View {
             HStack(spacing: 4) {
                 if tally.bookedAuto > 0 {
                     Button { auditTarget = AuditTarget(value: name) } label: {
-                        Text("\(tally.bookedAuto) auto-detected").underline()
+                        Text(OutcomePatterns.autoDetectedLine(tally)).underline()
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(OVColor.forest)
@@ -101,7 +101,7 @@ struct OutcomePatternsView: View {
                     }
                 }
                 if tally.bookedManual > 0 {
-                    Text("\(tally.bookedManual) confirmed by you").foregroundStyle(OVColor.inkFaint)
+                    Text(OutcomePatterns.confirmedByYouLine(tally)).foregroundStyle(OVColor.inkFaint)
                 }
             }
         }

@@ -108,7 +108,7 @@ struct DraftReviewView: View {
         .confirmationDialog("Did they mean this show, or the whole organisation?",
                             isPresented: $askAboutWholeOrg, titleVisibility: .visible) {
             Button("Just this show") { }
-            Button("Never contact \(item.groupName) again", role: .destructive) {
+            Button(DraftReviewNotes.neverContactOrg(groupName: item.groupName), role: .destructive) {
                 onSetOrgDoNotContact(true)
             }
         } message: {
@@ -261,7 +261,7 @@ struct DraftReviewView: View {
     @ViewBuilder private var performerOverridePreviews: some View {
         ForEach(item.contacts.filter { $0.overrideBody?.isEmpty == false }) { c in
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(c.displayName) will instead receive:")
+                Text(DraftReviewNotes.willInsteadReceive(name: c.displayName))
                     .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                 Text(c.overrideBody ?? "")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
@@ -326,7 +326,7 @@ struct DraftReviewView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!gmailConnected || !item.hasPendingRecipient)
-                    .help(gmailConnected ? "Send this email now" : "Connect Gmail first")
+                    .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this email now"))
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     if item.isReprepEligible { reprepMenu }
@@ -399,7 +399,7 @@ struct DraftReviewView: View {
             Button("Send Anyway") { onOverrideDraftLint() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("\(draftLintBlockMessage) Confirm you've checked it and it's fine to send as-is.")
+            Text(DraftReviewNotes.lintOverrideConfirm(blockers: item.draftLintBlockers))
         }
         // #733: guard against repeatedly re-prepping the same prospect.
         .alert("Redo this re-prep?", isPresented: $showReprepCooldownConfirm) {
@@ -511,7 +511,7 @@ struct DraftReviewView: View {
             // exactly what THIS contact will receive instead of the shared (third-person) draft above.
             // Editing this override is not built yet (deferred to a later phase).
             if let overrideBody = c.overrideBody, !overrideBody.isEmpty {
-                Text("Will receive: \(overrideBody)")
+                Text(DraftReviewNotes.willReceive(body: overrideBody))
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 20)
@@ -589,7 +589,7 @@ struct DraftReviewView: View {
     @ViewBuilder private func replyDraftBlock(_ c: RecipientSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let hint = c.intentHint, !hint.isEmpty {
-                Text("AI read: \(QueueModel.replyIntentLabel(hint))")
+                Text(QueueModel.aiReadNote(hint: hint))
                     .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
             }
             if editingReplyFor == c.id {
@@ -635,7 +635,7 @@ struct DraftReviewView: View {
                                 .background(Capsule().fill(OVColor.forest))
                         }
                         .buttonStyle(.plain).disabled(!gmailConnected)
-                        .help(gmailConnected ? "Send this reply on the contact's thread" : "Connect Gmail first")
+                        .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this reply on the contact's thread"))
                         Button("Edit") { replyEditText = c.replyDraftBody ?? ""; editingReplyFor = c.id }
                             .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                         Button("Copy") { onCopyReply(c.id) }

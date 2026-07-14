@@ -272,7 +272,7 @@ struct FollowUpsView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .help(gmailConnected ? "Review and send" : "Connect Gmail first")
+        .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Review and send"))
     }
 
     private func setStateMenu(_ d: ConversationReminder.DueRecipient, label: String = "Set a state") -> some View {

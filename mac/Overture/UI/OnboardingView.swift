@@ -51,7 +51,7 @@ struct OnboardingView: View {
                     Label("All set", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                 }
                 Spacer()
-                Button(state.isComplete ? "Done" : "Close", action: onClose)
+                Button(OnboardingState.closeButtonTitle(isComplete: state.isComplete), action: onClose)
                     .keyboardShortcut(.defaultAction)
             }
         }

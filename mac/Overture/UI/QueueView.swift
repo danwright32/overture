@@ -126,7 +126,7 @@ struct QueueView: View {
                     // Active state (#118): filled seal + forest tint when the filter is engaged,
                     // mirroring the high-fit chip's active treatment, so it's clear why rows are
                     // hidden instead of "where did my rows go?".
-                    Label("Confirm bookings (\(pendingBookings))",
+                    Label(QueueModel.confirmBookingsLabel(count: pendingBookings),
                           systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
                 }
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)

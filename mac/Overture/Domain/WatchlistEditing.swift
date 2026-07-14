@@ -128,3 +128,8 @@ enum WatchlistEditing {
         return a == b
     }
 }
+
+// #885 (guard sweep): the add-a-source button's two states.
+extension WatchlistEditing {
+    static func addButtonTitle(isOpen: Bool) -> String { isOpen ? "Cancel" : "Watch a calendar" }
+}

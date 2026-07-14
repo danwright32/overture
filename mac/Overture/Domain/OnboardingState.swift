@@ -67,3 +67,9 @@ extension OnboardingState {
         "Couldn't connect Gmail: \(reason)"
     }
 }
+
+// #885 (guard sweep): the sheet's close button says what closing MEANS: setup finished, or merely
+// dismissed with steps outstanding.
+extension OnboardingState {
+    static func closeButtonTitle(isComplete: Bool) -> String { isComplete ? "Done" : "Close" }
+}

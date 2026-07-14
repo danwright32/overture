@@ -51,3 +51,43 @@ enum DraftReviewNotes {
         "\(name) may already be pitched for a nearby show; blocked from sending."
     }
 }
+
+// #885 (guard sweep): the rest of DraftReviewView's computed copy.
+extension DraftReviewNotes {
+    // A destructive, irreversible choice, and it names the ORGANIZATION it will silence. The one button
+    // in the app whose label must never be able to name the wrong org.
+    static func neverContactOrg(groupName: String) -> String { "Never contact \(groupName) again" }
+
+    // A performer with their own directly-addressed draft gets a DIFFERENT email from the shared one
+    // above it. Saying whose, and what, is the entire point.
+    static func willInsteadReceive(name: String) -> String { "\(name) will instead receive:" }
+
+    static func willReceive(body: String) -> String { "Will receive: \(body)" }
+
+    // The two-step confirm behind an override: it repeats WHAT is blocking before asking him to send
+    // anyway, so the confirm is never a bare "are you sure" about a fact he has forgotten.
+    static func lintOverrideConfirm(blockers: [DraftIssue]) -> String {
+        DraftCheck.blockMessage(blockers: blockers)
+            + " Confirm you've checked it and it's fine to send as-is."
+    }
+}
+
+// #885: "Connect Gmail first" was written out four times, in four files, as the disabled half of a
+// ternary on a Send button's help. One sentence, one home. A send affordance that cannot explain why it
+// is disabled is a dead button, which is the #888 failure in miniature.
+enum GmailCopy {
+    static let notConnected = "Connect Gmail first"
+
+    static func sendHelp(connected: Bool, whenConnected: String) -> String {
+        connected ? whenConnected : notConnected
+    }
+
+    // The masthead's own wording, deliberately NOT the terse "Connect Gmail first" above. This is where
+    // a first-time user meets the idea, so it says what authorizing is FOR. Preserved word for word:
+    // collapsing it into the shared sentence would have quietly changed what Dan reads.
+    static func connectionHelp(connected: Bool) -> String {
+        connected
+            ? "Gmail is connected for sending"
+            : "Authorize your photography Gmail so you can send approved emails"
+    }
+}
