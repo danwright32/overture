@@ -176,26 +176,19 @@ struct BlockedCalendarTests {
 
     // The trap that produced this issue: Downbeat exports zero bookings, so the conflict guard has never
     // once fired, and nothing said so. A guard protecting nothing must not look identical to one that
-    // works.
-    @Test func aCalendarWithNoBookingsKnowsItHasNoBookedShootData() {
+    // works. #925 sharpened the question from "has a booking ever existed" to "is there one from today
+    // on", so this asks against a fixed `today`.
+    @Test func aCalendarWithNoBookingsHasNoUpcomingShoot() {
         let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
-                                        daysOff: [dayOff("2026-11-14", "2026-11-22")])
+                                        daysOff: [dayOff("2099-11-14", "2099-11-22")])
 
-        #expect(cal.hasBookedShootData == false)   // Dan's own days off are not booked-shoot data
+        #expect(cal.hasUpcomingBookedShoot(today: "2099-01-01") == false)  // Dan's own days off are not shoots
     }
 
-    @Test func aCalendarWithABookingKnowsItHasBookedShootData() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+    @Test func aCalendarWithAnUpcomingBookingHasOne() {
+        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2099-11-14")],
                                         exportedBlockedDates: [], daysOff: [])
 
-        #expect(cal.hasBookedShootData == true)
-    }
-
-    // A flat exported blocked date with no booking behind it is still evidence Downbeat knows Dan is
-    // working: it can only have come from a booking.
-    @Test func anExportedBlockedDateAloneCountsAsBookedShootData() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: ["2026-11-14"], daysOff: [])
-
-        #expect(cal.hasBookedShootData == true)
+        #expect(cal.hasUpcomingBookedShoot(today: "2099-01-01") == true)
     }
 }
