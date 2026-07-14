@@ -1,41 +1,26 @@
 import SwiftUI
 
-// #337: the toolbar's icon-only buttons had no visible name, only the small, easy-to-miss system
-// `.help()` tooltip. On hover, expand the icon into a labeled pill so the toolbar is
-// self-explanatory at a glance without relying on that tooltip. A plain SwiftUI `Label` doesn't
-// work for this: macOS collapses a toolbar Label's text by default at this size, which is exactly
-// the behavior being fixed, so the icon and text are drawn directly instead of going through
-// `Label`'s automatic icon/text choice.
+// #337 / #901: a toolbar button's icon with its name always beside it.
+//
+// It began (#337) as a hover-to-expand pill, because macOS collapses a plain toolbar Label's text by
+// default at this size and the names were easy to miss. But animating each button's WIDTH to reveal its
+// label made the toolbar misbehave: macOS does not reflow the neighbouring items in step with the
+// animation, so mid-expand the buttons drew on top of each other and the icon spilled out of its
+// container. Dan hit every version of that (jumpy, too fast, then overlapping) walking the app on
+// 2026-07-14, and chose the fix that removes the entire failure class: the label is simply always shown.
+// Nothing widens on hover, so nothing can overlap. The toolbar is wider, which the layout has room for.
 struct ToolbarHoverLabel: View {
     let title: String
     let systemImage: String
-    // #805: keep the title up even when the pointer is elsewhere, for a button that is reporting something
-    // rather than merely naming itself. A count Dan can only see by hovering over the right icon is not a
-    // symptom, and the failure this exists for (a source that quietly half works) has no other one.
-    //
-    // Words, and not color alone: a tint on a toolbar BUTTON's label is at the mercy of whatever macOS
-    // decides to do with it, so the sentence has to survive the tint being ignored entirely.
+    // Retained so the nine call sites don't all have to change. It used to force the label to stay up for
+    // a button reporting a count/state; now every label stays up, so it no longer does anything. The gold
+    // attention tint those callers apply lives at the call site, not here, and still works.
     var showsTitle: Bool = false
-    @State private var isHovering = false
-
-    private var titleIsVisible: Bool { isHovering || showsTitle }
 
     var body: some View {
-        HStack(spacing: titleIsVisible ? 5 : 0) {
+        HStack(spacing: 5) {
             Image(systemName: systemImage)
-            if titleIsVisible {
-                Text(title)
-                    .fixedSize()
-                    // #901 walk fix: a pure fade, not a slide. The old `.move(edge: .leading)` translated
-                    // the text sideways as the pill widened, and against the toolbar reflowing at the same
-                    // time that read as a jump rather than a reveal. Opacity alone lets the width ease open
-                    // underneath it.
-                    .transition(.opacity)
-            }
+            Text(title).fixedSize()
         }
-        // Dan's walk (2026-07-14): at 0.2s the expansion snapped open too fast to read as motion. Slower
-        // and eased so the pill (and the neighbours it nudges) glide open rather than jump.
-        .animation(.easeInOut(duration: 0.32), value: titleIsVisible)
-        .onHover { isHovering = $0 }
     }
 }

@@ -75,14 +75,27 @@ struct ToolbarConsolidationGuardTests {
         #expect(rootView.contains("OmniFocusSyncConfig.Keys.enabled"))
     }
 
-    // #337: idle-state toolbar buttons use the shared hover-expand treatment instead of a bare
-    // system Label (whose text macOS's toolbar hides by default at this size).
-    @Test func toolbarButtonsUseTheHoverExpandLabel() {
+    // #337: idle-state toolbar buttons use the shared label instead of a bare system Label (whose text
+    // macOS's toolbar hides by default at this size).
+    @Test func toolbarButtonsUseTheSharedLabel() {
         #expect(!rootView.isEmpty)
         let occurrences = rootView.components(separatedBy: "ToolbarHoverLabel(").count - 1
         // Dismissed, Due, What converts, Voice guidance, Sources (#800), Days off (#901), the merged
         // Scout/Prep idle state, the disconnected-Gmail CTA, and the OmniFocus menu's idle state: nine
         // call sites.
         #expect(occurrences == 9)
+    }
+
+    // #901 (Dan's walk, 2026-07-14): the label ALWAYS shows its word now, it does not expand on hover.
+    // Animating a toolbar button's width to reveal the label made neighbouring buttons overlap and the
+    // icon spill out of its container mid-animation, because macOS doesn't reflow the toolbar in step.
+    // Dan chose always-on labels: no width change, so nothing can overlap. This guard pins that the
+    // hover-driven reveal is gone, because quietly reintroducing it brings the overlap back.
+    @Test func theToolbarLabelDoesNotHideBehindHover() {
+        let label = source("Overture/UI/ToolbarHoverLabel.swift")
+        #expect(!label.isEmpty)
+        #expect(!label.contains("onHover"))
+        #expect(!label.contains("isHovering"))
+        #expect(!label.contains(".animation("))   // no width animation left to overlap on
     }
 }
