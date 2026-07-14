@@ -74,6 +74,12 @@ enum FollowUp {
             + "This sends one follow-up right now, to this recipient only. Nothing else goes out."
     }
 
+    // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)
+    //
+    // Everything to the ignore-end below is what Dan SENDS, not what Overture SAYS to him, so it stays
+    // out of the copy inventory, which is a list of the app's own voice. What goes to a stranger has its
+    // own guard: the draft lint (#789), which reads it before it can leave.
+
     static func nudgeSubject(groupName: String) -> String {
         "Following up: photographs for \(groupName)"
     }
@@ -102,4 +108,5 @@ enum FollowUp {
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
             + "No problem if the timing isn't right." + signoff
     }
+    // copy-inventory:ignore-end
 }

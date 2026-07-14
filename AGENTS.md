@@ -48,6 +48,14 @@ already drifting from the Swift version it mirrored.
   carries the Debug identity, and only then launches it, printing the exact `.app` path and the
   store it will touch. It refuses to launch a bundle claiming the Release identity, which would
   open the LIVE store. Release has its own installer, `mac/build-install.sh`.
+- Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
+  (#915), generated from the source and checked in. The test suite regenerates it and fails when it
+  is stale, so a PR that changes the app's wording shows that change in the diff, in the words Dan
+  will read rather than as a line of Swift. If a run fails saying the inventory was out of date, it
+  has already rewritten the file: read `git diff docs/copy-inventory.md`, and if it says what you
+  meant, commit it. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
+  AppleScript, the draft lint's search terms) is marked at the source with
+  `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
