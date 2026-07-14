@@ -9,18 +9,27 @@ import SwiftUI
 struct ToolbarHoverLabel: View {
     let title: String
     let systemImage: String
+    // #805: keep the title up even when the pointer is elsewhere, for a button that is reporting something
+    // rather than merely naming itself. A count Dan can only see by hovering over the right icon is not a
+    // symptom, and the failure this exists for (a source that quietly half works) has no other one.
+    //
+    // Words, and not color alone: a tint on a toolbar BUTTON's label is at the mercy of whatever macOS
+    // decides to do with it, so the sentence has to survive the tint being ignored entirely.
+    var showsTitle: Bool = false
     @State private var isHovering = false
 
+    private var titleIsVisible: Bool { isHovering || showsTitle }
+
     var body: some View {
-        HStack(spacing: isHovering ? 5 : 0) {
+        HStack(spacing: titleIsVisible ? 5 : 0) {
             Image(systemName: systemImage)
-            if isHovering {
+            if titleIsVisible {
                 Text(title)
                     .fixedSize()
                     .transition(.opacity.combined(with: .move(edge: .leading)))
             }
         }
-        .animation(.easeOut(duration: 0.15), value: isHovering)
+        .animation(.easeOut(duration: 0.15), value: titleIsVisible)
         .onHover { isHovering = $0 }
     }
 }
