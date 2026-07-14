@@ -35,7 +35,12 @@ struct MultiOwnerReconcileTests {
     // A source with enough history that its silence is allowed to count. Anything less and the reconcile
     // is disarmed for an unrelated reason and every test below passes vacuously.
     @discardableResult
-    private func establishedSource(_ ctx: ModelContext, _ id: String, baseline: Int = 2) -> WatchedSource {
+    // #897: the baseline matches what these runs actually return (one event each), so a run here is at its
+    // source's FULL size and the size gate is wide open. Set it higher and every test below is disarmed for
+    // an unrelated reason: a run at half of baseline can no longer mark anything gone (isCredibleNewBaseline,
+    // 0.9), so the batching these tests exist to prove would go unproven while they all still passed. The
+    // one test that WANTS a degraded source passes its own baseline in, and says so.
+    private func establishedSource(_ ctx: ModelContext, _ id: String, baseline: Int = 1) -> WatchedSource {
         let s = WatchedSource(sourceId: id, orgName: "Org \(id)",
                               listingsURL: "https://\(id).example/events", kind: .html)
         s.pendingContentHash = "new-hash-\(id)"

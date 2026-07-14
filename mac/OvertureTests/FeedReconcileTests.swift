@@ -367,20 +367,16 @@ struct FeedReconcileTests {
         #expect(updated.degradedStreak == 0)
     }
 
-    // KNOWN LIMIT, asserted rather than hidden. This fix stops the baseline being TRAINED down; it does
-    // NOT close #897's hole. A run that returns 16 of a 30-show page still clears the 50% trust bar and is
-    // still believed when it says the other 14 are gone. Nothing here can tell "the calendar now lists 16"
-    // from "the run read 16 of the 30 listed", because a show the run never returned is not a show it
-    // rejected. That needs the per-page accounting #897 is still open for. When this test starts failing,
-    // the hole has been closed and it should be deleted, not repaired.
-    @Test func theCancellationGateIsStillTooLooseAndThisFixDoesNotCloseIt() {
-        let report = FeedReconcile.SourceReport(
-            sourceId: "kaufman", seenKeys: [], seenSourceURLs: [],
-            feedCount: 16, baseline: 30, successfulCheckCount: 5,
-            verdict: .upcomingListings, rejectedCount: 0)
-
-        #expect(report.absenceIsEvidence)   // 16 >= 15.0, and 14 live shows can still be struck through
-    }
+    // The KNOWN LIMIT that used to be asserted here is gone: a run returning 16 of a 30-show page cleared
+    // the 50% trust bar and was believed when it said the other 14 were gone. It was left standing, with a
+    // note saying to delete it rather than repair it once the hole was closed, and the cancellation gate
+    // (#897) has now closed it: absenceIsEvidence asks isCredibleNewBaseline, the same 0.9 bar this file's
+    // re-baselining tests pin. See ShrunkenFeedCannotCancelTests for what replaced it.
+    //
+    // Still open, and NOT what that fix was: nothing here can yet tell "the calendar now lists 16" from
+    // "the run read 16 of the 30 listed". Overture simply refuses to believe EITHER until the smaller size
+    // holds. Telling them apart needs the per-page accounting #897 remains open for, and that is what
+    // raising monthHorizon above 1 on the watchlist still waits on.
 
     // One source's big season must never re-baseline another source's feed. That merged singleton is
     // precisely what made the old design unable to tell a dead scraper from a quiet calendar.

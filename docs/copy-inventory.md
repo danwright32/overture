@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **551 sentences**, from 175 source files.
+Every sentence Overture can say to Dan: **553 sentences**, from 175 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1159,6 +1159,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(readable) shows listed, down from the usual \(baseline), "
+    `Domain/SourceReadability.swift`
 "\(subject) you to stop still turn up on calendars you watch: \(who). "
     `Domain/SuppressionReport.swift`
 "\(tally.booked) booked of \(tally.contacted)"
@@ -1251,6 +1253,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "send failed"
     `Integration/GmailSender.swift`
 "so Overture won't mark anything from this source as gone until it can."
+    `Domain/SourceReadability.swift`
+"so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
 "stern auditorium / perelman stage"
     `Domain/VenueDisplay.swift`

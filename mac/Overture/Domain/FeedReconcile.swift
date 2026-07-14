@@ -191,8 +191,27 @@ enum FeedReconcile {
             // A brand-new source imports a whole season on its first check and may legitimately look
             // different on its second. It cannot mark anything gone before it has a history of its own.
             guard successfulCheckCount >= WatchedSource.warmupRuns else { return false }
-            // A suspiciously small feed against this source's own baseline is a degraded fetch (#150).
-            return feedIsTrustworthy(currentCount: feedCount, baseline: baseline)
+            // #897: the run's size must be credible as what this source IS, not merely "not obviously
+            // broken". This asked feedIsTrustworthy (0.5), and that was the live half of #897.
+            //
+            // #910 had already ruled that a run between half size and full size is NOT believable enough to
+            // become the source's new baseline. Asking the lenient bar here meant the app held two
+            // contradictory beliefs about one run: "I do not believe this is really how big this source is"
+            // and, in the same breath, "I believe every show missing from it was cancelled". A Kaufman page
+            // that half loads returns 16 of 30, clears 0.5, and two runs later 14 live October concerts are
+            // struck through and filtered out of Dan's queue with no error anywhere. No pagination needed.
+            //
+            // So it is now ONE bar, asked once: a feed we would not accept as this source's size cannot be
+            // evidence of what is missing from it. The two constants still mean different things and both
+            // still exist; they are simply no longer asked the same question.
+            //
+            // This cannot become a permanent silent switch-off (#888): updatedHealth's degradedStreak is the
+            // escape hatch. A calendar that genuinely shrank and STAYS shrunk is accepted as its new size
+            // after selfHealThreshold reads, and marks shows gone again from the next run. Dan's call
+            // (2026-07-14): on a small calendar one real cancellation is indistinguishable from a half
+            // loaded page, so Overture waits for it to settle rather than guessing, and the Sources sheet
+            // says so while it waits (SourceReadability, drawn from this same rule).
+            return isCredibleNewBaseline(currentCount: feedCount, baseline: baseline)
         }
     }
 

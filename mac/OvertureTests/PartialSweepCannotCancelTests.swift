@@ -40,13 +40,26 @@ struct PartialSweepCannotCancelTests {
         #expect(r.absenceIsEvidence == false)
     }
 
-    // Proof the OLD guard could not have caught it, so this test is not merely restating #150. Same
-    // numbers, but with nothing rejected: the feed is trusted, because 75% of baseline is healthy.
+    // Proof the #150 degradation guard could not have caught it, so this test is not merely restating it:
+    // 60 of 80 is 75% of baseline, comfortably "healthy" at its 0.5 bar.
+    //
+    // #897 has since raised the bar the RECONCILE asks (isCredibleNewBaseline, 0.9), which catches these
+    // particular numbers from the other side too. The lenient rule still exists and still says yes, which
+    // is what this pins: the two rules are different questions, and #150's was never enough on its own.
     @Test func theDegradationGuardAloneWouldHaveTrustedThatExactFeed() {
-        let r = report(feedCount: 60, baseline: 80, rejected: 0)
-
         #expect(FeedReconcile.feedIsTrustworthy(currentCount: 60, baseline: 80))
-        #expect(r.absenceIsEvidence)   // <- the hole #887 closes
+    }
+
+    // ...and this guard is NOT redundant with #897's, which is the thing that would quietly rot if nobody
+    // asserted it. Here the run's SIZE is beyond reproach: this source's calendar grew from 60 listings to
+    // 80, the run returned a full 60, and against a baseline of 60 that is 100% of its usual size. Only
+    // #887 can see that 20 of the 80 it looked at came back unread, because this rule alone measures what
+    // the run could READ (kept plus thrown away) rather than how big it was.
+    @Test func aRunAtFullSizeCanStillBeTooUnreadToBeBelieved() {
+        let r = report(feedCount: 60, baseline: 60, rejected: 20)
+
+        #expect(FeedReconcile.isCredibleNewBaseline(currentCount: 60, baseline: 60))  // size: perfect
+        #expect(r.absenceIsEvidence == false)                                         // read: not nearly
     }
 
     // Dan's call (2026-07-13), replacing the strict zero this shipped with. A small number of dropped

@@ -35,11 +35,17 @@ struct PartialSweepIngestWiringTests {
         s.pendingContentHash = "new-hash"
         s.hasUnreadChanges = true
         s.successfulCheckCount = WatchedSource.warmupRuns
-        // Small enough that a one-event run still clears the #150 degradation floor (minHealthyFraction
-        // is 0.5). Set this too high and the reconcile is disarmed for an UNRELATED reason, and the test
-        // below passes while proving nothing. That is not hypothetical: it happened on the first run of
-        // this file, and only the contrast test caught it.
-        s.baselineFeedCount = 2
+        // Exactly what the clean run below returns, so that run is at this source's FULL size and the
+        // degradation guard is wide open. Set this too high and the reconcile is disarmed for an UNRELATED
+        // reason, and the test below passes while proving nothing. That is not hypothetical: it happened on
+        // the first run of this file, and only the contrast test caught it.
+        //
+        // It was 2, which cleared the old floor (minHealthyFraction, 0.5) by exactly one event. #897 raised
+        // the bar the reconcile actually asks to isCredibleNewBaseline (0.9), and 1 of 2 no longer clears
+        // it: the contrast test went red, which is the same warning the comment above describes, fired for
+        // real this time. Now the ONLY thing standing between the partial run and a cancellation is #887's
+        // rejected-events guard, which is precisely what this file exists to test.
+        s.baselineFeedCount = 1
         ctx.insert(s)
         return s
     }
