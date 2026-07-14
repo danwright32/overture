@@ -206,6 +206,19 @@ enum ConversationReminder {
         }
     }
 
+    // #885: what Dan confirms before a conversation note goes out. Assembled inline in an alert closure
+    // before, with the second sentence appended by a ternary.
+    //
+    // That second sentence is the whole reason this is worth testing: a closing note does a SECOND thing,
+    // it also closes the lead out. A confirmation that silently omits a consequence is precisely the one
+    // that must not be able to drift.
+    static func confirmMessage(recipient: String, preview: String, isClosing: Bool) -> String {
+        let base = "To: \(recipient)\n\n\(preview)\n\n"
+            + "This sends one message right now, to this recipient only."
+        guard isClosing else { return base }
+        return base + " It also closes the lead out (kept warm for next time)."
+    }
+
     // The pre-written, reviewable nudge per active state, in Dan's level voice (no performative
     // enthusiasm, no em dashes, contractions throughout). Dan edits before sending; the hasQuestion
     // copy is deliberately generic since it cannot know the specific question. Follows the

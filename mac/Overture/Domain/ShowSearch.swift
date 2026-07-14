@@ -21,3 +21,9 @@ enum ShowSearch {
         haystack.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 }
+
+// #885: the empty-result line, out of ShowSearchField's body. It quotes back what Dan typed, which is
+// what makes it useful (a typo is visible in it), and that quoting was being done in a view.
+extension ShowSearch {
+    static func noMatchesNote(query: String) -> String { "No matches for \"\(query)\"" }
+}

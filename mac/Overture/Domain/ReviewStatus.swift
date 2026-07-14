@@ -23,6 +23,15 @@ enum ContactMethod: String, CaseIterable, Sendable {
 
 enum ContactConfidence: String, CaseIterable, Sendable {
     case high, medium, low
+
+    // #885: the pip's wording, which was a switch inside DraftReviewView's body.
+    var label: String {
+        switch self {
+        case .high: return "high confidence"
+        case .medium: return "medium confidence"
+        case .low: return "low confidence"
+        }
+    }
 }
 
 // What ultimately happened after Dan reached out. Defaults to `.noResponse` (like
@@ -116,4 +125,12 @@ enum DismissReason: String, CaseIterable, Sendable {
     // The reasons Dan can pick himself. `wentBy` is Overture's own, never offered as a choice: he cannot
     // decide that a date has passed.
     static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy } }
+}
+
+// #885: the conversation menu's summary line. It lowercases a domain label to sit inside a sentence,
+// which is a copy transform, and it was happening in a view.
+extension ConversationState {
+    static func looksLikeNote(_ state: ConversationState) -> String {
+        "Looks like \(state.label.lowercased())"
+    }
 }

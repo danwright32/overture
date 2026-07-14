@@ -7,6 +7,17 @@ import SwiftData
 // venue); `manual` = an address Dan typed in at approval.
 enum RecipientProvenance: String, Codable, CaseIterable, Sendable {
     case act, performer, presenter, manual
+
+    // #885: the codebase's convention is a `.label` on the enum (ConversationState, ArchiveStatus,
+    // PerformanceStatus and DismissReason all have one). This one was a switch inside a view body.
+    var label: String {
+        switch self {
+        case .act: return "act"
+        case .performer: return "performer"
+        case .presenter: return "presenter"
+        case .manual: return "added"
+        }
+    }
 }
 
 // A recipient's place in sending. Distinct from a performance's review status (ReviewStatus);

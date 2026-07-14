@@ -76,13 +76,10 @@ struct QueueView: View {
     }
     private var reachedOutKeys: Set<String> { Set(reachedOutRecipients.map(\.prospect.naturalKey)) }
 
+    // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
     private var filtered: [QueueItem] {
-        items.filter { item in
-            if let d = disciplineFilter, item.discipline != d { return false }
-            if highOnly, !item.isHighFit { return false }
-            if showPendingBookingsOnly, !item.bookingSuggested { return false }
-            return true
-        }
+        QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
+                          pendingBookingsOnly: showPendingBookingsOnly)
     }
 
     // What the queue actually shows: the filtered set windowed to the bookable date range
@@ -129,13 +126,12 @@ struct QueueView: View {
                     // Active state (#118): filled seal + forest tint when the filter is engaged,
                     // mirroring the high-fit chip's active treatment, so it's clear why rows are
                     // hidden instead of "where did my rows go?".
-                    Label("Confirm bookings (\(pendingBookings))",
+                    Label(QueueModel.confirmBookingsLabel(count: pendingBookings),
                           systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
                 }
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
-                .help(showPendingBookingsOnly
-                      ? "Showing only the \(pendingBookings) pending booking\(pendingBookings == 1 ? "" : "s"). Click to show the whole queue again."
-                      : "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one")
+                .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
+                                                    count: pendingBookings))
             }
         }
     }
@@ -172,8 +168,8 @@ struct QueueView: View {
     @ViewBuilder private var pipelineContent: some View {
         Picker("Pipeline", selection: $pipeline) {
             ForEach(Pipeline.allCases, id: \.self) { p in
-                Text(p == .toSend ? "To send (\(visible.count))"
-                                  : "Reached out (\(reachedOutRecipients.count))").tag(p)
+                Text(p == .toSend ? QueueModel.toSendLabel(count: visible.count)
+                                  : QueueModel.reachedOutLabel(count: reachedOutRecipients.count)).tag(p)
             }
         }
         .pickerStyle(.segmented)
@@ -205,7 +201,7 @@ struct QueueView: View {
         let rows = items.filter { wanted.contains($0.id) }
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text(focusedHeading ?? "\(rows.count) new lead\(rows.count == 1 ? "" : "s") while you were away")
+                Text(focusedHeading ?? QueueModel.newLeadsHeading(count: rows.count))
                     .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
                 Button("Show all") { focusedKeys = nil; focusedHeading = nil }
@@ -341,8 +337,8 @@ struct QueueView: View {
         let statuses = AgentRoster.statuses(agentInputs)
         let needs = AgentRoster.needsYouCount(statuses)
         return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            if needs > 0 {
-                Text("\(needs) need\(needs == 1 ? "s" : "") you")
+            if let needsYou = AgentRoster.needsYouLabel(needs) {
+                Text(needsYou)
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(OVColor.rust)
             }
             WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
@@ -382,7 +378,7 @@ struct QueueView: View {
         .buttonStyle(.plain)
         // #332: the concept sentence (what this pill IS) alongside the live detail (what's in it
         // right now), so hovering answers "what is this" the first time, not just "how many".
-        .help("\(AgentRoster.conceptSummary(for: s.name)) \(s.detail)")
+        .help(AgentRoster.chipHelp(name: s.name, detail: s.detail))
     }
 
     private func agentColor(_ state: AgentState) -> Color {
@@ -508,11 +504,12 @@ struct QueueView: View {
 
     private var emptyState: some View {
         VStack(spacing: OVSpacing.xs) {
-            Text(items.isEmpty ? "Nothing scouted yet" : "Nothing matches this filter")
+            // #885: "there is nothing" and "your filter hid it" are different problems with different
+            // fixes, and telling them apart is the whole job of this copy (EmptyState).
+            let empty = EmptyState.queue(hasAnyItems: !items.isEmpty)
+            Text(empty.title)
                 .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Text(items.isEmpty
-                 ? "Run the scout to comb the venue calendars. Ranked candidates land here for review."
-                 : "Try a different discipline, or clear the high-fit filter.")
+            Text(empty.detail)
                 .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

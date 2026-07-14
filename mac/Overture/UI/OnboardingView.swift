@@ -51,7 +51,7 @@ struct OnboardingView: View {
                     Label("All set", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                 }
                 Spacer()
-                Button(state.isComplete ? "Done" : "Close", action: onClose)
+                Button(OnboardingState.closeButtonTitle(isComplete: state.isComplete), action: onClose)
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -87,7 +87,7 @@ struct OnboardingView: View {
         busy = true; status = "Opening Google sign-in…"
         Task {
             do { try await GmailAuthManager.shared.connect(); status = "Gmail connected." }
-            catch { status = "Couldn't connect Gmail: \(error.localizedDescription)" }
+            catch { status = OnboardingState.gmailConnectFailed(reason: error.localizedDescription) }
             busy = false
             await refreshAsync()
         }
@@ -100,9 +100,7 @@ struct OnboardingView: View {
             // A harmless read is enough to provoke the one-time grant while Dan is present.
             _ = try? AppleScriptOmniFocusClient().existingOvertureTasks()
             await refreshAsync()
-            status = omniFocus
-                ? "OmniFocus permission granted."
-                : "Still not granted. Allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
+            status = OnboardingState.omniFocusStatus(granted: omniFocus)
             busy = false
         }
     }
@@ -112,9 +110,7 @@ struct OnboardingView: View {
         Task {
             let granted = await NotificationService.requestAuthorization()
             await refreshAsync()
-            status = granted
-                ? "Notifications allowed."
-                : "Not allowed. Enable Overture in System Settings ▸ Notifications."
+            status = OnboardingState.notificationsStatus(granted: granted)
             busy = false
         }
     }

@@ -50,7 +50,7 @@ struct ReminderSettingsView: View {
             HStack {
                 Text(label).font(OVType.body).foregroundStyle(OVColor.ink)
                 Spacer(minLength: OVSpacing.sm)
-                Text("\(value.wrappedValue) day\(value.wrappedValue == 1 ? "" : "s")")
+                Text(Plural.count(value.wrappedValue, "day"))   // #885
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft).monospacedDigit()
             }
         }

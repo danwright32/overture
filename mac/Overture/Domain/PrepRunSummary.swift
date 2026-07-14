@@ -30,4 +30,32 @@ enum PrepRunSummary {
         if let matchDataWarning = outcome.matchDataWarning { notes.append(matchDataWarning) }
         return notes
     }
+
+    // #885: the rest of it. #876 extracted `notes(for:)` and left two more conditional notes, the
+    // "Prep: " prefix and the join in RootView's body, so a test of this type could pass while the
+    // sentence Dan actually reads was assembled somewhere it could not see.
+    //
+    // The two extra facts are not part of the run's Outcome (they come from auditing the voice guidance
+    // file afterwards), so they are passed in rather than reached for.
+    static func notes(for outcome: PrepImporter.Outcome,
+                      voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> [String] {
+        var notes = self.notes(for: outcome)
+        // #249: the distiller put a real name into the voice guidance, and that section is quarantined
+        // so it can never feed a future draft. Dan has to know it happened.
+        if voiceGuidanceLeaked { notes.append("voice guidance leaked a name, quarantined") }
+        // #251: the run altered or dropped Dan's hand-written notes and they were restored from the
+        // pre-run backup.
+        if guidanceNotesRestored { notes.append("restored your guidance notes") }
+        return notes
+    }
+
+    // The whole line, or nothing at all. A run with nothing to report says nothing rather than showing
+    // an empty "Prep:" with a blank after it.
+    static func statusMessage(for outcome: PrepImporter.Outcome,
+                              voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> String? {
+        let notes = notes(for: outcome, voiceGuidanceLeaked: voiceGuidanceLeaked,
+                          guidanceNotesRestored: guidanceNotesRestored)
+        guard !notes.isEmpty else { return nil }
+        return "Prep: " + notes.joined(separator: " · ")
+    }
 }

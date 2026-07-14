@@ -245,10 +245,13 @@ struct BlockedContactRowGuardTests {
     private var draftReview: String { SourceGuardHelper.source("Overture/UI/DraftReviewView.swift") }
     private var queueModel: String { SourceGuardHelper.source("Overture/UI/QueueView+Model.swift") }
 
+    // #885: the SENTENCE moved to DraftReviewNotes.heldContacts, where a test can finally read it (see
+    // DraftReviewCopyTests), so this guard checks the WIRE instead of the words: the row still asks for
+    // that note, and still asks with the item's own blocked count. The protection is identical and the
+    // copy is now testable rather than merely present.
     @Test func theSentRowAlsoSaysHowManyContactsAreHeld() {
         #expect(!draftReview.isEmpty)
-        #expect(draftReview.contains("item.blockedContactCount > 0"))
-        #expect(draftReview.contains("held for a check"))
+        #expect(draftReview.contains("DraftReviewNotes.heldContacts(item.blockedContactCount)"))
     }
 
     // And it has to reach the row at all: the count is carried on the QueueItem, not recomputed in a

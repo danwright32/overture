@@ -27,6 +27,34 @@ enum DetachedRunOutcome {
         if let modified = resultsModifiedAt, modified >= started { return .producedResults }
         return .finishedEmpty
     }
+
+    // #885: the type that decides a run finished EMPTY should also say what that means. All three
+    // sentences were assembled inline in RootView's three watcher functions, each concatenating its own
+    // log tail with its own ternary, where no test could read any of them.
+    //
+    // A run that finished empty is not silence. It is the one shape of failure that would otherwise be
+    // indistinguishable from a quiet calendar, an inbox with no replies, or a Prep run with nothing to
+    // do, which is why each sentence says something different and true about ITS OWN work rather than
+    // sharing a generic one.
+    enum Kind: Equatable, Sendable { case prep, scoutExtract, replyClassify }
+
+    static func finishedEmptyMessage(_ kind: Kind, tail: String) -> String {
+        let lead: String
+        switch kind {
+        case .prep:
+            lead = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
+        case .scoutExtract:
+            // NOT "the calendars are quiet". Those pages were never read, and saying so is the whole
+            // point: a broken read and an empty calendar must never look alike.
+            lead = "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
+        case .replyClassify:
+            lead = "The reply drafter finished but didn't produce a draft. It may have hit an error."
+        }
+        // The reason travels WITH the failure rather than living in a file nobody opens. An empty tail
+        // adds nothing, so no heading is ever left dangling over nothing.
+        guard !tail.isEmpty else { return lead }
+        return lead + "\n\nLast lines of the run log:\n\(tail)"
+    }
 }
 
 // The tail of a detached run's log, shown when a run finishes empty so Dan can see why rather than

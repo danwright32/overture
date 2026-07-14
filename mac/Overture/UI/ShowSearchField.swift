@@ -49,7 +49,7 @@ struct ShowSearchField: View {
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
             Group {
                 if matches.isEmpty {
-                    Text("No matches for \"\(trimmedQuery)\"")
+                    Text(ShowSearch.noMatchesNote(query: trimmedQuery))
                         .font(OVType.body).foregroundStyle(OVColor.inkFaint)
                         .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.sm)
                 } else {

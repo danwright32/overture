@@ -21,6 +21,13 @@ enum RunProgress {
     // "Drafting a reply…" when it isn't. The trailing ellipsis stays so a counter-less run still reads
     // as in-progress. `detail` (#354, e.g. "3 of 9" from a run's own progress file) inserts before the
     // ellipsis when present: "Prepping 3 of 9… 0:45".
+    // #885: the STALLED sentence, the one label LiveRunLabel did not get from here. RunProgress.liveness
+    // already decides THAT a run is stalled; it should also say so. An asymmetry with nothing holding it
+    // in place is an asymmetry that drifts.
+    static func stalledLabel(_ base: String, elapsed: String) -> String {
+        "\(base) looks stuck (\(elapsed))"
+    }
+
     static func spinnerLabel(_ base: String, since start: Date?, now: Date, detail: String? = nil) -> String {
         let label = detail.map { "\(base) \($0)" } ?? base
         if let elapsed = elapsedLabel(since: start, now: now) {

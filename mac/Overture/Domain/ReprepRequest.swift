@@ -15,6 +15,16 @@ enum ReprepRequest {
     // predictable rather than tied to the Prep run cadence itself.
     static let cooldown: TimeInterval = 86400
 
+    // #885: what Dan is asked before re-prepping something that was prepped recently. The type that
+    // decides there IS a cooldown should also say so. Built inline in an alert closure before.
+    //
+    // A prospect never re-prepped has no time to state, and must not read "re-prepped ." with a blank
+    // where the time should be.
+    static func confirmMessage(lastServedAt: Date?, now: Date) -> String {
+        guard let lastServedAt else { return "Redo it anyway?" }
+        return "This was re-prepped \(PrepStatus.relative(from: lastServedAt, to: now)). Redo it anyway?"
+    }
+
     static func isInCooldown(lastServedAt: Date?, now: Date) -> Bool {
         guard let lastServedAt else { return false }
         return now.timeIntervalSince(lastServedAt) < cooldown

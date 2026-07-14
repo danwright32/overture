@@ -33,6 +33,36 @@ enum OutcomePatterns {
     static let lowSampleThreshold = 4
     static func isLowSample(_ tally: OutcomeTally) -> Bool { tally.contacted < lowSampleThreshold }
 
+    // #885: the two lines Dan reads on this screen, and the rule that suppresses half of one of them.
+    //
+    // These are statistical claims he is invited to ACT on (pitch more of this discipline, drop that
+    // one), and they were assembled in the view body: the low-sample suppression as a ternary, the
+    // percentage by a view-private formatter, and "replied" as a bare bit of arithmetic.
+    //
+    // Below the threshold the percentage is hidden entirely, because a booking rate over two shows is
+    // noise wearing the costume of a number, and a number is what he would believe.
+    static func bookedLine(_ tally: OutcomeTally) -> String {
+        let base = "\(tally.booked) booked of \(tally.contacted)"
+        return isLowSample(tally) ? base : base + percentSuffix(tally.bookingRate)
+    }
+
+    // "Replied" includes the ones who went on to BOOK: somebody who booked certainly replied. That rule
+    // was arithmetic in a view, and it is the difference between an honest response rate and one that
+    // silently undercounts every success.
+    static func repliedLine(_ tally: OutcomeTally) -> String {
+        "\(tally.replied + tally.booked) replied" + percentSuffix(tally.responseRate)
+    }
+
+    static func percentSuffix(_ rate: Double?) -> String {
+        guard let rate else { return "" }
+        return " · \(Int((rate * 100).rounded()))%"
+    }
+
+    // The dimension values are short slugs ("self", "agency", "music", "high"); a readable cap is enough.
+    static func slugLabel(_ name: String) -> String {
+        name.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
     static func samples(from prospects: [Prospect], by dimension: Dimension) -> [OutcomeSample] {
         prospects.map { p in
             // Phase F: with the A3 rollup gone, a reply lives on the contact, not the lead outcome.
@@ -80,4 +110,12 @@ enum OutcomePatterns {
             .map { AutoBookedBooking(groupName: $0.groupName, performanceDate: $0.performanceDate,
                                      venue: $0.venue) }
     }
+}
+
+// #885 (guard sweep): the booking split's two lines. "Auto-detected" versus "confirmed by you" is a
+// provenance claim about where a booking came from (#117), and Dan audits it by clicking through.
+extension OutcomePatterns {
+    static func autoDetectedLine(_ tally: OutcomeTally) -> String { "\(tally.bookedAuto) auto-detected" }
+
+    static func confirmedByYouLine(_ tally: OutcomeTally) -> String { "\(tally.bookedManual) confirmed by you" }
 }

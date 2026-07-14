@@ -53,6 +53,27 @@ enum FollowUp {
         return due
     }
 
+    // #885: which nudge THIS one is. `followUpCount` is how many have already gone; the one about to go
+    // is the next. Trivial arithmetic, and it was written twice: once for the label Dan reads on the row
+    // (FollowUpsView), once for the `attempt:` that decides which of the two nudge bodies a stranger
+    // receives (requestNudge). Two independent statements of one off-by-one, neither testable. Drift and
+    // the row says "nudge 1 of 2" while the email is written as the softer last note, or the reverse.
+    static func attempt(after followUpCount: Int) -> Int { followUpCount + 1 }
+
+    // The row's line: who this goes to, and where it sits in the sequence.
+    static func nudgeLabel(email: String?, followUpCount: Int, config: FollowUpConfig = .init()) -> String {
+        let to = (email?.isEmpty == false) ? email! : "no contact"
+        return "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
+    }
+
+    // What Dan confirms before a nudge goes. A promise about what the app will do, and it lived inside an
+    // alert closure in a view, where no test could read it. The last clause is the load-bearing one: it
+    // says nothing ELSE goes out, on a screen listing many due contacts.
+    static func confirmMessage(recipient: String, preview: String) -> String {
+        "To: \(recipient)\n\n\(preview)\n\n"
+            + "This sends one follow-up right now, to this recipient only. Nothing else goes out."
+    }
+
     static func nudgeSubject(groupName: String) -> String {
         "Following up: photographs for \(groupName)"
     }
