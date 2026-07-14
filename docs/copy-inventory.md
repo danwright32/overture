@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **553 sentences**, from 175 source files.
+Every sentence Overture can say to Dan: **556 sentences**, from 176 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -178,6 +178,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
+"1 source needs"
+    `Domain/SourceAttention.swift`
 "A Prep run is already in progress. Wait for it to finish."
     `Integration/PrepQueueService.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
@@ -926,7 +928,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this."
     `App/RootView.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
-    `App/RootView.swift`
+    `Domain/SourceAttention.swift`
 "The calendars Overture re-checks on every scout."
     `UI/SourcesView.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
@@ -1097,6 +1099,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
+"\(count) sources need"
+    `Domain/SourceAttention.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
@@ -1161,6 +1165,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
+"\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
+    `Domain/SourceAttention.swift`
 "\(subject) you to stop still turn up on calendars you watch: \(who). "
     `Domain/SuppressionReport.swift`
 "\(tally.booked) booked of \(tally.contacted)"

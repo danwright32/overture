@@ -47,6 +47,9 @@ struct RootView: View {
 
     // All prospects, for the time-based follow-up due count (#45).
     @Query private var allProspects: [Prospect]
+    // #805: the live store, not a snapshot taken when the window opened. A source that degrades DURING a
+    // scout must light the badge on that scout, not on the next launch.
+    @Query private var watchedSources: [WatchedSource]
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
     // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
@@ -72,6 +75,11 @@ struct RootView: View {
     private var followUpsDue: Int {
         DueWork.counts(prospects: allProspects, now: Date(), reminder: .loaded()).total
     }
+
+    // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for
+    // the same reason as the Due pill above: the number on the button and the rows in the sheet it opens
+    // must be one rule, not two that happen to agree.
+    private var sourcesNeedingALook: Int { SourceAttention.count(watchedSources) }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
 
@@ -293,13 +301,29 @@ struct RootView: View {
                     .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
                 }
                 // #800: read-only for now. Phase 4 adds a source, Phase 5 lets Dan stop watching one.
+                //
+                // #805: the button changes how it LOOKS while a source needs him. A source that half works
+                // is silent (healthy fetch, healthy verdict, quietly returning 16 of its 30 shows), and its
+                // only symptom was a sentence in a sheet he has no reason to open. The gold is what he sees
+                // across the room; the count and the sentence are there when he hovers. Both come from
+                // SourceAttention, never summed here, so this can never disagree with the sheet it opens.
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
                         showSources = true
                     } label: {
-                        ToolbarHoverLabel(title: "Sources", systemImage: "list.bullet.rectangle")
+                        ToolbarHoverLabel(title: SourceAttention.badgeTitle(count: sourcesNeedingALook),
+                                          systemImage: "list.bullet.rectangle",
+                                          // The words stay up while a source needs him, rather than hiding
+                                          // until he happens to hover the right icon. A symptom only a man
+                                          // already looking for it can find is what #805 called the bug.
+                                          showsTitle: sourcesNeedingALook > 0)
+                            // Gold, not rust: a source degrading is not a source that failed, and the
+                            // Sources sheet says it in the same color (#800). The tint is a bonus on top of
+                            // the words, never the message itself: macOS may do as it likes with a toolbar
+                            // button's foreground style, and the count has to survive that.
+                            .foregroundStyle(sourcesNeedingALook > 0 ? OVColor.gold : Color.primary)
                     }
-                    .help("The calendars Overture re-checks on every scout, and how each one is doing")
+                    .help(SourceAttention.help(count: sourcesNeedingALook))
                 }
                 // #344: connected is the steady state Dan will see almost always, so it collapses to
                 // a bare icon; disconnected stays a prominent, labeled call to action since it

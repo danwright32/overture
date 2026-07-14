@@ -86,6 +86,31 @@ enum FeedReconcile {
         feedIsTrustworthy(currentCount: currentCount, baseline: baseline, fraction: fraction)
     }
 
+    // #805: the two ways a source that RAN, and looks perfectly healthy doing it, has still forfeited the
+    // right to say a show is gone. Named here, once, because three surfaces now ask the same question and a
+    // fourth copy of the rule would be the one that eventually disagrees: the reconcile (absenceIsEvidence),
+    // the sentence in the Sources sheet (SourceReadability), and the toolbar badge (SourceAttention).
+    //
+    // Deliberately NOT the whole of absenceIsEvidence. A source still in warmup, or one whose page had
+    // nothing dated on it, also cannot cancel, and neither is a fault: they are normal states that pass on
+    // their own. These two are the ones that mean something is WRONG and that nothing else would ever say
+    // out loud, which is exactly what #805 opened with.
+    static func unreadPagesForfeitAbsence(readable: Int, unreadable: Int) -> Bool {
+        unreadable > 0 && !rejectedIsWithinTolerance(readable: readable, unreadable: unreadable)
+    }
+
+    // An EMPTY feed is deliberately not this. That is a broken fetch or a quiet off-season (the normal
+    // state of most calendars in July), and health and the run's own note already speak for it. Counting it
+    // here would put a permanent alarm on every off-season source, which is the noise #805 warned against.
+    static func shrunkenFeedForfeitsAbsence(readable: Int, baseline: Int) -> Bool {
+        readable > 0 && !isCredibleNewBaseline(currentCount: readable, baseline: baseline)
+    }
+
+    static func hasForfeitedAbsence(readable: Int, unreadable: Int, baseline: Int) -> Bool {
+        unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable)
+            || shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline)
+    }
+
     // Persisted feed-health state across scouts (#152). `baseline` is the size the next run is
     // judged against (see feedIsTrustworthy). `degradedStreak`/`lastDegradedCount` track a run of
     // consecutive degraded feeds that have held at a stable smaller level, the signal that lets a

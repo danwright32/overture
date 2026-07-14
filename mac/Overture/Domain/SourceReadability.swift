@@ -28,8 +28,7 @@ enum SourceReadability {
         let total = readable + unreadable
 
         // #887: too much of what this run looked at came back unread. It cannot know what else it missed.
-        if unreadable > 0,
-           !FeedReconcile.rejectedIsWithinTolerance(readable: readable, unreadable: unreadable) {
+        if FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) {
             // Saying only "12 shows couldn't be read" would hide the consequence, and the consequence is the
             // part Dan can actually act on: this source can no longer tell him a show has been cancelled,
             // and it will not be able to until it can read its own pages again.
@@ -46,8 +45,7 @@ enum SourceReadability {
         // never tell Dan cancellation is working on a source where it is switched off. An empty feed is
         // deliberately not this case: that is a broken fetch or a quiet off-season, which the source's own
         // health and run note already speak for.
-        if readable > 0,
-           !FeedReconcile.isCredibleNewBaseline(currentCount: readable, baseline: baseline) {
+        if FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline) {
             return "\(readable) shows listed, down from the usual \(baseline), "
                 + "so Overture won't mark anything from this source as gone until the smaller calendar holds."
         }
