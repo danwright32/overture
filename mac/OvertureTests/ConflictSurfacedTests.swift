@@ -193,21 +193,27 @@ struct ConflictSurfacedTests {
 
     // MARK: - Where it sits in the queue
 
-    // Dan's call (2026-07-14): the fit score keeps meaning "how good a show is this", which is true
-    // whether or not he is free. The show sinks in the ORDER instead.
-    @Test func aConflictedShowSinksBelowShowsHeCanActuallyShoot() throws {
+    // Dan's call, REVISED after walking the build (2026-07-14): a conflicted show stays in its normal
+    // date position, marked with a highly visible badge, and is NOT reordered. The first build sank it to
+    // the bottom of the queue, and a single-show date sliding to the end read as the show being deleted,
+    // which is the exact disappearance this whole feature exists to prevent. So the order is by date, flag
+    // or no flag; the badge does the work of telling him, not the position.
+    @Test func aConflictedShowKeepsItsDatePositionAndIsNotReordered() throws {
         let ctx = try context()
-        run([event("Vienna Philharmonic", date: "2099-09-19"), event("Takács Quartet", date: "2099-09-20")],
+        // The conflicted show is the EARLIER date, so if anything sank it, it would land last.
+        run([event("Vienna Philharmonic", date: "2099-09-19"), event("Takács Quartet", date: "2099-09-25")],
             blocked: vacation("2099-09-19", "2099-09-19"), in: ctx)
 
-        // Judged from a day inside the queue's own 90-day lead-time window, or both shows fall out of it
-        // for reasons that have nothing to do with this test.
+        // Fed in date order, the way the queue's own query hands them over (queueOrder preserves input
+        // order for same-window shows; it does not sort). The point is that the conflicted show is NOT
+        // pulled out of that order to the bottom.
         let items = stored(ctx).map(QueueItem.init)
+            .sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
         let ordered = QueueModel.queueOrder(items, today: "2099-08-01")
 
-        #expect(ordered.count == 2)                                  // both are still here
-        #expect(ordered.last?.groupName == "Vienna Philharmonic")    // but the one he cannot shoot is last
-        #expect(ordered.last?.conflictNote == "You blocked Sep 19 (Vacation).")
-        #expect(ordered.first?.hasUnclearedConflict == false)
+        #expect(ordered.count == 2)                                     // both present
+        #expect(ordered.first?.groupName == "Vienna Philharmonic")      // the earlier date, conflicted, still first
+        #expect(ordered.first?.hasUnclearedConflict == true)            // it kept its place, badge and all
+        #expect(ordered.first?.conflictNote == "You blocked Sep 19 (Vacation).")
     }
 }

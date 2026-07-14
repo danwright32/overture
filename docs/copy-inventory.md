@@ -716,7 +716,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     `Domain/DaysOffAttention.swift`
-"Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here. Downbeat only records shoots booked through it, and a shoot booked outside it never appears at all."
+"Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
     `Domain/DaysOffAttention.swift`
 "Overture lead: "
     `Domain/OmniFocusSync.swift`

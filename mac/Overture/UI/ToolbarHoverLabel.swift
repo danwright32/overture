@@ -26,10 +26,14 @@ struct ToolbarHoverLabel: View {
             if titleIsVisible {
                 Text(title)
                     .fixedSize()
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                    // #901 walk fix: a pure fade, not a slide. The old `.move(edge: .leading)` translated
+                    // the text sideways as the pill widened, and against the toolbar reflowing at the same
+                    // time that read as a jump rather than a reveal. Opacity alone lets the width ease open
+                    // underneath it. Slightly longer and easeInOut so it settles instead of snapping.
+                    .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.15), value: titleIsVisible)
+        .animation(.easeInOut(duration: 0.2), value: titleIsVisible)
         .onHover { isHovering = $0 }
     }
 }

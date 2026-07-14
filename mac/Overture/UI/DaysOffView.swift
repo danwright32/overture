@@ -96,7 +96,10 @@ struct DaysOffView: View {
                 Button("Block these days") { add() }
             }
         }
-        .padding(OVSpacing.md)
+        // #901 walk fix: `lg`, matching the header and the section list above and below it. At `md` the
+        // date pickers sat tighter to the edge than everything else in the sheet, so "First day" looked
+        // like it was running off the side.
+        .padding(OVSpacing.lg)
         .background(OVColor.surfaceSunk)
     }
 

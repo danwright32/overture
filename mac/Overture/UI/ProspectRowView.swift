@@ -318,26 +318,32 @@ struct ProspectRowView: View {
     // #611: a fit-risk Prep's own research found, e.g. the org's site names its own photographer.
     // Rust tone (a caution, not an opportunity), mirroring bookingSuggestionFlag's capsule idiom.
     // Never changes fitScore/tier; Dan decides himself whether to deprioritize or skip.
-    // #901: a day of this run Dan cannot work. The show is HERE (it used to be dropped, silently, and he
-    // asked to see them), it has sunk below every show he can shoot, and it cannot be drafted or sent
-    // until he overrules the clash himself.
+    // #901: a day of this run Dan cannot work. The show is HERE, in its normal date position (it used to
+    // be dropped, then briefly sank to the bottom, which read as deleted); it cannot be drafted or sent
+    // until he overrules the clash.
     //
-    // Rust, like alreadyCoveredFlag: this is a caution about a show, not an opportunity. The reason is
-    // spelled out in the capsule rather than hidden behind a hover, because it is the whole point: "you're
-    // already shooting the Nguyen recital that night" is a fact he can act on, and "unavailable" is not.
+    // Dan's call after walking it (2026-07-14): a HIGHLY VISIBLE badge, not a faint tint. So this is a
+    // FILLED rust badge reading "Unavailable", with the reason spelled out beside it rather than behind a
+    // hover, because the reason is the whole point: "you're already shooting the Nguyen recital that
+    // night" is a fact he can act on, where a bare "unavailable" is not.
     @ViewBuilder private var dateConflictFlag: some View {
         if item.hasUnclearedConflict, let note = item.conflictNote {
             Menu {
                 Button("I can shoot this anyway") { onClearConflict() }
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "calendar.badge.exclamationmark")
+                HStack(spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text("Unavailable")
+                    }
+                    .font(OVType.tag.weight(.semibold))
+                    .foregroundStyle(OVColor.onRust)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
+                    .background(Capsule().fill(OVColor.rust))
                     Text(note)
+                        .font(OVType.tag)
+                        .foregroundStyle(OVColor.rust)
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.rust)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
