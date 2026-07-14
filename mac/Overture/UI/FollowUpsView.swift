@@ -12,7 +12,6 @@ struct FollowUpsView: View {
     @Query private var prospects: [Prospect]
     @State private var pending: PendingNudge?
     @State private var pendingConversation: PendingConversation?
-    @State private var showSettings = false
     // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
     // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
     // still has them, dismissing this sheet first since Archive opens as a sibling sheet on the
@@ -86,10 +85,6 @@ struct FollowUpsView: View {
                 Text("\(DueWork.counts(prospects: prospects, now: Date(), reminder: reminderConfig).total)")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
-                Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
-                    .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
-                    .help("Adjust reminder timing")
-                    .popover(isPresented: $showSettings, arrowEdge: .bottom) { ReminderSettingsView() }
                 Button("Done") { dismiss() }
             }
             .padding(OVSpacing.lg)
