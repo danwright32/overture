@@ -292,6 +292,96 @@ struct FeedReconcileTests {
         #expect(state.baseline == 80)
     }
 
+    // MARK: - The baseline cannot be trained down (#897)
+    //
+    // One constant was answering two different questions, and only one of them suits it.
+    //
+    //   "Can this run's silence be trusted?" is minHealthyFraction (0.5). A run at half its source's
+    //   usual size is degraded but not obviously broken, and #150 chose that line deliberately.
+    //
+    //   "Is this run's size the source's new normal?" was ALSO minHealthyFraction, and that is far too
+    //   loose. Anything clearing half re-baselined immediately, so the degradedStreak / selfHealThreshold
+    //   machinery that exists precisely to stop a bad fetch ratcheting the baseline down was dead code for
+    //   every shrink between 50% and 100%, which is the whole range a partially-read page lands in.
+    //
+    // Split: a big drop must now HOLD for selfHealThreshold runs before it is accepted, which is what the
+    // streak was built for. A normal decline still re-baselines at once.
+
+    @Test func aRunThatCameBackHalfSizeIsNotAcceptedAsTheNewNormal() {
+        let state = FeedReconcile.FeedHealthState(baseline: 30, degradedStreak: 0, lastDegradedCount: 0)
+
+        let updated = FeedReconcile.updatedHealth(state, currentCount: 16)
+
+        #expect(updated.baseline == 30)          // it used to become 16, in one run, with nothing said
+        #expect(updated.degradedStreak == 1)     // it goes to the streak, which is what the streak is for
+    }
+
+    // The ratchet, with the real Kaufman numbers from #897. Two runs used to train a 30-show source into
+    // an 8-show one, and at every step the shrunken feed still cleared the 50% trust bar, so it kept its
+    // right to mark shows gone the whole way down.
+    @Test func twoUnderReadRunsCannotTrainAThirtyShowSourceIntoAnEightShowOne() {
+        var state = FeedReconcile.FeedHealthState(baseline: 30, degradedStreak: 0, lastDegradedCount: 0)
+
+        state = FeedReconcile.updatedHealth(state, currentCount: 16)   // 16 >= 15.0: used to re-baseline
+        state = FeedReconcile.updatedHealth(state, currentCount: 8)    //  8 >=  8.0: and again
+
+        #expect(state.baseline == 30)
+    }
+
+    // The other half of the rule, and the reason this is a split rather than a tightening: a calendar that
+    // genuinely shrank and STAYED there must still be able to become the new normal, or the source is left
+    // judged forever against a season it no longer has.
+    @Test func aGenuineSustainedShrinkStillBecomesTheNewNormal() {
+        var state = FeedReconcile.FeedHealthState(baseline: 30, degradedStreak: 0, lastDegradedCount: 0)
+
+        state = FeedReconcile.updatedHealth(state, currentCount: 16)
+        state = FeedReconcile.updatedHealth(state, currentCount: 16)
+        state = FeedReconcile.updatedHealth(state, currentCount: 16)
+
+        #expect(state.baseline == 16)
+        #expect(state.degradedStreak == 0)
+    }
+
+    // And a normal decline (a show or two off a 30-show calendar) is not a drop at all. It re-baselines at
+    // once, exactly as before. Over-tightening this would leave every healthy source permanently mid-streak.
+    @Test func aNormalSmallDeclineStillReBaselinesImmediately() {
+        let state = FeedReconcile.FeedHealthState(baseline: 30, degradedStreak: 0, lastDegradedCount: 0)
+
+        let updated = FeedReconcile.updatedHealth(state, currentCount: 28)
+
+        #expect(updated.baseline == 28)
+        #expect(updated.degradedStreak == 0)
+    }
+
+    @Test func aGrownFeedIsAlwaysCredibleAsTheNewNormal() {
+        let state = FeedReconcile.FeedHealthState(baseline: 30, degradedStreak: 0, lastDegradedCount: 0)
+
+        #expect(FeedReconcile.updatedHealth(state, currentCount: 44).baseline == 44)
+    }
+
+    // A source's very first read has nothing to be judged against, and must not land in a degraded streak.
+    @Test func theFirstReadOfANewSourceSetsTheBaseline() {
+        let updated = FeedReconcile.updatedHealth(.empty, currentCount: 30)
+
+        #expect(updated.baseline == 30)
+        #expect(updated.degradedStreak == 0)
+    }
+
+    // KNOWN LIMIT, asserted rather than hidden. This fix stops the baseline being TRAINED down; it does
+    // NOT close #897's hole. A run that returns 16 of a 30-show page still clears the 50% trust bar and is
+    // still believed when it says the other 14 are gone. Nothing here can tell "the calendar now lists 16"
+    // from "the run read 16 of the 30 listed", because a show the run never returned is not a show it
+    // rejected. That needs the per-page accounting #897 is still open for. When this test starts failing,
+    // the hole has been closed and it should be deleted, not repaired.
+    @Test func theCancellationGateIsStillTooLooseAndThisFixDoesNotCloseIt() {
+        let report = FeedReconcile.SourceReport(
+            sourceId: "kaufman", seenKeys: [], seenSourceURLs: [],
+            feedCount: 16, baseline: 30, successfulCheckCount: 5,
+            verdict: .upcomingListings, rejectedCount: 0)
+
+        #expect(report.absenceIsEvidence)   // 16 >= 15.0, and 14 live shows can still be struck through
+    }
+
     // One source's big season must never re-baseline another source's feed. That merged singleton is
     // precisely what made the old design unable to tell a dead scraper from a quiet calendar.
     @Test func oneSourcesSeasonCannotReBaselineAnother() {

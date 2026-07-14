@@ -64,6 +64,28 @@ enum FeedReconcile {
         return Double(currentCount) >= Double(baseline) * fraction
     }
 
+    // #897: how close to its own baseline a run must land before its size is accepted, THERE AND THEN, as
+    // the source's new normal.
+    //
+    // A different question from feedIsTrustworthy, and it was being answered by the same constant. That is
+    // the bug. "Is this run degraded?" is a lenient question: 0.5, because a run at half size is suspect
+    // but not obviously broken (#150). "Is this the size this source is now?" is a strict one, and asking
+    // it at 0.5 meant ANY shrink between half and full re-baselined instantly. The degradedStreak and
+    // selfHealThreshold machinery below exists precisely to stop a bad fetch ratcheting the baseline down,
+    // and it was unreachable across that whole band: 30 shows read as 16 became a 16-show source in one
+    // run, then an 8-show source in the next, each step still clearing the 50% bar that lets a source mark
+    // shows gone. The guard trained itself to accept a half-empty feed.
+    //
+    // 0.9, so a normal decline (a show or two off a 30-show calendar) still re-baselines at once and no
+    // healthy source is left permanently mid-streak, while a real drop has to HOLD for selfHealThreshold
+    // runs before it is believed. A grown feed clears it trivially: only shrinking is ever suspicious.
+    static let minReBaselineFraction = 0.9
+
+    static func isCredibleNewBaseline(currentCount: Int, baseline: Int,
+                                      fraction: Double = minReBaselineFraction) -> Bool {
+        feedIsTrustworthy(currentCount: currentCount, baseline: baseline, fraction: fraction)
+    }
+
     // Persisted feed-health state across scouts (#152). `baseline` is the size the next run is
     // judged against (see feedIsTrustworthy). `degradedStreak`/`lastDegradedCount` track a run of
     // consecutive degraded feeds that have held at a stable smaller level, the signal that lets a
@@ -83,14 +105,16 @@ enum FeedReconcile {
     static let selfHealThreshold = 3
 
     // Folds one scout's feed size into the health state.
-    //   - A trustworthy (full) feed re-baselines immediately to its size and clears the streak.
-    //   - A degraded feed extends the streak only while it stays at a stable level (each degraded
-    //     run within the healthy fraction of the previous one, both ways). Once the streak reaches
-    //     selfHealThreshold the stable smaller level becomes the new baseline, so detection resumes.
+    //   - A feed at or near its baseline (isCredibleNewBaseline, #897) re-baselines immediately to its
+    //     size and clears the streak. A grown feed always qualifies; only a shrink is ever suspicious.
+    //   - Any other non-empty feed, however mild the shrink, extends the streak only while it stays at a
+    //     stable level (each degraded run within the healthy fraction of the previous one, both ways).
+    //     Once the streak reaches selfHealThreshold the stable smaller level becomes the new baseline, so
+    //     a calendar that genuinely shrank and stayed there is believed, and detection resumes.
     //   - An empty feed is a broken fetch, not a smaller-but-real calendar, so it never builds toward
     //     (or resets) the streak; otherwise consecutive empties would re-baseline to zero.
     static func updatedHealth(_ state: FeedHealthState, currentCount: Int) -> FeedHealthState {
-        if feedIsTrustworthy(currentCount: currentCount, baseline: state.baseline) {
+        if isCredibleNewBaseline(currentCount: currentCount, baseline: state.baseline) {
             return FeedHealthState(baseline: currentCount, degradedStreak: 0, lastDegradedCount: 0)
         }
         guard currentCount > 0 else { return state }
