@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **583 sentences**, from 180 source files.
+Every sentence Overture can say to Dan: **585 sentences**, from 180 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -466,6 +466,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectMutations.swift`
 "Hedges like a cold pitch at a warm client"
     `Domain/DraftCheck.swift`
+"Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
+    `App/ActionFeedback.swift`
+"Hide this for a week"
+    `Domain/DaysOffAttention.swift`
 "High-fit only"
     `UI/QueueView.swift`
 "How Overture drafts in your voice. Your notes are yours and are never auto-edited; the observed tendencies are learned from your edits after each Prep run."
@@ -708,12 +712,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
-"Overture has no booked shoots from Downbeat, so it can't keep clear of them. Block those days here."
-    `Domain/DaysOffAttention.swift`
-"Overture has no booked shoots from Downbeat, so the only days it knows about are the ones you add here. Downbeat only records shoots booked through it, from now on, and a shoot booked outside it never appears at all."
-    `Domain/DaysOffAttention.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
+"Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
+    `Domain/DaysOffAttention.swift`
+"Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here. Downbeat only records shoots booked through it, and a shoot booked outside it never appears at all."
+    `Domain/DaysOffAttention.swift`
 "Overture lead: "
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"

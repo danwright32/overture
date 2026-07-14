@@ -59,6 +59,13 @@ enum ActionAck {
         excluded ? "Won't learn from \(org)'s email" : "Learning from \(org)'s email again"
     }
 
+    // #925: the no-upcoming-shoots warning, put away for a week. It deliberately does NOT say "done" or
+    // "fixed": nothing was fixed, and the second sentence is the whole reason the button is allowed to
+    // exist. Hiding a warning he cannot act on is fine. Letting him forget what it meant is not.
+    static func daysOffSnoozed() -> String {
+        "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
+    }
+
     // #901: a stretch of days off, removed. Reversible from the banner, because the row he just deleted is
     // the one place the range was written down.
     static func dayOffRemoved(range: String) -> String {

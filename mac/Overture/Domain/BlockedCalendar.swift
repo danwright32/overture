@@ -82,19 +82,27 @@ struct BlockedCalendar: Equatable, Sendable {
     // and it is the one he cannot move).
     private var byDate: [String: Day] = [:]
 
-    // Whether Downbeat has told us about ANY committed work. False means the booked-shoot half of the
-    // guard is protecting nothing, which is exactly the state that produced #901 and went unsaid for the
-    // app's whole life.
-    private(set) var hasBookedShootData = false
+    // Whether Downbeat has told us about any shoot from today ONWARD (#925).
+    //
+    // Deliberately not "have we ever seen a booking". Downbeat exports every committed booking it holds,
+    // with no date filter (its OvertureExportService.swift:45), so a shoot booked last March keeps that
+    // answer true forever, including in September when it is long past and Overture is once again
+    // protecting nothing. A past shoot is evidence the pipe once worked. It is not evidence that Dan's
+    // schedule is known TODAY, which is the only thing this question is for.
+    //
+    // His own days off are deliberately not counted: a vacation says nothing about the work he has taken
+    // on, and letting one silence this would hide the gap the moment he blocked his first week.
+    func hasUpcomingBookedShoot(today: String) -> Bool {
+        byDate.values.contains { $0.kind == .bookedShoot && $0.date >= today }
+    }
 
-    // Nothing blocked, and no booked-shoot data either: the state Overture has been in its whole life.
+    // Nothing blocked at all: the state Overture has been in its whole life.
     static let empty = BlockedCalendar()
 
     static func build(bookings: [OvertureBooking],
                       exportedBlockedDates: [String],
                       daysOff: [DayOffRange]) -> BlockedCalendar {
         var cal = BlockedCalendar()
-        cal.hasBookedShootData = !bookings.isEmpty || !exportedBlockedDates.isEmpty
 
         // Dan's own days first, so a booked shoot lands on top of one where they collide.
         for range in daysOff {

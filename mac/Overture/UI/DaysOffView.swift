@@ -23,6 +23,12 @@ struct DaysOffView: View {
         ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context)
     }
 
+    // #925: bound, not merely read, so pressing "Hide this for a week" redraws this sheet and the toolbar
+    // behind it at once. Read through DaysOffAttention, never interpreted here: the value is a timestamp,
+    // and a view deciding for itself what a timestamp means is how the toolbar and the sheet would come to
+    // different answers about the same fact.
+    @AppStorage(DaysOffAttention.snoozeKey) private var snoozedUntil: Double = 0
+
     @State private var showAdd = false
     @State private var newStart = Date()
     @State private var newEnd = Date()
@@ -104,6 +110,13 @@ struct DaysOffView: View {
         if result == .added { newNote = ""; showAdd = false }
     }
 
+    // #925: away for a week, and it says so without pretending anything was solved. The sheet stays open:
+    // the next thing he should do is block the days himself, and that form is right here.
+    private func snooze() {
+        DaysOffAttention.snooze(now: Date())
+        feedback.acknowledge(ActionAck.daysOffSnoozed(), tone: .warning)
+    }
+
     // MARK: - Downbeat's half: read-only, and honest about being empty
 
     private var bookedShoots: some View {
@@ -111,10 +124,23 @@ struct DaysOffView: View {
             sectionHeading("Booked shoots", systemImage: "camera",
                            count: calendar.days.filter { $0.kind == .bookedShoot }.count)
 
-            if DaysOffAttention.needsALook(calendar) {
+            // #925: the explanation is gated on the FACT (no upcoming shoots), never on the snooze. The
+            // snooze silences the toolbar mark, and only that. Hiding this sentence too would put the
+            // empty list straight back to reading as "you have nothing booked", which is a different
+            // claim and a false one, and it is the exact misreading this whole feature exists to stop.
+            if !calendar.hasUpcomingBookedShoot(today: QueueModel.easternToday()) {
                 Text(DaysOffAttention.noBookedShootsExplanation)
                     .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
+                // The dismiss lives HERE, under the explanation, and not on the toolbar button itself.
+                // Putting a warning away should cost Dan the ten seconds of having read what he is putting
+                // away; a one-click silence from the masthead is how a warning gets dismissed reflexively
+                // and then forgotten. Offered only while the mark is actually up.
+                if DaysOffAttention.needsALook(calendar) {
+                    Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
+                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                        .padding(.top, 2)
+                }
             } else {
                 ForEach(calendar.days.filter { $0.kind == .bookedShoot }, id: \.key) { day in
                     HStack(spacing: OVSpacing.sm) {

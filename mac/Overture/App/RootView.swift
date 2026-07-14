@@ -82,9 +82,14 @@ struct RootView: View {
     // must be one rule, not two that happen to agree.
     private var sourcesNeedingALook: Int { SourceAttention.count(watchedSources) }
 
-    // #901: Overture holds no booked shoots at all, so the only days it can keep clear of are the ones Dan
+    // #901: Overture knows of no upcoming shoot, so the only days it can keep clear of are the ones Dan
     // types in himself. Asked of DaysOffAttention, never decided here, so the toolbar and the sheet it
     // opens cannot come to different answers.
+    //
+    // #925: the snooze is bound rather than merely read, so dismissing it in the sheet clears the mark on
+    // this toolbar immediately instead of on the next launch.
+    @AppStorage(DaysOffAttention.snoozeKey) private var daysOffSnoozedUntil: Double = 0
+
     private var noBookedShootData: Bool {
         DaysOffAttention.needsALook(
             ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context))

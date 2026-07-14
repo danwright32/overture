@@ -49,7 +49,7 @@ struct DaysOffAttentionTests {
     // has to block those days by hand, or Overture will keep pitching him for nights he is working.
     @Test func theHelpSaysWhatOvertureCannotProtectHimFrom() {
         let help = DaysOffAttention.help(needsALook: true)
-        #expect(help.contains("no booked shoots"))
+        #expect(help.contains("no upcoming shoots"))     // #925: upcoming, not "ever seen a booking"
         #expect(help.contains("Downbeat"))
         #expect(help.contains("Block those days here"))   // what he can DO about it
     }
