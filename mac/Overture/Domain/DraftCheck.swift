@@ -67,6 +67,13 @@ enum DraftCheck {
         let what = blockers.map(\.label).joined(separator: " and ")
         return "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     }
+    // copy-inventory:ignore-start  draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
+    //
+    // The distinction the inventory turns on: Overture never says "thrilled to" to Dan, it says
+    // "Performative enthusiasm or an exclamation point" (the reasons above, which ARE in the list).
+    // These are search terms, and there are sixty-odd of them against nine reasons, so counting them as
+    // copy would have made one file's needles a tenth of everything the app appears to say.
+
     private static let performative = ["love to", "thrilled", "so excited", "excited", "can't wait", "delighted", "honored", "thrilled to"]
     private static let booking = ["lock in", "plan to cover", "i'll cover", "i'll be covering", "i'll plan to", "i will cover", "i'll be there to photograph"]
     private static let coldHedges = ["if you haven't arranged", "if you haven't booked", "if you haven't found", "if you haven't hired", "in case you still need", "if you still need a photographer"]
@@ -80,6 +87,7 @@ enum DraftCheck {
     private static let concession = ["discount", "complimentary", "flexible"]
 
     private static let venueRequests = ["what venue", "which venue", "what's the venue", "what is the venue", "let me know the venue", "name of the venue", "what location", "which location", "what's the location", "what is the location", "let me know the location", "let me know where", "send me the venue", "send me the location", "where is the show", "where's the show", "where is the performance", "where's the performance", "where is the concert", "where's the concert", "where is the event", "where's the event", "where is it being held", "where is it taking place", "where will it be held"]
+    // copy-inventory:ignore-end
 
     // `knownsDate`/`knownsVenue` opt the caller into the #456 known-fact check: the flag fires ONLY
     // when Overture actually holds that fact, since asking is legitimate when it doesn't. Defaulting

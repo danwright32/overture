@@ -61,6 +61,59 @@ struct ViewCopyGuardTests {
             """)
     }
 
+    // MARK: - The detector itself
+    //
+    // #915: these pin down what the guard actually catches, which until now nothing did. The guard had a
+    // single test, and that test ran it over the real views: it could only ever say "the tree is clean
+    // today". If the detector quietly stopped detecting, that test would have gone on passing, which is
+    // the precise failure #887 taught (a guard that fails open looks exactly like a guard that passes).
+    //
+    // They also make it safe to move this scanner onto the shared lexer, which is what #915 needed and
+    // what these were written to protect.
+
+    @Test func flagsATernaryThatChoosesBetweenTwoWordings() {
+        let hits = Self.computedCopy(in: #"Text(isKept ? "pending Prep run" : "keep to prep")"#)
+        #expect(hits.count == 1)
+    }
+
+    @Test func flagsWordsBuiltAroundAValue() {
+        let hits = Self.computedCopy(in: ##"Text("\(n) new leads while you were away")"##)
+        #expect(hits.count == 1)
+    }
+
+    @Test func ignoresAStaticLiteral() {
+        #expect(Self.computedCopy(in: #"Text("Sources")"#).isEmpty)
+    }
+
+    // Displaying a number a model already computed is not a rule.
+    @Test func ignoresABareValue() {
+        #expect(Self.computedCopy(in: ##"Text("\(item.fitScore)")"##).isEmpty)
+    }
+
+    // An SF Symbol is a name, not a sentence, and nobody reads it.
+    @Test func ignoresAnIconTernary() {
+        let source = #"Label("Keep", systemImage: on ? "checkmark.seal.fill" : "checkmark.seal")"#
+        #expect(Self.computedCopy(in: source).isEmpty)
+    }
+
+    @Test func ignoresCopyQuotedInAComment() {
+        #expect(Self.computedCopy(in: ##"// Text("\(n) leads while you were away")"##).isEmpty)
+    }
+
+    @Test func ignoresDebugOnlyCopy() {
+        let source = """
+        #if DEBUG
+        Text("\\(n) seeded prospects")
+        #endif
+        """
+        #expect(Self.computedCopy(in: source).isEmpty)
+    }
+
+    // A string that isn't going anywhere Dan can read it is none of this guard's business.
+    @Test func ignoresAComputedStringThatIsNotUserFacing() {
+        #expect(Self.computedCopy(in: ##"let key = "\(org) lead key""##).isEmpty)
+    }
+
     // MARK: - The scanner
     //
     // Reuses the same idea as the dash guard (#343): walk the source, know whether you are in code, a
@@ -95,83 +148,37 @@ struct ViewCopyGuardTests {
     // A literal that interpolates a value AND carries words of its own.
     private static func ruleBearingLiteral(in statement: String) -> String? {
         if isWordingTernary(statement) { return statement.trimmingCharacters(in: .whitespaces) }
-        for literal in stringLiterals(in: statement) where literal.contains("\\(") {
+        for literal in SwiftSource.literals(in: statement).map(\.text) where literal.contains("\\(") {
             // Strip the interpolations and see whether any WORDS are left. "\(count)" alone is a value
             // being displayed, not a sentence being built, and is none of this guard's business.
-            //
-            // Balanced parens, not a lazy regex: an interpolation can contain a call with its own parens
-            // ("\(DueWork.counts(prospects: p).total)"), and a naive [^)]* stops at the first one and
-            // leaves ".total)" behind, which looks exactly like words. That false positive would have
-            // been indistinguishable from a real finding.
-            if withoutInterpolations(literal).contains(where: { $0.isLetter }) { return literal }
+            if CopyInventory.withoutInterpolations(literal).contains(where: { $0.isLetter }) {
+                return literal
+            }
         }
         return nil
     }
 
-    static func withoutInterpolations(_ literal: String) -> String {
-        var out = ""
-        var depth = 0
-        var index = literal.startIndex
-        while index < literal.endIndex {
-            if depth == 0, literal[index] == "\\",
-               literal.index(after: index) < literal.endIndex,
-               literal[literal.index(after: index)] == "(" {
-                depth = 1
-                index = literal.index(index, offsetBy: 2)
-                continue
-            }
-            if depth > 0 {
-                if literal[index] == "(" { depth += 1 }
-                if literal[index] == ")" { depth -= 1 }
-                index = literal.index(after: index)
-                continue
-            }
-            out.append(literal[index])
-            index = literal.index(after: index)
-        }
-        return out
-    }
-
-    private static func stringLiterals(in statement: String) -> [String] {
-        var out: [String] = []
-        var current = ""
-        var inString = false
-        var escaped = false
-        for ch in statement {
-            if escaped { if inString { current.append(ch) }; escaped = false; continue }
-            if ch == "\\" { if inString { current.append(ch) }; escaped = true; continue }
-            if ch == "\"" {
-                if inString { out.append(current); current = "" }
-                inString.toggle()
-                continue
-            }
-            if inString { current.append(ch) }
-        }
-        return out
-    }
-
-    // Source, minus comments, gathered into statements: a line plus any continuation lines, so a Text(…)
-    // split across three lines is still seen whole. Line numbers are the statement's first line.
+    // Statements: a line plus any continuation lines, so a Text(…) split across three is still seen
+    // whole. Line numbers are the statement's first line.
+    //
+    // #915: the reading of Swift underneath this (what is a comment, what is a string, what is compiled
+    // out) now lives in SwiftSource, shared with the copy inventory, which needs exactly the same
+    // answers. It used to live here, in a second copy that had drifted: this one swallowed the #else
+    // branch of a DEBUG block along with the DEBUG one, and ended a literal at the quote inside
+    // `\(venue ?? "Venue TBD")`.
+    //
+    // Only SCAFFOLDING is skipped here (DEBUG, previews), never a `copy-inventory:ignore` region. A
+    // marking says "these words are not Dan's copy", and it must never be readable as "this copy may be
+    // computed wherever you like", which would let a comment buy an exemption from this guard.
     static func statements(in source: String) -> [(Int, String)] {
         var out: [(Int, String)] = []
         var pending: String?
         var pendingLine = 0
-        // DEBUG-only copy is exempt, and deliberately so: it is compiled out of the app Dan runs, so it
-        // can never mislead him. A guard that fires on developer scaffolding is a guard that trains
-        // people to ignore it.
-        var debugDepth = 0
-        for (index, rawLine) in source.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = stripComment(String(rawLine))
-            let trimmedRaw = line.trimmingCharacters(in: .whitespaces)
-            if trimmedRaw.hasPrefix("#if DEBUG") { debugDepth += 1; continue }
-            if debugDepth > 0 {
-                if trimmedRaw.hasPrefix("#if") { debugDepth += 1 }
-                if trimmedRaw.hasPrefix("#endif") { debugDepth -= 1 }
-                continue
-            }
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+        for (line, code) in SwiftSource.scannableLines(in: source, skipping: .scaffolding) {
+            let trimmed = code.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
             if var open = pending {
-                open += " " + line.trimmingCharacters(in: .whitespaces)
+                open += " " + trimmed
                 if balanced(open) {
                     out.append((pendingLine, open))
                     pending = nil
@@ -180,11 +187,11 @@ struct ViewCopyGuardTests {
                 }
                 continue
             }
-            if balanced(line) {
-                out.append((index + 1, line))
+            if balanced(code) {
+                out.append((line, code))
             } else {
-                pending = line
-                pendingLine = index + 1
+                pending = code
+                pendingLine = line
             }
         }
         if let pending { out.append((pendingLine, pending)) }
@@ -204,26 +211,6 @@ struct ViewCopyGuardTests {
             if ch == ")" { depth -= 1 }
         }
         return depth <= 0
-    }
-
-    // Drops a // comment, but never one that lives inside a string (a URL's //).
-    private static func stripComment(_ line: String) -> String {
-        var out = ""
-        var inString = false
-        var escaped = false
-        var previous: Character?
-        for ch in line {
-            if escaped { out.append(ch); escaped = false; previous = ch; continue }
-            if ch == "\\" { out.append(ch); escaped = true; previous = ch; continue }
-            if ch == "\"" { inString.toggle(); out.append(ch); previous = ch; continue }
-            if !inString, ch == "/", previous == "/" {
-                out.removeLast()
-                return out
-            }
-            out.append(ch)
-            previous = ch
-        }
-        return out
     }
 
     // MARK: - Which files are views

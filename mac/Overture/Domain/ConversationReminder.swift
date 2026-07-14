@@ -219,6 +219,11 @@ enum ConversationReminder {
         return base + " It also closes the lead out (kept warm for next time)."
     }
 
+    // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)
+    //
+    // Same line as FollowUp's: the copy inventory lists what OVERTURE says to DAN. A nudge body is what
+    // DAN says to a stranger, and the draft lint (#789) is what reads it before it goes.
+
     // The pre-written, reviewable nudge per active state, in Dan's level voice (no performative
     // enthusiasm, no em dashes, contractions throughout). Dan edits before sending; the hasQuestion
     // copy is deliberately generic since it cannot know the specific question. Follows the
@@ -255,6 +260,8 @@ enum ConversationReminder {
             + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
             + "then. Either way, it was good to be in touch." + signoff
     }
+
+    // copy-inventory:ignore-end
 
     private static func venueClause(_ venue: String?) -> String {
         (venue?.isEmpty == false) ? " at \(venue!)" : ""

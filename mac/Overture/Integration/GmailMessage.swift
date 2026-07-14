@@ -13,6 +13,8 @@ enum GmailMessage {
             .replacingOccurrences(of: "=", with: "")
     }
 
+    // copy-inventory:ignore-start  RFC822 headers: a mail server reads these, not Dan (#915)
+
     // A minimal text/plain RFC 2822 message. From is the authorized sender; the
     // subject is RFC 2047 encoded only when it contains non-ASCII (e.g. an accented
     // org name) so headers stay 7-bit clean.
@@ -41,6 +43,7 @@ enum GmailMessage {
         ]
         return headers.joined(separator: "\r\n")
     }
+    // copy-inventory:ignore-end
 
     static func rawField(fromName: String, fromEmail: String, to: String, subject: String, body: String,
                          messageID: String? = nil, inReplyTo: String? = nil) -> String {

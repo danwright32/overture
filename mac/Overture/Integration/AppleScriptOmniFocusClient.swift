@@ -6,6 +6,7 @@ import Foundation
 // to Dan's "Outreach" project plus the "Overture" tag + a lead-key note, so it never touches his
 // own tasks. Degrades by throwing (callers run it best-effort and swallow) if OmniFocus is absent
 // or Automation permission is denied.
+// copy-inventory:ignore-start  AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 struct AppleScriptOmniFocusClient: OmniFocusClient {
     // Dan's existing "Outreach" project, targeted by id so a rename can't break it.
     private let projectId = "bAdQ9GQXfWn"
@@ -172,3 +173,4 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         return EasternDate.calendar.date(from: comps)
     }
 }
+// copy-inventory:ignore-end
