@@ -146,7 +146,7 @@ struct ProspectRowView: View {
             Text("\(item.fitScore)")
                 .font(OVType.fitNumber)
                 .foregroundStyle(item.isHighFit ? OVColor.gold : OVColor.inkFaint)
-            Text(item.isHighFit ? "HIGH FIT" : "LONG SHOT")
+            Text(QueueModel.fitLabel(isHighFit: item.isHighFit))
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(1.2)
                 .foregroundStyle(item.isHighFit ? OVColor.gold : OVColor.inkFaint)
@@ -392,9 +392,7 @@ struct ProspectRowView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help(confirmed
-                  ? "You confirmed this performer is a past client, so the fit score counts it and a draft can write to them as a returning client."
-                  : "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it.")
+            .help(QueueModel.performerMatchHelp(confirmed: confirmed))
             .padding(.top, 2)
         }
     }
@@ -439,7 +437,7 @@ struct ProspectRowView: View {
                     .foregroundStyle(OVColor.forest)
             }
             if !item.hasDraft && !item.isBooked {
-                Text(item.isKept ? "Contact: pending Prep run" : "Contact: keep to prep")
+                Text(QueueModel.contactPrepNote(isKept: item.isKept))
                     .foregroundStyle(OVColor.inkFaint)
             }
         }

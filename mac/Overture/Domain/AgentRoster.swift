@@ -94,6 +94,14 @@ enum AgentRoster {
     // as a queue ("shows waiting to...") rather than a step in a sequence, since these four are
     // parallel work queues a single show can skip entirely (e.g. dismissed before Send), not
     // stages every show passes through in order.
+    // #885: what a chip's hover actually says: the concept ("what this pill IS") followed by the live
+    // detail ("what is in it right now"). Both halves were domain-computed already; the sentence that
+    // joins them was the view's, which meant the one thing nobody could test was the only part that was
+    // ever going to be got wrong (a missing space, a swapped order).
+    static func chipHelp(name: String, detail: String) -> String {
+        "\(conceptSummary(for: name)) \(detail)"
+    }
+
     static func conceptSummary(for name: String) -> String {
         switch name {
         case "Scout": return "Freshly found events waiting for you to keep or dismiss."
@@ -184,7 +192,18 @@ enum AgentRoster {
                            focus: .sendApproved, count: 0)
     }
 
-    private static func shows(_ n: Int) -> String { n == 1 ? "show" : "shows" }
+    private static func shows(_ n: Int) -> String { Plural.word(n, "show") }   // #885: one pluralizer
+
+    // #885: the roll-up line above the agent chips. The VERB is what agrees here, and it inverts: one
+    // NEEDS you, three NEED you. Written inline in the view as `n == 1 ? "s" : ""`, backwards from every
+    // other pluralization in the app, which is exactly the sort of thing that survives until somebody
+    // "tidies" it into agreeing with its neighbours and silently breaks it.
+    //
+    // Nothing needing Dan says nothing at all: a line that is always there is a line he stops reading.
+    static func needsYouLabel(_ needs: Int) -> String? {
+        guard needs > 0 else { return nil }
+        return "\(needs) \(Plural.word(needs, "needs", "need")) you"
+    }
 
     // #863: the one pill exempt from "the number equals the rows you land on", because it does not land
     // Dan on rows at all: it opens FollowUpsView, which lists the due RECIPIENTS. So a recipient count is

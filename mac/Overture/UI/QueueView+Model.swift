@@ -285,6 +285,56 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
 }
 
 enum QueueModel {
+
+    // MARK: - Copy and filtering the queue used to do in its own body (#885)
+
+    // The three-clause filter that feeds the "To send (N)" pill. The windowing after it
+    // (toSendQueue) was always tested; THIS half was written in the view, so the pill's number was only
+    // ever as trustworthy as its untested part. A count is a promise about rows (#863).
+    static func filter(_ items: [QueueItem], discipline: String?, highOnly: Bool,
+                       pendingBookingsOnly: Bool) -> [QueueItem] {
+        items.filter { item in
+            if let discipline, item.discipline != discipline { return false }
+            if highOnly, !item.isHighFit { return false }
+            if pendingBookingsOnly, !item.bookingSuggested { return false }
+            return true
+        }
+    }
+
+    static func toSendLabel(count: Int) -> String { "To send (\(count))" }
+
+    static func reachedOutLabel(count: Int) -> String { "Reached out (\(count))" }
+
+    // #308: the heading on the focused view a multi-lead away alert lands on. It names how many leads it
+    // is about to show, so it is a promise about the rows directly beneath it.
+    static func newLeadsHeading(count: Int) -> String {
+        "\(Plural.count(count, "new lead")) while you were away"
+    }
+
+    // Why rows have vanished, which is the one thing a filter must never leave Dan guessing about, and
+    // what turning it on would do when it is off. Two entirely different sentences, chosen by a ternary
+    // in the view body.
+    static func pendingBookingsHelp(showingOnly: Bool, count: Int) -> String {
+        guard showingOnly else {
+            return "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
+        }
+        return "Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."
+    }
+
+    static func fitLabel(isHighFit: Bool) -> String { isHighFit ? "HIGH FIT" : "LONG SHOT" }
+
+    // Both branches promise something about what the DRAFT will do, which is why they are worth a test:
+    // one says a returning-client draft is now allowed, the other says it is not yet.
+    static func performerMatchHelp(confirmed: Bool) -> String {
+        confirmed
+            ? "You confirmed this performer is a past client, so the fit score counts it and a draft can write to them as a returning client."
+            : "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
+    }
+
+    // "Pending Prep run" asserts this show is IN the Prep queue: a claim about what the app does next.
+    static func contactPrepNote(isKept: Bool) -> String {
+        isKept ? "Contact: pending Prep run" : "Contact: keep to prep"
+    }
     // Plain-language label for the AI's non-binding reply-intent hint (#420 C6).
     static func replyIntentLabel(_ raw: String) -> String {
         switch ReplyIntent(rawValue: raw) {
