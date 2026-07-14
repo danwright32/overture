@@ -21,6 +21,36 @@
 # Either way the source's content hash is NOT stamped and its unread flag stays set, so the next scout
 # reads it again rather than skipping it forever.
 
+# corrupt_path <results>   (#911)
+#
+# Where a run's unreadable bytes are kept. STAMPED, because the name used to be fixed
+# (`<results>.corrupt`) and both writers below used it: two bad runs in a week left only the most recent,
+# with nothing anywhere saying an earlier one had been lost. #868's whole point was that these bytes are
+# the only evidence of what a run really did, and the failure that is hardest to diagnose (an intermittent
+# one) is exactly the failure whose evidence a fixed name destroys.
+#
+# Still ends in `.corrupt`, deliberately: HandoffCleanup (#821) owns anything with that suffix and prunes
+# it on the same 14-day rule, so stamped copies compose with the existing sweep instead of piling up
+# forever. A test asserts that suffix survives, because the day it does not, these files become immortal.
+#
+# Written once, and both writers call it. Two functions building the same name their own way is how they
+# would drift apart, and one of them silently reverting to a fixed name is exactly this bug again.
+corrupt_path() {
+  local results="$1"
+  local stamp
+  stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo unknown)"
+
+  # Two runs inside the same second are not a thing a scout does, but a retry loop is, and a collision
+  # would silently destroy the evidence again. So the suffix is checked, not assumed.
+  local candidate="${results}.${stamp}.corrupt"
+  local n=2
+  while [ -e "${candidate}" ]; do
+    candidate="${results}.${stamp}-${n}.corrupt"
+    n=$((n + 1))
+  done
+  printf '%s' "${candidate}"
+}
+
 # quarantine_unreadable_results <results>   (#868)
 #
 # A results file that does not parse is not results, and leaving it in place is the quietest failure in
@@ -43,19 +73,24 @@ quarantine_unreadable_results() {
   [ -f "${results}" ] || return 0                    # no file: already handled on its own path
   command -v node >/dev/null 2>&1 || return 0        # no node: degrade to today's behaviour, never worse
 
+  # #911: the destination is decided HERE, by the one function that names these files, and handed to node.
+  # Node building the name for itself is how the two writers drifted into a fixed name apiece.
+  local destination
+  destination="$(corrupt_path "${results}")"
+
   node -e '
     const fs = require("fs");
-    const file = process.argv[1];
+    const [file, destination] = process.argv.slice(1);
     const raw = fs.readFileSync(file, "utf8");
     try {
       JSON.parse(raw);
     } catch {
       // Kept, never deleted: this is the only record of what the run produced, and the reason it failed
-      // is somewhere in it.
-      fs.renameSync(file, file + ".corrupt");
-      console.log(`results file did not parse; moved aside to ${file}.corrupt so the run reports as empty`);
+      // is somewhere in it. Stamped, so the NEXT bad run cannot land on top of it (#911).
+      fs.renameSync(file, destination);
+      console.log(`results file did not parse; moved aside to ${destination} so the run reports as empty`);
     }
-  ' "${results}" 2>/dev/null || true
+  ' "${results}" "${destination}" 2>/dev/null || true
 }
 
 # ensure_every_queued_source_reported <queue> <results> <log> <exit-status>
@@ -69,9 +104,14 @@ ensure_every_queued_source_reported() {
   [ -f "${queue}" ] || return 0                      # nothing was asked for, so nothing to guard
   command -v node >/dev/null 2>&1 || return 0        # no node: degrade to the old behaviour, never worse
 
+  # #911: same one naming rule as the quarantine path above. Computed even when the results turn out to be
+  # fine, because it is a name and not a file: nothing is written unless the bytes are actually unreadable.
+  local corrupt_destination
+  corrupt_destination="$(corrupt_path "${results}")"
+
   node -e '
     const fs = require("fs");
-    const [queuePath, resultsPath, logPath, status] = process.argv.slice(1);
+    const [queuePath, resultsPath, logPath, status, corruptPath] = process.argv.slice(1);
 
     const read = (p) => { try { return fs.readFileSync(p, "utf8"); } catch { return null; } };
     const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -87,8 +127,14 @@ ensure_every_queued_source_reported() {
     // ingests nothing while saying nothing, because a freshly written file looks like a run that produced
     // results. Keep the bytes as evidence (they are the only record of what went wrong) and speak for
     // every source, rather than leaving that silence in place.
+    // #911: to a stamped path, so a second unreadable run keeps its own evidence AND the evidence of the
+    // run before it, rather than overwriting the only record of what went wrong last time.
+    //
+    // NO APOSTROPHES ANYWHERE IN HERE. This whole program is one single-quoted bash string, and a raw
+    // quote ends it: the script then fails to parse, every function in this file silently stops existing,
+    // and the guards vanish. `bash -n` catches it, and this comment cost one run of it to learn.
     if (rawResults !== null && parsed === null) {
-      try { fs.writeFileSync(resultsPath + ".corrupt", rawResults); } catch {}
+      try { fs.writeFileSync(corruptPath, rawResults); } catch {}
     }
 
     const existing = Array.isArray(parsed?.results) ? parsed.results : [];
@@ -126,5 +172,5 @@ ensure_every_queued_source_reported() {
     } catch (e) {
       console.error(`could not write the failure results file: ${e.message}`);
     }
-  ' "${queue}" "${results}" "${log}" "${status}" || true
+  ' "${queue}" "${results}" "${log}" "${status}" "${corrupt_destination}" || true
 }

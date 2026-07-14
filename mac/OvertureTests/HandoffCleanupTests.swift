@@ -112,6 +112,33 @@ struct HandoffCleanupTests {
         #expect(exists(corrupt))
     }
 
+    // #911: the quarantined bytes are STAMPED now (`<results>.<timestamp>.corrupt`), because a fixed name
+    // meant a second bad run overwrote the first one's evidence, and an intermittent failure is exactly the
+    // one whose evidence that destroyed. The stamped name has to stay inside this sweep's ownership, or the
+    // fix trades a lost file for a folder that grows forever. Asserted from THIS side, because results-guard
+    // is a shell script and nothing else would notice the two rules parting company.
+    @Test func aStampedCorruptFileIsStillOwnedAndStillPruned() throws {
+        let dir = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let stamped = try seed("overture-scout-extract-results.json.20260714T104500Z.corrupt",
+                               in: dir, ageInDays: 30)
+        let collision = try seed("overture-prep-results.json.20260714T104500Z-2.corrupt",
+                                 in: dir, ageInDays: 30)
+        let fresh = try seed("overture-prep-results.json.20260714T104500Z-3.corrupt",
+                             in: dir, ageInDays: 1)
+
+        #expect(HandoffCleanup.owns(stamped.lastPathComponent))
+        #expect(HandoffCleanup.owns(collision.lastPathComponent))
+
+        let result = HandoffCleanup.sweep(handoffDirectory: dir, now: now)
+
+        #expect(!exists(stamped))                     // past the horizon: pruned on the same rule as before
+        #expect(!exists(collision))
+        #expect(exists(fresh), "evidence inside the 14-day window must never be swept")
+        #expect(result.deleted.count == 2)
+    }
+
     // MARK: - It owns two names and nothing else
     //
     // The handoff directory is not a scratch folder. It holds Dan's booking history, his Gmail tokens,
