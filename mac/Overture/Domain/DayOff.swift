@@ -51,6 +51,12 @@ enum DayOffEditing {
     // its own (#885): copy computed in a view body is copy no test can read.
     static func addButtonTitle(isOpen: Bool) -> String { isOpen ? "Cancel" : "Block some days" }
 
+    // #901 walk fix: whether closing the sheet should ask first. It should when the add form is open,
+    // because Dan may have typed a range he expects Done to block; closing it silently is what lost his
+    // work once. In the tested helper rather than the view so the rule can't quietly regress to a bare
+    // dismiss() (which is exactly the bug), the way #863 taught us about logic living in a view body.
+    static func closeNeedsConfirmation(addFormOpen: Bool) -> Bool { addFormOpen }
+
     static func message(for result: Result) -> String? {
         switch result {
         case .added: return nil                 // the row appearing in the list is the receipt

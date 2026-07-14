@@ -606,6 +606,13 @@ enum QueueModel {
         return "\(startLabel) to \(endLabel)"
     }
 
+    // #901 (Dan's walk, 2026-07-14): a date-group header is marked "Unavailable" when any show under it
+    // is on a day he cannot work. A day off or a booked shoot blocks the whole day, so this reads as
+    // "this date is blocked" at a glance, without opening each row.
+    static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
+        items.contains(where: \.hasUnclearedConflict)
+    }
+
     static func relatedRunNote(_ item: QueueItem) -> String? {
         item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
     }

@@ -407,6 +407,18 @@ struct QueueView: View {
                 if !group.year.isEmpty {
                     Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 }
+                // #901 (Dan's walk, 2026-07-14): "up by the date". When any show on this date is a day he
+                // can't work, the header itself says so, so a blocked day reads at a glance.
+                if QueueModel.groupIsUnavailable(group.items) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text("Unavailable")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.onRust)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                    .background(Capsule().fill(OVColor.rust))
+                }
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }

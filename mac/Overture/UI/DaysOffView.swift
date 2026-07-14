@@ -34,6 +34,9 @@ struct DaysOffView: View {
     @State private var newEnd = Date()
     @State private var newNote = ""
     @State private var addMessage: String?
+    // #901 walk fix: Dan opened the add form, changed the dates, and clicked Done, expecting that to
+    // block them; it discarded them silently. Now Done, while the form is open, asks first.
+    @State private var confirmUnsaved = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -54,6 +57,23 @@ struct DaysOffView: View {
         .frame(width: 560)
         .background(OVColor.canvas)
         .actionFeedbackBanner()
+        .confirmationDialog("You entered days off but haven't blocked them yet.",
+                            isPresented: $confirmUnsaved, titleVisibility: .visible) {
+            Button("Block these days") {
+                // Block, then leave: if the range is bad, keep the sheet open with the reason showing
+                // rather than closing on an error he never got to see.
+                add()
+                if addMessage == nil { dismiss() }
+            }
+            Button("Discard them", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) { }
+        }
+    }
+
+    // Done, but not at the cost of the range he just typed: the decision lives in the tested helper, so
+    // it cannot quietly regress to a bare dismiss().
+    private func done() {
+        if DayOffEditing.closeNeedsConfirmation(addFormOpen: showAdd) { confirmUnsaved = true } else { dismiss() }
     }
 
     private var header: some View {
@@ -66,7 +86,7 @@ struct DaysOffView: View {
             Spacer()
             Button(DayOffEditing.addButtonTitle(isOpen: showAdd)) { showAdd.toggle(); addMessage = nil }
                 .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            Button("Done") { done() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
     }
@@ -76,6 +96,9 @@ struct DaysOffView: View {
             HStack(spacing: OVSpacing.md) {
                 DatePicker("First day", selection: $newStart, displayedComponents: .date)
                 DatePicker("Last day", selection: $newEnd, displayedComponents: .date)
+                // #901 walk fix: pin the pickers left with a guaranteed gap on the right, so the year's
+                // stepper never crowds the sheet edge.
+                Spacer(minLength: OVSpacing.sm)
             }
             .font(.system(size: 12))
             .datePickerStyle(.compact)

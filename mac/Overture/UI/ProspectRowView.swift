@@ -80,7 +80,6 @@ struct ProspectRowView: View {
                     }
                     tags
                     relatedRunNote
-                    dateConflictFlag
                     confidenceFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -318,40 +317,6 @@ struct ProspectRowView: View {
     // #611: a fit-risk Prep's own research found, e.g. the org's site names its own photographer.
     // Rust tone (a caution, not an opportunity), mirroring bookingSuggestionFlag's capsule idiom.
     // Never changes fitScore/tier; Dan decides himself whether to deprioritize or skip.
-    // #901: a day of this run Dan cannot work. The show is HERE, in its normal date position (it used to
-    // be dropped, then briefly sank to the bottom, which read as deleted); it cannot be drafted or sent
-    // until he overrules the clash.
-    //
-    // Dan's call after walking it (2026-07-14): a HIGHLY VISIBLE badge, not a faint tint. So this is a
-    // FILLED rust badge reading "Unavailable", with the reason spelled out beside it rather than behind a
-    // hover, because the reason is the whole point: "you're already shooting the Nguyen recital that
-    // night" is a fact he can act on, where a bare "unavailable" is not.
-    @ViewBuilder private var dateConflictFlag: some View {
-        if item.hasUnclearedConflict, let note = item.conflictNote {
-            Menu {
-                Button("I can shoot this anyway") { onClearConflict() }
-            } label: {
-                HStack(spacing: 6) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar.badge.exclamationmark")
-                        Text("Unavailable")
-                    }
-                    .font(OVType.tag.weight(.semibold))
-                    .foregroundStyle(OVColor.onRust)
-                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
-                    .background(Capsule().fill(OVColor.rust))
-                    Text(note)
-                        .font(OVType.tag)
-                        .foregroundStyle(OVColor.rust)
-                }
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all.")
-            .padding(.top, 2)
-        }
-    }
-
     @ViewBuilder private var alreadyCoveredFlag: some View {
         if let note = item.alreadyCoveredNote, !item.alreadyCoveredDismissed {
             Menu {
@@ -482,7 +447,40 @@ struct ProspectRowView: View {
         .padding(.top, 2)
     }
 
+    // #901 (Dan's walk, 2026-07-14): the "Unavailable" badge sits UP HERE, by Keep/Dismiss, and it is
+    // loud (a filled rust pill, not a faint tint), with the reason spelled out beneath it. It used to be
+    // a quiet tinted capsule buried in the left-hand tag stack, which he walked straight past.
     private var actions: some View {
+        VStack(alignment: .trailing, spacing: OVSpacing.xs) {
+            if item.hasUnclearedConflict, let note = item.conflictNote {
+                Menu {
+                    Button("I can shoot this anyway") { onClearConflict() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text("Unavailable")
+                        Image(systemName: "chevron.down").font(.system(size: 9))
+                    }
+                    .font(OVType.meta.weight(.semibold))
+                    .foregroundStyle(OVColor.onRust)
+                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.rust))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all.")
+                Text(note)
+                    .font(OVType.tag)
+                    .foregroundStyle(OVColor.rust)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 220, alignment: .trailing)
+            }
+            keepDismissControls
+        }
+    }
+
+    private var keepDismissControls: some View {
         HStack(spacing: OVSpacing.xs) {
             // #864: a show Overture retired because its last night passed is NOT a cut Dan made, and it
             // offers no Restore. Restoring it would put it back as undecided, and the next launch would

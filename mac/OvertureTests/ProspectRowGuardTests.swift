@@ -112,8 +112,8 @@ struct ProspectRowRestoreGuardTests {
     }
 
     @Test func actionsBranchesOnDismissedStatusBeforeKeepDismiss() {
-        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
-            Issue.record("actions view not found")
+        guard let actionsRange = prospectRow.range(of: "private var keepDismissControls: some View {") else {
+            Issue.record("keepDismissControls view not found")
             return
         }
         let body = prospectRow[actionsRange.lowerBound...].prefix(1600)
@@ -126,8 +126,8 @@ struct ProspectRowRestoreGuardTests {
     // has to come FIRST. Order is the whole guarantee here, so the guard checks the order, not just that
     // both branches exist.
     @Test func aRetiredShowIsBranchedOnBeforeTheRestoreBranch() {
-        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
-            Issue.record("actions view not found")
+        guard let actionsRange = prospectRow.range(of: "private var keepDismissControls: some View {") else {
+            Issue.record("keepDismissControls view not found")
             return
         }
         let body = String(prospectRow[actionsRange.lowerBound...].prefix(1600))
@@ -142,8 +142,8 @@ struct ProspectRowRestoreGuardTests {
     }
 
     @Test func dismissMenuIsNotNestedInElseIfKept() {  // #499 regression
-        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
-            Issue.record("actions view not found")
+        guard let actionsRange = prospectRow.range(of: "private var keepDismissControls: some View {") else {
+            Issue.record("keepDismissControls view not found")
             return
         }
         // The regression would show up as "} else if item.isKept {" at the top level of
@@ -153,6 +153,22 @@ struct ProspectRowRestoreGuardTests {
         // else, which does not contain that fragment at the method level.
         let body = prospectRow[actionsRange.lowerBound...]
         #expect(!body.contains("} else if item.isKept {"))
+    }
+
+    // #901 (Dan's walk, 2026-07-14): the "Unavailable" badge belongs UP by Keep/Dismiss, not buried in
+    // the faint left-hand tag stack where he walked past it. It lives in `actions` (which stacks the badge
+    // over `keepDismissControls`), gated on hasUnclearedConflict, tappable to clear. The guard pins the
+    // placement, because a badge that drifts back down into the metadata is invisible again.
+    @Test func theUnavailableBadgeSitsInTheActionsColumn() {
+        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+            Issue.record("actions view not found")
+            return
+        }
+        let body = String(prospectRow[actionsRange.lowerBound...].prefix(1500))
+        #expect(body.contains("item.hasUnclearedConflict"))
+        #expect(body.contains("Unavailable"))
+        #expect(body.contains("I can shoot this anyway"))
+        #expect(body.contains("keepDismissControls"))   // badge stacked above the Keep/Dismiss row
     }
 }
 
