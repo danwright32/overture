@@ -30,12 +30,12 @@ struct ReminderSettingsView: View {
             row("Interested, going quiet", value: $interestedDays, range: 1...90)
             Divider()
             row("Lead buffer before the event", value: $leadBufferDays, range: 0...30)
-            Divider()
-            Toggle(isOn: $omniFocusEnabled) {
-                Text("Sync due reminders to OmniFocus").font(OVType.body).foregroundStyle(OVColor.ink)
-            }
+            // #931: on/off for OmniFocus sync lives once, in the toolbar's OmniFocus menu that opens this
+            // sheet, so it is not duplicated here. The look-ahead window has no other home, so it stays,
+            // shown while sync is on (toggle it from that menu).
             if omniFocusEnabled {
-                Text("Adds a follow-up task to your Outreach project (deferred to 11am, due 6pm on the day it's due) so a near-event lead reaches you when you're away from Overture. Only fires while Overture is open, so it looks ahead by:")
+                Divider()
+                Text("OmniFocus is syncing due follow-ups. It only fires while Overture is open, so it looks ahead by:")
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 row("Look-ahead window", value: $omniFocusHorizon, range: 1...60)
