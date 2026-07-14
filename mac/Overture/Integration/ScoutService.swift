@@ -195,7 +195,7 @@ enum ScoutService {
         // so repeat-client recognition stays current as Dan sends and books (#19).
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let history = LocalHistory.forMatching(existing: existing)
-        let blocked = mergedBlockedDates(exportBlocked: loaded.blockedDates, localOverride: loadBlockedDates())
+        let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context)
 
         let watchlist = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
         let plan = SourceSchedule.plan(sources: watchlist, depth: depth, budget: budget, now: now)
@@ -271,7 +271,7 @@ enum ScoutService {
     // never thrown, so a source that is down cannot cost Dan the rest of his watchlist.
     private static func runNative(_ source: WatchedSource?, extractor: any SourceExtractor,
                                   clients: [DownbeatClient], history: [HistoryRecord],
-                                  blocked: Set<String>, now: Date,
+                                  blocked: BlockedCalendar, now: Date,
                                   into context: ModelContext) async -> Outcome {
         let sourceId = source?.sourceId ?? WatchedSource.carnegieId
         let orgName = source?.orgName ?? "Carnegie Hall"
@@ -526,7 +526,7 @@ enum ScoutService {
         events: [ExtractedEvent],
         clients: [DownbeatClient],
         history: [HistoryRecord],
-        blocked: Set<String>,
+        blocked: BlockedCalendar,
         feed: FeedCheck,
         today: String = QueueModel.easternToday(),
         sourceIds: [String] = [],
@@ -551,7 +551,7 @@ enum ScoutService {
         events: [ExtractedEvent],
         clients: [DownbeatClient],
         history: [HistoryRecord],
-        blocked: Set<String>,
+        blocked: BlockedCalendar,
         feed: FeedCheck? = nil,
         // #798: injected so the upcoming-only guard below is testable against a pinned day instead of
         // the wall clock. The reconcile already needed today's date; now one value serves both.
@@ -579,12 +579,15 @@ enum ScoutService {
             // at the whole org.
             let verdict = HistoryMatch.matchRelationship(name: e.title, venue: e.venue,
                                                          clients: clients, history: history)
-            switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict, blocked: blocked) {
+            switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict) {
             case .skip(let reason):
                 skipped += 1
-                // Only a REFUSAL is reported. A blocked date is skipped too, and it means something
-                // entirely different; a report where the lines do not all mean "somebody asked you to
-                // stop" is a report that has to be read carefully, which means it will not be.
+                // Only a REFUSAL is reported. The other skip (unreachable) means something entirely
+                // different; a report where the lines do not all mean "somebody asked you to stop" is a
+                // report that has to be read carefully, which means it will not be read at all.
+                //
+                // #901: a blocked date is no longer a skip of any kind. It is imported and flagged, so it
+                // cannot reach this report by any route.
                 if reason == .suppressed {
                     suppressedShows.append(Prospect.decodeHTMLEntities(e.title))
                 }
@@ -656,6 +659,17 @@ enum ScoutService {
             enriched.runEndDate = gr.runEndDate
             enriched.partOfRelatedRun = gr.partOfRelatedRun
             enriched.runSourceURLs = gr.runSourceURLs
+
+            // #901: the date conflict, and it lives HERE, at the run, for the same reason the guard above
+            // does. `runEndDate` does not exist until the nights have been grouped, so a check on the
+            // event (where the old blocked-date drop lived) can only ever see opening night: a four-night
+            // run whose third night sits on a booked shoot passed clean, and Dan would have pitched a
+            // show he could not finish.
+            //
+            // It FLAGS, it does not drop (Dan's call, 2026-07-13). A dropped show is a decision the app
+            // made for him, silently, and he would rather see the clash and decide himself.
+            enriched.conflictKey = blocked.conflict(performanceDate: enriched.performanceDate,
+                                                    runEndDate: enriched.runEndDate)?.key
 
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
@@ -815,6 +829,7 @@ enum ScoutService {
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
         prospect.sourceIds = p.sourceIds        // #771
+        prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
     }
 
@@ -833,6 +848,11 @@ enum ScoutService {
         // (via ClassificationOverride.rescored) and by the fresh score in p.
         existing.passedOnThisShow = p.passedOnThisShow
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
+        // #901: scout-owned too, and refreshed to whatever is true NOW: a vacation Dan cancelled stops
+        // flagging the show, and a shoot booked over a week he was merely away re-flags it under a new
+        // key, which is a fact he has not seen and so is not covered by anything he cleared.
+        existing.setScoutConflict(p.conflictKey)
+        // NOTE: never touch conflictClearedKey here; Dan owns that decision (#901).
         // NOTE: never touch confidenceReviewedByDan here; Dan owns that acknowledgement.
         // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
 
@@ -902,21 +922,21 @@ enum ScoutService {
         existing.ingestedAt = Date()
     }
 
-    // The days the scout suppresses: Downbeat's exported blockedDates (the canonical source,
-    // #156) unioned with the optional local override file, deduplicated. Pure for testing.
-    static func mergedBlockedDates(exportBlocked: [String], localOverride: Set<String>) -> Set<String> {
-        Set(exportBlocked).union(localOverride)
-    }
-
-    private static func loadBlockedDates() -> Set<String> {
-        let url = appSupport("overture-blocked-dates.json")
-        guard let data = try? Data(contentsOf: url),
-              let dates = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-        return Set(dates)
-    }
-
-    private static func appSupport(_ name: String) -> URL {
-        StoreLocation.handoffDirectory
-            .appendingPathComponent(name)
+    // The days Dan cannot work, from BOTH sources at once (#901): Downbeat's booked shoots, and the days
+    // off he types into Overture himself.
+    //
+    // This replaces `mergedBlockedDates`, which unioned Downbeat's exported dates with a local override
+    // file, `overture-blocked-dates.json`. That file was read here and written NOWHERE: no editor, no
+    // settings screen, no writer anywhere in the app, and it does not exist on Dan's Mac. Downbeat's
+    // half, meanwhile, has always exported an empty list. So the guard has never once fired in the app's
+    // life, and both halves of it looked exactly like a guard that worked.
+    //
+    // The days off now live in the store (DayOff), where the sheet that edits them and the scout that
+    // reads them are looking at the same rows, instead of at a file only one of them knew about.
+    static func blockedCalendar(export: (bookings: [OvertureBooking], blockedDates: [String]),
+                                context: ModelContext) -> BlockedCalendar {
+        BlockedCalendar.build(bookings: export.bookings,
+                              exportedBlockedDates: export.blockedDates,
+                              daysOff: DayOffEditing.ranges(in: context))
     }
 }

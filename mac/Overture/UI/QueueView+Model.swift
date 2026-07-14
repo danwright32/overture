@@ -79,6 +79,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftLintBlockers: [DraftIssue] = []
     var draftLintBlocked: Bool = false
     var outcomeSourceRaw: String? = nil
+    // #901: a day of this run Dan cannot work and has not waved through, and the sentence saying which.
+    // The show still renders (Dan's call: he decides, not the app), sinks to the bottom of the order, and
+    // is neither drafted nor sendable until he clears it.
+    var hasUnclearedConflict: Bool = false
+    var conflictNote: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
@@ -498,7 +503,16 @@ enum QueueModel {
         let demoted = tooSoon
             .sorted { $0.days != $1.days ? $0.days > $1.days : $0.index < $1.index }
             .map(\.item)
-        return bookable + demoted
+
+        // #901, Dan's call (2026-07-14): a show on a day he cannot work sinks BELOW every show he can,
+        // and the fit score is left alone. The score answers "how good a show is this", which is true
+        // whether or not he happens to be free, and baking his calendar into it would mean clearing a
+        // conflict had to re-score the show to undo itself. So the demotion lives in the ORDER, which is
+        // the thing that was actually wrong: it was at the top of his queue, and he cannot shoot it.
+        //
+        // It is never hidden. Dropping it silently is exactly the behavior this replaced.
+        let ordered = bookable + demoted
+        return ordered.filter { !$0.hasUnclearedConflict } + ordered.filter(\.hasUnclearedConflict)
     }
 
     struct DateGroup: Identifiable, Equatable {
@@ -608,9 +622,10 @@ enum QueueModel {
     private static func day(_ iso: String) -> Date? { EasternDate.date(from: iso) }
 
     private static let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    private static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     private static func shortWeekday(_ component: Int) -> String { weekdays[(component - 1 + 7) % 7] }
-    private static func shortMonth(_ component: Int) -> String { months[(component - 1 + 12) % 12] }
+    // #901: the month names moved to EasternDate, which now also renders the single-day label the
+    // blocked-calendar note needs ("Nov 14"). One list of month names, not two drifting ones.
+    private static func shortMonth(_ component: Int) -> String { EasternDate.shortMonth(component) }
 }
 
 extension QueueItem {
@@ -663,6 +678,8 @@ extension QueueItem {
                 Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers))),
             draftLintBlocked: p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint },
             outcomeSourceRaw: p.outcomeSourceRaw,
+            hasUnclearedConflict: p.hasUnclearedConflict,
+            conflictNote: p.conflictNote,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed,

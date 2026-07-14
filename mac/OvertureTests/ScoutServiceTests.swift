@@ -30,7 +30,7 @@ struct ScoutServiceTests {
 
     @Test func classifiesRanksAndInsertsExtractedEvents() throws {
         let ctx = ModelContext(try container())
-        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.found == 2)
         #expect(outcome.inserted == 2)
@@ -44,7 +44,7 @@ struct ScoutServiceTests {
 
     @Test func reScoutPreservesKeepDismissAndUpdates() throws {
         let ctx = ModelContext(try container())
-        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         // Dan keeps the choir.
         let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
@@ -53,7 +53,7 @@ struct ScoutServiceTests {
         choir?.status = .queued
         try ctx.save()
 
-        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         #expect(outcome.inserted == 0)
         #expect(outcome.updated == 2)
 
@@ -64,7 +64,7 @@ struct ScoutServiceTests {
     @Test func dncHistorySuppressesAProspect() throws {
         let ctx = ModelContext(try container())
         let history = [HistoryRecord(groupName: "Indianapolis Children's Choir", status: "dnc")]
-        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.skipped == 1)   // the DNC choir is suppressed
         #expect(outcome.inserted == 1)  // only the recital remains
@@ -72,7 +72,7 @@ struct ScoutServiceTests {
 
     @Test func reScoutRefreshesConfidenceButKeepsDansReview() throws {
         let ctx = ModelContext(try container())
-        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
                                           performanceDate: "2026-06-24", venue: "Stern Auditorium / Perelman Stage")
         let choir = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
@@ -83,7 +83,7 @@ struct ScoutServiceTests {
         choir?.classificationConfidence = Confidence.uncertain.rawValue
         try ctx.save()
 
-        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
         #expect(refreshed?.confidenceReviewedByDan == true)                          // Dan-owned, preserved
         #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
@@ -120,7 +120,7 @@ struct ScoutServiceTests {
                                         venue: "Stern Auditorium / Perelman Stage",
                                         performanceDate: "2026-06-24",
                                         sourceUrl: "https://example.com/b")
-        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(
             predicate: #Predicate { $0.naturalKey == key })).first
@@ -178,7 +178,7 @@ struct ScoutServiceTests {
         try ctx.save()
 
         // Re-scout with no clients and no history, so the fresh org match is nothing at all.
-        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try choirRow(ctx)
         #expect(refreshed.priorRelationship == "booked")
@@ -204,7 +204,7 @@ struct ScoutServiceTests {
         ctx.insert(p)
         try ctx.save()
 
-        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try choirRow(ctx)
         // The performer-match lock still protects the relationship identity.
@@ -231,7 +231,7 @@ struct ScoutServiceTests {
                                     shortName: nil, email: "", contractEmail: "", phoneNumber: nil,
                                     isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
                                     notes: nil, hostingSite: "")
-        _ = ScoutService.apply(events: [choirEvent], clients: [client], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [choirEvent], clients: [client], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try choirRow(ctx)
         #expect(refreshed.priorRelationship == "booked")
@@ -252,7 +252,7 @@ struct ScoutServiceTests {
         ctx.insert(p)
         try ctx.save()
 
-        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let refreshed = try choirRow(ctx)
         #expect(refreshed.priorRelationship == "none")
@@ -272,22 +272,22 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: .empty, feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
         #expect(try xRow().missedScoutCount == 0)
 
         // X is absent from a healthy (non-empty) feed: one miss, not yet gone.
-        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: .empty, feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 1)
         #expect(try xRow().disappearedFromFeed == false)
 
         // Absent again: two misses, now gone.
-        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: .empty, feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().disappearedFromFeed == true)
 
         // X reappears: counter resets.
-        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: .empty, feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
@@ -301,22 +301,36 @@ struct ScoutServiceTests {
         let y = ExtractedEvent(title: "Future Choir Y", presenter: "Future Choir Y",
                                venue: "Weill Recital Hall", performanceDate: future,
                                sourceUrl: "https://www.carnegiehall.org/event/y")
-        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: [], feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [x], clients: [], history: [], blocked: .empty, feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         let xKey = Prospect.makeNaturalKey(groupName: "Future Choir X", performanceDate: future, venue: "Weill Recital Hall")
         func xRow() throws -> Prospect { try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == xKey })).first! }
 
         // Tiny feed (only y) but a large healthy baseline → feed looks degraded → X is NOT a miss.
-        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: [], feed: carnegieSweep(baseline: 80), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
+        _ = ScoutService.applySweep(events: [y], clients: [], history: [], blocked: .empty, feed: carnegieSweep(baseline: 80), today: ScoutTestClock.beforeAllFixtures, sourceIds: [WatchedSource.carnegieId], into: ctx)
         #expect(try xRow().missedScoutCount == 0)
     }
 
-    // #156: the scout's blocked set is Downbeat's exported blockedDates unioned with the local
-    // override file, deduplicated.
-    @Test func mergedBlockedDatesUnionsExportAndLocalOverride() {
-        let merged = ScoutService.mergedBlockedDates(
-            exportBlocked: ["2026-03-10", "2026-03-11"],
-            localOverride: ["2026-03-11", "2026-04-01"])
-        #expect(merged == ["2026-03-10", "2026-03-11", "2026-04-01"])
+    // #901: the scout's blocked calendar is Downbeat's booked shoots AND the days off Dan typed into
+    // Overture, from ONE builder that every path (scout, batched extract ingest, pasted lead) calls.
+    //
+    // It replaces `mergedBlockedDates`, which unioned Downbeat's dates with a local override FILE that
+    // nothing in the app has ever written. The lead path did not even read that file, so a pasted lead
+    // was judged against a different set of blocked days than a scouted show was.
+    @Test func theBlockedCalendarUnionsDownbeatsShootsWithDansOwnDaysOff() throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, DayOff.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        DayOffEditing.add(start: "2026-04-01", end: "2026-04-01", note: "Vacation", into: ctx)
+
+        let cal = ScoutService.blockedCalendar(
+            export: (bookings: [OvertureBooking(id: "b1", clientId: "c1", clientDisplayName: "A Client",
+                                                shootName: "Nguyen Recital", startDate: "2026-03-10",
+                                                endDate: "2026-03-10", venueId: nil, venueName: "V")],
+                     blockedDates: ["2026-03-10"]),
+            context: ctx)
+
+        #expect(cal.conflict(performanceDate: "2026-03-10", runEndDate: nil)?.name == "Nguyen Recital")
+        #expect(cal.conflict(performanceDate: "2026-04-01", runEndDate: nil)?.name == "Vacation")
+        #expect(cal.conflict(performanceDate: "2026-05-01", runEndDate: nil) == nil)
     }
 
     @Test func healthyFeedCountPersistenceRoundTrips() {
@@ -349,7 +363,7 @@ struct ScoutServiceTests {
             ExtractedEvent(title: "Mark Morris", presenter: "The Joyce Theater", venue: "The Joyce", performanceDate: "2026-07-15", sourceUrl: "u15"),
             ExtractedEvent(title: "Mark Morris", presenter: "The Joyce Theater", venue: "The Joyce", performanceDate: "2026-07-16", sourceUrl: "u16"),
         ]
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(stored.count == 1)
         #expect(stored[0].performanceDate == "2026-07-14")
@@ -363,14 +377,14 @@ struct ScoutServiceTests {
             ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-14", sourceUrl: "n14"),
             ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-15", sourceUrl: "n15"),
         ]
-        _ = ScoutService.apply(events: day1, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: day1, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let kept = try ctx.fetch(FetchDescriptor<Prospect>())[0]
         kept.statusRaw = "dismissed"   // Dan's decision
         try? ctx.save()
 
         // Next scout: the 14th has aged out of the window; only the 15th remains.
         let day2 = [ExtractedEvent(title: "Run", presenter: "Producer Org", venue: "Hall", performanceDate: "2026-07-15", sourceUrl: "n15")]
-        _ = ScoutService.apply(events: day2, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: day2, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(stored.count == 1)               // re-attached, not duplicated
         #expect(stored[0].statusRaw == "dismissed")  // decision preserved
@@ -381,7 +395,7 @@ struct ScoutServiceTests {
         let url = "https://www.carnegiehall.org/event/abc-123"
         let first = ExtractedEvent(title: "Acme Festival Chorus", presenter: "Acme Festival Chorus",
                                    venue: "Weill Recital Hall", performanceDate: "2026-07-01", sourceUrl: url)
-        _ = ScoutService.apply(events: [first], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [first], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         // Dan dismisses it.
         let p = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.status != .dismissed }
@@ -391,7 +405,7 @@ struct ScoutServiceTests {
         // Re-scout: the venue tweaked the listing title, but the source URL is unchanged.
         let drifted = ExtractedEvent(title: "Acme Festival Chorus — Summer Concert", presenter: "Acme Festival Chorus",
                                      venue: "Weill Recital Hall", performanceDate: "2026-07-01", sourceUrl: url)
-        let outcome = ScoutService.apply(events: [drifted], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let outcome = ScoutService.apply(events: [drifted], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.inserted == 0)                                    // no orphaned duplicate
         #expect(outcome.updated == 1)
@@ -408,7 +422,7 @@ struct ScoutServiceTests {
             schema: Schema([Prospect.self]),
             seed: { _ in },
             body: { ctx in
-                ScoutService.apply(events: self.liveEvents, clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+                ScoutService.apply(events: self.liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
             })
 
         #expect(outcome.found == 2)

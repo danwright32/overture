@@ -64,6 +64,7 @@ enum ProspectRowFactory {
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissAlreadyCoveredFlag: { ProspectMutations.dismissAlreadyCoveredFlag(item, prospects: prospects, context: context, feedback: feedback) },
+            onClearConflict: { ProspectMutations.clearConflict(item, prospects: prospects, context: context, feedback: feedback) },
             onSetOrgDoNotContact: { on in ProspectMutations.setOrgDoNotContact(item, on, prospects: prospects, context: context, feedback: feedback) },
             onConfirmPerformerMatch: { ProspectMutations.confirmPerformerMatch(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissPerformerMatch: { ProspectMutations.dismissPerformerMatch(item, prospects: prospects, context: context, feedback: feedback) },

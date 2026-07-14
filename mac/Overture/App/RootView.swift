@@ -63,6 +63,7 @@ struct RootView: View {
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
     @State private var showSources = false
+    @State private var showDaysOff = false      // #901
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
     // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
     // reading calendars for minutes with nothing on screen at all, and nothing to say if that run hung.
@@ -80,6 +81,15 @@ struct RootView: View {
     // the same reason as the Due pill above: the number on the button and the rows in the sheet it opens
     // must be one rule, not two that happen to agree.
     private var sourcesNeedingALook: Int { SourceAttention.count(watchedSources) }
+
+    // #901: Overture holds no booked shoots at all, so the only days it can keep clear of are the ones Dan
+    // types in himself. Asked of DaysOffAttention, never decided here, so the toolbar and the sheet it
+    // opens cannot come to different answers.
+    private var noBookedShootData: Bool {
+        let loaded = DownbeatBridge.loadWithHealth(now: Date())
+        return DaysOffAttention.needsALook(
+            ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context))
+    }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
 
@@ -307,7 +317,12 @@ struct RootView: View {
                 // only symptom was a sentence in a sheet he has no reason to open. The gold is what he sees
                 // across the room; the count and the sentence are there when he hovers. Both come from
                 // SourceAttention, never summed here, so this can never disagree with the sheet it opens.
-                ToolbarItem(placement: .secondaryAction) {
+                //
+                // #901: Days off shares this group with Sources rather than taking a slot of its own,
+                // because SwiftUI's toolbar builder tops out at ten children and one more would not
+                // compile. They belong together anyway: both say what Overture is working from, one the
+                // calendars it reads and the other the days it must keep clear of.
+                ToolbarItemGroup(placement: .secondaryAction) {
                     Button {
                         showSources = true
                     } label: {
@@ -324,6 +339,24 @@ struct RootView: View {
                             .foregroundStyle(sourcesNeedingALook > 0 ? OVColor.gold : Color.primary)
                     }
                     .help(SourceAttention.help(count: sourcesNeedingALook))
+
+                    // #901: the days Overture won't pitch him for, and (Dan's call, 2026-07-14) a standing
+                    // gold mark while it holds no booked shoots at all.
+                    //
+                    // That state is the trap this issue was written about: the conflict guard has never
+                    // once fired, because Downbeat exports no bookings and nothing ever wrote the local
+                    // override file, and a guard protecting nothing looked exactly like one that worked. It
+                    // may sit marked for a long time (bookings only accrue going forward), and that is the
+                    // honest reading: until he blocks those days himself, Overture cannot keep clear of them.
+                    Button {
+                        showDaysOff = true
+                    } label: {
+                        ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(needsALook: noBookedShootData),
+                                          systemImage: "calendar.badge.clock",
+                                          showsTitle: noBookedShootData)
+                            .foregroundStyle(noBookedShootData ? OVColor.gold : Color.primary)
+                    }
+                    .help(DaysOffAttention.help(needsALook: noBookedShootData))
                 }
                 // #344: connected is the steady state Dan will see almost always, so it collapses to
                 // a bare icon; disconnected stays a prominent, labeled call to action since it
@@ -450,6 +483,7 @@ struct RootView: View {
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             .sheet(isPresented: $showSources) { SourcesView() }
+            .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
@@ -674,8 +708,8 @@ struct RootView: View {
         let outcome = ScoutExtractIngest.ingest(
             results, clients: loaded.clients,
             history: LocalHistory.forMatching(existing: existing),
-            blocked: ScoutService.mergedBlockedDates(exportBlocked: loaded.blockedDates,
-                                                     localOverride: []),
+            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates),
+                                                  context: context),
             into: context)
 
         scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885

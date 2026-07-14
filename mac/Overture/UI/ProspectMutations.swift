@@ -293,6 +293,25 @@ enum ProspectMutations {
     // #611: Dan judged the "already has its own photographer" flag a false positive. Keeps the
     // original note (an audit trail of what Prep found) and tracks the dismissal separately,
     // mirroring dismissBookingSuggestion above.
+    // #901: "I can shoot this anyway." Dan overrules a date clash, which unlocks drafting and sending a
+    // show on a night Overture believes he is booked or away.
+    //
+    // Offered with an Undo, on the #845 principle: this is the action that lets an email go out for a
+    // night he cannot work, so a mis-click has to be reversible from the banner it happened in, rather
+    // than needing him to find the row again and work out how to put the flag back.
+    static func clearConflict(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              model.hasUnclearedConflict else { return }   // nothing to clear, and nothing to pre-approve
+        model.clearConflict()
+        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
+            feedback.acknowledge(ActionAck.conflictCleared(org: item.groupName),
+                                 action: ActionFeedback.Action(label: "Undo") {
+                                     model.restoreConflict()
+                                     context.saveOrWarn(org: item.groupName, feedback: feedback)
+                                 })
+        }
+    }
+
     static func dismissAlreadyCoveredFlag(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.alreadyCoveredDismissed = true

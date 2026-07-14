@@ -33,7 +33,7 @@ struct ProspectProvenanceTests {
     @Test func aScoutedProspectRecordsTheSourceThatSurfacedIt() throws {
         let ctx = try context()
         ScoutService.apply(events: [event("Brooklyn Youth Chorus", url: "https://a.example/1")],
-                           clients: [], history: [], blocked: [],
+                           clients: [], history: [], blocked: .empty,
                            today: ScoutTestClock.beforeAllFixtures,
                            sourceIds: ["venue-a"], into: ctx)
 
@@ -47,10 +47,10 @@ struct ProspectProvenanceTests {
         let ctx = try context()
         let show = event("Brooklyn Youth Chorus", url: "https://venue.example/1")
 
-        ScoutService.apply(events: [show], clients: [], history: [], blocked: [],
+        ScoutService.apply(events: [show], clients: [], history: [], blocked: .empty,
                            today: ScoutTestClock.beforeAllFixtures, sourceIds: ["venue-a"], into: ctx)
         // The presenter's own site lists the same night at the same venue: the chain merges it.
-        ScoutService.apply(events: [show], clients: [], history: [], blocked: [],
+        ScoutService.apply(events: [show], clients: [], history: [], blocked: .empty,
                            today: ScoutTestClock.beforeAllFixtures, sourceIds: ["presenter-b"], into: ctx)
 
         let all = try stored(ctx)
@@ -63,7 +63,7 @@ struct ProspectProvenanceTests {
         let ctx = try context()
         let show = event("Brooklyn Youth Chorus", url: "https://venue.example/1")
         for _ in 0..<3 {
-            ScoutService.apply(events: [show], clients: [], history: [], blocked: [],
+            ScoutService.apply(events: [show], clients: [], history: [], blocked: .empty,
                                today: ScoutTestClock.beforeAllFixtures, sourceIds: ["venue-a"], into: ctx)
         }
         #expect(try stored(ctx).first?.sourceIds == ["venue-a"])
@@ -91,7 +91,7 @@ struct ProspectProvenanceTests {
     @Test func aHandAddedLeadIsStampedManual() throws {
         let ctx = try context()
         ScoutService.apply(events: [event("Second Ending Ensemble", url: "https://org.example/1")],
-                           clients: [], history: [], blocked: [],
+                           clients: [], history: [], blocked: .empty,
                            today: ScoutTestClock.beforeAllFixtures,
                            sourceIds: [WatchedSource.manualId], into: ctx)
 
@@ -104,7 +104,7 @@ struct ProspectProvenanceTests {
     @Test func aProspectWithNoRecordedSourceIsLeftEmptyRatherThanGuessedAt() throws {
         let ctx = try context()
         ScoutService.apply(events: [event("Unknown Provenance", url: "https://x.example/1")],
-                           clients: [], history: [], blocked: [],
+                           clients: [], history: [], blocked: .empty,
                            today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(try stored(ctx).first?.sourceIds == [])

@@ -193,6 +193,37 @@ final class Prospect {
     // corrected the discipline. Defaulted so existing records migrate cleanly.
     var passedOnThisShow: Bool = false
 
+    // #901: a day of this show's run that Dan cannot work, as a BlockedCalendar.Day key.
+    //
+    // Scout-owned and refreshed every run: the day may stop being blocked (the vacation was cancelled),
+    // or start being blocked by something else (a shoot booked over the week he was merely away).
+    //
+    // The KEY is stored, never the sentence. The sentence is composed for display from the key, so
+    // rewording the copy cannot silently re-raise every conflict Dan has already cleared, and cannot
+    // leave old prospects quoting last month's wording back at him.
+    var conflictKey: String? = nil
+
+    // Dan-owned: the exact conflict he waved through ("I can shoot this anyway"). Stored as the KEY he
+    // accepted rather than a bare boolean, on the #718 pattern, so a conflict that CHANGES under him is
+    // a fact he has not seen yet and blocks again. Waving through "you're on vacation" is not waving
+    // through "you are already shooting a wedding that night".
+    var conflictClearedKey: String? = nil
+
+    // The two keys above, reduced to the one question every gate actually asks. Derived, but STORED, for
+    // a reason that is not premature optimization: RootView gates the "Prep kept" button with a SwiftData
+    // #Predicate, a #Predicate cannot call a Swift function, and the rule expressed inline there
+    // ("a key exists AND differs from the cleared one", two optional-to-optional comparisons on top of the
+    // existing four-term expression) overruns the #Predicate type-checker outright.
+    //
+    // The alternative was a predicate that is merely a SUPERSET of the real rule, refined afterwards in
+    // Swift. That is the #863 bug by construction: the button would light up for a show the Prep run then
+    // refuses to work on, and Dan would click Prep and watch it find nothing.
+    //
+    // So the flag is written in exactly three places (setScoutConflict, clearConflict, restoreConflict),
+    // it is what `hasUnclearedConflict` reads, and it is what the #Predicate reads. One column, one truth,
+    // and no way for the button and the work-list to disagree.
+    var conflictOpen: Bool = false
+
     // The Downbeat booking id that auto-booked this prospect (#203). Recorded at auto-book
     // time so Dan can reject that exact match. Defaulted so existing records migrate cleanly.
     var autoBookedFromBookingId: String? = nil
@@ -341,6 +372,44 @@ final class Prospect {
     var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
 
     var hasDraft: Bool { draftBody != nil }
+
+    // MARK: - The date conflict (#901)
+
+    // A day of this run Dan cannot work, that he has NOT waved through. This is the one every gate asks:
+    // it keeps the show out of the Prep run (no money is spent drafting a show he cannot shoot) and out
+    // of the send (a conflict can turn up AFTER the draft exists, which a prep-only gate would miss).
+    var hasUnclearedConflict: Bool { conflictOpen }
+
+    // What Dan reads on the row: "You blocked Nov 14 (Vacation)." / "You're already shooting X on Nov 14."
+    // Composed from the key, never stored, so it can never be a stale quotation of older copy.
+    var conflictNote: String? {
+        conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.reason
+    }
+
+    // The scout's write, every run. The ONLY thing that sets a conflict.
+    //
+    // A conflict that has GONE takes the clearance with it: a clearance is Dan's answer to one specific
+    // clash, so once that clash no longer exists there is nothing left for it to be an answer to, and
+    // leaving it behind would silently pre-clear a DIFFERENT conflict that landed on the same show later.
+    func setScoutConflict(_ key: String?) {
+        conflictKey = key
+        if key == nil { conflictClearedKey = nil }
+        conflictOpen = key != nil && key != conflictClearedKey
+    }
+
+    // "I can shoot this anyway." His call, recorded against the exact conflict he saw, so a conflict that
+    // CHANGES under him is a new fact he has not seen and blocks again (#718's pattern).
+    func clearConflict() {
+        conflictClearedKey = conflictKey
+        conflictOpen = false
+    }
+
+    // Undo of the above (the queue offers it in the confirmation banner, like every other reversible
+    // action here), which puts the flag back rather than pretending the clash never existed.
+    func restoreConflict() {
+        conflictClearedKey = nil
+        conflictOpen = conflictKey != nil
+    }
 
     // Apply Dan's edit to the draft (#240 / #119). The FIRST time the edited text meaningfully
     // differs from the AI draft, snapshot the AI version into originalDraft* so the voice-learning

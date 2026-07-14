@@ -109,6 +109,27 @@ struct StagePillCountMatchesNavigationTests {
         }
     }
 
+    // #901: a show Dan cannot work that night is NOT prep work. The Prep run refuses to draft it (no money
+    // is spent on a show that cannot happen), so the Prep pill must not count it and must not send him to
+    // it: a pill that offers work the run will then decline to do is #863 all over again, in a new place.
+    @Test func thePrepPillDoesNotCountAShowTheRunWillRefuseToDraft() throws {
+        let ctx = try context()
+        let kept = show(ctx, "kept-but-booked", status: .queued, hasDraft: false)
+        kept.setScoutConflict(BlockedCalendar.Day(date: "2026-09-19", kind: .bookedShoot,
+                                                  name: "Nguyen Recital").key)
+        try ctx.save()
+
+        let prep = try pill(ctx, "Prep")
+        #expect(prep.count == 0)                                   // not offered as work
+        #expect(try targets(ctx, prep).isEmpty)                    // and the tap lands nowhere it shouldn't
+        #expect(PrepQueueBuilder.needsPrepEligible(kept) == false)  // because the run won't take it
+
+        // And once he overrules the clash, it is ordinary work again, counted and reachable.
+        kept.clearConflict()
+        try ctx.save()
+        #expect(try pill(ctx, "Prep").count == 1)
+    }
+
     // MARK: - Send: five different problems wearing one pill
 
     // #483 + #863: the show was SENT, so it is neither approved nor holding a blocked contact. Keyed by

@@ -126,7 +126,7 @@ struct PassedShowPenaltyTests {
         let ctx = ModelContext(try container())
 
         // Season one: it is scouted and Dan passes on it.
-        _ = ScoutService.apply(events: [auroraAtWeill], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [auroraAtWeill], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let first = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         let originalScore = first.fitScore
         first.status = .dismissed
@@ -139,7 +139,7 @@ struct PassedShowPenaltyTests {
             title: "Aurora Strings", presenter: "Aurora Strings", venue: "Weill Recital Hall",
             performanceDate: "2027-09-11", sourceUrl: "https://example.com/b")
         let history = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
-        _ = ScoutService.apply(events: [nextSeason], clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [nextSeason], clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         let returning = try ctx.fetch(FetchDescriptor<Prospect>())
             .first { $0.performanceDate == "2027-09-11" }!
@@ -160,11 +160,11 @@ struct PassedShowPenaltyTests {
     // while measuring the wrong thing entirely.
     @Test func theSameOrgAtANewVenueComesBackAtFullScore() throws {
         let control = ModelContext(try container())
-        _ = ScoutService.apply(events: [auroraElsewhere], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: control)
+        _ = ScoutService.apply(events: [auroraElsewhere], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: control)
         let unpenalizedScore = try control.fetch(FetchDescriptor<Prospect>()).first!.fitScore
 
         let ctx = ModelContext(try container())
-        _ = ScoutService.apply(events: [auroraAtWeill], clients: [], history: [], blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [auroraAtWeill], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let first = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         first.status = .dismissed
         first.dismissReasonRaw = DismissReason.dontWantToShoot.rawValue
@@ -173,7 +173,7 @@ struct PassedShowPenaltyTests {
         let history = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(history.contains { $0.status == "passed" })   // the pass really is in play
 
-        _ = ScoutService.apply(events: [auroraElsewhere], clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [auroraElsewhere], clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let other = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.venue == "Merkin Hall" }!
 
         #expect(other.fitScore == unpenalizedScore)

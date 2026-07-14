@@ -44,9 +44,11 @@ enum StageNavigation {
             return p.status == .new && !p.hasGoneBy(today: today)
 
         case .prep:
-            return PrepQueueBuilder.needsPrep(status: p.status, hasDraft: p.hasDraft,
-                                              reprepDraftRequested: p.reprepDraftRequested,
-                                              reprepContactsRequested: p.reprepContactsRequested)
+            // #901: through needsPrepEligible, not needsPrep with the fields spelled out again. Spelled
+            // out, this call quietly omitted the new conflict gate, so the pill counted a show Dan is
+            // booked against and the Prep run then refused to draft it. The (Prospect) -> Bool wrapper
+            // exists precisely so a new field cannot be forgotten at one of two call sites.
+            return PrepQueueBuilder.needsPrepEligible(p)
 
         case .review:
             return p.status == .drafted

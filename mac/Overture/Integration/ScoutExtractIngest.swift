@@ -22,7 +22,7 @@ enum ScoutExtractIngest {
     // again rather than skipping it forever.
     @discardableResult
     static func ingest(_ results: ScoutExtractResults,
-                       clients: [DownbeatClient], history: [HistoryRecord], blocked: Set<String>,
+                       clients: [DownbeatClient], history: [HistoryRecord], blocked: BlockedCalendar,
                        today: String = QueueModel.easternToday(),
                        now: Date = Date(),
                        into context: ModelContext) -> ScoutService.Outcome {

@@ -67,7 +67,7 @@ struct OrgDoNotContactTests {
                                         venue: "Weill Recital Hall", performanceDate: "2027-09-11",
                                         sourceUrl: "https://example.com/next")
         let outcome = ScoutService.apply(events: [nextSeason], clients: [], history: history,
-                                         blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+                                         blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.skipped == 1)
         #expect(try all(ctx).allSatisfy { $0.performanceDate != "2027-09-11" })
@@ -82,7 +82,7 @@ struct OrgDoNotContactTests {
         let other = ExtractedEvent(title: "Innocent Ensemble", presenter: "Innocent Ensemble",
                                    venue: "Weill Recital Hall", performanceDate: "2027-09-11",
                                    sourceUrl: "https://example.com/other")
-        _ = ScoutService.apply(events: [other], clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [other], clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(try all(ctx).contains { $0.groupName == "Innocent Ensemble" })
     }
@@ -99,7 +99,7 @@ struct OrgDoNotContactTests {
         let different = ExtractedEvent(title: "New York Theatre Ballet Company of Manhattan",
                                        presenter: nil, venue: "Weill Recital Hall",
                                        performanceDate: "2027-09-11", sourceUrl: "https://example.com/x")
-        _ = ScoutService.apply(events: [different], clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [different], clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(try all(ctx).contains { $0.performanceDate == "2027-09-11" })
     }
@@ -187,7 +187,7 @@ struct OrgDoNotContactTests {
         let returning = ExtractedEvent(title: "Refused Chorale", presenter: "Refused Chorale",
                                        venue: "Weill Recital Hall", performanceDate: "2027-09-11",
                                        sourceUrl: "https://example.com/back")
-        _ = ScoutService.apply(events: [returning], clients: [], history: history, blocked: [], today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        _ = ScoutService.apply(events: [returning], clients: [], history: history, blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(try all(ctx).contains { $0.performanceDate == "2027-09-11" })
     }

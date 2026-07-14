@@ -39,9 +39,21 @@ enum PrepQueueBuilder {
     // (RootView's "Prep kept" button gate) can't call an arbitrary function from inside a
     // #Predicate macro, so needsPrepPredicate below expresses the SAME logic as a standalone
     // Predicate value and PrepQueueEligibilityParityTests pins the two never drifting apart.
+    // `hasUnclearedConflict` is deliberately NOT defaulted, and it is the only argument here that isn't.
+    //
+    // Defaulted, it was silently wrong the moment it shipped: StageNavigation called this without it, so
+    // the Prep pill counted a show Dan is booked against and took him to it, while the Prep run refused to
+    // draft it. That is exactly #863 (a pill's number is a promise about rows), reappearing in a new place
+    // through a default value that made forgetting invisible. Required, forgetting it is a compile error.
     static func needsPrep(status: ReviewStatus, hasDraft: Bool,
                           reprepDraftRequested: Bool = false,
-                          reprepContactsRequested: Bool = false) -> Bool {
+                          reprepContactsRequested: Bool = false,
+                          hasUnclearedConflict: Bool) -> Bool {
+        // #901: a show on a day Dan cannot work is not drafted until he says he can work it. Not a drop
+        // (he still sees it, flagged, and decides), but no contacts are researched and no email is
+        // written for a night he is already booked or away for: that is his money and the model's time
+        // spent on a show that cannot happen.
+        if hasUnclearedConflict { return false }
         if status == .queued && !hasDraft { return true }
         let reprepEligible = status == .queued || status == .drafted || status == .approved
         return reprepEligible && (reprepDraftRequested || reprepContactsRequested)
@@ -53,7 +65,8 @@ enum PrepQueueBuilder {
     static func needsPrepEligible(_ p: Prospect) -> Bool {
         needsPrep(status: p.status, hasDraft: p.hasDraft,
                  reprepDraftRequested: p.reprepDraftRequested,
-                 reprepContactsRequested: p.reprepContactsRequested)
+                 reprepContactsRequested: p.reprepContactsRequested,
+                 hasUnclearedConflict: p.hasUnclearedConflict)
     }
 
     // The #Predicate mirror of needsPrep above, for the one call site (RootView's toPrep @Query)
@@ -62,9 +75,14 @@ enum PrepQueueBuilder {
     // reinvented inline in RootView.swift.
     static var needsPrepPredicate: Predicate<Prospect> {
         #Predicate<Prospect> { p in
-            (p.statusRaw == "queued" && p.draftBody == nil)
-            || ((p.reprepDraftRequested || p.reprepContactsRequested)
-                && (p.statusRaw == "queued" || p.statusRaw == "drafted" || p.statusRaw == "approved"))
+            // #901: the conflict gate. It reads the SAME stored column Prospect.hasUnclearedConflict
+            // does, rather than re-deriving the rule from the two keys, which is both why it is trivial
+            // here and why it cannot drift from the plain-Swift function above. (Expressed inline from
+            // the keys, it overran the #Predicate type-checker outright; see Prospect.conflictOpen.)
+            !p.conflictOpen
+            && ((p.statusRaw == "queued" && p.draftBody == nil)
+                || ((p.reprepDraftRequested || p.reprepContactsRequested)
+                    && (p.statusRaw == "queued" || p.statusRaw == "drafted" || p.statusRaw == "approved")))
         }
     }
 

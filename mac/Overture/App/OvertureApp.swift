@@ -26,7 +26,9 @@ struct OvertureApp: App {
         // app has ever had: there is no MigrationPlan or VersionedSchema anywhere in it. That makes the
         // launch-time backup below the ONLY safety net, which is why this migration was rehearsed
         // against a clone of the live store before it shipped rather than trusted.
-        let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self])
+        // #901: DayOff joins it on the same terms (a new entity, plus two defaulted String? columns on
+        // Prospect for the conflict it now carries instead of dropping).
+        let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self])
         var container: ModelContainer? = nil
         var lock: StoreLock? = nil
         var reason: String? = nil
