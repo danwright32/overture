@@ -89,6 +89,9 @@ final class ReconcileScheduler {
         let bookedBefore = Set(before.filter { $0.outcome == .booked }.map(\.naturalKey))
 
         let bookingResult = reconcileBookings(now: now)
+        // #923: same trigger as the booking pass. Re-judge conflicts so a night newly booked in the export
+        // flags its show at once, instead of leaving it sendable until the next scout.
+        reapplyConflicts(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
         var omniFocusChanged = 0
@@ -133,6 +136,20 @@ final class ReconcileScheduler {
         // #308: carry every new-lead key: a tap deep-links to the sole lead when one is new, or to the
         // filtered new-leads view when several are.
         post(body, summary.newLeadKeys)
+    }
+
+    // #923: re-judge every stored show's date conflict against the export that just reconciled.
+    //
+    // A conflict has two inputs: Dan's days off (which he edits by hand, re-judged on the spot by #901/#922)
+    // and Downbeat's bookings (which Dan does NOT touch; they arrive in the export). The scout judges a
+    // show when it first arrives, so a booking that lands AFTER the scout leaves the show on that night
+    // unflagged, on the Prep work-list, and sendable, until the next scout happens to run. reconcileBookings
+    // above already reads the export on the same trigger (launch, timer, export-change); this closes the
+    // other half on that same trigger. ConflictSweep is pure, tested, and idempotent, and preserves any
+    // clearance Dan already made (setScoutConflict compares against the key he cleared).
+    func reapplyConflicts(now: Date, from url: URL = DownbeatBridge.defaultURL) {
+        let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
+        ConflictSweep.reapplyAll(export: (loaded.bookings, loaded.blockedDates), in: context)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
