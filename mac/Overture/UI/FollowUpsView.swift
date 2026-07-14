@@ -81,7 +81,10 @@ struct FollowUpsView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                Text("\(due.count + conversationDue.count)").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                // #885: the SAME count RootView's badge shows, from the one definition, so the pill Dan
+                // clicks and the sheet he lands on can never disagree.
+                Text("\(DueWork.counts(prospects: prospects, now: Date(), reminder: reminderConfig).total)")
+                    .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
                     .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
@@ -138,7 +141,7 @@ struct FollowUpsView: View {
             Button("Send") { performNudge(p.id, p.recipientId) }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: { p in
-            Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one follow-up right now, to this recipient only. Nothing else goes out.")
+            Text(FollowUp.confirmMessage(recipient: p.recipient, preview: p.preview))
         }
         .alert("Send this note now?",
                isPresented: Binding(get: { pendingConversation != nil }, set: { if !$0 { pendingConversation = nil } }),
@@ -146,8 +149,8 @@ struct FollowUpsView: View {
             Button("Send") { performConversationNudge(p.id, p.recipientId, isClosing: p.isClosing) }
             Button("Cancel", role: .cancel) { pendingConversation = nil }
         } message: { p in
-            Text("To: \(p.recipient)\n\n\(p.preview)\n\nThis sends one message right now, to this recipient only."
-                + (p.isClosing ? " It also closes the lead out (kept warm for next time)." : ""))
+            Text(ConversationReminder.confirmMessage(recipient: p.recipient, preview: p.preview,
+                                                     isClosing: p.isClosing))
         }
         .actionFeedbackBanner()
         .onAppear {
@@ -173,7 +176,7 @@ struct FollowUpsView: View {
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(d.prospect.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                Text("\(r.email ?? "no contact") · nudge \(r.followUpCount + 1) of \(FollowUpConfig().maxFollowUps)")
+                Text(FollowUp.nudgeLabel(email: r.email, followUpCount: r.followUpCount))
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 if let line = SendFailureLine.text(for: r.sendError) {
                     Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(2)
@@ -280,7 +283,10 @@ struct FollowUpsView: View {
         guard let email = d.recipient.email else { return }
         let preview = "Subject: \(FollowUp.nudgeSubject(groupName: d.prospect.groupName))\n\n"
             + FollowUp.nudgeBody(contactName: d.recipient.name, groupName: d.prospect.groupName,
-                                 venue: d.prospect.venue, attempt: d.recipient.followUpCount + 1)
+                                 venue: d.prospect.venue,
+                                 // #885: the SAME derivation the row's label uses, so the nudge Dan is
+                                 // told he is sending is the nudge the recipient actually gets.
+                                 attempt: FollowUp.attempt(after: d.recipient.followUpCount))
         pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, recipient: email, preview: preview)
     }
 

@@ -66,9 +66,11 @@ struct RootView: View {
     // CLAUDE.md's rule is binding, and this was a straight violation of it.
     @State private var readingStartedAt: Date?
 
+    // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
+    // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
+    // lands on stated the same rule twice, with nothing asserting they agreed.
     private var followUpsDue: Int {
-        FollowUp.dueRecipients(from: allProspects, now: Date()).count
-            + ConversationReminder.dueRecipients(from: allProspects, now: Date(), config: .loaded()).count
+        DueWork.counts(prospects: allProspects, now: Date(), reminder: .loaded()).total
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
