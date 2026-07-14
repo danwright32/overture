@@ -143,7 +143,34 @@ ensure_every_queued_source_reported "${QUEUE}" "${RESULTS}" "${LOG}" 137
 assert_equals "an unparsable results file becomes an honest failure for every source" \
   "bargemusic=not_read,kaufman=not_read" "$(verdicts)"
 assert_contains "and the corrupt bytes are preserved as evidence, never just overwritten" \
-  "$(cat "${RESULTS}.corrupt" 2>/dev/null || echo MISSING)" '{"version":1,"results":[{"sourceId":"kauf'
+  "$(cat "${RESULTS}".*.corrupt 2>/dev/null || echo MISSING)" '{"version":1,"results":[{"sourceId":"kauf'
+
+# #911: and a SECOND bad run must not destroy the first one's evidence.
+#
+# The name was fixed (`<results>.corrupt`), so two bad runs in a week left only the most recent, with
+# nothing anywhere saying an earlier one had been lost. The failure that is hardest to diagnose (an
+# intermittent one) is exactly the failure whose evidence that destroyed, and #868's whole point was that
+# these bytes ARE the evidence.
+printf '%s' '{"version":1,"results":[{"sourceId":"SECOND RUN, DIFFERENT GARBAGE' > "${RESULTS}"
+printf 'boot\nsegfault\n' > "${LOG}"
+
+ensure_every_queued_source_reported "${QUEUE}" "${RESULTS}" "${LOG}" 139
+
+assert_equals "a second unreadable run keeps its own evidence AND the first run's" \
+  "2" "$(ls "${RESULTS}".*.corrupt 2>/dev/null | wc -l | tr -d ' ')"
+assert_contains "the first run's bytes are still there, unharmed" \
+  "$(cat "${RESULTS}".*.corrupt 2>/dev/null)" '{"version":1,"results":[{"sourceId":"kauf'
+assert_contains "and the second run's bytes are there too" \
+  "$(cat "${RESULTS}".*.corrupt 2>/dev/null)" 'SECOND RUN, DIFFERENT GARBAGE'
+
+# The sweep that owns these files (HandoffCleanup, #821) matches on a `.corrupt` suffix, so a stamped name
+# is pruned on exactly the same 14-day rule and cannot pile up forever. If this ever stops being true, the
+# stamped copies become immortal.
+for f in "${RESULTS}".*.corrupt; do
+  assert_equals "a stamped copy still ends in .corrupt, so the 14-day sweep still owns it" \
+    "corrupt" "${f##*.}"
+done
+rm -f "${RESULTS}".*.corrupt
 
 # --- It must never fail the run it is guarding --------------------------------------------------------
 #
@@ -193,7 +220,19 @@ else
   echo "ok - an unparsable results file is moved aside, so the app's empty-run warning fires instead of silence"
 fi
 assert_contains "and its bytes are kept as evidence of what the run actually did" \
-  "$(cat "${PREP_RESULTS}.corrupt" 2>/dev/null || echo MISSING)" '"naturalKey":"aurora|2026-03-10|carn'
+  "$(cat "${PREP_RESULTS}".*.corrupt 2>/dev/null || echo MISSING)" '"naturalKey":"aurora|2026-03-10|carn'
+
+# #911: the same on this path. Two prep runs that both came back garbled must leave two files, not one.
+printf '%s' '{"version":6,"results":[{"naturalKey":"A SECOND, DIFFERENT FAILURE' > "${PREP_RESULTS}"
+quarantine_unreadable_results "${PREP_RESULTS}"
+
+assert_equals "a second unreadable prep run does not overwrite the first one's evidence" \
+  "2" "$(ls "${PREP_RESULTS}".*.corrupt 2>/dev/null | wc -l | tr -d ' ')"
+assert_contains "the first prep run's bytes survive" \
+  "$(cat "${PREP_RESULTS}".*.corrupt 2>/dev/null)" '"naturalKey":"aurora|2026-03-10|carn'
+assert_contains "and so do the second's" \
+  "$(cat "${PREP_RESULTS}".*.corrupt 2>/dev/null)" 'A SECOND, DIFFERENT FAILURE'
+rm -f "${PREP_RESULTS}".*.corrupt
 
 # A GOOD results file must never be touched. This runs on every run, including every successful one, so
 # a false positive here would throw away Dan's drafts.
