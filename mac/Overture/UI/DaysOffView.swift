@@ -34,6 +34,9 @@ struct DaysOffView: View {
     @State private var newEnd = Date()
     @State private var newNote = ""
     @State private var addMessage: String?
+    // #928: the add form's state as it was when Dan opened it, so Done can tell a real edit (a moved picker
+    // or a typed note) from a form he only opened and left alone, and nag only for the former.
+    @State private var addBaseline: DayOffEditing.AddDraft?
     // #901 walk fix: Dan opened the add form, changed the dates, and clicked Done, expecting that to
     // block them; it discarded them silently. Now Done, while the form is open, asks first.
     @State private var confirmUnsaved = false
@@ -70,10 +73,22 @@ struct DaysOffView: View {
         }
     }
 
+    // The add form's editable state right now, in the same ISO-day form the helper compares against.
+    private var currentDraft: DayOffEditing.AddDraft {
+        DayOffEditing.AddDraft(startDay: EasternDate.dayString(from: newStart),
+                               endDay: EasternDate.dayString(from: newEnd),
+                               note: newNote)
+    }
+
     // Done, but not at the cost of the range he just typed: the decision lives in the tested helper, so
-    // it cannot quietly regress to a bare dismiss().
+    // it cannot quietly regress to a bare dismiss(). #928: it also does not nag when the open form was
+    // never actually edited.
     private func done() {
-        if DayOffEditing.closeNeedsConfirmation(addFormOpen: showAdd) { confirmUnsaved = true } else { dismiss() }
+        if DayOffEditing.closeNeedsConfirmation(addFormOpen: showAdd, draft: currentDraft, baseline: addBaseline) {
+            confirmUnsaved = true
+        } else {
+            dismiss()
+        }
     }
 
     private var header: some View {
@@ -84,7 +99,10 @@ struct DaysOffView: View {
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
-            Button(DayOffEditing.addButtonTitle(isOpen: showAdd)) { showAdd.toggle(); addMessage = nil }
+            Button(DayOffEditing.addButtonTitle(isOpen: showAdd)) {
+                if !showAdd { addBaseline = currentDraft }   // #928: snapshot the form as it opens
+                showAdd.toggle(); addMessage = nil
+            }
                 .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
             Button("Done") { done() }.keyboardShortcut(.defaultAction)
         }
