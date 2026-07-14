@@ -71,11 +71,9 @@ struct DraftReviewView: View {
     @State private var showOverrideConfirm = false
     @State private var showLintOverrideConfirm = false
 
-    // Names the actual finding rather than saying "there's a problem": the whole point is that Dan
-    // can tell at a glance whether it's a bad link or a leftover placeholder, and fix it in one edit.
+    // #885: the sentence lives in DraftCheck, which is the type that decides what blocks a send.
     private var draftLintBlockMessage: String {
-        let what = item.draftLintBlockers.map(\.label).joined(separator: " and ")
-        return "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
+        DraftCheck.blockMessage(blockers: item.draftLintBlockers)
     }
     // #733: guard against repeatedly re-prepping the same prospect.
     @State private var showReprepCooldownConfirm = false
@@ -168,14 +166,14 @@ struct DraftReviewView: View {
 
     @ViewBuilder private var venueMatchWarnings: some View {
         recipientWarning(item.contacts.filter { $0.looksLikeVenue && !$0.looksLikeVenueDismissed },
-                        message: { "\($0.displayName) may be the venue itself, not the act; blocked from sending." },
+                        message: { DraftReviewNotes.venueSuspect(name: $0.displayName) },
                         dismissLabel: "Not the venue", onDismiss: onDismissVenueMatch)
     }
 
     // #722: same shape as venueMatchWarnings above, for the runbook's separate press/media rule.
     @ViewBuilder private var pressContactWarnings: some View {
         recipientWarning(item.contacts.filter { $0.looksLikePressContact && !$0.looksLikePressContactDismissed },
-                        message: { "\($0.displayName) may be a press/media contact, not the act; blocked from sending." },
+                        message: { DraftReviewNotes.pressSuspect(name: $0.displayName) },
                         dismissLabel: "Not press/media", onDismiss: onDismissPressContactMatch)
     }
 
@@ -183,7 +181,7 @@ struct DraftReviewView: View {
     // pitched on another still-open prospect for what looks like the same real-world performance.
     @ViewBuilder private var duplicateContactWarnings: some View {
         recipientWarning(item.contacts.filter { $0.looksLikeDuplicateContact && !$0.looksLikeDuplicateContactDismissed },
-                        message: { "\($0.displayName) may already be pitched for a nearby show; blocked from sending." },
+                        message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName) },
                         dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
     }
 
@@ -303,10 +301,8 @@ struct DraftReviewView: View {
                 // The held contact is usually the one worth emailing (the act's own address, held by a
                 // heuristic Dan need only glance at), so both facts are said at once: it went, AND
                 // somebody is still waiting on him.
-                if item.blockedContactCount > 0 {
-                    let n = item.blockedContactCount
-                    Label("\(n) contact\(n == 1 ? "" : "s") held for a check",
-                          systemImage: "exclamationmark.triangle")
+                if let held = DraftReviewNotes.heldContacts(item.blockedContactCount) {
+                    Label(held, systemImage: "exclamationmark.triangle")
                         .font(OVType.meta).foregroundStyle(OVColor.gold)
                         .help("A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email.")
                 }
@@ -339,28 +335,30 @@ struct DraftReviewView: View {
                     // fixed. #718: he CAN override the block itself via a deliberate two-step confirm
                     // (a native alert, not a single tap), which then tones the message down rather
                     // than hiding it, so there's still a visible trail the send happened despite it.
-                    if item.draftNeedsSalutationReview && !item.salutationReviewOverridden {
-                        Text("This old draft may still have a name in the greeting Overture couldn't safely remove; edit it before sending.")
+                    // #885: the wording is DraftReviewNotes'; the view only decides whether the
+                    // Override button belongs beside it.
+                    if let note = DraftReviewNotes.salutation(needsReview: item.draftNeedsSalutationReview,
+                                                              overridden: item.salutationReviewOverridden) {
+                        Text(note)
                             .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                        Button("Override") { showOverrideConfirm = true }
-                            .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                    } else if item.draftNeedsSalutationReview && item.salutationReviewOverridden {
-                        Text("Sending despite the greeting warning you confirmed.")
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                        if !item.salutationReviewOverridden {
+                            Button("Override") { showOverrideConfirm = true }
+                                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                        }
                     }
                     // #789: same shape as the salutation block above. A fact about the words, not a
                     // guess Dan can dismiss as wrong: it clears itself the moment the text is fixed.
                     // He can still override it, but only through a deliberate two-step confirm, and
                     // the message afterwards tones down rather than disappearing, so there is a
                     // visible trail that the send happened despite it.
-                    if item.draftLintBlocked {
-                        Text(draftLintBlockMessage)
+                    if let note = DraftReviewNotes.lint(blocked: item.draftLintBlocked,
+                                                        blockers: item.draftLintBlockers) {
+                        Text(note)
                             .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                        Button("Override") { showLintOverrideConfirm = true }
-                            .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                    } else if !item.draftLintBlockers.isEmpty {
-                        Text("Sending despite the draft warning you confirmed.")
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                        if item.draftLintBlocked {
+                            Button("Override") { showLintOverrideConfirm = true }
+                                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                        }
                     }
                     if let line = SendFailureLine.text(for: item.sendError) {
                         Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
@@ -411,11 +409,7 @@ struct DraftReviewView: View {
             }
             Button("Cancel", role: .cancel) { pendingReprepMode = nil }
         } message: {
-            if let servedAt = item.reprepLastServedAt {
-                Text("This was re-prepped \(PrepStatus.relative(from: servedAt, to: Date())). Redo it anyway?")
-            } else {
-                Text("Redo it anyway?")
-            }
+            Text(ReprepRequest.confirmMessage(lastServedAt: item.reprepLastServedAt, now: Date()))
         }
     }
 
@@ -667,14 +661,7 @@ struct DraftReviewView: View {
         .padding(.leading, 20)
     }
 
-    private func provenanceLabel(_ p: RecipientProvenance) -> String {
-        switch p {
-        case .act: return "act"
-        case .performer: return "performer"
-        case .presenter: return "presenter"
-        case .manual: return "added"
-        }
-    }
+    private func provenanceLabel(_ p: RecipientProvenance) -> String { p.label }   // #885
 
     private func contactStatusColor(_ c: RecipientSnapshot) -> Color {
         if c.resolution == .booked { return OVColor.forest }
@@ -781,11 +768,13 @@ private struct ConfidencePip: View {
     // the badge becomes a clickable link to the page the contact was verified on.
     let sourceURL: URL?
     var body: some View {
-        let (label, color): (String, Color) = {
+        // #885: the WORDS come from the enum (ContactConfidence.label); only the colour is the view's.
+        let label = confidence.label
+        let color: Color = {
             switch confidence {
-            case .high: return ("high confidence", OVColor.forest)
-            case .medium: return ("medium confidence", OVColor.gold)
-            case .low: return ("low confidence", OVColor.rust)
+            case .high: return OVColor.forest
+            case .medium: return OVColor.gold
+            case .low: return OVColor.rust
             }
         }()
         let pip = Text(label)

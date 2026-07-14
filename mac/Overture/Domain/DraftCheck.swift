@@ -55,6 +55,18 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
 }
 
 enum DraftCheck {
+
+    // #885: the sentence that tells Dan a draft is HELD. It names the actual findings rather than saying
+    // "there is a problem", because the whole point is that he can tell at a glance whether it is a
+    // foreign link or a leftover placeholder and fix it in one edit. Computed in DraftReviewView's body
+    // before, then interpolated into a SECOND sentence in the override confirm, so neither was testable.
+    //
+    // The empty fallback is not defensive padding: without it a block with nothing to name would read
+    // "This draft won't send: ." and tell him nothing at all about what to fix.
+    static func blockMessage(blockers: [DraftIssue]) -> String {
+        let what = blockers.map(\.label).joined(separator: " and ")
+        return "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
+    }
     private static let performative = ["love to", "thrilled", "so excited", "excited", "can't wait", "delighted", "honored", "thrilled to"]
     private static let booking = ["lock in", "plan to cover", "i'll cover", "i'll be covering", "i'll plan to", "i will cover", "i'll be there to photograph"]
     private static let coldHedges = ["if you haven't arranged", "if you haven't booked", "if you haven't found", "if you haven't hired", "in case you still need", "if you still need a photographer"]

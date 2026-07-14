@@ -23,6 +23,15 @@ enum ContactMethod: String, CaseIterable, Sendable {
 
 enum ContactConfidence: String, CaseIterable, Sendable {
     case high, medium, low
+
+    // #885: the pip's wording, which was a switch inside DraftReviewView's body.
+    var label: String {
+        switch self {
+        case .high: return "high confidence"
+        case .medium: return "medium confidence"
+        case .low: return "low confidence"
+        }
+    }
 }
 
 // What ultimately happened after Dan reached out. Defaults to `.noResponse` (like
