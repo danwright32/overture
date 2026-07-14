@@ -22,5 +22,8 @@ struct ToolbarHoverLabel: View {
             Image(systemName: systemImage)
             Text(title).fixedSize()
         }
+        // #901 (Dan's walk): the always-on labels packed too tightly against each other. A little
+        // breathing room on each side separates one icon-and-name pair from the next.
+        .padding(.horizontal, OVSpacing.xs)
     }
 }
