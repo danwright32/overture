@@ -33,9 +33,10 @@ private func item(
 @Suite("Date group unavailability (#901)")
 struct DateGroupUnavailableTests {
     private func conflicted(_ key: String) -> QueueItem {
-        var q = item(key: key)
+        var q = item(key: key)   // performanceDate defaults to 2026-07-01
         q.hasUnclearedConflict = true
-        q.conflictNote = "You blocked Jul 22 (Vacation)."
+        q.conflictBlockedDate = "2026-07-01"   // blocked on its own date, so the date header is honest
+        q.conflictNote = "You blocked Jul 1 (Vacation)."
         return q
     }
 
@@ -53,6 +54,29 @@ struct DateGroupUnavailableTests {
 
     @Test func anEmptyGroupIsNot() {
         #expect(QueueModel.groupIsUnavailable([]) == false)
+    }
+
+    // #929: a multi-night run can be flagged for a LATER night while its opening night, the date it groups
+    // under, is free. The date-group header is a claim about THAT date, so it must not read "Unavailable"
+    // when the blocked night is a different day. The row still carries its own flag and honest note; only
+    // the date-level claim has to stay true.
+    @Test func aRunBlockedOnlyOnALaterNightDoesNotMarkTheOpeningDate() {
+        var q = item(performanceDate: "2026-07-01", key: "b")
+        q.runEndDate = "2026-07-05"
+        q.hasUnclearedConflict = true
+        q.conflictBlockedDate = "2026-07-03"                 // blocked mid-run; opening night is free
+        q.conflictNote = "You blocked Jul 3 (Vacation)."
+        #expect(QueueModel.groupIsUnavailable([item(key: "a"), q]) == false)
+    }
+
+    // The common case still marks the header: the block falls on the show's own opening night, which is
+    // exactly the date the group is headed by.
+    @Test func aRunBlockedOnItsOpeningNightMarksThatDate() {
+        var q = item(performanceDate: "2026-07-01", key: "b")
+        q.hasUnclearedConflict = true
+        q.conflictBlockedDate = "2026-07-01"
+        q.conflictNote = "You blocked Jul 1 (Vacation)."
+        #expect(QueueModel.groupIsUnavailable([item(key: "a"), q]))
     }
 }
 
