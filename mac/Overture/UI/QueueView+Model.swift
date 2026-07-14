@@ -504,15 +504,12 @@ enum QueueModel {
             .sorted { $0.days != $1.days ? $0.days > $1.days : $0.index < $1.index }
             .map(\.item)
 
-        // #901, Dan's call (2026-07-14): a show on a day he cannot work sinks BELOW every show he can,
-        // and the fit score is left alone. The score answers "how good a show is this", which is true
-        // whether or not he happens to be free, and baking his calendar into it would mean clearing a
-        // conflict had to re-score the show to undo itself. So the demotion lives in the ORDER, which is
-        // the thing that was actually wrong: it was at the top of his queue, and he cannot shoot it.
-        //
-        // It is never hidden. Dropping it silently is exactly the behavior this replaced.
-        let ordered = bookable + demoted
-        return ordered.filter { !$0.hasUnclearedConflict } + ordered.filter(\.hasUnclearedConflict)
+        // #901, Dan's call REVISED after he walked the build (2026-07-14): a conflicted show keeps its
+        // normal date position and is NOT reordered. The first build sank it below every shootable show;
+        // in practice a single-show date sliding to the very bottom read as the show being deleted, which
+        // is the exact disappearance this feature exists to prevent. The highly visible "Unavailable"
+        // badge on the row does the telling now, not the position. The fit score is still untouched.
+        return bookable + demoted
     }
 
     struct DateGroup: Identifiable, Equatable {
@@ -607,6 +604,13 @@ enum QueueModel {
             ? "\(cal.component(.day, from: e))"
             : "\(shortMonth(cal.component(.month, from: e))) \(cal.component(.day, from: e))"
         return "\(startLabel) to \(endLabel)"
+    }
+
+    // #901 (Dan's walk, 2026-07-14): a date-group header is marked "Unavailable" when any show under it
+    // is on a day he cannot work. A day off or a booked shoot blocks the whole day, so this reads as
+    // "this date is blocked" at a glance, without opening each row.
+    static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
+        items.contains(where: \.hasUnclearedConflict)
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {

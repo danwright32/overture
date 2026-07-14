@@ -60,9 +60,12 @@ struct DaysOffAttentionTests {
 
     // The sentence inside the sheet, where the promise is actually made. It has to explain WHY the list is
     // empty, or an empty list reads as "you have no shoots booked", which is a different and false claim.
-    @Test func theSheetExplainsWhyThereAreNoBookedShoots() {
+    //
+    // Dan uses Downbeat for everything (2026-07-14), so it must NOT hedge about shoots booked outside
+    // Downbeat: to him that is noise about a case that never happens. It says only what is true and useful.
+    @Test func theSheetExplainsWhyTheListIsEmptyWithoutHedgingAboutOutsideDownbeat() {
         let text = DaysOffAttention.noBookedShootsExplanation
         #expect(text.contains("Downbeat"))
-        #expect(text.contains("booked outside"))     // the shoots that will NEVER reach this list
+        #expect(!text.lowercased().contains("outside"))   // no "booked outside it" hedge
     }
 }

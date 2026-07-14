@@ -30,6 +30,32 @@ private func item(
     return q
 }
 
+@Suite("Date group unavailability (#901)")
+struct DateGroupUnavailableTests {
+    private func conflicted(_ key: String) -> QueueItem {
+        var q = item(key: key)
+        q.hasUnclearedConflict = true
+        q.conflictNote = "You blocked Jul 22 (Vacation)."
+        return q
+    }
+
+    // The date-group HEADER gets an "Unavailable" marker when any show under it is on a day Dan can't
+    // work (Dan's walk feedback, 2026-07-14: "up by the date"). A day off or a booked shoot blocks the
+    // whole day, so a marked header reads as "this date is blocked", which is what he wants to see at a
+    // glance without opening every row.
+    @Test func aGroupWithAConflictedShowIsUnavailable() {
+        #expect(QueueModel.groupIsUnavailable([item(key: "a"), conflicted("b")]))
+    }
+
+    @Test func aGroupWithNoConflictedShowIsNot() {
+        #expect(QueueModel.groupIsUnavailable([item(key: "a"), item(key: "b")]) == false)
+    }
+
+    @Test func anEmptyGroupIsNot() {
+        #expect(QueueModel.groupIsUnavailable([]) == false)
+    }
+}
+
 @Suite("Queue item lifecycle")
 struct QueueItemLifecycleTests {
     // #200: a contacted (sent) prospect stays "kept" so it remains visible in the queue,

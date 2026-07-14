@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **585 sentences**, from 180 source files.
+Every sentence Overture can say to Dan: **588 sentences**, from 180 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -26,13 +26,16 @@ What is not, and why:
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 
-## The same sentence, said in more than one place (36)
+## The same sentence, said in more than one place (37)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
 - "## Observed tendencies"
   - `Domain/VoiceGuidanceGuard.swift`
   - `Domain/VoiceNotesProtector.swift`
+- "Block these days"
+  - `UI/DaysOffView.swift`
+  - `UI/DaysOffView.swift`
 - "Carnegie Hall"
   - `Domain/VenueDisplay.swift`
   - `Domain/WatchedSourceBackfill.swift`
@@ -386,6 +389,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "Did they mean this show, or the whole organisation?"
     `UI/DraftReviewView.swift`
+"Discard them"
+    `UI/DaysOffView.swift`
 "Do not contact"
     `UI/ProspectRowView.swift`
 "Don't learn from this email"
@@ -510,6 +515,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Just this show"
     `UI/DraftReviewView.swift`
+"Keep editing"
+    `UI/DaysOffView.swift`
 "Keep watching this calendar"
     `UI/AddLeadSheet.swift`
 "Keeps Overture resident in the menu bar so the syncs run unattended."
@@ -716,7 +723,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     `Domain/DaysOffAttention.swift`
-"Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here. Downbeat only records shoots booked through it, and a shoot booked outside it never appears at all."
+"Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
     `Domain/DaysOffAttention.swift`
 "Overture lead: "
     `Domain/OmniFocusSync.swift`
@@ -1135,6 +1142,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You declined before (usually a date conflict)"
     `UI/QueueView+Model.swift`
+"You entered days off but haven't blocked them yet."
+    `UI/DaysOffView.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."

@@ -183,18 +183,24 @@ struct SourceAttentionWiringTests {
     }
 }
 
-// The label itself: the count has to be visible without the pointer on it, and the quiet state must stay
-// quiet (an always-labelled toolbar is the #337 pill this component exists to avoid).
-@Suite("A toolbar label can keep its title up (#805)")
+// The label itself. #805 kept the count visible without the pointer on it by force-showing the title for a
+// reporting button (isHovering || showsTitle). #901 went further: EVERY label is always up now, because
+// the hover-to-expand width animation made toolbar buttons overlap (see
+// ToolbarConsolidationGuardTests.theToolbarLabelDoesNotHideBehindHover). So the "keep the count up" intent
+// is preserved by construction, and the guard for it is the always-shown one, not this hover check.
+@Suite("A toolbar label always shows its title (#805/#901)")
 struct ToolbarHoverLabelTests {
     private var label: String { SourceGuardHelper.source("Overture/UI/ToolbarHoverLabel.swift") }
 
-    @Test func theTitleShowsOnHoverOrWhenItIsReportingSomething() {
-        #expect(label.contains("isHovering || showsTitle"))
+    // The count, and every label, is up without the pointer on it: Text(title) renders unconditionally.
+    @Test func theTitleIsAlwaysShown() {
+        #expect(label.contains("Text(title)"))
+        #expect(!label.contains("if titleIsVisible"))   // no longer gated on hover/state
     }
 
-    // Default off: every other button in the toolbar keeps the icon-only behaviour it had.
-    @Test func aButtonThatIsMerelyNamingItselfStaysIconOnly() {
+    // The parameter stays for source compatibility across the nine call sites, even though it no longer
+    // changes anything.
+    @Test func showsTitleParameterIsRetained() {
         #expect(label.contains("var showsTitle: Bool = false"))
     }
 }

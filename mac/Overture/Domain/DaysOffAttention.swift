@@ -65,8 +65,12 @@ enum DaysOffAttention {
 
     // The sentence in the sheet itself, where the promise is made. An empty list with no explanation reads
     // as "you have no shoots booked", which is a different claim, and a false one.
+    //
+    // Dan uses Downbeat for everything (2026-07-14), so this does NOT hedge about shoots booked outside
+    // Downbeat: to him that is a case that never happens, and warning about it is noise that buries the
+    // one thing he needs to know, which is that Downbeat has handed over nothing upcoming.
     static let noBookedShootsExplanation =
-        "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here. Downbeat only records shoots booked through it, and a shoot booked outside it never appears at all."
+        "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
 
     static let snoozeButtonTitle = "Hide this for a week"
 }

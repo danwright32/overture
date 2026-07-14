@@ -63,6 +63,9 @@ enum OVColor {
     )
 
     static let onForest = Color.white.opacity(0.96)
+    // #901: text on a filled rust badge. Rust is a dark brick in light mode and a lighter terracotta in
+    // dark; white reads on both, where `canvas` would go near-black on the dark-mode fill.
+    static let onRust = Color.white.opacity(0.96)
 
     private static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in

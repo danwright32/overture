@@ -101,6 +101,13 @@ struct DayOffEditingTests {
 
     // MARK: - What Dan reads
 
+    // #901 walk fix: Dan changed the dates, hit Done expecting them blocked, and lost them silently.
+    // Closing while the add form is still open must ask first; closing with it shut just closes.
+    @Test func closingWithTheAddFormOpenNeedsConfirmation() {
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true) == true)
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: false) == false)
+    }
+
     @Test func eachRefusalSaysWhatToDoAboutIt() {
         #expect(DayOffEditing.message(for: .endsBeforeItStarts) == "The last day is before the first day.")
         #expect(DayOffEditing.message(for: .tooLong) == "That's longer than a year. Block a shorter stretch.")
