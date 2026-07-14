@@ -84,6 +84,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // is neither drafted nor sendable until he clears it.
     var hasUnclearedConflict: Bool = false
     var conflictNote: String? = nil
+    // #929: the specific night that is blocked (yyyy-MM-dd), decoded from the conflict key. A run can be
+    // flagged for a LATER night while its opening night (the date this show groups under) is free, so the
+    // date-group header must compare this against the group's date rather than assume the two are the same.
+    var conflictBlockedDate: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
@@ -606,11 +610,17 @@ enum QueueModel {
         return "\(startLabel) to \(endLabel)"
     }
 
-    // #901 (Dan's walk, 2026-07-14): a date-group header is marked "Unavailable" when any show under it
-    // is on a day he cannot work. A day off or a booked shoot blocks the whole day, so this reads as
-    // "this date is blocked" at a glance, without opening each row.
+    // #901 (Dan's walk, 2026-07-14): a date-group header is marked "Unavailable" when a show under it is
+    // on a day he cannot work. A day off or a booked shoot blocks the whole day, so this reads as "this
+    // date is blocked" at a glance, without opening each row.
+    //
+    // #929: the header is a claim about THIS date, so it fires only when the blocked night IS this date.
+    // A multi-night run can be flagged for a LATER night while its opening night (the date it groups under)
+    // is free; that run still shows its own row flag, but painting the opening-night header "Unavailable"
+    // would state something untrue. Items in a group share their performanceDate, so comparing each show's
+    // blocked night against its own performanceDate is the same as comparing against the group's date.
     static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
-        items.contains(where: \.hasUnclearedConflict)
+        items.contains { $0.hasUnclearedConflict && $0.conflictBlockedDate == $0.performanceDate }
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {
@@ -684,6 +694,7 @@ extension QueueItem {
             outcomeSourceRaw: p.outcomeSourceRaw,
             hasUnclearedConflict: p.hasUnclearedConflict,
             conflictNote: p.conflictNote,
+            conflictBlockedDate: p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
             runEndDate: p.runEndDate,
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed,
