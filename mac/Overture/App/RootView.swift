@@ -64,6 +64,7 @@ struct RootView: View {
     @State private var showVoiceGuidance = false
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
+    @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
     // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
     // reading calendars for minutes with nothing on screen at all, and nothing to say if that run hung.
@@ -401,6 +402,12 @@ struct RootView: View {
                         Divider()
                         Button("Sync now") { syncOmniFocus(force: true) }
                             .disabled(omniFocusSyncStartedAt != nil)
+                        Divider()
+                        // #931: the reminder-cadence and look-ahead settings, orphaned when the
+                        // Follow-ups reminder button was removed (#901/#930), live here now. This menu is
+                        // already the follow-up-automation surface, and it is NOT the Follow-ups header
+                        // Dan asked to keep clear.
+                        Button("Reminder timing…") { showReminderSettings = true }
                     } label: {
                         // #469: the menu itself stays clickable while syncing (unlike Scout/Prep and
                         // Gmail connect, this doesn't block anything Dan would want to check), but the
@@ -497,6 +504,7 @@ struct RootView: View {
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             .sheet(isPresented: $showSources) { SourcesView() }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
+            .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)

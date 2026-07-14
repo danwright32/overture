@@ -220,8 +220,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Added, but no scout has reached them yet."
     `Domain/SourceGrade.swift`
-"Adds a follow-up task to your Outreach project (deferred to 11am, due 6pm on the day it's due) so a near-event lead reaches you when you're away from Overture. Only fires while Overture is open, so it looks ahead by:"
-    `UI/ReminderSettingsView.swift`
 "Agency-routed showcase rental, the dead zone that rarely converts."
     `Domain/EventClassifier.swift`
 "Agent logged an error: open agent logs"
@@ -681,6 +679,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueuePriorityBreakdown.swift`
 "Offers a discount or free/complimentary work"
     `Domain/DraftCheck.swift`
+"OmniFocus is syncing due follow-ups. It only fires while Overture is open, so it looks ahead by:"
+    `UI/ReminderSettingsView.swift`
 "OmniFocus needs Automation permission"
     `Domain/OmniFocusSyncStatus.swift`
 "OmniFocus permission granted."
@@ -824,6 +824,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Reminder timing"
     `UI/ReminderSettingsView.swift`
+"Reminder timing…"
+    `App/RootView.swift`
 "Remove this contact"
     `UI/DraftReviewView.swift`
 "Removed \(who) from \(org)."
@@ -938,8 +940,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
     `App/ActionFeedback.swift`
-"Sync due reminders to OmniFocus"
-    `UI/ReminderSettingsView.swift`
 "Sync now"
     `App/RootView.swift`
 "Thalia Spanish Theatre"

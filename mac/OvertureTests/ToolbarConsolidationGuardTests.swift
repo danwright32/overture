@@ -100,6 +100,28 @@ struct ToolbarConsolidationGuardTests {
         #expect(daysOff.lowerBound < whatConverts.lowerBound)
     }
 
+    // #931: the reminder-timing settings, orphaned when the Follow-ups reminder button was removed
+    // (#901/#930), are rehomed in the OmniFocus toolbar menu, never back on the Follow-ups header (which
+    // FollowUpsNoReminderButtonGuardTests keeps clear). This pins that RootView opens ReminderSettingsView
+    // again from a "Reminder timing" entry, so the rehome cannot silently rot back into dead code with no
+    // caller.
+    @Test func reminderSettingsAreRehomedInRootView() {
+        #expect(!rootView.isEmpty)
+        #expect(rootView.contains("ReminderSettingsView"))       // presented again
+        #expect(rootView.contains("Reminder timing"))            // the menu entry that opens it
+    }
+
+    // #931: on/off for OmniFocus sync lives once, in the toolbar menu that opens the reminder sheet, so
+    // the sheet must NOT carry its own duplicate enable toggle (two controls doing one job). The
+    // look-ahead window has no other home, so it stays. Re-adding the toggle turns this red.
+    @Test func theReminderSheetDoesNotDuplicateTheOmniFocusToggle() {
+        let sheet = source("Overture/UI/ReminderSettingsView.swift")
+        #expect(!sheet.isEmpty)
+        #expect(!sheet.contains("Sync due reminders to OmniFocus"))   // the old duplicate toggle's label
+        #expect(!sheet.contains("Toggle(isOn: $omniFocusEnabled)"))   // and its control
+        #expect(sheet.contains("Look-ahead window"))                  // the setting that has no other home stays
+    }
+
     // #901 (Dan's walk, 2026-07-14): the toolbar is icon-only, names on hover. Animating a button's width
     // to reveal its label made neighbouring buttons overlap and the icon spill out of its container
     // mid-animation, because macOS doesn't reflow the toolbar in step. This guard pins that the hover
