@@ -23,31 +23,34 @@ private func verdict(relationship: PriorRelationship = .none, suppressed: Bool =
 
 @Suite("Prospect assembler")
 struct ProspectAssemblerTests {
-    @Test func blockedDateIsSkipped() {
+    // #901: the assembler no longer knows about blocked dates at all, and it must not: it decides per
+    // EVENT, before the nights of a run have been grouped, so it cannot see a run's later nights. The
+    // conflict is found at the run (ScoutService.apply) and FLAGS the show rather than dropping it. This
+    // pins that a date, on its own, can no longer make a show vanish here.
+    @Test func aDateAloneNeverSkipsAShow() {
         let d = ProspectAssembler.decide(
-            event: event(date: "2026-07-01"), classification: classification(),
-            verdict: verdict(), blocked: ["2026-07-01"])
-        #expect(d == .skip(.blocked))
+            event: event(date: "2026-07-01"), classification: classification(), verdict: verdict())
+        guard case .prospect = d else { #expect(Bool(false), "a date must not drop a show"); return }
     }
 
     @Test func dncSuppressedIsSkipped() {
         let d = ProspectAssembler.decide(
             event: event(), classification: classification(),
-            verdict: verdict(suppressed: true), blocked: [])
+            verdict: verdict(suppressed: true))
         #expect(d == .skip(.suppressed))
     }
 
     @Test func unreachableIsSkipped() {
         let d = ProspectAssembler.decide(
             event: event(), classification: classification(reachable: false),
-            verdict: verdict(), blocked: [])
+            verdict: verdict())
         #expect(d == .skip(.unreachable))
     }
 
     @Test func strongSelfProducedChoirBecomesHighFitProspect() {
         let d = ProspectAssembler.decide(
             event: event(), classification: classification(),
-            verdict: verdict(), blocked: [])
+            verdict: verdict())
         guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
         // self(2) + strong(2) + uncovered(2) + music(1, #350 merged Choral's score) = 7
         #expect(p.fitScore == 7)
@@ -60,8 +63,7 @@ struct ProspectAssemblerTests {
         let d = ProspectAssembler.decide(
             event: event(), classification: classification(),
             verdict: MatchVerdict(relationship: .booked, suppressed: false, downbeatClientId: "c1",
-                                  matchedClientName: "DCINY", possible: nil),
-            blocked: [])
+                                  matchedClientName: "DCINY", possible: nil))
         guard case let .prospect(p) = d else { #expect(Bool(false)); return }
         #expect(p.priorRelationship == "booked")
         #expect(p.matchedClientName == "DCINY")

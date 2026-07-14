@@ -40,7 +40,7 @@ struct SourceNoteIngestTests {
             "The run exited with status 1 and produced no results for this source. "
             + "It has NOT been read, and the next scout will try it again. "
             + "Last lines of the run log: + claude -p | Error: connection reset"),
-            clients: [], history: [], blocked: [], now: Date(), into: ctx)
+            clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
 
         #expect(source.runNote == "The run exited with status 1 and produced no results for this source. "
                 + "It has NOT been read, and the next scout will try it again.")
@@ -55,7 +55,7 @@ struct SourceNoteIngestTests {
 
         _ = ScoutExtractIngest.ingest(
             results(.upcomingListings, note: "Two shows list no venue, so they were left out."),
-            clients: [], history: [], blocked: [], now: Date(), into: ctx)
+            clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
 
         #expect(source.runNote == "Two shows list no venue, so they were left out.")
     }
@@ -67,12 +67,12 @@ struct SourceNoteIngestTests {
         let ctx = context()
         let source = watched(ctx)
 
-        _ = ScoutExtractIngest.ingest(results(.notRead, note: "The run never reached this page."), clients: [], history: [], blocked: [],
+        _ = ScoutExtractIngest.ingest(results(.notRead, note: "The run never reached this page."), clients: [], history: [], blocked: .empty,
                                       now: Date(), into: ctx)
         #expect(source.runNote != nil)
 
         _ = ScoutExtractIngest.ingest(results(.upcomingListings, note: nil),
-                                      clients: [], history: [], blocked: [], now: Date(), into: ctx)
+                                      clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
         #expect(source.runNote == nil)
     }
 }

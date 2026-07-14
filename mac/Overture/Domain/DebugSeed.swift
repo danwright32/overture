@@ -10,16 +10,19 @@ import SwiftData
 #if DEBUG
 enum DebugSeed {
     // The handoff files the app INGESTS (per docs/contracts.md): scout results, the Downbeat export,
-    // booking/warm history, drafted emails, and reply intents, plus the optional blocked-dates
-    // override. Deliberately excludes the files the app WRITES (prep/classify queues, voice
-    // feedback), copying those from live would clobber dev work product, and Gmail tokens
-    // (out of scope, and sensitive).
+    // booking/warm history, drafted emails, and reply intents. Deliberately excludes the files the app
+    // WRITES (prep/classify queues, voice feedback), copying those from live would clobber dev work
+    // product, and Gmail tokens (out of scope, and sensitive).
+    //
+    // #901 removed `overture-blocked-dates.json` from this list. It was a local override file the scout
+    // read and NOTHING ever wrote (no editor, no settings screen, no writer anywhere in the app), so it
+    // has never existed on Dan's Mac. Days off are rows in the store now (DayOff), which is what makes
+    // them editable at all, and they travel with the store rather than as a file beside it.
     static let inputFileNames = [
         "downbeat-export.json",
         "overture-history.json",
         "overture-prep-results.json",
         "overture-reply-classify-results.json",
-        "overture-blocked-dates.json",
     ]
 
     // Pure: maps each input filename to a (source in live, dest in debug) pair under each base.

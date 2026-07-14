@@ -80,7 +80,7 @@ struct MultiOwnerReconcileTests {
             results: perSource.map { id, events in
                 ScoutExtractResult(sourceId: id, verdict: .upcomingListings, events: events, note: nil)
             })
-        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: [],
+        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 

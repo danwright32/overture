@@ -153,7 +153,7 @@ struct SourceReadabilityPersistenceTests {
             version: 1, generatedAt: "2026-07-13T00:00:00Z",
             results: [ScoutExtractResult(sourceId: "kaufman", verdict: .upcomingListings,
                                          events: events, note: nil)])
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: [],
+        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures,
                                   now: Date(timeIntervalSince1970: 1_800_000_000), into: ctx)
     }

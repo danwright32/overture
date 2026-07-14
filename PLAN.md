@@ -149,7 +149,7 @@ This follows from the decisions above and was open to revision during the build;
 - **sends:** draft id, sent-at, gmail thread id, throttle batch.
 - **events (replies and follow-ups):** prospect id, type, scheduled-at, sent-at, reply-detected-at.
 - **history (imported):** the 156-row log, used for dedup and prior-relationship flagging.
-- **blocked_dates:** dates Dan dismissed as "day does not work."
+- **days_off (#901):** stretches of days Dan blocks himself (a vacation), entered as a range. Unioned with the booked shoots Downbeat exports to make the blocked calendar. A show landing on one of those days is NOT dropped: it is surfaced, flagged with the reason, sunk below the shows he can shoot, and neither drafted nor sent until he overrules the clash.
 - **variants and outcomes:** for A/B testing and the later feedback loop.
 
 ---

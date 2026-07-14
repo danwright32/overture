@@ -43,7 +43,7 @@ struct SuppressionReportTests {
         let existing = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         return ScoutService.apply(events: events, clients: [],
                                   history: LocalHistory.forMatching(existing: existing),
-                                  blocked: [], today: ScoutTestClock.beforeAllFixtures,
+                                  blocked: .empty, today: ScoutTestClock.beforeAllFixtures,
                                   sourceIds: [WatchedSource.carnegieId], into: ctx)
     }
 
@@ -85,19 +85,24 @@ struct SuppressionReportTests {
         #expect(outcome.inserted == 1)   // and the ordinary show is imported as normal
     }
 
-    // A show skipped for a BLOCKED DATE is not a refusal, and must never appear in this report. The
-    // whole value of the report is that every line in it means "somebody asked you to stop".
+    // A show on a BLOCKED DATE is not a refusal, and must never appear in this report. The whole value of
+    // the report is that every line in it means "somebody asked you to stop".
+    //
+    // #901 changed what happens to such a show (it is now imported and flagged rather than dropped), and
+    // this stays true through that change: whatever else a date clash does, it never reads as a refusal.
     @Test func aBlockedDateIsNotARefusalAndIsNotReportedAsOne() throws {
         let ctx = try context()
         let existing = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         let outcome = ScoutService.apply(
             events: [event("Vienna Philharmonic")], clients: [],
             history: LocalHistory.forMatching(existing: existing),
-            blocked: ["2099-09-19"], today: ScoutTestClock.beforeAllFixtures,
+            blocked: BlockedCalendar.build(
+                bookings: [], exportedBlockedDates: ["2099-09-19"], daysOff: []),
+            today: ScoutTestClock.beforeAllFixtures,
             sourceIds: [WatchedSource.carnegieId], into: ctx)
 
-        #expect(outcome.skipped == 1)             // it was skipped
-        #expect(outcome.suppressedOrgs.isEmpty)   // but nobody refused him
+        #expect(outcome.inserted == 1)            // it is kept, flagged, for Dan to decide
+        #expect(outcome.suppressedOrgs.isEmpty)   // and nobody refused him
     }
 
     // MARK: - What Dan reads

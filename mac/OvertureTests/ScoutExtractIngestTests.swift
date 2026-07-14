@@ -46,7 +46,7 @@ struct ScoutExtractIngestTests {
     }
 
     private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext) -> ScoutService.Outcome {
-        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: [],
+        ScoutExtractIngest.ingest(r, clients: [], history: [], blocked: .empty,
                                   today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
     }
 

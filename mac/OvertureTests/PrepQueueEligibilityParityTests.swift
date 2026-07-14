@@ -48,14 +48,34 @@ struct PrepQueueEligibilityParityTests {
                reprepDraftRequested: true, reprepContactsRequested: true)
         insert(ctx, key: "dismissed-with-flags", status: .dismissed, hasDraft: true,
                reprepDraftRequested: true, reprepContactsRequested: true)
+
+        // #901: the conflict gate, in all three of its states. Otherwise the predicate and the function
+        // could agree perfectly on every case that predates it and still disagree on every case that
+        // matters now.
+        let conflicted = Prospect(naturalKey: "kept-but-booked", groupName: "g", discipline: "choral",
+                                  venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
+                                  websiteURL: nil, priorRelationship: "none", production: "self",
+                                  profile: "strong", coverage: "likely_uncovered", fitScore: 5,
+                                  tier: "mid", fitReason: "r", matchedClientName: nil,
+                                  possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
+        conflicted.setScoutConflict(BlockedCalendar.Day(date: "2026-07-01", kind: .dayOff,
+                                                        name: "Vacation").key)
+        ctx.insert(conflicted)
+
+        let cleared = Prospect(naturalKey: "kept-but-cleared", groupName: "g", discipline: "choral",
+                               venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
+                               websiteURL: nil, priorRelationship: "none", production: "self",
+                               profile: "strong", coverage: "likely_uncovered", fitScore: 5,
+                               tier: "mid", fitReason: "r", matchedClientName: nil,
+                               possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
+        cleared.setScoutConflict(BlockedCalendar.Day(date: "2026-07-01", kind: .dayOff,
+                                                     name: "Vacation").key)
+        cleared.clearConflict()          // Dan overruled it, so it is ordinary work again
+        ctx.insert(cleared)
         try ctx.save()
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let viaFunction = Set(all.filter {
-            PrepQueueBuilder.needsPrep(status: $0.status, hasDraft: $0.hasDraft,
-                                       reprepDraftRequested: $0.reprepDraftRequested,
-                                       reprepContactsRequested: $0.reprepContactsRequested)
-        }.map(\.naturalKey))
+        let viaFunction = Set(all.filter(PrepQueueBuilder.needsPrepEligible).map(\.naturalKey))
 
         let viaPredicate = Set(try ctx.fetch(
             FetchDescriptor<Prospect>(predicate: PrepQueueBuilder.needsPrepPredicate)
@@ -63,6 +83,7 @@ struct PrepQueueEligibilityParityTests {
 
         #expect(viaPredicate == viaFunction)
         #expect(viaPredicate == Set(["kept-no-draft", "drafted-draft-flag", "drafted-contacts-flag",
-                                     "approved-both-flags"]))
+                                     "approved-both-flags", "kept-but-cleared"]))
+        #expect(!viaPredicate.contains("kept-but-booked"))   // and the conflicted show is in neither
     }
 }

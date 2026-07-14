@@ -141,7 +141,7 @@ struct LeadIntakeTests {
             events: [ExtractedEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
                                     venue: "Merkin Hall", performanceDate: "2026-09-19",
                                     sourceUrl: "https://org.example/a")],
-            clients: [], history: [], blocked: [],
+            clients: [], history: [], blocked: .empty,
             today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.inserted == 1)
@@ -163,7 +163,7 @@ struct LeadIntakeTests {
             events: [ExtractedEvent(title: "Brooklyn Youth Chorus", presenter: "Brooklyn Youth Chorus",
                                     venue: "Merkin Hall", performanceDate: "2026-09-19",
                                     sourceUrl: "https://org.example/a")],
-            clients: [], history: dnc, blocked: [],
+            clients: [], history: dnc, blocked: .empty,
             today: ScoutTestClock.beforeAllFixtures, into: ctx)
 
         #expect(outcome.inserted == 0)

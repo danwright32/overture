@@ -58,7 +58,7 @@ struct LeadIntakeReconcileTests {
             title: "Vienna Philharmonic", presenter: "Vienna Philharmonic",
             venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-09-19",
             sourceUrl: "https://www.carnegiehall.org/Calendar/2026/09/19/Vienna-Philharmonic-0800PM")
-        ScoutService.apply(events: [carnegie], clients: [], history: [], blocked: [],
+        ScoutService.apply(events: [carnegie], clients: [], history: [], blocked: .empty,
                            feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
                            sourceIds: [WatchedSource.carnegieId], into: ctx)
         return (try! ctx.fetch(FetchDescriptor<Prospect>())).first { $0.groupName.contains("Vienna") }!
@@ -112,7 +112,7 @@ struct LeadIntakeReconcileTests {
         for _ in 0..<FeedReconcile.goneThreshold {
             // #888 part B: applySweep, the single-source pairing of upsert + reconcile. `apply` alone is
             // now an upsert and reconciles nothing, which is exactly what runNative uses this for.
-            ScoutService.applySweep(events: [stillListed], clients: [], history: [], blocked: [],
+            ScoutService.applySweep(events: [stillListed], clients: [], history: [], blocked: .empty,
                                     feed: carnegieSweep(), today: ScoutTestClock.beforeAllFixtures,
                                     sourceIds: [WatchedSource.carnegieId], into: ctx)
         }

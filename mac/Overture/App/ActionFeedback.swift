@@ -59,6 +59,19 @@ enum ActionAck {
         excluded ? "Won't learn from \(org)'s email" : "Learning from \(org)'s email again"
     }
 
+    // #901: a stretch of days off, removed. Reversible from the banner, because the row he just deleted is
+    // the one place the range was written down.
+    static func dayOffRemoved(range: String) -> String {
+        "\(range) is no longer blocked"
+    }
+
+    // #901: he has overruled a date clash. Deliberately does NOT claim the clash is gone (it isn't: the
+    // row still says he is booked or away that night); it says what actually changed, which is that the
+    // show can now be drafted and sent.
+    static func conflictCleared(org: String) -> String {
+        "\(org) can be drafted despite the clash"
+    }
+
     static func restored(org: String) -> String {
         "Restored \(org) to the queue"
     }

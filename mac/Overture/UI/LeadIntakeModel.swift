@@ -379,7 +379,12 @@ final class LeadIntakeModel {
         let outcome = ScoutService.apply(events: events,
                                          clients: loaded.clients,
                                          history: LocalHistory.forMatching(existing: existing),
-                                         blocked: Set(loaded.blockedDates),
+                                         // #901: the SAME calendar the scout uses, days off included. It
+                                         // used to pass Downbeat's exported dates alone, so a lead Dan
+                                         // pasted was judged against a different, smaller set of blocked
+                                         // days than a scouted show was.
+                                         blocked: ScoutService.blockedCalendar(
+                                            export: (loaded.bookings, loaded.blockedDates), context: context),
                                          today: today, sourceIds: [WatchedSource.manualId],
                                          into: context)
         let added = outcome.inserted + outcome.updated

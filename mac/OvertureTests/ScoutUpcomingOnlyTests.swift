@@ -39,7 +39,7 @@ struct ScoutUpcomingOnlyTests {
         let ctx = ModelContext(try container())
         let events = [choir("Indianapolis Children's Choir", "2026-06-20")]   // three weeks ago
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [],
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                          today: today, into: ctx)
 
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
@@ -53,7 +53,7 @@ struct ScoutUpcomingOnlyTests {
         let ctx = ModelContext(try container())
         let events = [choir("Indianapolis Children's Choir", "2026-09-19")]
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [],
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                          today: today, into: ctx)
 
         #expect(outcome.inserted == 1)
@@ -64,7 +64,7 @@ struct ScoutUpcomingOnlyTests {
     @Test func aShowTodayIsStillUpcoming() throws {
         let ctx = ModelContext(try container())
         let outcome = ScoutService.apply(events: [choir("Indianapolis Children's Choir", today)],
-                                         clients: [], history: [], blocked: [], today: today, into: ctx)
+                                         clients: [], history: [], blocked: .empty, today: today, into: ctx)
         #expect(outcome.inserted == 1)
     }
 
@@ -79,7 +79,7 @@ struct ScoutUpcomingOnlyTests {
             choir("Brooklyn Youth Chorus", "2026-07-12", url: "https://org.example/c"),   // still to come
         ]
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [],
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                          today: today, into: ctx)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
@@ -101,8 +101,8 @@ struct ScoutUpcomingOnlyTests {
             choir("Brooklyn Youth Chorus", "2026-07-09", url: "https://org.example/a"),
             choir("Brooklyn Youth Chorus", "2026-07-12", url: "https://org.example/c"),
         ]
-        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: [], today: today, into: ctx)
-        let second = ScoutService.apply(events: events, clients: [], history: [], blocked: [],
+        _ = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty, today: today, into: ctx)
+        let second = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                         today: "2026-07-12", into: ctx)   // a later scout, still running
 
         #expect(second.inserted == 0)
@@ -118,7 +118,7 @@ struct ScoutUpcomingOnlyTests {
             choir("Brooklyn Youth Chorus", "2026-06-20", url: "https://org.example/b"),
         ]
 
-        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: [],
+        let outcome = ScoutService.apply(events: events, clients: [], history: [], blocked: .empty,
                                          today: today, into: ctx)
 
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
@@ -132,7 +132,7 @@ struct ScoutUpcomingOnlyTests {
     @Test func anUndatedShowIsKeptRatherThanDroppedAsPast() throws {
         let ctx = ModelContext(try container())
         let outcome = ScoutService.apply(events: [choir("Indianapolis Children's Choir", nil)],
-                                         clients: [], history: [], blocked: [], today: today, into: ctx)
+                                         clients: [], history: [], blocked: .empty, today: today, into: ctx)
         #expect(outcome.inserted == 1)
         #expect(outcome.skipped == 0)
     }

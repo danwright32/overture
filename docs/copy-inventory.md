@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **556 sentences**, from 176 source files.
+Every sentence Overture can say to Dan: **583 sentences**, from 180 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -26,7 +26,7 @@ What is not, and why:
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 
-## The same sentence, said in more than one place (35)
+## The same sentence, said in more than one place (36)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -58,6 +58,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Date to be confirmed"
   - `UI/QueueView+Model.swift`
   - `UI/QueueView+Model.swift`
+- "Days off"
+  - `Domain/DaysOffAttention.swift`
+  - `UI/DaysOffView.swift`
 - "Delivery delayed"
   - `UI/DraftReviewView.swift`
   - `UI/QueueView.swift`
@@ -264,8 +267,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
+"Block some days"
+    `Domain/DayOff.swift`
+"Block these days"
+    `UI/DaysOffView.swift`
+"Booked shoots"
+    `UI/DaysOffView.swift`
 "Booking and response rates by production, discipline, and fit tier"
     `App/RootView.swift`
+"Both days are included, so a Friday to Sunday trip is three blocked days."
+    `UI/DaysOffView.swift`
 "Bronx, NY"
     `Domain/VenueDisplay.swift`
 "Brooklyn, NY"
@@ -363,6 +374,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Day doesn't work"
     `Domain/ReviewStatus.swift`
+"Days off"
+    `Domain/DaysOffAttention.swift`
+    `UI/DaysOffView.swift`
+"Days off (no shoots)"
+    `Domain/DaysOffAttention.swift`
+"Days you blocked"
+    `UI/DaysOffView.swift`
 "Delivery delayed"
     `UI/DraftReviewView.swift`
     `UI/QueueView.swift`
@@ -395,6 +413,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Finds a contact and drafts an email for shows you've kept."
     `Domain/AgentRoster.swift`
+"First day"
+    `UI/DaysOffView.swift`
 "Fit tier"
     `Domain/OutcomePatterns.swift`
 "Follow-up sent to \(org)"
@@ -407,6 +427,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
+"From Downbeat"
+    `UI/DaysOffView.swift`
 "Give the organization a name so you can recognize it here."
     `Domain/WatchlistEditing.swift`
 "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
@@ -450,6 +472,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/VoiceGuidanceView.swift`
 "How long to wait before nudging an active conversation, and how close to the event a reminder may still fire."
     `UI/ReminderSettingsView.swift`
+"I can shoot this anyway"
+    `UI/ProspectRowView.swift`
 "I can't read that page: the site builds its calendar with JavaScript, so the shows aren't in what I download. Nothing's wrong with your link. Try the venue's page for the show, or a ticket link (Eventbrite and the like) if there is one."
     `Domain/LeadIntake.swift`
 "I can't read that: it's behind a login, so I only get the sign-in page. Paste the org's own site or the venue's event page instead."
@@ -490,6 +514,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Last checked \(formatter.string(from: last))"
     `App/MenuBarStatus.swift`
+"Last day"
+    `UI/DaysOffView.swift`
 "Last lines of the run log:"
     `Domain/SourceNote.swift`
 "Lead buffer before the event"
@@ -614,6 +640,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Not yet synced"
     `Domain/OmniFocusSyncStatus.swift`
+"Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
+    `UI/DaysOffView.swift`
 "Nothing matches this filter"
     `Domain/EmptyState.swift`
 "Nothing new"
@@ -680,12 +708,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture has no booked shoots from Downbeat, so it can't keep clear of them. Block those days here."
+    `Domain/DaysOffAttention.swift`
+"Overture has no booked shoots from Downbeat, so the only days it knows about are the ones you add here. Downbeat only records shoots booked through it, from now on, and a shoot booked outside it never appears at all."
+    `Domain/DaysOffAttention.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
 "Overture lead: "
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
+    `UI/ProspectRowView.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -911,6 +945,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
     `Domain/WatchlistEditing.swift`
+"That isn't a date Overture can read."
+    `Domain/DayOff.swift`
 "That link isn't a web page (it served \(type ?? "an unknown type"))."
     `Integration/SourceFetcher.swift`
 "That link redirects to a different site (\(h)). Check the address."
@@ -921,6 +957,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "That page has no dated listings on it. It may be the wrong page for this org."
     `Domain/WatchedSource.swift`
+"That's longer than a year. Block a shorter stretch."
+    `Domain/DayOff.swift`
 "The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
     `Domain/DownbeatExport.swift`
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
@@ -931,6 +969,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "The calendars Overture re-checks on every scout."
     `UI/SourcesView.swift`
+"The days Overture won't pitch you for."
+    `UI/DaysOffView.swift`
+"The days Overture won't pitch you for: your booked shoots, and the days you block."
+    `Domain/DaysOffAttention.swift`
+"The last day is before the first day."
+    `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
     `Integration/OmniFocusUserNotifier.swift`
 "The page answered with HTTP \(code)."
@@ -1065,6 +1109,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "What converts"
     `App/RootView.swift`
     `UI/OutcomePatternsView.swift`
+"Why (optional): vacation, family, anything"
+    `UI/DaysOffView.swift`
 "Why lost? (optional note)"
     `UI/DraftReviewView.swift`
 "Will receive: \(body)"
@@ -1077,10 +1123,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Wrong match"
     `UI/ProspectRowView.swift`
+"You blocked \(day) (\(name))."
+    `Domain/BlockedCalendar.swift`
+"You blocked \(day)."
+    `Domain/BlockedCalendar.swift`
 "You confirmed this performer is a past client, so the fit score counts it and a draft can write to them as a returning client."
     `UI/QueueView+Model.swift`
 "You declined before (usually a date conflict)"
     `UI/QueueView+Model.swift`
+"You're already shooting \(name) on \(day)."
+    `Domain/BlockedCalendar.swift`
+"You're already shooting on \(day)."
+    `Domain/BlockedCalendar.swift`
 "You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own."
     `UI/LeadIntakeModel.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
@@ -1145,6 +1199,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
+"\(org) can be drafted despite the clash"
+    `App/ActionFeedback.swift`
 "\(org) has already been sent to, so nothing was queued"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to; queued to find new contacts only"
@@ -1163,6 +1219,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(range) is no longer blocked"
+    `App/ActionFeedback.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"

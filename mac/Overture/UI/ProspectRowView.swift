@@ -43,6 +43,7 @@ struct ProspectRowView: View {
     var onRejectBooking: () -> Void = {}
     // #611: dismisses the "already has its own photographer" fit-risk flag as a false positive.
     var onDismissAlreadyCoveredFlag: () -> Void = {}
+    var onClearConflict: () -> Void = {}   // #901: "I can shoot this anyway"
     // #769: Dan marks (or releases) the whole ORG as do-not-contact, not just this show.
     var onSetOrgDoNotContact: (Bool) -> Void = { _ in }
     // #753: Dan's verdict on a performer match. Confirming unlocks the warm drafting tone; rejecting
@@ -79,6 +80,7 @@ struct ProspectRowView: View {
                     }
                     tags
                     relatedRunNote
+                    dateConflictFlag
                     confidenceFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -316,6 +318,34 @@ struct ProspectRowView: View {
     // #611: a fit-risk Prep's own research found, e.g. the org's site names its own photographer.
     // Rust tone (a caution, not an opportunity), mirroring bookingSuggestionFlag's capsule idiom.
     // Never changes fitScore/tier; Dan decides himself whether to deprioritize or skip.
+    // #901: a day of this run Dan cannot work. The show is HERE (it used to be dropped, silently, and he
+    // asked to see them), it has sunk below every show he can shoot, and it cannot be drafted or sent
+    // until he overrules the clash himself.
+    //
+    // Rust, like alreadyCoveredFlag: this is a caution about a show, not an opportunity. The reason is
+    // spelled out in the capsule rather than hidden behind a hover, because it is the whole point: "you're
+    // already shooting the Nguyen recital that night" is a fact he can act on, and "unavailable" is not.
+    @ViewBuilder private var dateConflictFlag: some View {
+        if item.hasUnclearedConflict, let note = item.conflictNote {
+            Menu {
+                Button("I can shoot this anyway") { onClearConflict() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                    Text(note)
+                }
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.rust)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all.")
+            .padding(.top, 2)
+        }
+    }
+
     @ViewBuilder private var alreadyCoveredFlag: some View {
         if let note = item.alreadyCoveredNote, !item.alreadyCoveredDismissed {
             Menu {

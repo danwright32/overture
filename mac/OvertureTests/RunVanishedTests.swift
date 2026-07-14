@@ -55,7 +55,7 @@ struct RunVanishedTests {
         let source = queuedSource(ctx)
 
         ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
-                                  clients: [], history: [], blocked: [], now: now, into: ctx)
+                                  clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         #expect(source.lastContentHash == "old-hash", "the hash of a page nobody read must never be stamped")
         #expect(source.hasUnreadChanges, "there is still something on that page we have not read")
@@ -70,7 +70,7 @@ struct RunVanishedTests {
         queuedSource(ctx)
 
         let outcome = ScoutExtractIngest.ingest(results("kaufman", verdict: .notRead),
-                                                clients: [], history: [], blocked: [], now: now, into: ctx)
+                                                clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         let warning = try #require(outcome.warning)
         #expect(warning.contains("Kaufman Music Center"))
@@ -94,7 +94,7 @@ struct RunVanishedTests {
         let source = queuedSource(ctx)
 
         ScoutExtractIngest.ingest(results("kaufman", verdict: .allPast),
-                                  clients: [], history: [], blocked: [], now: now, into: ctx)
+                                  clients: [], history: [], blocked: .empty, now: now, into: ctx)
 
         #expect(source.lastContentHash == "new-hash", "a page we genuinely read is stamped")
         #expect(source.hasUnreadChanges == false)

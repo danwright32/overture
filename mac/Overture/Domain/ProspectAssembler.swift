@@ -36,12 +36,20 @@ struct AssembledProspect: Equatable, Sendable {
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
+    // #901: the day of this run Dan cannot work, if any. Set by ScoutService.apply once the run is known
+    // (a conflict is a fact about the whole run, not about its opening night), never by `decide`.
+    var conflictKey: String? = nil
     // #771: which source surfaced this. Set by ScoutService.apply from the run it belongs to, never by
     // `decide`, which stays pure and knows nothing about sources.
     var sourceIds: [String] = []
 }
 
-enum SkipReason: String, Equatable, Sendable { case blocked, suppressed, unreachable }
+// #901: `blocked` is gone from here. A day Dan cannot work no longer drops the show (he asked to see it,
+// flagged, and decide himself), and the check could never have been correct at this level anyway: this
+// runs per EVENT, before RunGrouping has collapsed the nights, so `runEndDate` does not exist yet and a
+// run whose LATER nights collide could not be seen at all. It now happens in ScoutService.apply, at the
+// run, next to the #798 upcoming-only guard, which lives there for exactly the same reason.
+enum SkipReason: String, Equatable, Sendable { case suppressed, unreachable }
 
 enum ProspectDecision: Equatable, Sendable {
     case prospect(AssembledProspect)
@@ -49,18 +57,11 @@ enum ProspectDecision: Equatable, Sendable {
 }
 
 enum ProspectAssembler {
-    static func isBlockedDate(_ date: String?, _ blocked: Set<String>) -> Bool {
-        guard let date else { return false }
-        return blocked.contains(date)
-    }
-
     static func decide(
         event: ExtractedEvent,
         classification c: EventClassification,
-        verdict: MatchVerdict,
-        blocked: Set<String>
+        verdict: MatchVerdict
     ) -> ProspectDecision {
-        if isBlockedDate(event.performanceDate, blocked) { return .skip(.blocked) }
         if verdict.suppressed { return .skip(.suppressed) }
 
         let candidate = Candidate(

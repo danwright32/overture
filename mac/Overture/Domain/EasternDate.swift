@@ -44,6 +44,44 @@ enum EasternDate {
         return calendar.dateComponents([.day], from: f, to: t).day
     }
 
+    // Every Eastern day from one day string to another, inclusive of both ends (#901): a booking, a
+    // vacation and a multi-night run are all ranges, and all three have to be asked about day by day.
+    //
+    // Capped, because two of those three ranges come from data we do not control: a scraped runEndDate is
+    // whatever an org's season page happened to say, and "2999-01-01" would otherwise walk a third of a
+    // million days before answering. A year is far past any real run or vacation.
+    //
+    // A backwards range (end before start) is bad data, not a block on the days in between, so it yields
+    // its start day alone rather than an empty list: a show still happens on its opening night even if
+    // the page's closing date is nonsense.
+    static let maxRangeDays = 366
+
+    static func days(from start: String, through end: String, maxDays: Int = maxRangeDays) -> [String] {
+        guard let startDate = date(from: start) else { return [] }
+        guard let endDate = date(from: end), endDate >= startDate else { return [start] }
+
+        var out: [String] = []
+        var cursor = startDate
+        while cursor <= endDate && out.count < maxDays {
+            out.append(dayString(from: cursor))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return out
+    }
+
+    private static let shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    static func shortMonth(_ component: Int) -> String { shortMonths[(component - 1 + 12) % 12] }
+
+    // A day string as Dan reads it: "Nov 14". Nil for an unparseable day, so a caller has to say what it
+    // wants to show instead rather than being handed a plausible-looking wrong date.
+    static func dayLabel(_ day: String) -> String? {
+        guard let d = date(from: day) else { return nil }
+        return "\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
+    }
+
     // MARK: - The run window (#798)
     //
     // Two places ask "is this run over?": the scout's import guard (should this show enter the queue

@@ -304,6 +304,11 @@ final class Recipient {
     // salutation flag blocks above.
     var isSendablePending: Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
+            // #901: a date conflict Dan has not cleared stops the send, not just the draft. The prep gate
+            // alone would miss the case that matters most: the draft already existed, was approved, and
+            // THEN he blocked the week or took a booking. Nothing should go out pitching a night he
+            // cannot work until he says he can.
+            && prospect?.hasUnclearedConflict != true
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
