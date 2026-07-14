@@ -51,11 +51,29 @@ enum DayOffEditing {
     // its own (#885): copy computed in a view body is copy no test can read.
     static func addButtonTitle(isOpen: Bool) -> String { isOpen ? "Cancel" : "Block some days" }
 
-    // #901 walk fix: whether closing the sheet should ask first. It should when the add form is open,
-    // because Dan may have typed a range he expects Done to block; closing it silently is what lost his
-    // work once. In the tested helper rather than the view so the rule can't quietly regress to a bare
-    // dismiss() (which is exactly the bug), the way #863 taught us about logic living in a view body.
-    static func closeNeedsConfirmation(addFormOpen: Bool) -> Bool { addFormOpen }
+    // The add form's editable state, snapshotted when it opens and again when Done is pressed, so the
+    // sheet can tell a real edit from a form Dan merely opened and left alone (#928). Days are the ISO
+    // strings the pickers resolve to, so a time-of-day drift can never read as a date change.
+    struct AddDraft: Equatable, Sendable {
+        var startDay: String
+        var endDay: String
+        var note: String
+    }
+
+    // #901 walk fix / #928: whether closing the sheet should ask first. It should when the add form is
+    // open AND Dan actually edited it since it opened (moved a picker or typed a note), because that is
+    // work Done would otherwise discard silently, which is what lost his range once. An open form he
+    // changed nothing in has nothing to lose, so it closes without a nag. In the tested helper rather than
+    // the view so the rule can't quietly regress to a bare dismiss(), the way #863 taught us about logic
+    // living in a view body. A missing baseline (should not happen) asks, so no edit is ever dropped.
+    static func closeNeedsConfirmation(addFormOpen: Bool, draft: AddDraft, baseline: AddDraft?) -> Bool {
+        guard addFormOpen else { return false }
+        guard let baseline else { return true }
+        func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return draft.startDay != baseline.startDay
+            || draft.endDay != baseline.endDay
+            || trimmed(draft.note) != trimmed(baseline.note)
+    }
 
     static func message(for result: Result) -> String? {
         switch result {

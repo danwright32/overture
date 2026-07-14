@@ -102,10 +102,40 @@ struct DayOffEditingTests {
     // MARK: - What Dan reads
 
     // #901 walk fix: Dan changed the dates, hit Done expecting them blocked, and lost them silently.
-    // Closing while the add form is still open must ask first; closing with it shut just closes.
-    @Test func closingWithTheAddFormOpenNeedsConfirmation() {
-        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true) == true)
-        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: false) == false)
+    // Closing with the add form shut just closes.
+    @Test func closingWithTheAddFormShutJustCloses() {
+        let d = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "")
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: false, draft: d, baseline: d) == false)
+    }
+
+    // #928: the form is open but Dan changed nothing since it opened (the pickers still hold their opening
+    // values and the note is empty). There is nothing to lose, so closing must NOT nag.
+    @Test func closingAnUneditedOpenFormDoesNotNag() {
+        let d = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "")
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true, draft: d, baseline: d) == false)
+    }
+
+    // #928: a moved date is a real edit to lose, so closing asks first.
+    @Test func closingAfterMovingADateNeedsConfirmation() {
+        let base = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "")
+        let edited = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-05", note: "")
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true, draft: edited, baseline: base) == true)
+    }
+
+    // #928: a typed note is a real edit too. Whitespace-only does not count.
+    @Test func closingAfterTypingANoteNeedsConfirmationButBlankDoesNot() {
+        let base = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "")
+        let noted = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "Vacation")
+        let blank = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "   ")
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true, draft: noted, baseline: base) == true)
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true, draft: blank, baseline: base) == false)
+    }
+
+    // #928: an open form with no recorded baseline (should not happen, but be safe) still asks, so a real
+    // edit can never be dropped silently by a missing snapshot.
+    @Test func closingAnOpenFormWithNoBaselineAsksToBeSafe() {
+        let d = DayOffEditing.AddDraft(startDay: "2026-07-01", endDay: "2026-07-01", note: "")
+        #expect(DayOffEditing.closeNeedsConfirmation(addFormOpen: true, draft: d, baseline: nil) == true)
     }
 
     @Test func eachRefusalSaysWhatToDoAboutIt() {
