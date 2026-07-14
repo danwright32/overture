@@ -29,11 +29,13 @@ struct ToolbarHoverLabel: View {
                     // #901 walk fix: a pure fade, not a slide. The old `.move(edge: .leading)` translated
                     // the text sideways as the pill widened, and against the toolbar reflowing at the same
                     // time that read as a jump rather than a reveal. Opacity alone lets the width ease open
-                    // underneath it. Slightly longer and easeInOut so it settles instead of snapping.
+                    // underneath it.
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: titleIsVisible)
+        // Dan's walk (2026-07-14): at 0.2s the expansion snapped open too fast to read as motion. Slower
+        // and eased so the pill (and the neighbours it nudges) glide open rather than jump.
+        .animation(.easeInOut(duration: 0.32), value: titleIsVisible)
         .onHover { isHovering = $0 }
     }
 }
