@@ -183,23 +183,25 @@ struct SourceAttentionWiringTests {
     }
 }
 
-// The label itself. #805 kept the count visible without the pointer on it by force-showing the title for a
-// reporting button (isHovering || showsTitle). #901 went further: EVERY label is always up now, because
-// the hover-to-expand width animation made toolbar buttons overlap (see
-// ToolbarConsolidationGuardTests.theToolbarLabelDoesNotHideBehindHover). So the "keep the count up" intent
-// is preserved by construction, and the guard for it is the always-shown one, not this hover check.
-@Suite("A toolbar label always shows its title (#805/#901)")
+// The label itself. This went through three shapes as Dan walked it (2026-07-14): hover-to-expand (#337,
+// jumpy), then always-on (#901, overflowed and buried daily buttons), and finally icon-only with the name
+// as a hover TOOLTIP, which is what he chose. The only exception is a button that must show text at a
+// glance: an attention count or a blocking call-to-action passes `showsTitle: true` and its label renders
+// STATICALLY, no hover involved. So #805's "keep the count visible without the pointer on it" survives as
+// that static reveal, not as a hover check.
+@Suite("A toolbar label is icon-only unless asked to show its title (#805/#901)")
 struct ToolbarHoverLabelTests {
     private var label: String { SourceGuardHelper.source("Overture/UI/ToolbarHoverLabel.swift") }
 
-    // The count, and every label, is up without the pointer on it: Text(title) renders unconditionally.
-    @Test func theTitleIsAlwaysShown() {
-        #expect(label.contains("Text(title)"))
-        #expect(!label.contains("if titleIsVisible"))   // no longer gated on hover/state
+    // The title renders only when the caller asks (attention / CTA), statically. Everything else is the
+    // icon alone, with the name coming from the button's own `.help()` tooltip on hover.
+    @Test func theTitleShowsOnlyWhenAskedAndNeverOnHover() {
+        #expect(label.contains("if showsTitle"))
+        #expect(!label.contains("onHover"))
+        #expect(!label.contains("isHovering"))
+        #expect(!label.contains(".animation("))   // no width animation to overlap on
     }
 
-    // The parameter stays for source compatibility across the nine call sites, even though it no longer
-    // changes anything.
     @Test func showsTitleParameterIsRetained() {
         #expect(label.contains("var showsTitle: Bool = false"))
     }

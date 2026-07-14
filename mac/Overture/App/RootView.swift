@@ -298,22 +298,6 @@ struct RootView: View {
                     }
                     .help("Follow-ups and active conversations due for a touch")
                 }
-                ToolbarItem(placement: .secondaryAction) {
-                    Button {
-                        showPatterns = true
-                    } label: {
-                        ToolbarHoverLabel(title: "What converts", systemImage: "chart.bar")
-                    }
-                    .help("Booking and response rates by production, discipline, and fit tier")
-                }
-                ToolbarItem(placement: .secondaryAction) {
-                    Button {
-                        showVoiceGuidance = true
-                    } label: {
-                        ToolbarHoverLabel(title: "Voice guidance", systemImage: "text.quote")
-                    }
-                    .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
-                }
                 // #800: read-only for now. Phase 4 adds a source, Phase 5 lets Dan stop watching one.
                 //
                 // #805: the button changes how it LOOKS while a source needs him. A source that half works
@@ -362,6 +346,28 @@ struct RootView: View {
                     }
                     .help(DaysOffAttention.help(needsALook: noBookedShootData))
                 }
+                // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
+                // Sources/Days off group, not before it. With every toolbar label now always shown the row
+                // overflows into the macOS ">>" menu, and in that order the brand-new Days off button was
+                // the first thing hidden. The daily-driver buttons (Archive, Follow-ups) and the two things
+                // Overture is working from (Sources, Days off) come first; these two settings-ish views can
+                // fall into the overflow instead.
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showPatterns = true
+                    } label: {
+                        ToolbarHoverLabel(title: "What converts", systemImage: "chart.bar")
+                    }
+                    .help("Booking and response rates by production, discipline, and fit tier")
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showVoiceGuidance = true
+                    } label: {
+                        ToolbarHoverLabel(title: "Voice guidance", systemImage: "text.quote")
+                    }
+                    .help("Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits.")
+                }
                 // #344: connected is the steady state Dan will see almost always, so it collapses to
                 // a bare icon; disconnected stays a prominent, labeled call to action since it
                 // blocks sending.
@@ -375,7 +381,10 @@ struct RootView: View {
                             LiveRunLabel(base: "Connecting", since: gmailConnectStartedAt,
                                          timeout: RunTimeouts.gmailConnect)
                         } else {
-                            ToolbarHoverLabel(title: "Connect Gmail", systemImage: "link")
+                            // #901: labelled statically (showsTitle) even though the toolbar is otherwise
+                            // icons-only. A disconnected Gmail blocks every send, so "Connect Gmail" has to
+                            // read at a glance, not only on hover.
+                            ToolbarHoverLabel(title: "Connect Gmail", systemImage: "link", showsTitle: true)
                         }
                     }
                     .disabled(gmailConnected || isConnectingGmail)

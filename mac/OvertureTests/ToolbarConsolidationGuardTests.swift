@@ -86,11 +86,26 @@ struct ToolbarConsolidationGuardTests {
         #expect(occurrences == 9)
     }
 
-    // #901 (Dan's walk, 2026-07-14): the label ALWAYS shows its word now, it does not expand on hover.
-    // Animating a toolbar button's width to reveal the label made neighbouring buttons overlap and the
-    // icon spill out of its container mid-animation, because macOS doesn't reflow the toolbar in step.
-    // Dan chose always-on labels: no width change, so nothing can overlap. This guard pins that the
-    // hover-driven reveal is gone, because quietly reintroducing it brings the overlap back.
+    // #901 (Dan's walk, 2026-07-14): Days off is ordered AHEAD of the settings-ish buttons (What
+    // converts, Voice guidance), so if the toolbar ever overflows into the macOS ">>" menu the brand-new
+    // Days off button is not the first thing hidden. The daily-driver and "what Overture works from"
+    // buttons come first; the settings views can fall into overflow instead.
+    @Test func daysOffIsOrderedAheadOfTheSettingsButtons() {
+        #expect(!rootView.isEmpty)
+        guard let daysOff = rootView.range(of: "showDaysOff = true"),
+              let whatConverts = rootView.range(of: "showPatterns = true") else {
+            Issue.record("expected both the Days off and What converts buttons in the toolbar")
+            return
+        }
+        #expect(daysOff.lowerBound < whatConverts.lowerBound)
+    }
+
+    // #901 (Dan's walk, 2026-07-14): the toolbar is icon-only, names on hover. Animating a button's width
+    // to reveal its label made neighbouring buttons overlap and the icon spill out of its container
+    // mid-animation, because macOS doesn't reflow the toolbar in step. This guard pins that the hover
+    // reveal and its width animation stay gone, because quietly reintroducing either brings the overlap
+    // back. (The label still shows STATICALLY when a caller passes showsTitle, with no hover involved,
+    // covered by ToolbarHoverLabelTests.)
     @Test func theToolbarLabelDoesNotHideBehindHover() {
         let label = source("Overture/UI/ToolbarHoverLabel.swift")
         #expect(!label.isEmpty)

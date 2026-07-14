@@ -56,3 +56,18 @@ struct FollowUpsRowArchiveJumpGuardTests {
                 "onOpenInArchive should set showArchive, reusing the existing jump mechanism (#686).")
     }
 }
+
+// #901 (Dan's walk, 2026-07-14): the reminder-timing sliders button is removed from the Follow-ups
+// "Due" header at his request. It was the only entry point to ReminderSettingsView, so this guard pins
+// that it stays gone: re-adding it is what he asked against, and the removal has no other test surface.
+@Suite("Follow-ups header has no reminder-settings button (#901)")
+struct FollowUpsNoReminderButtonGuardTests {
+    private var followUpsView: String { SourceGuardHelper.source("Overture/UI/FollowUpsView.swift") }
+
+    @Test func theReminderSettingsButtonIsGone() {
+        #expect(!followUpsView.isEmpty)
+        #expect(!followUpsView.contains("slider.horizontal.3"))
+        #expect(!followUpsView.contains("ReminderSettingsView"))
+        #expect(!followUpsView.contains("showSettings"))
+    }
+}
