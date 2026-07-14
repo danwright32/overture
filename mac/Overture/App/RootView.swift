@@ -123,10 +123,7 @@ struct RootView: View {
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
     // ScoutStatus already use in the masthead rather than introducing a second one.
     private var omniFocusStatusLine: String {
-        if let last = OmniFocusSyncStatus.lastSuccessAt() {
-            return "Synced \(PrepStatus.relative(from: last, to: Date()))"
-        }
-        return "Not yet synced"
+        OmniFocusSyncStatus.line(lastSuccessAt: OmniFocusSyncStatus.lastSuccessAt(), now: Date())
     }
 
     var body: some View {
@@ -613,9 +610,8 @@ struct RootView: View {
         case .producedResults:
             ingestPrep()
         case .finishedEmpty:
-            let tail = RunLog.tail(8, from: RunLog.prepURL)
-            errorMessage = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
-                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+            errorMessage = DetachedRunOutcome.finishedEmptyMessage(
+                .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
         case .idle:
             break
         }
@@ -639,9 +635,8 @@ struct RootView: View {
         case .producedResults:
             ingestScoutExtract()
         case .finishedEmpty:
-            let tail = RunLog.tail(8, from: RunLog.scoutExtractURL)
-            warningMessage = "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
-                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+            warningMessage = DetachedRunOutcome.finishedEmptyMessage(
+                .scoutExtract, tail: RunLog.tail(8, from: RunLog.scoutExtractURL))
         case .idle:
             break
         }
@@ -659,8 +654,7 @@ struct RootView: View {
                                                      localOverride: []),
             into: context)
 
-        let added = outcome.inserted + outcome.updated
-        scoutSummary = added > 0 ? "\(added) from watched calendars" : "Nothing new on the watched calendars"
+        scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885
         // A source whose page could not be read is named here, every run, exactly as one that could not
         // be fetched is. A broken calendar and a quiet one must never look alike.
         warningMessage = outcome.warning
@@ -682,9 +676,8 @@ struct RootView: View {
         case .producedResults:
             ingestReplyClassifications()
         case .finishedEmpty:
-            let tail = RunLog.tail(8, from: RunLog.replyClassifyURL)
-            errorMessage = "The reply drafter finished but didn't produce a draft. It may have hit an error."
-                + (tail.isEmpty ? "" : "\n\nLast lines of the run log:\n\(tail)")
+            errorMessage = DetachedRunOutcome.finishedEmptyMessage(
+                .replyClassify, tail: RunLog.tail(8, from: RunLog.replyClassifyURL))
         case .idle:
             break
         }
@@ -745,10 +738,7 @@ struct RootView: View {
         Task {
             do {
                 let outcome = try await ScoutService.runScout(into: context, depth: depth)
-                var parts = ["\(outcome.found) found"]
-                if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
-                if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
-                scoutSummary = parts.joined(separator: " · ")
+                scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
                 // Surface a scout warning if any: a source that couldn't be checked (#802), an
                 // established feed that came back empty (#27), or a missing/stale past-client export
                 // (#22/#23). Silent degradation is the thing we are avoiding.
@@ -816,7 +806,8 @@ struct RootView: View {
                 let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
                 if force {
-                    statusMessage = "OmniFocus: \(desired.count) due · existing \(r.existing) · created \(r.created) · completed \(r.completed)"
+                    statusMessage = OmniFocusSync.receipt(due: desired.count, existing: r.existing,
+                                                          created: r.created, completed: r.completed)
                 }
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
@@ -839,18 +830,18 @@ struct RootView: View {
         // #876: every sentence derived from the run's own outcome now lives in PrepRunSummary, where a
         // test can read it. Built here in the view body, this copy was unreachable by any test, which is
         // exactly the shape #863 warns about.
-        var notes = PrepRunSummary.notes(for: outcome)
         // #249: fail closed if the distiller leaked a real name into the voice guidance; quarantine
         // the contaminated section so it can't feed a future draft, and warn Dan.
         let leaks = VoiceGuidanceGuard.audit(fileURL: VoiceGuidanceGuard.defaultURL,
                                              prospects: (try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
-        if !leaks.isEmpty { notes.append("⚠ voice guidance leaked a name, quarantined") }
         // #251: if the run altered or dropped Dan's hand-written notes, restore them from the pre-run
         // backup (the fresh auto section is kept).
-        if VoiceNotesProtector.restoreIfNeeded(fileURL: VoiceGuidanceGuard.defaultURL,
-                                               backupURL: VoiceNotesProtector.defaultBackupURL) {
-            notes.append("restored your guidance notes")
-        }
-        if !notes.isEmpty { statusMessage = "Prep: " + notes.joined(separator: " · ") }
+        let restored = VoiceNotesProtector.restoreIfNeeded(fileURL: VoiceGuidanceGuard.defaultURL,
+                                                           backupURL: VoiceNotesProtector.defaultBackupURL)
+        // #885: the WHOLE sentence, including the two notes above and the prefix, now comes from
+        // PrepRunSummary. #876 extracted half of it and left the rest here, so a green test of that type
+        // said nothing about the line Dan actually reads.
+        statusMessage = PrepRunSummary.statusMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,
+                                                     guidanceNotesRestored: restored) ?? statusMessage
     }
 }

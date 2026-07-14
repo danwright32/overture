@@ -30,6 +30,16 @@ enum OmniFocusSyncStatus {
         return Date(timeIntervalSince1970: t)
     }
 
+    // #885: the toolbar's freshness line, out of RootView's body. Reuses the same coarse relative-time
+    // formatter PrepStatus and ScoutStatus already use in the masthead, rather than a second one.
+    //
+    // "Not yet synced" is deliberately a sentence and not an empty string: a blank where a time should
+    // be reads as a bug, and a sync that has genuinely never run is a normal state on a new install.
+    static func line(lastSuccessAt: Date?, now: Date) -> String {
+        guard let lastSuccessAt else { return "Not yet synced" }
+        return "Synced \(PrepStatus.relative(from: lastSuccessAt, to: now))"
+    }
+
     // #268: record that OmniFocus Automation is not granted. Also lights the masthead failure key so
     // the warning shows when the window is open; the dedicated flag distinguishes it from a generic
     // failure for the notification path.
