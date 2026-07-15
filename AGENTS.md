@@ -24,7 +24,7 @@ already drifting from the Swift version it mirrored.
 ## Working here
 
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
-  `docs/contracts.md`) — or really, before pushing anything — run `scripts/test-all.sh`
+  `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
   from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
   command (#595): the repo's two independent CI jobs (`typecheck-and-test`, `swift-tests`)
   make it easy to run only the Mac app's tests locally, see them pass, and push, only
@@ -56,6 +56,14 @@ already drifting from the Swift version it mirrored.
   meant, commit it. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
   AppleScript, the draft lint's search terms) is marked at the source with
   `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
+- Changing the AI drafting instructions: those rules live in two places that must stay in sync,
+  `docs/prep-runbook.md` §2 inside this repo and the `dan-wright-brand-voice` skill at
+  `~/.claude/skills/dan-wright-brand-voice/` (which is NOT tracked by this repo, and is the
+  authoritative source, "the skill always wins"). `scripts/check-brand-voice-drift.sh` (#731) warns
+  when the two drift apart on the concrete facts they both state (the citable credentials, marquee
+  venues, portfolio link, the four opener shapes, the soft close). It rides along in
+  `scripts/test-all.sh`, and skips cleanly on any machine without the skill installed, so edit a
+  drafting rule in one place and a local pre-push run flags the other side going stale.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
