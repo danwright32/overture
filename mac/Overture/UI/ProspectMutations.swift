@@ -432,7 +432,11 @@ enum ProspectMutations {
     // The default a caller gets when it doesn't inject its own; a test injects a fake instead so
     // performSend/sendReply/sendFollowUp/sendConversationNudge are testable without hitting the
     // real network or the GmailAuthManager.shared singleton (#468, SUP-006).
-    private static func liveSender() -> MailSender { GmailSender(fromEmail: "dan@danwrightphotography.com") }
+    // #360: the sending identity comes from SendIdentity (the same value the confirmation's From line
+    // reads), so the address Dan is shown before a send can never drift from the one it goes out as.
+    private static func liveSender() -> MailSender {
+        GmailSender(fromName: SendIdentity.danWright.name, fromEmail: SendIdentity.danWright.email)
+    }
 
     // The confirm dialog itself (step 1 of a send) stays in each screen: it only needs
     // SendConfirmation(prospect:), a pure struct init, not worth extracting. This is step 2, the

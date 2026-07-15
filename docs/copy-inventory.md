@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **599 sentences**, from 189 source files.
+Every sentence Overture can say to Dan: **600 sentences**, from 191 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -23,6 +23,7 @@ What is not, and why:
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
+- `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 
@@ -887,7 +888,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send this email now"
     `UI/DraftReviewView.swift`
 "Send this email now?"
-    `UI/SendConfirmAndReconnectAlerts.swift`
+    `UI/SendConfirmSheet.swift`
 "Send this follow-up now?"
     `UI/FollowUpsView.swift`
 "Send this note now?"
@@ -988,6 +989,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "The days Overture won't pitch you for: your booked shoots, and the days you block."
     `Domain/DaysOffAttention.swift`
+"The email that will send"
+    `UI/SendConfirmSheet.swift`
 "The last day is before the first day."
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
@@ -1064,6 +1067,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This run's results disagreed with themselves, so nothing from it was used."
     `Domain/WatchedSource.swift`
+"This sends one email right now, to this recipient only. Nothing else goes out."
+    `UI/SendConfirmSheet.swift`
 "This sends one follow-up right now, to this recipient only. Nothing else goes out."
     `Domain/FollowUp.swift`
 "This sends one message right now, to this recipient only."
@@ -1086,8 +1091,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "To send (\(count))"
     `UI/QueueView+Model.swift`
-"To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out."
-    `UI/SendConfirmAndReconnectAlerts.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."

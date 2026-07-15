@@ -48,6 +48,15 @@ struct SendConfirmationTests {
         #expect(c?.subject == "A photo of your June concert")
     }
 
+    // #360: the confirmation also carries the exact email body about to send, so the branded sheet
+    // can preview it, and the From identity, which must be the one true sending identity.
+    @Test func carriesTheDraftBodyAndTheSendingIdentity() throws {
+        let ctx = ModelContext(try container())
+        let c = SendConfirmation(prospect: make(ctx, body: "Hi Marcus,\n\nI'd love to photograph the evening."))
+        #expect(c?.body == "Hi Marcus,\n\nI'd love to photograph the evening.")
+        #expect(c?.from == SendIdentity.danWright)
+    }
+
     @Test func fallsBackWhenSubjectIsMissingOrBlank() throws {
         let ctx = ModelContext(try container())
         #expect(SendConfirmation(prospect: make(ctx, subject: nil))?.subject == "(no subject)")
