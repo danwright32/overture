@@ -12,6 +12,8 @@ enum SendConfirmCopy {
     static let previewLabel = "The email that will send"
     static let send = "Send"
     static let cancel = "Cancel"
+    // #361: the gold seal on a just-sent row as it leaves the queue.
+    static let sentSeal = "Sent"
 }
 
 // #360: a first-class, on-brand replacement for the old stock system send-confirm alert. Shows the

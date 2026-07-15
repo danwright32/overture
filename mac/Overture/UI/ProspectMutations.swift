@@ -445,13 +445,18 @@ enum ProspectMutations {
     static func performSend(_ naturalKey: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                            sender: MailSender = liveSender(),
                            markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
-                           onNeedsReconnect: @escaping () -> Void) {
+                           onNeedsReconnect: @escaping () -> Void,
+                           // #361: on a successful send, report whether it emptied the show (no pending recipient
+                           // left). The queue plays its leaving delight only when the row actually departs, so a
+                           // partial send on a multi-recipient show (still someone pending) does not trigger it.
+                           onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         markSending(naturalKey)
         Task {
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
+            if sent { onSent(naturalKey, SendService.nextPendingRecipient(for: model) == nil) }
             if !sent && !GmailAuthManager.shared.isConnected { onNeedsReconnect() }
         }
     }

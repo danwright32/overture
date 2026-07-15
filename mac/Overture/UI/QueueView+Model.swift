@@ -525,6 +525,15 @@ enum QueueModel {
     }
 
     // Groups by performance date, preserving incoming order. Undated collect last.
+    // #361: fold the just-sent rows playing their leaving delight back into the displayed rows, so each
+    // glides out in its place. The send has already dropped them from `visible`, so they come from the
+    // departing snapshots; a defensive filter avoids showing one twice if `visible` briefly still holds
+    // it before the @Query refilters.
+    static func withDeparting(_ visible: [QueueItem], departing: [String: QueueItem]) -> [QueueItem] {
+        guard !departing.isEmpty else { return visible }
+        return visible.filter { departing[$0.id] == nil } + Array(departing.values)
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
