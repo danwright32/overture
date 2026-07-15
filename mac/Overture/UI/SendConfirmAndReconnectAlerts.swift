@@ -10,17 +10,18 @@ private struct SendConfirmAndReconnectAlerts: ViewModifier {
     let onSend: (String) -> Void
     let onConnectGmail: () -> Void
 
-    private var sendConfirmBinding: Binding<Bool> {
-        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
-    }
-
     func body(content: Content) -> some View {
         content
-            .alert("Send this email now?", isPresented: sendConfirmBinding, presenting: pendingConfirm) { pending in
-                Button("Send") { onSend(pending.id) }
-                Button("Cancel", role: .cancel) { pendingConfirm = nil }
-            } message: { pending in
-                Text(Self.sendConfirmMessage(pending))
+            // #360: the send confirmation is now the branded SendConfirmSheet (From / To / Subject +
+            // a preview of the exact body), not a stock system alert, since confirming it sends a real
+            // email to a real recipient. The reconnect prompt stays a plain alert (it's a recoverable
+            // interruption, not the consequential commit).
+            .sheet(item: $pendingConfirm) { pending in
+                SendConfirmSheet(
+                    confirmation: pending.confirmation,
+                    onSend: { onSend(pending.id) },
+                    onCancel: { pendingConfirm = nil }
+                )
             }
             .alert("Reconnect Gmail", isPresented: $showReconnect) {
                 Button("Connect Gmail") { onConnectGmail() }
@@ -28,10 +29,6 @@ private struct SendConfirmAndReconnectAlerts: ViewModifier {
             } message: {
                 Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
             }
-    }
-
-    static func sendConfirmMessage(_ pending: PendingSend) -> String {
-        "To: \(pending.confirmation.recipient)\nSubject: \(pending.confirmation.subject)\n\nThis sends one email right now, to this recipient only. Nothing else goes out."
     }
 }
 
