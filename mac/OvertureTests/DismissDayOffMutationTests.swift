@@ -57,7 +57,7 @@ struct DismissDayOffMutationTests {
         let feedback = ActionFeedback()
         let offer = DayOffOfferRequest()
 
-        ProspectMutations.dismissForReason(QueueItem(p), .dayDoesntWork,
+        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
                                            prospects: [p], context: ctx, feedback: feedback, offer: offer)
 
         let pending = try #require(offer.pending)

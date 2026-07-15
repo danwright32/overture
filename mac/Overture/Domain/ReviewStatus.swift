@@ -103,7 +103,8 @@ enum ConversationState: String, CaseIterable, Sendable {
 // read as a judgement Dan made (it gets its own Archive bucket, and teaches LocalHistory nothing).
 enum DismissReason: String, CaseIterable, Sendable {
     case dateConflict = "date_conflict"
-    case dayDoesntWork = "day_doesnt_work"
+    // #940: 'Day doesn't work' (day_doesnt_work) was folded into 'Date conflict' (they behaved
+    // identically). DismissReasonMigration rewrites any prospect still carrying the old raw value.
     case notInterested = "not_interested"
     case dontWantToShoot = "dont_want_to_shoot"   // #351: personal taste, distinct from "Not a fit"
     case alreadyBooked = "already_booked"
@@ -113,7 +114,6 @@ enum DismissReason: String, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .dateConflict: return "Date conflict"
-        case .dayDoesntWork: return "Day doesn't work"
         case .notInterested: return "Not a fit"
         case .dontWantToShoot: return "Don't want to shoot this"
         case .alreadyBooked: return "Already booked"

@@ -26,6 +26,9 @@ enum LaunchMigrations {
         // Idempotent: guarded by "is there a Carnegie row yet", and it never drops a source id a
         // prospect already carries.
         WatchedSourceBackfill.run(in: context)
+        // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
+        // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
+        DismissReasonMigration.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show

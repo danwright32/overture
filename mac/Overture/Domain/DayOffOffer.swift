@@ -19,7 +19,7 @@ enum DayOffOffer {
     // The reasons that mean "I can't shoot on this date", mirroring the three DismissReason cases the
     // engine already carries. Every other reason (not a fit, don't want to shoot, duplicate, went by) is
     // about the show, not the calendar, so it offers nothing.
-    private static let calendarReasons: Set<DismissReason> = [.dateConflict, .dayDoesntWork, .alreadyBooked]
+    private static let calendarReasons: Set<DismissReason> = [.dateConflict, .alreadyBooked]
 
     // `alreadyBlocked` is the show's own conflict state: when its date is already a day off or a booked
     // shoot, the show already reads "unavailable", so there is nothing to capture and the picker must not

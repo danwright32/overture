@@ -9,7 +9,7 @@ import Foundation
 enum LocalHistory {
     // Reasons Dan skips a prospect because HE couldn't take it (a scheduling miss), not because
     // they're a bad fit; these stay hot future leads (1.2 / #70).
-    private static let schedulingDismissals: Set<DismissReason> = [.dateConflict, .dayDoesntWork, .alreadyBooked]
+    private static let schedulingDismissals: Set<DismissReason> = [.dateConflict, .alreadyBooked]
 
     static func records(from prospects: [Prospect]) -> [HistoryRecord] {
         prospects.compactMap { p in
