@@ -214,6 +214,10 @@ enum SourceInactiveReason: String, Codable, Equatable, Sendable, CaseIterable {
 enum SourceFailure: Equatable, Sendable {
     case fetch(SourceFetchError)
     case verdict(PageVerdict)
+    // #857: the run's verdict disagreed with the events it returned (it claimed the page was empty or
+    // unreadable and still handed back shows, or claimed it found listings and handed back none). The
+    // specific contradiction is carried in the source's note (the WHY line); this token is the WHAT.
+    case inconsistentResult
 
     // A verdict is only a failure when it means the page is broken or we are blind to it. A quiet
     // off-season is the NORMAL state (5 of the #770 spike's 7 real sites, in July) and reporting it as
@@ -238,6 +242,7 @@ enum SourceFailure: Equatable, Sendable {
         case .fetch(.redirectedAway(let h)): return "redirected:\(h)"
         case .fetch(.unreachable):           return "unreachable"
         case .verdict(let v):                return "verdict_\(v.rawValue)"
+        case .inconsistentResult:            return "inconsistent"
         }
     }
 
@@ -250,6 +255,8 @@ enum SourceFailure: Equatable, Sendable {
         switch token {
         case "unreachable":
             self = .fetch(.unreachable)
+        case "inconsistent":
+            self = .inconsistentResult
         case "not_html":
             self = .fetch(.notHTML(payload.isEmpty ? nil : payload))
         case "redirected":
@@ -284,6 +291,10 @@ enum SourceFailure: Equatable, Sendable {
             return "The run ended before reading this page, so it has not been read. The next scout will try it again."
         case .verdict(let v):
             return "The page came back as \(v.rawValue)."
+        case .inconsistentResult:
+            // Generic WHAT. The specific contradiction (which claim disagreed with which events) is the
+            // run's own note, shown on the WHY line beneath this, so this line never repeats it (#843).
+            return "This run's results disagreed with themselves, so nothing from it was used."
         }
     }
 }
