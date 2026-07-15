@@ -18,6 +18,7 @@ struct RootView: View {
     // #285: the shared acknowledgment surface for this window and its sheets, so a control whose
     // effect isn't otherwise visible still shows it ran.
     @State private var feedback = ActionFeedback()
+    @State private var dayOffOffer = DayOffOfferRequest()   // #924: dismiss-to-day-off picker request
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
@@ -505,9 +506,12 @@ struct RootView: View {
             .sheet(isPresented: $showSources) { SourcesView() }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
+            // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
+            .sheet(item: Bindable(dayOffOffer).pending) { pending in BlockDaysSheet(pending: pending) }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
+            .environment(dayOffOffer)
     }
 
     #if DEBUG

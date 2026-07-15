@@ -43,6 +43,24 @@ final class ActionFeedback {
         action = nil
     }
 
+    // #924: the banner is attached to the main window AND to each sheet, since a macOS sheet is a separate
+    // window an overlay on the main view can't cover. All of them read this one object, so without a rule
+    // they all draw the same message at once: the double banner Dan saw removing a day off, one over the
+    // sheet and one on the window behind it. Each mounted banner registers here; only the most recently
+    // mounted surface (the topmost: an open sheet, or the window when none is open) draws.
+    private var activeBanners: Set<Int> = []
+    private var nextBannerToken = 0
+
+    var topBanner: Int { activeBanners.max() ?? 0 }
+
+    func registerBanner() -> Int {
+        nextBannerToken += 1
+        activeBanners.insert(nextBannerToken)
+        return nextBannerToken
+    }
+
+    func releaseBanner(_ token: Int) { activeBanners.remove(token) }
+
     // How long the banner stays up. A message offering Dan a DECISION has to outlast a glance: 3.2
     // seconds is right for "Sent" (which asks nothing of him) and useless for an Undo he has to notice,
     // read, and reach for. Here rather than in the banner view, where no test could reach it (#863/#885).
@@ -81,6 +99,13 @@ enum ActionAck {
 
     static func restored(org: String) -> String {
         "Restored \(org) to the queue"
+    }
+
+    // #924: the day(s) off just captured from a dismissal. Reversible from the banner, the way removing a
+    // range is (#845): the show it came from is now off the queue, so this banner is the one place the
+    // range Dan just blocked is written down.
+    static func dayOffBlocked(range: String) -> String {
+        "\(range) is now blocked"
     }
 
     static func followUpSent(org: String, success: Bool) -> String {

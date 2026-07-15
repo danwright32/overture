@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **587 sentences**, from 180 source files.
+Every sentence Overture can say to Dan: **592 sentences**, from 184 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -34,6 +34,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/VoiceGuidanceGuard.swift`
   - `Domain/VoiceNotesProtector.swift`
 - "Block these days"
+  - `UI/BlockDaysSheet.swift`
   - `UI/DaysOffView.swift`
   - `UI/DaysOffView.swift`
 - "Carnegie Hall"
@@ -266,16 +267,19 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
+"Block days off"
+    `UI/BlockDaysSheet.swift`
 "Block some days"
     `Domain/DayOff.swift`
 "Block these days"
+    `UI/BlockDaysSheet.swift`
     `UI/DaysOffView.swift`
 "Booked shoots"
     `UI/DaysOffView.swift`
 "Booking and response rates by production, discipline, and fit tier"
     `App/RootView.swift`
 "Both days are included, so a Friday to Sunday trip is three blocked days."
-    `UI/DaysOffView.swift`
+    `UI/DayOffRangeFields.swift`
 "Bronx, NY"
     `Domain/VenueDisplay.swift`
 "Brooklyn, NY"
@@ -329,6 +333,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/DraftReviewView.swift`
+"Couldn't block \(range)"
+    `UI/ProspectMutations.swift`
 "Couldn't connect Gmail: \(reason)"
     `Domain/OnboardingState.swift`
 "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
@@ -415,7 +421,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Finds a contact and drafts an email for shows you've kept."
     `Domain/AgentRoster.swift`
 "First day"
-    `UI/DaysOffView.swift`
+    `UI/DayOffRangeFields.swift`
 "Fit tier"
     `Domain/OutcomePatterns.swift`
 "Follow-up sent to \(org)"
@@ -522,7 +528,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Last checked \(formatter.string(from: last))"
     `App/MenuBarStatus.swift`
 "Last day"
-    `UI/DaysOffView.swift`
+    `UI/DayOffRangeFields.swift`
 "Last lines of the run log:"
     `Domain/SourceNote.swift`
 "Lead buffer before the event"
@@ -633,6 +639,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Not installed yet. Run your Overture build once to install it."
     `UI/OnboardingView.swift`
+"Not now"
+    `UI/BlockDaysSheet.swift`
 "Not press/media"
     `UI/DraftReviewView.swift`
 "Not read yet"
@@ -1119,7 +1127,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
     `UI/OutcomePatternsView.swift`
 "Why (optional): vacation, family, anything"
-    `UI/DaysOffView.swift`
+    `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"
     `UI/DraftReviewView.swift`
 "Will receive: \(body)"
@@ -1140,6 +1148,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You declined before (usually a date conflict)"
     `UI/QueueView+Model.swift`
+"You dismissed \(org) because the dates don't work. Block the days you can't shoot, and Overture will stop pitching you for them."
+    `Domain/DayOffOffer.swift`
 "You entered days off but haven't blocked them yet."
     `UI/DaysOffView.swift`
 "You're already shooting \(name) on \(day)."
@@ -1231,6 +1241,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
 "\(range) is no longer blocked"
+    `App/ActionFeedback.swift`
+"\(range) is now blocked"
     `App/ActionFeedback.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`

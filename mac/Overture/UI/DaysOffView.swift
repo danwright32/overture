@@ -111,21 +111,9 @@ struct DaysOffView: View {
 
     private var addForm: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            HStack(spacing: OVSpacing.md) {
-                DatePicker("First day", selection: $newStart, displayedComponents: .date)
-                DatePicker("Last day", selection: $newEnd, displayedComponents: .date)
-                // #901 walk fix: pin the pickers left with a guaranteed gap on the right, so the year's
-                // stepper never crowds the sheet edge.
-                Spacer(minLength: OVSpacing.sm)
-            }
-            .font(.system(size: 12))
-            .datePickerStyle(.compact)
-
-            TextField("Why (optional): vacation, family, anything", text: $newNote)
-                .textFieldStyle(.roundedBorder).font(.system(size: 12))
-            Text("Both days are included, so a Friday to Sunday trip is three blocked days.")
-                .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                .fixedSize(horizontal: false, vertical: true)
+            // #924: the date fields are shared with the block-these-days picker a dismissal opens, so the
+            // two forms cannot drift.
+            DayOffRangeFields(start: $newStart, end: $newEnd, note: $newNote)
 
             if let addMessage {
                 Text(addMessage).font(.system(size: 11)).foregroundStyle(OVColor.rust)

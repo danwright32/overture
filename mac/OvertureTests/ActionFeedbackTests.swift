@@ -19,6 +19,27 @@ struct ActionFeedbackTests {
         #expect(f.revision == 1)
     }
 
+    // The banner is attached to the main window AND to each sheet (sheets are separate windows on macOS),
+    // all reading the one shared object. When a sheet is open over the window, both would draw the same
+    // message: the double banner Dan saw removing a day off. Only the most recently attached surface (the
+    // topmost: the open sheet, or the window when none is open) should draw it.
+    @Test("only the topmost banner surface draws the message")
+    func onlyTheTopmostBannerDraws() {
+        let f = ActionFeedback()
+        let window = f.registerBanner()
+        #expect(f.topBanner == window)          // window alone draws
+
+        let sheet = f.registerBanner()
+        #expect(f.topBanner == sheet)           // a sheet opens over it and takes the banner
+        #expect(f.topBanner != window)          // so the window no longer draws (no double)
+
+        f.releaseBanner(sheet)
+        #expect(f.topBanner == window)          // sheet closes, the window draws again
+
+        f.releaseBanner(window)
+        #expect(f.topBanner == 0)               // nothing mounted, nothing draws
+    }
+
     @Test("a repeated identical message still bumps the revision so the banner restarts")
     func repeatStillBumps() {
         let f = ActionFeedback()

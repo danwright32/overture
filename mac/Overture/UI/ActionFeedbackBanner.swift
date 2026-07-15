@@ -6,11 +6,16 @@ import SwiftUI
 // them), all reading the one inherited ActionFeedback object.
 private struct ActionFeedbackBanner: ViewModifier {
     @Environment(ActionFeedback.self) private var feedback
+    // #924: this surface's spot in the mount order, so only the topmost one draws (no double banner when a
+    // sheet is open over the window). Registered on appear, released on disappear.
+    @State private var token = 0
 
     func body(content: Content) -> some View {
         content
+            .onAppear { token = feedback.registerBanner() }
+            .onDisappear { feedback.releaseBanner(token) }
             .overlay(alignment: .bottom) {
-                if let message = feedback.message {
+                if let message = feedback.message, token == feedback.topBanner {
                     HStack(spacing: OVSpacing.sm) {
                         Text(message)
                             .font(OVType.meta)

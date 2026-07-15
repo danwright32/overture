@@ -1,0 +1,100 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import Overture
+
+// #924: dismissing a show for a calendar reason records the dismissal AND offers to block the date. The
+// offer is on the banner (an action Dan taps), never automatic. This drives the mutation end to end with a
+// real store so the single-tap block actually writes a DayOff, and the run path actually raises a picker
+// request, rather than trusting a source read.
+@MainActor
+@Suite("Dismiss offers a day off (#924)")
+struct DismissDayOffMutationTests {
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self, DayOff.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    @discardableResult
+    private func show(_ ctx: ModelContext, on date: String, runEnd: String? = nil) -> Prospect {
+        let p = Prospect(naturalKey: "k-\(date)", groupName: "Vienna Philharmonic", discipline: "music",
+                         venue: "Stern Auditorium", performanceDate: date, sourceListingURL: nil,
+                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .queued)
+        p.runEndDate = runEnd
+        ctx.insert(p)
+        try? ctx.save()
+        return p
+    }
+
+    // A calendar-reason dismissal opens the centered picker (a pending request), pre-filled with the show's
+    // date, rather than a missable banner. It commits nothing until Dan confirms in the picker: the reason
+    // Dan wanted a modal here is that dismissing for a date reason almost always means he'll block it.
+    @Test func aSingleNightCalendarDismissOpensThePickerForThatDay() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-18")
+        let feedback = ActionFeedback()
+        let offer = DayOffOfferRequest()
+
+        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
+                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+
+        #expect(p.status == .dismissed)
+        #expect(p.dismissReasonRaw == "date_conflict")
+        let pending = try #require(offer.pending)           // the centered picker is raised, not a banner
+        #expect(pending.start == "2026-11-18")
+        #expect(pending.end == "2026-11-18")
+        #expect(feedback.action == nil)                     // no missable banner offer
+        #expect(DayOffEditing.rows(in: ctx).isEmpty)        // nothing blocked until he confirms in the picker
+    }
+
+    // A multi-night run opens the same picker, pre-filled with the whole run, so Dan narrows it there.
+    @Test func aRunDismissOpensThePickerForTheWholeRun() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-18", runEnd: "2026-11-20")
+        let feedback = ActionFeedback()
+        let offer = DayOffOfferRequest()
+
+        ProspectMutations.dismissForReason(QueueItem(p), .dayDoesntWork,
+                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+
+        let pending = try #require(offer.pending)
+        #expect(pending.start == "2026-11-18")
+        #expect(pending.end == "2026-11-20")
+        #expect(DayOffEditing.rows(in: ctx).isEmpty)        // the picker has not committed anything
+    }
+
+    // A non-calendar reason records the dismissal and offers nothing.
+    @Test func aNonCalendarDismissOffersNothing() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-18")
+        let feedback = ActionFeedback()
+        let offer = DayOffOfferRequest()
+
+        ProspectMutations.dismissForReason(QueueItem(p), .notInterested,
+                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+
+        #expect(p.status == .dismissed)
+        #expect(offer.pending == nil)
+        #expect(feedback.action == nil)
+    }
+
+    // The picker's confirm goes through blockDaysOff, the one writer, which adds the day off (the conflict
+    // sweep then acts on it) and confirms it.
+    @Test func blockDaysOffWritesTheDayOffAndConfirms() throws {
+        let ctx = try context()
+        let feedback = ActionFeedback()
+
+        let ok = ProspectMutations.blockDaysOff(start: "2026-11-18", end: "2026-11-20",
+                                                note: "Away", context: ctx, feedback: feedback)
+
+        #expect(ok)
+        let rows = DayOffEditing.rows(in: ctx)
+        #expect(rows.count == 1)
+        #expect(rows.first?.startDate == "2026-11-18")
+        #expect(rows.first?.endDate == "2026-11-20")
+        #expect(feedback.message?.contains("blocked") == true)
+    }
+}

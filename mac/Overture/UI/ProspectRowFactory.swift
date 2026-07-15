@@ -9,6 +9,7 @@ import SwiftData
 @MainActor
 enum ProspectRowFactory {
     static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                    dayOffOffer: DayOffOfferRequest,
                     highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
@@ -18,7 +19,7 @@ enum ProspectRowFactory {
             item: item,
             today: today,
             onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback) },
-            onDismiss: { reason in ProspectMutations.setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback) },
+            onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects, context: context, feedback: feedback, offer: dayOffOffer) },
             onApprove: { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
