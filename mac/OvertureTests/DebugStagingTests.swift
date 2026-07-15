@@ -114,6 +114,23 @@ struct DebugStagingTests {
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.sendState == .sent)
         #expect(p.recipients.first?.sentAt == now)
+        // #378: ReachedOutQueue now requires a Gmail message id as proof of a real send, so a
+        // staged recipient must carry a (synthetic) one too or it silently drops off that view.
+        #expect(p.recipients.first?.gmailMessageId != nil)
+    }
+
+    // #378 end to end: the whole reason stageAsSent stamps a synthetic gmailMessageId is so a
+    // staged lead still shows up in the Reached-out queue Dan uses to test follow-up/reminder
+    // flows in Debug builds, exactly as it did before the real-send-proof gate was added.
+    @Test func stagedRecipientStillShowsUpInReachedOutQueue() {
+        let p = makeProspect()
+        let recipient = Recipient(id: "ann@example.com", email: "ann@example.com", provenance: .act)
+        p.setRecipients([recipient])
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        DebugStaging.stageAsSent(p, now: now)
+
+        #expect(ReachedOutQueue.nextReachOut(for: recipient, of: p, now: now) != nil)
     }
 
     @Test func reminderDueLeadSeedsARepliedRecipient() throws {
@@ -125,6 +142,7 @@ struct DebugStagingTests {
         #expect(p.recipients.first?.email == "reminder@debug.example")
         #expect(p.recipients.first?.sendState == .sent)
         #expect(p.recipients.first?.replied == true)
+        #expect(p.recipients.first?.gmailMessageId != nil)
     }
 
     @Test func selfSendLeadSeedsAPendingRecipient() throws {
