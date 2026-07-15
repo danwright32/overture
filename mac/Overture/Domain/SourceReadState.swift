@@ -47,14 +47,21 @@ enum SourceReadState: Equatable, Sendable {
     func isWorthShowing(lastCheckedAt: Date?, failure: SourceFailure? = nil) -> Bool {
         switch self {
         case .unreadChangesWaiting:
-            // #843: a run that died BEFORE reading the page (`notRead`) leaves this state set AND records
-            // a failure whose own line already says "it has not been read. The next scout will try it
-            // again." Shown together, both lines say the one thing. The failure line is the better of the
-            // two (it also says WHY the read did not happen), so it keeps the message and this one steps
-            // aside. Any other failure carries a distinct reason, so this line still adds its own.
-            if case .verdict(.notRead) = failure { return false }
-            // Not a fact about time, and the whole reason the line exists. Always said, always loud.
-            return true
+            // This line's job is the one that must never be skimmed: listings changed, nobody has read
+            // them, and a scout Dan starts is what reads them. But for two failures "Run a scout to read
+            // them" is the wrong thing to say, so it steps aside for the failure line instead:
+            //   - notRead (#843): the run died before opening the page; the failure line already says
+            //     "it has not been read. The next scout will try it again.", and also says WHY, so the
+            //     two together said the one thing twice.
+            //   - unreadable (#958): the page is drawn by JavaScript, so a plain re-fetch reads the same
+            //     empty shell every time. "Run a scout to read them" promises a re-run will fix what a
+            //     re-run cannot; the failure line ("drawn by JavaScript, nothing to read") is the truth.
+            // Any other failure (a transient fetch error, say) can genuinely be cleared by another scout,
+            // so the line stays, always loud.
+            switch failure {
+            case .verdict(.notRead), .verdict(.unreadable): return false
+            default: return true
+            }
         case .neverRead:
             // "Never checked" already tells him nobody has read it. Said twice, it says nothing.
             return lastCheckedAt != nil
