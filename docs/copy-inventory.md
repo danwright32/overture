@@ -160,8 +160,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
-" It also closes the lead out (kept warm for next time)."
-    `Domain/ConversationReminder.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
 " Try again, and if it keeps happening the page may be one it can't make sense of."
@@ -889,9 +887,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send this email now?"
     `UI/SendConfirmSheet.swift`
 "Send this follow-up now?"
-    `UI/FollowUpsView.swift`
+    `UI/SendConfirmSheet.swift`
 "Send this note now?"
-    `UI/FollowUpsView.swift`
+    `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
     `UI/DraftReviewView.swift`
 "Sending despite the draft warning you confirmed."
@@ -1067,9 +1065,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This sends one email right now, to this recipient only. Nothing else goes out."
     `UI/SendConfirmSheet.swift`
 "This sends one follow-up right now, to this recipient only. Nothing else goes out."
-    `Domain/FollowUp.swift`
+    `UI/SendConfirmSheet.swift`
 "This sends one message right now, to this recipient only."
-    `Domain/ConversationReminder.swift`
+    `UI/SendConfirmSheet.swift`
+"This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time)."
+    `UI/SendConfirmSheet.swift`
 "This should be their events or season page, not one show. A single show's page never changes again, so watching it would watch nothing."
     `UI/AddLeadSheet.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."

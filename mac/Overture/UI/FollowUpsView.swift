@@ -47,19 +47,19 @@ struct FollowUpsView: View {
                                    hasQuestionDays: hasQuestionDays, leadBufferDays: leadBufferDays)
     }
 
+    // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
+    // renders (the same sheet the main draft send uses), instead of a preview string for a stock alert.
     private struct PendingNudge: Identifiable {
         let id: String        // prospect naturalKey
         let recipientId: String   // which contact on the show (#418 D)
-        let recipient: String
-        let preview: String
+        let confirmation: SendConfirmation
     }
 
     private struct PendingConversation: Identifiable {
         let id: String        // prospect naturalKey
         let recipientId: String   // which contact on the show (#652)
-        let recipient: String
-        let preview: String
         let isClosing: Bool
+        let confirmation: SendConfirmation
     }
 
     private var due: [FollowUp.DueRecipient] {
@@ -130,22 +130,18 @@ struct FollowUpsView: View {
         }
         .frame(width: 500, height: 560)
         .background(OVColor.canvas)
-        .alert("Send this follow-up now?",
-               isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-               presenting: pending) { p in
-            Button("Send") { performNudge(p.id, p.recipientId) }
-            Button("Cancel", role: .cancel) { pending = nil }
-        } message: { p in
-            Text(FollowUp.confirmMessage(recipient: p.recipient, preview: p.preview))
+        // #948: the follow-up and conversation-note confirmations are the same branded SendConfirmSheet
+        // the main draft send uses (From / To / Subject / body preview), not a stock system alert. All
+        // three consequential sends now look and read the same.
+        .sheet(item: $pending) { p in
+            SendConfirmSheet(confirmation: p.confirmation,
+                             onSend: { performNudge(p.id, p.recipientId) },
+                             onCancel: { pending = nil })
         }
-        .alert("Send this note now?",
-               isPresented: Binding(get: { pendingConversation != nil }, set: { if !$0 { pendingConversation = nil } }),
-               presenting: pendingConversation) { p in
-            Button("Send") { performConversationNudge(p.id, p.recipientId, isClosing: p.isClosing) }
-            Button("Cancel", role: .cancel) { pendingConversation = nil }
-        } message: { p in
-            Text(ConversationReminder.confirmMessage(recipient: p.recipient, preview: p.preview,
-                                                     isClosing: p.isClosing))
+        .sheet(item: $pendingConversation) { p in
+            SendConfirmSheet(confirmation: p.confirmation,
+                             onSend: { performConversationNudge(p.id, p.recipientId, isClosing: p.isClosing) },
+                             onCancel: { pendingConversation = nil })
         }
         .actionFeedbackBanner()
         .onAppear {
@@ -275,32 +271,21 @@ struct FollowUpsView: View {
     }
 
     private func requestNudge(_ d: FollowUp.DueRecipient) {
-        guard let email = d.recipient.email else { return }
-        let preview = "Subject: \(FollowUp.nudgeSubject(groupName: d.prospect.groupName))\n\n"
-            + FollowUp.nudgeBody(contactName: d.recipient.name, groupName: d.prospect.groupName,
-                                 venue: d.prospect.venue,
-                                 // #885: the SAME derivation the row's label uses, so the nudge Dan is
-                                 // told he is sending is the nudge the recipient actually gets.
-                                 attempt: FollowUp.attempt(after: d.recipient.followUpCount))
-        pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, recipient: email, preview: preview)
+        // #948: the branded confirmation is built from the same FollowUp.nudgeContent the sender reads,
+        // so what Dan sees on the sheet (From / To / Subject / body) is exactly what goes out. The old
+        // preview derived its subject from nudgeSubject while the send used replySubject: two subjects.
+        guard let confirmation = SendConfirmation(followUpFor: d.recipient, of: d.prospect) else { return }
+        pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, confirmation: confirmation)
     }
 
     private func requestConversationNudge(_ d: ConversationReminder.DueRecipient, kind: ConversationReminder.Kind) {
         let p = d.prospect, r = d.recipient
-        guard let email = r.email else { return }
-        let body: String
-        var closing = false
-        switch kind {
-        case .active(let state):
-            body = ConversationReminder.nudgeBody(for: state, contactName: r.name, groupName: p.groupName, venue: p.venue)
-        case .closing:
-            body = ConversationReminder.closingNudgeBody(contactName: r.name, groupName: p.groupName, venue: p.venue)
-            closing = true
-        case .needsState, .suggested:
-            return   // not a sendable nudge; handled by confirm / set-a-state
-        }
-        pendingConversation = PendingConversation(id: p.naturalKey, recipientId: r.id, recipient: email,
-                                                  preview: body, isClosing: closing)
+        let isClosing: Bool
+        if case .closing = kind { isClosing = true } else { isClosing = false }
+        // Nil for a kind that is a prompt, not a sendable email (handled by confirm / set-a-state).
+        guard let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: kind) else { return }
+        pendingConversation = PendingConversation(id: p.naturalKey, recipientId: r.id,
+                                                  isClosing: isClosing, confirmation: confirmation)
     }
 
     // #468 (SUP-006): routed through ProspectMutations so this sheet's send gets the same
