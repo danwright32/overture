@@ -58,7 +58,7 @@ enum DebugStaging {
     // default). Left `.drafted` (not pre-approved) so Dan exercises the real approve + send clicks; its
     // performance date is inside the bookable window so it shows in the queue; keyed under the
     // "debug-of-" prefix so clearDebugLeads removes it.
-    static let defaultSelfSendAddress = "dan@danwrightphotography.com"
+    static let defaultSelfSendAddress = SendIdentity.danWright.email
 
     // #432: resolve the self-send test address from an optional override (the `selfSendTestAddress`
     // user default), falling back to Dan's primary inbox when it is absent or blank. Pure so the

@@ -55,7 +55,7 @@ final class GmailAuthManager {
         let config = OAuthConfig(clientId: client.clientId, clientSecret: client.clientSecret,
                                  redirectURI: redirect, scopes: OAuthConfig.gmailScopes)
         let authURL = GoogleOAuth.authorizationURL(config: config, pkce: pkce, state: state,
-                                                   loginHint: "dan@danwrightphotography.com")
+                                                   loginHint: SendIdentity.danWright.email)
         NSWorkspace.shared.open(authURL)
 
         // Auto-give-up so the UI can never deadlock on "Connecting…" if the redirect

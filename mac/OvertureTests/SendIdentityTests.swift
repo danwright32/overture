@@ -30,5 +30,11 @@ struct SendIdentityTests {
         // too rather than keeping its own copy that could silently drift from what actually sends.
         #expect(!SourceGuardHelper.source("Overture/Integration/GmailReplyChecker.swift").contains(address),
                 "GmailReplyChecker must default its selfEmail from SendIdentity, not a re-typed address literal (#949).")
+        // #951: the last two copies. The Google sign-in login hint (which account to authorize) and the
+        // debug self-send default are both Dan's own address, so they read SendIdentity too.
+        #expect(!SourceGuardHelper.source("Overture/Integration/GmailAuthManager.swift").contains(address),
+                "GmailAuthManager's login hint must come from SendIdentity, not a re-typed address literal (#951).")
+        #expect(!SourceGuardHelper.source("Overture/Domain/DebugStaging.swift").contains(address),
+                "DebugStaging's self-send default must come from SendIdentity, not a re-typed address literal (#951).")
     }
 }
