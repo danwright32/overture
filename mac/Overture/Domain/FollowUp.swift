@@ -66,12 +66,19 @@ enum FollowUp {
         return "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     }
 
-    // What Dan confirms before a nudge goes. A promise about what the app will do, and it lived inside an
-    // alert closure in a view, where no test could read it. The last clause is the load-bearing one: it
-    // says nothing ELSE goes out, on a screen listing many due contacts.
-    static func confirmMessage(recipient: String, preview: String) -> String {
-        "To: \(recipient)\n\n\(preview)\n\n"
-            + "This sends one follow-up right now, to this recipient only. Nothing else goes out."
+    // #948: the exact subject and body a follow-up nudge will send, in ONE place, so the branded
+    // confirmation sheet (SendConfirmation.init(followUpFor:of:)) and the sender (SendService.sendFollowUp)
+    // read the same values. Before this, the confirm preview built its subject from `nudgeSubject` while
+    // the send used `replySubject`, so Dan confirmed one subject and a different one went out. Pure
+    // (primitives in, strings out): no model access, no actor, testable on its own.
+    struct NudgeContent: Equatable, Sendable { let subject: String; let body: String }
+
+    static func nudgeContent(originalSubject: String?, groupName: String,
+                             contactName: String?, venue: String?, followUpCount: Int) -> NudgeContent {
+        NudgeContent(
+            subject: replySubject(originalSubject: originalSubject, groupName: groupName),
+            body: nudgeBody(contactName: contactName, groupName: groupName,
+                            venue: venue, attempt: attempt(after: followUpCount)))
     }
 
     // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)

@@ -6,6 +6,14 @@ import SwiftUI
 enum SendConfirmCopy {
     static let title = "Send this email now?"
     static let reassurance = "This sends one email right now, to this recipient only. Nothing else goes out."
+    // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
+    // differ from the draft's (and a closing note names the second thing it does), and they live here
+    // beside the draft's so all three are read together, in one place, rather than in three view bodies.
+    static let followUpTitle = "Send this follow-up now?"
+    static let followUpReassurance = "This sends one follow-up right now, to this recipient only. Nothing else goes out."
+    static let noteTitle = "Send this note now?"
+    static let noteReassurance = "This sends one message right now, to this recipient only."
+    static let noteReassuranceClosing = "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time)."
     static let fromLabel = "From"
     static let toLabel = "To"
     static let subjectLabel = "Subject"
@@ -30,7 +38,7 @@ struct SendConfirmSheet: View {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 15))
                     .foregroundStyle(OVColor.goldBright)
-                Text(SendConfirmCopy.title)
+                Text(confirmation.title)
                     .font(OVType.dateHeading)
                     .foregroundStyle(OVColor.onForest)
             }
@@ -69,7 +77,7 @@ struct SendConfirmSheet: View {
 
                 HStack(alignment: .top, spacing: OVSpacing.xs) {
                     Circle().fill(OVColor.gold).frame(width: 6, height: 6).padding(.top, 5)
-                    Text(SendConfirmCopy.reassurance)
+                    Text(confirmation.reassurance)
                         .font(.system(size: 12))
                         .foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)

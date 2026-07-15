@@ -109,26 +109,36 @@ struct FollowUpCopyTests {
         #expect(label == "no contact · nudge 2 of 2")
     }
 
-    // The confirmation Dan reads before a send. It is a PROMISE about what the app will do, and it was
-    // assembled inline in an alert closure where no test could read it.
-    @Test func theFollowUpConfirmationPromisesExactlyOneEmailToOneContact() {
-        let message = FollowUp.confirmMessage(recipient: "them@example.com", preview: "Subject: x\n\nBody")
+    // #948: the exact subject and body a follow-up nudge sends, in one shared place read by both the
+    // sender and the confirmation sheet. The subject must be the REPLY subject (what threads and what
+    // actually goes out), not the standalone nudge subject the old confirm preview showed.
+    @Test func theFollowUpNudgeContentUsesTheReplySubjectThatActuallySends() {
+        let content = FollowUp.nudgeContent(originalSubject: "Photographs for the Quartet",
+                                            groupName: "The Quartet", contactName: "Marcus",
+                                            venue: "Weill Recital Hall", followUpCount: 0)
 
-        #expect(message.contains("To: them@example.com"))
-        #expect(message.contains("Subject: x"))
-        #expect(message.contains("This sends one follow-up right now, to this recipient only. Nothing else goes out."))
+        #expect(content.subject == "Re: Photographs for the Quartet")
+        #expect(content.subject
+                == FollowUp.replySubject(originalSubject: "Photographs for the Quartet", groupName: "The Quartet"))
+        #expect(content.body
+                == FollowUp.nudgeBody(contactName: "Marcus", groupName: "The Quartet",
+                                      venue: "Weill Recital Hall", attempt: 1))
     }
 
-    // The closing note does a SECOND thing (it also closes the lead out), and the sentence saying so was
-    // appended by a ternary in a view. A confirmation that omits a consequence is the one that matters.
-    @Test func aClosingNoteSaysItAlsoClosesTheLeadOut() {
-        let closing = ConversationReminder.confirmMessage(recipient: "them@example.com",
-                                                          preview: "Body", isClosing: true)
-        let plain = ConversationReminder.confirmMessage(recipient: "them@example.com",
-                                                        preview: "Body", isClosing: false)
+    // The closing note does a SECOND thing (it also closes the lead out), so its content is marked
+    // closing; a prompt kind (needs a state, or an unconfirmed guess) is not a sendable email at all.
+    @Test func aClosingNoteIsMarkedClosingAndAPromptKindHasNoSendableContent() {
+        let active = ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: "S",
+                                                       groupName: "G", contactName: "A", venue: "V")
+        #expect(active?.isClosing == false)
 
-        #expect(closing.contains("It also closes the lead out (kept warm for next time)."))
-        #expect(plain.contains("This sends one message right now, to this recipient only."))
-        #expect(!plain.contains("closes the lead out"))
+        let closing = ConversationReminder.nudgeContent(kind: .closing, originalSubject: "S",
+                                                        groupName: "G", contactName: "A", venue: "V")
+        #expect(closing?.isClosing == true)
+
+        #expect(ConversationReminder.nudgeContent(kind: .needsState, originalSubject: "S",
+                                                  groupName: "G", contactName: "A", venue: "V") == nil)
+        #expect(ConversationReminder.nudgeContent(kind: .suggested(.interested), originalSubject: "S",
+                                                  groupName: "G", contactName: "A", venue: "V") == nil)
     }
 }

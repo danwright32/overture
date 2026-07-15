@@ -206,17 +206,28 @@ enum ConversationReminder {
         }
     }
 
-    // #885: what Dan confirms before a conversation note goes out. Assembled inline in an alert closure
-    // before, with the second sentence appended by a ternary.
-    //
-    // That second sentence is the whole reason this is worth testing: a closing note does a SECOND thing,
-    // it also closes the lead out. A confirmation that silently omits a consequence is precisely the one
-    // that must not be able to drift.
-    static func confirmMessage(recipient: String, preview: String, isClosing: Bool) -> String {
-        let base = "To: \(recipient)\n\n\(preview)\n\n"
-            + "This sends one message right now, to this recipient only."
-        guard isClosing else { return base }
-        return base + " It also closes the lead out (kept warm for next time)."
+    // #948: the exact subject and body a conversation nudge will send, in ONE place, shared by the
+    // branded confirmation sheet (SendConfirmation.init(conversationNudgeFor:of:kind:)) and the sender
+    // (SendService.sendConversationNudge), so what Dan confirms cannot differ from what goes out. Returns
+    // nil for the kinds that are a prompt to categorize/confirm, not a sendable email (#652). `isClosing`
+    // is carried out so the sheet's reassurance can name the SECOND thing a closing note does. Pure.
+    struct NudgeContent: Equatable, Sendable { let subject: String; let body: String; let isClosing: Bool }
+
+    static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String,
+                             contactName: String?, venue: String?) -> NudgeContent? {
+        let body: String
+        var closing = false
+        switch kind {
+        case .active(let state):
+            body = nudgeBody(for: state, contactName: contactName, groupName: groupName, venue: venue)
+        case .closing:
+            body = closingNudgeBody(contactName: contactName, groupName: groupName, venue: venue)
+            closing = true
+        case .needsState, .suggested:
+            return nil   // a prompt to categorize/confirm, not a sendable email
+        }
+        return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: groupName),
+                            body: body, isClosing: closing)
     }
 
     // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)

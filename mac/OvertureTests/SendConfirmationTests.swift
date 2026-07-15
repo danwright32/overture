@@ -100,4 +100,50 @@ struct SendConfirmationTests {
         presenter.sendState = .sent; presenter.sentAt = Date()
         #expect(SendConfirmation(prospect: p) == nil)
     }
+
+    // #948: the draft confirmation carries the draft heading and reassurance, so the one generalized
+    // sheet can present it without hardcoding those words.
+    @Test func theDraftConfirmationCarriesItsOwnHeadingAndReassurance() throws {
+        let ctx = ModelContext(try container())
+        let c = SendConfirmation(prospect: make(ctx))
+        #expect(c?.title == "Send this email now?")
+        #expect(c?.reassurance == "This sends one email right now, to this recipient only. Nothing else goes out.")
+    }
+
+    // #948: a follow-up confirmation shows exactly what SendService.sendFollowUp will send. The subject
+    // is the REPLY subject (what threads), not the standalone nudge subject the old alert previewed, and
+    // From is the one true sending identity.
+    @Test func aFollowUpConfirmationShowsExactlyWhatWillSend() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, subject: "Photographs for G")
+        let r = p.recipients.first!
+        r.name = "Marcus"
+
+        let c = SendConfirmation(followUpFor: r, of: p)
+        #expect(c?.from == SendIdentity.danWright)
+        #expect(c?.recipient == "to@org.org")
+        #expect(c?.title == "Send this follow-up now?")
+        #expect(c?.reassurance == "This sends one follow-up right now, to this recipient only. Nothing else goes out.")
+        #expect(c?.subject == FollowUp.replySubject(originalSubject: "Photographs for G", groupName: "G"))
+        #expect(c?.body == FollowUp.nudgeContent(originalSubject: "Photographs for G", groupName: "G",
+                                                 contactName: "Marcus", venue: "V", followUpCount: 0).body)
+    }
+
+    // #948: a closing note's reassurance names the SECOND thing it does (it closes the lead out); an
+    // active note's does not. A prompt kind is not sendable, so it yields no confirmation.
+    @Test func aConversationNoteConfirmationSaysWhatAClosingNoteAlsoDoes() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, subject: "Photographs for G")
+        let r = p.recipients.first!
+
+        let active = SendConfirmation(conversationNudgeFor: r, of: p, kind: .active(.interested))
+        #expect(active?.title == "Send this note now?")
+        #expect(active?.reassurance == "This sends one message right now, to this recipient only.")
+
+        let closing = SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing)
+        #expect(closing?.reassurance
+                == "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time).")
+
+        #expect(SendConfirmation(conversationNudgeFor: r, of: p, kind: .needsState) == nil)
+    }
 }

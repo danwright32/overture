@@ -132,11 +132,15 @@ enum SendService {
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
         // thread reply detection already watches for this contact.
+        // #948: subject and body come from the one shared helper the confirmation sheet also reads, so
+        // what Dan confirmed is exactly what sends.
+        let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
+                                            contactName: recipient.name, venue: prospect.venue,
+                                            followUpCount: recipient.followUpCount)
         let mail = OutgoingMail(
             to: email,
-            subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
-            body: FollowUp.nudgeBody(contactName: recipient.name, groupName: prospect.groupName,
-                                     venue: prospect.venue, attempt: recipient.followUpCount + 1),
+            subject: content.subject,
+            body: content.body,
             inReplyTo: recipient.gmailMessageId,
             threadId: recipient.gmailThreadId)
         do {
@@ -168,22 +172,18 @@ enum SendService {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
         // #468: shared with sendFollowUp's claim above.
         guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
-        let body: String
-        switch kind {
-        case .active(let state):
-            body = ConversationReminder.nudgeBody(for: state, contactName: recipient.name,
-                                                  groupName: prospect.groupName, venue: prospect.venue)
-        case .closing:
-            body = ConversationReminder.closingNudgeBody(contactName: recipient.name,
-                                                         groupName: prospect.groupName, venue: prospect.venue)
-        case .needsState, .suggested:
+        // #948: subject and body from the one shared helper the confirmation sheet also reads. It returns
+        // nil for a kind that is a prompt, not a sendable email, exactly the .needsState/.suggested case.
+        guard let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
+                                                              groupName: prospect.groupName,
+                                                              contactName: recipient.name, venue: prospect.venue) else {
             recipient.nudgeSendClaimedAt = nil   // never actually sent, don't leave the claim held
-            return false   // a prompt to categorize/confirm, not a sendable email
+            return false
         }
         let mail = OutgoingMail(
             to: email,
-            subject: FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName),
-            body: body,
+            subject: content.subject,
+            body: content.body,
             inReplyTo: recipient.gmailMessageId,
             threadId: recipient.gmailThreadId)
         do {
