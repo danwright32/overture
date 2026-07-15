@@ -644,6 +644,18 @@ enum QueueModel {
         item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
     }
 
+    // #939: QueueView and ArchiveView both build their rows from `prospects` this same way, so the
+    // cross-venue engagement link (computed across the WHOLE array, not one prospect at a time) lives
+    // here where it is testable, rather than inline in either view (the #863 lesson).
+    static func items(from prospects: [Prospect]) -> [QueueItem] {
+        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
+        return prospects.map {
+            var item = QueueItem($0)
+            item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
+            return item
+        }
+    }
+
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays
     // one or more OTHER venues nearby, so two queue rows Dan might otherwise treat as separate leads are
     // actually one touring engagement. Each case is one complete sentence (not built by joining pieces),

@@ -65,16 +65,7 @@ struct QueueView: View {
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
 
-    // #939: a same-production show at a different venue nearby, so two rows Dan might read as separate
-    // leads show as one touring engagement. Computed fresh from what's currently in the queue, not stored.
-    private var items: [QueueItem] {
-        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
-        return prospects.map {
-            var item = QueueItem($0)
-            item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
-            return item
-        }
-    }
+    private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
     // #217: split the queue into people still to email and people already reached out to.
     enum Pipeline: String, CaseIterable {
