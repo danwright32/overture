@@ -49,7 +49,16 @@ struct ArchiveView: View {
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
-    private var items: [QueueItem] { prospects.map(QueueItem.init) }
+    // #939: same as QueueView.items, so a show reads the same whether Dan is looking at it in the
+    // live queue or after it has been dismissed/archived.
+    private var items: [QueueItem] {
+        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
+        return prospects.map {
+            var item = QueueItem($0)
+            item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
+            return item
+        }
+    }
 
     private var filtered: [QueueItem] {
         items

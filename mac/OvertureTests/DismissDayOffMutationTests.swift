@@ -99,6 +99,34 @@ struct DismissDayOffMutationTests {
         #expect(offer.pending == nil)       // but no picker: the date is already blocked
     }
 
+    // #939: dismissing one venue's row for a calendar reason, when a same-production show at a DIFFERENT
+    // venue nearby is also in the queue, widens the picker to cover both dates in one action.
+    @Test func dismissingOneVenueOfATouringShowWidensThePickerToTheOtherVenuesDate() throws {
+        let ctx = try context()
+        let p1 = Prospect(naturalKey: "moca-25", groupName: "MOCA PERFORMS", discipline: "theater",
+                          venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil,
+                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                          status: .queued)
+        let p2 = Prospect(naturalKey: "moca-24", groupName: "MOCA PERFORMS", discipline: "theater",
+                          venue: "Open Door Senior Center", performanceDate: "2026-07-24", sourceListingURL: nil,
+                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                          status: .queued)
+        ctx.insert(p1); ctx.insert(p2); try ctx.save()
+        let feedback = ActionFeedback()
+        let offer = DayOffOfferRequest()
+
+        ProspectMutations.dismissForReason(QueueItem(p1), .dateConflict,
+                                           prospects: [p1, p2], context: ctx, feedback: feedback, offer: offer)
+
+        let pending = try #require(offer.pending)
+        #expect(pending.start == "2026-07-24")
+        #expect(pending.end == "2026-07-25")
+    }
+
     // The picker's confirm goes through blockDaysOff, the one writer, which adds the day off (the conflict
     // sweep then acts on it) and confirms it.
     @Test func blockDaysOffWritesTheDayOffAndConfirms() throws {
