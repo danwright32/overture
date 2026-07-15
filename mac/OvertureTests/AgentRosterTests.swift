@@ -141,4 +141,39 @@ struct AgentRosterTests {
     @Test func conceptSummaryIsEmptyForAnUnknownName() {
         #expect(AgentRoster.conceptSummary(for: "Nonsense").isEmpty)
     }
+
+    // #843: the tooltip is concept + live detail, shown together. In the common state of three pills the
+    // detail used to restate the concept, so the hover said the same thing twice. The detail now carries
+    // only what the concept does not: that it is running (Prep), or the count (Send, Follow-ups).
+    @Test func aRunningPrepDoesNotRestateWhatPrepDoes() {
+        var i = calm; i.prepRunning = true
+        #expect(status("Prep", i).detail == "Running now…")
+        // The old detail repeated the concept's own verbs; the new one does not.
+        let help = AgentRoster.chipHelp(name: "Prep", detail: status("Prep", i).detail)
+        #expect(!help.contains("drafts") || !help.contains("drafting"))
+        #expect(!help.contains("Finding contacts and drafting"))
+    }
+
+    @Test func approvedSendsShowOnlyTheCountOnceConnected() {
+        var i = calm; i.readyToSend = 3
+        #expect(status("Send", i).detail == "3 ready")
+        // "approved" and "to send" both live in the concept already; the detail no longer repeats them.
+        let help = AgentRoster.chipHelp(name: "Send", detail: status("Send", i).detail)
+        #expect(!help.contains("approved, ready to send"))
+    }
+
+    // The not-connected line is untouched: it carries a real instruction the concept does not.
+    @Test func disconnectedSendStillTellsHimToConnectGmail() {
+        var i = calm; i.readyToSend = 2; i.gmailConnected = false
+        #expect(status("Send", i).detail == "2 approved, connect Gmail to send")
+    }
+
+    @Test func dueFollowUpsShowOnlyTheCount() {
+        var i = calm; i.followUpsDue = 4
+        let detail = status("Follow-ups", i).detail
+        #expect(detail == "4 due")
+        // "Nudges" is the concept's word ("Nudges due on shows you've already reached out to."); the
+        // detail no longer repeats it, so the tooltip stops saying "nudges due" twice.
+        #expect(!detail.lowercased().contains("nudge"))
+    }
 }

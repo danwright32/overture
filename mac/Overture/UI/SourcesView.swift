@@ -199,8 +199,11 @@ struct SourcesView: View {
             // feed, or any source a scout just read) is one event, and Dan's Carnegie row described it
             // twice: "Checked 8 hours ago", then "Read 8 hours ago". Repetition teaches him to skim, and
             // the state this exists to surface is the one line here he must never skim past.
+            // #843: the failure is passed in because a `notRead` run leaves this line and the failure line
+            // below saying the same thing; the read-state decides, in one tested place, to step aside for
+            // it rather than repeat it.
             let readState = SourceReadState.of(source)
-            if readState.isWorthShowing(lastCheckedAt: source.lastCheckedAt) {
+            if readState.isWorthShowing(lastCheckedAt: source.lastCheckedAt, failure: source.lastFailure) {
                 Text(readState.label)
                     .font(.system(size: 11))
                     .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **600 sentences**, from 193 source files.
+Every sentence Overture can say to Dan: **598 sentences**, from 193 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -27,7 +27,7 @@ What is not, and why:
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 
-## The same sentence, said in more than one place (37)
+## The same sentence, said in more than one place (36)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -91,9 +91,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
 - "Nothing matches this filter"
-  - `Domain/EmptyState.swift`
-  - `Domain/EmptyState.swift`
-- "Nothing scouted yet"
   - `Domain/EmptyState.swift`
   - `Domain/EmptyState.swift`
 - "Owes a reply"
@@ -216,12 +213,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Add contact"
     `UI/DraftReviewView.swift`
-"Added \(Plural.count(count, "show")) to the queue."
+"Added \(Plural.count(count, "show")), ranked into your queue with everything else."
     `UI/LeadIntakeModel.swift`
 "Added \(who). \(totalCount) recipient\(totalCount == 1 ? "" : "s") on \(org) now."
     `App/ActionFeedback.swift`
-"Added, but no scout has reached them yet."
-    `Domain/SourceGrade.swift`
 "Agency-routed showcase rental, the dead zone that rarely converts."
     `Domain/EventClassifier.swift`
 "Agent logged an error: open agent logs"
@@ -415,8 +410,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
-"Finding contacts and drafting…"
-    `Domain/AgentRoster.swift`
 "Finds a contact and drafts an email for shows you've kept."
     `Domain/AgentRoster.swift`
 "First day"
@@ -604,6 +597,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "No matches for \"\(query)\""
     `Domain/ShowSearch.swift`
+"No new shows landed in the queue from that page."
+    `UI/LeadIntakeModel.swift`
 "No one to follow up with"
     `UI/QueueView.swift`
 "No outcomes yet. Once you've sent and recorded results, booking and response rates show up here."
@@ -670,6 +665,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Nothing to send"
     `Domain/AgentRoster.swift`
+"Nothing tracked yet"
+    `Domain/EmptyState.swift`
 "Nothing upcoming for \(org) on that page. The other shows there belong to the venue's own programme, not to them, so I've left them out."
     `Domain/LeadIntake.swift`
 "Nothing waiting"
@@ -859,6 +856,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Run the scout to comb the venue calendars. Ranked candidates land here for review."
     `Domain/EmptyState.swift`
+"Running now…"
+    `Domain/AgentRoster.swift`
 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;"
     `App/StoreSchemaGuard.swift`
 "Scout & Prep"
@@ -1049,8 +1048,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
     `Domain/SourceGrade.swift`
-"They're ranked and waiting with everything else."
-    `UI/AddLeadSheet.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -1195,13 +1192,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepStatus.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
     `Integration/ScoutService.swift`
-"\(i.followUpsDue) nudge\(i.followUpsDue == 1 ? "" : "s") due"
-    `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
     `Domain/AgentRoster.swift`
 "\(i.readyToSend) approved, connect Gmail to send"
-    `Domain/AgentRoster.swift`
-"\(i.readyToSend) approved, ready to send"
     `Domain/AgentRoster.swift`
 "\(i.sendErrors) failed to send"
     `Domain/AgentRoster.swift`

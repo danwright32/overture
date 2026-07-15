@@ -246,7 +246,12 @@ struct DraftReviewView: View {
         // are about voice, and once Dan edits the text the voice is his; but a dead link or an
         // unfilled placeholder is a fact about the words a stranger will read, no matter who typed
         // them, so his own edit gets flagged too (and it is what actually holds the send).
-        issueFlags(item.draftLintBlockers)
+        // #843: except once approved-and-blocked, when the "This draft won't send: …" gate by the Send
+        // button already names the same reason. The decision is DraftReviewNotes', tested, not this view's.
+        if DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: isApproved,
+                                                       lintBlocked: item.draftLintBlocked) {
+            issueFlags(item.draftLintBlockers)
+        }
         if !item.draftEditedByDan, let body = item.draftBody {
             issueFlags(DraftCheck.findings(in: body,
                                            knownsDate: item.performanceDate != nil,

@@ -200,10 +200,14 @@ struct ProspectRowView: View {
             HStack(spacing: 6) {
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
                     .foregroundStyle(OVColor.inkFaint)
-                Text("·").foregroundStyle(OVColor.lineStrong)
-                Text(timing.label)
-                    .foregroundStyle(timing.urgency == .imminent ? OVColor.rust
-                                     : timing.urgency == .booked ? OVColor.forest : OVColor.inkFaint)
+                // #843: on a booked row the seal already says "BOOKED", so the timing token would repeat
+                // it. The decision lives in the model, tested, not in this ternary.
+                if QueueModel.headerShowsTimingLine(isBooked: item.isBooked) {
+                    Text("·").foregroundStyle(OVColor.lineStrong)
+                    Text(timing.label)
+                        .foregroundStyle(timing.urgency == .imminent ? OVColor.rust
+                                         : timing.urgency == .booked ? OVColor.forest : OVColor.inkFaint)
+                }
             }
             .font(OVType.meta.weight(.regular))
         }

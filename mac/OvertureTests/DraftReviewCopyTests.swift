@@ -123,4 +123,31 @@ struct DraftReviewCopyTests {
         #expect(ContactConfidence.medium.label == "medium confidence")
         #expect(ContactConfidence.low.label == "low confidence")
     }
+
+    // MARK: - #843: a blocking finding is not shown twice
+
+    // Once a draft is approved and still blocked, the "This draft won't send: <finding>." gate by the Send
+    // button names the finding, so the warning flag near the body would say the same thing again. In that
+    // one case the flag steps aside; the gate keeps it.
+    @Test func aBlockingFindingIsNotFlaggedNearTheBodyWhenTheGateAlreadyNamesIt() {
+        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: true, lintBlocked: true) == false)
+    }
+
+    // Before approval there is no gate yet, so the flag is the only place the finding shows: it stays.
+    @Test func aBlockingFindingStaysFlaggedBeforeApproval() {
+        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: false, lintBlocked: true))
+    }
+
+    // After an override the gate no longer names the reason (it tones down to "Sending despite the draft
+    // warning you confirmed."), so the specific finding must stay visible near the body.
+    @Test func anOverriddenFindingStaysFlaggedNearTheBody() {
+        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: true, lintBlocked: false))
+    }
+
+    // The guard and its wiring are two claims (#887): the rule only holds on screen if the view gates the
+    // flags on it. Cut the wire and the finding is shown twice again with the unit tests still green.
+    @Test func theViewGatesTheFlagsOnThatRule() {
+        let view = SourceGuardHelper.source("Overture/UI/DraftReviewView.swift")
+        #expect(view.contains("DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: isApproved"))
+    }
 }

@@ -489,6 +489,21 @@ struct BookedDisplayTests {
         #expect(QueueModel.displayTiming(performanceDate: "2026-07-01", today: today, isBooked: false)
                 == QueueModel.outreachTiming(performanceDate: "2026-07-01", today: today))
     }
+
+    // #843: a booked row shows "BOOKED" on its seal, so the header's timing token would say it again. On a
+    // booked row the header shows only the run date; every other row keeps its timing line.
+    @Test func aBookedRowShowsBookedOnceNotInTheTimingLineToo() {
+        #expect(QueueModel.headerShowsTimingLine(isBooked: true) == false)
+        #expect(QueueModel.headerShowsTimingLine(isBooked: false))
+    }
+
+    // The guard and its wiring are two claims (#887): the rule above only holds on screen if the row
+    // actually gates the timing line on it. Cut the wire and the "Booked" token comes back with the unit
+    // test still green.
+    @Test func theRowGatesItsTimingLineOnThatRule() {
+        let row = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
+        #expect(row.contains("QueueModel.headerShowsTimingLine(isBooked: item.isBooked)"))
+    }
 }
 
 // #201: a confirmed booking leaves the reach-out queue; an auto-detected one stays until Dan confirms it.

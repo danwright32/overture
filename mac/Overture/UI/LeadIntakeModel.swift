@@ -440,10 +440,15 @@ final class LeadIntakeModel {
         try? context.save()
     }
 
-    // #885: the sheet's two sentences, out of AddLeadSheet's body and into the model that already
-    // produced the count they are about.
+    // #885: the sheet's confirmation line, out of AddLeadSheet's body and into the model that already
+    // produced the count it is about.
+    // #843: was two lines ("Added N shows to the queue." then "They're ranked and waiting with everything
+    // else."), where "waiting … with everything else" only restated "to the queue". Now one line, which
+    // also lets the zero case tell the truth: with nothing added, there is nothing to be "ranked and
+    // waiting", so it says what actually happened instead of describing shows that are not there.
     static func addedNote(count: Int) -> String {
-        "Added \(Plural.count(count, "show")) to the queue."
+        guard count > 0 else { return "No new shows landed in the queue from that page." }
+        return "Added \(Plural.count(count, "show")), ranked into your queue with everything else."
     }
 
     static func alreadyWatchingNote(orgName: String) -> String {

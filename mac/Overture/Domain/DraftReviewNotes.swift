@@ -29,6 +29,17 @@ enum DraftReviewNotes {
         return "Sending despite the draft warning you confirmed."
     }
 
+    // #843: the blocking lint findings appear as warning flags near the draft body AND, once the draft is
+    // approved and still blocked, in the "This draft won't send: …" gate by the Send button, which names
+    // the very same reason. That is the same finding on one screen twice. The gate is the one to keep (it
+    // sits with the Send button and its Override), so the flags near the body step aside only in that
+    // exact case. Before approval there is no gate yet, and after an override the gate no longer names the
+    // reason (it tones down to "Sending despite the draft warning you confirmed."), so in both of those
+    // the flags stay: they are the only place the specific finding is still shown.
+    static func showsBlockingFlagsNearBody(isApproved: Bool, lintBlocked: Bool) -> Bool {
+        !(isApproved && lintBlocked)
+    }
+
     // #792: "Sent" was once the whole story, and a contact held back by a review guard is not sendable,
     // so a show read as fully done while a real person never received anything. This count is what says
     // otherwise, and a count is a promise about rows (#863).

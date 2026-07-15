@@ -181,12 +181,14 @@ struct CopyInventoryTests {
                 == ["Domain/EmptyState.swift"])
     }
 
-    // The first thing the list is FOR (#843). The Queue and the Archive both say "Nothing scouted yet"
-    // when empty, which is wrong on the Archive: nothing was scouted is not why the Archive is empty.
-    // Preserved rather than quietly fixed here, because seeing it is #915's job and fixing it is #843's.
-    @Test func reportsTheSameSentenceSaidInTwoPlaces() throws {
+    // The first thing the list was FOR (#843). The Queue and the Archive both said "Nothing scouted yet"
+    // when empty, which is wrong on the Archive: nothing was scouted is not why it is empty. #843 fixed
+    // it, so that sentence is no longer a duplicate. The detector itself still works: it goes on
+    // surfacing the other repeated sentences, which is what keeps the next collision visible.
+    @Test func theFixedDuplicateIsGoneButTheDetectorStillWorks() throws {
         let inventory = try CopyInventory.build()
-        #expect(inventory.duplicates.contains { $0.sentence == "Nothing scouted yet" })
+        #expect(!inventory.duplicates.contains { $0.sentence == "Nothing scouted yet" })
+        #expect(!inventory.duplicates.isEmpty)
     }
 
     // Dan's call on scope: this lists what OVERTURE says to DAN. The follow-up bodies are what Dan says

@@ -160,10 +160,11 @@ struct AddLeadSheet: View {
 
     private func added(_ count: Int, note: String?) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            // #843: one line, not two. It used to be followed by "They're ranked and waiting with
+            // everything else.", which only restated "into the queue"; the one true addition ("ranked",
+            // interleaved with the rest) now lives in the single sentence above.
             Text(LeadIntakeModel.addedNote(count: count))
                 .font(OVType.body).foregroundStyle(OVColor.ink)
-            Text("They're ranked and waiting with everything else.")
-                .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
 
             // He must still be told when the page he pasted could not be read and Overture followed its
             // ticket link to a different site. Silently swapping the page under him is the kind of quiet
