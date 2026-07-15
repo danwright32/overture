@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **592 sentences**, from 188 source files.
+Every sentence Overture can say to Dan: **599 sentences**, from 189 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1010,6 +1010,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The run ended before reading this page, so it has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
+"The run returned results under \(unqueuedResultIds.count) sources it was never asked about (\(ids)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
+    `Integration/ScoutService.swift`
+"The run returned results under a source it was never asked about (\(ids)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
+    `Integration/ScoutService.swift`
+"The run said every listing on this page was in the past but still returned \(shows(count)) from it."
+    `Domain/ScoutResultAudit.swift`
+"The run said it never read this page but still returned \(shows(count)) from it."
+    `Domain/ScoutResultAudit.swift`
+"The run said this page could not be read but still returned \(shows(count)) from it."
+    `Domain/ScoutResultAudit.swift`
+"The run said this page had no dated listings but still returned \(shows(count)) from it."
+    `Domain/ScoutResultAudit.swift`
 "The scheduled scout couldn't run. It'll try again later."
     `Domain/ScoutFailure.swift`
 "The scout couldn't run. This stopped the whole run, so no source was checked. Try again; if it keeps failing, something is wrong with the local store rather than with any one calendar.\n\nDetails: \(message)"
@@ -1050,6 +1062,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This performance happened before you triaged it, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
+"This run's results disagreed with themselves, so nothing from it was used."
+    `Domain/WatchedSource.swift`
 "This sends one follow-up right now, to this recipient only. Nothing else goes out."
     `Domain/FollowUp.swift`
 "This sends one message right now, to this recipient only."

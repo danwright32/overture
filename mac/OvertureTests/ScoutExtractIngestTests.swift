@@ -167,6 +167,11 @@ struct ScoutExtractIngestTests {
         #expect(outcome.inserted == 0)
         #expect(s.lastContentHash == "old-hash")   // our source is untouched
         #expect(s.hasUnreadChanges)                // and still waiting to be read
+
+        // #857: and it vanishes LOUDLY, not silently. A result for an id we never queued means the run
+        // rebuilt a key, so it is recorded and surfaced rather than dropped with no trace.
+        #expect(outcome.unqueuedResultIds == ["some-other-id"])
+        #expect(outcome.warning?.contains("some-other-id") == true)
     }
 
     // A source that was queued but that the run never got to (it died at source nine) keeps its pending
@@ -200,5 +205,50 @@ struct ScoutExtractIngestTests {
 
         #expect(outcome.inserted == 0)
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
+    }
+
+    // MARK: - #857: a run whose results disagree with themselves is not trusted
+
+    // The run said every listing was in the past, then returned an upcoming show anyway. Today those
+    // events were INGESTED off a verdict that claims there was nothing upcoming to ingest. A run that
+    // disagrees with itself does not get to add shows.
+    @Test func allPastWithEventsIsAContradictionAndDoesNotIngest() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx)
+
+        let outcome = ingest(results("org", verdict: .allPast, events: [event("A Show")]), into: ctx)
+
+        #expect(s.health == .failing)
+        guard case .inconsistentResult = s.lastFailure else {
+            Issue.record("expected inconsistentResult, got \(String(describing: s.lastFailure))"); return
+        }
+        #expect(outcome.inserted == 0)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)   // NOT ingested
+    }
+
+    // A verdict that already fails on its own (no dated content) is RELABELLED as a contradiction when it
+    // still returns events, so the reason Dan reads names the real problem (the run disagreed with
+    // itself) rather than the generic "wrong page".
+    @Test func noDatedContentWithEventsIsNamedAsAContradiction() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx)
+
+        ingest(results("org", verdict: .noDatedContent, events: [event("A Show")]), into: ctx)
+
+        guard case .inconsistentResult = s.lastFailure else {
+            Issue.record("expected inconsistentResult, got \(String(describing: s.lastFailure))"); return
+        }
+        #expect(s.runNote?.contains("no dated listings") == true)
+    }
+
+    // A consistent healthy read is untouched: the audit must never fail a source that agreed with itself.
+    @Test func aConsistentReadStillLandsNormally() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx)
+
+        ingest(results("org", verdict: .upcomingListings, events: [event("A Show")]), into: ctx)
+
+        #expect(s.health == .ok)
+        #expect(s.lastFailure == nil)
     }
 }

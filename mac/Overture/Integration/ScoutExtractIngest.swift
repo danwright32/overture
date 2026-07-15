@@ -32,8 +32,12 @@ enum ScoutExtractIngest {
             // A source id the app never queued resolves to NOTHING. The results file is written by a
             // Claude run, and if it ever rebuilt an id instead of echoing it verbatim, the work must
             // vanish loudly rather than land on some other org's row. A silent mismatch has to read as
-            // absence, never as the wrong show.
-            guard let source = row(for: result.sourceId, in: context) else { continue }
+            // absence, never as the wrong show. #857: recorded, so "loudly" is true: the drop is
+            // surfaced in the run's warning rather than being a bare `continue` nobody ever sees.
+            guard let source = row(for: result.sourceId, in: context) else {
+                outcome.unqueuedResultIds.append(result.sourceId)
+                continue
+            }
 
             // #875: the run's own explanation, kept rather than discarded. Written for EVERY result, on
             // the failure path and the healthy one alike, and overwritten each run so it always describes
@@ -41,19 +45,30 @@ enum ScoutExtractIngest {
             // that recovers must stop explaining a failure it no longer has.
             source.notes = result.note
 
+            // #857: the run's own results are untrusted input. A verdict that disagrees with the events
+            // it returned (it claimed the page was empty or unreadable and still handed back shows, or
+            // claimed it found upcoming listings and handed back none) is the run ignoring its own
+            // instructions, and its silence about a show is worth nothing. Its events are NOT ingested;
+            // it is a named failure so the next scout reads the page again.
+            //
+            // Checked BEFORE the verdict branch below on purpose: a `no_dated_content`/`unreadable`
+            // result that still carries events already fails there, but with the generic wrong-page
+            // message; catching it here names the real problem (the run disagreed with itself) on the WHY
+            // line Dan reads, and also catches the two contradictions that verdict branch cannot see
+            // (`all_past` with events, which it would otherwise INGEST, and `upcoming_listings` with none,
+            // which it would otherwise stamp as a healthy quiet read).
+            if let reason = ScoutResultAudit.contradiction(in: result) {
+                source.notes = reason
+                fail(source, as: .inconsistentResult, now: now, outcome: &outcome)
+                continue
+            }
+
             // A page we could not read is a FAILURE, and its hash is not stamped. Stamping it would mean
             // never looking at this source again: it would report as unchanged forever, having never
             // once been read. `SourceFailure(verdict:)` is what decides which verdicts mean broken, and
             // a quiet off-season is deliberately not one of them.
             if let failure = SourceFailure(verdict: result.verdict) {
-                source.lastCheckedAt = now
-                source.health = .failing
-                source.lastFailure = failure
-                // Deliberately NOT cleared: there is still something on that page we have not read, and
-                // the next run must try again rather than skip it.
-                source.hasUnreadChanges = true
-                outcome.sources.append(ScoutService.SourceResult(
-                    sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure)))
+                fail(source, as: failure, now: now, outcome: &outcome)
                 continue
             }
 
@@ -134,6 +149,19 @@ enum ScoutExtractIngest {
         }
 
         return outcome
+    }
+
+    // The shared bookkeeping for a source that failed this run, whichever way it failed (a broken verdict
+    // or a run that contradicted itself, #857). The hash is NOT stamped and the unread flag stays set, so
+    // the next scout reads the page again rather than skipping it forever on the strength of a bad run.
+    private static func fail(_ source: WatchedSource, as failure: SourceFailure, now: Date,
+                             outcome: inout ScoutService.Outcome) {
+        source.lastCheckedAt = now
+        source.health = .failing
+        source.lastFailure = failure
+        source.hasUnreadChanges = true
+        outcome.sources.append(ScoutService.SourceResult(
+            sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure)))
     }
 
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that

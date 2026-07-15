@@ -32,6 +32,12 @@ enum ScoutService {
         // must never report a total that silently omits half of what it was supposed to check.
         var sources: [SourceResult] = []
 
+        // #857: results that came back under a sourceId we never queued. The run rebuilt a key instead of
+        // echoing it, so its work resolves to nothing and cannot be landed on the right row. Recorded so
+        // it vanishes LOUDLY: the queued source it should have belonged to shows up separately as
+        // never-read (the shell guard fills it), but only this names WHY (the id was rewritten).
+        var unqueuedResultIds: [String] = []
+
         // #802, Dan's 3rd decision: the orgs that asked him to stop whose shows still turned up on a
         // calendar he watches. The #769 guard suppressed them, silently, and silent is the problem: on
         // the one mistake that cannot be taken back he would rather SEE the guard working than trust it.
@@ -77,12 +83,25 @@ enum ScoutService {
             if let extractLaunchFailure { return extractLaunchFailure }
             // A source that could not be checked is the most actionable thing after that, and it is
             // named, every run, for as long as it keeps failing. A dead source and a quiet season must
-            // never look alike.
-            if let failures = failureWarning { return failures }
+            // never look alike. #857: a run that rebuilt an id (returned work under a source we never
+            // queued) is shown alongside, not masked by, the failures, because both can happen in one run.
+            let parts = [failureWarning, unqueuedWarning].compactMap { $0 }
+            if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if silentlyEmptyFeed {
                 return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
             }
             return clientListWarning
+        }
+
+        // #857: the run rebuilt one or more sourceIds, so its work for them cannot be landed. Named, so
+        // the drop is loud rather than silent. The id itself is what the run wrote, and is the actionable
+        // clue for whoever debugs why a source keeps coming back never-read.
+        private var unqueuedWarning: String? {
+            guard !unqueuedResultIds.isEmpty else { return nil }
+            let ids = unqueuedResultIds.joined(separator: ", ")
+            return unqueuedResultIds.count == 1
+                ? "The run returned results under a source it was never asked about (\(ids)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
+                : "The run returned results under \(unqueuedResultIds.count) sources it was never asked about (\(ids)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
         }
 
         private var failureWarning: String? {
@@ -113,6 +132,7 @@ enum ScoutService {
             collapsedIntoRun += other.collapsedIntoRun
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
+            unqueuedResultIds.append(contentsOf: other.unqueuedResultIds)
             suppressedOrgs.append(contentsOf: other.suppressedOrgs)
             // #888 part B: reports ACCUMULATE across a merge rather than the last one winning. That is
             // the whole point: a caller that landed six sources must be able to hand all six to one
