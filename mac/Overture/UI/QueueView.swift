@@ -123,11 +123,12 @@ struct QueueView: View {
                 Button {
                     showPendingBookingsOnly.toggle()
                 } label: {
-                    // Active state (#118): filled seal + forest tint when the filter is engaged,
-                    // mirroring the high-fit chip's active treatment, so it's clear why rows are
+                    // #932: the shared toolbar component, like every other toolbar button (icon-only, name
+                    // on hover via .help). Active state (#118): filled seal + forest tint when the filter is
+                    // engaged, mirroring the high-fit chip's active treatment, so it's clear why rows are
                     // hidden instead of "where did my rows go?".
-                    Label(QueueModel.confirmBookingsLabel(count: pendingBookings),
-                          systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
+                    ToolbarHoverLabel(title: QueueModel.confirmBookingsLabel(count: pendingBookings),
+                                      systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
                 }
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
                 .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
