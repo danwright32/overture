@@ -56,6 +56,18 @@ already drifting from the Swift version it mirrored.
   meant, commit it. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
   AppleScript, the draft lint's search terms) is marked at the source with
   `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
+  Before opening a PR that adds or changes any of these sentences, read the new and changed ones
+  COLD (#843/#844): open `git diff docs/copy-inventory.md`, read each added or reworded line in the
+  order a person meets it on screen (the row title before its subtitle, the section heading before
+  its body, the pill name before its detail, the concept summary before the live line shown beside
+  it), with no memory of why the code produces it, and ask of each: does this tell Dan anything the
+  line next to it did not? If not, cut it, or show the second line only in the edge case where the
+  two genuinely differ. The whole class of defect (#840, #841, the third in #840's comment, and the
+  nine #843 fixed) is invisible from inside the code and obvious the instant a person reads the
+  screen, and no test can catch any of it; this cold read is the only thing that does, so it is a
+  required step, not a good intention. A distinction that is real in the code ("checked" versus
+  "read", #803) still collapses to the same sentence twice in the common case, which is exactly what
+  the read has to catch.
 - Changing the AI drafting instructions: those rules live in two places that must stay in sync,
   `docs/prep-runbook.md` §2 inside this repo and the `dan-wright-brand-voice` skill at
   `~/.claude/skills/dan-wright-brand-voice/` (which is NOT tracked by this repo, and is the
