@@ -43,6 +43,24 @@ final class ActionFeedback {
         action = nil
     }
 
+    // #924: the banner is attached to the main window AND to each sheet, since a macOS sheet is a separate
+    // window an overlay on the main view can't cover. All of them read this one object, so without a rule
+    // they all draw the same message at once: the double banner Dan saw removing a day off, one over the
+    // sheet and one on the window behind it. Each mounted banner registers here; only the most recently
+    // mounted surface (the topmost: an open sheet, or the window when none is open) draws.
+    private var activeBanners: Set<Int> = []
+    private var nextBannerToken = 0
+
+    var topBanner: Int { activeBanners.max() ?? 0 }
+
+    func registerBanner() -> Int {
+        nextBannerToken += 1
+        activeBanners.insert(nextBannerToken)
+        return nextBannerToken
+    }
+
+    func releaseBanner(_ token: Int) { activeBanners.remove(token) }
+
     // How long the banner stays up. A message offering Dan a DECISION has to outlast a glance: 3.2
     // seconds is right for "Sent" (which asks nothing of him) and useless for an Undo he has to notice,
     // read, and reach for. Here rather than in the banner view, where no test could reach it (#863/#885).
@@ -81,13 +99,6 @@ enum ActionAck {
 
     static func restored(org: String) -> String {
         "Restored \(org) to the queue"
-    }
-
-    // #924: dismissing a show for a date clash offers to capture that as a day off, so Dan does not have to
-    // say "not this day" twice. The offer, never the act (his standing "ask me" preference): a single night
-    // blocks in one tap, a run opens a picker. Deliberately a question, so the banner is plainly an offer.
-    static func dismissedWithDayOffOffer(org: String, multiNight: Bool) -> String {
-        "Dismissed \(org). " + (multiNight ? "Block those days?" : "Block that day?")
     }
 
     // #924: the day(s) off just captured from a dismissal. Reversible from the banner, the way removing a

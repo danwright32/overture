@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **595 sentences**, from 184 source files.
+Every sentence Overture can say to Dan: **592 sentences**, from 184 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -271,13 +271,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/BlockDaysSheet.swift`
 "Block some days"
     `Domain/DayOff.swift`
-"Block that day?"
-    `App/ActionFeedback.swift`
 "Block these days"
     `UI/BlockDaysSheet.swift`
     `UI/DaysOffView.swift`
-"Block those days?"
-    `App/ActionFeedback.swift`
 "Booked shoots"
     `UI/DaysOffView.swift`
 "Booking and response rates by production, discipline, and fit tier"
@@ -297,8 +293,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Carnegie Hall is added the first time Overture opens your store."
     `UI/SourcesView.swift`
-"Choose days to block…"
-    `UI/ProspectMutations.swift`
 "Closed (not interested)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`

@@ -175,30 +175,17 @@ enum ProspectMutations {
 
     // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date
     // as a day off. Dan telling Overture "not this day" is the most natural moment to block it, instead of
-    // making him say it twice. Never automatic (his "ask me" preference): a single-night show blocks in one
-    // tap on the banner; a run opens a date picker (via the injected request RootView presents), pre-filled
-    // with the whole run, so he narrows it himself.
+    // making him say it twice. The offer is a CENTERED picker (via the injected request RootView presents),
+    // pre-filled with the show's date or run, not a missable banner: dismissing for a date reason almost
+    // always means he'll block it, so a modal he acts on is right. It is still an offer, never automatic:
+    // nothing is blocked until he confirms in the picker (or he closes it with Not now).
     static func dismissForReason(_ item: QueueItem, _ reason: DismissReason,
                                  prospects: [Prospect], context: ModelContext,
                                  feedback: ActionFeedback, offer: DayOffOfferRequest) {
         setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback)
         guard let o = DayOffOffer.offer(reason: reason, performanceDate: item.performanceDate,
                                         runEndDate: item.runEndDate) else { return }
-        let org = item.groupName
-        if o.isMultiNight {
-            // A run opens the picker pre-filled with the whole run; Dan narrows it there.
-            feedback.acknowledge(ActionAck.dismissedWithDayOffOffer(org: org, multiNight: true),
-                                 action: .init(label: "Choose days to block…") {
-                                     offer.request(key: item.id, org: org, start: o.start, end: o.end)
-                                 })
-        } else {
-            // A single night blocks in one tap.
-            let day = EasternDate.dayLabel(o.start) ?? o.start
-            feedback.acknowledge(ActionAck.dismissedWithDayOffOffer(org: org, multiNight: false),
-                                 action: .init(label: "Block \(day)") {
-                                     blockDaysOff(start: o.start, end: o.end, context: context, feedback: feedback)
-                                 })
-        }
+        offer.request(key: item.id, org: item.groupName, start: o.start, end: o.end)
     }
 
     // #924: add the day(s) off and confirm it, reversibly. Shared by the single-tap dismiss offer and the
