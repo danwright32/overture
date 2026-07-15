@@ -15,6 +15,11 @@ enum DebugStaging {
     // already carries its own recipients (from PrepImporter, #654); any still-pending one is
     // marked sent too, mirroring SendService.deliver, so per-recipient downstream flows
     // (follow-ups, reminders, reply handling) have something to act on.
+    //
+    // #378: ReachedOutQueue now requires a Gmail message id as proof of a real send, so each
+    // staged recipient gets a synthetic one (a "debug-" id no real Gmail response could produce)
+    // to keep showing up in the Reached-out queue for testing, without it being mistakable for
+    // a genuine send.
     static func stageAsSent(_ prospect: Prospect, now: Date) {
         prospect.sentAt = now
         prospect.status = .approved
@@ -23,6 +28,7 @@ enum DebugStaging {
         for r in prospect.recipients where r.sendState == .pending {
             r.sendState = .sent
             r.sentAt = now
+            r.gmailMessageId = "debug-\(r.id)-\(Int(now.timeIntervalSince1970))"
         }
     }
 
@@ -46,6 +52,7 @@ enum DebugStaging {
                                   name: "Test Contact (debug)", provenance: .act)
         recipient.sendState = .sent
         recipient.sentAt = p.sentAt
+        recipient.gmailMessageId = "debug-\(recipient.id)-\(Int(now.timeIntervalSince1970))"
         recipient.replied = true
         recipient.setConversationState(.wantsToBook, now: now)
         p.setRecipients([recipient])

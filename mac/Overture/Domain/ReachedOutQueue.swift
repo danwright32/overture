@@ -15,6 +15,10 @@ enum ReachedOutQueue {
         // #331: a real send always has a contact address; a sent timestamp without one is a
         // staged/corrupt record that was never actually emailed, so it doesn't belong here.
         guard let email = r.email, !email.isEmpty else { return nil }
+        // #378: a sent timestamp is not proof of a real send either. Every genuine send (deliver,
+        // and DebugStaging's synthetic stand-in for one) stamps a Gmail message id along with
+        // sentAt; a record with a timestamp but no message id was never actually sent.
+        guard r.gmailMessageId != nil else { return nil }
         let standing = r.standing
         guard standing.isInPlay else { return nil }
 

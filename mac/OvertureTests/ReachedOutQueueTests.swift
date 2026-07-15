@@ -34,6 +34,10 @@ struct ReachedOutQueueTests {
         let r = Recipient(id: id, email: hasEmail ? id : nil, provenance: .act)
         r.sentAt = sentAt
         r.sendState = sentAt != nil ? .sent : .pending
+        // A genuine send always stamps a Gmail message id (GmailSender.performSend), so every
+        // scenario here defaults to carrying one once sent, mirroring the real send path.
+        // #378's own test overwrites this back to nil to model a record with no send proof.
+        r.gmailMessageId = sentAt != nil ? "msg-\(id)" : nil
         if outcome == .replied { r.replied = true }
         if outcome == .lostSoft { r.resolution = .declinedSoft }
         if outcome == .lostHard { r.resolution = .declinedHard }
@@ -57,6 +61,20 @@ struct ReachedOutQueueTests {
         let p = makeShow(ctx, group: "Ghost")
         let ghost = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-86_400), hasEmail: false)
         #expect(ReachedOutQueue.nextReachOut(for: ghost, of: p, now: now) == nil)
+        #expect(ReachedOutQueue.active(from: [p], now: now).isEmpty)
+    }
+
+    // #378: a sent timestamp alone is not proof of a real send (DebugStaging's #331 root cause,
+    // or any future bug that sets sentAt without going through SendService.deliver). A genuine
+    // send always stamps gmailMessageId from the actual Gmail response, so a recipient missing it
+    // must not show up in the reached-out pipeline even though it has a timestamp and an address.
+    @Test func sentWithoutGmailProofIsNotReachedOut() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let p = makeShow(ctx, group: "Unproven")
+        let unproven = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-86_400))
+        unproven.gmailMessageId = nil   // explicit: no Gmail proof of a real send
+        #expect(ReachedOutQueue.nextReachOut(for: unproven, of: p, now: now) == nil)
         #expect(ReachedOutQueue.active(from: [p], now: now).isEmpty)
     }
 
