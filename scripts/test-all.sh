@@ -27,6 +27,12 @@ pnpm test
 echo "==> scripts/run-shell-fixtures.sh"
 "${REPO_ROOT}/scripts/run-shell-fixtures.sh"
 
+# Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
+# (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
+# this clone, so it never breaks CI or a fresh checkout; it only fails locally on genuine drift.
+echo "==> scripts/check-brand-voice-drift.sh"
+"${REPO_ROOT}/scripts/check-brand-voice-drift.sh"
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 
