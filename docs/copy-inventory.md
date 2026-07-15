@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **592 sentences**, from 184 source files.
+Every sentence Overture can say to Dan: **591 sentences**, from 185 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -377,8 +377,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReviewStatus.swift`
 "Date to be confirmed"
     `UI/QueueView+Model.swift`
-"Day doesn't work"
-    `Domain/ReviewStatus.swift`
 "Days off"
     `Domain/DaysOffAttention.swift`
     `UI/DaysOffView.swift`

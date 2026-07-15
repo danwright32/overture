@@ -9,7 +9,7 @@ import Foundation
 struct DayOffOfferTests {
 
     @Test func offersForEachCalendarReason() {
-        for reason in [DismissReason.dateConflict, .dayDoesntWork, .alreadyBooked] {
+        for reason in [DismissReason.dateConflict, .alreadyBooked] {
             let offer = DayOffOffer.offer(reason: reason, performanceDate: "2026-11-18", runEndDate: nil)
             #expect(offer != nil, "expected an offer for \(reason)")
         }
@@ -38,7 +38,7 @@ struct DayOffOfferTests {
     // A run spans its opening night through its closing night, and is multi-night, so the caller opens the
     // date picker pre-filled with the whole run for Dan to narrow.
     @Test func aRunSpansOpeningThroughClosing() {
-        let offer = DayOffOffer.offer(reason: .dayDoesntWork, performanceDate: "2026-11-18", runEndDate: "2026-11-20")
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-11-18", runEndDate: "2026-11-20")
         #expect(offer?.start == "2026-11-18")
         #expect(offer?.end == "2026-11-20")
         #expect(offer?.isMultiNight == true)
