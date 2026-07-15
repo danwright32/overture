@@ -46,7 +46,7 @@ struct FeedReconcileTests {
     }
 
     private let carnegieURL = "https://www.carnegiehall.org/Calendar/2026/08/01/x"
-    private let today = "2026-06-25"
+    private let today = ScoutTestClock.feedReconcileAnchor
 
     // MARK: - The base behaviour (#133), now expressed per source
 

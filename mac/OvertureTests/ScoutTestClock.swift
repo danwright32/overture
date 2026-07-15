@@ -13,4 +13,20 @@ import Foundation
 // point there is to sit on both sides of the line.
 enum ScoutTestClock {
     static let beforeAllFixtures = "2026-01-01"
+
+    // #811: each of these anchors a suite whose fixtures are dated relative to it (yesterday, tonight,
+    // months before, etc.), so the exact value only has to stay internally consistent with that suite's
+    // fixtures, not track any real date. They live here, named, instead of as a `private let today` in
+    // each file, so a suite going red on a date nobody chose has one shared place to look and fix.
+    static let runWindowAnchor = "2026-07-11"
+    static let wentByRetirementAnchor = "2026-07-12"
+    static let daysOffSnoozeAnchor = "2026-07-14"
+    static let farFuture = "2099-01-01"
+
+    // Shared by StageNavigationTests and StagePillCountMatchesNavigationTests: both exercise
+    // StageNavigation.naturalKeys, one directly and one through AgentInputs.from, against the same
+    // fixture story.
+    static let stageNavigationAnchor = "2026-07-12"
+    static let manualProvenanceAnchor = "2026-07-13"
+    static let feedReconcileAnchor = "2026-06-25"
 }

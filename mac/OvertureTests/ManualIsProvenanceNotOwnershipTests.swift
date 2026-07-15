@@ -28,7 +28,7 @@ struct ManualIsProvenanceNotOwnershipTests {
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
-    private let today = "2026-07-13"
+    private let today = ScoutTestClock.manualProvenanceAnchor
 
     @discardableResult
     private func show(_ ctx: ModelContext, sourceIds: [String]) -> Prospect {

@@ -182,13 +182,13 @@ struct BlockedCalendarTests {
         let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
                                         daysOff: [dayOff("2099-11-14", "2099-11-22")])
 
-        #expect(cal.hasUpcomingBookedShoot(today: "2099-01-01") == false)  // Dan's own days off are not shoots
+        #expect(cal.hasUpcomingBookedShoot(today: ScoutTestClock.farFuture) == false)  // Dan's own days off are not shoots
     }
 
     @Test func aCalendarWithAnUpcomingBookingHasOne() {
         let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2099-11-14")],
                                         exportedBlockedDates: [], daysOff: [])
 
-        #expect(cal.hasUpcomingBookedShoot(today: "2099-01-01") == true)
+        #expect(cal.hasUpcomingBookedShoot(today: ScoutTestClock.farFuture) == true)
     }
 }
