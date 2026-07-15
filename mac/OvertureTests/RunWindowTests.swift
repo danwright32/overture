@@ -18,7 +18,7 @@ import Testing
 // read this suite first.
 @Suite("Run window (#798)")
 struct RunWindowTests {
-    private let today = "2026-07-11"
+    private let today = ScoutTestClock.runWindowAnchor
 
     @Test func theLastNightOfARunIsWhatDecidesIt() {
         // A multi-night run is judged on its closing night, not its opening one.

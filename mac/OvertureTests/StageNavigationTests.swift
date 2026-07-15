@@ -130,7 +130,7 @@ struct StageNavigationTests {
 @MainActor
 @Suite("A show that already happened is not waiting to be triaged (#861)")
 struct PastShowsLeaveTheScoutQueueTests {
-    private let today = "2026-07-12"
+    private let today = ScoutTestClock.stageNavigationAnchor
 
     private func show(_ key: String, date: String?, runEnd: String? = nil,
                       status: ReviewStatus = .new) -> Prospect {

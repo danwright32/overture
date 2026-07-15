@@ -22,7 +22,7 @@ import SwiftData
 @MainActor
 @Suite("A pill's number is the rows its tap lands on (#863)")
 struct StagePillCountMatchesNavigationTests {
-    private let today = "2026-07-12"
+    private let today = ScoutTestClock.stageNavigationAnchor
     private let now = Date(timeIntervalSince1970: 1_768_000_000)
 
     private func context() throws -> ModelContext {

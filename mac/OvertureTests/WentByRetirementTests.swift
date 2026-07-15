@@ -19,7 +19,7 @@ import SwiftData
 @MainActor
 @Suite("A show that quietly went by is retired, not left to rot (#864)")
 struct WentByRetirementTests {
-    private let today = "2026-07-12"
+    private let today = ScoutTestClock.wentByRetirementAnchor
 
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),

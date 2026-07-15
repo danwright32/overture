@@ -12,7 +12,7 @@ import Foundation
 // So: it asks about UPCOMING shoots only, and he can put it away for a week at a time.
 @Suite("The no-booked-shoots warning, and putting it away (#925)")
 struct DaysOffSnoozeTests {
-    private let today = "2026-07-14"
+    private let today = ScoutTestClock.daysOffSnoozeAnchor
     private let now = Date(timeIntervalSince1970: 1_784_000_000)
 
     private func booking(_ start: String, _ end: String? = nil) -> OvertureBooking {
