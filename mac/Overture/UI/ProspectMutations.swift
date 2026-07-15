@@ -173,6 +173,57 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date
+    // as a day off. Dan telling Overture "not this day" is the most natural moment to block it, instead of
+    // making him say it twice. Never automatic (his "ask me" preference): a single-night show blocks in one
+    // tap on the banner; a run opens a date picker (via the injected request RootView presents), pre-filled
+    // with the whole run, so he narrows it himself.
+    static func dismissForReason(_ item: QueueItem, _ reason: DismissReason,
+                                 prospects: [Prospect], context: ModelContext,
+                                 feedback: ActionFeedback, offer: DayOffOfferRequest) {
+        setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback)
+        guard let o = DayOffOffer.offer(reason: reason, performanceDate: item.performanceDate,
+                                        runEndDate: item.runEndDate) else { return }
+        let org = item.groupName
+        if o.isMultiNight {
+            // A run opens the picker pre-filled with the whole run; Dan narrows it there.
+            feedback.acknowledge(ActionAck.dismissedWithDayOffOffer(org: org, multiNight: true),
+                                 action: .init(label: "Choose days to block…") {
+                                     offer.request(key: item.id, org: org, start: o.start, end: o.end)
+                                 })
+        } else {
+            // A single night blocks in one tap.
+            let day = EasternDate.dayLabel(o.start) ?? o.start
+            feedback.acknowledge(ActionAck.dismissedWithDayOffOffer(org: org, multiNight: false),
+                                 action: .init(label: "Block \(day)") {
+                                     blockDaysOff(start: o.start, end: o.end, context: context, feedback: feedback)
+                                 })
+        }
+    }
+
+    // #924: add the day(s) off and confirm it, reversibly. Shared by the single-tap dismiss offer and the
+    // picker sheet's confirm, so both go through one implementation. Reuses DayOffEditing.add, which runs
+    // the conflict sweep, so every other show on those nights is flagged in the same action. A refused
+    // range (backwards, too long) says why instead of failing silently.
+    @discardableResult
+    static func blockDaysOff(start: String, end: String, note: String? = nil,
+                             context: ModelContext, feedback: ActionFeedback) -> Bool {
+        let range = QueueModel.runDateLabel(start: start, end: end)
+        let result = DayOffEditing.add(start: start, end: end, note: note, into: context)
+        guard result == .added else {
+            feedback.acknowledge(DayOffEditing.message(for: result) ?? "Couldn't block \(range)", tone: .warning)
+            return false
+        }
+        feedback.acknowledge(ActionAck.dayOffBlocked(range: range),
+                             action: .init(label: "Undo") {
+                                 if let row = DayOffEditing.rows(in: context)
+                                     .first(where: { $0.startDate == start && $0.endDate == end }) {
+                                     DayOffEditing.remove(row, in: context)
+                                 }
+                             })
+        return true
+    }
+
     static func saveDraft(_ item: QueueItem, _ subject: String, _ body: String,
                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }

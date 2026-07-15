@@ -83,6 +83,20 @@ enum ActionAck {
         "Restored \(org) to the queue"
     }
 
+    // #924: dismissing a show for a date clash offers to capture that as a day off, so Dan does not have to
+    // say "not this day" twice. The offer, never the act (his standing "ask me" preference): a single night
+    // blocks in one tap, a run opens a picker. Deliberately a question, so the banner is plainly an offer.
+    static func dismissedWithDayOffOffer(org: String, multiNight: Bool) -> String {
+        "Dismissed \(org). " + (multiNight ? "Block those days?" : "Block that day?")
+    }
+
+    // #924: the day(s) off just captured from a dismissal. Reversible from the banner, the way removing a
+    // range is (#845): the show it came from is now off the queue, so this banner is the one place the
+    // range Dan just blocked is written down.
+    static func dayOffBlocked(range: String) -> String {
+        "\(range) is now blocked"
+    }
+
     static func followUpSent(org: String, success: Bool) -> String {
         success ? "Follow-up sent to \(org)" : "Couldn't send the follow-up to \(org)"
     }

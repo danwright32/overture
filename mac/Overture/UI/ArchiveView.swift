@@ -29,6 +29,7 @@ struct ArchiveView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback
+    @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
 
     @Query private var prospects: [Prospect]
 
@@ -129,7 +130,8 @@ struct ArchiveView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: OVSpacing.md) {
                         ForEach(filtered) { item in
-                            row(item, context: context, feedback: feedback, outboundSendSince: outboundSending[item.id])
+                            row(item, context: context, feedback: feedback,
+                                dayOffOffer: dayOffOffer, outboundSendSince: outboundSending[item.id])
                         }
                     }
                     .padding(OVSpacing.lg)
@@ -171,8 +173,10 @@ struct ArchiveView: View {
     // @Environment(ActionFeedback.self) read, which traps with no ancestor view providing one) or
     // fighting an owned @State from outside a view instance. Same prop-threading fix as
     // FollowUpsView's `since` parameter.
-    func row(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback, outboundSendSince: Date? = nil) -> some View {
+    func row(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback,
+             dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                              dayOffOffer: dayOffOffer,
                               highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
                               outboundSendSince: outboundSendSince,
                               replySendSince: { rid in replySending[rid] },

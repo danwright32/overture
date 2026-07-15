@@ -6,6 +6,7 @@ import AppKit
 struct QueueView: View {
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
+    @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
     // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc. The
     // "hide untouched-gone" rule (#133) lives in QueueModel.queueOrder, not here, because a
@@ -510,6 +511,7 @@ struct QueueView: View {
 
     private func prospectRow(_ item: QueueItem) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                              dayOffOffer: dayOffOffer,
                               highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                               replySendSince: { rid in replySending[rid] },
                               onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })

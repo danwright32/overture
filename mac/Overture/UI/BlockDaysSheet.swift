@@ -1,0 +1,63 @@
+import SwiftUI
+import SwiftData
+
+// #924: the date picker a multi-night dismissal opens, pre-filled with the whole run, so Dan blocks the
+// days he actually can't work rather than the app assuming the whole run or only opening night (his call,
+// 2026-07-14). A single-night show never reaches here; it blocks in one tap on the banner.
+//
+// It writes through ProspectMutations.blockDaysOff, the same writer the one-tap path uses, so both go
+// through DayOffEditing.add and its conflict sweep. A refused range keeps the sheet open with the reason
+// showing (via the shared feedback banner), rather than closing on an error Dan never saw.
+struct BlockDaysSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Environment(ActionFeedback.self) private var feedback
+    @Environment(DayOffOfferRequest.self) private var offer
+
+    let pending: DayOffOfferRequest.Pending
+
+    @State private var start: Date
+    @State private var end: Date
+    @State private var note: String
+
+    init(pending: DayOffOfferRequest.Pending) {
+        self.pending = pending
+        _start = State(initialValue: EasternDate.date(from: pending.start) ?? Date())
+        _end = State(initialValue: EasternDate.date(from: pending.end) ?? Date())
+        _note = State(initialValue: "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Block days off").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                Text(DayOffOffer.pickerSubtitle(org: pending.org))
+                    .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            DayOffRangeFields(start: $start, end: $end, note: $note)
+
+            HStack {
+                Button("Not now") { offer.clear(); dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Block these days") { block() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(OVSpacing.lg)
+        .frame(width: 460)
+        .background(OVColor.canvas)
+        .actionFeedbackBanner()
+    }
+
+    // Block, then leave: if the range is bad, blockDaysOff surfaces the reason on the banner and returns
+    // false, so the sheet stays open on the reason rather than closing on an error Dan never got to see.
+    private func block() {
+        let ok = ProspectMutations.blockDaysOff(start: EasternDate.dayString(from: start),
+                                                end: EasternDate.dayString(from: end),
+                                                note: note, context: context, feedback: feedback)
+        if ok { offer.clear(); dismiss() }
+    }
+}
