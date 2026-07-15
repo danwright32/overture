@@ -21,7 +21,13 @@ enum DayOffOffer {
     // about the show, not the calendar, so it offers nothing.
     private static let calendarReasons: Set<DismissReason> = [.dateConflict, .dayDoesntWork, .alreadyBooked]
 
-    static func offer(reason: DismissReason, performanceDate: String?, runEndDate: String?) -> Offer? {
+    // `alreadyBlocked` is the show's own conflict state: when its date is already a day off or a booked
+    // shoot, the show already reads "unavailable", so there is nothing to capture and the picker must not
+    // pop. This is what stops a second dismissal on a date Dan just blocked from asking him to block it
+    // again (2026-07-15).
+    static func offer(reason: DismissReason, performanceDate: String?, runEndDate: String?,
+                      alreadyBlocked: Bool = false) -> Offer? {
+        guard !alreadyBlocked else { return nil }
         guard calendarReasons.contains(reason), let start = performanceDate else { return nil }
         // The closing night, judged the same way the conflict calculator and the feed reconcile judge it,
         // so one definition of "the last night of this run" serves all three.
