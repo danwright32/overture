@@ -156,6 +156,7 @@ struct HandoffCleanupTests {
             "overture-voice-guidance.md",         // his own words about how the emails should sound
             "overture-voice-guidance.backup.md",
             "overture-voice-feedback.json",
+            "overture-recent-openers.json",       // the openers a recent run used, for anti-repetition
             "downbeat-export.json",
             "overture-scout-extract-queue.json",  // what a run was asked to read
             "overture-scout-extract-results.json",// and what it came back with

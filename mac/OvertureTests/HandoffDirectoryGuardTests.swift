@@ -22,6 +22,7 @@ struct HandoffDirectoryGuardTests {
             ("reply-classify-results", ReplyClassifyResultsDecoder.defaultURL),
             ("reply-classify-importer", ReplyClassifyImporter.defaultURL),
             ("voice-feedback", VoiceFeedbackBuilder.defaultURL),
+            ("recent-openers", RecentOpenersBuilder.defaultURL),
             ("scout-extract-queue", ScoutExtractQueueBuilder.defaultURL),
             ("scout-extract-results", ScoutExtractResultsDecoder.defaultURL),
             ("scout-extract-progress", ScoutExtractProgressDecoder.defaultURL),
