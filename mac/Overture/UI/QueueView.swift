@@ -65,7 +65,7 @@ struct QueueView: View {
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
 
-    private var items: [QueueItem] { prospects.map(QueueItem.init) }
+    private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
     // #217: split the queue into people still to email and people already reached out to.
     enum Pipeline: String, CaseIterable {

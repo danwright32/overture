@@ -61,4 +61,40 @@ struct DayOffOfferTests {
         #expect(DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-11-18",
                                   runEndDate: nil, alreadyBlocked: true) == nil)
     }
+
+    // #939: a same-production show at another venue widens the offer to cover the whole engagement, so
+    // blocking in one action captures every date Dan can't shoot, not just the row he happened to dismiss.
+    @Test func widensToCoverAnEarlierLinkedDate() {
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-07-25", runEndDate: nil,
+                                      linkedDates: ["2026-07-24"])
+        #expect(offer?.start == "2026-07-24")
+        #expect(offer?.end == "2026-07-25")
+    }
+
+    @Test func widensToCoverALaterLinkedDate() {
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-07-20", runEndDate: nil,
+                                      linkedDates: ["2026-07-22"])
+        #expect(offer?.start == "2026-07-20")
+        #expect(offer?.end == "2026-07-22")
+    }
+
+    @Test func widensAcrossMultipleLinkedDatesToTheFullSpan() {
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-07-22", runEndDate: nil,
+                                      linkedDates: ["2026-07-20", "2026-07-24"])
+        #expect(offer?.start == "2026-07-20")
+        #expect(offer?.end == "2026-07-24")
+    }
+
+    @Test func linkedDatesInsideTheOwnRangeChangeNothing() {
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-07-18", runEndDate: "2026-07-20",
+                                      linkedDates: ["2026-07-19"])
+        #expect(offer?.start == "2026-07-18")
+        #expect(offer?.end == "2026-07-20")
+    }
+
+    @Test func noLinkedDatesLeavesTheOfferUnchanged() {
+        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-07-18", runEndDate: nil)
+        #expect(offer?.start == "2026-07-18")
+        #expect(offer?.end == "2026-07-18")
+    }
 }

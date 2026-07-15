@@ -183,8 +183,11 @@ enum ProspectMutations {
                                  prospects: [Prospect], context: ModelContext,
                                  feedback: ActionFeedback, offer: DayOffOfferRequest) {
         setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback)
+        // #939: a same-production show at a different venue nearby widens the offer to the whole
+        // engagement, so blocking in one action captures every date, not just this row's own.
+        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))[item.id]?.map(\.date) ?? []
         guard let o = DayOffOffer.offer(reason: reason, performanceDate: item.performanceDate,
-                                        runEndDate: item.runEndDate,
+                                        runEndDate: item.runEndDate, linkedDates: linked,
                                         alreadyBlocked: item.hasUnclearedConflict) else { return }
         offer.request(key: item.id, org: item.groupName, start: o.start, end: o.end)
     }

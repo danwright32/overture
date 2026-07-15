@@ -31,7 +31,9 @@ enum RunGrouping {
         var memberIds: [Int] = []
     }
 
-    private static let gapDays = 3
+    // #939: shared with EngagementLink, which uses the same "how many dark days still count as one
+    // engagement" window to link the same production across DIFFERENT venues.
+    static let gapDays = 3
 
     private static func canon(_ s: String?) -> String {
         (s ?? "").lowercased().replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)

@@ -25,14 +25,19 @@ enum DayOffOffer {
     // shoot, the show already reads "unavailable", so there is nothing to capture and the picker must not
     // pop. This is what stops a second dismissal on a date Dan just blocked from asking him to block it
     // again (2026-07-15).
+    //
+    // #939: `linkedDates` are this show's dates at OTHER venues in the same touring engagement (from
+    // EngagementLink), widening the offer to the whole engagement's span so blocking in one action
+    // captures every date Dan can't shoot, not just the row he happened to dismiss.
     static func offer(reason: DismissReason, performanceDate: String?, runEndDate: String?,
-                      alreadyBlocked: Bool = false) -> Offer? {
+                      linkedDates: [String] = [], alreadyBlocked: Bool = false) -> Offer? {
         guard !alreadyBlocked else { return nil }
         guard calendarReasons.contains(reason), let start = performanceDate else { return nil }
         // The closing night, judged the same way the conflict calculator and the feed reconcile judge it,
         // so one definition of "the last night of this run" serves all three.
-        let end = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: start) ?? start
-        return Offer(start: start, end: end)
+        let ownEnd = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: start) ?? start
+        let allDates = [start, ownEnd] + linkedDates
+        return Offer(start: allDates.min()!, end: allDates.max()!)
     }
 
     // The picker sheet's subtitle. Here rather than in the view so it is testable and the org it names

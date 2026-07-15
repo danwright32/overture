@@ -272,4 +272,42 @@ struct QueueItemSnapshotTests {
         #expect(QueueModel.replyIntentLabel("has_question") == "has a question")
         #expect(QueueModel.replyIntentLabel("weird") == "weird")          // unknown passes through
     }
+
+    // #939: QueueModel.items(from:) is what QueueView and ArchiveView actually call to build their rows,
+    // so the cross-venue engagement link (computed across the WHOLE prospects array, not one prospect at
+    // a time) is exercised end to end here rather than only through its pure pieces.
+    @Test func itemsFromCarriesTheLinkedEngagementAcrossTwoVenues() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p1 = Prospect(naturalKey: "moca-25", groupName: "MOCA PERFORMS", discipline: "theater",
+                          venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil,
+                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        let p2 = Prospect(naturalKey: "moca-24", groupName: "MOCA PERFORMS", discipline: "theater",
+                          venue: "Open Door Senior Center", performanceDate: "2026-07-24", sourceListingURL: nil,
+                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p1); ctx.insert(p2)
+
+        let items = QueueModel.items(from: [p1, p2])
+
+        let item25 = try #require(items.first { $0.id == "moca-25" })
+        #expect(item25.linkedEngagementMembers == [EngagementLink.Member(venue: "Open Door Senior Center", date: "2026-07-24")])
+        #expect(QueueModel.linkedEngagementNote(item25) == "This production also plays at Open Door Senior Center on Jul 24.")
+    }
+
+    @Test func itemsFromCarriesNoLinkWhenThereIsNoSiblingVenue() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "Solo Show", discipline: "music", venue: "Weill Recital Hall",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+
+        let items = QueueModel.items(from: [p])
+
+        #expect(items.first?.linkedEngagementMembers.isEmpty == true)
+    }
 }

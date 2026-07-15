@@ -49,7 +49,7 @@ struct ArchiveView: View {
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
-    private var items: [QueueItem] { prospects.map(QueueItem.init) }
+    private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
     private var filtered: [QueueItem] {
         items

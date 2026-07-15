@@ -90,6 +90,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var conflictBlockedDate: String? = nil
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
+    // #939: the same production at OTHER venues nearby (a recurring Carnegie community-calendar
+    // pattern), distinct from partOfRelatedRun above (which means the same venue, a separate run).
+    var linkedEngagementMembers: [EngagementLink.Member] = []
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
     var disappearedFromFeed: Bool = false
     // The performance's recipients as flat snapshots for the per-contact conversation surface (#418 B1).
@@ -639,6 +642,34 @@ enum QueueModel {
 
     static func relatedRunNote(_ item: QueueItem) -> String? {
         item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
+    }
+
+    // #939: QueueView and ArchiveView both build their rows from `prospects` this same way, so the
+    // cross-venue engagement link (computed across the WHOLE array, not one prospect at a time) lives
+    // here where it is testable, rather than inline in either view (the #863 lesson).
+    static func items(from prospects: [Prospect]) -> [QueueItem] {
+        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
+        return prospects.map {
+            var item = QueueItem($0)
+            item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
+            return item
+        }
+    }
+
+    // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays
+    // one or more OTHER venues nearby, so two queue rows Dan might otherwise treat as separate leads are
+    // actually one touring engagement. Each case is one complete sentence (not built by joining pieces),
+    // so the copy-inventory (docs/copy-inventory.md) shows it as the one whole line Dan actually reads.
+    static func linkedEngagementNote(_ item: QueueItem) -> String? {
+        let members = item.linkedEngagementMembers
+        guard members.count == 1, let only = members.first else {
+            return members.isEmpty ? nil : "This production also plays at \(members.count) other venues nearby."
+        }
+        let dateLabel = EasternDate.dayLabel(only.date) ?? only.date
+        guard let venue = only.venue, !venue.isEmpty else {
+            return "This production also plays elsewhere on \(dateLabel)."
+        }
+        return "This production also plays at \(venue) on \(dateLabel)."
     }
 
     // MARK: - Date helpers

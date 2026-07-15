@@ -80,6 +80,7 @@ struct ProspectRowView: View {
                     }
                     tags
                     relatedRunNote
+                    linkedEngagementNote
                     confidenceFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -233,6 +234,16 @@ struct ProspectRowView: View {
 
     @ViewBuilder private var relatedRunNote: some View {
         if let note = QueueModel.relatedRunNote(item) {
+            Text(note)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #939: distinct from relatedRunNote above (same venue, a separate run).
+    @ViewBuilder private var linkedEngagementNote: some View {
+        if let note = QueueModel.linkedEngagementNote(item) {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)

@@ -436,6 +436,35 @@ struct RunDisplayTests {
         #expect(QueueModel.relatedRunNote(run) != nil)
         #expect(QueueModel.relatedRunNote(item(performanceDate: "2026-06-25")) == nil)
     }
+
+    // #939: a same-production show at another venue nearby, so Dan can tell two queue rows are one
+    // touring engagement rather than two unrelated leads.
+    @Test func noLinkedEngagementNoteWhenThereAreNoLinkedMembers() {
+        #expect(QueueModel.linkedEngagementNote(item(performanceDate: "2026-07-25")) == nil)
+    }
+
+    @Test func linkedEngagementNoteNamesTheOtherVenueAndDate() {
+        var show = item(performanceDate: "2026-07-25")
+        show.linkedEngagementMembers = [EngagementLink.Member(venue: "Open Door Senior Center", date: "2026-07-24")]
+        #expect(QueueModel.linkedEngagementNote(show) == "This production also plays at Open Door Senior Center on Jul 24.")
+    }
+
+    @Test func linkedEngagementNoteFallsBackWhenTheOtherVenueIsUnknown() {
+        var show = item(performanceDate: "2026-07-25")
+        show.linkedEngagementMembers = [EngagementLink.Member(venue: nil, date: "2026-07-24")]
+        #expect(QueueModel.linkedEngagementNote(show) == "This production also plays elsewhere on Jul 24.")
+    }
+
+    // A short community-venue tour (3+ stops) names the count rather than enumerating every venue, so
+    // the copy stays one complete sentence regardless of how many venues are involved.
+    @Test func linkedEngagementNoteNamesTheCountForMultipleOtherVenues() {
+        var show = item(performanceDate: "2026-07-20")
+        show.linkedEngagementMembers = [
+            EngagementLink.Member(venue: "Venue B", date: "2026-07-22"),
+            EngagementLink.Member(venue: "Venue C", date: "2026-07-24"),
+        ]
+        #expect(QueueModel.linkedEngagementNote(show) == "This production also plays at 2 other venues nearby.")
+    }
 }
 
 @Suite("Disappeared-from-feed queue filtering (#133)")
