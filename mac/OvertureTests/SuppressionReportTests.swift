@@ -126,6 +126,18 @@ struct SuppressionReportTests {
         #expect(many.contains("A") && many.contains("B"))
     }
 
+    // #959: the verb agrees with the subject. Singular used to read "An organization that asked you to
+    // stop still turn up", a subject/verb slip; plural stays "Organizations... turn up".
+    @Test func theVerbAgreesWithOneOrManyOrgs() {
+        let one = SuppressionReport.summary(for: [.init(orgName: "A", showCount: 1)]) ?? ""
+        let many = SuppressionReport.summary(for: [.init(orgName: "A", showCount: 1),
+                                                   .init(orgName: "B", showCount: 2)]) ?? ""
+
+        #expect(one.contains("An organization that asked you to stop still turns up"))
+        #expect(!one.contains("still turn up"))
+        #expect(many.contains("Organizations that asked you to stop still turn up"))
+    }
+
     @Test func nothingSuppressedMeansNoReportAtAll() {
         #expect(SuppressionReport.summary(for: []) == nil)
     }

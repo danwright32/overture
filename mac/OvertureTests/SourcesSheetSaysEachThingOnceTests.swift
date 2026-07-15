@@ -91,14 +91,25 @@ struct SourcesSheetSaysEachThingOnceTests {
         #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure) == false)
     }
 
-    // Only `notRead` collapses. Every other failure names a distinct reason (a JavaScript page, an empty
-    // page, an HTTP error), so the unread-changes line still adds something and stays.
-    @Test func anotherFailureDoesNotSuppressTheUnreadChangesLine() {
+    // A transient fetch failure CAN be cleared by another scout, so "Run a scout to read them" is honest
+    // advice there and the line stays.
+    @Test func aTransientFetchFailureDoesNotSuppressTheUnreadChangesLine() {
+        let waiting = source(checked: hoursAgo(1), succeeded: hoursAgo(72), unread: true)
+        waiting.lastFailure = .fetch(.unreachable)
+
+        let state = SourceReadState.of(waiting)
+        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure))
+    }
+
+    // #958: a JavaScript-drawn page (`unreadable`) reads the same empty shell on every plain re-fetch, so
+    // "Run a scout to read them" promises a re-run will fix what a re-run cannot. The line steps aside for
+    // the failure line ("drawn by JavaScript, nothing to read"), which is the truth.
+    @Test func aJavaScriptDrawnPageDoesNotSayToRunAScoutThatCannotHelp() {
         let waiting = source(checked: hoursAgo(1), succeeded: hoursAgo(72), unread: true)
         waiting.lastFailure = .verdict(.unreadable)
 
         let state = SourceReadState.of(waiting)
-        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure))
+        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure) == false)
     }
 
     // The guard and its wiring are two claims (#887): the rule above is only true on screen if the sheet

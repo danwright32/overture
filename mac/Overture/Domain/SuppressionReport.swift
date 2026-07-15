@@ -16,12 +16,13 @@ enum SuppressionReport {
         guard !orgs.isEmpty else { return nil }
 
         let lines = orgs.map { org -> String in
-            let shows = org.showCount == 1 ? "1 show" : "\(org.showCount) shows"
-            return "\(org.orgName) (\(shows))"
+            "\(org.orgName) (\(Plural.count(org.showCount, "show")))"
         }
         let who = lines.joined(separator: ", ")
+        // #959: the verb agrees with the subject. Singular was reading "An organization... still turn up".
         let subject = orgs.count == 1 ? "An organization that asked" : "Organizations that asked"
-        return "\(subject) you to stop still turn up on calendars you watch: \(who). "
+        let verb = Plural.word(orgs.count, "turns up", "turn up")
+        return "\(subject) you to stop still \(verb) on calendars you watch: \(who). "
              + "Nothing was added and nothing will go out to them."
     }
 }
