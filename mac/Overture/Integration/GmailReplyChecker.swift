@@ -7,7 +7,10 @@ import SwiftData
 // GmailAuthManager, #50). The marking decision is the tested ReplyService/ReplyDetection.
 @MainActor
 struct GmailReplyChecker {
-    var fromEmail: String = "dan@danwrightphotography.com"
+    // #949: Dan's own address (used to tell his sends apart from a stranger's reply) is the same
+    // sending identity the send path and the confirmation use, read from the one SendIdentity source
+    // so it can never drift from what actually sends.
+    var fromEmail: String = SendIdentity.danWright.email
 
     // #499: returns whether a detected reply's context.save() failed, so the caller can surface
     // it instead of it failing silently. false covers both "nothing to save" and "not connected".
