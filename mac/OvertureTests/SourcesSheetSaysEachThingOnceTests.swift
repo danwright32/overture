@@ -79,16 +79,50 @@ struct SourcesSheetSaysEachThingOnceTests {
         #expect(SourceReadState.of(fresh).isWorthShowing(lastCheckedAt: fresh.lastCheckedAt) == false)
     }
 
+    // #843: a run that died before opening the page (`notRead`) leaves BOTH the unread-changes line and a
+    // failure line that says "it has not been read. The next scout will try it again." Shown together they
+    // say the one thing, so the read-state line steps aside and lets the failure line (which also says
+    // WHY) carry it. The row is not left silent: the failure line is still shown.
+    @Test func aPageAScoutNeverReachedDoesNotSayNotReadTwice() {
+        let waiting = source(checked: hoursAgo(1), succeeded: nil, unread: true)
+        waiting.lastFailure = .verdict(.notRead)
+
+        let state = SourceReadState.of(waiting)
+        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure) == false)
+    }
+
+    // Only `notRead` collapses. Every other failure names a distinct reason (a JavaScript page, an empty
+    // page, an HTTP error), so the unread-changes line still adds something and stays.
+    @Test func anotherFailureDoesNotSuppressTheUnreadChangesLine() {
+        let waiting = source(checked: hoursAgo(1), succeeded: hoursAgo(72), unread: true)
+        waiting.lastFailure = .verdict(.unreadable)
+
+        let state = SourceReadState.of(waiting)
+        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure))
+    }
+
+    // The guard and its wiring are two claims (#887): the rule above is only true on screen if the sheet
+    // actually hands the failure to it. Without the argument, `notRead` defaults away and the line comes
+    // back, with every domain test still green.
+    @Test func theSheetHandsTheFailureToTheReadStateDecision() {
+        let sourcesView = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        #expect(sourcesView.contains("isWorthShowing(lastCheckedAt: source.lastCheckedAt, failure: source.lastFailure)"))
+    }
+
     // MARK: - #841: the header and the section do not say the same thing
 
     // "Watching" is the default state the sheet's own subtitle already describes, so its explanation was
-    // that subtitle restated five lines lower. The other grades keep theirs: those are the ones where a
-    // wrong reading costs something, above all "Stopped at their request", which must never read as
-    // "broken".
+    // that subtitle restated five lines lower. #843: "Not checked yet" is the same case, its heading says
+    // the whole of it, and its old line ("Added, but no scout has reached them yet.") only said it again.
+    // The other grades keep theirs: those are the ones where a wrong reading costs something, above all
+    // "Stopped at their request", which must never read as "broken".
     @Test func theWatchingSectionDoesNotRestateTheSheetsSubtitle() {
-        #expect(SourceGrade.watching.explanation == nil)
-
-        for grade in SourceGrade.allCases where grade != .watching {
+        let selfEvident: Set<SourceGrade> = [.watching, .neverChecked]
+        for grade in selfEvident {
+            #expect(grade.explanation == nil,
+                    "\(grade)'s heading already says it; a second line only restates it")
+        }
+        for grade in SourceGrade.allCases where !selfEvident.contains(grade) {
             #expect(grade.explanation?.isEmpty == false,
                     "\(grade) still needs its own line: its meaning is not obvious from the heading alone")
         }

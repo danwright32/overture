@@ -126,7 +126,10 @@ enum AgentRoster {
 
     private static func prep(_ i: AgentInputs) -> AgentStatus {
         if i.prepRunning {
-            return AgentStatus(name: "Prep", state: .working, detail: "Finding contacts and drafting…",
+            // #843: the tooltip shows this after the concept ("Finds a contact and drafts an email…"), so
+            // "Finding contacts and drafting…" only said the concept again in the present tense. The live
+            // detail's job here is just to say it is happening now.
+            return AgentStatus(name: "Prep", state: .working, detail: "Running now…",
                                focus: .prep, count: i.keptToPrep)
         }
         if i.keptToPrep > 0 {
@@ -181,8 +184,12 @@ enum AgentRoster {
                                focus: .sendBlocked, count: n)
         }
         if i.readyToSend > 0 {
+            // #843: the connected line follows the concept ("Approved emails waiting to be sent.") in the
+            // tooltip, so "N approved, ready to send" restated all of it but the number. The count is the
+            // only new thing, so that is all it says now. The not-connected line stays as it is: "connect
+            // Gmail to send" is a real instruction the concept does not carry.
             let detail = i.gmailConnected
-                ? "\(i.readyToSend) approved, ready to send"
+                ? "\(i.readyToSend) ready"
                 : "\(i.readyToSend) approved, connect Gmail to send"
             return AgentStatus(name: "Send", state: .needsAttention, detail: detail,
                                focus: .sendApproved, count: i.readyToSend,
@@ -217,8 +224,11 @@ enum AgentRoster {
                                focus: .followUps, count: n)
         }
         if i.followUpsDue > 0 {
+            // #843: the tooltip shows this after the concept ("Nudges due on shows you've already reached
+            // out to."), so "N nudges due" repeated "nudges due" verbatim. The count is the only new
+            // thing; the concept supplies the rest.
             return AgentStatus(name: "Follow-ups", state: .needsAttention,
-                               detail: "\(i.followUpsDue) nudge\(i.followUpsDue == 1 ? "" : "s") due",
+                               detail: "\(i.followUpsDue) due",
                                focus: .followUps, count: i.followUpsDue)
         }
         return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due", focus: .followUps, count: 0)

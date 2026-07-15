@@ -77,9 +77,11 @@ enum SourceGrade: Equatable, Sendable, CaseIterable {
     }
 
     // What the section means, so a quiet section is never mistaken for an empty one.
-    // #841: nil where the heading and the sheet's own subtitle already say it. "Watching" IS the default
-    // state the subtitle describes ("the calendars Overture re-checks on every scout"), so its line was
-    // that subtitle restated five lines lower.
+    // #841/#843: nil where the heading already carries the meaning. "Watching" IS the default state the
+    // sheet's subtitle describes, so its line was that subtitle restated five lines lower. "Not checked
+    // yet" is the same: the heading says it in full, and "Added, but no scout has reached them yet." only
+    // said it again (the one novel word, "Added", is true of every row on the sheet). Neither has a
+    // costly misreading to guard against, which is the test the kept explanations pass and these do not.
     //
     // The others keep theirs, and they are not decoration: they are the sections where a wrong reading
     // costs something. Above all "Stopped at their request", which must never be read as "broken".
@@ -90,7 +92,7 @@ enum SourceGrade: Equatable, Sendable, CaseIterable {
         case .failing:
             return "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
         case .neverChecked:
-            return "Added, but no scout has reached them yet."
+            return nil
         case .stoppedAtTheirRequest:
             return "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
         case .removed:

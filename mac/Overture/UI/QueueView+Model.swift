@@ -472,6 +472,11 @@ enum QueueModel {
         return outreachTiming(performanceDate: performanceDate, today: today)
     }
 
+    // #843: a booked row already carries "BOOKED" on its seal (the whole point of the seal is to make the
+    // row read as done at a glance). The header's timing line would then say "Booked" a second time, so on
+    // a booked row it shows only the run date and lets the seal own the status.
+    static func headerShowsTimingLine(isBooked: Bool) -> Bool { !isBooked }
+
     // Orders the queue for display: hide past performances and anything beyond the lead-time
     // window, keep everything else, and demote the too-close events to the bottom, graded so
     // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).

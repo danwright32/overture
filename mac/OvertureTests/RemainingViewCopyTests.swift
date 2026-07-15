@@ -92,9 +92,19 @@ struct RemainingViewCopyTests {
 
     // MARK: - Add a lead
 
+    // #843: one line, and it no longer restates itself ("to the queue" then "waiting … with everything
+    // else"). The novel part ("ranked", interleaved) is folded in.
     @Test func theAddedNoteCountsWhatLanded() {
-        #expect(LeadIntakeModel.addedNote(count: 1) == "Added 1 show to the queue.")
-        #expect(LeadIntakeModel.addedNote(count: 4) == "Added 4 shows to the queue.")
+        #expect(LeadIntakeModel.addedNote(count: 1) == "Added 1 show, ranked into your queue with everything else.")
+        #expect(LeadIntakeModel.addedNote(count: 4) == "Added 4 shows, ranked into your queue with everything else.")
+    }
+
+    // #843: with nothing added there is nothing to be "ranked and waiting", so the zero case says what
+    // actually happened rather than describing shows that are not there.
+    @Test func theAddedNoteDoesNotDescribeShowsThatAreNotThere() {
+        let note = LeadIntakeModel.addedNote(count: 0)
+        #expect(note == "No new shows landed in the queue from that page.")
+        #expect(!note.contains("ranked"))
     }
 
     @Test func anAlreadyWatchedOrgIsToldWhyNothingMoreIsNeeded() {
@@ -117,15 +127,20 @@ struct RemainingViewCopyTests {
         #expect(empty.detail != filtered.detail)
     }
 
-    // The Archive's own pair. Its "empty" title is today the same words as the Queue's ("Nothing scouted
-    // yet"), which is preserved here verbatim rather than quietly improved: this issue is about copy
-    // being unreachable by a test, and #843 is the one about copy that says the same thing twice. Now
-    // that both live here, that duplication is finally visible to a test rather than buried in two views.
+    // The Archive's own pair. #843: its empty title used to be the Queue's exact words ("Nothing scouted
+    // yet"), which is wrong here, since nothing is ever scouted into an archive. It now says what is
+    // actually true, and no longer collides with the Queue's title.
     @Test func anEmptyArchiveAndAFilteredOneAreDifferentSentences() {
-        #expect(EmptyState.archive(hasAnyItems: false).title == "Nothing scouted yet")
+        #expect(EmptyState.archive(hasAnyItems: false).title == "Nothing tracked yet")
         #expect(EmptyState.archive(hasAnyItems: true).title == "Nothing matches this filter")
         #expect(EmptyState.archive(hasAnyItems: false).detail
                     == "Shows land here once Overture has tracked at least one.")
+    }
+
+    // #843: the Queue and the Archive no longer share an empty title. The Queue's stays "Nothing scouted
+    // yet" (correct: a scout is what fills it); the Archive's is its own sentence.
+    @Test func theQueueAndArchiveNoLongerShareAnEmptyTitle() {
+        #expect(EmptyState.queue(hasAnyItems: false).title != EmptyState.archive(hasAnyItems: false).title)
     }
 
     // MARK: - Reminder settings

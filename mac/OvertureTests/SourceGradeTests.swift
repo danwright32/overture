@@ -62,12 +62,15 @@ struct SourceGradeTests {
         #expect(SourceGrade.failing.label.lowercased().contains("failing"))
     }
 
-    // #841: an explanation only where the heading does not already carry the meaning. "Watching" is the
-    // default state the sheet's own subtitle describes, so its line was that subtitle restated five lines
-    // lower. The rest keep theirs, because those are the readings that cost something when they are wrong.
+    // #841/#843: an explanation only where the heading does not already carry the meaning. "Watching" and
+    // "Not checked yet" both say it in full in the heading, so their lines only restated it. The rest
+    // keep theirs, because those are the readings that cost something when they are wrong.
     @Test func everyGradeWhoseMeaningIsNotObviousExplainsItself() {
-        #expect(SourceGrade.watching.explanation == nil)
-        for grade in SourceGrade.allCases where grade != .watching {
+        let selfEvident: Set<SourceGrade> = [.watching, .neverChecked]
+        for grade in selfEvident {
+            #expect(grade.explanation == nil)
+        }
+        for grade in SourceGrade.allCases where !selfEvident.contains(grade) {
             #expect(grade.explanation?.isEmpty == false)
         }
     }

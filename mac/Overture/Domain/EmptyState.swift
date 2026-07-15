@@ -20,14 +20,14 @@ enum EmptyState {
                       detail: "Run the scout to comb the venue calendars. Ranked candidates land here for review.")
     }
 
-    // The Archive's "empty" title is today word for word the Queue's, which is preserved rather than
-    // quietly improved here: #885 is about copy no test can reach, and #843 is the one about copy that
-    // says the same thing twice. With both now in one file, that duplication is at last visible.
+    // #843: the Archive's "empty" title used to be word for word the Queue's ("Nothing scouted yet"),
+    // which is wrong here: nothing is ever scouted INTO an archive, so "not scouted yet" is not why it is
+    // empty. Its own title now says what is actually true, and the detail below carries the rest.
     static func archive(hasAnyItems: Bool) -> Message {
         hasAnyItems
             ? Message(title: "Nothing matches this filter",
                       detail: "Try a different status filter, or clear the search.")
-            : Message(title: "Nothing scouted yet",
+            : Message(title: "Nothing tracked yet",
                       detail: "Shows land here once Overture has tracked at least one.")
     }
 }

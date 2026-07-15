@@ -44,9 +44,15 @@ enum SourceReadState: Equatable, Sendable {
     //
     // Copy that repeats itself teaches Dan to skim, and the line this protects (listings changed, nobody
     // has read them) is the one line here that must never be skimmed past.
-    func isWorthShowing(lastCheckedAt: Date?) -> Bool {
+    func isWorthShowing(lastCheckedAt: Date?, failure: SourceFailure? = nil) -> Bool {
         switch self {
         case .unreadChangesWaiting:
+            // #843: a run that died BEFORE reading the page (`notRead`) leaves this state set AND records
+            // a failure whose own line already says "it has not been read. The next scout will try it
+            // again." Shown together, both lines say the one thing. The failure line is the better of the
+            // two (it also says WHY the read did not happen), so it keeps the message and this one steps
+            // aside. Any other failure carries a distinct reason, so this line still adds its own.
+            if case .verdict(.notRead) = failure { return false }
             // Not a fact about time, and the whole reason the line exists. Always said, always loud.
             return true
         case .neverRead:
