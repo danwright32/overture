@@ -13,6 +13,9 @@ struct SourcesView: View {
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
+    // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
+    // sentence both live in SourceYield, a tested pure function, so this view has no counting of its own.
+    @Query private var prospects: [Prospect]
 
     // #802: the sheet is where the watchlist is MANAGED, because it was previously the only place it
     // could be seen and nowhere it could be changed: a calendar could only join by pasting a lead, and
@@ -201,6 +204,16 @@ struct SourcesView: View {
                 Text(readState.label)
                     .font(.system(size: 11))
                     .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // #794: what this source has actually earned over its lifetime, kept-first: "3 of 12 kept",
+            // with sent/booked appended when present. A source that extracts perfectly and produces
+            // nothing Dan keeps is dead weight ("0 of 12 kept"), and that has to be visible, or a source
+            // sits generating junk forever. Nothing here removes it: only a refusal (or Dan's own removal)
+            // takes a source off the list. Silent when the source has found nothing yet.
+            if let yield = SourceYield.line(SourceYield.tally(sourceId: source.sourceId, in: prospects)) {
+                Text(yield).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
