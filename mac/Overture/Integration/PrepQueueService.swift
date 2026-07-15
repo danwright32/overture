@@ -81,6 +81,7 @@ enum PrepQueueService {
                           queueURL: URL = PrepQueueBuilder.defaultURL,
                           markerURL: URL = defaultMarkerURL,
                           voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
+                          recentOpenersURL: URL = RecentOpenersBuilder.defaultURL,
                           launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
@@ -107,6 +108,10 @@ enum PrepQueueService {
             // Refresh the voice-learning handoff so the run drafts with Dan's latest edits (#241). Best
             // effort: a feedback-write failure must never block the Prep run itself.
             try? VoiceFeedbackService.export(from: context, generatedAt: stamp, url: voiceFeedbackURL)
+
+            // Refresh the cross-run anti-repetition handoff so the run steers away from openers recent
+            // runs already used (#730). Same best-effort contract: a write failure never blocks the run.
+            try? RecentOpenersService.export(from: context, generatedAt: stamp, url: recentOpenersURL)
 
             // Back up the voice-guidance file so Dan's notes can be restored if the run drops them (#251).
             VoiceNotesProtector.backup(fileURL: VoiceGuidanceGuard.defaultURL,

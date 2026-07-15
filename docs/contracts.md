@@ -36,6 +36,7 @@ the workflow's runbook is its spec.
 | `overture-scout-extract-results.json` | Scout-extract run (workflow) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` (seeds it) + scout-extract run (workflow, updates it) | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
+| `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
 
 `overture-uncertain.json` and `overture-refined.json` (the scout's round trip with a Claude
 Code refine step for ambiguous classifications) were also retired in #493: confirmed never
@@ -254,3 +255,17 @@ edit) versus `Recipient.sentReplyBody` (frozen at commit), gated on the same `mi
 and reply pairs share the one `maxPairs` cap, winners first. The distiller should treat a reply pair's
 register (short, responsive) separately from a cold opener. Additive: `v1.json`/`v2.json` stay
 byte-identical (their `kind` decodes to nil = cold), `v3.json` is the new spec.
+
+### `overture-recent-openers.json`
+
+The opening sentences recent drafts already used, so a Prep run can steer away from them and separate
+small batches drafted on different days don't independently converge on the same handful of openers
+(#730, extending #362's within-run rule across runs). The app writes it when a Prep run launches
+(`PrepQueueService.startPrep`, best-effort so a write failure never blocks the run, alongside the
+voice-feedback handoff); the Prep workflow reads it (docs/prep-runbook.md §2). One-sided: the reader is
+a Claude Code workflow with no automated test, so `fixtures/recent-openers/` plus the prep runbook is
+its spec. Each `openers[]` entry carries the opaque `naturalKey`, `discipline`, the `opener` (the first
+sentence of a recently drafted body, derived from `originalDraftBody` when present else `draftBody`),
+and the `usedAt` timestamp it is ordered by. Newest first, deduped by opener text, capped at
+`maxOpeners` (15). Like the voice-feedback file, it carries real body text: it is a list of shapes to
+AVOID reusing, and the runbook forbids lifting any specific out of it into a draft.

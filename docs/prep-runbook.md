@@ -35,6 +35,11 @@ before this was codified.
   `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
   setup. Skip the learning step when so. See "Once per run" below.
+- **Read (optional, #730 cross-run anti-repetition):**
+  `~/Library/Application Support/Overture/overture-recent-openers.json` (`RecentOpeners`:
+  `openers[]`, each the opening SENTENCE a recent draft already used, newest first). Absent
+  or empty on a fresh setup. These are shapes to AVOID reusing this run, NEVER a source of
+  facts. See §2's anti-repetition rule.
 - **Write (optional, #119 voice learning):**
   `~/Library/Application Support/Overture/overture-voice-guidance.md`: the distilled,
   anonymized voice tendencies, an editable artifact. You regenerate ONLY its
@@ -288,8 +293,17 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
 - **Anti-repetition within the run (#362):** before finalizing each draft, compare it
   against the one or two drafts immediately before it in this run. Don't reuse the
-  same opening line, hook, or distinctive phrase back to back. This is a within-run
-  check only, you aren't expected to recall drafts from a previous day's run.
+  same opening line, hook, or distinctive phrase back to back.
+- **Anti-repetition across runs (#730):** at the START of the run, read
+  `overture-recent-openers.json` (above): its `openers[]` are the opening SENTENCES recent
+  runs already used, so separate small batches drafted on different days don't independently
+  converge on the same handful of openers. As you draft, don't reopen with a shape or
+  distinctive phrase that matches one already in that list; reach for a different archetype or
+  a fresh angle instead. Treat it exactly like the within-run check, just with a longer memory
+  the app maintains for you. It is shapes to AVOID ONLY: never lift an org, venue, name, or any
+  other specific out of it into a draft (the same cross-contamination trap the "Once per run"
+  step warns about). If the file is absent or empty (a fresh setup), there is nothing to avoid
+  yet, draft normally.
 
 Hard rules: no em dashes; contractions throughout; NO fabrication (only what's real
 from the listing, never invent performer states); never volunteer the dance
