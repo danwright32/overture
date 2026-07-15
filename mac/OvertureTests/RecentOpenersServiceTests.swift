@@ -72,4 +72,41 @@ struct RecentOpenersServiceTests {
         let decoded = try JSONDecoder().decode(RecentOpeners.self, from: Data(contentsOf: openersURL))
         #expect(decoded.openers.map(\.opener) == ["A distinctive opener sentence."])
     }
+
+    @Test func startPrepStillProceedsWhenTheRecentOpenersWriteFails() throws {
+        // The export is best-effort (try?): a failure to write the anti-repetition file must never block
+        // the Prep run itself. Force the write to fail by pointing it under a path whose parent is a
+        // FILE, so createDirectory throws, and prove the queue is still written and the launch happens.
+        let ctx = ModelContext(try container())
+        let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
+                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              priorRelationship: "none", production: "self", profile: "strong",
+                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                              status: .queued)
+        ctx.insert(toPrep)
+        try ctx.save()
+
+        let tmp = FileManager.default.temporaryDirectory
+        let queueURL = tmp.appendingPathComponent("q-\(UUID().uuidString).json")
+        let marker = tmp.appendingPathComponent("m-\(UUID().uuidString)")
+        let feedbackURL = tmp.appendingPathComponent("vf-\(UUID().uuidString).json")
+        // A regular file standing in as the openers URL's parent directory, so the export's
+        // createDirectory (and thus the write) fails.
+        let blocker = tmp.appendingPathComponent("blocker-\(UUID().uuidString)")
+        try Data().write(to: blocker)
+        let openersURL = blocker.appendingPathComponent("child.json")
+        defer { [queueURL, marker, feedbackURL, blocker].forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        var launched = false
+        let count = try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                                   queueURL: queueURL, markerURL: marker,
+                                                   voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
+                                                   launch: { launched = true })
+
+        #expect(count == 1)                                              // the run went ahead
+        #expect(launched)                                               // and launched
+        #expect(FileManager.default.fileExists(atPath: queueURL.path))  // the queue was still written
+        #expect(!FileManager.default.fileExists(atPath: openersURL.path))  // the openers write did fail
+    }
 }
