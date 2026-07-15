@@ -184,7 +184,8 @@ enum ProspectMutations {
                                  feedback: ActionFeedback, offer: DayOffOfferRequest) {
         setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback)
         guard let o = DayOffOffer.offer(reason: reason, performanceDate: item.performanceDate,
-                                        runEndDate: item.runEndDate) else { return }
+                                        runEndDate: item.runEndDate,
+                                        alreadyBlocked: item.hasUnclearedConflict) else { return }
         offer.request(key: item.id, org: item.groupName, start: o.start, end: o.end)
     }
 

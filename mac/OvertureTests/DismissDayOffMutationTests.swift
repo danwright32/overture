@@ -81,6 +81,24 @@ struct DismissDayOffMutationTests {
         #expect(feedback.action == nil)
     }
 
+    // Dismissing a SECOND show on a date Dan already blocked must NOT pop the picker again: the show
+    // already reads "unavailable" (it carries an uncleared conflict), so there is nothing to capture.
+    @Test func dismissingAShowOnAnAlreadyBlockedDateDoesNotOffer() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-18")
+        p.setScoutConflict("dayOff|2026-11-18|Vacation")   // its date is already blocked
+        try ctx.save()
+        #expect(p.hasUnclearedConflict)
+        let feedback = ActionFeedback()
+        let offer = DayOffOfferRequest()
+
+        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict,
+                                           prospects: [p], context: ctx, feedback: feedback, offer: offer)
+
+        #expect(p.status == .dismissed)     // still dismissed
+        #expect(offer.pending == nil)       // but no picker: the date is already blocked
+    }
+
     // The picker's confirm goes through blockDaysOff, the one writer, which adds the day off (the conflict
     // sweep then acts on it) and confirms it.
     @Test func blockDaysOffWritesTheDayOffAndConfirms() throws {

@@ -54,4 +54,11 @@ struct DayOffOfferTests {
     @Test func thePickerSubtitleNamesTheOrg() {
         #expect(DayOffOffer.pickerSubtitle(org: "Vienna Philharmonic").contains("Vienna Philharmonic"))
     }
+
+    // If the show's date is already blocked (it already shows a conflict), there is nothing to capture, so
+    // dismissing a SECOND show on that same blocked date must not pop the picker again (Dan, 2026-07-15).
+    @Test func anAlreadyBlockedDateOffersNothing() {
+        #expect(DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-11-18",
+                                  runEndDate: nil, alreadyBlocked: true) == nil)
+    }
 }
