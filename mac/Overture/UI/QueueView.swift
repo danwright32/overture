@@ -28,6 +28,11 @@ struct QueueView: View {
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
     @State private var outboundSending: [String: Date] = [:]
     @State private var replySending: [String: Date] = [:]
+    // #361: shows that have just been fully sent and are playing their leaving delight (gold seal +
+    // drawn line, then a glide-up exit). Keyed by natural key to the snapshot to render while it
+    // departs, since the real row has already left `visible` once the send lands in the data.
+    @State private var departing: [String: QueueItem] = [:]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // #236: a lead opened from an OmniFocus deep link. When it changes, the queue switches to the
     // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
@@ -182,7 +187,9 @@ struct QueueView: View {
                 activeDiscipline: $disciplineFilter,
                 highOnly: $highOnly
             )
-            let groups = QueueModel.groupByDate(visible)
+            // #361: fold any departing (just-sent) rows back into the date groups so each plays its
+            // leaving delight in place before the glide-up removes it.
+            let groups = QueueModel.groupByDate(QueueModel.withDeparting(visible, departing: departing))
             if groups.isEmpty {
                 emptyState
             } else {
@@ -509,12 +516,22 @@ struct QueueView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    private func prospectRow(_ item: QueueItem) -> some View {
-        ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
-                              dayOffOffer: dayOffOffer,
-                              highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
-                              replySendSince: { rid in replySending[rid] },
-                              onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
+    @ViewBuilder private func prospectRow(_ item: QueueItem) -> some View {
+        if departing[item.id] != nil {
+            // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
+            // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
+            // the glide to a plain fade; the drawn line is already dropped by the timing plan.
+            SendDelightRow(item: item, timing: SendDelightTiming.plan(reduceMotion: reduceMotion))
+                .transition(.asymmetric(
+                    insertion: .identity,
+                    removal: reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)))
+        } else {
+            ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                                  dayOffOffer: dayOffOffer,
+                                  highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                                  replySendSince: { rid in replySending[rid] },
+                                  onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
+        }
     }
 
     private var emptyState: some View {
@@ -545,10 +562,22 @@ struct QueueView: View {
 
     private func performSend(_ naturalKey: String) {
         pendingConfirm = nil
+        // #361: snapshot the row now, while it's still present, so its leaving delight can render after
+        // the send removes it from `visible`. Only a send that EMPTIES the show (onSent fullySent) plays
+        // it; a partial send on a multi-recipient show keeps the row, so no exit yet.
+        let snapshot = items.first(where: { $0.id == naturalKey })
         ProspectMutations.performSend(naturalKey, prospects: prospects, context: context, feedback: feedback,
                                       markSending: { outboundSending[$0] = Date() },
                                       clearSending: { outboundSending[$0] = nil },
-                                      onNeedsReconnect: { showReconnect = true })
+                                      onNeedsReconnect: { showReconnect = true },
+                                      onSent: { id, fullySent in
+                                          guard fullySent, let snap = snapshot else { return }
+                                          departing[id] = snap
+                                          let t = SendDelightTiming.plan(reduceMotion: reduceMotion)
+                                          DispatchQueue.main.asyncAfter(deadline: .now() + t.holdBeforeExit) {
+                                              withAnimation(.easeOut(duration: t.exit)) { departing[id] = nil }
+                                          }
+                                      })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {

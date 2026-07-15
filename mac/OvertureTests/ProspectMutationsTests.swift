@@ -263,6 +263,52 @@ struct ProspectMutationsTests {
         #expect(p.status == .contacted)
     }
 
+    // #361: after a successful send, onSent reports whether that send EMPTIED the show (no pending
+    // recipient left). The queue uses this to play the leaving delight only when the row actually
+    // departs: a single-recipient show is fully sent in one go.
+    @Test func performSendReportsFullySentWhenTheLastRecipientGoes() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, status: .approved)
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.recipients = [Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)]
+        try? ctx.save()
+        let sender = RecordingSender()
+        var sentReports: [(String, Bool)] = []
+
+        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
+                                      markSending: { _ in }, clearSending: { _ in },
+                                      onNeedsReconnect: {},
+                                      onSent: { id, fullySent in sentReports.append((id, fullySent)) })
+
+        while sentReports.isEmpty { await Task.yield() }
+        #expect(sentReports.count == 1)
+        #expect(sentReports.first?.0 == "k")
+        #expect(sentReports.first?.1 == true)
+    }
+
+    // #361: a multi-recipient show still has someone pending after one send, so onSent reports NOT
+    // fully sent, and the row stays in the queue (no leaving delight yet).
+    @Test func performSendReportsNotFullySentWhileARecipientRemains() async throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, status: .approved)
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.recipients = [
+            Recipient(id: "act@example.com", email: "act@example.com", provenance: .act),
+            Recipient(id: "pres@example.com", email: "pres@example.com", provenance: .presenter),
+        ]
+        try? ctx.save()
+        let sender = RecordingSender()
+        var sentReports: [(String, Bool)] = []
+
+        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
+                                      markSending: { _ in }, clearSending: { _ in },
+                                      onNeedsReconnect: {},
+                                      onSent: { id, fullySent in sentReports.append((id, fullySent)) })
+
+        while sentReports.isEmpty { await Task.yield() }
+        #expect(sentReports.first?.1 == false)
+    }
+
     @Test func sendReplyMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)

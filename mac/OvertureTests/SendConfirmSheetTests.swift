@@ -24,6 +24,7 @@ struct SendConfirmSheetTests {
         #expect(SendConfirmCopy.previewLabel == "The email that will send")
         #expect(SendConfirmCopy.send == "Send")
         #expect(SendConfirmCopy.cancel == "Cancel")
+        #expect(SendConfirmCopy.sentSeal == "Sent")   // #361: the leaving-row gold seal
     }
 
     @Test func theSharedModifierPresentsASheetNotAPlainAlert() {
