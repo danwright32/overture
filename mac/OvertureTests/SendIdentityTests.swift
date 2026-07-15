@@ -25,5 +25,10 @@ struct SendIdentityTests {
                 "ProspectMutations must build the live sender from SendIdentity, not a re-typed address literal (#360).")
         #expect(!SourceGuardHelper.source("Overture/Domain/SendConfirmation.swift").contains(address),
                 "SendConfirmation must read its From from SendIdentity, not a re-typed address literal (#360).")
+        // #949: the reply/bounce checker identifies Dan's own address to tell his sends apart from a
+        // stranger's reply. That "self" address is the same sending identity, so it reads SendIdentity
+        // too rather than keeping its own copy that could silently drift from what actually sends.
+        #expect(!SourceGuardHelper.source("Overture/Integration/GmailReplyChecker.swift").contains(address),
+                "GmailReplyChecker must default its selfEmail from SendIdentity, not a re-typed address literal (#949).")
     }
 }
