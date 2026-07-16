@@ -81,13 +81,31 @@ enum SourceFetcher {
     //
     // So pagination is opt-in, and today only the paste-a-lead path opts in. That path never reconciles
     // and never cancels (`LeadIntakeModel` applies with no `feed:`), so the hole cannot open there.
+    // #972: Overture ships with no App Transport Security exception, so macOS refuses a cleartext http
+    // request before it leaves the process, and the source lands on `unreachable`. That sentence is a lie
+    // in the case that actually happens: the site is up, it simply got stored with an http address. Two of
+    // the three sources failing after the #359 backfill (Rainer Crosett, The Cell Theatre) were exactly
+    // this, and both answer https with a 200; the third (Dinu Mihailescu) has a genuinely broken TLS
+    // handshake, which no scheme fixes and which SHOULD keep failing.
+    //
+    // Asking for https instead cannot regress anything: a cleartext fetch cannot succeed today, so no
+    // source that works now is affected. It also catches the next http link Dan pastes as a lead, which
+    // would otherwise fail the same misleading way.
+    static func secured(_ url: URL) -> URL {
+        guard url.scheme?.lowercased() == "http",
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        parts.scheme = "https"
+        return parts.url ?? url
+    }
+
     static func fetch(_ url: URL,
                       session: URLSession = .shared,
                       render: ((URL) async throws -> String)? = nil,
                       allowTicketLinkHop: Bool = true,
                       monthHorizon: Int = 1,
                       now: Date = Date()) async throws -> FetchedPage {
-        let landing = try await fetchSinglePage(url, session: session, render: render,
+        let landing = try await fetchSinglePage(secured(url), session: session, render: render,
                                                 allowTicketLinkHop: allowTicketLinkHop)
 
         // Not asked to paginate, or we are no longer on the page Dan gave us. A ticket-link hop means we
