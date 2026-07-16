@@ -67,6 +67,17 @@ For each item in the work-list:
    nothing upcoming. Say so in the `note` and return no events. Do NOT reach for the hall's other shows
    to have something to return.
 
+   **"Never invent one" covers the FIELDS of a real event, not just the event** (#995). A row that is
+   genuinely on the page does not entitle you to fill in the parts of it the page left blank. Report what
+   the page says and leave the rest null.
+
+   The real case: a page listed a date whose title read only *"Info coming soon"*. The run returned it as
+   `Palm Springs Engagement`, a phrase that appears nowhere on the page, and noted "Oct 24 event title
+   inferred". No code can catch this: an invented title is indistinguishable from a real one to
+   everything downstream, and it becomes half of how Overture recognises that show again on the next
+   scout (#797). A `note` admitting the invention does not license it, because the title is what Dan
+   reads and the note is not.
+
 3. **Follow each event's own link** (`WebFetch`) for the **venue** and the **exact date**. The listings
    page usually carries neither, and Overture needs the venue: it drives classification and the pitch
    itself. Never guess a venue.
@@ -80,9 +91,23 @@ For each item in the work-list:
    at Pier 5, Brooklyn, NY", and the concert is not even on the barge. Take the venue from the listing
    and every pitch names the wrong place, with nothing downstream able to notice.
 
-   If a detail page genuinely does not name the venue, say so in the `note` and leave `venue` null.
-   Do not invent one, and do not pass through a numeric id, "TBD", or "unknown": all of those are
-   rejected anyway, and an honest null tells Dan the truth about the source.
+   **A null venue is a RIGHT answer, not a lost row** (#995). Read the paragraph above as a fact about
+   what a venue is for, never as pressure to produce one. Some pages publish no venue anywhere, for any
+   event, and never will: on those, null on every row is the correct and complete result, and the run
+   has succeeded. Reporting that honestly is worth more to Dan than a full-looking list, because he is
+   deciding what to do about those sources and can only do it if the file says what is really there.
+
+   So: if a page does not name the venue, say so in the `note` and leave `venue` null. Do not invent one,
+   do not pass through a numeric id, "TBD" or "unknown", and **never copy the location into `venue`**.
+   A city is not a room. `location` (3a) is where that fact belongs, and it has its own field precisely
+   so `venue` never has to absorb it.
+
+   This last one is not hypothetical either, and it is why this paragraph exists. The first real scout of
+   a venue-less page returned `venue: "Baltimore, Maryland"`, `venue: "Harrogate, UK"`, and two more like
+   them, explaining itself in the note: *"Venue field populated with location as best available
+   specificity."* Every one of those is now rejected as `no venue (the listing gave only a place)`, so
+   the disguise buys nothing. It is worse than null, because a null says "this page has no venues" and a
+   city in the venue field says "Dan's email should offer to photograph Baltimore, Maryland".
 
 3a. **Report `location`: where the show is, VERBATIM, exactly as the page wrote it** (#970). Copy the
    string across untouched. Do not tidy it, expand it, abbreviate it, or translate it into a format you

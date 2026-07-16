@@ -23,9 +23,9 @@ import Foundation
 @Suite("Extracted event guard (#799)")
 struct ExtractedEventGuardTests {
     private func event(title: String = "Aurora Strings", venue: String?,
-                       date: String? = "2026-09-19") -> ExtractedEvent {
+                       date: String? = "2026-09-19", location: String? = nil) -> ExtractedEvent {
         ExtractedEvent(title: title, presenter: "Aurora Strings", venue: venue,
-                       performanceDate: date, sourceUrl: "https://org.example/a")
+                       performanceDate: date, sourceUrl: "https://org.example/a", location: location)
     }
 
     @Test func aRealVenuePasses() {
@@ -62,6 +62,57 @@ struct ExtractedEventGuardTests {
         #expect(ExtractedEventGuard.rejection(for: event(title: "", venue: "Merkin Hall")) == .noTitle)
     }
 
+    // #995. A city is not a room, and a run that copies the location into the venue defeats this whole
+    // guard while looking like it passed it. These four are verbatim from the first real scout of a
+    // venue-less page (Smoke Ring Quartet, 2026-07-16), and are in the live store today. The run said so
+    // itself: "Venue field populated with location as best available specificity."
+    //
+    // The guard cannot see a page, so it cannot know a venue was never published. It CAN see that the
+    // venue only restates the location, which is the same fact wearing a disguise.
+    @Test func aVenueThatMerelyRestatesTheLocationIsNotAVenue() {
+        for place in ["Baltimore, Maryland", "San Rafael, CA", "Harrogate, UK", "Palm Springs, CA"] {
+            #expect(ExtractedEventGuard.rejection(for: event(venue: place, location: place))
+                    == .locationAsVenue,
+                    "\(place) is a place, not a venue, and must not pass as one")
+        }
+    }
+
+    // The same disguise with the edges filed off: a run that reports the city alone, or in another case,
+    // is making the identical claim and must fail identically.
+    @Test func restatingOnlyPartOfTheLocationIsStillNotAVenue() {
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Baltimore", location: "Baltimore, Maryland")) == .locationAsVenue)
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "  harrogate ", location: "Harrogate, UK")) == .locationAsVenue)
+    }
+
+    // The rule must not fire the other way round. A REAL venue routinely names its own city, and this is
+    // the exact string the runbook holds up as the right answer (Bargemusic's detail page, #799). If
+    // this ever rejects, the guard has started eating the events it exists to protect.
+    @Test func aRealVenueThatNamesItsOwnCityStillPasses() {
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Brooklyn Bridge Park Boathouse at Pier 5, Brooklyn, NY",
+                       location: "Brooklyn, NY")) == nil)
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Weill Recital Hall", location: "New York, NY")) == nil)
+    }
+
+    // A venue-less row on a page that names no place either. There is nothing to compare against, so
+    // this stays the plain `.noVenue` it always was, rather than becoming the new reason.
+    @Test func aVenuelessEventWithNoLocationIsStillJustVenueless() {
+        #expect(ExtractedEventGuard.rejection(for: event(venue: nil, location: nil)) == .noVenue)
+        #expect(ExtractedEventGuard.rejection(for: event(venue: nil, location: "Baltimore, Maryland"))
+                == .noVenue)
+    }
+
+    // #979 requires "no venue was published" and "the model gave up" to stay distinguishable, or the
+    // guard is merely weakened. Dan's ruling (a venue-less NYC show is worth chasing, a venue-less
+    // Harrogate one is not) can only ever be built on top of a reason that says which happened.
+    @Test func theReasonSaysAPlaceWasGivenRatherThanNothingAtAll() {
+        #expect(ExtractedEventGuard.Rejection.locationAsVenue != .noVenue)
+        #expect(ExtractedEventGuard.Rejection.locationAsVenue != .placeholderVenue)
+    }
+
     // An undated listing is NOT rejected: "date to be confirmed" is a normal state on a season page,
     // and #798's guard already handles what to do with it. The venue is the field we cannot do without.
     @Test func anUndatedEventIsStillUsable() {
@@ -80,9 +131,10 @@ struct ScoutExtractResultsGuardTests {
                                                          events: events, note: nil)])
     }
 
-    private func event(_ title: String, venue: String?) -> ScoutExtractEvent {
+    private func event(_ title: String, venue: String?, location: String? = nil) -> ScoutExtractEvent {
         ScoutExtractEvent(title: title, presenter: title, venue: venue,
-                          performanceDate: "2026-09-19", sourceUrl: "https://org.example/\(title)")
+                          performanceDate: "2026-09-19", sourceUrl: "https://org.example/\(title)",
+                          location: location)
     }
 
     @Test func onlyUsableEventsComeOutOfTheResults() {
@@ -108,6 +160,22 @@ struct ScoutExtractResultsGuardTests {
         #expect(rejected.map(\.reason).contains(.noVenue))
         #expect(rejected.map(\.reason).contains(.placeholderVenue))
         #expect(rejected.first(where: { $0.reason == .noVenue })?.title == "No Venue")
+    }
+
+    // #995: the wire, not the rule. The rule rejecting a city and the BOUNDARY dropping it are two
+    // separate claims, and only the second one keeps a fabricated venue out of Dan's store. This is the
+    // exact payload the first real scout of Smoke Ring Quartet returned.
+    @Test func aCityDisguisedAsAVenueIsDroppedAtTheBoundaryAndReported() {
+        let r = results([event("Good Show", venue: "Merkin Hall", location: "New York, NY"),
+                         event("LABBS 50th Convention", venue: "Harrogate, UK",
+                               location: "Harrogate, UK")])
+
+        #expect(r.events(for: "s").map(\.title) == ["Good Show"])
+
+        let rejected = r.rejectedEvents(for: "s")
+        #expect(rejected.count == 1)
+        #expect(rejected.first?.title == "LABBS 50th Convention")
+        #expect(rejected.first?.reason == .locationAsVenue)
     }
 
     @Test func aSourceWhoseEventsAreAllVenuelessIsVisiblyBrokenRatherThanEmpty() {
