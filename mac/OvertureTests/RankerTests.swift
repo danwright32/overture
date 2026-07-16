@@ -71,8 +71,7 @@ struct RankerTests {
     }
 
     // #350: Choral folded into Music, merged at Choral's former score (Dan's call) so
-    // already-preferred disciplines aren't demoted; "other" (no discipline signal) is now the
-    // sole baseline.
+    // already-preferred disciplines aren't demoted.
     @Test func disciplinePreferenceOrder() {
         #expect(Ranker.disciplinePoints(.dance) == 3)
         #expect(Ranker.disciplinePoints(.opera) == 2)
@@ -80,7 +79,23 @@ struct RankerTests {
         #expect(Ranker.disciplinePoints(.music) == 1)
         #expect(Ranker.disciplinePoints(.band) == 1)
         #expect(Ranker.disciplinePoints(.comedy) == 1)
+    }
+
+    // #970 Phase 0. `.other` scored 0 on the theory that it was the no-signal baseline, but until Phase
+    // 0 the classifier could never return it: no-signal rows fell back to `.music` and scored 1. Making
+    // `.other` reachable therefore risked re-scoring live rows as a side effect of a bug fix. It does
+    // not, and this test pins the reason: the row that sits exactly on the high-tier threshold of 5
+    // ("Anna Pierre, Piano Virgile Roche, Piano") says "Piano", so the music vocabulary Phase 0 added
+    // keeps it `.music` and keeps its point. Every live row scoring at or above 5 carries a music word.
+    // Only genuinely unreadable titles reach `.other`, and they already score at or below 3, so no row
+    // changes tier. If this ever goes red, a real prospect is being demoted by a classifier change and
+    // Dan has to be asked, not accommodated.
+    @Test func onlyUnreadableTitlesPayTheOtherBaseline() {
         #expect(Ranker.disciplinePoints(.other) == 0)
+        #expect(EventClassifier.classify(ExtractedEvent(
+            title: "Anna Pierre, Piano Virgile Roche, Piano", presenter: nil,
+            venue: "Weill Recital Hall", performanceDate: "2026-06-25", sourceUrl: nil
+        )).discipline == .music)
     }
 
     @Test func unreachableIsExcludedRegardlessOfScore() {

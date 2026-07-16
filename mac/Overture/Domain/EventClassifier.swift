@@ -47,7 +47,13 @@ enum EventClassifier {
         if matches(text, #"\b(choir|chorus|chorale|choral|voices|singers|cantata|vocal)\b"#) { return .music }
         if matches(text, #"\b(band|wind ensemble|brass|jazz band|marching)\b"#) { return .band }
         if matches(text, #"\b(comedy|comedian|stand.?up|improv)\b"#) { return .comedy }
-        return .music
+        // #970 Phase 0. Checked last, because these words are weaker signals than the ones above and
+        // must lose to them: "Opera in Concert" is opera, "Playhouse Orchestra Night" is theater.
+        // Deliberately NOT here: "musical" (a theater word, already refused as a theater signal above)
+        // and "performance"/"artist", which name no discipline at all. `music` is bounded so it cannot
+        // match inside "musical".
+        if matches(text, #"\b(music|orchestra|philharmoni\w*|symphon\w*|piano|pianist|violin\w*|viola|cello|cellist|flute|clarinet|trumpet|harpsichord|guitar|recital|concerto|sonata|quartet|quintet|octet|sextet|septet|trio|chamber|camerata|conservatory|soprano|tenor|baritone|mezzo|jazz|blues|bluegrass|folk|composer|conductor|concert|song|songs|melodies|sings)\b"#) { return .music }
+        return .other
     }
 
     static func classify(_ event: ExtractedEvent) -> EventClassification {
