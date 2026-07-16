@@ -210,4 +210,25 @@ struct StagePillCountMatchesNavigationTests {
         #expect(send.count == 2)
         #expect(Set(try targets(ctx, send)) == Set(["approved-1", "approved-2"]))
     }
+
+    // #357: AgentInputs.from derives BOTH new pills' counts the same way as every existing one, through
+    // StageNavigation, so their number and their tap target can never drift apart either.
+    @Test func inputsFromCountsUncertainClassificationsAndCarriesOmniFocusFailure() throws {
+        let ctx = try context()
+        let unsure = show(ctx, "unsure", status: .new, hasDraft: false)
+        unsure.classificationConfidence = Confidence.uncertain.rawValue
+        show(ctx, "confident", status: .new, date: "2026-09-19", hasDraft: false)
+            .classificationConfidence = Confidence.confident.rawValue
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let withoutFailure = AgentInputs.from(prospects: all, now: now, today: today,
+                                              gmailConnected: true, prepRunning: false, replyRunAlive: false)
+        #expect(withoutFailure.uncertainClassifications == 1)
+        #expect(withoutFailure.omniFocusSyncFailed == false)
+
+        let withFailure = AgentInputs.from(prospects: all, now: now, today: today,
+                                           gmailConnected: true, prepRunning: false, replyRunAlive: false,
+                                           omniFocusSyncFailed: true)
+        #expect(withFailure.omniFocusSyncFailed == true)
+    }
 }

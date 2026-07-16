@@ -111,6 +111,47 @@ struct StageNavigationTests {
 
         #expect(StageNavigation.naturalKeys(for: .followUps, in: all).isEmpty)
     }
+
+    // #357: an unconfirmed classification is cross-cutting, not tied to any one pipeline stage (a
+    // freshly scouted show and one already kept can both carry it), unlike Scout/Prep/Review/Send.
+    @MainActor
+    @Test func uncertainClassificationIsCrossCuttingRegardlessOfStatus() throws {
+        let ctx = makeContext()
+        let stillNew = prospect(ctx, key: "unsure-new", status: .new, hasDraft: false)
+        stillNew.classificationConfidence = Confidence.uncertain.rawValue
+        let alreadyKept = prospect(ctx, key: "unsure-kept", status: .queued, hasDraft: false)
+        alreadyKept.classificationConfidence = Confidence.uncertain.rawValue
+        let confidentOne = prospect(ctx, key: "confident", status: .new, hasDraft: false)
+        confidentOne.classificationConfidence = Confidence.confident.rawValue
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        let keys = Set(StageNavigation.naturalKeys(for: .uncertainClassification, in: all))
+        #expect(keys == Set(["unsure-new", "unsure-kept"]))
+    }
+
+    // Once Dan has actually looked at an uncertain guess and confirmed it, it stops waiting on him,
+    // even though the stored confidence string itself never changes.
+    @MainActor
+    @Test func aReviewedUncertainClassificationNoLongerWaitsOnHim() throws {
+        let ctx = makeContext()
+        let reviewed = prospect(ctx, key: "reviewed", status: .new, hasDraft: false)
+        reviewed.classificationConfidence = Confidence.uncertain.rawValue
+        reviewed.confidenceReviewedByDan = true
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        #expect(StageNavigation.naturalKeys(for: .uncertainClassification, in: all).isEmpty)
+    }
+
+    // Not a queue filter for anyone: OmniFocus sync health is an app-level state, not a property of any
+    // one show, so its pill resolves no queue rows at all (mirrors Follow-ups).
+    @MainActor
+    @Test func omniFocusSyncResolvesNoQueueKeys() throws {
+        let ctx = makeContext()
+        _ = prospect(ctx, key: "x", status: .queued, hasDraft: false)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        #expect(StageNavigation.naturalKeys(for: .omniFocusSync, in: all).isEmpty)
+    }
 }
 
 // #861: the Scout pill counted shows that had already happened.

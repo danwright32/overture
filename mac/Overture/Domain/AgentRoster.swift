@@ -43,6 +43,9 @@ struct AgentInputs: Sendable {
     // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
     // "sendable", so it left the queue and nothing ever surfaced the person still waiting.
     var blockedContacts: Int = 0
+    // #357: two more categories that quietly waited on Dan with no top-level pill anywhere.
+    var uncertainClassifications: Int = 0
+    var omniFocusSyncFailed: Bool = false
 }
 
 // #863: every count a pill can show is built HERE, from the same prospects StageNavigation resolves
@@ -53,7 +56,8 @@ struct AgentInputs: Sendable {
 // is passed in, so this stays pure and testable.
 extension AgentInputs {
     static func from(prospects: [Prospect], now: Date, today: String,
-                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
+                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool,
+                     omniFocusSyncFailed: Bool = false) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         func count(_ focus: StageFocus) -> Int {
@@ -73,14 +77,35 @@ extension AgentInputs {
             },
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
-            blockedContacts: count(.sendBlocked)
+            blockedContacts: count(.sendBlocked),
+            uncertainClassifications: count(.uncertainClassification),
+            omniFocusSyncFailed: omniFocusSyncFailed
         )
     }
 }
 
+// #357/#863: what tapping a chip actually DOES, pulled out of QueueView's Button closure so this
+// dispatch has a seam a test can reach. Most pills navigate the queue to their focus; a handful
+// route somewhere else entirely (a Gmail-connect flow, the Follow-ups sheet, an OmniFocus retry).
+enum AgentChipAction: Equatable, Sendable {
+    case connectGmail
+    case showFollowUps
+    case retryOmniFocusSync
+    case focusOnStage
+}
+
 enum AgentRoster {
     static func statuses(_ i: AgentInputs) -> [AgentStatus] {
-        [scout(i), prep(i), review(i), send(i), followUps(i)]
+        [scout(i), prep(i), review(i), send(i), followUps(i), unsureClassifications(i), omniFocusSync(i)]
+    }
+
+    // #565/#338/#357: needsGmailConnect outranks everything (a real instruction with something to
+    // click), then the two pills that route somewhere other than the queue, then ordinary navigation.
+    static func chipAction(for status: AgentStatus) -> AgentChipAction {
+        if status.needsGmailConnect { return .connectGmail }
+        if status.name == "Follow-ups" { return .showFollowUps }
+        if status.name == "OmniFocus" { return .retryOmniFocusSync }
+        return .focusOnStage
     }
 
     static func needsYouCount(_ statuses: [AgentStatus]) -> Int {
@@ -109,6 +134,8 @@ enum AgentRoster {
         case "Review": return "Drafts waiting for you to read, edit, and approve."
         case "Send": return "Approved emails waiting to be sent."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
+        case "Unsure": return "Prospects whose classification you haven't confirmed yet."
+        case "OmniFocus": return "The health of the automatic sync to OmniFocus."
         default: return ""
         }
     }
@@ -232,5 +259,30 @@ enum AgentRoster {
                                focus: .followUps, count: i.followUpsDue)
         }
         return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due", focus: .followUps, count: 0)
+    }
+
+    // #357: an unconfirmed classification quietly waited on Dan with no top-level pill anywhere; only
+    // a small badge on the individual row. Cross-cutting (any status), so it needs its own pill rather
+    // than folding into an existing stage.
+    private static func unsureClassifications(_ i: AgentInputs) -> AgentStatus {
+        if i.uncertainClassifications > 0 {
+            let n = i.uncertainClassifications
+            return AgentStatus(name: "Unsure", state: .needsAttention,
+                               detail: "\(n) \(shows(n)) with an unsure classification",
+                               focus: .uncertainClassification, count: n)
+        }
+        return AgentStatus(name: "Unsure", state: .idle, detail: "Nothing unsure",
+                           focus: .uncertainClassification, count: 0)
+    }
+
+    // #357: the toolbar's own OmniFocus warning lived apart from every other "needs you" signal. Not a
+    // queue filter (mirrors Follow-ups): app-level sync health, not a property of any one show, so its
+    // count is always 0, never a promise about rows.
+    private static func omniFocusSync(_ i: AgentInputs) -> AgentStatus {
+        if i.omniFocusSyncFailed {
+            return AgentStatus(name: "OmniFocus", state: .error, detail: "Sync failing: tap to retry",
+                               focus: .omniFocusSync, count: 0)
+        }
+        return AgentStatus(name: "OmniFocus", state: .idle, detail: "Synced", focus: .omniFocusSync, count: 0)
     }
 }
