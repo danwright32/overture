@@ -16,6 +16,102 @@ struct LiveRunLabelViewStateTests {
         try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
+    // #994. In the toolbar the label must not change width, because a toolbar item that grows reflows
+    // its neighbours and shoves real buttons into the macOS ">>" overflow, exactly when Dan is watching
+    // for a run to start. Dan's call: show the icon only and put the sentence in the tooltip.
+    //
+    // The sentence must survive somewhere, though. It is the whole "still alive" signal (#435), so it
+    // moves to the tooltip verbatim rather than being dropped.
+    @Test func theCompactLabelPrintsNoCaptionBesideItsIconSoTheToolbarCannotChangeWidth() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1010)
+        let label = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60,
+                                 progressDetail: "12 of 38", compact: true)
+        let view = label.content(now: now)
+
+        // The caption is what widens a toolbar item, and the HStack is what lays one out beside the
+        // icon: the normal label is `HStack { ProgressView; Text }`. Asserting on the HStack rather
+        // than on "is there any Text" is deliberate, because ViewInspector surfaces a `.help(...)`
+        // tooltip as a Text too, so counting Texts cannot tell a caption from a tooltip.
+        #expect((try? view.inspect().find(ViewType.HStack.self)) == nil,
+                "a compact label lays nothing out beside its icon, so its width cannot move")
+
+        // The words are not gone, they moved: the icon carries them as its tooltip.
+        #expect(try view.inspect().find(ViewType.ProgressView.self).help().string()
+                == label.helpText(now: now))
+    }
+
+    // Icon-only must not mean state-less. A spinner that looks identical whether the run is alive or
+    // dead is the exact defect the standing progress rule forbids, so the three states stay
+    // distinguishable AT A GLANCE by icon: spinner while alive, a warning symbol once stalled.
+    @Test func theCompactLabelStillTellsAliveApartFromStalledWithoutHovering() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let alive = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60, compact: true)
+        let stalled = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60, compact: true)
+
+        // 10s in: still working, so a spinner and no warning.
+        let running = alive.content(now: Date(timeIntervalSince1970: 1010))
+        #expect((try? running.inspect().find(ViewType.ProgressView.self)) != nil)
+
+        // 70s in, past the timeout: an actionable stalled state, visibly different.
+        let stuck = stalled.content(now: Date(timeIntervalSince1970: 1070))
+        #expect((try? stuck.inspect().find(ViewType.ProgressView.self)) == nil,
+                "a stalled run must not keep spinning as though it were alive")
+    }
+
+    // The tooltip is now the only place the elapsed counter and the "N of M" progress live, so it has
+    // to carry them, and it has to keep ticking. If this said only "Reading calendars", the compact
+    // mode would have thrown away the still-alive signal rather than moved it.
+    @Test func theCompactTooltipCarriesTheProgressAndTheElapsedCounter() {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1010)
+
+        let help = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60,
+                                progressDetail: "12 of 38", compact: true).helpText(now: now)
+
+        #expect(help == RunProgress.spinnerLabel("Reading calendars", since: since, now: now,
+                                                 detail: "12 of 38"))
+        #expect(help.contains("12 of 38"))
+        #expect(help.contains(RunProgress.elapsedLabel(since: since, now: now)!))
+    }
+
+    @Test func theCompactTooltipSaysSoWhenTheRunLooksStuck() {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)   // past the 60s timeout
+        let elapsed = RunProgress.elapsedLabel(since: since, now: now)!
+
+        let help = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60,
+                                compact: true).helpText(now: now)
+
+        #expect(help == RunProgress.stalledLabel("Reading calendars", elapsed: elapsed))
+        #expect(help.contains("looks stuck"))
+    }
+
+    // The stalled icon must carry the tooltip too. This is the state Dan most needs words for: the run
+    // is dead and the icon alone cannot say for how long.
+    @Test func theCompactStalledIconStillCarriesItsTooltip() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)
+        let label = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60, compact: true)
+        let view = label.content(now: now)
+
+        #expect(try view.inspect().find(ViewType.Image.self).help().string() == label.helpText(now: now))
+        #expect((try? view.inspect().find(ViewType.HStack.self)) == nil,
+                "the stalled icon must not grow a caption either; it is in the same toolbar slot")
+    }
+
+    // The non-compact label is unchanged: every other surface (the reply drafter, Prep, Gmail connect)
+    // has room for the sentence and keeps showing it, laid out beside the spinner.
+    @Test func theNormalLabelStillPrintsItsSentenceBesideTheSpinner() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1010)
+        let label = LiveRunLabel(base: "Sending", since: since, timeout: 60)
+        let view = label.content(now: now)
+
+        #expect((try? view.inspect().find(ViewType.HStack.self)) != nil)
+        #expect(try allTexts(view).contains(RunProgress.spinnerLabel("Sending", since: since, now: now)))
+    }
+
     @Test func idleShowsTheBareCaptionWithNoElapsedCounterAndNoRetry() throws {
         let now = Date(timeIntervalSince1970: 1000)
         let label = LiveRunLabel(base: "Sending", since: nil, timeout: 60)
