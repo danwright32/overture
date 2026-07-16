@@ -21,7 +21,7 @@ private func item(
         location: location,
         priorRelationship: "none", production: "self", profile: "strong", coverage: "unknown",
         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
-        possibleMatchSource: nil, possibleMatchName: nil, status: .untriaged)
+        possibleMatchSource: nil, possibleMatchName: nil, status: .new)
 }
 
 @Suite("Queue geo filter: what it hides")

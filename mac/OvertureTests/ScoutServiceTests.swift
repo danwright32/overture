@@ -89,9 +89,6 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
     }
 
-    // #60 Task 3: Dan's corrected classification must survive a re-scout.
-    // Set up an existing prospect whose discipline was corrected to "dance" by Dan
-    // (classificationOverriddenByDan = true). Run apply with a fresh event that the
     // #970 Phase 3. The scout reports a location (#985) and the resolver can read one (#989), but the
     // gate runs at QUEUE time against `Prospect.location`, so the string has to actually land on the
     // row. Without this hop the whole feature is a no-op with green tests either side of a gap, which
@@ -140,6 +137,9 @@ struct ScoutServiceTests {
         #expect(refreshed?.presenter == "Cerddorion Inc")
     }
 
+    // #60 Task 3: Dan's corrected classification must survive a re-scout.
+    // Set up an existing prospect whose discipline was corrected to "dance" by Dan
+    // (classificationOverriddenByDan = true). Run apply with a fresh event that the
     // classifier produces as "choral". The prospect's discipline must stay "dance" and
     // fitScore must reflect dance (not the scout's choral value).
     @Test func reScoutPreservesDansCorrectedClassification() throws {
