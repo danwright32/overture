@@ -12,6 +12,9 @@ struct AssembledProspect: Equatable, Sendable {
     // being forward-only forever. #980 could not be: it fixed the classifier and the input that
     // produced every existing row was already gone.
     var presenter: String?
+    // #970: where the page said the show is, verbatim. Carried through unresolved; EventPlace judges it
+    // at queue time, so the store keeps the page's own words and the rule stays changeable.
+    var location: String?
     var discipline: String
     var venue: String?
     var performanceDate: String?
@@ -86,6 +89,7 @@ enum ProspectAssembler {
             // independently, so matching is unaffected either way.
             groupName: Prospect.decodeHTMLEntities(event.title),
             presenter: event.presenter,
+            location: event.location,
             discipline: c.discipline.rawValue,
             venue: event.venue,
             performanceDate: event.performanceDate,

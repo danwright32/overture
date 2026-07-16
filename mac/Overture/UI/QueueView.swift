@@ -21,6 +21,7 @@ struct QueueView: View {
     @State private var disciplineFilter: String?
     @State private var highOnly = false
     @State private var showPendingBookingsOnly = false
+    @State private var showTooFarOnly = false        // #970
     @State private var pipeline: Pipeline = .toSend
     @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
@@ -88,7 +89,7 @@ struct QueueView: View {
     // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
     private var filtered: [QueueItem] {
         QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
-                          pendingBookingsOnly: showPendingBookingsOnly)
+                          pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly)
     }
 
     // What the queue actually shows: the filtered set windowed to the bookable date range
@@ -122,6 +123,7 @@ struct QueueView: View {
         queueScroll
             .background(OVColor.canvas)
             .toolbar { bookingsToolbar }
+            .toolbar { tooFarToolbar }        // #970
     }
 
     @ToolbarContentBuilder
@@ -142,6 +144,25 @@ struct QueueView: View {
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
                 .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
                                                     count: pendingBookings))
+            }
+        }
+    }
+
+    // #970: the shows the geo gate took. Only appears when it actually took some, so a queue with
+    // nothing out of range says nothing, and a filter bug is loud rather than invisible (#887).
+    @ToolbarContentBuilder
+    private var tooFarToolbar: some ToolbarContent {
+        let tooFar = QueueModel.tooFarCount(items)
+        if tooFar > 0 {
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    showTooFarOnly.toggle()
+                } label: {
+                    ToolbarHoverLabel(title: QueueModel.tooFarLabel(count: tooFar),
+                                      systemImage: showTooFarOnly ? "location.slash.fill" : "location.slash")
+                }
+                .foregroundStyle(showTooFarOnly ? OVColor.forest : OVColor.inkSoft)
+                .help(QueueModel.tooFarHelp(showingOnly: showTooFarOnly, count: tooFar))
             }
         }
     }
@@ -262,6 +283,7 @@ struct QueueView: View {
         disciplineFilter = nil
         highOnly = false
         showPendingBookingsOnly = false
+        showTooFarOnly = false
         highlightedKey = key
         deepLinkedKey = nil
         // Let the pipeline/filter change lay out before scrolling to the row.
