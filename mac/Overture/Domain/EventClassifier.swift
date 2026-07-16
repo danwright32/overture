@@ -11,6 +11,14 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     var venue: String?
     var performanceDate: String?
     var sourceUrl: String?
+    // #970: where the page says this show is, VERBATIM. Not parsed here and not normalized: what a
+    // page writes ranges from "Louisville, KY" to "southern Norway" to a full street address to a
+    // comma-joined list of four cities, and deciding what any of that MEANS is a resolver's job, not
+    // the wire's. Nil means the page named no place, which is common and is not an error.
+    //
+    // The venue cannot stand in for this. Measured on the live store: 0 of 26 distinct venue strings
+    // contain a comma, and the touring artist pages this exists for frequently name no venue at all.
+    var location: String?
 }
 
 enum Confidence: String, Sendable { case confident, uncertain }

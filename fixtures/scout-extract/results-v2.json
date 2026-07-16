@@ -1,0 +1,35 @@
+{
+  "generatedAt" : "2026-07-16T19:10:00Z",
+  "results" : [
+    {
+      "events" : [
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-06-11",
+          "presenter" : "Smoke Ring Quartet",
+          "sourceUrl" : "https://www.smokeringquartet.com/gigs",
+          "title" : "Gotham Chorus Show",
+          "venue" : "Gotham Hall"
+        },
+        {
+          "location" : "Harrogate, UK",
+          "performanceDate" : "2026-10-30",
+          "presenter" : "Smoke Ring Quartet",
+          "sourceUrl" : "https://www.smokeringquartet.com/gigs",
+          "title" : "LABBS 50th Convention",
+          "venue" : "Harrogate Convention Centre"
+        },
+        {
+          "performanceDate" : "2026-04-06",
+          "presenter" : "Rainer Crosett",
+          "sourceUrl" : "http://www.rainercrosett.com/schedule",
+          "title" : "Carnegie Hall Debut Recital",
+          "venue" : "Weill Recital Hall"
+        }
+      ],
+      "sourceId" : "smoke-ring-quartet",
+      "verdict" : "upcoming_listings"
+    }
+  ],
+  "version" : 2
+}

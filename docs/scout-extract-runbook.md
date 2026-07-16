@@ -84,6 +84,37 @@ For each item in the work-list:
    Do not invent one, and do not pass through a numeric id, "TBD", or "unknown": all of those are
    rejected anyway, and an honest null tells Dan the truth about the source.
 
+3a. **Report `location`: where the show is, VERBATIM, exactly as the page wrote it** (#970). Copy the
+   string across untouched. Do not tidy it, expand it, abbreviate it, or translate it into a format you
+   think is cleaner. Judging what a location MEANS is Overture's job, not yours; your job is to hand
+   over what the page actually said, unedited.
+
+   This is not the same field as `venue`, and one cannot substitute for the other. A venue is the room
+   ("Weill Recital Hall"). A location is the place ("New York, NY"). Measured on the live store, **0 of
+   26 distinct venue strings contain a city at all**, so a venue can never answer "where is this".
+
+   Take it from wherever the page puts it. Many artist and ensemble sites carry a location field of
+   their own, separate from the title and the venue, and some name **no venue anywhere**, only a city.
+   Real examples, all verbatim, all of which must survive exactly as written:
+
+   | what the page says | report `location` as |
+   |---|---|
+   | `New York, NY` | `New York, NY` |
+   | `Louisville, KY` | `Louisville, KY` |
+   | `Baltimore, Maryland` | `Baltimore, Maryland` (do NOT shorten to MD) |
+   | `Harrogate, UK` | `Harrogate, UK` |
+   | `Amsterdam` | `Amsterdam` (do NOT add a country) |
+   | `southern Norway` | `southern Norway` (a region is not a city; report it anyway) |
+   | `Orange County, Santa Barbara, Pasadena, and Santa Monica` | the whole string, unedited |
+   | `26 Thorwaldsenstraße Berlin, BE, 12157 Germany` | the whole address, unedited |
+
+   **If the page names no location, leave it null.** That is common and is not a failure: it means the
+   page did not say, and Overture treats an unknown place as a show to keep and flag for Dan, never as
+   one to hide. Guessing a city from an org's name, a hall you recognise, or the site's home country is
+   worse than null, because a confident wrong place is the one thing that can hide a real show.
+
+   Unlike `venue`, a missing `location` does **not** drop the event.
+
 4. **Judge the page and report one verdict.** This is the part that matters most, because an empty
    event list is ambiguous and all three readings occur in the wild:
 

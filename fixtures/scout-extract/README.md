@@ -66,3 +66,11 @@ needs it, because it drives the classifier and the pitch itself.
 
 `progress-v1.json`: seeded by the script, updated by the run, so the scout can show "3 of 9" instead
 of a bare spinner.
+
+`results-v2.json` (#970): adds an optional `location` per event, the page's own words for WHERE the
+show is. Verbatim, never normalized. The cases are real rows from real pages: `New York, NY` and
+`Harrogate, UK` from `smokeringquartet.com/gigs` (a site that publishes a city and NO venue at all),
+and `Carnegie Hall Debut Recital` from `rainercrosett.com/schedule`, which names a venue and no city,
+so it decodes with `location` absent. Absent is normal: it means the page did not say, and an unknown
+place is a show to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop
+the event. `results-v1.json` stays byte-identical and still decodes, carrying no locations.
