@@ -69,7 +69,7 @@ enum OutcomePatterns {
             // Count an otherwise-unresolved lead as replied when a contact wrote back.
             let effectiveOutcome: Outcome =
                 (p.outcome == .noResponse && p.recipients.contains(where: \.replied)) ? .replied : p.outcome
-            return OutcomeSample(wasContacted: p.wasContacted, outcome: effectiveOutcome,
+            return OutcomeSample(wasContacted: p.wasProvablyContacted, outcome: effectiveOutcome,
                                  dimension: dimensionValue(of: p, by: dimension),
                                  outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
         }

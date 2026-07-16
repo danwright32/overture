@@ -20,7 +20,7 @@ enum DownbeatBooking {
         // Deterministic order: sort by performanceDate then groupName so 1:1 booking
         // consumption is stable across runs.
         let sorted = prospects
-            .filter { $0.wasContacted }
+            .filter { $0.wasProvablyContacted }
             .sorted {
                 let d0 = $0.performanceDate ?? ""
                 let d1 = $1.performanceDate ?? ""
