@@ -19,6 +19,31 @@ import Foundation
 // reasons are reportable against the source that produced them, which is the actionable fact: "this
 // source returned 6 shows and not one of them has a venue" says its detail pages are not being read.
 // Six quietly venue-less prospects would just poison the queue.
+//
+// WHICH PATHS FOLLOW THIS RULE (#987): both, and that is now a decision rather than an accident.
+//
+//   - The agent path applies it at its BOUNDARY, by construction: `ScoutExtractResults.events(for:)`
+//     filters on `isUsable`, so an ingest cannot forget to ask.
+//   - The native path (Carnegie's structured feed) applies it in `ScoutService.runNative`, which filters
+//     `extractor.extract().events` before `applySweep`.
+//
+// Until #987 the native path did not apply it at all: it handed the raw feed straight to `applySweep`
+// and never touched `ScoutExtractResults`, so the same show got a different verdict depending on which
+// door it came through. That was invisible because 37 of 38 sources have never successfully scouted and
+// Carnegie always names a hall (0 of 132 live rows had a missing, placeholder, or numeric-id venue), so
+// guarding it changed nothing on the day it was done. It is insurance, and it is what lets #979's
+// place-aware venue rule (Dan's ruling: a venue-less NYC show is worth chasing, a venue-less Harrogate
+// one is not) be written ONCE rather than forked across two paths that already disagreed.
+//
+// The argument for guarding a structured feed is the same one as for a model's answer, because it is
+// about the PROSPECT and not about who typed it: an event with no venue puts the wrong place in Dan's
+// email, and nothing downstream can catch it. A feed that stops naming a facility produces exactly that.
+//
+// A CONSTRAINT on anything that drops an event, and it is not optional: a dropped event is absent from
+// the feed the reconcile reads, which is indistinguishable from a show that was CANCELLED (#897/#917).
+// Every caller of this guard must hand its reject count to `FeedCheck.rejectedCount`, so #887's
+// tolerance gate can forbid that run from concluding anything is gone. Guarding a path without that
+// line ships the bug the guard was meant to prevent.
 enum ExtractedEventGuard {
     enum Rejection: String, Equatable, Sendable {
         case noTitle
