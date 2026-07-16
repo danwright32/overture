@@ -142,6 +142,7 @@ struct ReconcileSchedulerTests {
                                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                                  status: .approved)
                 p.sentAt = Date(timeIntervalSince1970: 1_735_689_600)   // 2025-01-01, well before the booking
+                p.gmailMessageId = "msg-k"   // #963: a real send always stamps this alongside sentAt
                 p.downbeatClientId = "C1"
                 ctx.insert(p)
             },

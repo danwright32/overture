@@ -28,6 +28,10 @@ struct DownbeatBookingTests {
         p.outcome = outcome
         p.outcomeSourceRaw = source?.rawValue
         p.sentAt = sentAt
+        // #963: a real send always stamps gmailMessageId alongside sentAt, so the fixture must too,
+        // or a "sent" prospect here would no longer count once reconcileBooked reads
+        // wasProvablyContacted instead of the bare timestamp.
+        if sentAt != nil { p.gmailMessageId = "msg-\(group)" }
         p.downbeatClientId = clientId
         ctx.insert(p)
         return p
@@ -133,6 +137,30 @@ struct DownbeatBookingTests {
         #expect(p.recipients.first { $0.id == "b@present.example" }?.sendState == .suppressed)
         #expect(p.recipients.first { $0.id == "b@present.example" }?.suppressionReason == .bookedElsewhere)
         #expect(p.recipients.first { $0.id == "a@act.example" }?.sendState == .sent)
+    }
+
+    // #963: a sent timestamp alone is not proof of a real send (#378's lesson, extended past the
+    // Reached-out queue). A staged/corrupt record with only sentAt (no gmailMessageId) must never
+    // auto-book, or a future bug that sets sentAt without sending could falsely mark a show booked.
+    @Test func aSentTimestampWithoutAGmailMessageIdIsNeverAutoBooked() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = Prospect(naturalKey: "Acme Festival Chorus", groupName: "Acme Festival Chorus",
+                         discipline: "choral", venue: "V", performanceDate: "2026-07-01",
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
+        p.sentAt = sendDay   // no gmailMessageId: never actually sent
+        p.downbeatClientId = "C1"
+        ctx.insert(p)
+        let b = booking(id: "B99", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
+
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: Date(timeIntervalSince1970: 9_999))
+
+        #expect(count == 0)
+        #expect(p.outcome != .booked)
     }
 
     // 1. Exact match auto-books a contacted, sent prospect.
@@ -241,6 +269,7 @@ struct DownbeatBookingTests {
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                           status: .approved)
         p1.sentAt = sendDay
+        p1.gmailMessageId = "msg-p1"
         p1.downbeatClientId = "C1"
         let p2 = Prospect(naturalKey: "p2-key", groupName: "Acme Festival Chorus", discipline: "choral",
                           venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -249,6 +278,7 @@ struct DownbeatBookingTests {
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                           status: .approved)
         p2.sentAt = sendDay
+        p2.gmailMessageId = "msg-p2"
         p2.downbeatClientId = "C1"
         ctx.insert(p1)
         ctx.insert(p2)

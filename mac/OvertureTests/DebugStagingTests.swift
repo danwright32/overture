@@ -29,6 +29,9 @@ struct DebugStagingTests {
         // The two together are exactly what wasContacted keys off, so the lead now counts
         // as contacted for every post-send flow.
         #expect(p.wasContacted)
+        // #963: and the synthetic gmailMessageId means it counts as PROVABLY contacted too, so
+        // outreach stats/booking auto-detection see it, not just the older, weaker check.
+        #expect(p.wasProvablyContacted)
     }
 
     @Test func snapshotsPriorRelationshipLikeARealSend() {
@@ -51,7 +54,9 @@ struct DebugStagingTests {
         // No spurious outcome, reply, or thread state: it stages a fresh send, nothing more.
         #expect(p.outcome == .noResponse)
         #expect(p.gmailThreadId == nil)
-        #expect(p.gmailMessageId == nil)
+        // #963: gmailMessageId IS deliberately set now (the prospect-level proof-of-send synthetic
+        // id), unlike gmailThreadId above, which nothing reads for that purpose.
+        #expect(p.gmailMessageId != nil)
         #expect(p.lastReplyText == nil)
         #expect(p.draftBody == "hello")
         #expect(p.draftSubject == "subj")
@@ -143,6 +148,9 @@ struct DebugStagingTests {
         #expect(p.recipients.first?.sendState == .sent)
         #expect(p.recipients.first?.replied == true)
         #expect(p.recipients.first?.gmailMessageId != nil)
+        // #963: the prospect-level proof-of-send id too, so this staged lead counts as contacted
+        // for outreach stats/booking auto-detection, not just the recipient-level Reached-out queue.
+        #expect(p.wasProvablyContacted)
     }
 
     @Test func selfSendLeadSeedsAPendingRecipient() throws {

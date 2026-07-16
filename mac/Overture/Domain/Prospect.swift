@@ -690,6 +690,14 @@ final class Prospect {
     // .contacted state (stored as .approved + a send date) still count, with no migration.
     var wasContacted: Bool { sentAt != nil }
 
+    // #963: `wasContacted` alone is not proof of a real send (#378's lesson, extended past the
+    // Reached-out queue): every genuine send (SendService.deliver, and DebugStaging's synthetic
+    // stand-in for one) stamps `gmailMessageId` alongside `sentAt`, so a record with a timestamp but
+    // no message id was never actually sent. Outreach stats and booking auto-detection read this,
+    // not the bare timestamp, so a future bug that sets `sentAt` without sending can't silently
+    // skew a booking rate or auto-book a show that was never pitched.
+    var wasProvablyContacted: Bool { gmailMessageId != nil }
+
     // The content key two results files agree on for "the same performance". Each
     // part is CANONICALIZED so a scraped name and the same name fetched/decoded
     // elsewhere produce one key (the silent-mismatch root): HTML entities decoded,

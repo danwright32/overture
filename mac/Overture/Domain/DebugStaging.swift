@@ -20,11 +20,16 @@ enum DebugStaging {
     // staged recipient gets a synthetic one (a "debug-" id no real Gmail response could produce)
     // to keep showing up in the Reached-out queue for testing, without it being mistakable for
     // a genuine send.
+    //
+    // #963: the same proof requirement now applies at the PROSPECT level too (outreach stats,
+    // booking auto-detection), mirroring SendService.deliver's lead-level rollup, so a staged
+    // prospect still counts as contacted for those flows in a Debug build.
     static func stageAsSent(_ prospect: Prospect, now: Date) {
         prospect.sentAt = now
         prospect.status = .approved
         prospect.priorRelationshipAtSend = prospect.priorRelationship
         prospect.sendError = nil
+        prospect.gmailMessageId = "debug-\(prospect.naturalKey)-\(Int(now.timeIntervalSince1970))"
         for r in prospect.recipients where r.sendState == .pending {
             r.sendState = .sent
             r.sentAt = now
@@ -46,6 +51,9 @@ enum DebugStaging {
                          fitScore: 7, tier: "high", fitReason: "debug", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
         p.sentAt = now.addingTimeInterval(-86_400)
+        // #963: mirrors stageAsSent's prospect-level synthetic id, so this staged lead also counts
+        // as contacted for outreach stats/booking auto-detection, not just the reminder flow it targets.
+        p.gmailMessageId = "debug-\(key)-\(Int(now.timeIntervalSince1970))"
         p.outcome = .replied
         // #654: the conversation state Dan confirms lives on the recipient now, not the lead.
         let recipient = Recipient(id: "reminder@debug.example", email: "reminder@debug.example",

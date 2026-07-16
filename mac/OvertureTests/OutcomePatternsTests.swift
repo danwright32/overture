@@ -25,7 +25,12 @@ struct OutcomePatternsTests {
         p.outcome = outcome
         // A contacted prospect is one whose pitch went out (#200): approved-in-these-tests means
         // sent, so it carries a send date. New prospects stay uncontacted (no date).
-        if status == .approved { p.sentAt = Date(timeIntervalSince1970: 1_000) }
+        // #963: a real send always stamps gmailMessageId alongside sentAt, so the fixture must too,
+        // or it would no longer count once OutcomePatterns reads wasProvablyContacted.
+        if status == .approved {
+            p.sentAt = Date(timeIntervalSince1970: 1_000)
+            p.gmailMessageId = "msg-\(group)"
+        }
         ctx.insert(p)
         return p
     }
@@ -51,6 +56,25 @@ struct OutcomePatternsTests {
         #expect(tallies["self"]?.booked == 1)
     }
 
+    // #963: a sent timestamp is not proof of a real send (#378's lesson, extended past the Reached-out
+    // queue). Every genuine send stamps a Gmail message id alongside sentAt; a staged/corrupt record with
+    // only the timestamp must not count as contacted in the outreach stats either, or a future bug that
+    // sets sentAt without sending would silently inflate (or deflate) a booking rate Dan reads as real.
+    @Test func aSentTimestampWithoutAGmailMessageIdDoesNotCountAsContacted() throws {
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: "k", discipline: "music", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        p.sentAt = Date(timeIntervalSince1970: 1_000)   // a timestamp with no gmailMessageId proof
+        ctx.insert(p)
+
+        let samples = OutcomePatterns.samples(from: [p], by: .production)
+        #expect(samples.allSatisfy { !$0.wasContacted })
+    }
+
     // #4: the insight view also breaks outcomes down by coverage, profile, and venue, so Dan can
     // see the full set of factors that predict bookings before adjusting weights by hand.
     private func sent(_ ctx: ModelContext, key: String, profile: String, coverage: String, venue: String?) {
@@ -61,6 +85,7 @@ struct OutcomePatternsTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
         p.sentAt = Date(timeIntervalSince1970: 1_000)
+        p.gmailMessageId = "msg-\(key)"
         ctx.insert(p)
     }
 
