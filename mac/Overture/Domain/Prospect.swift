@@ -21,6 +21,13 @@ final class Prospect {
     // approximates it, and writes answers a real scout would not give. #980 hit exactly this and had to
     // ship forward-only.
     var presenter: String?
+    // #970: where the page said the show is, VERBATIM and unresolved. Defaulted, so existing rows
+    // migrate cleanly and stay nil, which is honest: every row that predates this was never asked.
+    //
+    // Stored raw on purpose. The geo verdict is NOT stored: it is derived at queue time from this plus
+    // the discipline, so changing the rule (or Dan refusing a town) re-decides every row at once
+    // instead of leaving a stale verdict baked into the store.
+    var location: String?
     var discipline: String
     var venue: String?
     var performanceDate: String?

@@ -846,6 +846,7 @@ enum ScoutService {
             possibleMatchName: p.possibleMatchName,
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs)
         prospect.presenter = p.presenter
+        prospect.location = p.location
         prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
@@ -858,6 +859,7 @@ enum ScoutService {
     private static func apply(_ p: AssembledProspect, to existing: Prospect) {
         existing.groupName = p.groupName
         existing.presenter = p.presenter
+        existing.location = p.location
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL

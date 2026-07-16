@@ -14,6 +14,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let performanceDate: String?
     let sourceListingURL: String?
     let websiteURL: String?
+    // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
+    // this and the discipline, never stored, so a rule change re-decides every row at once.
+    var location: String? = nil
     let priorRelationship: String
     let production: String
     let profile: String
@@ -304,13 +307,46 @@ enum QueueModel {
     // (toSendQueue) was always tested; THIS half was written in the view, so the pill's number was only
     // ever as trustworthy as its untested part. A count is a promise about rows (#863).
     static func filter(_ items: [QueueItem], discipline: String?, highOnly: Bool,
-                       pendingBookingsOnly: Bool) -> [QueueItem] {
+                       pendingBookingsOnly: Bool, tooFarOnly: Bool = false) -> [QueueItem] {
         items.filter { item in
             if let discipline, item.discipline != discipline { return false }
             if highOnly, !item.isHighFit { return false }
             if pendingBookingsOnly, !item.bookingSuggested { return false }
+            // #970. The gate. `tooFarOnly` inverts it, which is how a hidden show stays one click away
+            // rather than gone: the same predicate decides both, so the chip's count and the rows it
+            // reveals cannot drift apart (#863).
+            if isTooFar(item) != tooFarOnly { return false }
             return true
         }
+    }
+
+    // #970. The geo gate, asked here and nowhere else, so `filter` and `tooFar` can never disagree
+    // about a row: the chip's number is a promise about the rows behind it (#863).
+    //
+    // ONLY a positive placement hides. Unknown keeps, always (Dan's spec), which is what makes this
+    // safe to ship on all 38 sources at once: it can only take shows the resolver can actually place
+    // out of range. Every live row today has no location, so this is a no-op on the queue Dan has.
+    static func isTooFar(_ item: QueueItem) -> Bool {
+        let discipline = Discipline(rawValue: item.discipline) ?? .other
+        return EventPlace.resolve(location: item.location, discipline: discipline).verdict == .outOfRange
+    }
+
+    // The rows the gate took, so a filter bug is loud rather than invisible (#887): a hidden show is
+    // one click away, never gone.
+    static func tooFar(_ items: [QueueItem]) -> [QueueItem] { items.filter(isTooFar) }
+
+    static func tooFarCount(_ items: [QueueItem]) -> Int { tooFar(items).count }
+
+    static func tooFarLabel(count: Int) -> String { "Too far (\(count))" }
+
+    // Why rows have vanished, which is the one thing a filter must never leave Dan guessing about, and
+    // what turning it on would do when it is off. Mirrors pendingBookingsHelp, deliberately: it is the
+    // same job, and the queue should not have two voices for it.
+    static func tooFarHelp(showingOnly: Bool, count: Int) -> String {
+        guard showingOnly else {
+            return "Show only the shows that are too far away to shoot"
+        }
+        return "Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
     }
 
     static func toSendLabel(count: Int) -> String { "To send (\(count))" }
@@ -707,6 +743,7 @@ extension QueueItem {
             performanceDate: p.performanceDate,
             sourceListingURL: p.sourceListingURL,
             websiteURL: p.websiteURL,
+            location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,
             profile: p.profile,

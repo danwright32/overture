@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **610 sentences**, from 195 source files.
+Every sentence Overture can say to Dan: **613 sentences**, from 195 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -917,9 +917,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreUnavailableView.swift`
 "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
     `UI/QueueView+Model.swift`
+"Show only the shows that are too far away to shoot"
+    `UI/QueueView+Model.swift`
 "Show which bookings were auto-detected"
     `UI/OutcomePatternsView.swift`
 "Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."
+    `UI/QueueView+Model.swift`
+"Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
     `UI/QueueView+Model.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
@@ -1102,6 +1106,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "To send"
     `UI/QueueView.swift`
 "To send (\(count))"
+    `UI/QueueView+Model.swift`
+"Too far (\(count))"
     `UI/QueueView+Model.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`

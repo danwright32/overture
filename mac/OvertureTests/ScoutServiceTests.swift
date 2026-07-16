@@ -89,9 +89,29 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
     }
 
-    // #60 Task 3: Dan's corrected classification must survive a re-scout.
-    // Set up an existing prospect whose discipline was corrected to "dance" by Dan
-    // (classificationOverriddenByDan = true). Run apply with a fresh event that the
+    // #970 Phase 3. The scout reports a location (#985) and the resolver can read one (#989), but the
+    // gate runs at QUEUE time against `Prospect.location`, so the string has to actually land on the
+    // row. Without this hop the whole feature is a no-op with green tests either side of a gap, which
+    // is the exact failure #970 has already produced four times.
+    @Test func aScoutStoresTheLocationTheRunReported() throws {
+        let ctx = ModelContext(try container())
+        let e = ExtractedEvent(title: "Gotham Chorus Show", presenter: "Smoke Ring Quartet",
+                               venue: "Gotham Hall", performanceDate: "2026-06-24",
+                               sourceUrl: "https://example.com/a", location: "New York, NY")
+        _ = ScoutService.apply(events: [e], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).first?.location == "New York, NY")
+
+        // A re-scout after the listing moved the show must refresh it, or the queue keeps gating on a
+        // place the show no longer has.
+        let moved = ExtractedEvent(title: "Gotham Chorus Show", presenter: "Smoke Ring Quartet",
+                                   venue: "Gotham Hall", performanceDate: "2026-06-24",
+                                   sourceUrl: "https://example.com/a", location: "Louisville, KY")
+        _ = ScoutService.apply(events: [moved], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).first?.location == "Louisville, KY")
+    }
+
     // The presenter is half of what the classifier reads, and it used to be thrown away at assemble.
     // That made every classification a one-way door: #980 fixed the classifier and could not be
     // replayed over the existing rows, because the input was gone. Storing it is what makes a future
@@ -117,6 +137,9 @@ struct ScoutServiceTests {
         #expect(refreshed?.presenter == "Cerddorion Inc")
     }
 
+    // #60 Task 3: Dan's corrected classification must survive a re-scout.
+    // Set up an existing prospect whose discipline was corrected to "dance" by Dan
+    // (classificationOverriddenByDan = true). Run apply with a fresh event that the
     // classifier produces as "choral". The prospect's discipline must stay "dance" and
     // fitScore must reflect dance (not the scout's choral value).
     @Test func reScoutPreservesDansCorrectedClassification() throws {
