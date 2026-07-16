@@ -365,19 +365,16 @@ struct QueueView: View {
     // FollowUpsView sheet; Prep/Review/Send focus the queue on that stage's prospects.
     private func agentChip(_ s: AgentStatus) -> some View {
         Button {
+            switch AgentRoster.chipAction(for: s) {
             // #565: the "connect Gmail to send" detail read as an instruction with nothing behind
             // it to click; route straight to the same Gmail-connect flow #488 wires up elsewhere,
             // instead of just filtering the queue to prospects Dan still can't send to.
-            if s.needsGmailConnect {
-                onConnectGmail()
-            } else if s.name == "Follow-ups" {
-                onShowFollowUps()
-            } else if s.name == "OmniFocus" {
-                // #357: no rows to navigate to (app-level sync health, not a property of any show),
-                // so the tap retries the sync directly instead.
-                onRetryOmniFocusSync()
-            } else {
-                focusOnStage(s)
+            case .connectGmail: onConnectGmail()
+            case .showFollowUps: onShowFollowUps()
+            // #357: no rows to navigate to (app-level sync health, not a property of any show), so
+            // the tap retries the sync directly instead.
+            case .retryOmniFocusSync: onRetryOmniFocusSync()
+            case .focusOnStage: focusOnStage(s)
             }
         } label: {
             HStack(spacing: 5) {

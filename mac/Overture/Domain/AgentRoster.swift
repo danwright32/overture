@@ -84,9 +84,28 @@ extension AgentInputs {
     }
 }
 
+// #357/#863: what tapping a chip actually DOES, pulled out of QueueView's Button closure so this
+// dispatch has a seam a test can reach. Most pills navigate the queue to their focus; a handful
+// route somewhere else entirely (a Gmail-connect flow, the Follow-ups sheet, an OmniFocus retry).
+enum AgentChipAction: Equatable, Sendable {
+    case connectGmail
+    case showFollowUps
+    case retryOmniFocusSync
+    case focusOnStage
+}
+
 enum AgentRoster {
     static func statuses(_ i: AgentInputs) -> [AgentStatus] {
         [scout(i), prep(i), review(i), send(i), followUps(i), unsureClassifications(i), omniFocusSync(i)]
+    }
+
+    // #565/#338/#357: needsGmailConnect outranks everything (a real instruction with something to
+    // click), then the two pills that route somewhere other than the queue, then ordinary navigation.
+    static func chipAction(for status: AgentStatus) -> AgentChipAction {
+        if status.needsGmailConnect { return .connectGmail }
+        if status.name == "Follow-ups" { return .showFollowUps }
+        if status.name == "OmniFocus" { return .retryOmniFocusSync }
+        return .focusOnStage
     }
 
     static func needsYouCount(_ statuses: [AgentStatus]) -> Int {

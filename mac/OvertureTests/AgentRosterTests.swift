@@ -207,4 +207,29 @@ struct AgentRosterTests {
         #expect(AgentRoster.conceptSummary(for: "Unsure").contains("classification"))
         #expect(AgentRoster.conceptSummary(for: "OmniFocus").contains("sync"))
     }
+
+    // #357: what a chip tap actually DOES, pulled out of QueueView's Button closure (the #863 lesson:
+    // logic inside a SwiftUI view is untestable) so this dispatch has a seam a test can reach.
+    @Test func chipActionRoutesGmailConnectAheadOfEverythingElse() {
+        var i = calm; i.readyToSend = 1; i.gmailConnected = false
+        #expect(AgentRoster.chipAction(for: status("Send", i)) == .connectGmail)
+    }
+
+    @Test func chipActionOpensFollowUpsInsteadOfNavigating() {
+        var i = calm; i.followUpsDue = 1
+        #expect(AgentRoster.chipAction(for: status("Follow-ups", i)) == .showFollowUps)
+    }
+
+    @Test func chipActionRetriesOmniFocusSyncInsteadOfNavigating() {
+        var i = calm; i.omniFocusSyncFailed = true
+        #expect(AgentRoster.chipAction(for: status("OmniFocus", i)) == .retryOmniFocusSync)
+        #expect(AgentRoster.chipAction(for: status("OmniFocus", calm)) == .retryOmniFocusSync)
+    }
+
+    @Test func chipActionFocusesTheQueueForEveryOtherPill() {
+        var i = calm; i.toTriage = 1
+        #expect(AgentRoster.chipAction(for: status("Scout", i)) == .focusOnStage)
+        i = calm; i.uncertainClassifications = 1
+        #expect(AgentRoster.chipAction(for: status("Unsure", i)) == .focusOnStage)
+    }
 }
