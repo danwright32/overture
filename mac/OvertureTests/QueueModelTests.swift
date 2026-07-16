@@ -455,15 +455,38 @@ struct RunDisplayTests {
         #expect(QueueModel.linkedEngagementNote(show) == "This production also plays elsewhere on Jul 24.")
     }
 
-    // A short community-venue tour (3+ stops) names the count rather than enumerating every venue, so
-    // the copy stays one complete sentence regardless of how many venues are involved.
-    @Test func linkedEngagementNoteNamesTheCountForMultipleOtherVenues() {
+    // #966: a short community-venue tour (3+ stops) names every venue and date, not just a count, so
+    // the note is actually informative when a real multi-venue tour shows up.
+    @Test func linkedEngagementNoteNamesEveryVenueForMultipleOtherVenues() {
         var show = item(performanceDate: "2026-07-20")
         show.linkedEngagementMembers = [
             EngagementLink.Member(venue: "Venue B", date: "2026-07-22"),
             EngagementLink.Member(venue: "Venue C", date: "2026-07-24"),
         ]
-        #expect(QueueModel.linkedEngagementNote(show) == "This production also plays at 2 other venues nearby.")
+        #expect(QueueModel.linkedEngagementNote(show)
+                == "This production also plays at Venue B on Jul 22; at Venue C on Jul 24.")
+    }
+
+    @Test func linkedEngagementNoteNamesThreeOrMoreVenues() {
+        var show = item(performanceDate: "2026-07-20")
+        show.linkedEngagementMembers = [
+            EngagementLink.Member(venue: "Venue B", date: "2026-07-22"),
+            EngagementLink.Member(venue: "Venue C", date: "2026-07-24"),
+            EngagementLink.Member(venue: "Venue D", date: "2026-07-26"),
+        ]
+        #expect(QueueModel.linkedEngagementNote(show)
+                == "This production also plays at Venue B on Jul 22; at Venue C on Jul 24; at Venue D on Jul 26.")
+    }
+
+    // An unnamed venue among otherwise-named ones still reads sensibly rather than showing "nil".
+    @Test func linkedEngagementNoteHandlesAnUnknownVenueAmongMultiple() {
+        var show = item(performanceDate: "2026-07-20")
+        show.linkedEngagementMembers = [
+            EngagementLink.Member(venue: nil, date: "2026-07-22"),
+            EngagementLink.Member(venue: "Venue C", date: "2026-07-24"),
+        ]
+        #expect(QueueModel.linkedEngagementNote(show)
+                == "This production also plays elsewhere on Jul 22; at Venue C on Jul 24.")
     }
 }
 
