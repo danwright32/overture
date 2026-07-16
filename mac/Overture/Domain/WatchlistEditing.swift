@@ -132,4 +132,11 @@ enum WatchlistEditing {
 // #885 (guard sweep): the add-a-source button's two states.
 extension WatchlistEditing {
     static func addButtonTitle(isOpen: Bool) -> String { isOpen ? "Cancel" : "Watch a calendar" }
+
+    // #970. Deliberately "read", not "check": the app already draws that line (#803). The free daily run
+    // CHECKS every source (fetch, hash, notice a change) and spends nothing. Reading is what costs, and
+    // it is what produces prospects. This button is the expensive half, for one source.
+    static let readOneTitle = "Read this one now"
+
+    static let readOneHelp = "Read this source's listings now, without scouting the rest of the list"
 }

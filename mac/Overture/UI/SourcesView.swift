@@ -9,6 +9,11 @@ import SwiftData
 // broken source reading as an org that asked him to stop. SourceGrade is what decides which section a
 // row lands in, and it is a tested domain rule, so this view has no logic of its own to get wrong.
 struct SourcesView: View {
+    // #970: read ONE source now. Handed in rather than reached for, because starting a detached run is
+    // RootView's job (it owns the live-run state and the one-at-a-time guard), and a view that launched
+    // its own run would be a second place that could start one.
+    var readOne: (WatchedSource) -> Void = { _ in }
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -280,6 +285,24 @@ struct SourcesView: View {
             if source.isActive, source.kind != .algolia {
                 HStack {
                     Spacer()
+                    // #970: reads THIS source, now. The scout otherwise reads oldest-first, and every
+                    // source shares a lastCheckedAt (the daily run checks them in one pass), so "read
+                    // that one" is not otherwise expressible: a capped run picks arbitrarily among a
+                    // tie. Costs one run instead of twenty.
+                    Button {
+                        readOne(source)
+                        dismiss()
+                    } label: {
+                        Text(WatchlistEditing.readOneTitle)
+                            .font(.system(size: 11))
+                            .foregroundStyle(OVColor.inkSoft)
+                            .padding(.horizontal, OVSpacing.sm)
+                            .padding(.vertical, 4)
+                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .help(WatchlistEditing.readOneHelp)
+
                     Button {
                         stopWatching(source)
                     } label: {

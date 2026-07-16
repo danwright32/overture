@@ -198,6 +198,8 @@ enum ScoutService {
     // domain, so a test that used the real one would scribble on Dan's app.
     static func runScout(into context: ModelContext,
                          depth: ScoutDepth = .readChanged,
+                         // Dan pointed at one source and asked for it. Absent means the ordinary run.
+                         only: Set<String>? = nil,
                          extractor: any SourceExtractor = CarnegieExtractor(),
                          fetch: (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
                          // Injected for the same reason the fetch is: pinning writes a file to the
@@ -218,7 +220,7 @@ enum ScoutService {
         let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context)
 
         let watchlist = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
-        let plan = SourceSchedule.plan(sources: watchlist, depth: depth, budget: budget, now: now)
+        let plan = SourceSchedule.plan(sources: watchlist, depth: depth, only: only, budget: budget, now: now)
 
         var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
 

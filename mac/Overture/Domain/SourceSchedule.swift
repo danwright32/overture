@@ -49,11 +49,21 @@ enum SourceSchedule {
         var maySpendTokens: Bool { depth == .readChanged }
     }
 
-    static func plan(sources: [WatchedSource], depth: ScoutDepth,
+    // `only` scopes a read to named sources: Dan pointed at one and asked for it. Absent means the
+    // ordinary run.
+    //
+    // It exists because "read THIS source" is otherwise impossible to express. Every source shares a
+    // lastCheckedAt (the daily run checks them in one pass), so oldest-first is a tie across the whole
+    // list and the budget then picks arbitrarily among them. Capping a run to 3 does not read the 3 you
+    // meant, it reads 3 drawn by lot.
+    static func plan(sources: [WatchedSource], depth: ScoutDepth, only: Set<String>? = nil,
                      budget: Int = defaultBudget, now: Date) -> Plan {
         // An org that asked Dan to stop, or a dead source he removed, is not checked at all. Not
         // fetched, not hashed, not read. Re-checking an org that asked to be left alone is the one
         // mistake in this feature that cannot be taken back.
+        // ABOVE the scoping, deliberately. Naming a source cannot override an org's refusal: that is
+        // the one mistake in this feature that cannot be taken back, so it is not a filter Dan can
+        // reach past by pointing at a row.
         let watched = sources.filter(\.isActive)
 
         let native = watched.filter(\.usesNativeExtractor)
@@ -72,6 +82,16 @@ enum SourceSchedule {
             // watchlist promises never to do.
             return Plan(native: native, fetch: fetchable, deferred: [], depth: depth)
         case .readChanged:
+            // Dan named the sources, so the budget does not apply: it is a backstop against reading
+            // fifty by accident, and an explicit request is not an accident. Nothing is deferred
+            // either, because the rest were never asked for and are not waiting on anything. An id
+            // that matches nothing reads nothing, rather than falling back to reading everything: a
+            // typo must not launch twenty runs.
+            if let only {
+                return Plan(native: native.filter { only.contains($0.sourceId) },
+                            fetch: fetchable.filter { only.contains($0.sourceId) },
+                            deferred: [], depth: depth)
+            }
             let cap = max(0, budget)
             return Plan(native: native,
                         fetch: Array(fetchable.prefix(cap)),

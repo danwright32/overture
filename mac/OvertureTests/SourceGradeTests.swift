@@ -150,7 +150,9 @@ struct SourcesViewWiringTests {
     @Test func theToolbarOpensTheSourcesSheet() {
         #expect(!rootView.isEmpty)
         #expect(rootView.contains("showSources = true"))          // a button sets it
-        #expect(rootView.contains("$showSources) { SourcesView() }"))   // and a sheet presents it
+        // #970 gave the sheet a `readOne:` argument, so this matches the presentation rather than an
+        // exact empty-argument call.
+        #expect(rootView.contains("$showSources) { SourcesView("))   // and a sheet presents it
     }
 
     // A @Query, not a snapshot passed in: the sheet must reflect what the scout wrote on this run, not

@@ -26,7 +26,11 @@ struct AutoScoutSpendGuardTests {
     // button needs no argument, but the DEFAULT itself has to stay the reading one, or pressing Scout
     // would quietly stop reading anything and Dan would never see a new show from an html source again.
     @Test func theRunDanStartsIsTheOneThatReads() {
-        #expect(rootView.contains("private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged)"))
+        // Matches the DEFAULT, not the whole signature: #970 added an `only:` parameter and the old
+        // exact-signature match broke without anything it guarded being untrue. A guard that fails on
+        // an unrelated edit gets "fixed" by whoever is in a hurry, and the thing it protects is what
+        // gets lost. This asserts the invariant itself: the run Dan starts defaults to reading.
+        #expect(rootView.contains("private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged"))
     }
 
     // The free daily run must not be able to reach the AI path at all. Stated as a property of the
