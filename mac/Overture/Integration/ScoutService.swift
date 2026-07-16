@@ -845,6 +845,7 @@ enum ScoutService {
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs)
+        prospect.presenter = p.presenter
         prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
@@ -856,6 +857,7 @@ enum ScoutService {
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
     private static func apply(_ p: AssembledProspect, to existing: Prospect) {
         existing.groupName = p.groupName
+        existing.presenter = p.presenter
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL

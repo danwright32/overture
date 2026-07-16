@@ -7,6 +7,11 @@ import Foundation
 
 struct AssembledProspect: Equatable, Sendable {
     var groupName: String
+    // The presenter EventClassifier actually read (its haystack is title + presenter). Kept, not
+    // dropped, so a later classifier or scoring change can be replayed over the store instead of
+    // being forward-only forever. #980 could not be: it fixed the classifier and the input that
+    // produced every existing row was already gone.
+    var presenter: String?
     var discipline: String
     var venue: String?
     var performanceDate: String?
@@ -80,6 +85,7 @@ enum ProspectAssembler {
             // Decode entities for the displayed name (issue #25); the key canonicalizes
             // independently, so matching is unaffected either way.
             groupName: Prospect.decodeHTMLEntities(event.title),
+            presenter: event.presenter,
             discipline: c.discipline.rawValue,
             venue: event.venue,
             performanceDate: event.performanceDate,

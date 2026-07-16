@@ -92,6 +92,31 @@ struct ScoutServiceTests {
     // #60 Task 3: Dan's corrected classification must survive a re-scout.
     // Set up an existing prospect whose discipline was corrected to "dance" by Dan
     // (classificationOverriddenByDan = true). Run apply with a fresh event that the
+    // The presenter is half of what the classifier reads, and it used to be thrown away at assemble.
+    // That made every classification a one-way door: #980 fixed the classifier and could not be
+    // replayed over the existing rows, because the input was gone. Storing it is what makes a future
+    // rule change backfillable. A scout must land it on the row, and a re-scout must refresh it, or a
+    // presenter corrected at the source never reaches the store.
+    @Test func aScoutStoresThePresenterItClassifiedOn() throws {
+        let ctx = ModelContext(try container())
+        let e = ExtractedEvent(title: "Cerddorion", presenter: "Cerddorion Vocal Ensemble",
+                               venue: "Weill Recital Hall", performanceDate: "2026-06-24",
+                               sourceUrl: "https://example.com/a")
+        _ = ScoutService.apply(events: [e], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(stored?.presenter == "Cerddorion Vocal Ensemble")
+
+        // The same show, re-scouted after the listing corrected its presenter.
+        let corrected = ExtractedEvent(title: "Cerddorion", presenter: "Cerddorion Inc",
+                                       venue: "Weill Recital Hall", performanceDate: "2026-06-24",
+                                       sourceUrl: "https://example.com/a")
+        _ = ScoutService.apply(events: [corrected], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let refreshed = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        #expect(refreshed?.presenter == "Cerddorion Inc")
+    }
+
     // classifier produces as "choral". The prospect's discipline must stay "dance" and
     // fitScore must reflect dance (not the scout's choral value).
     @Test func reScoutPreservesDansCorrectedClassification() throws {
