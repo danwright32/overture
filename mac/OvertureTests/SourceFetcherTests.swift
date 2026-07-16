@@ -71,6 +71,27 @@ private func stubSession() -> URLSession {
 struct SourceFetcherTests {
     private let url = URL(string: "https://org.example/events")!
 
+    // #972: the app has no App Transport Security exception, so macOS refuses a cleartext http request
+    // outright and the source lands on the `unreachable` failure. That reads as "their site is down" when
+    // the site is perfectly up: of the three failing sources after the #359 backfill, Rainer Crosett and
+    // The Cell Theatre were BOTH just stored with an http URL and both answer https with a 200. So ask for
+    // https. Strictly an improvement, never a regression: a cleartext fetch cannot succeed today, so no
+    // source that works now can break. The assertion is on what was REQUESTED, not on what came back,
+    // because a test that only checked the returned page would still pass with the upgrade wired out.
+    @Test func anInsecureSourceIsFetchedOverHTTPSKeepingItsPathAndQuery() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("""
+        <html><body><table><tr><td><div>11</div>
+        <a href="https://org.example/show/a">Aurora Strings</a></td></tr></table></body></html>
+        """.utf8)
+
+        _ = try await SourceFetcher.fetch(URL(string: "http://org.example/events?view=list")!,
+                                          session: stubSession())
+
+        #expect(PageStubURLProtocol.requestedURLs.first == "https://org.example/events?view=list")
+        #expect(!PageStubURLProtocol.requestedURLs.contains { $0.hasPrefix("http://") })
+    }
+
     @Test func fetchesAPageAndNormalizesIt() async throws {
         PageStubURLProtocol.reset()
         PageStubURLProtocol.body = Data("""
