@@ -33,7 +33,7 @@ the workflow's runbook is its spec.
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename), `HandoffCleanupTests.swift` (retention) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
-| `overture-scout-extract-results.json` | Scout-extract run (workflow) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
+| `overture-scout-extract-results.json` | Scout-extract run (workflow) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` (seeds it) + scout-extract run (workflow, updates it) | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 | `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
@@ -269,3 +269,35 @@ sentence of a recently drafted body, derived from `originalDraftBody` when prese
 and the `usedAt` timestamp it is ordered by. Newest first, deduped by opener text, capped at
 `maxOpeners` (15). Like the voice-feedback file, it carries real body text: it is a list of shapes to
 AVOID reusing, and the runbook forbids lifting any specific out of it into a draft.
+
+### `overture-scout-extract-results.json`
+
+Written by the scout-extract run (a Claude Code workflow, so it has no automated test of its own) and
+read by `ScoutExtractResultsDecoder`. `fixtures/scout-extract/` plus `docs/scout-extract-runbook.md`
+are its spec. One rule dominates: `sourceId` is opaque and must be echoed back verbatim, never rebuilt,
+because a reconstructed id matches nothing on the way home and the work vanishes with no error.
+
+Version 2 (#970) adds an optional `location` to each event: where the page says the show is, VERBATIM,
+exactly as written. It is the only way the app can learn where a show is, and it exists because the
+alternatives were measured against real data and do not work:
+
+- The **venue** cannot answer it. On the live store, 0 of 26 distinct venue strings contain a city, and
+  the touring artist pages this serves frequently name no venue at all (`smokeringquartet.com/gigs`
+  publishes a city and never a room).
+- The **title** cannot answer it either, except on Carnegie's NYO tour convention
+  (`NYO Jazz in Beijing, China`), which no other source shares.
+
+The run must not normalize it. What pages actually write ranges from `Louisville, KY` to
+`Baltimore, Maryland` to `Harrogate, UK` to a bare `Amsterdam` to `southern Norway` to
+`Orange County, Santa Barbara, Pasadena, and Santa Monica` to a full street address. Deciding what any
+of that MEANS is a resolver's job in the app; the wire's job is to carry the page's own words intact.
+
+Absent means the page named no place, which is common and is NOT an error: an unknown place is a show
+to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop the event.
+
+Additive, and the version bump is **documentation of the shape change, not a behavioral gate**: nothing
+reads `version`, and because `location` is optional a v1 file decodes unchanged and simply carries no
+locations. That is the same outcome as a v2 run that looked and found none. The app cannot tell those
+apart and does not need to, so do not add a version check to invent the distinction. `results-v1.json`
+stays byte-identical as that proof; `results-v2.json` is the location spec, and its cases are real rows
+from real pages.

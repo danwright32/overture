@@ -84,6 +84,59 @@ struct ScoutExtractContractTests {
     // The two real shapes the #770 spike found, both of which the app must handle without confusing
     // one for the other. Chelsea's page is FULL of concerts and every one of them is past; Bargemusic
     // genuinely has upcoming shows. Same file, opposite meanings.
+    // #970 Phase 1. The run reports WHERE a show is, verbatim, as the page wrote it.
+    //
+    // This exists because the alternatives were measured and do not work. Reading the city out of the
+    // venue string fires on nothing (0 of 26 live venue strings contain a comma). Reading it out of the
+    // title fires only on Carnegie's NYO tour convention, and on no other source. The touring artist
+    // pages this is for carry the city in a field of their own, and often name no venue at all, so the
+    // only way the app can learn a place is for the run to hand it over.
+    //
+    // Verbatim, NOT normalized: the run must not decide what "Harrogate, UK" means. Every real shape
+    // has to survive the wire intact for the resolver to judge later.
+    @Test func resultsCarryTheLocationThePageShowed() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v2.json"))
+        let smoke = try #require(results.results.first { $0.sourceId == "smoke-ring-quartet" })
+
+        let gotham = try #require(smoke.events.first { $0.title == "Gotham Chorus Show" })
+        #expect(gotham.location == "New York, NY")
+
+        let labbs = try #require(smoke.events.first { $0.title == "LABBS 50th Convention" })
+        #expect(labbs.location == "Harrogate, UK")
+    }
+
+    // A page that names no location is normal, not broken: "Carnegie Hall Debut Recital" is a real row
+    // from a real artist site that publishes a venue and no city. It must decode as absent, so the
+    // resolver can keep and flag it rather than mistake silence for a place.
+    @Test func anEventWithNoLocationDecodesAsAbsent() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v2.json"))
+        let smoke = try #require(results.results.first { $0.sourceId == "smoke-ring-quartet" })
+        let debut = try #require(smoke.events.first { $0.title == "Carnegie Hall Debut Recital" })
+        #expect(debut.location == nil)
+    }
+
+    // The field is optional, so a v1 file written before the run was ever asked for a location still
+    // decodes. It resolves to no location at all, which is the same answer as a v2 run that looked and
+    // found none: both are unknown, both are kept and flagged. The app cannot tell them apart and does
+    // not need to, so do not add a version check to invent the distinction.
+    @Test func aVersionOneResultsFileStillDecodesWithNoLocations() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v1.json"))
+        let barge = try #require(results.results.first { $0.sourceId == "bargemusic" })
+        #expect(barge.events.count == 2)
+        #expect(barge.events.allSatisfy { $0.location == nil })
+    }
+
+    // ScoutExtractEvent mirrors ExtractedEvent field for field and converts straight across, on purpose:
+    // #799's whole point is ONE pipeline, so an agent-read event and a Carnegie-read event are the same
+    // thing downstream. A location that decodes off the wire and then falls out of `asExtractedEvent`
+    // would leave the contract test green while the app still knew nothing about where a show is.
+    @Test func theLocationSurvivesTheHopIntoTheAppsOwnEventType() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v2.json"))
+        let smoke = try #require(results.results.first { $0.sourceId == "smoke-ring-quartet" })
+        let labbs = try #require(smoke.events.first { $0.title == "LABBS 50th Convention" })
+        #expect(labbs.asExtractedEvent.location == "Harrogate, UK")
+    }
+
     @Test func resultsCarryAVerdictThatDistinguishesQuietFromBroken() throws {
         let results = try ScoutExtractResultsDecoder.decode(fixture("results-v1.json"))
 

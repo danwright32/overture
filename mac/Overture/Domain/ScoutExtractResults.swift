@@ -66,10 +66,13 @@ struct ScoutExtractEvent: Codable, Equatable, Sendable {
     var venue: String?
     var performanceDate: String?
     var sourceUrl: String?
+    // #970: where the page says this show is, VERBATIM, exactly as written. Optional, so a v1 file
+    // written before the run was ever asked for one still decodes and simply has no locations.
+    var location: String?
 
     var asExtractedEvent: ExtractedEvent {
         ExtractedEvent(title: title, presenter: presenter, venue: venue,
-                       performanceDate: performanceDate, sourceUrl: sourceUrl)
+                       performanceDate: performanceDate, sourceUrl: sourceUrl, location: location)
     }
 }
 
