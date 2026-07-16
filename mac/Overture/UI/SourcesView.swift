@@ -25,6 +25,10 @@ struct SourcesView: View {
     @State private var newURL = ""
     @State private var addMessage: String?
 
+    // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
+    // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
+    @State private var topSection: SourceGrade?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -36,13 +40,22 @@ struct SourcesView: View {
                 empty
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                    LazyVStack(alignment: .leading, spacing: OVSpacing.lg) {
                         // Sectioning, ordering and the omit-empty rule all come from the tested domain
                         // function, so this view has no judgement of its own to get wrong.
                         ForEach(SourceGrade.sections(sources), id: \.grade) { section($0.grade, $0.sources) }
                     }
+                    .scrollTargetLayout()
                     .padding(OVSpacing.lg)
                 }
+                // #974: hold the scroll where Dan put it. `sources` is a @Query, so ANY change to ANY
+                // source rebuilds this content, and a scout pass changes many at once: each source it
+                // checks gains a "new listings" line (#803) and can move to a different grade section.
+                // A plain ScrollView drops its offset to the top on every one of those, so during a run
+                // the sheet cannot be scrolled at all: it snaps back before he can read a row. Binding the
+                // position to the top-visible section pins it across the rebuild. Only visible with a
+                // watchlist long enough to scroll, which is why it surfaced when #359 took it from 3 to 38.
+                .scrollPosition(id: $topSection, anchor: .top)
                 // Sizes to its content rather than to a fixed height, so today's one-source watchlist
                 // does not open as a mostly empty box, and a long one still scrolls instead of running
                 // off the screen.
