@@ -662,14 +662,24 @@ enum QueueModel {
     // so the copy-inventory (docs/copy-inventory.md) shows it as the one whole line Dan actually reads.
     static func linkedEngagementNote(_ item: QueueItem) -> String? {
         let members = item.linkedEngagementMembers
-        guard members.count == 1, let only = members.first else {
-            return members.isEmpty ? nil : "This production also plays at \(members.count) other venues nearby."
+        guard !members.isEmpty else { return nil }
+        if members.count == 1, let only = members.first {
+            let dateLabel = EasternDate.dayLabel(only.date) ?? only.date
+            guard let venue = only.venue, !venue.isEmpty else {
+                return "This production also plays elsewhere on \(dateLabel)."
+            }
+            return "This production also plays at \(venue) on \(dateLabel)."
         }
-        let dateLabel = EasternDate.dayLabel(only.date) ?? only.date
-        guard let venue = only.venue, !venue.isEmpty else {
-            return "This production also plays elsewhere on \(dateLabel)."
-        }
-        return "This production also plays at \(venue) on \(dateLabel)."
+        // #966: 3+ venues used to fall back to a count-only sentence; a real short community-venue
+        // tour showed that wasn't informative enough, so every member is named instead.
+        let list = members.map(linkedEngagementMemberPhrase).joined(separator: "; ")
+        return "This production also plays \(list)."
+    }
+
+    private static func linkedEngagementMemberPhrase(_ member: EngagementLink.Member) -> String {
+        let dateLabel = EasternDate.dayLabel(member.date) ?? member.date
+        guard let venue = member.venue, !venue.isEmpty else { return "elsewhere on \(dateLabel)" }
+        return "at \(venue) on \(dateLabel)"
     }
 
     // MARK: - Date helpers

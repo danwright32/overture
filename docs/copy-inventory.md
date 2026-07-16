@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **608 sentences**, from 194 source files.
+Every sentence Overture can say to Dan: **610 sentences**, from 194 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1068,7 +1068,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This performance happened before you triaged it, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
-"This production also plays at \(members.count) other venues nearby."
+"This production also plays \(list)."
     `UI/QueueView+Model.swift`
 "This production also plays at \(venue) on \(dateLabel)."
     `UI/QueueView+Model.swift`
@@ -1299,6 +1299,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceGuidanceGuard.swift`
 "a past client"
     `UI/QueueView+Model.swift`
+"at \(venue) on \(dateLabel)"
+    `UI/QueueView+Model.swift`
 "book now"
     `Domain/TicketLink.swift`
 "brooklyn society for ethical culture"
@@ -1311,6 +1313,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BounceDetection.swift`
 "edit it before sending."
     `Domain/DraftReviewNotes.swift`
+"elsewhere on \(dateLabel)"
+    `UI/QueueView+Model.swift`
 "file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "get seats"
