@@ -1,8 +1,10 @@
 import Testing
 @testable import Overture
 
-private func event(date: String? = "2026-07-01", venue: String? = "Weill Recital Hall") -> ExtractedEvent {
-    ExtractedEvent(title: "Test Group", presenter: "Test Choir", venue: venue, performanceDate: date, sourceUrl: nil)
+private func event(
+    date: String? = "2026-07-01", venue: String? = "Weill Recital Hall", presenter: String? = "Test Choir"
+) -> ExtractedEvent {
+    ExtractedEvent(title: "Test Group", presenter: presenter, venue: venue, performanceDate: date, sourceUrl: nil)
 }
 
 private func classification(
@@ -57,6 +59,31 @@ struct ProspectAssemblerTests {
         #expect(p.tier == "high")
         #expect(p.discipline == "music")
         #expect(p.priorRelationship == "none")
+    }
+
+    // The classifier reads the presenter (EventClassifier.classify builds its haystack from title AND
+    // presenter), but the presenter was dropped at assemble and never stored. That made every
+    // classification a one-way door: #980 fixed the classifier and could not be replayed over the 128
+    // existing rows, because half the input was gone. Recomputing from `groupName` alone does not
+    // reproduce the classifier, it approximates it, and would write answers a real scout would not give
+    // ("Chengcheng Ma and Guest Artists" presented by a chamber orchestra reads as `.other` without its
+    // presenter and `.music` with it). Keeping the presenter is what makes a future rule change
+    // backfillable instead of forward-only forever.
+    @Test func theAssemblerKeepsThePresenterTheClassifierRead() {
+        let d = ProspectAssembler.decide(
+            event: event(presenter: "Indianapolis Children's Choir"),
+            classification: classification(), verdict: verdict())
+        guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
+        #expect(p.presenter == "Indianapolis Children's Choir")
+    }
+
+    // A listing with no presenter is normal, not an error. It must round-trip as absent rather than as
+    // an empty string, so a later backfill can tell "no presenter published" from "we never asked".
+    @Test func anAbsentPresenterStaysAbsent() {
+        let d = ProspectAssembler.decide(
+            event: event(presenter: nil), classification: classification(), verdict: verdict())
+        guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
+        #expect(p.presenter == nil)
     }
 
     @Test func priorBookingCarriesIntoTheScore() {

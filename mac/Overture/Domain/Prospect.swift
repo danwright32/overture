@@ -11,6 +11,16 @@ final class Prospect {
     @Attribute(.unique) var naturalKey: String
 
     var groupName: String
+    // The presenter the classifier read when it judged this row. Defaulted, so existing rows migrate
+    // cleanly: they predate this and stay nil, which honestly means "we never kept it" rather than
+    // "the listing named none".
+    //
+    // Stored because classification is otherwise a ONE-WAY DOOR. EventClassifier reads title AND
+    // presenter, but only the title survived as `groupName`, so a rule change could never be replayed
+    // over the store: recomputing from `groupName` alone does not reproduce the classifier, it
+    // approximates it, and writes answers a real scout would not give. #980 hit exactly this and had to
+    // ship forward-only.
+    var presenter: String?
     var discipline: String
     var venue: String?
     var performanceDate: String?
