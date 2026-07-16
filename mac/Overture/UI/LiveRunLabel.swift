@@ -25,6 +25,11 @@ struct LiveRunLabel: View {
     // (not a plain Bool) so it re-evaluates each second alongside the TimelineView tick. nil keeps the
     // wall-clock-only behavior.
     var runAlive: (() -> Bool)? = nil
+    // #994: icon only, with the sentence moved to the tooltip. For the toolbar, where a label that
+    // grows when a run starts reflows every other item and pushes real buttons into the macOS ">>"
+    // overflow, at the exact moment Dan is watching for the run to start. Off everywhere else: the
+    // reply drafter, Prep and Gmail connect all have room for the words.
+    var compact: Bool = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -36,14 +41,50 @@ struct LiveRunLabel: View {
     // fixed `now`, inspecting the result with ViewInspector, instead of driving the real
     // TimelineView `body` wraps this in asynchronously.
     @ViewBuilder func content(now: Date) -> some View {
+        let state = liveness(now: now)
+        if compact {
+            compactContent(state: state, now: now)
+        } else {
+            switch state {
+            case .stalled(let elapsed):
+                stalled(elapsed: elapsed)
+            case .running, .idle:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    styled(Text(RunProgress.spinnerLabel(base, since: since, now: now,
+                                                         detail: progressDetail)))
+                }
+            }
+        }
+    }
+
+    // #994: the same three states, told by ICON alone, so the item's width never changes and the
+    // toolbar never reflows. This is not the "bare indefinite spinner" the progress rule forbids: a run
+    // that passes its timeout without a heartbeat flips to the warning symbol, so working, still-alive
+    // and stalled all stay distinguishable at a glance. Only the numbers move to the tooltip.
+    @ViewBuilder private func compactContent(state: RunLiveness, now: Date) -> some View {
+        switch state {
+        case .stalled:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .imageScale(.small)
+                .help(helpText(now: now))
+        case .running, .idle:
+            ProgressView()
+                .controlSize(.small)
+                .help(helpText(now: now))
+        }
+    }
+
+    // #994: the sentence the tooltip says, which in compact mode is the ONLY place the elapsed counter
+    // and the "N of M" progress appear. Internal and pure so a test can read it at a fixed `now`,
+    // rather than the words being buried in a modifier no test can see.
+    func helpText(now: Date) -> String {
         switch liveness(now: now) {
         case .stalled(let elapsed):
-            stalled(elapsed: elapsed)
+            return RunProgress.stalledLabel(base, elapsed: elapsed)
         case .running, .idle:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                styled(Text(RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail)))
-            }
+            return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail)
         }
     }
 

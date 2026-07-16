@@ -244,7 +244,7 @@ struct RootView: View {
                     } label: {
                         if isScanning {
                             LiveRunLabel(base: "Scouting", since: scoutStartedAt,
-                                         timeout: RunTimeouts.scout)
+                                         timeout: RunTimeouts.scout, compact: true)
                         } else if let readingStartedAt {
                             // #803: the detached half. Judged against RunTimeouts.scoutExtract (10
                             // minutes), NOT RunTimeouts.scout (3, correct for an in-process run and
@@ -256,20 +256,27 @@ struct RootView: View {
                                          timeout: RunTimeouts.scoutExtract,
                                          progressDetail: ScoutExtractProgressDecoder.label(
                                              from: ScoutExtractProgressDecoder.loadCurrent()),
-                                         runAlive: { ScoutExtractService.isRunning(now: Date()) })
+                                         runAlive: { ScoutExtractService.isRunning(now: Date()) },
+                                         compact: true)
                         } else if PrepQueueService.isRunning(now: Date()) {
                             // #354: real "N of M" progress from the run's own progress file,
                             // instead of a bare indefinite spinner.
                             LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
                                          timeout: RunTimeouts.prep,
-                                         progressDetail: PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()))
+                                         progressDetail: PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()),
+                                         compact: true)
                         } else {
+                            // #994: the idle tooltip belongs HERE rather than on the Menu. A live run's
+                            // own tooltip (the elapsed counter and "N of M", which compact mode makes
+                            // the only place they appear) is set inside LiveRunLabel, and a second
+                            // `.help` on the Menu wrapping it would be free to win, silently costing Dan
+                            // the still-alive signal this whole change is built to keep.
                             ToolbarHoverLabel(title: "Scout & Prep", systemImage: "binoculars")
+                                .help("Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily.")
                         }
                     }
                     // No primaryAction: a plain click always opens the dropdown instead of
                     // guessing which of Scout or Prep was meant.
-                    .help("Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily.")
                 }
                 // #346: rendered next to the Scout control that produced it, not the unrelated
                 // center status slot. #345: symmetric padding so the text doesn't crowd the pill.
