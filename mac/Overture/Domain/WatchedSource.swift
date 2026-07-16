@@ -81,6 +81,20 @@ final class WatchedSource {
     var lastReadableCount: Int = 0
     var lastUnreadableCount: Int = 0
 
+    // #986: how many of the last run's kept shows said WHERE they are, and whether this source has EVER said
+    // so. #970's gate reads only that `location` string (EventPlace.resolve never sees the venue), so a run
+    // that silently stopped reporting it looks exactly like a page that never named a city, and both keep and
+    // flag everything. Only the source's own history tells those apart.
+    //
+    // The stored flag is what was true BEFORE the last run, not after it, and that is deliberate: the note
+    // has to distinguish a source's FIRST placing run (say the baseline once) from its tenth (say nothing),
+    // and a plain high-water mark set during the run makes those two identical the moment it is written.
+    //
+    // Defaulted, so existing rows migrate cleanly. An already-placing source reads as new on its next run and
+    // says its baseline line once, which is the harmless direction: the alternative is silence forever.
+    var lastPlacedCount: Int = 0
+    var hadPlacedBeforeLastRun: Bool = false
+
     var pageCount: Int
     var addedAt: Date
     // #875: the last run's own account of this source, verbatim, as it wrote it. Kept whole (sentence
@@ -102,6 +116,22 @@ final class WatchedSource {
     var readabilityNote: String? {
         SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount,
                                baseline: baselineFeedCount)
+    }
+
+    // #986: has this source EVER said where one of its shows is? A high-water mark, derived rather than
+    // stored, so it cannot disagree with the two facts it is made of. Never goes back to false: a source that
+    // could once place and now cannot has drifted, and one that forgot would quietly rejoin the venue
+    // calendars and never be asked about it again.
+    var hasEverPlaced: Bool { hadPlacedBeforeLastRun || lastPlacedCount > 0 }
+
+    // The line the Sources sheet shows about whether this source says where its shows are, or nothing at all
+    // when it is doing what it always has. Decided beside the data and NOT in the view (#863/#885).
+    //
+    // The total is `lastReadableCount`: the shows this run KEPT. Events dropped by the guard are already
+    // reported by readabilityNote, and counting them here too would say the same loss twice in one row.
+    var placementNote: String? {
+        SourcePlacement.note(placed: lastPlacedCount, total: lastReadableCount,
+                             hadEverPlaced: hadPlacedBeforeLastRun)
     }
 
     // #875: what the run itself said about this source, in words, and the raw log behind it. Same rule as

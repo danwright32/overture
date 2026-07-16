@@ -118,7 +118,13 @@ enum ScoutExtractIngest {
                           // describe a run other than the one that produced it. A source that recovers
                           // overwrites this with a zero and stops complaining, which it must: a warning
                           // that never clears becomes furniture, and this is the one line Dan must not skim.
-                          unreadable: results.rejectedEvents(for: source.sourceId).count)
+                          unreadable: results.rejectedEvents(for: source.sourceId).count,
+                          // #986: how many of the shows this run KEPT said where they are. Blank is not a
+                          // place: the runbook asks for the page's words verbatim, and a page rendering an
+                          // empty location field must not read as one that named somewhere.
+                          placed: events.filter {
+                              !($0.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                          }.count)
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
                 state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
@@ -168,9 +174,16 @@ enum ScoutExtractIngest {
     // worked (the warmup that eventually lets this source mark a show as gone).
     private static func recordSuccess(on source: WatchedSource, events: Int,
                                       health: FeedReconcile.FeedHealthState, now: Date,
-                                      unreadable: Int = 0) {
+                                      unreadable: Int = 0, placed: Int = 0) {
         source.lastReadableCount = events
         source.lastUnreadableCount = unreadable
+
+        // #986: the pre-run answer is captured BEFORE this run's count overwrites it, and in that order, or
+        // a source's first placing run would be indistinguishable from its tenth and the baseline line would
+        // never appear. Recorded on the SAME branch as the run's success, so the count can never describe a
+        // run other than the one that produced it.
+        source.hadPlacedBeforeLastRun = source.hasEverPlaced
+        source.lastPlacedCount = placed
 
         let updated = FeedReconcile.updatedHealth(health, currentCount: events)
         source.baselineFeedCount = updated.baseline

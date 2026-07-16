@@ -257,6 +257,19 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #986: whether this source still says WHERE its shows are. #970's gate reads only that, so a
+            // run that silently stopped reporting it looks exactly like a page that never named a city, and
+            // both keep and flag everything. Only this source's own history tells them apart, which is why
+            // the ~30 venue calendars that correctly never place stay silent here.
+            //
+            // Gold on the drift, faint on the one-time baseline: one is a capability going out, the other is
+            // just it coming up for the first time. Decided in SourcePlacement, never here (#863/#885).
+            if let placement = source.placementNote {
+                Text(placement).font(.system(size: 11))
+                    .foregroundStyle(source.lastPlacedCount == 0 ? OVColor.gold : OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // #875: the RUN'S OWN account of this source, which until now was decoded and thrown away
             // while Dan was shown only the generic sentence for the verdict. The generic line says WHAT
             // happened ("The run ended before reading this page"); this one says WHY, and why is the only
