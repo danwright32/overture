@@ -322,27 +322,54 @@ enum ScoutService {
             lastDegradedCount: source?.lastDegradedCount ?? 0)
         let hadBaseline = health.baseline > 0
 
+        // #987: the SAME usable-event rule the agent path applies at its boundary. This path used to hand
+        // the raw feed straight to applySweep and never see the guard, so the same show got a different
+        // verdict depending on which door it came through, and nobody chose that.
+        //
+        // A no-op on today's data (0 of 132 live rows have a missing, placeholder, or numeric-id venue,
+        // because Carnegie always names a hall), and that is the point: it is insurance, and it means
+        // #979's place-aware venue rule can be written ONCE instead of forked across two paths. The
+        // guard's argument does not care which door an event used: a prospect with no venue puts the
+        // wrong place in Dan's email, and nothing downstream can catch it. A structured feed that stops
+        // naming a facility produces exactly that, silently.
+        let usable = events.filter(ExtractedEventGuard.isUsable)
+        let rejectedCount = events.count - usable.count
+
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
         // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
         // stop marking anything gone: nothing would fail, shows would just quietly linger forever.
         var outcome = applySweep(
-            events: events, clients: clients, history: history, blocked: blocked,
+            events: usable, clients: clients, history: history, blocked: blocked,
             feed: FeedCheck(sourceId: sourceId,
                             baseline: health.baseline,
                             // No row yet means no history, so it is treated as still in its warmup: it
                             // can find and rank shows but cannot mark any of them gone, which is exactly
                             // what "we have no feed history to judge an absence against" should mean.
-                            successfulCheckCount: source?.successfulCheckCount ?? 0),
+                            successfulCheckCount: source?.successfulCheckCount ?? 0,
+                            // #987/#887: guarding this path without this line would have SHIPPED the bug
+                            // it was meant to prevent. A dropped event is absent from the feed the
+                            // reconcile reads, so a run that threw events away is indistinguishable from
+                            // one whose shows were cancelled (#897/#917's live bug class). Handing the
+                            // count over lets #887's tolerance gate forbid this run from concluding that
+                            // anything is gone. It may still add and update.
+                            rejectedCount: rejectedCount),
             sourceIds: [sourceId], into: context)
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,
         // and a feed that stays degraded at a stable smaller level across selfHealThreshold scouts
         // re-baselines too, so a genuine sustained calendar shrink self-heals without one bad fetch
         // ratcheting the baseline down (#150/#152).
-        recordCheck(on: source, events: events.count, health: health, now: now)
+        //
+        // #987: the USABLE count, matching the agent path, which baselines on what came out of its guard
+        // rather than what went in. Baselining on the raw feed while ingesting the usable subset would
+        // make every guarded run look like a shrinking calendar.
+        recordCheck(on: source, events: usable.count, health: health, now: now,
+                    // #891/#987: so a native feed that stopped naming venues says so on the Sources
+                    // sheet, exactly as an unreadable HTML source does, instead of going quiet.
+                    unreadable: rejectedCount)
 
         outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
-                                        state: .ingested(found: events.count),
+                                        state: .ingested(found: usable.count),
                                         hadBaseline: hadBaseline)]
         return outcome
     }
@@ -440,8 +467,15 @@ enum ScoutService {
     // saved here: apply() already saved, and the caller's own save covers this (a lost health update is
     // recoverable, unlike a lost prospect).
     private static func recordCheck(on source: WatchedSource?, events: Int,
-                                    health: FeedReconcile.FeedHealthState, now: Date) {
+                                    health: FeedReconcile.FeedHealthState, now: Date,
+                                    unreadable: Int = 0) {
         guard let source else { return }
+        // #891/#987: what this run could and could not use, so the Sources sheet can say it. Recorded on
+        // the same branch as the run's success, so the counts can never describe a different run, and a
+        // source that recovers overwrites them with a zero and stops complaining.
+        source.lastReadableCount = events
+        source.lastUnreadableCount = unreadable
+
         let updated = FeedReconcile.updatedHealth(health, currentCount: events)
         source.baselineFeedCount = updated.baseline
         source.degradedStreak = updated.degradedStreak
