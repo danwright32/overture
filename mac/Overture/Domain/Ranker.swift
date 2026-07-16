@@ -91,8 +91,16 @@ enum Ranker {
         switch c { case .likelyUncovered: return 2; case .unknown: return 0; case .likelyCovered: return -2 }
     }
     // #350: Choral folded into Music, merged at Choral's former score (Dan's call) rather than
-    // demoting it to Music's old baseline. "other" (no discipline signal) is now the sole
-    // baseline. Dance highest.
+    // demoting it to Music's old baseline. "other" (no discipline signal) is the sole baseline.
+    // Dance highest.
+    //
+    // #970 Phase 0 made `other` REACHABLE for the first time: the classifier used to fall back to
+    // `.music`, so "no idea" scored 1 and this 0 applied to nothing. It stays 0 because Phase 0 also
+    // taught the classifier real music words, which is what keeps the change invisible: every live row
+    // that scores at or above the high-tier threshold carries a music word (piano, orchestra, concert)
+    // and stays `.music`, so nothing is demoted. Only genuinely unreadable titles land here, and they
+    // already score at or below 3. Do NOT "fix" this to 1 to hold scores still: it would shift every
+    // case in the shared ranker fixture spec by a point for no reason.
     static func disciplinePoints(_ d: Discipline) -> Int {
         switch d {
         case .dance: return 3
