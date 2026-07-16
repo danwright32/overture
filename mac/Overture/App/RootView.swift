@@ -177,7 +177,8 @@ struct RootView: View {
                       archiveJumpKey = key
                       archiveJumpRecipientId = recipientId
                       showArchive = true
-                  })
+                  },
+                  onRetryOmniFocusSync: { syncOmniFocus(force: true) })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it

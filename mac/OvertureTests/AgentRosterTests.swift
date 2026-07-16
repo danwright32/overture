@@ -176,4 +176,35 @@ struct AgentRosterTests {
         // detail no longer repeats it, so the tooltip stops saying "nudges due" twice.
         #expect(!detail.lowercased().contains("nudge"))
     }
+
+    // #357: two more categories that quietly waited on Dan with no top-level pill anywhere: an
+    // unconfirmed classification, and a failed OmniFocus sync. Both fold into the same roster/count
+    // invariant every other pill already follows.
+    @Test func unsureNeedsAttentionWithUncertainClassifications() {
+        var i = calm; i.uncertainClassifications = 2
+        #expect(status("Unsure", i).state == .needsAttention)
+        #expect(status("Unsure", i).count == 2)
+        #expect(status("Unsure", i).focus == .uncertainClassification)
+        #expect(status("Unsure", calm).state == .idle)
+    }
+
+    @Test func omniFocusPillReflectsSyncFailure() {
+        var i = calm; i.omniFocusSyncFailed = true
+        #expect(status("OmniFocus", i).state == .error)
+        #expect(status("OmniFocus", i).focus == .omniFocusSync)
+        #expect(status("OmniFocus", calm).state == .idle)
+        // #863: this pill resolves no queue rows (mirrors Follow-ups), so its count is always 0,
+        // never a promise about rows tapping it would land on.
+        #expect(status("OmniFocus", i).count == 0)
+    }
+
+    @Test func rollUpCountsUnsureAndOmniFocusToo() {
+        var i = calm; i.uncertainClassifications = 1; i.omniFocusSyncFailed = true
+        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 2)
+    }
+
+    @Test func conceptSummaryCoversTheTwoNewPills() {
+        #expect(AgentRoster.conceptSummary(for: "Unsure").contains("classification"))
+        #expect(AgentRoster.conceptSummary(for: "OmniFocus").contains("sync"))
+    }
 }

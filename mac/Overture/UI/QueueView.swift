@@ -64,6 +64,9 @@ struct QueueView: View {
     // second one. #685: also carries which contact Dan clicked from, so a multi-recipient show
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
+    // #357: the OmniFocus pill has no rows to navigate to, so its tap retries the sync directly
+    // instead (RootView owns the actual sync call).
+    var onRetryOmniFocusSync: () -> Void = {}
 
     private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
@@ -338,7 +341,8 @@ struct QueueView: View {
             prospects: prospects, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
-            replyRunAlive: ReplyClassifyService.isRunning(now: now)
+            replyRunAlive: ReplyClassifyService.isRunning(now: now),
+            omniFocusSyncFailed: OmniFocusSyncStatus.lastFailure() != nil
         )
     }
 
@@ -368,6 +372,10 @@ struct QueueView: View {
                 onConnectGmail()
             } else if s.name == "Follow-ups" {
                 onShowFollowUps()
+            } else if s.name == "OmniFocus" {
+                // #357: no rows to navigate to (app-level sync health, not a property of any show),
+                // so the tap retries the sync directly instead.
+                onRetryOmniFocusSync()
             } else {
                 focusOnStage(s)
             }
