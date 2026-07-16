@@ -154,6 +154,58 @@ struct LeadIntakeModelTests {
         #expect(!msg.lowercased().contains("error"))
     }
 
+    // #995. A page that publishes only cities is NOT a page whose detail pages failed to load, and Dan
+    // must not be told it is. These are Smoke Ring Quartet's real rows: the page loaded perfectly and
+    // simply never names a venue, for any show, and never will. Sending Dan to debug a fetch that is not
+    // broken is the "a dead run and a broken calendar must never look alike" defect (#920), and the
+    // wrong half of this sentence is the diagnosis, not the count.
+    @Test func aPageThatNamesOnlyCitiesIsNotReportedAsAFailedFetch() async {
+        let cityOnly = ["Baltimore, Maryland", "Harrogate, UK"].map {
+            ScoutExtractEvent(title: "Show in \($0)", presenter: "Smoke Ring Quartet", venue: $0,
+                              performanceDate: "2099-09-19", sourceUrl: "https://org.example/a",
+                              location: $0)
+        }
+        let m = model(results: { id in self.results(.upcomingListings, cityOnly, id: id) })
+        m.urlText = "https://org.example/events"
+
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+
+        guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
+        #expect(!msg.lowercased().contains("didn't load"),
+                "the page loaded; blaming the fetch sends Dan to debug the wrong thing: \(msg)")
+        #expect(msg.lowercased().contains("city"), "say what the page actually gave: \(msg)")
+    }
+
+    // A lead is often ONE show, and "found 1 show, but none of them name a venue" is not a sentence a
+    // person writes. Caught by #995's cold read of the inventory, in copy that predates it.
+    @Test func aSingleUnusableShowIsDescribedInTheSingular() async {
+        let one = [ScoutExtractEvent(title: "A", presenter: "A", venue: nil,
+                                     performanceDate: "2099-09-19", sourceUrl: "https://org.example/a")]
+        let m = model(results: { id in self.results(.upcomingListings, one, id: id) })
+        m.urlText = "https://org.example/events"
+
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+
+        guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
+        #expect(msg.contains("Found 1 show on"))
+        #expect(!msg.lowercased().contains("none of them"), "one show is not a them: \(msg)")
+    }
+
+    // The Bargemusic shape is unchanged, and its diagnosis stays the right one: a venue exists and the
+    // run failed to reach it. This is the sentence #995 must NOT flatten into its new case.
+    @Test func aVenuelessPageStillReadsAsDetailPagesNotBeingRead() async {
+        let noVenue = [ScoutExtractEvent(title: "A", presenter: "A", venue: nil,
+                                         performanceDate: "2099-09-19",
+                                         sourceUrl: "https://org.example/a")]
+        let m = model(results: { id in self.results(.upcomingListings, noVenue, id: id) })
+        m.urlText = "https://org.example/events"
+
+        await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
+
+        guard case .problem(let msg) = m.phase else { Issue.record("expected .problem"); return }
+        #expect(msg.lowercased().contains("didn't load"))
+    }
+
     // #859: EVERY show it found goes in, and it goes in through the REAL pipeline rather than a
     // hand-built insert, which is what keeps blocked dates, the do-not-contact suppression and the
     // upcoming-only guard applying to a hand-added lead. That routing is what makes importing everything

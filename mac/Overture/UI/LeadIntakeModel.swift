@@ -342,7 +342,24 @@ final class LeadIntakeModel {
         case .foundButUnusable(let rejected, _):
             // NOT "no shows". The page had shows and none has a real venue, which means this source's
             // detail pages are not being read. Naming it is what makes it fixable.
-            phase = .problem("Found \(rejected.count) show\(rejected.count == 1 ? "" : "s") on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load.")
+            //
+            // #995: except when it does NOT mean that. A page that publishes a city and no venue for
+            // every show (Smoke Ring Quartet) loaded perfectly and is not hiding anything, so the
+            // fetch diagnosis below would send Dan to debug something that is not broken. Two causes
+            // that need two sentences, per the standing rule that a dead run and a working-but-empty
+            // one must never read alike.
+            // Whole sentences per case rather than assembled fragments: a lead is often ONE show, and
+            // the joined version said "found 1 show, but none of them name a venue".
+            switch (rejected.allSatisfy { $0.reason == .locationAsVenue }, rejected.count) {
+            case (true, 1):
+                phase = .problem("Found 1 show on that page, but it only gives the city it's in, never the venue, so I can't use it. Some pages never name a venue at all: that is the page being honest, not a fetch that failed.")
+            case (true, let count):
+                phase = .problem("Found \(count) shows on that page, but it only gives the city each one is in, never the venue, so I can't use them. Some pages never name a venue at all: that is the page being honest, not a fetch that failed.")
+            case (false, 1):
+                phase = .problem("Found 1 show on that page, but it doesn't name a venue, so I can't use it. That usually means the show's own page didn't load.")
+            case (false, let count):
+                phase = .problem("Found \(count) shows on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load.")
+            }
         case .noUpcomingShows(let message), .notAnEventsPage(let message), .unreadable(let message):
             phase = .problem(message)
         case .nothingCameBack:

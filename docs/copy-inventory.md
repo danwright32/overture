@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **615 sentences**, from 195 source files.
+Every sentence Overture can say to Dan: **619 sentences**, from 195 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -421,7 +421,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Follow-ups and active conversations due for a touch"
     `App/RootView.swift`
-"Found \(rejected.count) show\(rejected.count == 1 ? "" : "s") on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load."
+"Found 1 show on that page, but it doesn't name a venue, so I can't use it. That usually means the show's own page didn't load."
+    `UI/LeadIntakeModel.swift`
+"Found 1 show on that page, but it only gives the city it's in, never the venue, so I can't use it. Some pages never name a venue at all: that is the page being honest, not a fetch that failed."
+    `UI/LeadIntakeModel.swift`
+"Found \(count) shows on that page, but it only gives the city each one is in, never the venue, so I can't use them. Some pages never name a venue at all: that is the page being honest, not a fetch that failed."
+    `UI/LeadIntakeModel.swift`
+"Found \(count) shows on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load."
     `UI/LeadIntakeModel.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
@@ -1369,6 +1375,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "no title"
     `Domain/ExtractedEventGuard.swift`
 "no venue"
+    `Domain/ExtractedEventGuard.swift`
+"no venue (the listing gave only a place)"
     `Domain/ExtractedEventGuard.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`

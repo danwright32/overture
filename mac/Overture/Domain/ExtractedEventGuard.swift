@@ -24,12 +24,14 @@ enum ExtractedEventGuard {
         case noTitle
         case noVenue            // absent or blank
         case placeholderVenue   // present, but not a venue: a numeric id, "unknown", "TBD"
+        case locationAsVenue    // present, but only restates the location: a city is not a room
 
         var label: String {
             switch self {
             case .noTitle:          return "no title"
             case .noVenue:          return "no venue"
             case .placeholderVenue: return "no real venue (the listing carries a placeholder)"
+            case .locationAsVenue:  return "no venue (the listing gave only a place)"
             }
         }
     }
@@ -51,7 +53,37 @@ enum ExtractedEventGuard {
         // venue and reads as one.
         if venue.allSatisfy({ $0.isNumber }) { return .placeholderVenue }
         if nonAnswers.contains(venue.lowercased()) { return .placeholderVenue }
+        if restatesLocation(venue: venue, location: event.location) { return .locationAsVenue }
         return nil
+    }
+
+    // #995: a venue that only says what the location already said is not a venue, it is the location
+    // wearing a venue's clothes. This is the one shape of "no venue published" the guard can actually
+    // SEE, because it never gets to look at the page.
+    //
+    // The comparison is deliberately narrow: equality, or the venue matching one whole comma-separated
+    // piece of the location ("Baltimore" against "Baltimore, Maryland"). It is NOT a substring test in
+    // the other direction, and that asymmetry is the whole point. A real venue routinely contains its
+    // own city ("Brooklyn Bridge Park Boathouse at Pier 5, Brooklyn, NY" against "Brooklyn, NY"), so a
+    // loose "one contains the other" rule would reject the exact answer the runbook holds up as correct.
+    //
+    // Measured against the live store before it was written: fires on 4 of 4 fabricated rows, and cannot
+    // fire on the other 128, which carry no location at all. A tempting alternative ("the venue has a
+    // comma") was rejected on the same data: it would eat Bargemusic's real answer.
+    private static func restatesLocation(venue: String, location: String?) -> Bool {
+        let venueKey = normalized(venue)
+        guard !venueKey.isEmpty,
+              let location, case let locationKey = normalized(location), !locationKey.isEmpty
+        else { return false }
+
+        if venueKey == locationKey { return true }
+        return locationKey.split(separator: ",")
+            .map { normalized(String($0)) }
+            .contains(venueKey)
+    }
+
+    private static func normalized(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     static func isUsable(_ event: ExtractedEvent) -> Bool { rejection(for: event) == nil }
