@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **619 sentences**, from 195 source files.
+Every sentence Overture can say to Dan: **621 sentences**, from 196 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -622,6 +622,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "None due"
     `Domain/AgentRoster.swift`
+"None of the \(total) shows say where they are, which is new for this source. Until that comes back, Overture can't tell an out-of-town date from a New York one."
+    `Domain/SourcePlacement.swift`
 "Not a booking"
     `UI/ProspectRowView.swift`
 "Not a duplicate"
@@ -1281,6 +1283,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(placed) of \(total) shows say where they are, so Overture can tell an out-of-town date from a New York one."
+    `Domain/SourcePlacement.swift`
 "\(range) is no longer blocked"
     `App/ActionFeedback.swift`
 "\(range) is now blocked"
