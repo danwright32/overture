@@ -152,8 +152,10 @@ struct QueueView: View {
     // nothing out of range says nothing, and a filter bug is loud rather than invisible (#887).
     @ToolbarContentBuilder
     private var tooFarToolbar: some ToolbarContent {
-        let tooFar = QueueModel.tooFarCount(items)
-        if tooFar > 0 {
+        let tooFar = QueueModel.tooFarCount(items, discipline: disciplineFilter, highOnly: highOnly,
+                                            pendingBookingsOnly: showPendingBookingsOnly,
+                                            reachedOutKeys: reachedOutKeys, today: today)
+        if QueueModel.chipIsShown(count: tooFar, showingOnly: showTooFarOnly) {
             ToolbarItem(placement: .secondaryAction) {
                 Button {
                     showTooFarOnly.toggle()

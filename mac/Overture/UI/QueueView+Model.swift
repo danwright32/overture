@@ -333,9 +333,37 @@ enum QueueModel {
 
     // The rows the gate took, so a filter bug is loud rather than invisible (#887): a hidden show is
     // one click away, never gone.
-    static func tooFar(_ items: [QueueItem]) -> [QueueItem] { items.filter(isTooFar) }
+    //
+    // #996: this is the set clicking the chip REVEALS, which is the only set its number may describe.
+    // It therefore runs the identical expression the view renders with (`filter` then `toSendQueue`),
+    // rather than the raw predicate over `items`.
+    //
+    // That distinction was not academic. The first version counted raw `items`, and the queue windows
+    // the filtered set to the bookable date range afterwards, so a show could be counted as too far
+    // and then dropped for being too far in the FUTURE. Dan saw "Too far (4)" open onto one row within
+    // minutes of it shipping. There is deliberately no way to ask for the unwindowed count any more:
+    // the whole justification for hiding rows at all is that the number makes a filter bug loud
+    // (#887), and a number that overstates by 4x cannot do that job.
+    static func tooFar(_ items: [QueueItem], discipline: String?, highOnly: Bool,
+                       pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
+                       today: String) -> [QueueItem] {
+        toSendQueue(filter(items, discipline: discipline, highOnly: highOnly,
+                           pendingBookingsOnly: pendingBookingsOnly, tooFarOnly: true),
+                    reachedOutKeys: reachedOutKeys, today: today)
+    }
 
-    static func tooFarCount(_ items: [QueueItem]) -> Int { tooFar(items).count }
+    static func tooFarCount(_ items: [QueueItem], discipline: String?, highOnly: Bool,
+                            pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
+                            today: String) -> Int {
+        tooFar(items, discipline: discipline, highOnly: highOnly,
+               pendingBookingsOnly: pendingBookingsOnly, reachedOutKeys: reachedOutKeys,
+               today: today).count
+    }
+
+    // #996: the chip must stay clickable while it is ON, even when it now reveals nothing. Changing a
+    // discipline filter with the chip active can empty its set, and a chip that vanished at that moment
+    // would strand Dan in a queue showing no rows with nothing left to click to get back.
+    static func chipIsShown(count: Int, showingOnly: Bool) -> Bool { count > 0 || showingOnly }
 
     static func tooFarLabel(count: Int) -> String { "Too far (\(count))" }
 
