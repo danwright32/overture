@@ -504,7 +504,7 @@ struct RootView: View {
                 onHighlightConsumed: { followUpsHighlightRecipientId = nil })
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
-            .sheet(isPresented: $showSources) { SourcesView() }
+            .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
@@ -815,13 +815,14 @@ struct RootView: View {
         runScout(auto: true, depth: .watchOnly)
     }
 
-    private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged) {
+    private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged,
+                          only: Set<String>? = nil) {
         isScanning = true
         scoutStartedAt = Date()
         scoutSummary = nil
         Task {
             do {
-                let outcome = try await ScoutService.runScout(into: context, depth: depth)
+                let outcome = try await ScoutService.runScout(into: context, depth: depth, only: only)
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
                 // Surface a scout warning if any: a source that couldn't be checked (#802), an
                 // established feed that came back empty (#27), or a missing/stale past-client export
