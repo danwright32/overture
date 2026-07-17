@@ -139,6 +139,14 @@ enum SourceCheck {
             source.health = .ok
             source.lastFailure = nil        // it works again; do not carry a stale error forever
 
+            // #1048: record what this fetch SAW, on every success branch below. This is not the ingested
+            // hash (that is stamped only by a save, further down the pipeline): it is "the live page as
+            // far as we know", and the free daily watch-only pass is exactly the run that updates it
+            // without re-reading. The Sources confirm affordance compares it against the last read to warn
+            // when a confirm would anchor to bytes the page has since moved past (WatchedSource
+            // .confirmReadIsStale).
+            source.lastObservedContentHash = page.contentHash
+
             // The hash is a CORRECTNESS mechanism, not merely a cost lever. If the page did not change,
             // the extractor never runs, so an extracted title cannot drift between runs and re-key a
             // prospect into a duplicate while the original is marked gone. Determinism by abstention.
