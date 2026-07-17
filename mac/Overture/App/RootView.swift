@@ -1005,27 +1005,26 @@ struct RootView: View {
         runScout()
     }
 
-    // #1034: what the reading phase shows, read live each tick. The source name comes from diffing the
-    // queue the app WROTE against the results the run is filling (no new runner file), and the "3 of 9"
-    // from the run's own script-derived progress file (#1015).
-    private func readingSnapshot() -> ScoutProgressView.Snapshot {
-        let progress = ScoutExtractProgressDecoder.loadCurrent()
-        return ScoutProgressView.Snapshot(
-            sourceName: ScoutExtractCurrentSource.loadCurrentName(),
-            completed: progress?.completed ?? 0,
-            total: progress?.total ?? 0)
-    }
-
     // #1034: the takeover itself. Phase, start, and live providers are read from the run's state; the
-    // per-second ticking happens inside ScoutProgressView's own TimelineView.
+    // per-second ticking happens inside ScoutProgressView's own TimelineView. The reading phase reads its
+    // source name and count live from the files the app owns via the shared ScoutProgressView.Snapshot
+    // .liveReading() (#1036 uses the same in AddLeadSheet). The chrome (fixed frame + canvas, centered) is
+    // applied HERE because the component itself is sized to content so it can also render inline.
     private var scoutProgressModal: some View {
-        ScoutProgressView(
-            phase: readingStartedAt != nil ? .reading : .scouting,
-            since: readingStartedAt ?? scoutStartedAt,
-            snapshot: { readingStartedAt != nil ? readingSnapshot() : (scoutNativeSnapshot ?? .init()) },
-            runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
-            onRetry: { retryScout() },
-            onHide: { scoutSheetShown = false })
+        VStack {
+            Spacer(minLength: 0)
+            ScoutProgressView(
+                phase: readingStartedAt != nil ? .reading : .scouting,
+                since: readingStartedAt ?? scoutStartedAt,
+                snapshot: { readingStartedAt != nil ? ScoutProgressView.Snapshot.liveReading()
+                                                    : (scoutNativeSnapshot ?? .init()) },
+                runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
+                onRetry: { retryScout() },
+                onHide: { scoutSheetShown = false })
+            Spacer(minLength: 0)
+        }
+        .frame(minWidth: 460, minHeight: 280)
+        .background(OVColor.canvas)
     }
 
     // Reconcile bookings on launch (#41/#99): auto-book on an exact Downbeat booking match,

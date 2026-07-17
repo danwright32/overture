@@ -52,9 +52,12 @@ struct ReadingHalfVisibleGuardTests {
     }
 
     // Real "3 of 9" from the run's own progress file, and the source being read RIGHT NOW, not a bare
-    // spinner. Both come from files the app already owns (#1034), read live each tick.
+    // spinner. Both come from files the app already owns (#1034), read live each tick. The snapshot that
+    // reads them is shared with AddLeadSheet (#1036), so the loaders live in ScoutProgressView; RootView
+    // wires that shared snapshot into the reading phase.
     @Test func itCountsAndNamesTheSourceRatherThanSpinning() {
-        #expect(rootView.contains("ScoutExtractProgressDecoder.loadCurrent()"))
-        #expect(rootView.contains("ScoutExtractCurrentSource.loadCurrentName()"))
+        #expect(progressView.contains("ScoutExtractProgressDecoder.loadCurrent("))
+        #expect(progressView.contains("ScoutExtractCurrentSource.loadCurrentName("))
+        #expect(rootView.contains("ScoutProgressView.Snapshot.liveReading()"))
     }
 }
