@@ -47,9 +47,16 @@ source "${SCRIPT_DIR}/models.sh"
 # wrote a draft rather than sensing that something changed.
 assert_equals "drafting uses the strong tier" "opus" "${OVERTURE_MODEL_DRAFTING}"
 
-# The mechanical run: a strict output schema and no judgment. Reading a page for its listings is exactly
-# the cheap-model case. Drafting is exactly not.
-assert_equals "reading a calendar is mechanical" "haiku" "${OVERTURE_MODEL_EXTRACTION}"
+# The extraction run. It LOOKED like the cheap-model case (a strict output schema, no judgment), and rode
+# on haiku on that reasoning. Dan's call (2026-07-17), after the first real watchlist scouts: haiku does
+# not actually do the job. On a 19-source queue it read only the first ~6 pages and then fabricated
+# "no dated content" for the rest without opening them, and it made ZERO detail-page fetches all run, so
+# even the pages it did read produced venue-less events that get rejected before ingest. Reading a
+# calendar is not mechanical after all: it needs the stamina to work a whole queue and follow each event
+# to its own page. The extraction run only ever fires on a scout Dan STARTS (the daily automatic run
+# watches and spends nothing, ScoutService.swift), so this heavier tier costs usage only on his manual
+# scouts, never on autopilot.
+assert_equals "reading a calendar needs a model that will actually read it" "sonnet" "${OVERTURE_MODEL_EXTRACTION}"
 
 # #874: the reply run is NAMED for the classification half of its job, and that is what hid this. It also
 # DRAFTS the reply, in Dan's voice, to a person who has already written back to him: a warmer lead than
