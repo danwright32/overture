@@ -178,15 +178,10 @@ final class WatchedSource {
         successfulCheckCount += 1
     }
 
-    // The line the Sources sheet shows about whether this source says where its shows are, or nothing at all
-    // when it is doing what it always has. Decided beside the data and NOT in the view (#863/#885).
-    //
-    // The total is `lastReadableCount`: the shows this run KEPT. Events dropped by the guard are already
-    // reported by readabilityNote, and counting them here too would say the same loss twice in one row.
-    var placementNote: String? {
-        SourcePlacement.note(placed: lastPlacedCount, total: lastReadableCount,
-                             hadEverPlaced: hadPlacedBeforeLastRun)
-    }
+    // #1029: the venue-precision line this source used to show Dan is gone (he did not understand why it
+    // mattered). The placement DATA above (lastPlacedCount / hadPlacedBeforeLastRun / hasEverPlaced) is
+    // still recorded on every run, kept for #970's drift detection; only the Dan-facing sentence and its
+    // SourcePlacement.note generator were removed.
 
     // #875: what the run itself said about this source, in words, and the raw log behind it. Same rule as
     // above: decided here, never in the view.

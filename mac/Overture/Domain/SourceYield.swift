@@ -20,8 +20,13 @@ enum SourceYield {
     // The funnel, widest to narrowest. It is CUMULATIVE by construction (see `tally`): a booked show is
     // also counted sent, approved and kept, so `found >= kept >= approved >= sent >= booked` always holds
     // and Dan can never read "1 sent" sitting above "0 kept".
+    //
+    // `unreviewed` sits OUTSIDE that funnel: it is the shows Dan has not opened yet (status `.new`), the
+    // ones the summary leads with (#1029). It never overlaps `kept`, because a kept show has by definition
+    // been moved past `.new`, so `unreviewed + reviewed == found` where `reviewed == found - unreviewed`.
     struct Tally: Equatable, Sendable {
         var found: Int
+        var unreviewed: Int
         var kept: Int
         var approved: Int
         var sent: Int
@@ -33,9 +38,14 @@ enum SourceYield {
     // one. A show surfaced by several sources (the upsert merges a venue's calendar and the presenter's
     // own site into one row) credits each of them, because each genuinely did surface it.
     static func tally(sourceId: String, in prospects: [Prospect]) -> Tally {
-        var t = Tally(found: 0, kept: 0, approved: 0, sent: 0, booked: 0)
+        var t = Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
         for p in prospects where p.sourceIds.contains(sourceId) {
             t.found += 1
+
+            // Not yet looked at. The scout writes every show `.new`; Dan keeps or dismisses it from there.
+            // This is what the summary leads with, and what a freshly scouted source is entirely made of,
+            // so it can never again read as "0 kept" (#1029).
+            if p.status == .new { t.unreviewed += 1 }
 
             // Read deepest-stage-first and let each stage subsume the ones below it, so the count stays
             // monotonic even when the current status has moved on. The load-bearing case is a show sent
@@ -60,16 +70,51 @@ enum SourceYield {
     // a source that only produces things he throws away.
     private static let keptStatuses: [ReviewStatus] = [.queued, .drafted, .approved, .contacted]
 
-    // The quiet line the Sources sheet shows, kept-first (Dan's choice): "3 of 12 kept", with sent and
-    // booked appended only when they are above zero, so a source that has produced nothing but leads to
-    // pitch does not carry a trailing "· 0 sent · 0 booked" of noise.
+    // The line the Sources sheet shows, led by the thing Dan ACTS on (#1029): the shows this source
+    // surfaced that he has not opened yet. A freshly scouted source is entirely those, so it now reads
+    // "8 new shows waiting for you" and never "0 of 8 kept", which read as dead weight on a source that
+    // had simply not been reviewed yet (Dan, on 54 Below: "extensive shows through August, only 5 counted
+    // and 0 kept"). "Not reviewed yet" and "reviewed and kept none" are two different states and must not
+    // collapse to one sentence.
     //
-    // nil when the source has surfaced nothing yet: "0 of 0 kept" reads like a failure, and a brand-new
-    // or off-season source is neither dead weight nor broken (its read state and health already speak for
-    // it). The dead-weight signal this feature exists for is "0 of 12 kept", which is NOT silenced.
+    // Behind the waiting count, the lifetime kept tally still earns its place (#794): a source Dan has
+    // reviewed and kept nothing from is dead weight, and that stays visible as "0 of N kept". Its
+    // denominator is the shows he has REVIEWED (found minus waiting), never the found total, or the ones
+    // still waiting would read as shows he looked at and passed over.
+    //
+    // nil when the source has surfaced nothing at all: a brand-new or off-season source is neither dead
+    // weight nor broken (its read state and health already speak for it).
     static func line(_ tally: Tally) -> String? {
         guard tally.found > 0 else { return nil }
-        var line = "\(tally.kept) of \(tally.found) kept"
+        let reviewed = tally.found - tally.unreviewed
+
+        // What to do now. Written as two complete literals (not `Plural.count` + a suffix) so each lands
+        // in the copy inventory as a whole sentence for the cold read, never as a "waiting for you"
+        // fragment.
+        let waitingClause: String? = tally.unreviewed > 0 ? waiting(tally.unreviewed) : nil
+
+        // What this source has earned over what he has reviewed. Silent until something has been reviewed,
+        // so it can never be the sentence a fresh source shows.
+        let keptClause: String? = reviewed > 0 ? keptLine(tally, reviewed: reviewed) : nil
+
+        switch (waitingClause, keptClause) {
+        case let (waiting?, kept?): return "\(waiting) · \(kept)"
+        case let (waiting?, nil):   return waiting
+        case let (nil, kept?):      return kept
+        case (nil, nil):            return nil   // unreachable given found > 0; stated, not forced.
+        }
+    }
+
+    // "8 new shows waiting for you" / "1 new show waiting for you". Two complete literals rather than a
+    // composed one, per the copy-inventory rule above.
+    private static func waiting(_ n: Int) -> String {
+        n == 1 ? "1 new show waiting for you" : "\(n) new shows waiting for you"
+    }
+
+    // The lifetime funnel over reviewed shows, kept-first (Dan's choice), with sent and booked appended
+    // only when they are above zero so the common case carries no trailing "· 0 sent · 0 booked" noise.
+    private static func keptLine(_ tally: Tally, reviewed: Int) -> String {
+        var line = "\(tally.kept) of \(reviewed) kept"
         if tally.sent > 0 { line += " · \(tally.sent) sent" }
         if tally.booked > 0 { line += " · \(tally.booked) booked" }
         return line

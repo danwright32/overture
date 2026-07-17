@@ -400,8 +400,8 @@ enum ScoutService {
                     // sheet, exactly as an unreadable HTML source does, instead of going quiet.
                     unreadable: rejectedCount,
                     // #986/#1005: how many kept shows named WHERE they are, by the SAME rule the agent
-                    // path uses. Wired here at last: this path never fed the placement detector before,
-                    // so Carnegie's placementNote could never say a thing whatever its feed reported.
+                    // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
+                    // the Dan-facing line the count fed; the count still records for #970's drift check.)
                     placed: SourcePlacement.placedCount(locations: usable.map(\.location)))
 
         outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
