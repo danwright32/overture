@@ -163,6 +163,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // than in the SwiftUI body (#863), and shared with the reply draft via DraftTrace so the two surfaces
     // cannot drift into saying it differently.
     var draftTraceLabel: String? { DraftTrace.label(for: draftModel) }
+
+    // #992: the one-line reason this show was placed too far, or nil unless the geo gate positively
+    // placed it out of range. Shown on the row only while the "Too far" filter is engaged. Decided in
+    // QueueModel (tested), not the SwiftUI body (#863).
+    var tooFarReason: String? { QueueModel.tooFarReason(self) }
 }
 
 // One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
@@ -329,6 +334,39 @@ enum QueueModel {
     static func isTooFar(_ item: QueueItem) -> Bool {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
         return EventPlace.resolve(location: item.location, discipline: discipline).verdict == .outOfRange
+    }
+
+    // #992. The chip's number says HOW MANY the gate hid; this says WHY this row in particular was, in one
+    // short line shown only while the "Too far" filter is engaged. `isTooFar` already computes the reason
+    // on every row and throws it away; this keeps it. Resolved fresh from the row's own words (never
+    // stored, like the verdict), so a rule change re-decides every row's reason at once.
+    //
+    // nil unless the gate positively placed this row out of range, so a kept or unknown row shows nothing.
+    static func tooFarReason(_ item: QueueItem) -> String? {
+        let discipline = Discipline(rawValue: item.discipline) ?? .other
+        let reason = EventPlace.resolve(location: item.location, discipline: discipline).reason
+        return tooFarReasonSentence(reason)
+    }
+
+    // The three hiding reasons are three genuinely different situations, and Dan reacts to each
+    // differently, so each gets its own sentence rather than a shared phrasing of "too far" (#843/#844):
+    //   outsideTheRegion  a real place, simply nowhere near the tri-state area. Obviously right.
+    //   excludedTown      in the tri-state, but a town on the skip list. He may want to reconsider it.
+    //   outsideTheBoroughs in the tri-state, but this is music, which he only travels the boroughs for.
+    //                     The surprising one: the same show as theater would have been kept, so the line
+    //                     says so, because that is exactly what reads like a bug otherwise.
+    // Every non-hiding reason returns nil (exhaustive, so a new EventPlace.Reason case must be handled here).
+    static func tooFarReasonSentence(_ reason: EventPlace.Reason) -> String? {
+        switch reason {
+        case .outsideTheRegion:
+            return "Outside New York, New Jersey and Connecticut."
+        case .excludedTown:
+            return "This town is on the skip list."
+        case .outsideTheBoroughs:
+            return "Music only travels to the five boroughs. As theater this would stay."
+        case .insideTheBoroughs, .insideTheRegion, .noLocation, .couldNotPlace:
+            return nil
+        }
     }
 
     // The rows the gate took, so a filter bug is loud rather than invisible (#887): a hidden show is

@@ -233,7 +233,12 @@ struct RootView: View {
                     Menu {
                         Button("Run scout now") { runScout() }
                             .keyboardShortcut("r", modifiers: .command)
-                            .disabled(isScanning)
+                            // #1033: disabled through BOTH scout phases, not just the native sweep. The
+                            // detached read follows with isScanning already false, so the old
+                            // .disabled(isScanning) went clickable again mid-run. Same rule runScout
+                            // guards on before starting a run.
+                            .disabled(ScoutControlState.isRunScoutDisabled(isScanning: isScanning,
+                                                                           isReading: readingStartedAt != nil))
                         // #799: a lead Dan found himself (a link to the show, or to the org's events
                         // page). It goes through the same classify/rank/upsert chain as a scouted one.
                         // The shortcut lives on the MENU-BAR command (OvertureApp), not here: a
@@ -844,8 +849,14 @@ struct RootView: View {
     // results file isn't there yet.
     private func ingestReplyClassifications() {
         guard let outcome = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context) else { return }
-        // #499: this run's intent hints/drafts were written in memory but never persisted.
-        if outcome.saveFailed { statusMessage = "Reply-classify results couldn't save. Try again." }
+        // #499: this run's intent hints/drafts were written in memory but never persisted. The save
+        // failure is the actionable one, so it wins the single status line.
+        if outcome.saveFailed {
+            statusMessage = "Reply-classify results couldn't save. Try again."
+        } else if let message = ReplyClassifyRunSummary.statusMessage(for: outcome) {
+            // #1018: replies the run never came back with, so a silently dropped reply is no longer invisible.
+            statusMessage = message
+        }
     }
 
     // Launch a reply-classify run for replies still needing an intent. Throws (and is swallowed)

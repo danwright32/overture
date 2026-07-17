@@ -22,6 +22,15 @@ enum ReplyIntent: String, CaseIterable, Sendable {
     }
 }
 
+// #1018: the identity of a single queued reply, used to tell what a run answered from what it dropped
+// (HandoffShortfall). It is the (naturalKey, recipientId) PAIR, not the show alone, because reply-classify
+// is per-recipient: two contacts on one show are two independent queue items, and a run that answers one
+// and drops the other must still name the dropped recipient even though the show's naturalKey came back.
+struct ReplyClassifyKey: Hashable, Sendable {
+    var naturalKey: String
+    var recipientId: String?
+}
+
 // Written by the app (the work-list).
 struct ReplyClassifyQueue: Codable, Equatable, Sendable {
     var version: Int

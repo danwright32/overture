@@ -222,3 +222,64 @@ struct QueueGeoFilterCountTests {
         #expect(on.contains("show the whole queue again"))
     }
 }
+
+// #992. The chip says HOW MANY were hidden; a hidden row must also say WHY it in particular was hidden,
+// because the three reasons are genuinely different situations Dan reacts to differently. Weighted to
+// the one thing that would make the whole feature pointless: three sentences that collapse into one on
+// screen (#843/#844).
+@Suite("Queue geo filter: why a row was placed too far")
+struct QueueGeoFilterReasonTests {
+    // The three hiding reasons each get their own sentence, and the sentences are asserted DIFFERENT
+    // pairwise, not merely non-nil: a distinction real in the code that renders identically is exactly
+    // the defect this feature exists to avoid.
+    @Test func theThreeHidingReasonsHaveGenuinelyDistinctSentences() {
+        let region = QueueModel.tooFarReasonSentence(.outsideTheRegion)
+        let excluded = QueueModel.tooFarReasonSentence(.excludedTown)
+        let boroughs = QueueModel.tooFarReasonSentence(.outsideTheBoroughs)
+        #expect(region != nil)
+        #expect(excluded != nil)
+        #expect(boroughs != nil)
+        #expect(region != excluded)
+        #expect(region != boroughs)
+        #expect(excluded != boroughs)
+    }
+
+    // A reason that never hides a row carries no sentence: the line appears only on rows the gate
+    // positively placed out of range, never on a kept or unknown one.
+    @Test func aReasonThatNeverHidesCarriesNoSentence() {
+        #expect(QueueModel.tooFarReasonSentence(.insideTheBoroughs) == nil)
+        #expect(QueueModel.tooFarReasonSentence(.insideTheRegion) == nil)
+        #expect(QueueModel.tooFarReasonSentence(.noLocation) == nil)
+        #expect(QueueModel.tooFarReasonSentence(.couldNotPlace) == nil)
+    }
+
+    // The three real shapes from the issue, resolved end to end through a QueueItem, each landing on its
+    // own sentence. This is the actual text a hidden row shows Dan.
+    @Test func theThreeRealRowsEachExplainThemselvesDistinctly() {
+        let beijing = item(id: "far", discipline: "music", location: "Beijing, China").tooFarReason
+        let buffalo = item(id: "buf", discipline: "music", location: "Buffalo, NY").tooFarReason
+        let larchmont = item(id: "larch", discipline: "music", location: "Larchmont, NY").tooFarReason
+        #expect(beijing == QueueModel.tooFarReasonSentence(.outsideTheRegion))
+        #expect(buffalo == QueueModel.tooFarReasonSentence(.excludedTown))
+        #expect(larchmont == QueueModel.tooFarReasonSentence(.outsideTheBoroughs))
+        #expect(beijing != buffalo)
+        #expect(buffalo != larchmont)
+        #expect(beijing != larchmont)
+    }
+
+    // The most surprising outcome in the feature (the issue calls it out): the SAME town, as theater, is
+    // kept and carries no reason at all, while as music it is hidden and carries the boroughs sentence.
+    @Test func theSameTownAsTheaterIsKeptWithNoReason() {
+        #expect(item(id: "play", discipline: "theater", location: "Larchmont, NY").tooFarReason == nil)
+        let musicReason = item(id: "orchestra", discipline: "music", location: "Larchmont, NY").tooFarReason
+        #expect(musicReason == QueueModel.tooFarReasonSentence(.outsideTheBoroughs))
+    }
+
+    // A kept row never shows a too-far reason, whatever its location: no place named, an unplaceable
+    // place, or a plainly local one all resolve to no reason.
+    @Test func aKeptRowHasNoReason() {
+        #expect(item(id: "local", discipline: "music", location: "New York, NY").tooFarReason == nil)
+        #expect(item(id: "none", location: nil).tooFarReason == nil)
+        #expect(item(id: "amsterdam", location: "Amsterdam").tooFarReason == nil)
+    }
+}

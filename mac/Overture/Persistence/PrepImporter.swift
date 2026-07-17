@@ -375,7 +375,7 @@ enum PrepImporter {
     private static func shortfall(results: PrepResults, url: URL, queueURL: URL) -> [String] {
         guard let queueData = try? Data(contentsOf: queueURL),
               let queue = try? JSONDecoder().decode(PrepQueue.self, from: queueData) else { return [] }
-        return PrepShortfall.missingKeys(
+        return HandoffShortfall.missingKeys(
             queuedKeys: queue.items.map(\.naturalKey),
             answeredKeys: results.results.map(\.naturalKey),
             queueGeneratedAt: ISO8601DateFormatter().date(from: queue.generatedAt),
