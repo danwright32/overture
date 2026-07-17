@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **643 sentences**, from 203 source files.
+Every sentence Overture can say to Dan: **643 sentences**, from 204 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1263,6 +1263,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
+"\(count) didn't come back, they'll be retried"
+    `Domain/HandoffShortfall.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
@@ -1321,8 +1323,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."
     `Domain/WatchlistEditing.swift`
-"\(outcome.missingKeys.count) didn't come back, they'll be retried"
-    `Domain/PrepRunSummary.swift`
 "\(outcome.skippedEdited) kept your edits"
     `Domain/PrepRunSummary.swift`
 "\(outcome.unmatchedKeys.count) didn't match"

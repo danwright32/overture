@@ -844,8 +844,14 @@ struct RootView: View {
     // results file isn't there yet.
     private func ingestReplyClassifications() {
         guard let outcome = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context) else { return }
-        // #499: this run's intent hints/drafts were written in memory but never persisted.
-        if outcome.saveFailed { statusMessage = "Reply-classify results couldn't save. Try again." }
+        // #499: this run's intent hints/drafts were written in memory but never persisted. The save
+        // failure is the actionable one, so it wins the single status line.
+        if outcome.saveFailed {
+            statusMessage = "Reply-classify results couldn't save. Try again."
+        } else if let message = ReplyClassifyRunSummary.statusMessage(for: outcome) {
+            // #1018: replies the run never came back with, so a silently dropped reply is no longer invisible.
+            statusMessage = message
+        }
     }
 
     // Launch a reply-classify run for replies still needing an intent. Throws (and is swallowed)
