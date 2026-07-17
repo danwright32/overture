@@ -52,6 +52,14 @@ For each item in the work-list:
    often belong to the NEXT month (a July grid's last two cells are August 1 and 2). Get that wrong and
    a real show is dated into the past and silently dropped.
 
+   **If one read does not return the whole file** (the tool says there is more, or offers an offset to
+   continue), keep reading with an increasing offset until the entire file is covered, before extracting
+   or judging anything. A large calendar (#1012: FRIGID's page, 26KB) can be bigger than a single read
+   returns, and stopping at the first chunk is exactly what turned a healthy `upcoming_listings` verdict
+   into a silent loss: dozens of real shows never seen, and the source's content hash latched as if the
+   whole page had been read, so nothing ever asked again. Only report `incomplete_extraction` (below)
+   after actually trying to read the rest of the file this way.
+
 2. **Extract every upcoming performance.** Today or later. Never invent one that is not on the page.
 
    **If the item carries `onlyForOrg`, return ONLY that organization's performances.** Everything else
@@ -149,9 +157,12 @@ For each item in the work-list:
    | `all_past` | it has dated listings, but every one has already happened. **A normal, healthy state**: an org between seasons. In July, 5 of the 7 real sites tested were exactly this. Report it honestly rather than reaching for something to return. |
    | `no_dated_content` | no dated listings at all. Usually the WRONG page (guessing a URL by convention lands on a 2021 archive that answers HTTP 200). |
    | `unreadable` | the bytes carry no event data: a calendar drawn by JavaScript, or a login wall (an Instagram link does this). Say so. Do not pretend to have read it. |
+   | `incomplete_extraction` | the page is larger than could be read even after paging through it with an increasing offset (step 1). Return whatever events turned up in the part actually read, and say in the note that the page was too large to finish. This is the ONLY verdict where a real, non-empty event list and an honest admission of missing more both belong together. |
 
    A quiet source and a broken source must never look the same to Dan. The verdict is the only thing
-   that tells them apart.
+   that tells them apart. Nor may a partially read source look like a fully read one: `incomplete_extraction`
+   keeps whatever it found (unlike the other three failure verdicts, which return nothing), but it never
+   lets the app treat this page as finished, so the next scout goes back for the rest.
 
 5. **Pagination: never follow a listings link; read every month the app already fetched.** The app walks
    a calendar's own month index itself (#858) and hands you the result, so a pinned page may hold

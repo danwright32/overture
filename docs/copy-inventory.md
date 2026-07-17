@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **621 sentences**, from 196 source files.
+Every sentence Overture can say to Dan: **622 sentences**, from 196 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -990,6 +990,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "That page couldn't be read."
     `Domain/WatchedSource.swift`
 "That page doesn't list any dated events. It may not be their events page: try the link that shows their season or calendar."
+    `Domain/LeadIntake.swift`
+"That page has more on it than I could read in one pass, and I didn't find a show in the part I did read. Try again, or paste a narrower link (a specific month or season) if it keeps happening."
     `Domain/LeadIntake.swift`
 "That page has no dated listings on it. It may be the wrong page for this org."
     `Domain/WatchedSource.swift`

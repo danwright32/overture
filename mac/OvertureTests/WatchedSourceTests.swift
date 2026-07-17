@@ -133,6 +133,13 @@ struct SourceFailureTests {
         #expect(SourceFailure(verdict: .unreadable) == .verdict(.unreadable))
     }
 
+    // #1012: a partial read is not a failure either, unlike noDatedContent/unreadable/notRead. Real
+    // events came back and are trustworthy enough to ingest; what must not happen is the hash latching,
+    // which is handled by ScoutExtractIngest's own partial-check path, not by SourceFailure.
+    @Test func aPartialReadIsNotAFailure() {
+        #expect(SourceFailure(verdict: .incompleteExtraction) == nil)
+    }
+
     @Test func anUnknownStoredStringIsRefusedRatherThanGuessed() {
         #expect(SourceFailure(raw: "wat") == nil)
         #expect(SourceFailure(raw: "") == nil)

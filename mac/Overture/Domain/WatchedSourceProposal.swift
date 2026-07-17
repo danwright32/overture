@@ -45,7 +45,11 @@ enum WatchedSourceProposal {
         case .unreadable, .noDatedContent, .notRead: return .nothingToWatch
         // `allPast` IS worth watching: a season that has finished is exactly the calendar that will have
         // an autumn on it. That is the whole reason to keep looking rather than pitch once and forget.
-        case .upcomingListings, .allPast: break
+        //
+        // #1012: `incompleteExtraction` groups here too. We are not blind to this page (unlike the group
+        // above): the run genuinely read part of a real calendar, it simply did not finish it, which says
+        // nothing against watching it.
+        case .upcomingListings, .allPast, .incompleteExtraction: break
         }
 
         // Matched on HOST, not on the exact URL. An org publishes /events, /calendar and /concerts and

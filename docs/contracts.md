@@ -38,6 +38,11 @@ the workflow's runbook is its spec.
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 | `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
 
+`PageVerdict` (the token in each scout-extract result's `verdict` field) added `incomplete_extraction`
+in #1012: a page the run could only read part of. Its events are ingested but its source's content
+hash is deliberately never latched, so the next scout re-reads the page rather than treating it as
+finished.
+
 `overture-uncertain.json` and `overture-refined.json` (the scout's round trip with a Claude
 Code refine step for ambiguous classifications) were also retired in #493: confirmed never
 actually completed in practice, and fully superseded by the app's own queue-review flow for

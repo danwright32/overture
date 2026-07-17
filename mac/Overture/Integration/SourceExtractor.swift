@@ -27,8 +27,16 @@ import Foundation
 //
 // The verdict routes source HEALTH. It is NOT the upcoming-only filter: #798's guard is, it runs on
 // every scout, and it does not trust any extractor's claim about what is upcoming.
-// What the run was able to establish about a page. The first four are the model's to report, and are the
-// only four the runbook offers it.
+// What the run was able to establish about a page. The first five are the model's to report, and are
+// the only five the runbook offers it.
+//
+// #1012: `incompleteExtraction` is for a page the run could only read PART of (the pinned file was
+// larger than a single Read call returned, and paging through the rest with `offset` still could not
+// cover it all). Distinct from `unreadable`: the run is not blind to this page, it simply did not finish
+// it, and whatever events it DID find are real and worth keeping. It is also distinct from a failure:
+// `SourceFailure(verdict:)` returns nil for it, because unlike `noDatedContent`/`unreadable`/`notRead` its
+// events are trustworthy enough to ingest. What it must never do is let the source's content hash latch,
+// or the rest of the page is lost forever the moment the app stops asking.
 //
 // #856: `notRead` is the SCRIPT's, and the model is never told it exists. It means the run ended without
 // coming back with anything for this source at all (it crashed, or it stopped to ask a question, or it
@@ -42,6 +50,7 @@ enum PageVerdict: String, Codable, Equatable, Sendable, CaseIterable {
     case allPast = "all_past"
     case noDatedContent = "no_dated_content"
     case unreadable = "unreadable"
+    case incompleteExtraction = "incomplete_extraction"
     case notRead = "not_read"
 }
 

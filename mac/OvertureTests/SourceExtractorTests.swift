@@ -74,6 +74,7 @@ struct SourceExtractorTests {
         #expect(PageVerdict.allPast.rawValue == "all_past")
         #expect(PageVerdict.noDatedContent.rawValue == "no_dated_content")
         #expect(PageVerdict.unreadable.rawValue == "unreadable")
+        #expect(PageVerdict.incompleteExtraction.rawValue == "incomplete_extraction")
 
         for v in PageVerdict.allCases {
             let data = try JSONEncoder().encode(v)

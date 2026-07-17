@@ -195,7 +195,7 @@ struct FeedReconcileTests {
     // A quiet off-season, or a page we could not read, is not a cancellation either. Only a source that
     // actually returned upcoming listings has an opinion worth acting on.
     @Test func onlyAnUpcomingListingsVerdictMayBlame() {
-        for verdict in [PageVerdict.allPast, .noDatedContent, .unreadable] {
+        for verdict in [PageVerdict.allPast, .noDatedContent, .unreadable, .incompleteExtraction] {
             let p = prospect(key: "safe", date: "2026-08-01", source: carnegieURL)
             FeedReconcile.reconcile(stored: [p],
                                     reports: [report("carnegie", count: 40, verdict: verdict)],

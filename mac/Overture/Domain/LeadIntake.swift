@@ -35,6 +35,13 @@ enum LeadIntake {
         // The run came back with nothing for the id we queued. Usually means it rebuilt the id instead
         // of echoing it, which is the silent-mismatch the opaque-id rule exists to prevent.
         case nothingCameBack
+
+        // #1012: the page was larger than one read could cover, and nothing usable turned up in the part
+        // that WAS read. Distinct from `.unreadable`: we are not blind to this page (a calendar drawn by
+        // JavaScript, a login wall), we simply have not finished it, and a second try may well reach the
+        // rest. (When a partial read DOES find something, it goes through `.found` above, note and all;
+        // this case only fires on an empty partial read.)
+        case incompleteExtraction(String)
     }
 
     // `onlyForOrg` is set when we had to follow a link OFF the org's own site (its page was unreadable)
@@ -88,6 +95,13 @@ enum LeadIntake {
             // died before opening. Handled rather than crashed, because a lead Dan is trying to add is
             // the worst possible place to trap.
             return .unreadable(unreadableMessage)
+        case .incompleteExtraction:
+            // #1012: reachable, unlike notRead: a lead's page goes through the same detached run and the
+            // same results contract, and a big page can genuinely be too large to finish in one pass. We
+            // only get here when nothing usable turned up in the part that WAS read (a non-empty partial
+            // read already returned `.found` above), so this says exactly that rather than blaming a
+            // JavaScript calendar or a login wall that was never the problem.
+            return .incompleteExtraction(incompleteExtractionMessage)
         }
     }
 
@@ -111,6 +125,12 @@ enum LeadIntake {
     // link would be confidently wrong, which is the exact failure this whole session has been about.
     static let loginWalledMessage =
         "I can't read that: it's behind a login, so I only get the sign-in page. Paste the org's own site or the venue's event page instead."
+
+    // #1012: a THIRD cause, and it needs its own message for the same reason the two above do. This page
+    // is not JavaScript-drawn and not behind a login: it is simply bigger than one pass could cover, and
+    // nothing turned up in the part that was read. Trying again may reach further into it.
+    static let incompleteExtractionMessage =
+        "That page has more on it than I could read in one pass, and I didn't find a show in the part I did read. Try again, or paste a narrower link (a specific month or season) if it keeps happening."
 
     // Hosts we already know we cannot read, so we say so IMMEDIATELY rather than spending a fetch and a
     // Claude run to rediscover a login wall. Verified, not assumed: a raw fetch of a public Instagram

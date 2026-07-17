@@ -96,6 +96,13 @@ struct WatchedSourceProposalTests {
         #expect(v == .propose(orgName: "Bargemusic", listingsURL: "https://bargemusic.org/events"))
     }
 
+    // #1012: a page the run only read PART of is still a real calendar (we saw genuine content), unlike
+    // a page we could not read at all. It is exactly the kind of thing worth watching.
+    @Test func aPartiallyReadPageIsStillWorthWatching() {
+        let v = verdict("https://bargemusic.org/events", .incompleteExtraction, events: [event("Bargemusic")])
+        #expect(v == .propose(orgName: "Bargemusic", listingsURL: "https://bargemusic.org/events"))
+    }
+
     @Test func nonsenseIsNotProposed() {
         #expect(verdict("not a url") == .nothingToWatch)
     }

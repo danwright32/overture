@@ -60,6 +60,12 @@ For EVERY item in the work-list:
      attribute noise are stripped, but the tag structure (INCLUDING TABLES AND CELLS) and links are
      intact. Some calendars print no dates at all and put each concert in a cell of a month grid, so
      the date is implied by WHICH cell it sits in and by the month heading. Read the grid.
+
+     If a single read of the pinned file does not return the whole thing (the tool tells you there is
+     more, or offers an offset to continue), keep reading with an increasing offset until you have
+     covered the ENTIRE file before you extract anything. Do not extract from, or judge, a file you
+     have only partly seen. Only report incomplete_extraction (step 4) if you truly cannot get past a
+     hard limit after doing this.
   2. Extract every UPCOMING performance. Do NOT invent anything that is not on the page. A page whose
      listings are all in the past is a normal, healthy state (an organization between seasons); report
      it honestly rather than reaching for something to return.
@@ -67,11 +73,16 @@ For EVERY item in the work-list:
      event's own detail page. FOLLOW the event's link (WebFetch) to get the venue and the exact date.
      Overture needs the venue: it drives classification and the pitch itself. Never guess a venue.
   4. Judge the PAGE and report exactly one verdict for it:
-       upcoming_listings  it has upcoming performances (you are returning them)
-       all_past           it has dated listings, but every one has already happened
-       no_dated_content   it carries no dated listings at all (often the wrong page entirely)
-       unreadable         the bytes carry no event data (e.g. a calendar drawn by JavaScript, or a
-                          login wall). Say so; do not pretend to have read it.
+       upcoming_listings     it has upcoming performances (you are returning them)
+       all_past              it has dated listings, but every one has already happened
+       no_dated_content      it carries no dated listings at all (often the wrong page entirely)
+       unreadable            the bytes carry no event data (e.g. a calendar drawn by JavaScript, or a
+                             login wall). Say so; do not pretend to have read it.
+       incomplete_extraction the page is larger than you could read even after paging through it with
+                             offset (step 1). Return whatever events you found in the part you DID
+                             read, and say in the note that the page was too large to finish. Only use
+                             this after actually trying to read the rest of the file; do not reach for
+                             it just because the first read was truncated.
   5. PAGINATION: NEVER follow a link to another listings page (/P20, ?page=2, a next-month link). The app
      has already fetched every page you are meant to read, and it hands them to you in the pinned file.
      A pinned page may therefore contain SEVERAL MONTHS of one calendar, each wrapped in a section under
