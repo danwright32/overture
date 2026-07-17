@@ -18,10 +18,23 @@
 # tell what wrote a draft rather than merely sensing that something changed.
 OVERTURE_MODEL_DRAFTING="opus"
 
-# The mechanical run. Reading a page for its listings is a task with a strict output schema and no
-# judgment, which is exactly the cheap-fast-model case. Drafting is exactly not, and nothing about that
-# distinction was ever deliberate before: it was inherited.
-OVERTURE_MODEL_EXTRACTION="haiku"
+# The extraction run. It was assumed to be the cheap-fast-model case: a strict output schema, no
+# judgment, just read a page for its listings. That assumption was wrong, and haiku rode on it.
+#
+# Dan's call (2026-07-17), after the first real watchlist scouts. On a 19-source queue, haiku read only
+# the first ~6 pinned pages, then wrote "no_dated_content" for the remaining 13 WITHOUT opening them
+# (confirmed from the run transcript: 6 Reads, 0 for the rest). It also made ZERO WebFetch calls the
+# entire run, so it never followed an event to its own detail page for the venue, and venue-less events
+# are rejected before ingest (ScoutExtractResults.swift). So even the pages it did read produced almost
+# nothing usable. Reading a whole queue and following each event's link is not mechanical; it needs a
+# model with the stamina to actually do it.
+#
+# Cost is bounded and Dan-controlled: the extraction run fires ONLY on a scout he starts. The daily
+# automatic scout watches (fetch, hash, health) and spends nothing (ScoutService.swift:192), so this
+# tier costs usage only on his manual scouts, never on autopilot. Chosen as the cheapest experiment
+# before building queue-batching machinery: if sonnet reads the whole queue and follows detail links,
+# batching is unnecessary. Measure a real run's transcript before concluding it worked.
+OVERTURE_MODEL_EXTRACTION="sonnet"
 
 # The reply run. Its NAME says classify, and for a while that is all this file heard: it sat with the
 # mechanical runs above, on the cheap tier. But it also DRAFTS the reply, in Dan's voice, to somebody who
