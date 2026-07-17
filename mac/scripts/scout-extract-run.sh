@@ -20,6 +20,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #856: the guarantee that this run cannot vanish. Every queued source comes back with a result, even
 # when the model writes none.
 . "$(dirname "$0")/lib/results-guard.sh"
+# #1015: derives the "N of M" progress count from the results file itself, so the toolbar can never
+# show a stale count just because the model forgot to report one.
+. "$(dirname "$0")/lib/progress-watcher.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -38,7 +41,16 @@ require_queue "$QUEUE" "scout-extract"
 
 # Heartbeat: keep the marker fresh while working, so a legitimately long batch (several pages, each
 # with detail pages to follow) is never mistaken for a crash and freed for a second run to clobber.
-( while :; do sleep 60; touch "$MARKER" 2>/dev/null || exit; done ) &
+#
+# #1015: the SAME tick also derives progress from $RESULTS, rather than a second background loop.
+# This is what makes the "N of M" toolbar count a fact the script establishes on its own: it counts
+# what has actually landed in the results file, so it can never sit at 0 just because the model never
+# got around to reporting a count (2026-07-16's run never did).
+( while :; do
+    sleep 60
+    touch "$MARKER" 2>/dev/null || exit
+    update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
+  done ) &
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
@@ -48,7 +60,9 @@ trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 discard_previous_results "$RESULTS"
 
 # Seed the progress file so the app shows "0 of N" immediately rather than a bare spinner while the
-# run boots (a cold Claude Code start is not instant). The run updates it as it goes.
+# run boots (a cold Claude Code start is not instant). The heartbeat above (and the derive right
+# after claude exits) is what advances it from here; #1015 made this the script's own job, never the
+# model's to self-report.
 TOTAL=$(grep -c '"sourceId"' "$QUEUE" 2>/dev/null || echo 0)
 printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 
@@ -97,19 +111,25 @@ For EVERY item in the work-list:
      fetched, so anything you wander off to find is not part of the set it reconciles against, and a run
      that wanders across an unbounded number of pages is the one that never comes back. (Following each
      EVENT's own detail page, per step 3, is different and still required.)
-  6. Update $PROGRESS after each item: {\"version\":1,\"total\":N,\"completed\":K}.
+  6. Immediately after finishing THIS item, rewrite $RESULTS with the complete v1 ScoutExtractResults
+     JSON covering EVERY item you have finished so far, not just this one. Do this after every single
+     item, not only at the very end: the app watches this file to show real progress as you work, and
+     the last time you do this simply IS the end. Never wait until the whole work-list is done to write
+     anything.
 
-YOU MUST ALWAYS write $RESULTS BEFORE YOU FINISH. This run is DETACHED: nobody is reading your output
-and nobody can answer you. A question is not an output. Never stop to ask which of two things to do:
-decide, do it, and record the decision in that source's "note" field. If you are unsure, a result with a
-verdict and an honest note is worth everything, and a question is worth nothing, because the work is
-thrown away and the app is left waiting for a file that never arrives. That has already happened once:
-twenty correctly extracted shows were lost to a question about pagination.
+YOU MUST ALWAYS have written $RESULTS before you finish, covering every item, not just the last one.
+This run is DETACHED: nobody is reading your output and nobody can answer you. A question is not an
+output. Never stop to ask which of two things to do: decide, do it, and record the decision in that
+source's "note" field. If you are unsure, a result with a verdict and an honest note is worth
+everything, and a question is worth nothing, because the work is thrown away and the app is left
+waiting for a file that never arrives. That has already happened once: twenty correctly extracted
+shows were lost to a question about pagination.
 
 Copy each item's sourceId VERBATIM into its result. Never rebuild it: a reconstructed id matches
 nothing on the way home and the work vanishes silently.
 
-Write the complete v1 ScoutExtractResults JSON to $RESULTS and nothing else to that file:
+The v1 ScoutExtractResults JSON, in full, is what you write to $RESULTS and nothing else to that
+file, every time, growing as you go:
 {\"version\":1,\"generatedAt\":\"<ISO8601>\",\"results\":[{\"sourceId\":\"...\",\"verdict\":\"...\",
 \"events\":[{\"title\":\"...\",\"presenter\":\"...\",\"venue\":\"...\",\"performanceDate\":\"YYYY-MM-DD\",
 \"sourceUrl\":\"...\"}],\"note\":\"one short line on anything that made this hard\"}]}
@@ -130,6 +150,10 @@ CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_EXTRACTION}" \
   --allowedTools "Read,Write,WebFetch" || CLAUDE_STATUS=$?
+
+# #1015: one last derive now that claude has exited, so the count reflects whatever landed between
+# the previous heartbeat tick and the process actually finishing, rather than sitting stale.
+update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
 
 # #856: whatever the model did or failed to do, every source this run was GIVEN now has a result. A
 # source the run never came back with is written down as `not_read`, with the tail of this log, so a lost
