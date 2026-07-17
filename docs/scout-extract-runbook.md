@@ -139,8 +139,11 @@ For each item in the work-list:
 
    This is not the same field as `venue`, and one cannot substitute for the other. A venue is the room
    ("Weill Recital Hall") or a specific named outdoor place (#1057: "Sakura Park"). A location is the
-   place ("New York, NY"). Measured on the live store, **0 of 26 distinct venue strings contain a city
-   at all**, so a venue can never answer "where is this".
+   place ("New York, NY"). A venue can still end up carrying a city when a source page bakes a full
+   street address into it (#1030: "The Players Theatre, 115 MacDougal Street, New York, NY"), but that
+   is an artifact of the address, not a location report, and the display layer strips it back out
+   (`VenueDisplay`). **`venue` cannot be relied on to always name a city**, so `location` is still the
+   dedicated field for it, and reporting it (3a) is never optional just because `venue` happened to.
 
    Take it from wherever the page puts it. Many artist and ensemble sites carry a location field of
    their own, separate from the title and the venue, and some name **no venue anywhere**, only a city.
