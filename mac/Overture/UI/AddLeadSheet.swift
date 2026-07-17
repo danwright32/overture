@@ -98,7 +98,12 @@ struct AddLeadSheet: View {
                 .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
+                // #1037: stop the detached read too, not just close the sheet, so a cancelled lead does
+                // not keep spending tokens and silently land its shows after Dan has walked away.
+                Button("Cancel") {
+                    ScoutExtractService.requestCancel()
+                    dismiss()
+                }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
             }
         }
     }

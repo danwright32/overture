@@ -27,6 +27,11 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # concurrently instead of in one long sequential pass. The app still sees one queue, one progress file,
 # and one results file: chunking lives entirely in this runner.
 . "$(dirname "$0")/lib/scout-parallel.sh"
+# #1037: the cooperative cancel check. Overture writes a cancel-request file; the heartbeat below checks
+# for it each tick and stops the run cleanly. A detached read has no trackable PID, so a hard kill is off
+# the table; a cooperative stop between ticks also can never interrupt a source mid-write and corrupt the
+# shared results file the way a kill -9 could.
+. "$(dirname "$0")/lib/scout-cancel.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -42,6 +47,16 @@ MARKER="$SUPPORT/scout-extract-running"
 # read by the app: only this runner writes here, and it is wiped and rebuilt every run so a bigger
 # previous run's chunk files can never masquerade as this run's work.
 CHUNKDIR="$SUPPORT/scout-extract-chunks"
+
+# #1037: the cooperative-cancel sentinel Overture writes to stop this run, and the file the heartbeat
+# reads to know which chunk processes to stop when it sees the sentinel (the heartbeat is forked before
+# the chunks launch, so it cannot see CHUNK_PIDS directly; the chunks write their PIDs here for it).
+CANCEL="$SUPPORT/scout-extract-cancel"
+CHUNK_PIDS_FILE="$SUPPORT/scout-extract-chunk-pids"
+# A sentinel left over from a previous cancelled run must never stop THIS one before it starts. Overture
+# clears it too, before launching; this is defence in depth (assume-it-runs-twice).
+clear_cancel "$CANCEL"
+rm -f "$CHUNK_PIDS_FILE" 2>/dev/null || true
 
 # How many claude processes read the queue at once. Bounded and Dan-tunable: the total token work is
 # unchanged (the same pages, the same detail fetches), it is just done concurrently, so this trades a
@@ -66,9 +81,18 @@ require_queue "$QUEUE" "scout-extract"
 # live union of every chunk's work and the derived count advances across all chunks at once. When the
 # run is not chunked (a node-free machine falls back to a single process writing $RESULTS directly),
 # merge_chunk_results finds no chunk files and no-ops, and the derive reads $RESULTS as before.
+# #1037: the SAME tick also honours a cancel. When Overture has written the sentinel, the heartbeat
+# stops the chunk processes it recorded (a cooperative stop, so no source is interrupted mid-write) and
+# exits; the main script's `wait` then returns, and it exits through its normal cleanup. Checked right
+# after touching the marker so a cancel is noticed within one tick.
 ( while :; do
     sleep 60
     touch "$MARKER" 2>/dev/null || exit
+    if cancel_requested "$CANCEL"; then
+      # shellcheck disable=SC2046
+      [ -s "$CHUNK_PIDS_FILE" ] && kill $(cat "$CHUNK_PIDS_FILE" 2>/dev/null) 2>/dev/null
+      exit
+    fi
     merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
     update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
   done ) &
@@ -76,7 +100,9 @@ HEARTBEAT_PID=$!
 # CHUNK_PIDS is filled in below once the chunk processes launch; killing them on exit stops a killed
 # script (Dan quits the app, a crash) from leaving orphaned claude processes running against the queue.
 CHUNK_PIDS=""
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; rm -f "$MARKER"' EXIT
+# #1037: clear the cancel sentinel and the pids file on exit too, so a stopped run never leaves a
+# sentinel that would instantly kill the next run.
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"' EXIT
 
 # #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and
@@ -212,6 +238,9 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
     CHUNK_PIDS="$CHUNK_PIDS $!"
     k=$((k + 1))
   done
+  # #1037: hand the chunk PIDs to the heartbeat (forked before this, so it cannot see CHUNK_PIDS), so a
+  # cancel can stop exactly these processes and nothing else.
+  printf '%s' "$CHUNK_PIDS" > "$CHUNK_PIDS_FILE"
 
   # Wait for every chunk, capturing each status so one failure is recorded without hiding the others.
   # The first non-zero becomes the run's status; the results guard below is the load-bearing check for

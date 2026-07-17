@@ -40,6 +40,9 @@ struct ScoutProgressView: View {
     var onRetry: (() -> Void)? = nil
     // Dismiss-to-hide: the run keeps going untouched; the caller shows a reopen affordance.
     var onHide: (() -> Void)? = nil
+    // #1037: a real Cancel that STOPS the run (cooperatively), distinct from Hide. Present only when the
+    // caller supplies one: the scout takeover does; AddLeadSheet keeps its own Cancel.
+    var onCancel: (() -> Void)? = nil
 
     // Each phase's own stall window: an in-process sweep is quick, a detached read that follows detail
     // pages legitimately runs long, so reusing the sweep's 3-minute ceiling for the read would declare a
@@ -98,6 +101,12 @@ struct ScoutProgressView: View {
 
     @ViewBuilder private func controls(state: RunLiveness) -> some View {
         HStack(spacing: OVSpacing.sm) {
+            // #1037: stop the run for real, in either state (a running read or a stalled one). Rust, not
+            // forest: this is the one control here that ends work, distinct from Hide (keep running) and
+            // Retry (start again).
+            if let onCancel {
+                Button("Cancel", action: onCancel).buttonStyle(.plain).foregroundStyle(OVColor.rust)
+            }
             if case .stalled = state, let onRetry {
                 Button("Retry", action: onRetry).buttonStyle(.plain).foregroundStyle(OVColor.forest)
             }
