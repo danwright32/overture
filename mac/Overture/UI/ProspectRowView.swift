@@ -36,6 +36,7 @@ struct ProspectRowView: View {
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
+    var onCancelReplyDraft: () -> Void = {}   // #1038: stop the detached reply-classify + drafter run
     var onMarkConfidenceReviewed: () -> Void = {}
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
     var onConfirmBooking: () -> Void = {}
@@ -124,6 +125,7 @@ struct ProspectRowView: View {
                     onSendReply: onSendReply,
                     onCopyReply: onCopyReply,
                     onEditReplyDraft: onEditReplyDraft,
+                    onCancelReplyDraft: onCancelReplyDraft,
                     gmailConnected: gmailConnected,
                     outboundSendSince: outboundSendSince,
                     replySendSince: replySendSince,

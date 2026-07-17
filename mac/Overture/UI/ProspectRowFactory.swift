@@ -57,6 +57,9 @@ enum ProspectRowFactory {
             onSendReply: onSendReply,
             onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects, context: context, feedback: feedback) },
+            // #1038: a run-level cancel (the reply-classify run drafts every queued reply in one pass), so
+            // it takes no recipient id: it writes the sentinel the runner checks on its heartbeat.
+            onCancelReplyDraft: { ReplyClassifyService.requestCancel() },
             onMarkConfidenceReviewed: { ProspectMutations.markConfidenceReviewed(item, prospects: prospects, context: context, feedback: feedback) },
             onCorrectClassification: { d, p in
                 ProspectMutations.correctClassification(item, discipline: d, production: p, prospects: prospects, context: context, feedback: feedback)

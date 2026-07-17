@@ -70,6 +70,23 @@ enum PrepQueueService {
             .appendingPathComponent("prep-running")
     }
 
+    // #1038: the cooperative-cancel sentinel. Prep is launched through the same DetachedRunner as scout,
+    // so its run has no trackable PID (backgrounded via `sh -c '... &'` with no handle) and a hard kill is
+    // impossible; instead the app writes this file and the runner checks for it on each heartbeat tick and
+    // stops cleanly. Same pattern and same predicates (`lib/scout-cancel.sh`) as ScoutExtractService.
+    static var defaultCancelURL: URL {
+        StoreLocation.handoffDirectory.appendingPathComponent("prep-cancel")
+    }
+
+    // Ask a running Prep run to stop. Writing the sentinel IS the request; the runner reads only its
+    // presence, never its contents. Best-effort: if the run has already finished, the next startPrep
+    // clears the file so it can never affect a later run.
+    static func requestCancel(cancelURL: URL = defaultCancelURL) {
+        try? FileManager.default.createDirectory(at: cancelURL.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? Data().write(to: cancelURL)
+    }
+
     static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
@@ -82,6 +99,7 @@ enum PrepQueueService {
                           markerURL: URL = defaultMarkerURL,
                           voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
                           recentOpenersURL: URL = RecentOpenersBuilder.defaultURL,
+                          cancelURL: URL = defaultCancelURL,
                           launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
@@ -99,6 +117,11 @@ enum PrepQueueService {
         } catch {
             throw PrepLaunchError.alreadyRunning
         }
+
+        // #1038: clear any leftover cancel sentinel before this run starts, so a stale one from a
+        // previously cancelled run can never make the new run's heartbeat stop on its first tick. The
+        // runner clears it too, as defence in depth.
+        try? FileManager.default.removeItem(at: cancelURL)
 
         do {
             let data = try PrepQueueBuilder.encode(queue)

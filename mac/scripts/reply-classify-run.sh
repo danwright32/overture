@@ -20,6 +20,12 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #868: a results file that does not parse is not results. Left in place it reads as a fresh, successful
 # run and the app fails to decode it in total silence.
 . "$(dirname "$0")/lib/results-guard.sh"
+# #1038: the cooperative cancel check (the SAME predicates scout uses, #1037). Overture writes a
+# cancel-request file; the heartbeat below checks for it each tick and stops the run cleanly. A detached
+# run has no trackable PID (DetachedRunner backgrounds the whole script via `sh -c '... &'`), so a hard
+# kill of the script is off the table; the stop is cooperative, and it lands at a poll boundary so it can
+# never interrupt a reply mid-write and corrupt the shared results file.
+. "$(dirname "$0")/lib/scout-cancel.sh"
 open_run_log "reply-classify-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -31,15 +37,55 @@ RUNBOOK="$PROJECT_DIR/docs/reply-classify-runbook.md"
 VOICE="$SUPPORT/overture-voice-guidance.md"
 MARKER="$SUPPORT/reply-classify-running"
 
+# #1038: the cooperative-cancel sentinel Overture writes to stop this run, and the file the heartbeat
+# reads to know which claude process to stop when it sees the sentinel (the heartbeat is forked before
+# claude launches, so it cannot see CLAUDE_PID directly; claude writes its PID here for it, mirroring
+# scout-extract-run.sh's CHUNK_PIDS_FILE).
+CANCEL="$SUPPORT/reply-classify-cancel"
+CLAUDE_PID_FILE="$SUPPORT/reply-classify-claude-pid"
+# A sentinel or PID left over from a previous cancelled run must never stop THIS one before it starts.
+# Overture clears the sentinel too, before launching; this is defence in depth (assume-it-runs-twice).
+clear_cancel "$CANCEL"
+rm -f "$CLAUDE_PID_FILE" 2>/dev/null || true
+
 require_queue "$QUEUE" "reply-classify"
 
 # In-flight marker the app watches; removed on exit no matter what.
 : > "$MARKER"
 
 # Heartbeat: keep the marker fresh while working so a longer batch isn't mistaken for a crash.
-( while :; do sleep 60; touch "$MARKER" 2>/dev/null || exit; done ) &
+#
+# #1038: the loop also honours a cancel. The cancel is read on a SHORT poll (REPLY_CLASSIFY_CANCEL_POLL_SECONDS,
+# default 3), DECOUPLED from the 60s marker touch by marker_due, so a Cancel Dan clicks stops the run (and
+# its token spend) within a few seconds instead of up to a minute. When the sentinel is present the
+# heartbeat stops the claude process it recorded and exits; the main script's `wait` then returns and it
+# exits through normal cleanup. The kill lands at a poll boundary and never interrupts a results write, so
+# no reply draft is corrupted mid-write. This run has no progress file (a small-batch classify run has
+# nothing a 'N of M' count adds over the per-recipient 'Drafting a reply' spinner, #1023), so the marker
+# branch only touches the marker, it does not derive a count.
+CANCEL_POLL="${REPLY_CLASSIFY_CANCEL_POLL_SECONDS:-3}"
+MARKER_INTERVAL=60
+( since_marker=0
+  while :; do
+    sleep "$CANCEL_POLL"
+    if cancel_requested "$CANCEL"; then
+      # shellcheck disable=SC2046
+      [ -s "$CLAUDE_PID_FILE" ] && kill $(cat "$CLAUDE_PID_FILE" 2>/dev/null) 2>/dev/null
+      exit
+    fi
+    since_marker=$((since_marker + CANCEL_POLL))
+    if marker_due "$since_marker" "$MARKER_INTERVAL"; then
+      since_marker=0
+      touch "$MARKER" 2>/dev/null || exit
+    fi
+  done ) &
 HEARTBEAT_PID=$!
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
+# CLAUDE_PID is filled in below once claude launches; killing it on exit stops a killed script from
+# leaving an orphaned claude running against the queue.
+CLAUDE_PID=""
+# #1038: clear the cancel sentinel and the pid file on exit too, so a stopped run never leaves a sentinel
+# that would instantly kill the next run.
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
@@ -77,10 +123,20 @@ resolve_claude
 cd "$PROJECT_DIR"
 # #868: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
 # took the whole script down with it, right here, before anything below could react.
+#
+# #1038: claude runs in the BACKGROUND now, with its PID recorded, so the heartbeat above can stop exactly
+# this process on a cancel (the heartbeat was forked before this, so it cannot see CLAUDE_PID directly; the
+# pid file hands it over, mirroring scout's chunk PIDs). `wait` blocks until claude finishes or the cancel
+# kills it; either way its status is captured. Written as `|| ...` so a non-zero status (including the
+# signal from a cancel) cannot trip `set -e` and take the whole script down on the failure path.
 CLAUDE_STATUS=0
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_REPLY_CLASSIFY}" \
-  --allowedTools "Read,Write,Skill" || CLAUDE_STATUS=$?
+  --allowedTools "Read,Write,Skill" &
+CLAUDE_PID=$!
+printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
+wait "$CLAUDE_PID" || CLAUDE_STATUS=$?
+CLAUDE_PID=""   # reaped; nothing left for the trap to kill
 
 # #868: a results file that does not parse is moved aside, so the app reports an empty run instead of
 # failing to decode it in silence. Nothing is invented in its place: a fabricated intent would drive a

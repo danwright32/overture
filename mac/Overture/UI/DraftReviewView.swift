@@ -42,6 +42,10 @@ struct DraftReviewView: View {
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
+    // #1038: stop the detached reply-classify + drafter run that is drafting this reply. The run drafts
+    // every queued reply in one detached pass, so this stops the whole run cooperatively (the runner sees
+    // the sentinel on its next heartbeat tick), not just this one recipient's draft.
+    var onCancelReplyDraft: () -> Void = {}
     var gmailConnected: Bool = false
     // #436: when this outbound draft is mid-send, the instant it was launched (nil = not sending), so the
     // Send button is replaced by a live "Sending… m:ss" indicator that flips to "looks stuck" past the
@@ -651,11 +655,18 @@ struct DraftReviewView: View {
             } else if c.isDraftingReply {
                 // #436: past the stall timeout this flips to a visible "looks stuck" state with a Retry
                 // (re-stamps and re-launches the draft) instead of an indefinite spinner.
-                LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
-                             timeout: RunTimeouts.replyDraft,
-                             font: OVType.meta, color: OVColor.inkSoft,
-                             onRetry: { onDraftReply(c.id) },
-                             runAlive: { ReplyClassifyService.isRunning(now: Date()) })
+                // #1038: a Cancel beside it stops the detached run cooperatively, so Dan can abandon a
+                // drafting run he no longer wants instead of only waiting it out.
+                HStack(spacing: OVSpacing.xs) {
+                    LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
+                                 timeout: RunTimeouts.replyDraft,
+                                 font: OVType.meta, color: OVColor.inkSoft,
+                                 onRetry: { onDraftReply(c.id) },
+                                 runAlive: { ReplyClassifyService.isRunning(now: Date()) })
+                    Button("Cancel") { onCancelReplyDraft() }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.rust)
+                        .help("Stop the reply drafting run")
+                }
             } else {
                 Button("Draft a reply") { onDraftReply(c.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)

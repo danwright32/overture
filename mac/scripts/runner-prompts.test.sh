@@ -79,6 +79,7 @@ rules_for() {
         "the rule that a naturalKey is echoed, never rebuilt	Copy each item's naturalKey verbatim" \
         "the demand that a contact be real and verified	strict verification" \
         "the instruction to write its results	Write the complete PrepResults JSON" \
+        "the #1023 incremental-write rule	Immediately after finishing EACH item, rewrite" \
         "its final sentence, intact	real, verifiable contacts."
       ;;
     reply-classify-run.sh)
