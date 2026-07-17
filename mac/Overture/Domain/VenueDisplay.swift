@@ -25,9 +25,27 @@ struct VenueDisplay: Equatable {
         }
         let hall = strippingEmbeddedAddress(raw)
         let known = map[normalize(hall)]
-        let fallback = eventLocation?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let location = known?.location ?? (fallback?.isEmpty == false ? fallback : nil)
+        let location = known?.location ?? safeCityStateLine(eventLocation)
         return VenueDisplay(hall: hall, parent: known?.parent, location: location)
+    }
+
+    // #1030 follow-up: the runbook explicitly allows `location` to be a full street address ("123 E
+    // 24th St, New York, NY 10010"), reported verbatim by design. Falling back to that raw string would
+    // reintroduce the exact "shows a raw address" problem Dan asked to eliminate, just moved to the
+    // second line. Only use it when it is ALREADY a clean city/state shape: no comma-clause may start
+    // with a digit. Anything address-shaped is omitted rather than guessed at, the same conservative
+    // rule `map` itself follows ("anything uncertain is omitted so it falls through").
+    //
+    // Measured against the live store's 11 distinct `location` values: rejects every street-address
+    // shape found there and passes through every clean one ("Brooklyn", "North Adams, MA").
+    private static func safeCityStateLine(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let looksLikeAnAddress = trimmed.split(separator: ",").contains {
+            $0.trimmingCharacters(in: .whitespaces).first?.isNumber == true
+        }
+        return looksLikeAnAddress ? nil : trimmed
     }
 
     // A source page can bake the street address directly into the venue string. The heuristic: split
