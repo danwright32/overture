@@ -10,7 +10,10 @@ struct RootView: View {
     // registers with the system and the keyboard route has to work.
     @Environment(AddLeadPresenter.self) private var addLead
     @AppStorage("autoScoutEnabled") private var autoScoutEnabled = true
-    @State private var statusMessage: String?
+    // #1047: the center status slot enforces its own precedence, so a routine informational write
+    // (a Prep summary, an OmniFocus receipt, a reply-classify note) cannot silently erase an unattended
+    // scout's warning that landed first on the same launch. Every writer below goes through status.set.
+    @State private var status = StatusLine()
     // #346: the scout outcome ("N found · N unsure", or a failure status) gets its own state so
     // it can render next to the Scout control instead of the unrelated center status slot.
     @State private var scoutSummary: String?
@@ -218,8 +221,8 @@ struct RootView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
                             .help("The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this.")
-                    } else if let statusMessage {
-                        Text(statusMessage)
+                    } else if let text = status.text {
+                        Text(text)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkFaint)
                     }
@@ -587,13 +590,13 @@ struct RootView: View {
         do {
             result = try DebugSeed.seedFromLive()
         } catch {
-            statusMessage = "DEBUG seed failed: \(error.localizedDescription)"
+            status.set("DEBUG seed failed: \(error.localizedDescription)")
             return
         }
         ingestPrep()
         ingestReplyClassifications()
-        statusMessage = "DEBUG: seeded \(result.copied.count) file\(result.copied.count == 1 ? "" : "s")"
-            + (result.copied.isEmpty ? " (none found in live)" : ": " + result.copied.joined(separator: ", "))
+        status.set("DEBUG: seeded \(result.copied.count) file\(result.copied.count == 1 ? "" : "s")"
+            + (result.copied.isEmpty ? " (none found in live)" : ": " + result.copied.joined(separator: ", ")))
     }
 
     // DEBUG ONLY (#325): copy the live Gmail credentials into the isolated Overture-Debug folder so the
@@ -605,16 +608,16 @@ struct RootView: View {
         do {
             result = try DebugSeed.seedGmailFromLive()
         } catch {
-            statusMessage = "DEBUG Gmail connect failed: \(error.localizedDescription)"
+            status.set("DEBUG Gmail connect failed: \(error.localizedDescription)")
             return
         }
         if result.missing.contains("gmail-tokens.json") {
-            statusMessage = "DEBUG: live Gmail isn't connected. Connect it in the release app first, then retry."
+            status.set("DEBUG: live Gmail isn't connected. Connect it in the release app first, then retry.")
             return
         }
-        statusMessage = GmailAuthManager.shared.isConnected
+        status.set(GmailAuthManager.shared.isConnected
             ? "DEBUG: Gmail connected from live (\(result.copied.joined(separator: ", ")))"
-            : "DEBUG: copied \(result.copied.count) file(s) but Gmail still reads as not connected"
+            : "DEBUG: copied \(result.copied.count) file(s) but Gmail still reads as not connected")
     }
 
     // DEBUG ONLY (#318): targeted reset of the isolated Overture-Debug dev environment: empties the
@@ -625,31 +628,31 @@ struct RootView: View {
         do {
             try context.save()
         } catch {
-            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            status.set("DEBUG clear failed: \(error.localizedDescription)")
             return
         }
         let removed: [String]
         do {
             removed = try DebugSeed.clearHandoffInputs(debugBase: DebugSeed.debugHandoffDirectory)
         } catch {
-            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            status.set("DEBUG clear failed: \(error.localizedDescription)")
             return
         }
         syncOmniFocus(force: true)   // completes the now-orphaned OmniFocus tasks
-        statusMessage = "DEBUG: cleared dev data (store + \(removed.count) file\(removed.count == 1 ? "" : "s"))"
+        status.set("DEBUG: cleared dev data (store + \(removed.count) file\(removed.count == 1 ? "" : "s"))")
     }
 
     private func debugStageFirstAsSent() {
         guard let target = allProspects.first(where: { $0.sentAt == nil }) else {
-            statusMessage = "DEBUG: no un-sent prospect to stage"
+            status.set("DEBUG: no un-sent prospect to stage")
             return
         }
         DebugStaging.stageAsSent(target, now: Date())
         do {
             try context.save()
-            statusMessage = "DEBUG: staged \(target.groupName) as sent"
+            status.set("DEBUG: staged \(target.groupName) as sent")
         } catch {
-            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
     }
 
@@ -657,9 +660,9 @@ struct RootView: View {
         let p = DebugStaging.stageReminderDueLead(in: context, now: Date())
         do {
             try context.save()
-            statusMessage = "DEBUG: staged \(p.groupName) as reminder-due"
+            status.set("DEBUG: staged \(p.groupName) as reminder-due")
         } catch {
-            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
     }
 
@@ -671,9 +674,9 @@ struct RootView: View {
         let p = DebugStaging.stageSelfSendLead(in: context, now: Date(), address: address)
         do {
             try context.save()
-            statusMessage = "DEBUG: staged self-send lead to \(p.recipients.first?.email ?? "?"). Approve it, then Send"
+            status.set("DEBUG: staged self-send lead to \(p.recipients.first?.email ?? "?"). Approve it, then Send")
         } catch {
-            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
     }
 
@@ -686,9 +689,9 @@ struct RootView: View {
         let p = DebugStaging.stageMultiRecipientSelfSendLead(in: context, now: Date(), address: address)
         do {
             try context.save()
-            statusMessage = "DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice"
+            status.set("DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice")
         } catch {
-            statusMessage = "DEBUG stage failed: \(error.localizedDescription)"
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
     }
 
@@ -697,18 +700,18 @@ struct RootView: View {
         do {
             try context.save()
         } catch {
-            statusMessage = "DEBUG clear failed: \(error.localizedDescription)"
+            status.set("DEBUG clear failed: \(error.localizedDescription)")
             return
         }
         syncOmniFocus(force: true)   // completes the now-orphaned OmniFocus tasks
-        statusMessage = "DEBUG: cleared debug leads"
+        status.set("DEBUG: cleared debug leads")
     }
     #endif
 
     private func connectGmail() {
         isConnectingGmail = true
         gmailConnectStartedAt = Date()   // #436: drives the live elapsed counter + the "looks stuck" warning
-        statusMessage = nil
+        status.set(nil)
         // connect() self-aborts after a hard internal timeout (GmailAuthManager.timeoutTask, 120s) and
         // throws, so the failure path below always resolves; the LiveRunLabel surfaces a "looks stuck"
         // warning a bit earlier so Dan can check the browser sign-in window before it gives up.
@@ -716,7 +719,7 @@ struct RootView: View {
             do {
                 try await GmailAuthManager.shared.connect()
                 gmailConnected = true
-                statusMessage = "Gmail connected. You can now send approved emails."
+                status.set("Gmail connected. You can now send approved emails.")
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -854,10 +857,10 @@ struct RootView: View {
         // #499: this run's intent hints/drafts were written in memory but never persisted. The save
         // failure is the actionable one, so it wins the single status line.
         if outcome.saveFailed {
-            statusMessage = "Reply-classify results couldn't save. Try again."
+            status.set("Reply-classify results couldn't save. Try again.")
         } else if let message = ReplyClassifyRunSummary.statusMessage(for: outcome) {
             // #1018: replies the run never came back with, so a silently dropped reply is no longer invisible.
-            statusMessage = message
+            status.set(message)
         }
     }
 
@@ -921,7 +924,7 @@ struct RootView: View {
                 //
                 // Deliberately the STATUS line and not the warning line. Nothing is wrong, nothing needs
                 // fixing, and putting a receipt in the warning slot would teach him to dismiss warnings.
-                statusMessage = SuppressionReport.summary(for: outcome.suppressedOrgs)
+                status.set(SuppressionReport.summary(for: outcome.suppressedOrgs))
 
                 // #802: the native half is done and shown. The pages that CHANGED are being read by a
                 // detached run right now, and its results land minutes later, so follow it to completion
@@ -992,7 +995,9 @@ struct RootView: View {
             scoutWarnings = w
             scoutSheetShown = true
         case .quietLine(let line):
-            statusMessage = line
+            // #1047: a warning, so a later informational write (a Prep summary, an OmniFocus receipt, a
+            // reply-classify note) on this same launch cannot silently erase it before Dan reads it.
+            status.set(line, priority: .warning)
             scoutSheetShown = false
         case .nothing:
             scoutSheetShown = false
@@ -1090,8 +1095,8 @@ struct RootView: View {
                 let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
                 if force {
-                    statusMessage = OmniFocusSync.receipt(due: desired.count, existing: r.existing,
-                                                          created: r.created, completed: r.completed)
+                    status.set(OmniFocusSync.receipt(due: desired.count, existing: r.existing,
+                                                     created: r.created, completed: r.completed))
                 }
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
@@ -1125,7 +1130,9 @@ struct RootView: View {
         // #885: the WHOLE sentence, including the two notes above and the prefix, now comes from
         // PrepRunSummary. #876 extracted half of it and left the rest here, so a green test of that type
         // said nothing about the line Dan actually reads.
-        statusMessage = PrepRunSummary.statusMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,
-                                                     guidanceNotesRestored: restored) ?? statusMessage
+        if let message = PrepRunSummary.statusMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,
+                                                      guidanceNotesRestored: restored) {
+            status.set(message)
+        }
     }
 }

@@ -19,8 +19,11 @@ struct SuppressionReceiptGuardTests {
     // It goes in the STATUS line, never the warning line. Nothing is wrong, nothing needs fixing, and a
     // receipt sitting in the warning slot would teach Dan to dismiss warnings, which is how the one
     // warning that matters gets missed.
+    // #1047: it goes through status.set at the default (informational) priority, never priority:
+    // .warning, so the receipt shows without sitting in the warning tier that now protects a real
+    // scout warning from being erased.
     @Test func itIsAReceiptAndNotAWarning() {
-        #expect(rootView.contains("statusMessage = SuppressionReport.summary"))
-        #expect(rootView.contains("warningMessage = SuppressionReport.summary") == false)
+        #expect(rootView.contains("status.set(SuppressionReport.summary(for: outcome.suppressedOrgs))"))
+        #expect(rootView.contains("SuppressionReport.summary(for: outcome.suppressedOrgs), priority: .warning") == false)
     }
 }
