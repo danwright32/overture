@@ -59,6 +59,9 @@ struct ProspectRowView: View {
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
     // #685: which contact, if any, to highlight inside this card's Contacts section.
     var highlightedRecipientId: String? = nil
+    // #992: the "Too far" filter is engaged, so a revealed row shows WHY it was placed out of range.
+    // Off by default (Archive and the normal queue never show this line).
+    var showingTooFar: Bool = false
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
@@ -70,6 +73,7 @@ struct ProspectRowView: View {
                 if item.isBooked { bookedSeal } else { fitSeal }
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
+                    tooFarReasonNote
                     feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
                         Text(item.fitReason)
@@ -229,6 +233,21 @@ struct ProspectRowView: View {
             .background(Capsule().fill(OVColor.rust.opacity(0.12)))
             .padding(.top, 2)
             .help("This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved.")
+        }
+    }
+
+    // #992: shown only while the "Too far" filter is engaged, and only on a row the gate positively
+    // placed out of range. Sits right under the location line it explains. The sentence is decided in
+    // QueueModel (tested); this view only draws it.
+    @ViewBuilder private var tooFarReasonNote: some View {
+        if showingTooFar, let reason = item.tooFarReason {
+            HStack(spacing: 5) {
+                Image(systemName: "location.slash")
+                Text(reason)
+            }
+            .font(OVType.tag)
+            .foregroundStyle(OVColor.inkSoft)
+            .padding(.top, 2)
         }
     }
 
