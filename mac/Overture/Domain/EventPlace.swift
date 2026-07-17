@@ -7,6 +7,12 @@ import Foundation
 // fail: the gate has to be deterministic, testable against real strings, and free, because the daily
 // scout never spends.
 //
+// #1065: this is ONE of TWO independent consumers of the raw `location` string. The other is the card's
+// display fallback (VenueDisplay.resolve's safeCityStateLine, #1030), which is STRICTER: it rejects any
+// address-shaped location where this gate reads straight through the street noise. The two tolerances
+// differ on purpose. If you change how `location` is normalized here, check that consumer too;
+// LocationTwoConsumersGuardTests pins both against shared inputs and goes red when they diverge.
+//
 // THE RULE (Dan's, 2026-07-16, see #979):
 //
 //   music, band   -> the five boroughs only. He will not travel for a band or a choir.

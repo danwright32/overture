@@ -27,6 +27,17 @@ final class Prospect {
     // Stored raw on purpose. The geo verdict is NOT stored: it is derived at queue time from this plus
     // the discipline, so changing the rule (or Dan refusing a town) re-decides every row at once
     // instead of leaving a stale verdict baked into the store.
+    //
+    // #1065: this ONE raw string now feeds TWO independent consumers with DIFFERENT tolerances, so a
+    // change to how it is populated or normalized has to satisfy BOTH:
+    //   1. the GEOGRAPHY GATE, EventPlace.resolve, which places or refuses a show and reads the messier
+    //      shapes on purpose (a full street address, a spelled-out state, a country, a region).
+    //   2. the DISPLAY FALLBACK, VenueDisplay.resolve's safeCityStateLine (#1030), which is stricter:
+    //      it shows this on the card ONLY when it is already a clean city/state shape and REJECTS
+    //      anything address-shaped.
+    // LocationTwoConsumersGuardTests pins both tolerances against shared inputs, so a change that
+    // silently diverges them turns that guard red. Do not touch this field's shape without checking
+    // both consumers.
     var location: String?
     var discipline: String
     var venue: String?

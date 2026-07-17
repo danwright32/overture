@@ -20,6 +20,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #868: a results file that does not parse is not results. Left in place it reads as a fresh, successful
 # run and the app fails to decode it in total silence.
 . "$(dirname "$0")/lib/results-guard.sh"
+# #1081: derives the "N of M" progress count from the results file itself (the SAME helper scout and prep
+# use, #1015/#1023), so the reply drafter's label can never sit stuck at 0 just because the model forgot
+# to self-report a count, which is exactly what silently failed for scout on 2026-07-16.
+. "$(dirname "$0")/lib/progress-watcher.sh"
 # #1038: the cooperative cancel check (the SAME predicates scout uses, #1037). Overture writes a
 # cancel-request file; the heartbeat below checks for it each tick and stops the run cleanly. A detached
 # run has no trackable PID (DetachedRunner backgrounds the whole script via `sh -c '... &'`), so a hard
@@ -33,6 +37,7 @@ open_run_log "reply-classify-run.log"
 
 QUEUE="$SUPPORT/overture-reply-classify-queue.json"
 RESULTS="$SUPPORT/overture-reply-classify-results.json"
+PROGRESS="$SUPPORT/overture-reply-classify-progress.json"
 RUNBOOK="$PROJECT_DIR/docs/reply-classify-runbook.md"
 VOICE="$SUPPORT/overture-voice-guidance.md"
 MARKER="$SUPPORT/reply-classify-running"
@@ -53,6 +58,12 @@ require_queue "$QUEUE" "reply-classify"
 # In-flight marker the app watches; removed on exit no matter what.
 : > "$MARKER"
 
+# #1081: seed a fresh progress file every run (never trust a leftover one from a prior run) so the reply
+# drafter's "N of M" display starts correct even before any result has landed.
+JQ="$(command -v jq 2>/dev/null || echo /usr/bin/jq)"
+TOTAL="$("$JQ" '.items | length' "$QUEUE" 2>/dev/null || echo 0)"
+printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
+
 # Heartbeat: keep the marker fresh while working so a longer batch isn't mistaken for a crash.
 #
 # #1038: the loop also honours a cancel. The cancel is read on a SHORT poll (REPLY_CLASSIFY_CANCEL_POLL_SECONDS,
@@ -60,9 +71,13 @@ require_queue "$QUEUE" "reply-classify"
 # its token spend) within a few seconds instead of up to a minute. When the sentinel is present the
 # heartbeat stops the claude process it recorded and exits; the main script's `wait` then returns and it
 # exits through normal cleanup. The kill lands at a poll boundary and never interrupts a results write, so
-# no reply draft is corrupted mid-write. This run has no progress file (a small-batch classify run has
-# nothing a 'N of M' count adds over the per-recipient 'Drafting a reply' spinner, #1023), so the marker
-# branch only touches the marker, it does not derive a count.
+# no reply draft is corrupted mid-write.
+#
+# #1081: the marker tick also DERIVES progress from $RESULTS (the SAME update_progress_from_results scout
+# and prep use), so the "N of M" count is a fact the script establishes by counting what has actually
+# landed in the results file, never a number the model has to remember to self-report (which it forgot
+# once, leaving scout's counter stuck at 0 through a live run on 2026-07-16). The derive runs only on the
+# marker branch, so a cancel that lands on a plain cancel-poll tick never interrupts a results write.
 CANCEL_POLL="${REPLY_CLASSIFY_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
 ( since_marker=0
@@ -77,6 +92,7 @@ MARKER_INTERVAL=60
     if marker_due "$since_marker" "$MARKER_INTERVAL"; then
       since_marker=0
       touch "$MARKER" 2>/dev/null || exit
+      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
     fi
   done ) &
 HEARTBEAT_PID=$!
@@ -108,9 +124,13 @@ are absolute: no em dashes, contractions throughout, and NO fabrication (never i
 show, the contact, or Dan's availability). Then read his distilled voice guidance at
 $VOICE and apply those tendencies only as secondary nudges, never over the skill, and NEVER quote or
 paraphrase raw past email pairs (the #119/#249 leak guard). Copy each item's naturalKey AND recipientId
-verbatim so each result attaches to the right contact. Write the complete v3 ReplyClassifyResults JSON
-(version 3; each result = {naturalKey, recipientId, intent, draftSubject, draftBody}) to $RESULTS and
-nothing else to that file. If $VOICE is absent, draft from the skill alone: it is the authority, and the
+verbatim so each result attaches to the right contact. Immediately after finishing EACH item, rewrite
+$RESULTS with the complete v3 ReplyClassifyResults JSON (version 3; each result = {naturalKey,
+recipientId, intent, draftSubject, draftBody}) covering EVERY item you have finished so far, not just
+this one, and nothing else to that file. Do this after every single item, not only at the end: the app
+derives its live 'N of M' progress from this file's own entry count, so the last time you do this simply
+IS the end, and you must never wait until the whole work-list is done to write anything. If $VOICE is
+absent, draft from the skill alone: it is the authority, and the
 guidance file only ever nudges.
 "
 
@@ -137,6 +157,10 @@ CLAUDE_PID=$!
 printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
 wait "$CLAUDE_PID" || CLAUDE_STATUS=$?
 CLAUDE_PID=""   # reaped; nothing left for the trap to kill
+
+# #1081: one last derive now that claude has exited, so the count reflects whatever landed between the
+# previous heartbeat tick and the process actually finishing, rather than sitting stale.
+update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
 
 # #868: a results file that does not parse is moved aside, so the app reports an empty run instead of
 # failing to decode it in silence. Nothing is invented in its place: a fabricated intent would drive a

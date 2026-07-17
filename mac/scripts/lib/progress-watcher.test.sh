@@ -116,6 +116,23 @@ update_progress_from_results "${PREP_QUEUE}" "${PREP_RESULTS}" "${PREP_PROGRESS}
 assert_equals "prep total comes from the prep queue's items" "3" "$(field "${PREP_PROGRESS}" total)"
 assert_equals "prep completed counts the PrepResult entries written so far" "1" "$(field "${PREP_PROGRESS}" completed)"
 
+# --- #1081: the SAME function derives REPLY-CLASSIFY's count, from its own file shapes -------------
+#
+# Reply-classify reached parity with prep and scout (#1081): its queue is `items[]` (one per replied
+# recipient) and its results are `results[]` of v3 ReplyClassifyResult objects, the same two keys this
+# function already folds through. So the ONE update_progress_from_results serves all three runners, and
+# this pins that a real reply-classify-shaped pair derives correctly rather than trusting that "same
+# keys" holds by inspection.
+REPLY_QUEUE="${TMP}/reply-queue.json"
+REPLY_RESULTS="${TMP}/reply-results.json"
+REPLY_PROGRESS="${TMP}/reply-progress.json"
+printf '{"version":3,"generatedAt":"2026-07-17T00:00:00Z","items":[{"naturalKey":"a|2026-03-10|carnegie-hall","recipientId":"pres@presentingorg.example"},{"naturalKey":"a|2026-03-10|carnegie-hall","recipientId":"act@aurorastrings.example"},{"naturalKey":"b|undated|none","recipientId":"info@lumendance.example"}]}' > "${REPLY_QUEUE}"
+printf '{"version":3,"generatedAt":"2026-07-17T00:00:00Z","results":[{"naturalKey":"a|2026-03-10|carnegie-hall","recipientId":"pres@presentingorg.example","intent":"wants_to_book","draftSubject":"Re: x","draftBody":"y"}]}' > "${REPLY_RESULTS}"
+printf '{"version":1,"total":3,"completed":0}' > "${REPLY_PROGRESS}"
+update_progress_from_results "${REPLY_QUEUE}" "${REPLY_RESULTS}" "${REPLY_PROGRESS}"
+assert_equals "reply-classify total comes from the reply queue's items" "3" "$(field "${REPLY_PROGRESS}" total)"
+assert_equals "reply-classify completed counts the ReplyClassifyResult entries written so far" "1" "$(field "${REPLY_PROGRESS}" completed)"
+
 # No node on PATH: this is a nice-to-have, never something that can fail the run or corrupt the file.
 write_queue 3
 write_results 2

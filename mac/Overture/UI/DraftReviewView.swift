@@ -662,6 +662,9 @@ struct DraftReviewView: View {
                                  timeout: RunTimeouts.replyDraft,
                                  font: OVType.meta, color: OVColor.inkSoft,
                                  onRetry: { onDraftReply(c.id) },
+                                 // #1081: the run's own "N of M" count, derived by the runner from the
+                                 // results file (never model-self-reported), re-read every tick (#1003).
+                                 progressDetail: { ReplyClassifyProgressDecoder.label(for: ReplyClassifyProgressDecoder.loadCurrent()) },
                                  runAlive: { ReplyClassifyService.isRunning(now: Date()) })
                     Button("Cancel") { onCancelReplyDraft() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.rust)

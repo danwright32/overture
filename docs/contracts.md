@@ -31,7 +31,8 @@ the workflow's runbook is its spec.
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
-| `overture-reply-classify-results.json` | Classify+drafter run (workflow) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-results.json` | Classify+drafter run (workflow, rewrites it after every item, not only once at the end; #1081) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
+| `overture-reply-classify-progress.json` | `reply-classify-run.sh` **only**: seeds it, then derives every update from `overture-reply-classify-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper prep and scout use). #1081: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`ReplyClassifyProgressDecoder`) | 1 | `fixtures/reply-classify-progress/` | `ReplyClassifyProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `reply-classify-cancel` | App (`ReplyClassifyService.requestCancel`) writes it to ask a running reply-classify run to stop; App (`startClassify`) clears any stale one before a fresh run | `reply-classify-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename), `HandoffCleanupTests.swift` (retention) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
@@ -299,6 +300,15 @@ The run must not normalize it. What pages actually write ranges from `Louisville
 `Baltimore, Maryland` to `Harrogate, UK` to a bare `Amsterdam` to `southern Norway` to
 `Orange County, Santa Barbara, Pasadena, and Santa Monica` to a full street address. Deciding what any
 of that MEANS is a resolver's job in the app; the wire's job is to carry the page's own words intact.
+
+**Two consumers, different tolerances (#1065).** Once in the app (stored as `Prospect.location`), this
+one raw string feeds TWO independent readers, and a change to how it is populated or normalized has to
+satisfy BOTH: the **geography gate** (`EventPlace.resolve`) places or refuses a show and handles the
+messier shapes above on purpose, while the **display fallback** (`VenueDisplay.resolve`'s
+`safeCityStateLine`, #1030) is stricter and shows it on the card ONLY when it is already a clean
+city/state shape, rejecting anything address-shaped. They have NOT diverged far enough to warrant
+splitting `location` into two derived values. `LocationTwoConsumersGuardTests` pins both tolerances
+against shared inputs so a change that silently diverges them turns that guard red.
 
 Absent means the page named no place, which is common and is NOT an error: an unknown place is a show
 to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop the event.

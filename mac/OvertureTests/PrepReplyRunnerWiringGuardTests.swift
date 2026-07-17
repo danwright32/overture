@@ -70,6 +70,57 @@ struct PrepReplyRunnerWiringGuardTests {
         #expect(!prep.contains("overwrite \\$PROGRESS"))
     }
 
+    // --- #1081: reply-classify derives its own progress, the model never self-reports it ------------
+
+    @Test func replySourcesTheProgressWatcher() {
+        #expect(!reply.isEmpty)
+        #expect(sources("progress-watcher.sh", in: reply))
+    }
+
+    // The heartbeat loop (the only thing ticking while claude is alive) actually CALLS the deriving
+    // function, not just sources the file that defines it. The derive sits behind marker_due deeper in
+    // the loop body (#1053's short-poll structure), so the window is generous.
+    @Test func replyHeartbeatDerivesProgressEachTick() throws {
+        guard let heartbeatRange = reply.range(of: "while :; do") else {
+            Issue.record("heartbeat loop not found in reply-classify-run.sh")
+            return
+        }
+        let nearby = reply[heartbeatRange.lowerBound...].prefix(800)
+        #expect(nearby.contains("update_progress_from_results"))
+    }
+
+    // A final derive after claude exits, so the last stretch of work between the previous tick and
+    // process exit is not left showing a stale count once the run is over.
+    @Test func replyDerivesOnceMoreAfterClaudeExits() throws {
+        guard let claudeRange = reply.range(of: "\"$CLAUDE\" -p") else {
+            Issue.record("claude invocation not found in reply-classify-run.sh")
+            return
+        }
+        let after = reply[claudeRange.upperBound...]
+        #expect(after.contains("update_progress_from_results"))
+    }
+
+    // The model is never asked to overwrite the progress file itself: an instruction it can simply
+    // forget (as scout's did on 2026-07-16) is worth nothing once the script derives the truth on its own.
+    @Test func replyNeverAsksTheModelToWriteTheProgressFile() {
+        #expect(!reply.contains("overwrite $PROGRESS"))
+        #expect(!reply.contains("overwrite \\$PROGRESS"))
+    }
+
+    // The reply drafter's LiveRunLabel reads the derived count in the closure form (#1003), so the
+    // "N of M" re-reads every tick rather than reflecting whatever the enclosing view last captured.
+    @Test func theReplyDrafterLabelReadsTheProgressFile() {
+        #expect(!draftReview.isEmpty)
+        guard let labelRange = draftReview.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
+            Issue.record("reply drafter LiveRunLabel not found")
+            return
+        }
+        // Generous window (the label spans several argument lines plus an explanatory comment), so an
+        // added note between the label and the closure can't push the assertion out of view.
+        let nearby = draftReview[labelRange.lowerBound...].prefix(900)
+        #expect(nearby.contains("progressDetail: { ReplyClassifyProgressDecoder.label(for: ReplyClassifyProgressDecoder.loadCurrent()) }"))
+    }
+
     // --- #1038: both runners honour the cancel sentinel on a short poll -----------------------------
 
     @Test func prepHonoursTheCancelSentinelOnItsHeartbeat() {
