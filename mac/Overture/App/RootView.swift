@@ -495,6 +495,13 @@ struct RootView: View {
                 } else {
                     ingestPrep()
                 }
+                // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
+                // the app, so one can still be going at launch (a relaunch over a live run, or the window
+                // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
+                // so a live run is never invisible now that the modal is the primary progress signal.
+                if ScoutExtractService.isRunning(now: Date()) {
+                    await reattachScoutExtractRun()
+                }
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
             .task {
@@ -963,6 +970,28 @@ struct RootView: View {
         case .nothing:
             scoutSheetShown = false
         }
+    }
+
+    // #1035: reattach to a scout-extract read still running at launch. Reopens the takeover in its
+    // reading phase (on its own, no click, since Dan started this scout) and follows the run to
+    // completion through the SAME watch + finish path a manual run uses, so a reattached run ingests its
+    // results and surfaces its warnings rather than being a dead end. The native half already ran (and
+    // was reported) in the session that started it, so only the read's own outcome is folded in here.
+    private func reattachScoutExtractRun() async {
+        scoutGeneration += 1
+        let gen = scoutGeneration
+        scoutIsManual = true
+        scoutNativeSnapshot = nil
+        scoutWarnings = nil
+        readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
+        scoutSheetShown = true
+        let read = await watchScoutExtractRun()
+        guard gen == scoutGeneration else { return }
+        readingStartedAt = nil
+        finishScout(ScoutWarnings.from(native: ScoutService.Outcome(found: 0, inserted: 0, updated: 0,
+                                                                    skipped: 0, uncertain: 0),
+                                       extract: read.outcome, finishedEmpty: read.finishedEmpty),
+                    auto: false)
     }
 
     // #1034: the stalled-state Retry. A stalled modal means the run's heartbeat has gone dead, so abandon
