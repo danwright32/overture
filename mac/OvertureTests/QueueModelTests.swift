@@ -312,7 +312,7 @@ struct TimingTests {
         #expect(QueueModel.outreachTiming(performanceDate: "2026-06-20", today: "2026-06-22").urgency == .past)
     }
 
-    // Within 5 days (72-hours-and-then-some) reads as too close to realistically book.
+    // Within 4 days reads as too close to realistically book.
     @Test func flagsNearTermAsTooClose() {
         let today = QueueModel.outreachTiming(performanceDate: "2026-06-22", today: "2026-06-22")
         #expect(today.urgency == .tooSoon)
@@ -320,8 +320,26 @@ struct TimingTests {
         let threeDays = QueueModel.outreachTiming(performanceDate: "2026-06-25", today: "2026-06-22")
         #expect(threeDays.urgency == .tooSoon)
         #expect(threeDays.label.contains("3 days"))
+    }
+
+    // Dan's call (2026-07-16), after his first walk of the queue: a five-day lead is enough time to
+    // pitch, so five days out is bookable and the window closes at four. He set the boundary here
+    // knowing it leaves a show four days out demoted.
+    @Test func fiveDaysOutIsBookableAndFourIsNot() {
+        let fourDays = QueueModel.outreachTiming(performanceDate: "2026-06-26", today: "2026-06-22")
+        #expect(fourDays.urgency == .tooSoon)
         let fiveDays = QueueModel.outreachTiming(performanceDate: "2026-06-27", today: "2026-06-22")
-        #expect(fiveDays.urgency == .tooSoon)
+        #expect(fiveDays.urgency == .imminent)
+        #expect(fiveDays.label.contains("5 days"))
+    }
+
+    // The same boundary, through the ordering path rather than the label: a five-day show sits with
+    // the bookable ones, not sunk to the bottom with the too-close ones.
+    @Test func fiveDaysOutIsNotDemoted() {
+        let result = QueueModel.queueOrder(
+            [item(performanceDate: "2026-06-24"), item(performanceDate: "2026-06-27")],
+            today: "2026-06-22")
+        #expect(result.map(\.performanceDate) == ["2026-06-27", "2026-06-24"])
     }
 
     @Test func urgesOutreachJustPastTheTooCloseWindow() {

@@ -5,6 +5,22 @@
 # once per script, across three rounds (#317/#437, #439, #485): pulled here so the next fix
 # in this class lands once. See #552.
 
+# Declares that this run is DETACHED: launched by the app, headless, with nobody reading its output
+# and nothing able to answer it. Dan's global Stop hooks in ~/.claude/hooks (the session reflection,
+# the issue review, the memory checkpoint) read this and skip, because every one of them is ceremony
+# aimed at a person in an interactive session.
+#
+# Exported here, in the ONE file all three runners source, for the same reason models.sh exists: a
+# guard that is right in two runners and missing from the third is the same bug wearing a disguise.
+#
+# Not cosmetic. On 2026-07-16 a scout-extract run spent itself writing a SESSION REFLECTION into its
+# own log, wrote a memory file into the project's store, and never wrote the results file the app was
+# waiting for. Every extracted show was lost and the run still exited 0. The hooks fired because a
+# headless `claude -p` inherits the same ~/.claude settings an interactive session does, and no CLI
+# flag separates the two: --setting-sources drops the hooks but takes Dan's brand-voice skill with
+# them, and --settings can only ADD hooks, never remove one. So the hooks check this instead.
+export CLAUDE_DETACHED_RUN=1
+
 # The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug
 # subfolder). Fall back to the live path for a hand-run from a terminal.
 SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"

@@ -501,7 +501,10 @@ enum QueueModel {
     static let leadTimeWindowDays = 90
     // Within this many days a booking is unrealistic to land, so the event still shows but
     // sinks below everything bookable rather than sitting up top with the nearest dates.
-    static let tooCloseDays = 5
+    //
+    // Dan's call (2026-07-16), on his first real walk of the queue: five days is enough notice to
+    // pitch, so the window closes at four. He set it knowing a show four days out still demotes.
+    static let tooCloseDays = 4
 
     // Whole days from `today` (a "yyyy-MM-dd" string) to the performance, as New York
     // calendar dates so nothing drifts a day across timezones.
