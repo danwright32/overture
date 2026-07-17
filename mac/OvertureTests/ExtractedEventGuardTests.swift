@@ -118,6 +118,21 @@ struct ExtractedEventGuardTests {
     @Test func anUndatedEventIsStillUsable() {
         #expect(ExtractedEventGuard.rejection(for: event(venue: "Merkin Hall", date: nil)) == nil)
     }
+
+    // #1057: a SPECIFIC, NAMED outdoor performance space is a real venue, not a bare location wearing
+    // a venue's clothes. The signal the guard can see is a recognizable place-type word ("Park",
+    // "Square", "Pier"...) that a bare city/state/country name never carries. These are the two real
+    // drops #1057 found live: Every Voice Choirs' Oct 25 2026 show at "Sakura Park, W 122nd St &
+    // Riverside Dr", and Jalopy Theatre's Golden Hour Series at Greeley Square, both wrongly discarded
+    // because the page's location string repeats the venue name, tripping `restatesLocation`.
+    @Test func aNamedOutdoorPlaceIsAVenueEvenWhenTheLocationRepeatsIt() {
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Sakura Park", location: "Sakura Park, W 122nd St & Riverside Dr")) == nil)
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Greeley Square", location: "Greeley Square, New York, NY")) == nil)
+        #expect(ExtractedEventGuard.rejection(for: event(venue: "Bryant Park", location: "Bryant Park"))
+                == nil)
+    }
 }
 
 // The guard is wired into the results boundary itself, not left as a helper an ingest might forget to

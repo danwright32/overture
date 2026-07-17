@@ -110,6 +110,21 @@ For each item in the work-list:
    A city is not a room. `location` (3a) is where that fact belongs, and it has its own field precisely
    so `venue` never has to absorb it.
 
+   **A specific, NAMED outdoor performance space IS a venue** (#1057), even though it is not a room. Dan's
+   call: the pitch email can say "your Oct 25 concert at Sakura Park" the same way it says "at Carnegie
+   Hall," so a named park, plaza, or pier belongs in `venue`, not `location`. The distinction is between a
+   place with its own proper name and a bare location string that only says where the city is:
+
+   | what the page says | report `venue` as | report `location` as |
+   |---|---|---|
+   | `Sakura Park, W 122nd St & Riverside Dr` | `Sakura Park, W 122nd St & Riverside Dr` | (verbatim, per 3a, even though it repeats the venue name) |
+   | `Golden Hour Series at Greeley Square` | `Greeley Square` | whatever the page states, if anything |
+   | `downtown Brooklyn, NY` | `null` (this names no specific place) | `downtown Brooklyn, NY` |
+   | `Baltimore, Maryland` | `null` (a city is not a venue) | `Baltimore, Maryland` |
+
+   If in doubt whether a place is specific enough to be a venue, ask: could Dan's pitch name it the way it
+   names a hall? "Bryant Park" and "Pier 5" pass that test. "Brooklyn" and "the waterfront area" do not.
+
    This last one is not hypothetical either, and it is why this paragraph exists. The first real scout of
    a venue-less page returned `venue: "Baltimore, Maryland"`, `venue: "Harrogate, UK"`, and two more like
    them, explaining itself in the note: *"Venue field populated with location as best available
@@ -123,8 +138,9 @@ For each item in the work-list:
    over what the page actually said, unedited.
 
    This is not the same field as `venue`, and one cannot substitute for the other. A venue is the room
-   ("Weill Recital Hall"). A location is the place ("New York, NY"). Measured on the live store, **0 of
-   26 distinct venue strings contain a city at all**, so a venue can never answer "where is this".
+   ("Weill Recital Hall") or a specific named outdoor place (#1057: "Sakura Park"). A location is the
+   place ("New York, NY"). Measured on the live store, **0 of 26 distinct venue strings contain a city
+   at all**, so a venue can never answer "where is this".
 
    Take it from wherever the page puts it. Many artist and ensemble sites carry a location field of
    their own, separate from the title and the venue, and some name **no venue anywhere**, only a city.
