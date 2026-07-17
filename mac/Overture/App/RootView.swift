@@ -22,7 +22,9 @@ struct RootView: View {
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
-    @State private var warningMessage: String?
+    // #1027: the finished scout's warnings, as one branded popup shown ONCE at the true end of a manual
+    // run. Replaces the plain warningMessage alert that fired after the native sweep, before the read.
+    @State private var scoutWarnings: ScoutWarnings?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
     // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
@@ -491,10 +493,13 @@ struct RootView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            .alert("Past-client list", isPresented: warningBinding) {
-                Button("OK", role: .cancel) { warningMessage = nil }
-            } message: {
-                Text(warningMessage ?? "")
+            // #1027: the branded end-of-scout popup, in place of the old plain "Past-client list" alert.
+            // Fires once, at the true end of a manual run, and lets Dan fix or confirm a source inline.
+            .sheet(isPresented: scoutWarningsBinding) {
+                if let scoutWarnings {
+                    ScoutSummaryView(warnings: scoutWarnings,
+                                     onReadFixed: { ids in runScout(only: ids) })
+                }
             }
             .sheet(isPresented: $showArchive) {
                 ArchiveView(initialHighlightKey: archiveJumpKey, initialHighlightRecipientId: archiveJumpRecipientId,
@@ -715,7 +720,10 @@ struct RootView: View {
     //
     // A run that finished empty is NOT silence. It is the one shape of failure that would otherwise be
     // indistinguishable from every watched calendar happening to be quiet.
-    private func watchScoutExtractRun() async {
+    // #1027: returns what the read produced so runScout can fold it into ONE end-of-scout popup, instead
+    // of setting a warning here (mid-run, before the popup) as it used to. The finishedEmpty message is
+    // its own return, because that signal (the reader ran and produced nothing) has no source to attach to.
+    private func watchScoutExtractRun() async -> (outcome: ScoutService.Outcome?, finishedEmpty: String?) {
         while ScoutExtractService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
@@ -724,18 +732,19 @@ struct RootView: View {
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
-            ingestScoutExtract()
+            return (ingestScoutExtract(), nil)
         case .finishedEmpty:
-            warningMessage = DetachedRunOutcome.finishedEmptyMessage(
-                .scoutExtract, tail: RunLog.tail(8, from: RunLog.scoutExtractURL))
+            return (nil, DetachedRunOutcome.finishedEmptyMessage(
+                .scoutExtract, tail: RunLog.tail(8, from: RunLog.scoutExtractURL)))
         case .idle:
-            break
+            return (nil, nil)
         }
     }
 
-    private func ingestScoutExtract() {
+    @discardableResult
+    private func ingestScoutExtract() -> ScoutService.Outcome? {
         guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL),
-              let results = try? ScoutExtractResultsDecoder.decode(data) else { return }
+              let results = try? ScoutExtractResultsDecoder.decode(data) else { return nil }
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let outcome = ScoutExtractIngest.ingest(
@@ -746,9 +755,7 @@ struct RootView: View {
             into: context)
 
         scoutSummary = ScoutRunSummary.watchedCalendarSummary(for: outcome)   // #885
-        // A source whose page could not be read is named here, every run, exactly as one that could not
-        // be fetched is. A broken calendar and a quiet one must never look alike.
-        warningMessage = outcome.warning
+        return outcome
     }
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
@@ -791,8 +798,8 @@ struct RootView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
-    private var warningBinding: Binding<Bool> {
-        Binding(get: { warningMessage != nil }, set: { if !$0 { warningMessage = nil } })
+    private var scoutWarningsBinding: Binding<Bool> {
+        Binding(get: { scoutWarnings != nil }, set: { if !$0 { scoutWarnings = nil } })
     }
 
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
@@ -824,6 +831,11 @@ struct RootView: View {
 
     private func runScout(auto: Bool = false, depth: ScoutDepth = .readChanged,
                           only: Set<String>? = nil) {
+        // #1027: never start a second run over a run already in flight, in EITHER phase. isScanning
+        // covers the native sweep; readingStartedAt covers the detached read (isScanning is already
+        // false by then). Without this, a double-tap of "Read the ones I fixed" starts two runs, and the
+        // second dies on the extract runner's already-running guard.
+        guard !isScanning, readingStartedAt == nil else { return }
         isScanning = true
         scoutStartedAt = Date()
         scoutSummary = nil
@@ -831,10 +843,6 @@ struct RootView: View {
             do {
                 let outcome = try await ScoutService.runScout(into: context, depth: depth, only: only)
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
-                // Surface a scout warning if any: a source that couldn't be checked (#802), an
-                // established feed that came back empty (#27), or a missing/stale past-client export
-                // (#22/#23). Silent degradation is the thing we are avoiding.
-                warningMessage = outcome.warning
 
                 // #802, Dan's 3rd decision: SHOW him the do-not-contact guard working. An org that asked
                 // him to stop can still turn up on a venue's calendar he legitimately watches, and #769
@@ -854,14 +862,22 @@ struct RootView: View {
                 // shown a total that silently omits half the run.
                 isScanning = false
                 scoutStartedAt = nil
+                var extract: ScoutService.Outcome? = nil
+                var finishedEmpty: String? = nil
                 if outcome.sources.contains(where: { $0.state == .queuedForReading }) {
                     // Visible for the whole of it: a counter that ticks, a real "3 of 9" from the run's
                     // own progress file, and a stalled state if the run dies. Before this, the scout
                     // looked finished while it was still working.
                     readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
-                    await watchScoutExtractRun()
+                    let read = await watchScoutExtractRun()
+                    extract = read.outcome
+                    finishedEmpty = read.finishedEmpty
                     readingStartedAt = nil
                 }
+                // #1027: ONE popup, now, at the true end of the whole run, folding both halves. A manual
+                // run gets the branded sheet; an unattended scheduled run leaves a quiet line instead.
+                presentWarnings(ScoutWarnings.from(native: outcome, extract: extract,
+                                                   finishedEmpty: finishedEmpty), auto: auto)
                 return
             } catch {
                 // A scheduled run failing stays quiet (a status line); a manual run shows
@@ -872,6 +888,17 @@ struct RootView: View {
             }
             isScanning = false
             scoutStartedAt = nil
+        }
+    }
+
+    // #1027: how a finished run surfaces what it found. A MANUAL run Dan started gets the branded popup;
+    // an unattended scheduled run he did not start leaves a quiet masthead line and never pops a modal
+    // (his call). Nothing to say means nothing shown.
+    private func presentWarnings(_ warnings: ScoutWarnings, auto: Bool) {
+        switch ScoutWarningsPresentation.decide(warnings, auto: auto) {
+        case .popup(let w): scoutWarnings = w
+        case .quietLine(let line): statusMessage = line
+        case .nothing: break
         }
     }
 

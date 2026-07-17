@@ -52,6 +52,13 @@ final class WatchedSource {
     // without spending a token to find out what. Defaulted, so existing rows migrate cleanly.
     var hasUnreadChanges: Bool = false
 
+    // #1027: the page hash Dan CONFIRMED as acceptably empty ("this really is the org's calendar, it
+    // is just quiet right now"). A future no_dated_content read whose bytes still hash to this value is
+    // not a failure and does not nag; the instant the page changes, the hash differs and it nags again.
+    // That is "until its content changes" expressed as the same hash test the rest of the feature uses.
+    // Defaulted, so existing rows migrate cleanly and simply carry no confirmation.
+    var confirmedEmptyHash: String? = nil
+
     // The hash of the page we pinned and handed to the extract run, held until that run comes back.
     //
     // It has to be remembered, because the results file does not echo it and the ingest happens minutes
@@ -305,6 +312,25 @@ enum SourceFailure: Equatable, Sendable {
             } else {
                 return nil
             }
+        }
+    }
+
+    // #1027: CONFIRM ("this page is right, stop nagging") is offered on exactly ONE failure: a page
+    // that fetched and read fine but carried no dated listings. Confirming a broken fetch or a JS page
+    // we can never read would silence a source that never delivers, which is the opposite of the goal.
+    var offersConfirm: Bool {
+        if case .verdict(.noDatedContent) = self { return true }
+        return false
+    }
+
+    // #1027: FIX (correct the URL) is offered wherever a wrong web address could plausibly be the
+    // cause, which is everything EXCEPT the two failures no address change can fix: a run that ended
+    // before opening the page (it self-heals on the next scout) and a run that contradicted itself (a
+    // run bug, not a bad page).
+    var offersFix: Bool {
+        switch self {
+        case .verdict(.notRead), .inconsistentResult: return false
+        default: return true
         }
     }
 

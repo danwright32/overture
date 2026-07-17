@@ -119,6 +119,82 @@ enum WatchlistEditing {
         return .resumed
     }
 
+    // #1027: correcting a source's URL in place.
+    //
+    // The one rule that matters: a corrected URL is a BRAND-NEW source for reconcile. The id is KEPT (it
+    // is stamped on every prospect the old page ever produced), but the feed history and warmup are
+    // reset, so the new page cannot conclude any of those prospects are gone until it has read its own
+    // pages enough times to have a baseline. Keep the id AND the baseline and a same-sized replacement
+    // page silently strikes Dan's live shows: the exact silent-cancellation hole #887/#897 closed.
+    enum EditResult: Equatable, Sendable {
+        case saved(sourceId: String)
+        case invalidURL
+        case conflict(orgName: String)     // a DIFFERENT active source already watches this host
+        case refused(orgName: String)      // the new host belongs to an org that asked to stop
+    }
+
+    @discardableResult
+    static func editURL(_ source: WatchedSource, to newURL: String, in context: ModelContext) -> EditResult {
+        let url = newURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let host = URL(string: url)?.host, !host.isEmpty,
+              URL(string: url)?.scheme?.hasPrefix("http") == true else { return .invalidURL }
+
+        let existing = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        // Another source already on this host. A refusal is named as a refusal (the one mistake that
+        // cannot be taken back); anything else is a plain collision, because the same calendar must never
+        // be fetched, hashed and read twice every run.
+        if let match = existing.first(where: { $0.sourceId != source.sourceId && sameHost($0.listingsURL, as: url) }) {
+            if !match.isActive, match.inactiveReason == .orgRefusal {
+                return .refused(orgName: match.orgName)
+            }
+            return .conflict(orgName: match.orgName)
+        }
+
+        source.listingsURL = url
+        // Reset feed history + warmup: the new page must re-earn the right to mark anything gone.
+        source.baselineFeedCount = 0
+        source.successfulCheckCount = 0
+        source.degradedStreak = 0
+        source.lastDegradedCount = 0
+        source.lastReadableCount = 0
+        source.lastUnreadableCount = 0
+        source.health = .neverChecked          // it has not been checked at this address yet
+        source.lastFailure = nil
+        source.confirmedEmptyHash = nil         // a different page: any prior confirmation is void
+        source.lastContentHash = nil
+        source.pendingContentHash = nil
+        source.hasUnreadChanges = true          // so the next scout reads the corrected page
+        try? context.save()
+        return .saved(sourceId: source.sourceId)
+    }
+
+    // #1027: Dan confirms a no_dated_content page is the right calendar, just quiet right now.
+    //
+    // Anchors the confirmation to the exact bytes just read (pendingContentHash), and stamps that hash as
+    // the last ingested one so the free daily run sees no change and never re-reads it. If there is no
+    // hash to anchor to (nothing has been read), the failing display is still cleared, but the page will
+    // nag again if it fails again: there is nothing to suppress against.
+    enum ConfirmResult: Equatable, Sendable {
+        case confirmed
+        case noHash
+    }
+
+    @discardableResult
+    static func confirmEmpty(_ source: WatchedSource, in context: ModelContext) -> ConfirmResult {
+        source.health = .ok
+        source.lastFailure = nil
+        guard let hash = source.pendingContentHash ?? source.lastContentHash else {
+            try? context.save()
+            return .noHash
+        }
+        source.confirmedEmptyHash = hash
+        source.lastContentHash = hash
+        source.pendingContentHash = nil
+        source.hasUnreadChanges = false
+        try? context.save()
+        return .confirmed
+    }
+
     private static func sameHost(_ urlString: String?, as other: String) -> Bool {
         func host(_ s: String?) -> String? {
             guard let s, let h = URL(string: s)?.host?.lowercased() else { return nil }

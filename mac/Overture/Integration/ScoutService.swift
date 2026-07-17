@@ -76,7 +76,7 @@ enum ScoutService {
         // Carnegie's 90-day window is the same unusual event it always was (#27, #126).
         var warning: String? {
             if saveFailed {
-                return "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
+                return ScoutWarningCopy.saveFailed
             }
             // The run found new listings and could not read them. It outranks a per-source failure
             // because it is the app that is broken, not a calendar, and because it has a one-step fix.
@@ -88,7 +88,7 @@ enum ScoutService {
             let parts = [failureWarning, unqueuedWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if silentlyEmptyFeed {
-                return "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
+                return ScoutWarningCopy.silentlyEmptyFeed
             }
             return clientListWarning
         }
@@ -98,10 +98,7 @@ enum ScoutService {
         // clue for whoever debugs why a source keeps coming back never-read.
         private var unqueuedWarning: String? {
             guard !unqueuedResultIds.isEmpty else { return nil }
-            let ids = unqueuedResultIds.joined(separator: ", ")
-            return unqueuedResultIds.count == 1
-                ? "The run returned results under a source it was never asked about (\(ids)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
-                : "The run returned results under \(unqueuedResultIds.count) sources it was never asked about (\(ids)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
+            return ScoutWarningCopy.unqueued(ids: unqueuedResultIds)
         }
 
         private var failureWarning: String? {
@@ -116,7 +113,9 @@ enum ScoutService {
         // A source that has succeeded before (so it has a baseline to be judged against) and came back
         // empty anyway. A brand-new source with no history has nothing unusual about an empty first
         // check, and a quiet off-season is not a defect.
-        private var silentlyEmptyFeed: Bool {
+        // #1027: internal, not private, so the structured ScoutWarnings can read the SAME rule the old
+        // single-string warning used rather than restating it and eventually disagreeing with it.
+        var silentlyEmptyFeed: Bool {
             sources.contains { $0.state == .ingested(found: 0) && $0.hadBaseline }
         }
 
@@ -165,6 +164,11 @@ enum ScoutService {
             case changedNotRead          // its page changed, but this was the free daily run
             case deferred                // over this run's budget. NOT checked. Not fine, not failing.
             case failed(SourceFailure)   // named, recorded on the row, and never fatal to the source
+            // #1027: a no_dated_content page Dan CONFIRMED as right-but-empty, read again at the same
+            // bytes. NOT a failure (it does not nag) and NOT `.unchanged` (that means never re-read;
+            // this page WAS read and its emptiness accepted). Its own case so a future count of one can
+            // never be quietly mistaken for the other.
+            case confirmedEmpty
 
             var isFailure: Bool { if case .failed = self { return true }; return false }
 

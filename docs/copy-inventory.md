@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **622 sentences**, from 196 source files.
+Every sentence Overture can say to Dan: **642 sentences**, from 201 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -28,7 +28,7 @@ What is not, and why:
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 
-## The same sentence, said in more than one place (36)
+## The same sentence, said in more than one place (37)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -122,6 +122,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Set up Overture"
   - `App/AppDelegate.swift`
   - `UI/OnboardingView.swift`
+- "Their events or season page"
+  - `UI/SourceFixConfirmActions.swift`
+  - `UI/SourcesView.swift`
 - "This looks right"
   - `UI/ProspectRowView.swift`
   - `UI/ProspectRowView.swift`
@@ -196,6 +199,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ReplyClassifyService.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
+"A source couldn't be checked. Open Sources to fix or confirm it."
+    `Domain/ScoutWarnings.swift`
 "A test tried to launch a real Claude run. Inject the launch seam instead."
     `Integration/ScoutExtractService.swift`
 "AI read: \(replyIntentLabel(hint))"
@@ -238,6 +243,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Already watching \(orgName)'s calendar."
     `Domain/WatchlistEditing.swift`
+"An established calendar came back empty this run."
+    `Domain/ScoutWarnings.swift`
 "An organization that asked"
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
@@ -288,6 +295,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Carnegie Hall is added the first time Overture opens your store."
     `UI/SourcesView.swift`
+"Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
+    `UI/SourceFixConfirmActions.swift`
 "Closed (not interested)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
@@ -328,6 +337,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/DraftReviewView.swift`
+"Correct this source's web address, then read it to check"
+    `UI/SourceFixConfirmActions.swift`
 "Couldn't block \(range)"
     `UI/ProspectMutations.swift`
 "Couldn't connect Gmail: \(reason)"
@@ -415,6 +426,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Fit tier"
     `Domain/OutcomePatterns.swift`
+"Fix a source's address or confirm a page is right, and I'll read the ones you fix."
+    `UI/ScoutSummaryView.swift`
+"Fix the address"
+    `UI/SourceFixConfirmActions.swift`
 "Follow-up sent to \(org)"
     `App/ActionFeedback.swift`
 "Follow-up tasks aren't being created. Open Overture and allow it to control OmniFocus."
@@ -516,6 +531,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Keep editing"
     `UI/DaysOffView.swift`
+"Keep this page but stop flagging it, until its contents change"
+    `UI/SourceFixConfirmActions.swift`
 "Keep watching this calendar"
     `UI/AddLeadSheet.swift`
 "Keeps Overture resident in the menu bar so the syncs run unattended."
@@ -570,6 +587,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Lost before, open to the future"
     `UI/QueueView+Model.swift`
+"Marked \(org)'s page as right. It won't be flagged again until it changes."
+    `UI/SourceFixConfirmActions.swift`
 "Matched performer '\(performerName)' to Downbeat client \(client.displayName)."
     `Domain/HistoryMatch.swift`
 "Matched performer '\(performerName)' to Downbeat client \(client.displayName). Their email matches the address on file."
@@ -710,6 +729,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
+"One source couldn't be checked."
+    `UI/ScoutSummaryView.swift`
 "One source couldn't be checked. \(lines[0])"
     `Integration/ScoutService.swift`
 "Open Overture"
@@ -751,8 +772,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Owes a reply"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`
-"Past-client list"
-    `App/RootView.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"
@@ -809,6 +828,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
+"Read the \(count) I fixed"
+    `UI/ScoutSummaryView.swift`
+"Read the one I fixed"
+    `UI/ScoutSummaryView.swift`
 "Read this one now"
     `Domain/WatchlistEditing.swift`
 "Read this page"
@@ -877,6 +900,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "Scout & Prep"
     `App/RootView.swift`
+"Scout results"
+    `UI/ScoutSummaryView.swift`
 "Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily."
     `App/RootView.swift`
 "Search shows, venues, contacts"
@@ -943,6 +968,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
+"Some changed calendars couldn't be read this run."
+    `Domain/ScoutWarnings.swift`
+"Some results came back under an unknown source and were ignored this run."
+    `Domain/ScoutWarnings.swift`
 "Something went wrong"
     `App/RootView.swift`
 "Source listing"
@@ -1003,6 +1032,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this."
     `App/RootView.swift`
+"The calendar reader ran but produced nothing this run."
+    `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
     `Domain/SourceAttention.swift`
 "The calendars Overture re-checks on every scout."
@@ -1037,10 +1068,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The run ended before reading this page, so it has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
-"The run returned results under \(unqueuedResultIds.count) sources it was never asked about (\(ids)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
-    `Integration/ScoutService.swift`
-"The run returned results under a source it was never asked about (\(ids)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
-    `Integration/ScoutService.swift`
+"The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
+    `Domain/ScoutWarningCopy.swift`
+"The run returned results under a source it was never asked about (\(list)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
+    `Domain/ScoutWarningCopy.swift`
 "The run said every listing on this page was in the past but still returned \(shows(count)) from it."
     `Domain/ScoutResultAudit.swift`
 "The run said it never read this page but still returned \(shows(count)) from it."
@@ -1053,10 +1084,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutFailure.swift`
 "The scout couldn't run. This stopped the whole run, so no source was checked. Try again; if it keeps failing, something is wrong with the local store rather than with any one calendar.\n\nDetails: \(message)"
     `Domain/ScoutFailure.swift`
+"The scout couldn't save its results. Run it again."
+    `Domain/ScoutWarnings.swift`
 "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
-    `Integration/ScoutService.swift`
+    `Domain/ScoutWarningCopy.swift`
 "The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
-    `Integration/ScoutService.swift`
+    `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
 "The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type."
@@ -1068,6 +1101,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Their calendar, not one show: a single show's page never changes again, so watching it would watch nothing."
     `UI/SourcesView.swift`
 "Their events or season page"
+    `UI/SourceFixConfirmActions.swift`
     `UI/SourcesView.swift`
 "These leads are no longer in your queue."
     `UI/QueueView.swift`
@@ -1085,6 +1119,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "This org asked not to be contacted, so none of their shows will be scouted or emailed. Tap to allow contact again."
     `UI/ProspectRowView.swift`
+"This page is right"
+    `UI/SourceFixConfirmActions.swift`
 "This performance happened before you triaged it, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
 "This production also plays \(list)."
@@ -1135,6 +1171,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Unsure call, tap to confirm or fix"
     `UI/ProspectRowView.swift`
+"Updated \(org)'s address."
+    `UI/SourceFixConfirmActions.swift`
 "Updated \(org)'s classification"
     `App/ActionFeedback.swift`
 "Venue TBD"
@@ -1187,6 +1225,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Wrong match"
     `UI/ProspectRowView.swift`
+"You already watch \(org) at that address."
+    `UI/SourceFixConfirmActions.swift`
 "You blocked \(day) (\(name))."
     `Domain/BlockedCalendar.swift`
 "You blocked \(day)."
@@ -1221,10 +1261,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
+"\(count) sources couldn't be checked."
+    `UI/ScoutSummaryView.swift`
 "\(count) sources need"
     `Domain/SourceAttention.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
+"\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
+    `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
     `Integration/ScoutService.swift`
 "\(i.keptToPrep) ready to prep"
