@@ -12,6 +12,24 @@ import Foundation
 // The sentences themselves live in the view (copy inventory), except the ones that already exist as
 // strings on the outcome (the reader-not-configured line, the past-client line, the reader-finished-empty
 // line): those travel as-is so there is one wording, not two.
+// #1027: where a finished scout's warnings go. Pure, so the rule (manual run gets the popup, an
+// unattended scheduled run gets only a quiet line, a clean run shows nothing) is tested rather than
+// buried in the view's async flow.
+enum ScoutWarningsPresentation: Equatable, Sendable {
+    case popup(ScoutWarnings)
+    case quietLine(String)
+    case nothing
+
+    static func decide(_ warnings: ScoutWarnings, auto: Bool) -> ScoutWarningsPresentation {
+        guard !warnings.isEmpty else { return .nothing }
+        if auto {
+            // An auto run he did not start must never pop a modal (Dan's call): a quiet line, or nothing.
+            return warnings.quietLine.map(ScoutWarningsPresentation.quietLine) ?? .nothing
+        }
+        return .popup(warnings)
+    }
+}
+
 struct ScoutWarnings: Equatable, Sendable {
     var saveFailed: Bool
     var extractLaunchFailure: String?       // the run could not hand changed pages off to be read

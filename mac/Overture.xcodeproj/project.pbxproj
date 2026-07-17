@@ -152,6 +152,7 @@
 		47FA186561E1912A18BA28BD /* StageNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF653614208C0E600D652C5 /* StageNavigationTests.swift */; };
 		482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */; };
 		48B098CAC4B814F245E3ADB4 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */; };
+		48E39171DC98887452D147BF /* ScoutWarningsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5984842E2C8A9DF81BB97 /* ScoutWarningsPresentationTests.swift */; };
 		496FF91D3DC2BFA3DEC7C755 /* LeadIntakeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E5E4DF0C3AFC070CCEE374 /* LeadIntakeModel.swift */; };
 		4A125A73DBC9E95E9B806451 /* PrepStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */; };
 		4A9031E5AE33243B77A5A3E3 /* ScoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637CE6DCB47850272BCB073A /* ScoutService.swift */; };
@@ -698,6 +699,7 @@
 		5D6A768536BCBD7F7BBA2452 /* GmailMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailMessageTests.swift; sourceTree = "<group>"; };
 		5D786A37D92F867863061D6A /* OutcomePatterns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatterns.swift; sourceTree = "<group>"; };
 		5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveStatusTests.swift; sourceTree = "<group>"; };
+		5FD5984842E2C8A9DF81BB97 /* ScoutWarningsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWarningsPresentationTests.swift; sourceTree = "<group>"; };
 		612B38A4015CC81015D5D0B9 /* PrepStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatusTests.swift; sourceTree = "<group>"; };
 		61BFE4E6528A1F2DB7FA5E67 /* GroupNameDriftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNameDriftTests.swift; sourceTree = "<group>"; };
 		62012DD048B72E8EF590F4AB /* PerformerMatchDismissTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformerMatchDismissTests.swift; sourceTree = "<group>"; };
@@ -1284,6 +1286,7 @@
 				FF01B805DA5B480951430061 /* ScoutStatusTests.swift */,
 				C3A8BF2BEBB1BB7883AB3147 /* ScoutTestClock.swift */,
 				444E5F3D9DAB0FAE8BAD1E91 /* ScoutUpcomingOnlyTests.swift */,
+				5FD5984842E2C8A9DF81BB97 /* ScoutWarningsPresentationTests.swift */,
 				C79E69D4176B426FEE4F7EEE /* ScoutWarningsTests.swift */,
 				2F3180AAE3A0F32C65075DFF /* SecureFileWriteTests.swift */,
 				6BF54AC30F42B8FE4D1BA8B6 /* SendConfirmAndReconnectAlertsSharedTests.swift */,
@@ -2134,6 +2137,7 @@
 				BAFBBEF83992A1D7340C8D9C /* ScoutStatusTests.swift in Sources */,
 				4F2350DC2BFC101516EB93F3 /* ScoutTestClock.swift in Sources */,
 				EF0F157DD366F310CA206876 /* ScoutUpcomingOnlyTests.swift in Sources */,
+				48E39171DC98887452D147BF /* ScoutWarningsPresentationTests.swift in Sources */,
 				1F9CE37909C3A30AD4665ED2 /* ScoutWarningsTests.swift in Sources */,
 				FBEA6350C47C754025188F03 /* SecureFileWriteTests.swift in Sources */,
 				1841EB867F8ECD6653B72BC2 /* SendConfirmAndReconnectAlertsSharedTests.swift in Sources */,

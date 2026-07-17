@@ -895,11 +895,10 @@ struct RootView: View {
     // an unattended scheduled run he did not start leaves a quiet masthead line and never pops a modal
     // (his call). Nothing to say means nothing shown.
     private func presentWarnings(_ warnings: ScoutWarnings, auto: Bool) {
-        guard !warnings.isEmpty else { return }
-        if auto {
-            if let line = warnings.quietLine { statusMessage = line }
-        } else {
-            scoutWarnings = warnings
+        switch ScoutWarningsPresentation.decide(warnings, auto: auto) {
+        case .popup(let w): scoutWarnings = w
+        case .quietLine(let line): statusMessage = line
+        case .nothing: break
         }
     }
 
