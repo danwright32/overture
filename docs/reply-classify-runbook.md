@@ -114,8 +114,16 @@ Rules:
   impression the whole approach is built on. Ask only about genuinely-unknown things (e.g. confirming
   Dan's own availability, logistics he can't infer). A draft must never request ANY field the queue
   already supplies. If `performanceDate` is absent (a genuinely undated show), simply don't name a date.
-- Write the complete **version 3** `ReplyClassifyResults` JSON (each result =
-  `{naturalKey, recipientId, intent, draftSubject, draftBody}`) to the results file and nothing else.
+- **Write incrementally as you go (#1081):** rewrite `overture-reply-classify-results.json` with the
+  complete **version 3** `ReplyClassifyResults` JSON (each result =
+  `{naturalKey, recipientId, intent, draftSubject, draftBody}`) covering EVERY item you have finished so
+  far, immediately after EACH item, not just at the very end, and nothing else. The launcher script
+  derives the reply drafter's live "N of M" progress display by counting the entries in this file itself
+  (`ReplyClassifyProgress` version `1`: `{ version, total, completed }`, seeded by the script with
+  `completed: 0` and the correct `total`), so the progress count moves forward on its own as this file
+  grows. You do NOT write the progress file: asking a model to self-report a count is the exact design
+  that left scout's counter stuck at 0 through a live run on 2026-07-16 (#1015), so the script owns it
+  now. The only thing you must do for progress is keep this results file current after every single item.
 
 `fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape.
 

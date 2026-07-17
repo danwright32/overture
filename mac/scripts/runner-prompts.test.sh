@@ -95,6 +95,7 @@ rules_for() {
         "the hard rule against inventing facts	NO fabrication" \
         "the #119/#249 leak guard on raw past emails	NEVER quote or paraphrase raw past email pairs" \
         "the rule that BOTH ids are echoed, never rebuilt	Copy each item's naturalKey AND recipientId verbatim" \
+        "the #1081 incremental-write rule	Immediately after finishing EACH item, rewrite" \
         "its final sentence, intact	the guidance file only ever nudges."
       ;;
   esac
