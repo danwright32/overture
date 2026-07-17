@@ -58,6 +58,32 @@ struct ScoutWarnings: Equatable, Sendable {
         case pastClientList(String)
     }
 
+    // #1027: the ONE quiet line an unattended scheduled run leaves in the masthead instead of the popup
+    // (Dan's call: an auto run he did not start must never pop a modal at him). The single most urgent
+    // section, in a sentence; the Sources sheet holds the detail and the actionable buttons. Manual runs
+    // never use this: they get the full sectioned popup.
+    var quietLine: String? {
+        guard let first = sections.first else { return nil }
+        switch first {
+        case .saveFailed:
+            return "The scout couldn't save its results. Run it again."
+        case .extractLaunchFailure:
+            return "Some changed calendars couldn't be read this run."
+        case .readerFinishedEmpty:
+            return "The calendar reader ran but produced nothing this run."
+        case .failures(let f):
+            return f.count == 1
+                ? "A source couldn't be checked. Open Sources to fix or confirm it."
+                : "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
+        case .unqueued:
+            return "Some results came back under an unknown source and were ignored this run."
+        case .silentlyEmptyFeed:
+            return "An established calendar came back empty this run."
+        case .pastClientList(let message):
+            return message
+        }
+    }
+
     var sections: [Section] {
         var out: [Section] = []
         if saveFailed { out.append(.saveFailed) }

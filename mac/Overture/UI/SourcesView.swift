@@ -243,6 +243,12 @@ struct SourcesView: View {
             if let failure = source.lastFailure {
                 Text(failure.message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
+                // #1027: the SAME fix/confirm controls the end-of-scout popup offers, here on the durable
+                // sheet Dan returns to after dismissing that popup. Only on an editable page he still
+                // watches (Carnegie's native feed has no URL to correct).
+                if source.isActive, source.kind != .algolia {
+                    SourceFixConfirmActions(source: source, failure: failure)
+                }
             }
 
             // #891: shows on this calendar whose own page Overture could not open. A source quietly
