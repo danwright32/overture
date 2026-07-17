@@ -1309,9 +1309,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
 "\(unread.count == 1 ? "that month" : "those months") isn't here."
     `UI/LeadIntakeModel.swift`
-"\(unreadable) of \(total) shows couldn't be read, "
+"\(unreadable) of \(total) shows had no venue on their own detail page, "
     `Domain/SourceReadability.swift`
-"\(unreadable) of \(total) shows couldn't be read."
+"\(unreadable) of \(total) shows had no venue on their own detail page."
     `Domain/SourceReadability.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
@@ -1394,7 +1394,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "send failed"
     `Integration/GmailSender.swift`
-"so Overture won't mark anything from this source as gone until it can."
+"so Overture won't mark anything from this source as gone until it can confirm one."
     `Domain/SourceReadability.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`

@@ -32,15 +32,15 @@ struct SourceReadabilityTests {
     @Test func aStrayUnreadableShowIsMentionedWithoutAlarm() {
         let note = SourceReadability.note(readable: 39, unreadable: 1, baseline: 40)
 
-        #expect(note == "1 of 40 shows couldn't be read.")
+        #expect(note == "1 of 40 shows had no venue on their own detail page.")
     }
 
     // THE case. Past the tolerance, this source can no longer mark anything cancelled, and saying only
-    // "12 shows couldn't be read" would hide the consequence, which is the part Dan can act on.
+    // "12 shows had no venue" would hide the consequence, which is the part Dan can act on.
     @Test func aSourceThatLostTooManyShowsSaysWhatThatCostIt() {
         let note = SourceReadability.note(readable: 68, unreadable: 12, baseline: 80)
 
-        #expect(note == "12 of 80 shows couldn't be read, so Overture won't mark anything from this source as gone until it can.")
+        #expect(note == "12 of 80 shows had no venue on their own detail page, so Overture won't mark anything from this source as gone until it can confirm one.")
     }
 
     // #897: the OTHER way a source loses its cancelling, and it must be as visible as the first. This run
@@ -69,7 +69,7 @@ struct SourceReadabilityTests {
     @Test func whenBothAreTrueTheUnreadPagesAreNamedBecauseTheyAreTheCause() {
         let note = SourceReadability.note(readable: 10, unreadable: 20, baseline: 30)
 
-        #expect(note?.contains("couldn't be read") == true)
+        #expect(note?.contains("no venue on their own detail page") == true)
         #expect(note?.contains("down from the usual") == false)
     }
 
