@@ -28,4 +28,15 @@ struct ScoutCancelWiringGuardTests {
         // And it clears the sentinel so a stopped run cannot kill the next one.
         #expect(runner.contains("clear_cancel"))
     }
+
+    // #1053: the cancel must be read on the SHORT poll, decoupled from the 60s marker work, or a Cancel
+    // Dan clicks would again sit unnoticed for up to a minute. The cadence decision (marker_due) is unit-
+    // tested in scout-cancel.test.sh; this pins that the runner actually sleeps the short poll and gates
+    // the periodic work behind marker_due, so the two cadences can't be silently re-coupled.
+    @Test func theRunnerPollsTheCancelSentinelFasterThanTheMarkerWork() {
+        #expect(!runner.isEmpty)
+        #expect(runner.contains("SCOUT_EXTRACT_CANCEL_POLL_SECONDS"))   // a short, tunable poll
+        #expect(runner.contains("sleep \"$CANCEL_POLL\""))              // the loop sleeps that poll, not 60
+        #expect(runner.contains("marker_due"))                         // the 60s work is gated behind it
+    }
 }

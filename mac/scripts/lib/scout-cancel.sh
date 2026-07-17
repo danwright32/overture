@@ -20,3 +20,13 @@ cancel_requested() {
 clear_cancel() {
   rm -f "$1" 2>/dev/null || true
 }
+
+# #1053: marker_due <elapsed_seconds> <interval_seconds>: true (0) once at least <interval> seconds have
+# accrued since the heartbeat last did its periodic work. The heartbeat polls the cancel sentinel on a
+# short interval (a few seconds), so a Cancel Dan clicks stops the read within seconds instead of up to a
+# minute; this gates the expensive periodic work (touching the marker, merging chunk results, deriving
+# the progress count) so it still runs only once per interval. Keeping the two cadences separate is the
+# whole point: the sentinel is read every poll, the 60s work is not dragged along with it.
+marker_due() {
+  [ "$1" -ge "$2" ]
+}

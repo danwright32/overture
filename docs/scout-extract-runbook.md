@@ -264,14 +264,19 @@ source or a merge that lost one would be a silent loss of Dan's shows.
 A scout Dan started can be cancelled from its progress window. The read is detached and has no trackable
 PID (the app backgrounds it via `sh -c '... &'` and keeps no handle), so there is nothing to `kill`.
 The stop is COOPERATIVE instead: the app writes an empty sentinel file, `scout-extract-cancel`, into the
-handoff dir, and the script's heartbeat (which already ticks every 60s to touch the marker and update the
-count) checks for it on each tick. When it is there, the heartbeat stops the chunk processes it recorded
-in `scout-extract-chunk-pids` and exits; the main script's `wait` then returns and it exits through its
-normal cleanup, so `lib/results-guard.sh` still speaks for every source and whatever landed is ingested.
+handoff dir, and the script's heartbeat checks for it. The heartbeat reads the sentinel on a SHORT poll
+(`SCOUT_EXTRACT_CANCEL_POLL_SECONDS`, default 3), decoupled from the 60s marker work it also does
+(touching the marker, merging the per-chunk results, and deriving the count, gated behind `marker_due`),
+so a Cancel Dan clicks stops the read (and its token spend) within a few seconds instead of up to a
+minute (#1053). The 60s work's cost is unchanged; only the cancel latency drops. When the sentinel is
+there, the heartbeat stops the chunk processes it recorded in `scout-extract-chunk-pids` and exits; the
+main script's `wait` then returns and it exits through its normal cleanup, so `lib/results-guard.sh`
+still speaks for every source and whatever landed is ingested.
 
-Cooperative, not instant, on purpose: a stop that lands between ticks can never interrupt a source
-mid-write and corrupt the shared results file the way a `kill -9` could. The sentinel's PRESENCE is the
-request; its contents are never read. The script clears it on exit (`lib/scout-cancel.sh`'s
+Cooperative, not instant, on purpose: the kill lands at a poll boundary and never during the merge (which
+runs only on the marker branch), so it can never interrupt a source mid-write and corrupt the shared
+results file the way a `kill -9` could. The sentinel's PRESENCE is the request; its contents are never
+read. The script clears it on exit (`lib/scout-cancel.sh`'s
 `clear_cancel`), and the app clears any stale one before starting a fresh run, so a sentinel left over
 from a cancelled run can never stop the next one. See `docs/contracts.md` for the cross-language contract.
 

@@ -41,5 +41,16 @@ refute "clearing the sentinel returns to not-requested" cancel_requested "${CANC
 # Clearing an already-absent sentinel is a quiet no-op, never an error that could fail a run.
 assert "clearing an absent sentinel is a no-op" clear_cancel "${CANCEL}"
 
+# #1053: the heartbeat now polls the cancel sentinel far more often than it touches the marker, so a
+# Cancel stops the read within a few seconds instead of up to a minute. marker_due gates the expensive
+# 60s work (marker touch, chunk merge, progress derive) so the two cadences stay decoupled: the sentinel
+# is read every short poll, this fires only once the accrued time reaches the interval. If this ever
+# regressed to firing every poll, the merge/derive cost would balloon; if it never fired, the marker
+# would go stale and a live run would look crashed.
+refute "marker work is not due before the interval" marker_due 3 60
+refute "marker work is not due one poll short of the interval" marker_due 57 60
+assert "marker work is due exactly at the interval" marker_due 60 60
+assert "marker work is due once past the interval" marker_due 63 60
+
 if [[ ${FAILURES} -gt 0 ]]; then echo "${FAILURES} failure(s)"; exit 1; fi
 echo "all scout-cancel.sh checks passed"
