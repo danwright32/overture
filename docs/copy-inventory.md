@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **642 sentences**, from 201 source files.
+Every sentence Overture can say to Dan: **644 sentences**, from 203 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -839,7 +839,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Read this source's listings now, without scouting the rest of the list"
     `Domain/WatchlistEditing.swift`
 "Reading calendars"
-    `App/RootView.swift`
+    `UI/ScoutProgressView.swift`
 "Reading the page"
     `UI/AddLeadSheet.swift`
 "Reconcile complete: "
@@ -900,6 +900,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "Scout & Prep"
     `App/RootView.swift`
+"Scout progress"
+    `App/RootView.swift`
 "Scout results"
     `UI/ScoutSummaryView.swift`
 "Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily."
@@ -956,6 +958,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Show only the shows that are too far away to shoot"
     `UI/QueueView+Model.swift`
+"Show the scout that's running. Hiding its window doesn't stop it."
+    `App/RootView.swift`
 "Show which bookings were auto-detected"
     `UI/OutcomePatternsView.swift`
 "Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."

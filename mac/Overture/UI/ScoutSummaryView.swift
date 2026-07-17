@@ -65,9 +65,11 @@ struct ScoutSummaryView: View {
             Spacer()
             if !fixedIds.isEmpty {
                 Button(ScoutSummaryCopy.readFixed(fixedIds.count)) {
-                    let ids = fixedIds
-                    dismiss()
-                    onReadFixed(ids)
+                    // #1034: no dismiss() here. The summary and the scout-progress takeover now share ONE
+                    // presented sheet, and onReadFixed starts a fresh scout that re-shows that same sheet
+                    // as progress. Dismissing first would fight the re-present (a dropped sheet, or a
+                    // flicker), so the read just swaps this sheet's content in place instead.
+                    onReadFixed(fixedIds)
                 }
                 .keyboardShortcut(.defaultAction)
             }

@@ -215,7 +215,13 @@ enum ScoutService {
                          },
                          budget: Int = SourceSchedule.defaultBudget,
                          now: Date = Date(),
-                         defaults: UserDefaults = .standard) async throws -> Outcome {
+                         defaults: UserDefaults = .standard,
+                         // #1034: the native "Scouting" phase heartbeat for the takeover modal. Called
+                         // after each source in the fetch/hash loop below with (orgName, 1-based
+                         // position, total), so the modal can name the source it is checking and count
+                         // "3 of 9" instead of a bare spinner. Default no-op, matching the fetch/pin/
+                         // launch injection style above, so every other caller runs unchanged.
+                         onNativeProgress: (String, Int, Int) -> Void = { _, _, _ in }) async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
@@ -243,10 +249,14 @@ enum ScoutService {
         // The html sources: fetch, hash, and decide. Nothing is READ here: this loop is free, and it runs
         // identically on the daily automatic scout and on one Dan started.
         var toRead: [(source: WatchedSource, page: FetchedPage)] = []
-        for source in plan.fetch {
+        for (index, source) in plan.fetch.enumerated() {
             let (result, page) = await check(source, fetch: fetch, depth: depth, now: now)
             outcome.sources.append(result)
             if let page { toRead.append((source, page)) }
+            // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
+            // takeover modal's count advances through the whole sweep rather than stalling on the ones
+            // that happened not to be re-read.
+            onNativeProgress(source.orgName, index + 1, plan.fetch.count)
         }
 
         // ONE batched detached run for every page that changed, never N subprocesses: one hung source

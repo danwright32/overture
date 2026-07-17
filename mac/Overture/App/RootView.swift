@@ -25,6 +25,18 @@ struct RootView: View {
     // #1027: the finished scout's warnings, as one branded popup shown ONCE at the true end of a manual
     // run. Replaces the plain warningMessage alert that fired after the native sweep, before the read.
     @State private var scoutWarnings: ScoutWarnings?
+    // #1034: the takeover progress modal, shown while a scout Dan STARTED runs (never the scheduled
+    // watch-only run, which keeps its quiet toolbar label). One presented sheet carries the whole run:
+    // it shows ScoutProgressView while scoutWarnings is nil, then swaps to #1027's ScoutSummaryView once
+    // the run finishes with something to say, so the takeover becomes the results without a dismiss/
+    // re-present flicker between two sheets.
+    @State private var scoutIsManual = false          // this run is one Dan started (drives the modal)
+    @State private var scoutSheetShown = false        // the sheet is presented (vs hidden while it runs)
+    @State private var scoutNativeSnapshot: ScoutProgressView.Snapshot?   // latest native-phase heartbeat
+    // Supersedes an abandoned run's completion after a stalled-state Retry, so the old Task cannot
+    // clobber the fresh run's state when it finally returns (CLAUDE.md: assume it runs twice).
+    @State private var scoutGeneration = 0
+    @State private var scoutTask: Task<Void, Never>?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
     // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
@@ -244,22 +256,16 @@ struct RootView: View {
                         }
                         .disabled(eligibleForBulkReprep.isEmpty)
                     } label: {
-                        if isScanning {
-                            LiveRunLabel(base: "Scouting", since: scoutStartedAt,
+                        if isScanning && !scoutIsManual {
+                            // #1034: the compact toolbar label is now ONLY the scheduled watch-only
+                            // scout's treatment. A scout Dan STARTED takes over the screen with the
+                            // ScoutProgressView modal instead (both the native "Scouting" sweep and the
+                            // detached "Reading calendars" read), so its progress never shows here. The
+                            // detached-read branch that used to live here moved into the modal wholesale:
+                            // a watch-only run never reads, so readingStartedAt is only ever set by a
+                            // manual run, which the modal owns.
+                            LiveRunLabel(base: ScoutProgressCopy.title(.scouting), since: scoutStartedAt,
                                          timeout: RunTimeouts.scout, compact: true)
-                        } else if let readingStartedAt {
-                            // #803: the detached half. Judged against RunTimeouts.scoutExtract (10
-                            // minutes), NOT RunTimeouts.scout (3, correct for an in-process run and
-                            // wrong for a batch that follows detail pages), or a perfectly healthy run
-                            // would be declared stuck at three minutes. `runAlive` is the run's own
-                            // marker heartbeat, so a slow-but-living run never flips to "looks stuck"
-                            // while a dead one does.
-                            LiveRunLabel(base: "Reading calendars", since: readingStartedAt,
-                                         timeout: RunTimeouts.scoutExtract,
-                                         progressDetail: ScoutExtractProgressDecoder.label(
-                                             from: ScoutExtractProgressDecoder.loadCurrent()),
-                                         runAlive: { ScoutExtractService.isRunning(now: Date()) },
-                                         compact: true)
                         } else if PrepQueueService.isRunning(now: Date()) {
                             // #354: real "N of M" progress from the run's own progress file,
                             // instead of a bare indefinite spinner.
@@ -433,6 +439,23 @@ struct RootView: View {
                     .help("Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus.")
                 }
             }
+            // #1034: the reopen control, shown only while a scout Dan started is running and he has
+            // hidden its progress window. Dismissing the window only hides it (#1010); the run keeps
+            // going. Its own .toolbar block, not the main one above, because that block is already at
+            // SwiftUI's ten-item ceiling (the same reason the DEBUG block below is separate).
+            .toolbar {
+                if scoutIsManual && !scoutSheetShown {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { scoutSheetShown = true } label: {
+                            HStack(spacing: 4) {
+                                ProgressView().controlSize(.small)
+                                Text("Scout progress")
+                            }
+                        }
+                        .help("Show the scout that's running. Hiding its window doesn't stop it.")
+                    }
+                }
+            }
             .toolbar {
                 #if DEBUG
                 // DEBUG ONLY (#196): test affordances, compiled out of release builds. Split into its
@@ -493,12 +516,18 @@ struct RootView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            // #1027: the branded end-of-scout popup, in place of the old plain "Past-client list" alert.
-            // Fires once, at the true end of a manual run, and lets Dan fix or confirm a source inline.
-            .sheet(isPresented: scoutWarningsBinding) {
+            // #1034/#1027: ONE presented sheet for a manual scout, from click to results. While the run
+            // is in flight (scoutWarnings still nil) it is the ScoutProgressView takeover; the instant the
+            // run finishes with something to say it becomes #1027's ScoutSummaryView, in the same sheet,
+            // so there is no dismiss-then-present flicker between two separate sheets. A run with nothing
+            // to report just closes it.
+            .sheet(isPresented: $scoutSheetShown, onDismiss: { scoutWarnings = nil }) {
                 if let scoutWarnings {
+                    // Fires once, at the true end of a manual run; lets Dan fix or confirm a source inline.
                     ScoutSummaryView(warnings: scoutWarnings,
                                      onReadFixed: { ids in runScout(only: ids) })
+                } else {
+                    scoutProgressModal
                 }
             }
             .sheet(isPresented: $showArchive) {
@@ -798,10 +827,6 @@ struct RootView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
-    private var scoutWarningsBinding: Binding<Bool> {
-        Binding(get: { scoutWarnings != nil }, set: { if !$0 { scoutWarnings = nil } })
-    }
-
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
     // on (#33). Safe to trigger unattended: the scout only reads/extracts, never sends.
     // Ingest classifications a prior reply-classify run wrote (suggests states, auto). No-op if the
@@ -836,12 +861,30 @@ struct RootView: View {
         // false by then). Without this, a double-tap of "Read the ones I fixed" starts two runs, and the
         // second dies on the extract runner's already-running guard.
         guard !isScanning, readingStartedAt == nil else { return }
+        scoutGeneration += 1
+        let gen = scoutGeneration   // this run's token; a Retry bumps it so an abandoned Task no-ops
         isScanning = true
         scoutStartedAt = Date()
         scoutSummary = nil
-        Task {
+        scoutNativeSnapshot = nil
+        // #1034: a scout Dan STARTED takes over the screen with the progress modal; the scheduled
+        // watch-only run keeps its quiet toolbar label and never pops it (his call, #1010).
+        if !auto {
+            scoutIsManual = true
+            scoutWarnings = nil       // fresh run: the sheet shows progress, not last run's summary
+            scoutSheetShown = true
+        }
+        scoutTask = Task {
             do {
-                let outcome = try await ScoutService.runScout(into: context, depth: depth, only: only)
+                let outcome = try await ScoutService.runScout(
+                    into: context, depth: depth, only: only,
+                    // #1034: the native "Scouting" phase heartbeat feeds the modal's source name and
+                    // "3 of 9". Guarded so an abandoned run's late callback cannot move a fresh run's bar.
+                    onNativeProgress: { name, index, total in
+                        guard gen == scoutGeneration else { return }
+                        scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total)
+                    })
+                guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 
                 // #802, Dan's 3rd decision: SHOW him the do-not-contact guard working. An org that asked
@@ -865,41 +908,95 @@ struct RootView: View {
                 var extract: ScoutService.Outcome? = nil
                 var finishedEmpty: String? = nil
                 if outcome.sources.contains(where: { $0.state == .queuedForReading }) {
-                    // Visible for the whole of it: a counter that ticks, a real "3 of 9" from the run's
-                    // own progress file, and a stalled state if the run dies. Before this, the scout
-                    // looked finished while it was still working.
+                    // #1034: the modal now flips to its "Reading calendars" phase, naming each source as
+                    // it lands (the queue/results diff) and counting the run's own "3 of 9", with a
+                    // stalled state if the detached run dies.
                     readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
+                    scoutNativeSnapshot = nil
                     let read = await watchScoutExtractRun()
+                    guard gen == scoutGeneration else { return }
                     extract = read.outcome
                     finishedEmpty = read.finishedEmpty
                     readingStartedAt = nil
                 }
-                // #1027: ONE popup, now, at the true end of the whole run, folding both halves. A manual
-                // run gets the branded sheet; an unattended scheduled run leaves a quiet line instead.
-                presentWarnings(ScoutWarnings.from(native: outcome, extract: extract,
-                                                   finishedEmpty: finishedEmpty), auto: auto)
+                // #1027/#1034: ONE surface at the true end of the whole run. A manual run's takeover
+                // becomes the branded summary in place; an unattended scheduled run leaves a quiet line.
+                finishScout(ScoutWarnings.from(native: outcome, extract: extract,
+                                               finishedEmpty: finishedEmpty), auto: auto)
                 return
             } catch {
+                guard gen == scoutGeneration else { return }
                 // A scheduled run failing stays quiet (a status line); a manual run shows
                 // the modal Dan expects after clicking (#77).
                 let p = ScoutFailure.presentation(auto: auto, message: String(describing: error))
                 errorMessage = p.alert
                 if let status = p.status { scoutSummary = status }
+                // Close the takeover so the error alert is what Dan sees.
+                scoutSheetShown = false
             }
+            guard gen == scoutGeneration else { return }
             isScanning = false
             scoutStartedAt = nil
+            scoutIsManual = false
+            scoutNativeSnapshot = nil
         }
     }
 
-    // #1027: how a finished run surfaces what it found. A MANUAL run Dan started gets the branded popup;
-    // an unattended scheduled run he did not start leaves a quiet masthead line and never pops a modal
-    // (his call). Nothing to say means nothing shown.
-    private func presentWarnings(_ warnings: ScoutWarnings, auto: Bool) {
+    // #1027/#1034: how a finished run surfaces what it found. A MANUAL run's takeover sheet becomes the
+    // branded summary (or just closes when there is nothing to say); an unattended scheduled run he did
+    // not start leaves a quiet masthead line and never pops a modal (his call).
+    private func finishScout(_ warnings: ScoutWarnings, auto: Bool) {
+        isScanning = false
+        scoutStartedAt = nil
+        readingStartedAt = nil
+        scoutIsManual = false
+        scoutNativeSnapshot = nil
         switch ScoutWarningsPresentation.decide(warnings, auto: auto) {
-        case .popup(let w): scoutWarnings = w
-        case .quietLine(let line): statusMessage = line
-        case .nothing: break
+        case .popup(let w):
+            // Setting scoutWarnings swaps the still-presented takeover to the summary in place; setting
+            // scoutSheetShown covers the case where Dan had hidden the takeover before it finished.
+            scoutWarnings = w
+            scoutSheetShown = true
+        case .quietLine(let line):
+            statusMessage = line
+            scoutSheetShown = false
+        case .nothing:
+            scoutSheetShown = false
         }
+    }
+
+    // #1034: the stalled-state Retry. A stalled modal means the run's heartbeat has gone dead, so abandon
+    // this watch (its Task's completion is guarded by the generation token) and start a fresh scout,
+    // which re-shows the takeover from the top.
+    private func retryScout() {
+        scoutTask?.cancel()
+        isScanning = false
+        readingStartedAt = nil
+        scoutStartedAt = nil
+        runScout()
+    }
+
+    // #1034: what the reading phase shows, read live each tick. The source name comes from diffing the
+    // queue the app WROTE against the results the run is filling (no new runner file), and the "3 of 9"
+    // from the run's own script-derived progress file (#1015).
+    private func readingSnapshot() -> ScoutProgressView.Snapshot {
+        let progress = ScoutExtractProgressDecoder.loadCurrent()
+        return ScoutProgressView.Snapshot(
+            sourceName: ScoutExtractCurrentSource.loadCurrentName(),
+            completed: progress?.completed ?? 0,
+            total: progress?.total ?? 0)
+    }
+
+    // #1034: the takeover itself. Phase, start, and live providers are read from the run's state; the
+    // per-second ticking happens inside ScoutProgressView's own TimelineView.
+    private var scoutProgressModal: some View {
+        ScoutProgressView(
+            phase: readingStartedAt != nil ? .reading : .scouting,
+            since: readingStartedAt ?? scoutStartedAt,
+            snapshot: { readingStartedAt != nil ? readingSnapshot() : (scoutNativeSnapshot ?? .init()) },
+            runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
+            onRetry: { retryScout() },
+            onHide: { scoutSheetShown = false })
     }
 
     // Reconcile bookings on launch (#41/#99): auto-book on an exact Downbeat booking match,
