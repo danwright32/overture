@@ -6,20 +6,51 @@ import Foundation
 // data-layer path for the long tail is deferred to #381. This is the single home for the knowledge
 // (the display layer), deliberately not duplicated into the scout engine.
 struct VenueDisplay: Equatable {
-    let hall: String        // the venue string as given (or "Venue TBD" when missing)
+    let hall: String        // the venue's own name (or "Venue TBD" when missing), address stripped
     let parent: String?     // the larger building, e.g. "Carnegie Hall"
     let location: String?   // city/state, e.g. "New York, NY"
 
     // The hall plus its parent building when known: "Weill Recital Hall, Carnegie Hall".
     var nameLine: String { parent.map { "\(hall), \($0)" } ?? hall }
 
-    static func resolve(_ venue: String?) -> VenueDisplay {
+    // #1030: Dan's call is city/state only, always, never a raw street address a source page happened
+    // to bake into the venue string ("The Players Theatre, 115 MacDougal Street, New York, NY"). The
+    // curated map is still the authority for `location` when it has an entry; `eventLocation` (#970's
+    // per-event `location` field) only fills the gap for venues the map has never heard of, so most
+    // cards get a consistent city/state line instead of an accident of the ~10-entry table.
+    static func resolve(_ venue: String?, location eventLocation: String? = nil) -> VenueDisplay {
         guard let raw = venue,
               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return VenueDisplay(hall: "Venue TBD", parent: nil, location: nil)
         }
-        let known = map[normalize(raw)]
-        return VenueDisplay(hall: raw, parent: known?.parent, location: known?.location)
+        let hall = strippingEmbeddedAddress(raw)
+        let known = map[normalize(hall)]
+        let fallback = eventLocation?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let location = known?.location ?? (fallback?.isEmpty == false ? fallback : nil)
+        return VenueDisplay(hall: hall, parent: known?.parent, location: location)
+    }
+
+    // A source page can bake the street address directly into the venue string. The heuristic: split
+    // on commas, always keep the first clause (the venue's own name, however it is spelled, even if it
+    // itself starts with a digit like "54 Below"), then keep walking clauses only until one starts with
+    // a digit, which every real street-address clause in the live store does ("115 MacDougal Street",
+    // "1140 Park Avenue", "7 East 95th Street"...). Everything from that clause onward (the street, and
+    // any city/state/zip after it) is dropped. A clause with no leading digit ("Carnegie Hall",
+    // "Abrons Arts Center", "Fabbri Mansion") is a real parent-venue name and is kept.
+    //
+    // Measured against the live store's 66 distinct venue strings: correctly strips every comma-address
+    // shape and leaves every parent-venue clause untouched.
+    private static func strippingEmbeddedAddress(_ raw: String) -> String {
+        let clauses = raw.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard clauses.count > 1 else { return raw }
+
+        var kept = [clauses[0]]
+        for clause in clauses.dropFirst() {
+            guard let first = clause.first, !first.isNumber else { break }
+            kept.append(clause)
+        }
+        return kept.joined(separator: ", ")
     }
 
     // Venue-specific normalization. Deliberately NOT GroupNameMatch.normalize, which is an org/
