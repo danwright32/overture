@@ -24,16 +24,21 @@ enum SourceReadability {
     // time: whichever is actually doing it. Ordered by cause, not severity. Events thrown away are missing
     // from the feed count as well, so heavy unread pages ALSO shrink the feed; naming the shrink in that
     // case would describe a symptom and hide the thing Dan can act on.
-    static func note(readable: Int, unreadable: Int, baseline: Int) -> String? {
+    // #1032: `titleRejected` is how many of the `unreadable` drops were rows with no NAME rather than no
+    // venue. It defaults to 0, the near-universal case, which keeps every existing caller and its copy
+    // byte-for-byte unchanged. The "no venue on their own detail page" sentence is true only of the venue
+    // family (a detail page that was never read), so a titleless drop is never folded into it; a run that
+    // dropped both is told both, in whole sentences per case rather than assembled fragments.
+    static func note(readable: Int, unreadable: Int, titleRejected: Int = 0, baseline: Int) -> String? {
         let total = readable + unreadable
+        let venueRejected = max(0, unreadable - titleRejected)
 
         // #887: too much of what this run looked at came back unread. It cannot know what else it missed.
+        // Saying only a bare count would hide the consequence, and the consequence is the part Dan can
+        // actually act on: this source can no longer tell him a show has been cancelled, and it will not be
+        // able to until it can read its own pages again.
         if FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) {
-            // Saying only "12 shows couldn't be read" would hide the consequence, and the consequence is the
-            // part Dan can actually act on: this source can no longer tell him a show has been cancelled,
-            // and it will not be able to until it can read its own pages again.
-            return "\(unreadable) of \(total) shows had no venue on their own detail page, "
-                + "so Overture won't mark anything from this source as gone until it can confirm one."
+            return forfeitLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
         }
 
         // #897: the run read what it found, but found far less than this source normally lists. A half
@@ -53,6 +58,32 @@ enum SourceReadability {
         // Inside the tolerance: worth stating, but it has cost the source nothing, and the copy must not
         // imply that it has. A "venue TBA" listing is a normal, permanent feature of a real calendar.
         guard unreadable > 0 else { return nil }
-        return "\(unreadable) of \(total) shows had no venue on their own detail page."
+        return toleranceLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
+    }
+
+    // Past the tolerance, the source has forfeited its right to mark anything gone. Complete sentences per
+    // case (#1032, and the standing rule against assembled fragments): the common venue-only case keeps its
+    // original wording; the mixed and title-only cases name what was actually dropped.
+    private static func forfeitLine(total: Int, venueRejected: Int, titleRejected: Int) -> String {
+        switch (venueRejected > 0, titleRejected > 0) {
+        case (_, false):
+            return "\(venueRejected) of \(total) shows had no venue on their own detail page, so Overture won't mark anything from this source as gone until it can confirm one."
+        case (true, true):
+            return "\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
+        case (false, true):
+            return "\(titleRejected) of \(total) shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
+        }
+    }
+
+    // Inside the tolerance, worth stating but with no cancellation consequence. Same three cases.
+    private static func toleranceLine(total: Int, venueRejected: Int, titleRejected: Int) -> String {
+        switch (venueRejected > 0, titleRejected > 0) {
+        case (_, false):
+            return "\(venueRejected) of \(total) shows had no venue on their own detail page."
+        case (true, true):
+            return "\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title."
+        case (false, true):
+            return "\(titleRejected) of \(total) shows had no title."
+        }
     }
 }

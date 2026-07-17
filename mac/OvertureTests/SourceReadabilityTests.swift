@@ -121,6 +121,40 @@ struct SourceReadabilityTests {
     @Test func anEmptyFeedIsNotReportedAsAShrunkenCalendar() {
         #expect(SourceReadability.note(readable: 0, unreadable: 0, baseline: 30) == nil)
     }
+
+    // MARK: - #1032: a titleless drop is not a "no venue" drop.
+
+    // A row with no name is dropped, but no detail page would fix it, so it must not be lumped into the
+    // "no venue on their own detail page" sentence. Past the tolerance, both families are named.
+    @Test func aTitlelessDropIsNamedSeparatelyFromVenueDropsPastTolerance() {
+        let note = SourceReadability.note(readable: 68, unreadable: 12, titleRejected: 2, baseline: 80)
+
+        #expect(note == "10 of 80 shows had no venue on their own detail page and 2 had no title, so Overture won't mark anything from this source as gone until it can read its pages again.")
+    }
+
+    // When EVERY drop is titleless, the note never says "no venue" at all: nothing here is about a venue.
+    @Test func aRunWhoseOnlyDropsAreTitlelessNeverSaysNoVenue() {
+        let note = SourceReadability.note(readable: 68, unreadable: 12, titleRejected: 12, baseline: 80)
+
+        #expect(note == "12 of 80 shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again.")
+        #expect(note?.contains("no venue") == false)
+    }
+
+    // Inside the tolerance, the same split, without the cancellation consequence.
+    @Test func aTitlelessDropInsideToleranceIsNamedWithoutAlarm() {
+        let note = SourceReadability.note(readable: 78, unreadable: 2, titleRejected: 1, baseline: 80)
+
+        #expect(note == "1 of 80 shows had no venue on their own detail page and 1 had no title.")
+    }
+
+    // The common case (no titleless drops) is byte-identical to before this split existed: a run whose
+    // drops are all venue-related reads exactly as it always has, whether the param is omitted or 0.
+    @Test func theVenueOnlyCopyIsUnchangedByTheSplit() {
+        #expect(SourceReadability.note(readable: 68, unreadable: 12, titleRejected: 0, baseline: 80)
+            == SourceReadability.note(readable: 68, unreadable: 12, baseline: 80))
+        #expect(SourceReadability.note(readable: 39, unreadable: 1, titleRejected: 0, baseline: 40)
+            == "1 of 40 shows had no venue on their own detail page.")
+    }
 }
 
 // The count has to survive the run that produced it, or the Sources sheet could only ever show it in the
@@ -167,7 +201,26 @@ struct SourceReadabilityPersistenceTests {
 
         #expect(s.lastReadableCount == 1)
         #expect(s.lastUnreadableCount == 1)
+        #expect(s.lastUnreadableTitleCount == 0)                              // the drop was a venue drop
         #expect(s.readabilityNote?.contains("won't mark anything") == true)   // 50%, far past tolerance
+    }
+
+    // #1032: a row with a venue but no NAME is dropped and recorded as a title drop, apart from the venue
+    // drops, so the source's own note names it correctly ("no title") instead of "no venue on their own
+    // detail page" (which no detail page would ever fix). Through the REAL ingest, so the wire that carries
+    // the split to Dan is exercised, not only the pure note.
+    @Test func anIngestRecordsATitlelessDropSeparately() throws {
+        let ctx = try context()
+        let s = source(ctx)
+
+        ingest([event("Read", venue: "Merkin Hall"),
+                event("", venue: "Merkin Hall")], into: ctx)   // a real venue, but no name at all
+
+        #expect(s.lastReadableCount == 1)
+        #expect(s.lastUnreadableCount == 1)
+        #expect(s.lastUnreadableTitleCount == 1)
+        #expect(s.readabilityNote?.contains("no title") == true)
+        #expect(s.readabilityNote?.contains("no venue") == false)
     }
 
     // #897, through the REAL ingest, because the rule and the WIRE that carries it to Dan are two separate

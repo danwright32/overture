@@ -40,6 +40,13 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
         }
     }
 
+    // #1032: the same drops, counted by family (venue vs title), so the Sources note names a titleless
+    // drop correctly rather than calling it "no venue". Counted through the SAME guard helper the native
+    // door uses, so the two paths can never disagree on the split.
+    func rejectionCounts(for sourceId: String) -> RejectionCounts {
+        ExtractedEventGuard.rejectionCounts(for: rawEvents(for: sourceId))
+    }
+
     private func rawEvents(for sourceId: String) -> [ExtractedEvent] {
         results.first { $0.sourceId == sourceId }?.events.map(\.asExtractedEvent) ?? []
     }

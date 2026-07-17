@@ -100,6 +100,11 @@ final class WatchedSource {
     // Defaulted, so existing rows migrate cleanly and simply carry no history.
     var lastReadableCount: Int = 0
     var lastUnreadableCount: Int = 0
+    // #1032: of `lastUnreadableCount`, how many were dropped for having no TITLE (a row with no name)
+    // rather than no venue. The Sources note's "no venue on their own detail page" sentence is true only
+    // of the venue drops, so it counts these apart instead of mislabeling a titleless row. Defaulted, so
+    // existing rows migrate cleanly and simply carry no title-drop history.
+    var lastUnreadableTitleCount: Int = 0
 
     // #986: how many of the last run's kept shows said WHERE they are, and whether this source has EVER said
     // so. #970's gate reads only that `location` string (EventPlace.resolve never sees the venue), so a run
@@ -135,7 +140,7 @@ final class WatchedSource {
     // question the next reconcile will ask, and clears itself the moment the smaller size is accepted.
     var readabilityNote: String? {
         SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount,
-                               baseline: baselineFeedCount)
+                               titleRejected: lastUnreadableTitleCount, baseline: baselineFeedCount)
     }
 
     // #986: has this source EVER said where one of its shows is? A high-water mark, derived rather than
@@ -158,10 +163,11 @@ final class WatchedSource {
     //
     // Deliberately does NOT touch the content hash. That is the agent path's alone (the native Algolia feed
     // has no fetched page to hash), so its caller promotes the hash itself after this returns.
-    func recordSuccessfulRead(events: Int, unreadable: Int, placed: Int,
+    func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0, placed: Int,
                               feedHealth: FeedReconcile.FeedHealthState, now: Date) {
         lastReadableCount = events
         lastUnreadableCount = unreadable
+        lastUnreadableTitleCount = titleUnreadable
 
         hadPlacedBeforeLastRun = hasEverPlaced
         lastPlacedCount = placed
@@ -218,6 +224,7 @@ final class WatchedSource {
         self.lastDegradedCount = 0
         self.lastReadableCount = 0
         self.lastUnreadableCount = 0
+        self.lastUnreadableTitleCount = 0
         self.pageCount = 1
         self.addedAt = addedAt
         self.notes = nil

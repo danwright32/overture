@@ -87,6 +87,9 @@ enum ScoutExtractIngest {
             // the 7 sites in the #770 spike, in July) and is not a failure: we know what that page says,
             // and re-reading it daily until the season starts would be paying to be told so again.
             let events = results.events(for: result.sourceId)
+            // #1032: the drops this run threw away, split by family (venue vs title), computed once and
+            // used for BOTH the #887 tolerance gate (its total) and the Sources note (its title share).
+            let rejection = results.rejectionCounts(for: result.sourceId)
             let health = FeedReconcile.FeedHealthState(
                 baseline: source.baselineFeedCount,
                 degradedStreak: source.degradedStreak,
@@ -109,7 +112,7 @@ enum ScoutExtractIngest {
                                              baseline: health.baseline,
                                              successfulCheckCount: source.successfulCheckCount,
                                              verdict: result.verdict,
-                                             rejectedCount: results.rejectedEvents(for: source.sourceId).count),
+                                             rejectedCount: rejection.total),
                 today: today, sourceIds: [source.sourceId], into: context)
             outcome.merge(applied)
 
@@ -127,14 +130,14 @@ enum ScoutExtractIngest {
             // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
             // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
             let placedCount = SourcePlacement.placedCount(locations: events.map(\.location))
-            let unreadableCount = results.rejectedEvents(for: source.sourceId).count
 
             if result.verdict == .incompleteExtraction {
                 // #1012: real events, so they land, but the run only read PART of this page. Stamping the
                 // hash or clearing the unread flag here would mean never going back for the rest of it:
                 // the source would report healthy and unchanged forever, having been read exactly once.
                 recordPartialCheck(on: source, events: events.count, now: now,
-                                   unreadable: unreadableCount, placed: placedCount)
+                                   unreadable: rejection.total, titleUnreadable: rejection.titleRelated,
+                                   placed: placedCount)
             } else {
                 recordSuccess(on: source, events: events.count, health: health, now: now,
                               // #891: recorded on the SAME branch as the run's success, so the count can
@@ -142,7 +145,10 @@ enum ScoutExtractIngest {
                               // recovers overwrites this with a zero and stops complaining, which it must:
                               // a warning that never clears becomes furniture, and this is the one line
                               // Dan must not skim.
-                              unreadable: unreadableCount, placed: placedCount)
+                              // #1032: the title share rides alongside the total, so the note names a
+                              // titleless drop correctly instead of calling it "no venue".
+                              unreadable: rejection.total, titleUnreadable: rejection.titleRelated,
+                              placed: placedCount)
             }
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
@@ -220,8 +226,9 @@ enum ScoutExtractIngest {
     // this path's own: the native Algolia feed has no fetched page to hash.
     private static func recordSuccess(on source: WatchedSource, events: Int,
                                       health: FeedReconcile.FeedHealthState, now: Date,
-                                      unreadable: Int = 0, placed: Int = 0) {
-        source.recordSuccessfulRead(events: events, unreadable: unreadable, placed: placed,
+                                      unreadable: Int = 0, titleUnreadable: Int = 0, placed: Int = 0) {
+        source.recordSuccessfulRead(events: events, unreadable: unreadable,
+                                    titleUnreadable: titleUnreadable, placed: placed,
                                     feedHealth: health, now: now)
 
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
@@ -242,9 +249,10 @@ enum ScoutExtractIngest {
     //     can never fire for this verdict (it gates on verdict == .upcomingListings), so there is nothing
     //     to protect by updating the baseline, only something to corrupt by doing so anyway.
     private static func recordPartialCheck(on source: WatchedSource, events: Int, now: Date,
-                                           unreadable: Int = 0, placed: Int = 0) {
+                                           unreadable: Int = 0, titleUnreadable: Int = 0, placed: Int = 0) {
         source.lastReadableCount = events
         source.lastUnreadableCount = unreadable
+        source.lastUnreadableTitleCount = titleUnreadable
         source.hadPlacedBeforeLastRun = source.hasEverPlaced
         source.lastPlacedCount = placed
 

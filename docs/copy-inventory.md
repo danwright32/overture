@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **650 sentences**, from 207 source files.
+Every sentence Overture can say to Dan: **649 sentences**, from 207 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1365,13 +1365,21 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(tally.kept) of \(reviewed) kept after review"
     `Domain/SourceYield.swift`
+"\(titleRejected) of \(total) shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
+    `Domain/SourceReadability.swift`
+"\(titleRejected) of \(total) shows had no title."
+    `Domain/SourceReadability.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`
 "\(unread.count == 1 ? "that month" : "those months") isn't here."
     `UI/LeadIntakeModel.swift`
-"\(unreadable) of \(total) shows had no venue on their own detail page, "
+"\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
     `Domain/SourceReadability.swift`
-"\(unreadable) of \(total) shows had no venue on their own detail page."
+"\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title."
+    `Domain/SourceReadability.swift`
+"\(venueRejected) of \(total) shows had no venue on their own detail page, so Overture won't mark anything from this source as gone until it can confirm one."
+    `Domain/SourceReadability.swift`
+"\(venueRejected) of \(total) shows had no venue on their own detail page."
     `Domain/SourceReadability.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
@@ -1436,14 +1444,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
     `UI/FollowUpsView.swift`
     `UI/QueueView.swift`
-"no real venue (the listing carries a placeholder)"
-    `Domain/ExtractedEventGuard.swift`
-"no title"
-    `Domain/ExtractedEventGuard.swift`
-"no venue"
-    `Domain/ExtractedEventGuard.swift`
-"no venue (the listing gave only a place)"
-    `Domain/ExtractedEventGuard.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
 "read it."
@@ -1454,8 +1454,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "send failed"
     `Integration/GmailSender.swift`
-"so Overture won't mark anything from this source as gone until it can confirm one."
-    `Domain/SourceReadability.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
 "stern auditorium / perelman stage"

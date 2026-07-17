@@ -200,4 +200,38 @@ struct ScoutExtractResultsGuardTests {
         #expect(r.rejectedEvents(for: "s").count == 2)      // ...but NOT because the page was empty
         #expect(r.verdict(for: "s") == .upcomingListings)   // the page HAD shows; we just can't use them
     }
+
+    // MARK: - #1032: rejected shows split by whether the reason is about a venue or a title.
+
+    // The three venue reasons (the detail page was not read) are counted apart from the one that has
+    // nothing to do with a detail page (a row with no name), so the Sources note can stop calling a
+    // titleless drop "no venue". Usable events are not counted at all.
+    // Built directly rather than via the two overloaded `event` helpers in this file, whose shared name
+    // makes an explicit per-title list ambiguous.
+    private func extracted(_ title: String, venue: String?, location: String? = nil) -> ExtractedEvent {
+        ExtractedEvent(title: title, presenter: title, venue: venue,
+                       performanceDate: "2026-09-19", sourceUrl: "https://org.example/a", location: location)
+    }
+
+    @Test func rejectionCountsSplitVenueReasonsFromTitleReasons() {
+        let counts = ExtractedEventGuard.rejectionCounts(for: [
+            extracted("Good", venue: "Merkin Hall"),                                 // usable
+            extracted("No venue", venue: nil),                                       // venue
+            extracted("Placeholder", venue: "3"),                                    // venue
+            extracted("City", venue: "Harrogate, UK", location: "Harrogate, UK"),    // venue
+            extracted("", venue: "Merkin Hall")                                      // title
+        ])
+        #expect(counts.venueRelated == 3)
+        #expect(counts.titleRelated == 1)
+        #expect(counts.total == 4)
+    }
+
+    @Test func rejectionCountsAreZeroWhenEveryEventIsUsable() {
+        let counts = ExtractedEventGuard.rejectionCounts(for: [
+            extracted("A", venue: "Merkin Hall"),
+            extracted("B", venue: "Carnegie Hall")
+        ])
+        #expect(counts == RejectionCounts(venueRelated: 0, titleRelated: 0))
+        #expect(counts.total == 0)
+    }
 }
