@@ -97,6 +97,66 @@ assert_equals "an unknown base warns rather than blocks" \
 assert_equals "a base still running is unknown, not red" \
   "base-unknown" "$(base_branch_stop_reason "in_progress")"
 
+# --- the WIRE from main() into the base-branch gate --------------------------------------
+#
+# The decision above is pure and tested. Whether main() actually CONSULTS it before merging is a
+# SEPARATE claim, and by this repo's own history the more important one: #887's guard sat green
+# across 1,829 tests with its wire cut, and #986's persistence test only earned trust once it was
+# seen to fail with the assignment removed. So this drives the real main(), with gh and
+# check-pr-ci.sh stubbed, and asserts on the thing that actually matters: did a merge happen.
+#
+# Cut the `case "$(base_branch_stop_reason ...)"` block out of main() and
+# "a red base is not merged onto" flips to "merged". That is the mutation this exists to catch.
+
+# Runs the REAL main() with a passing check-pr-ci.sh and a stubbed gh, and reports whether
+# `gh pr merge` was reached. Subshell, because main() exits.
+run_main_with_stubs() {
+  local base_conclusion="$1" override="${2:-}"
+  local tmp
+  tmp="$(mktemp -d)"
+
+  # A check-pr-ci.sh that reports a genuine pass, so the ONLY thing that can stop the merge is
+  # the base-branch gate under test.
+  cat > "${tmp}/check-pr-ci.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "PR #1 on danwright32/overture, commit abc1234"
+echo "swift-tests: Passed"
+exit 0
+STUB
+  chmod +x "${tmp}/check-pr-ci.sh"
+
+  (
+    SCRIPT_DIR="${tmp}"
+    gh_as_danwright32() {
+      case "$*" in
+        *"pr view"*)   echo "main" ;;
+        *"run list"*)  echo "${base_conclusion}" ;;
+        *"pr merge"*)  touch "${tmp}/MERGED" ;;
+      esac
+    }
+    main 1 900 ${override} >/dev/null 2>&1
+  )
+
+  if [[ -f "${tmp}/MERGED" ]]; then echo "merged"; else echo "not-merged"; fi
+  rm -rf "${tmp}"
+}
+
+# THE case. The PR itself passed; the base is red; nothing may be merged.
+assert_equals "a red base is not merged onto, even when the PR itself passed" \
+  "not-merged" "$(run_main_with_stubs "failure")"
+
+# The gate must not block a healthy merge, or it would be discovered by everything breaking.
+assert_equals "a green base is merged onto" \
+  "merged" "$(run_main_with_stubs "success")"
+
+# The override has to actually reach the merge, or the fix for a red main could never land.
+assert_equals "an override lets the fix for a red main land" \
+  "merged" "$(run_main_with_stubs "failure" "allow-red-base")"
+
+# An API outage must not stop work: the PR's own checks are still the real gate.
+assert_equals "an unknown base still merges, on the PR's own checks" \
+  "merged" "$(run_main_with_stubs "")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All merge-when-green.sh classification fixtures passed."
   exit 0
