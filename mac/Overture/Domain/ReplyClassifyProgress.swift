@@ -40,4 +40,14 @@ enum ReplyClassifyProgressDecoder {
         guard let progress, progress.total > 0 else { return nil }
         return "\(min(progress.completed, progress.total)) of \(progress.total)"
     }
+
+    // #1085: the run-wide "N of M" is a single run-level fact, so it belongs in ONE run-level spot (the
+    // top of the queue) rather than repeated next to every recipient the run is currently drafting.
+    // nil unless a run is genuinely alive AND has a count to show, so a stale count from a finished run
+    // never lingers up top and a run that hasn't written its total yet shows nothing (the per-recipient
+    // rows still carry the alive spinner, so aliveness is never lost).
+    static func runningLabel(running: Bool, progress: ReplyClassifyProgress?) -> String? {
+        guard running, let count = label(for: progress) else { return nil }
+        return "Drafting replies \(count)"
+    }
 }

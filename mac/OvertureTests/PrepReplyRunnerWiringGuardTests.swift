@@ -21,6 +21,7 @@ struct PrepReplyRunnerWiringGuardTests {
     private var rootView: String { source("Overture/App/RootView.swift") }
     private var factory: String { source("Overture/UI/ProspectRowFactory.swift") }
     private var draftReview: String { source("Overture/UI/DraftReviewView.swift") }
+    private var queueView: String { source("Overture/UI/QueueView.swift") }
 
     // Matches a real sourcing LINE, not merely a mention: every runner also names its lib files in header
     // comments, so a bare `contains("scout-cancel.sh")` would stay green even if the actual `.` line were
@@ -107,18 +108,30 @@ struct PrepReplyRunnerWiringGuardTests {
         #expect(!reply.contains("overwrite \\$PROGRESS"))
     }
 
-    // The reply drafter's LiveRunLabel reads the derived count in the closure form (#1003), so the
-    // "N of M" re-reads every tick rather than reflecting whatever the enclosing view last captured.
-    @Test func theReplyDrafterLabelReadsTheProgressFile() {
+    // #1085: the run's "N of M" is a single run-wide fact, so it moved OUT of the per-recipient
+    // "Drafting a reply" label (where it repeated on every drafting row) and into ONE run-level line at
+    // the top of the queue. This pins the move both ways so neither half can silently regress: the
+    // per-recipient label no longer carries the count, and QueueView's run-level line reads the derived
+    // progress through the pure, tested runningLabel. It reads through loadCurrent() inside the run's
+    // freshness check so the whole line re-reads each tick (#1003), never a value the enclosing view
+    // captured at its last render. The behavior of what the line SAYS is covered in
+    // ReplyClassifyProgressContractTests.runningLabel*.
+    @Test func theRunLevelLineReadsTheProgressFileAndThePerRecipientLabelNoLongerDoes() {
         #expect(!draftReview.isEmpty)
+        #expect(!queueView.isEmpty)
+        // The per-recipient label dropped the run-wide count...
         guard let labelRange = draftReview.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
             Issue.record("reply drafter LiveRunLabel not found")
             return
         }
         // Generous window (the label spans several argument lines plus an explanatory comment), so an
-        // added note between the label and the closure can't push the assertion out of view.
+        // added note near the label can't push the assertion out of view.
         let nearby = draftReview[labelRange.lowerBound...].prefix(900)
-        #expect(nearby.contains("progressDetail: { ReplyClassifyProgressDecoder.label(for: ReplyClassifyProgressDecoder.loadCurrent()) }"))
+        #expect(!nearby.contains("progressDetail:"))
+        // ...and the run-level line now reads the derived count, gated on a live run and re-read each tick.
+        #expect(queueView.contains("ReplyClassifyProgressDecoder.runningLabel("))
+        #expect(queueView.contains("ReplyClassifyProgressDecoder.loadCurrent()"))
+        #expect(queueView.contains("ReplyClassifyService.isRunning(now: context.date)"))
     }
 
     // --- #1038: both runners honour the cancel sentinel on a short poll -----------------------------
