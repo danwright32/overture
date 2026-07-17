@@ -1361,7 +1361,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(tally.bookedManual) confirmed by you"
     `Domain/OutcomePatterns.swift`
-"\(tally.kept) of \(reviewed) kept"
+"\(tally.kept) of \(reviewed) kept after review"
     `Domain/SourceYield.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`

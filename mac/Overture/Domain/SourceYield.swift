@@ -114,7 +114,7 @@ enum SourceYield {
     // The lifetime funnel over reviewed shows, kept-first (Dan's choice), with sent and booked appended
     // only when they are above zero so the common case carries no trailing "· 0 sent · 0 booked" noise.
     private static func keptLine(_ tally: Tally, reviewed: Int) -> String {
-        var line = "\(tally.kept) of \(reviewed) kept"
+        var line = "\(tally.kept) of \(reviewed) kept after review"
         if tally.sent > 0 { line += " · \(tally.sent) sent" }
         if tally.booked > 0 { line += " · \(tally.booked) booked" }
         return line

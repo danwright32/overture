@@ -92,17 +92,17 @@ struct SourceYieldTests {
     }
 
     // With everything reviewed (nothing waiting), the line is the lifetime kept ratio, kept-first:
-    // "3 of 12 kept", with sent and booked appended only when they are above zero (his choice), so the
+    // "3 of 12 kept after review", with sent and booked appended only when they are above zero (his choice), so the
     // common case stays quiet. The denominator is the shows he has REVIEWED, which here is all of them.
     @Test func theLineLeadsWithTheKeptRatioOnceEverythingIsReviewed() {
         var t = SourceYield.Tally(found: 12, unreviewed: 0, kept: 3, approved: 2, sent: 1, booked: 1)
-        #expect(SourceYield.line(t) == "3 of 12 kept · 1 sent · 1 booked")
+        #expect(SourceYield.line(t) == "3 of 12 kept after review · 1 sent · 1 booked")
 
         t = SourceYield.Tally(found: 4, unreviewed: 0, kept: 2, approved: 0, sent: 0, booked: 0)
-        #expect(SourceYield.line(t) == "2 of 4 kept")
+        #expect(SourceYield.line(t) == "2 of 4 kept after review")
 
         t = SourceYield.Tally(found: 5, unreviewed: 0, kept: 3, approved: 2, sent: 2, booked: 0)
-        #expect(SourceYield.line(t) == "3 of 5 kept · 2 sent")
+        #expect(SourceYield.line(t) == "3 of 5 kept after review · 2 sent")
     }
 
     // #1029: a freshly scouted source is ALL unreviewed. It must read as the shows waiting for Dan, not
@@ -112,7 +112,7 @@ struct SourceYieldTests {
         let t = SourceYield.Tally(found: 8, unreviewed: 8, kept: 0, approved: 0, sent: 0, booked: 0)
         #expect(SourceYield.line(t) == "8 new shows waiting for you")
         // The old wording must be gone: a fresh source is not dead weight.
-        #expect(SourceYield.line(t) != "0 of 8 kept")
+        #expect(SourceYield.line(t) != "0 of 8 kept after review")
     }
 
     // #1029: one waiting show reads in the singular, not "1 new shows waiting for you".
@@ -128,7 +128,7 @@ struct SourceYieldTests {
         let waiting = SourceYield.Tally(found: 8, unreviewed: 8, kept: 0, approved: 0, sent: 0, booked: 0)
         let deadWeight = SourceYield.Tally(found: 8, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
         #expect(SourceYield.line(waiting) == "8 new shows waiting for you")
-        #expect(SourceYield.line(deadWeight) == "0 of 8 kept")
+        #expect(SourceYield.line(deadWeight) == "0 of 8 kept after review")
         #expect(SourceYield.line(waiting) != SourceYield.line(deadWeight))
     }
 
@@ -136,7 +136,7 @@ struct SourceYieldTests {
     // silent, because making this visible is the entire point of the feature (#794).
     @Test func deadWeightReadsZeroOfManyOnceReviewed() {
         let t = SourceYield.Tally(found: 12, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
-        #expect(SourceYield.line(t) == "0 of 12 kept")
+        #expect(SourceYield.line(t) == "0 of 12 kept after review")
     }
 
     // #1029: a source with both a review history AND new shows shows BOTH facts: what to do now, and
@@ -145,10 +145,10 @@ struct SourceYieldTests {
     // carries through the combined line just as it does the standalone one.
     @Test func aSourceWithBothWaitingAndKeptShowsBoth() {
         let t = SourceYield.Tally(found: 9, unreviewed: 5, kept: 3, approved: 3, sent: 1, booked: 0)
-        #expect(SourceYield.line(t) == "5 new shows waiting for you · 3 of 4 kept · 1 sent")
+        #expect(SourceYield.line(t) == "5 new shows waiting for you · 3 of 4 kept after review · 1 sent")
     }
 
-    // A source that has surfaced nothing yet says nothing at all: "0 of 0 kept" would read like a
+    // A source that has surfaced nothing yet says nothing at all: "0 of 0 kept after review" would read like a
     // failure, and a brand-new or off-season source is neither dead weight nor broken.
     @Test func aSourceThatFoundNothingSaysNothing() {
         let t = SourceYield.Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
@@ -171,6 +171,6 @@ struct SourceYieldTests {
                                 show("b", sources: ["s"], status: .dismissed),
                                 show("c", sources: ["s"], status: .dismissed)]
         #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: reviewedKeptNone))
-                == "0 of 3 kept")
+                == "0 of 3 kept after review")
     }
 }
