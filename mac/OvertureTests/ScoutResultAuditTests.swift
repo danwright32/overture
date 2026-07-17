@@ -47,6 +47,16 @@ struct ScoutResultAuditTests {
         #expect(ScoutResultAudit.contradiction(in: result(.notRead)) == nil)
     }
 
+    // A partial read finding real events is the expected shape, not a contradiction: unlike the other
+    // empty-claiming verdicts, incomplete_extraction never claimed the page had nothing on it.
+    @Test func incompleteExtractionWithEventsIsConsistent() {
+        #expect(ScoutResultAudit.contradiction(in: result(.incompleteExtraction, events: [event()])) == nil)
+    }
+
+    @Test func incompleteExtractionWithNoEventsIsConsistent() {
+        #expect(ScoutResultAudit.contradiction(in: result(.incompleteExtraction)) == nil)
+    }
+
     // MARK: - A verdict that asserts emptiness while returning events is a contradiction
 
     @Test func allPastWithEventsContradicts() {

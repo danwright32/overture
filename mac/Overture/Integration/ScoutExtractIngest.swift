@@ -113,18 +113,29 @@ enum ScoutExtractIngest {
                 continue
             }
 
-            recordSuccess(on: source, events: events.count, health: health, now: now,
-                          // #891: recorded on the SAME branch as the run's success, so the count can never
-                          // describe a run other than the one that produced it. A source that recovers
-                          // overwrites this with a zero and stops complaining, which it must: a warning
-                          // that never clears becomes furniture, and this is the one line Dan must not skim.
-                          unreadable: results.rejectedEvents(for: source.sourceId).count,
-                          // #986: how many of the shows this run KEPT said where they are. Blank is not a
-                          // place: the runbook asks for the page's words verbatim, and a page rendering an
-                          // empty location field must not read as one that named somewhere.
-                          placed: events.filter {
-                              !($0.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                          }.count)
+            let placedCount = events.filter {
+                // #986: how many of the shows this run KEPT said where they are. Blank is not a place: the
+                // runbook asks for the page's words verbatim, and a page rendering an empty location field
+                // must not read as one that named somewhere.
+                !($0.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+            let unreadableCount = results.rejectedEvents(for: source.sourceId).count
+
+            if result.verdict == .incompleteExtraction {
+                // #1012: real events, so they land, but the run only read PART of this page. Stamping the
+                // hash or clearing the unread flag here would mean never going back for the rest of it:
+                // the source would report healthy and unchanged forever, having been read exactly once.
+                recordPartialCheck(on: source, events: events.count, now: now,
+                                   unreadable: unreadableCount, placed: placedCount)
+            } else {
+                recordSuccess(on: source, events: events.count, health: health, now: now,
+                              // #891: recorded on the SAME branch as the run's success, so the count can
+                              // never describe a run other than the one that produced it. A source that
+                              // recovers overwrites this with a zero and stops complaining, which it must:
+                              // a warning that never clears becomes furniture, and this is the one line
+                              // Dan must not skim.
+                              unreadable: unreadableCount, placed: placedCount)
+            }
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
                 state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
@@ -199,6 +210,32 @@ enum ScoutExtractIngest {
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
         source.hasUnreadChanges = false
+    }
+
+    // #1012: the run only read PART of this page, so this is neither a failure (real events came back
+    // and were ingested above) nor a completed check. Deliberately does NOT do what recordSuccess does:
+    //
+    //   - lastContentHash / pendingContentHash / hasUnreadChanges are left untouched, so the next scout
+    //     sees this source as still having unread changes and goes back for the rest of the page. Every
+    //     other branch in this file that skips stamping the hash (fail(), the saveFailed path) is
+    //     protecting the same invariant: only a run that read a page IN FULL may promote its hash.
+    //   - baselineFeedCount / degradedStreak / successfulCheckCount are left untouched. A partial count
+    //     is not this source's real size, and folding it into FeedReconcile.updatedHealth would let
+    //     repeated partial reads ratchet the baseline down for no benefit: absenceIsEvidence already
+    //     can never fire for this verdict (it gates on verdict == .upcomingListings), so there is nothing
+    //     to protect by updating the baseline, only something to corrupt by doing so anyway.
+    private static func recordPartialCheck(on source: WatchedSource, events: Int, now: Date,
+                                           unreadable: Int = 0, placed: Int = 0) {
+        source.lastReadableCount = events
+        source.lastUnreadableCount = unreadable
+        source.hadPlacedBeforeLastRun = source.hasEverPlaced
+        source.lastPlacedCount = placed
+
+        source.lastCheckedAt = now
+        source.health = .ok
+        source.lastFailure = nil
+        // Deliberately NOT lastSucceededAt and NOT successfulCheckCount: this run did not finish reading
+        // the page, so it should not count as the kind of check that starts the warmup clock.
     }
 
     private static func row(for sourceId: String, in context: ModelContext) -> WatchedSource? {

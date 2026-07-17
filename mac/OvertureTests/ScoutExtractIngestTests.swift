@@ -121,6 +121,57 @@ struct ScoutExtractIngestTests {
         #expect(s.lastFailure == .verdict(.noDatedContent))
     }
 
+    // MARK: - #1012: a page the run could only read PART of
+
+    // A partial read's real events are safe to ingest (FeedReconcile can never let this verdict argue a
+    // show is gone, since absenceIsEvidence gates on upcomingListings), but the hash must never latch:
+    // the rest of the page is still out there and the next scout has to go back for it.
+    @Test func aPartiallyReadPageIngestsItsEventsButNeverLatchesTheHash() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx, pending: "new-hash", lastIngested: "old-hash")
+
+        let outcome = ingest(results("org", verdict: .incompleteExtraction,
+                                     events: [event("A Show")]), into: ctx)
+
+        #expect(outcome.inserted == 1)                  // the real event it DID find lands
+        #expect(s.health == .ok)                        // it is not a failure
+        #expect(s.lastFailure == nil)
+        #expect(s.lastContentHash == "old-hash")         // NOT promoted: more of this page is unread
+        #expect(s.pendingContentHash == "new-hash")      // still in flight, for the next scout to finish
+        #expect(s.hasUnreadChanges)                      // there is still something here to read
+        #expect(outcome.failedSources.isEmpty)
+    }
+
+    // A partial count must not corrupt the baseline/warmup math: a page that is genuinely this size
+    // would otherwise look like a shrinking calendar after enough incomplete reads.
+    @Test func aPartiallyReadPageDoesNotAdvanceTheBaselineOrWarmup() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx)
+        s.baselineFeedCount = 40
+        s.successfulCheckCount = 3
+
+        ingest(results("org", verdict: .incompleteExtraction, events: [event("A Show")]), into: ctx)
+
+        #expect(s.baselineFeedCount == 40)
+        #expect(s.successfulCheckCount == 3)
+    }
+
+    // The run's own explanation still lands on the source, exactly as it does for every other verdict,
+    // so Dan can read what made this page hard even though nothing failed.
+    @Test func aPartiallyReadPageKeepsTheRunsNote() throws {
+        let ctx = try context()
+        let s = queuedSource(ctx)
+
+        ScoutExtractIngest.ingest(
+            ScoutExtractResults(version: 1, generatedAt: "2026-07-16T00:00:00Z",
+                                results: [ScoutExtractResult(sourceId: "org", verdict: .incompleteExtraction,
+                                                             events: [event("A Show")],
+                                                             note: "This page is larger than one Read call covered.")]),
+            clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
+
+        #expect(s.notes == "This page is larger than one Read call covered.")
+    }
+
     // MARK: - A page that came back correct and EMPTY
 
     // A quiet off-season is the NORMAL state (5 of the 7 spike sites, in July). It is not a failure, the

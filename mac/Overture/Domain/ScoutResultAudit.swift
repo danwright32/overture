@@ -4,7 +4,7 @@ import Foundation
 // sourceId, judge the page with exactly one verdict, never invent an event, write the results) is
 // enforced by nothing but hope, and when a run quietly ignores one the failure is silent and often
 // plausible-looking. This is the cheapest, highest-value check: does a source's VERDICT agree with the
-// EVENTS it returned? Four of the five verdicts are claims that the page had nothing upcoming to hand
+// EVENTS it returned? Four of the six verdicts are claims that the page had nothing upcoming to hand
 // back, so a run that makes one of them and still returns shows is disagreeing with itself, and its
 // result cannot be trusted enough to ingest.
 //
@@ -12,6 +12,9 @@ import Foundation
 // documented healthy state (a run that read the page, found its shows, and left every one out for a
 // reason it explains in its note), the same fact as `all_past` arrived at differently. See
 // `ScoutExtractIngestTests.anEmptyButHealthyListingIsNotAFailure`.
+//
+// `incomplete_extraction` is the other verdict any event count is plausible under: it never claimed the
+// page had nothing on it, only that it might not have seen all of it (#1012).
 //
 // Measured on the RAW events the run returned, before ExtractedEventGuard filters any out: the question
 // is what the RUN claimed versus what the RUN handed back, not what survived our own guard.
@@ -21,7 +24,7 @@ enum ScoutResultAudit {
     static func contradiction(in result: ScoutExtractResult) -> String? {
         let count = result.events.count
         switch result.verdict {
-        case .upcomingListings:
+        case .upcomingListings, .incompleteExtraction:
             return nil
         case .allPast:
             guard count > 0 else { return nil }

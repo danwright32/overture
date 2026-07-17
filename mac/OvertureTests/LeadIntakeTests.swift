@@ -93,6 +93,33 @@ struct LeadIntakeTests {
         #expect(!message.lowercased().contains("the org's own site"))
     }
 
+    // #1012: a partial read that DID find something is not a problem at all: it goes through the same
+    // `.found` path as a fully-read page, note and all. Only an empty partial read needs its own message.
+    @Test func aPartiallyReadPageWithShowsIsStillSomethingToConfirm() {
+        let outcome = LeadIntake.outcome(from: results(verdict: .incompleteExtraction,
+                                                       events: [event("Brooklyn Youth Chorus")]),
+                                         sourceId: "lead")
+
+        guard case .found(let events, _) = outcome else {
+            Issue.record("expected .found, got \(outcome)"); return
+        }
+        #expect(events.count == 1)
+    }
+
+    // A partial read that found nothing YET is a different fact from `.unreadable`: we are not blind to
+    // this page, we simply have not finished it, and the message must not claim a JavaScript calendar or
+    // a login wall that was never the problem.
+    @Test func anEmptyPartialReadSaysItWasNotFinishedRatherThanBlaming() {
+        let outcome = LeadIntake.outcome(from: results(verdict: .incompleteExtraction, events: []),
+                                         sourceId: "lead")
+
+        guard case .incompleteExtraction(let message) = outcome else {
+            Issue.record("expected .incompleteExtraction, got \(outcome)"); return
+        }
+        #expect(!message.lowercased().contains("javascript"))
+        #expect(!message.lowercased().contains("login"))
+    }
+
     @Test func anInstagramLinkIsRecognizedBeforeWeEvenFetchIt() {
         // Cheap and honest: we know how this ends, so say so immediately rather than spending a fetch
         // and a Claude run to discover a login wall.

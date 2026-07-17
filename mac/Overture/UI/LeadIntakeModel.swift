@@ -360,7 +360,8 @@ final class LeadIntakeModel {
             case (false, let count):
                 phase = .problem("Found \(count) shows on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load.")
             }
-        case .noUpcomingShows(let message), .notAnEventsPage(let message), .unreadable(let message):
+        case .noUpcomingShows(let message), .notAnEventsPage(let message), .unreadable(let message),
+             .incompleteExtraction(let message):
             phase = .problem(message)
         case .nothingCameBack:
             phase = .problem("The reader came back with nothing for that page. Try again, or paste the org's events page.")

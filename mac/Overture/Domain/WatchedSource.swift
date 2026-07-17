@@ -255,7 +255,10 @@ enum SourceFailure: Equatable, Sendable {
     // genuinely broken has to be visible.
     init?(verdict: PageVerdict) {
         switch verdict {
-        case .upcomingListings, .allPast: return nil
+        // #1012: `incompleteExtraction` is real data, not a failure, unlike the three below it. Its
+        // hash-latch suppression is handled by ScoutExtractIngest's own partial-check path, which never
+        // routes through SourceFailure at all.
+        case .upcomingListings, .allPast, .incompleteExtraction: return nil
         // #856: `notRead` is a failure for the reason that matters most here: the hash must NOT be
         // stamped and the unread flag must stay set, so the next scout reads the page rather than
         // skipping it forever on the strength of a run that never opened it.
