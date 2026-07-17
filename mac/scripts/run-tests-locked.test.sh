@@ -47,6 +47,58 @@ assert_equals "multiple stale Debug hosts (e.g. an older DerivedData build) are 
 2222" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}")"
 
 echo
+# --- crashed run vs failed run (#1006) ---------------------------------------------------
+#
+# On 2026-07-16 swift-tests on main printed `Test run with 1574 tests in 229 suites passed`
+# for a ~2400-test suite, then died with `** TEST FAILED **` and an EMPTY `Failing tests:`
+# list. Roughly 800 tests never executed, and the only number on screen said "passed". It took
+# an hour to work out that nothing had actually failed; the host had been killed.
+#
+# A killed run and a failing run must never look alike. The tell is exact and needs no
+# baseline: xcodebuild names every failing test under `Failing tests:`. If it says the run
+# failed and names NOTHING, nothing failed. The process died.
+#
+# Deliberately NOT a floor on the executed-test count: the two real crashes reported 1574 and
+# 2069 of ~2400, so a floor loose enough to survive normal test churn (2000) would have waved
+# 2069 straight through, and a floor tight enough to catch it would need bumping on every PR
+# that adds a test. A guard people routinely bump is a guard people stop reading.
+
+# The status glyphs xcodebuild prints on these lines are omitted deliberately (the repo's style
+# rule bans them, and the pre-push hook cannot tell a machine's quoted output from Dan-facing
+# copy). run_outcome never reads them: it parses "Failing tests:" and the lines under it, and
+# nothing else. So the fixtures stay real-shaped in the only part under test.
+CRASHED_OUTPUT="Test Suite 'All tests' started
+Test run with 1574 tests in 229 suites passed after 10.851 seconds.
+Failing tests:
+** TEST FAILED **"
+
+REAL_FAILURE_OUTPUT="Test aThingWorks() recorded an issue at Foo.swift:12:5: Expectation failed
+Failing tests:
+	OvertureTests.FooTests.aThingWorks()
+** TEST FAILED **"
+
+PASSING_OUTPUT="Test run with 2400 tests in 348 suites passed after 19.462 seconds.
+** TEST SUCCEEDED **"
+
+# THE case. xcodebuild says the run failed and names no failing test, so nothing failed: the
+# process was killed. This is what an hour of this session's investigation was spent decoding.
+assert_equals "a killed run is reported as crashed, not failed" \
+  "crashed" "$(run_outcome "${CRASHED_OUTPUT}" 65)"
+
+# A genuine failure must NOT be relabelled as a crash, or the guard would cry wolf on every
+# real red test and be turned off within a week.
+assert_equals "a genuine test failure is still a failure" \
+  "failed" "$(run_outcome "${REAL_FAILURE_OUTPUT}" 65)"
+
+# A pass is a pass. Exit code 0 wins outright; nothing else is even inspected.
+assert_equals "a passing run reports nothing" \
+  "" "$(run_outcome "${PASSING_OUTPUT}" 0)"
+
+# Defence in depth: a non-zero exit with no xcodebuild verdict at all (an infra failure before
+# the suite ran) is not a test failure either, and must not be reported as one.
+assert_equals "a run that never reached the suite is crashed, not failed" \
+  "crashed" "$(run_outcome "xcodebuild: error: Could not resolve package dependencies" 70)"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0
