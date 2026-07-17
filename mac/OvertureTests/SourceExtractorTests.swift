@@ -82,6 +82,46 @@ struct SourceExtractorTests {
         }
     }
 
+    // #1019: the runbook's verdict table (docs/scout-extract-runbook.md) and the detached runner's
+    // prompt (mac/scripts/scout-extract-run.sh) both describe the PageVerdict cases in hand-written
+    // prose, and nothing kept them matched to the enum. When #1012 added `incomplete_extraction`,
+    // both had to be edited by hand with no test to catch a miss. This guard reads both files from
+    // disk and fails if any model-facing verdict is documented in neither, or in only one, place, so
+    // the next added case cannot ship documented in the enum alone.
+    //
+    // `not_read` is deliberately excluded: it is the SCRIPT's own verdict for a source the run never
+    // came back with, and the model is never told it exists (#856). It has no row in the model-facing
+    // table or prompt list, and must not gain one, so it is not part of this sync check.
+    @Test func everyModelFacingVerdictIsDocumentedInBothTheRunbookAndTheRunnerPrompt() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests
+            .deletingLastPathComponent()   // mac
+            .deletingLastPathComponent()   // repo root
+        let runbook = try String(
+            contentsOf: repoRoot.appendingPathComponent("docs/scout-extract-runbook.md"),
+            encoding: .utf8)
+        let runnerPrompt = try String(
+            contentsOf: repoRoot.appendingPathComponent("mac/scripts/scout-extract-run.sh"),
+            encoding: .utf8)
+
+        let scriptInternal: Set<PageVerdict> = [.notRead]
+        let modelFacing = PageVerdict.allCases.filter { !scriptInternal.contains($0) }
+
+        for verdict in modelFacing {
+            #expect(runbook.contains(verdict.rawValue),
+                    "PageVerdict.\(verdict) (\"\(verdict.rawValue)\") is missing from docs/scout-extract-runbook.md's verdict table")
+            #expect(runnerPrompt.contains(verdict.rawValue),
+                    "PageVerdict.\(verdict) (\"\(verdict.rawValue)\") is missing from mac/scripts/scout-extract-run.sh's prompt")
+        }
+
+        // Keep the exclusion honest: not_read stays out of the model-facing runbook (#856). A future
+        // edit that quietly gave it a row there would make the exclusion above hide a real drift, so
+        // guard its absence. It legitimately appears in the SCRIPT itself, as the guard's own label,
+        // which is why only the runbook is checked here.
+        #expect(!runbook.contains(PageVerdict.notRead.rawValue),
+                "not_read is the script's internal verdict and must not appear in the model-facing runbook (#856)")
+    }
+
     // The protocol is what lets the scout iterate sources instead of naming Carnegie, and what lets
     // every extraction rule be a real Swift unit test with no network (StubSourceExtractor).
     @Test func anyExtractorCanStandInForAnother() async throws {
