@@ -116,7 +116,9 @@ enum ScoutService {
         // A source that has succeeded before (so it has a baseline to be judged against) and came back
         // empty anyway. A brand-new source with no history has nothing unusual about an empty first
         // check, and a quiet off-season is not a defect.
-        private var silentlyEmptyFeed: Bool {
+        // #1027: internal, not private, so the structured ScoutWarnings can read the SAME rule the old
+        // single-string warning used rather than restating it and eventually disagreeing with it.
+        var silentlyEmptyFeed: Bool {
             sources.contains { $0.state == .ingested(found: 0) && $0.hadBaseline }
         }
 
