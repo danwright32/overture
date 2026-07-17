@@ -77,4 +77,48 @@ struct ScoutWarningsTests {
         #expect(!w.isEmpty)
         #expect(w.sections == [.readerFinishedEmpty("the reader ran but produced nothing")])
     }
+
+    // MARK: - The quiet line an unattended scheduled run leaves instead of the popup
+
+    @Test func aCleanRunLeavesNoQuietLine() {
+        #expect(ScoutWarnings.from(native: outcome(), extract: nil, finishedEmpty: nil).quietLine == nil)
+    }
+
+    @Test func theQuietLineIsTheSingleMostUrgentSection() {
+        // save-failed outranks a per-source failure, so its line is the one shown.
+        var native = outcome()
+        native.saveFailed = true
+        var extract = outcome()
+        extract.sources = [failed("kaufman", "Kaufman", .verdict(.noDatedContent))]
+        let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
+        #expect(w.quietLine == "The scout couldn't save its results. Run it again.")
+    }
+
+    @Test func theFailuresQuietLinePluralizes() {
+        var one = outcome()
+        one.sources = [failed("a", "A", .verdict(.noDatedContent))]
+        #expect(ScoutWarnings.from(native: outcome(), extract: one, finishedEmpty: nil).quietLine
+                == "A source couldn't be checked. Open Sources to fix or confirm it.")
+
+        var two = outcome()
+        two.sources = [failed("a", "A", .verdict(.noDatedContent)),
+                       failed("b", "B", .fetch(.http(404)))]
+        #expect(ScoutWarnings.from(native: outcome(), extract: two, finishedEmpty: nil).quietLine
+                == "2 sources couldn't be checked. Open Sources to fix or confirm them.")
+    }
+}
+
+// #1027: the popup's own count-dependent copy, pinned so a plural bug shows in the diff (#863/#885).
+@MainActor
+@Suite("Scout summary popup copy (#1027)")
+struct ScoutSummaryCopyTests {
+    @Test func theFailuresHeadingPluralizes() {
+        #expect(ScoutSummaryCopy.failuresHeading(1) == "One source couldn't be checked.")
+        #expect(ScoutSummaryCopy.failuresHeading(3) == "3 sources couldn't be checked.")
+    }
+
+    @Test func theReadButtonPluralizes() {
+        #expect(ScoutSummaryCopy.readFixed(1) == "Read the one I fixed")
+        #expect(ScoutSummaryCopy.readFixed(2) == "Read the 2 I fixed")
+    }
 }
