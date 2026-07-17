@@ -189,7 +189,7 @@ struct ProspectRowView: View {
             // keeping its urgency colour.
             // #342: when the venue is a known hall, show its parent building inline ("…, Carnegie Hall")
             // and the city/state as a fainter line beneath, so any venue is locatable at a glance.
-            let venueInfo = VenueDisplay.resolve(item.venue)
+            let venueInfo = VenueDisplay.resolve(item.venue, location: item.location)
             Text(venueInfo.nameLine)
                 .font(OVType.body)
                 .foregroundStyle(OVColor.inkSoft)
