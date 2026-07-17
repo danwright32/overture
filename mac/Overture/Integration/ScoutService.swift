@@ -365,7 +365,11 @@ enum ScoutService {
         // wrong place in Dan's email, and nothing downstream can catch it. A structured feed that stops
         // naming a facility produces exactly that, silently.
         let usable = events.filter(ExtractedEventGuard.isUsable)
-        let rejectedCount = events.count - usable.count
+        // #1032: the drops split by family (venue vs title), the SAME helper the agent door counts
+        // through, so the two paths can never disagree. `total` is the tolerance-gate count; the title
+        // share travels on so the Sources note names a titleless drop correctly rather than "no venue".
+        let rejection = ExtractedEventGuard.rejectionCounts(for: events)
+        let rejectedCount = rejection.total
 
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
         // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
@@ -399,6 +403,8 @@ enum ScoutService {
                     // #891/#987: so a native feed that stopped naming venues says so on the Sources
                     // sheet, exactly as an unreadable HTML source does, instead of going quiet.
                     unreadable: rejectedCount,
+                    // #1032: the title share, so the note never calls a titleless drop "no venue".
+                    titleUnreadable: rejection.titleRelated,
                     // #986/#1005: how many kept shows named WHERE they are, by the SAME rule the agent
                     // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
@@ -512,9 +518,10 @@ enum ScoutService {
     // there is nothing to record onto), where the agent path always has a real row.
     private static func recordCheck(on source: WatchedSource?, events: Int,
                                     health: FeedReconcile.FeedHealthState, now: Date,
-                                    unreadable: Int = 0, placed: Int = 0) {
+                                    unreadable: Int = 0, titleUnreadable: Int = 0, placed: Int = 0) {
         guard let source else { return }
-        source.recordSuccessfulRead(events: events, unreadable: unreadable, placed: placed,
+        source.recordSuccessfulRead(events: events, unreadable: unreadable,
+                                    titleUnreadable: titleUnreadable, placed: placed,
                                     feedHealth: health, now: now)
     }
 

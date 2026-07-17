@@ -51,12 +51,16 @@ enum ExtractedEventGuard {
         case placeholderVenue   // present, but not a venue: a numeric id, "unknown", "TBD"
         case locationAsVenue    // present, but only restates the location: a city is not a room
 
-        var label: String {
+        // #1032: whether this rejection is about a VENUE (the detail page was never read, so the show
+        // came back with no usable place) or a TITLE (the row had no name at all, which no detail page
+        // would fix). The Sources note's "no venue on their own detail page" sentence is true only of the
+        // venue family, so the two are counted apart rather than lumped into one number the note then
+        // mislabels. An exhaustive switch, so a new rejection reason cannot be added without deciding
+        // which family it belongs to.
+        var isAboutVenue: Bool {
             switch self {
-            case .noTitle:          return "no title"
-            case .noVenue:          return "no venue"
-            case .placeholderVenue: return "no real venue (the listing carries a placeholder)"
-            case .locationAsVenue:  return "no venue (the listing gave only a place)"
+            case .noTitle:                                            return false
+            case .noVenue, .placeholderVenue, .locationAsVenue:       return true
             }
         }
     }
@@ -133,6 +137,29 @@ enum ExtractedEventGuard {
     }
 
     static func isUsable(_ event: ExtractedEvent) -> Bool { rejection(for: event) == nil }
+
+    // #1032: a run's rejected events, split by family (venue vs title), so the Sources note can name a
+    // titleless drop correctly instead of calling it "no venue". Usable events contribute nothing. Both
+    // ingest doors (the agent extract run and the native Carnegie sweep) count through this one function,
+    // so they can never disagree on which drops were about a venue.
+    static func rejectionCounts(for events: [ExtractedEvent]) -> RejectionCounts {
+        var venue = 0, title = 0
+        for event in events {
+            guard let reason = rejection(for: event) else { continue }
+            if reason.isAboutVenue { venue += 1 } else { title += 1 }
+        }
+        return RejectionCounts(venueRelated: venue, titleRelated: title)
+    }
+}
+
+// #1032: a run's dropped shows, split into the family the Sources note's "no venue on their own detail
+// page" sentence is about (the three venue reasons) and the one it is not (a titleless row). `total` is
+// every dropped event, which is what the #887 cancellation-tolerance gate counts, since a dropped event
+// of ANY reason is absent from the feed the reconcile reads.
+struct RejectionCounts: Equatable, Sendable {
+    var venueRelated: Int
+    var titleRelated: Int
+    var total: Int { venueRelated + titleRelated }
 }
 
 // One rejected event, kept so it can be reported against its source rather than vanishing.

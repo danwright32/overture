@@ -158,6 +158,7 @@ enum WatchlistEditing {
         source.lastDegradedCount = 0
         source.lastReadableCount = 0
         source.lastUnreadableCount = 0
+        source.lastUnreadableTitleCount = 0
         source.health = .neverChecked          // it has not been checked at this address yet
         source.lastFailure = nil
         source.confirmedEmptyHash = nil         // a different page: any prior confirmation is void
