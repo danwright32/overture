@@ -95,4 +95,29 @@ struct VenueDisplayTests {
         let v = VenueDisplay.resolve("Some Unlisted Hall", location: "   ")
         #expect(v.location == nil)
     }
+
+    // #1030 follow-up: the runbook explicitly allows `location` to be a full street address (it must
+    // be reported verbatim), which would reintroduce the exact "shows a raw address" problem Dan asked
+    // to eliminate, just moved to the second line. These are real, live `location` values. None may be
+    // used as the fallback; the card should show nothing rather than guess at a city from an address.
+    @Test func aStreetAddressLocationIsNeverUsedAsTheFallback() {
+        for raw in [
+            "123 E 24th St, New York, NY 10010",
+            "157 Montague St, Brooklyn, New York",
+            "44 East 32nd Street, New York City",
+            "466 Grand Street (at Pitt Street), New York, NY 10002",
+            "789 Tenth Avenue, 2nd Floor, NYC, b/t W. 52nd & 53rd Sts.",
+        ] {
+            let v = VenueDisplay.resolve("Some Unlisted Hall", location: raw)
+            #expect(v.location == nil, "\(raw) is address-shaped and must not be shown")
+        }
+    }
+
+    // A location that is already clean city/state shape, with no comma-clause starting with a digit,
+    // is exactly what the fallback exists for and must still pass through.
+    @Test func aCleanCityStateLocationStillPassesThroughAsTheFallback() {
+        #expect(VenueDisplay.resolve("Some Unlisted Hall", location: "Brooklyn").location == "Brooklyn")
+        #expect(VenueDisplay.resolve("Some Unlisted Hall", location: "North Adams, MA").location
+                == "North Adams, MA")
+    }
 }
