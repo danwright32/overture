@@ -559,7 +559,8 @@ struct QueueView: View {
                                   dayOffOffer: dayOffOffer,
                                   highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                                   replySendSince: { rid in replySending[rid] },
-                                  onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) })
+                                  onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
+                                  showingTooFar: showTooFarOnly)
         }
     }
 
