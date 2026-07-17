@@ -216,15 +216,40 @@ an honest note is worth everything. A question is worth nothing, because the wor
 on the way home, so the events are dropped with no error anywhere. `fixtures/prep-queue/` carries the
 same rule for the same reason.
 
+## How the run is split (#1028)
+
+Sonnet reads every page and follows each event's detail link, which is accurate but slow: a 2026-07-17
+run took 16 minutes for 18 sources, entirely sequential, a bare opaque wait on something Dan started by
+hand. The sources are independent until the app reconciles them, so the script splits the work-list into
+up to `SCOUT_EXTRACT_MAX_PARALLEL` (default 4) contiguous chunks and drives one claude per chunk at the
+same time, cutting the wait roughly in proportion to the chunk count.
+
+This is invisible to the app and to the model. The app still writes one queue, polls one progress file,
+and ingests one results file, all in the same shapes. Each chunk is a partition, so every `sourceId`
+lands in exactly one chunk; each chunk's claude reads only its own chunk queue and writes only its own
+chunk results file (never a shared one, which concurrent incremental rewrites would clobber). The
+prompt is unchanged per chunk: only the two paths it names are swapped for that chunk's files.
+
+The script's heartbeat merges the per-chunk results into the one results file every tick, so the derived
+"N of M" count advances across all chunks at once, and the final merge runs once more after every chunk
+exits. Because the merge feeds the same results file the results guard checks against the FULL queue, a
+chunk whose process dies writing nothing does not lose its sources: the script reports each one as a run
+that came back with nothing for it, exactly as it would for a lost sequential run (`lib/results-guard.sh`
+speaks for the sources, the same guard that has always closed this hole). Set `SCOUT_EXTRACT_MAX_PARALLEL=1`
+to fall straight back to a single sequential process. The split and merge are `lib/scout-parallel.sh`, the
+only part with an automated test (`lib/scout-parallel.test.sh`), because a partition that dropped a
+source or a merge that lost one would be a silent loss of Dan's shows.
+
 ## Files
 
 | file | who writes it |
 |---|---|
 | `overture-scout-extract-queue.json` | the app |
-| `overture-scout-extract-results.json` | this run (rewritten after every item, not only at the end; #1015) |
+| `overture-scout-extract-results.json` | the script, merged from the per-chunk results every heartbeat and once at the end (#1028); each chunk's claude rewrites its own chunk file after every item, not only at the end (#1015) |
 | `overture-scout-extract-progress.json` | the script only, seeded and then continuously derived from the results file above; this run never writes it (#1015) |
+| `scout-extract-chunks/chunk-queue-<n>.json`, `chunk-results-<n>.json` | the script's scratch dir (#1028): the split queue each chunk reads and the results each chunk writes, wiped and rebuilt every run; the app never reads these |
 | `overture-scout-page-<sourceId>.html` | the app (the pinned page you read) |
-| `scout-extract-run.log` | the script (shown to Dan when a run finishes empty) |
+| `scout-extract-run.log`, `scout-extract-run.chunk-<n>.log` | the script (the main log, shown to Dan when a run finishes empty, plus one log per chunk whose tail is folded into it) |
 
 The pinned page and any `.corrupt` results file are swept by the app at launch once they are more than
 14 days old (`HandoffCleanup`, #821). Recent ones stay, deliberately: they are the only record of what
