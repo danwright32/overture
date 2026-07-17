@@ -38,6 +38,12 @@ struct VenueDisplay: Equatable {
     //
     // Measured against the live store's 11 distinct `location` values: rejects every street-address
     // shape found there and passes through every clean one ("Brooklyn", "North Adams, MA").
+    //
+    // #1065: this is the STRICTER of `location`'s two independent consumers. The other is the geography
+    // gate (EventPlace.resolve), which reads the messier shapes this one rejects (a full address, a
+    // region name). If you loosen or tighten the shape accepted here, check that consumer too;
+    // LocationTwoConsumersGuardTests pins both tolerances against shared inputs and goes red when the
+    // two silently diverge.
     private static func safeCityStateLine(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)

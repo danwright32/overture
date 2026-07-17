@@ -300,6 +300,15 @@ The run must not normalize it. What pages actually write ranges from `Louisville
 `Orange County, Santa Barbara, Pasadena, and Santa Monica` to a full street address. Deciding what any
 of that MEANS is a resolver's job in the app; the wire's job is to carry the page's own words intact.
 
+**Two consumers, different tolerances (#1065).** Once in the app (stored as `Prospect.location`), this
+one raw string feeds TWO independent readers, and a change to how it is populated or normalized has to
+satisfy BOTH: the **geography gate** (`EventPlace.resolve`) places or refuses a show and handles the
+messier shapes above on purpose, while the **display fallback** (`VenueDisplay.resolve`'s
+`safeCityStateLine`, #1030) is stricter and shows it on the card ONLY when it is already a clean
+city/state shape, rejecting anything address-shaped. They have NOT diverged far enough to warrant
+splitting `location` into two derived values. `LocationTwoConsumersGuardTests` pins both tolerances
+against shared inputs so a change that silently diverges them turns that guard red.
+
 Absent means the page named no place, which is common and is NOT an error: an unknown place is a show
 to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop the event.
 
