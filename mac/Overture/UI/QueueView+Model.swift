@@ -548,17 +548,24 @@ enum QueueModel {
     static func headerShowsTimingLine(isBooked: Bool) -> Bool { !isBooked }
 
     // Orders the queue for display: hide past performances and anything beyond the lead-time
-    // window, keep everything else, and demote the too-close events to the bottom, graded so
-    // the nearest (least bookable) sits lowest. Undated events stay (they group last anyway).
-    // Computed live against `today` so it stays correct as days pass between scout runs.
+    // window, and keep everything else in its normal date position, undated events included
+    // (they group last anyway). Computed live against `today` so it stays correct as days pass
+    // between scout runs.
+    //
+    // #1014, Dan's call REVISED after his first real walk of the queue (2026-07-16): a too-close show
+    // used to sink to the bottom, graded by closeness, and it read as the show being deleted ("I do
+    // not have anything in my queue before jul 22", when the shows were there, just demoted beneath
+    // October dates). That is exactly #901's ruling for a conflicted show, recorded below: reordering
+    // a single show to the very end of the list reads as its disappearance, whatever the reason. The
+    // existing "likely too close to book" timing line already carries the meaning; the position no
+    // longer needs to.
     static func queueOrder(_ items: [QueueItem], today: String) -> [QueueItem] {
         // Hide shows that vanished from the feed and Dan never acted on (#133): pure noise. Ones
         // he kept/drafted/approved stay (shown struck-through) so a cancellation he was pursuing
         // stays visible.
         let items = items.filter { !($0.status == .new && $0.disappearedFromFeed) }
         var bookable: [QueueItem] = []
-        var tooSoon: [(item: QueueItem, days: Int, index: Int)] = []
-        for (index, item) in items.enumerated() {
+        for item in items {
             // A confirmed booking is settled and leaves the reach-out queue (#201). An auto-detected
             // booking is kept (handled just below) so Dan can confirm it or catch a wrong match.
             if item.isConfirmedBooking { continue }
@@ -573,22 +580,14 @@ enum QueueModel {
                 continue
             }
             if days < 0 || days > leadTimeWindowDays { continue }
-            if days <= tooCloseDays {
-                tooSoon.append((item, days, index))
-                continue
-            }
+            // #1014: a too-close show is neither hidden nor reordered, only kept (falls through to
+            // the same append as everything else). #901, Dan's call REVISED after he walked the build
+            // (2026-07-14): a conflicted show keeps its normal date position and is NOT reordered
+            // either. The highly visible "Unavailable" badge (and, here, the timing line) does the
+            // telling now, not the position. The fit score is still untouched.
             bookable.append(item)
         }
-        let demoted = tooSoon
-            .sorted { $0.days != $1.days ? $0.days > $1.days : $0.index < $1.index }
-            .map(\.item)
-
-        // #901, Dan's call REVISED after he walked the build (2026-07-14): a conflicted show keeps its
-        // normal date position and is NOT reordered. The first build sank it below every shootable show;
-        // in practice a single-show date sliding to the very bottom read as the show being deleted, which
-        // is the exact disappearance this feature exists to prevent. The highly visible "Unavailable"
-        // badge on the row does the telling now, not the position. The fit score is still untouched.
-        return bookable + demoted
+        return bookable
     }
 
     struct DateGroup: Identifiable, Equatable {

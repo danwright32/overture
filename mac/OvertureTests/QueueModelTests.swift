@@ -333,13 +333,14 @@ struct TimingTests {
         #expect(fiveDays.label.contains("5 days"))
     }
 
-    // The same boundary, through the ordering path rather than the label: a five-day show sits with
-    // the bookable ones, not sunk to the bottom with the too-close ones.
+    // #1014: the boundary still changes the LABEL (fiveDaysOutIsBookableAndFourIsNot), but it no
+    // longer changes the ORDER. A too-close show keeps its normal date position, same as #901's
+    // ruling for a conflicted one; see tooCloseShowsKeepTheirDatePositionAndAreNotReordered below.
     @Test func fiveDaysOutIsNotDemoted() {
         let result = QueueModel.queueOrder(
             [item(performanceDate: "2026-06-24"), item(performanceDate: "2026-06-27")],
             today: "2026-06-22")
-        #expect(result.map(\.performanceDate) == ["2026-06-27", "2026-06-24"])
+        #expect(result.map(\.performanceDate) == ["2026-06-24", "2026-06-27"])
     }
 
     @Test func urgesOutreachJustPastTheTooCloseWindow() {
@@ -381,13 +382,18 @@ struct QueueWindowTests {
         #expect(result.count == 1)
     }
 
-    // 0-5 days out stay visible but sink below everything bookable, closest-to-today lowest.
-    @Test func demotesNearTermToBottomGradedByCloseness() {
+    // #1014, Dan's call REVISED after his first real walk of the queue (2026-07-16): a too-close show
+    // keeps its normal date position and is NOT reordered, the same ruling #901 already made for a
+    // conflicted show. The first build sank it below every bookable show, and in practice a show
+    // sliding to the very bottom read as the show being deleted ("I do not have anything in my queue
+    // before jul 22", when the shows were there, just demoted beneath October dates). The existing
+    // "likely too close to book" timing line does the telling now, not the position.
+    @Test func tooCloseShowsKeepTheirDatePositionAndAreNotReordered() {
         let result = QueueModel.queueOrder(
             [dated("2026-06-25"), dated("2026-06-27"), dated("2026-07-10")],
             today: "2026-06-25"
         )
-        #expect(result.map(\.performanceDate) == ["2026-07-10", "2026-06-27", "2026-06-25"])
+        #expect(result.map(\.performanceDate) == ["2026-06-25", "2026-06-27", "2026-07-10"])
     }
 
     @Test func keepsUndatedAmongBookable() {
