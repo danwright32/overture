@@ -106,46 +106,62 @@ struct WatchlistSeedTests {
     // The one-shot opens the app's real store (all four @Model types) at a URL and persists the rows.
     // Proven here against a throwaway on-disk store, not the live one: write, then reopen a fresh
     // container at the same path and confirm the rows survived the save.
-    @Test func runImportPersistsRowsToAStoreOnDisk() throws {
-        let dir = try tempDir()
-        let storeURL = dir.appendingPathComponent("default.store")
-        let jsonURL = dir.appendingPathComponent("seed.json")
-        try Data("""
-        [
-          { "orgName": "The Sebastians", "listingsURL": "https://www.sebastians.org/nyc-series/" },
-          { "orgName": "TENET", "listingsURL": "https://tenet.nyc/concerts" }
-        ]
-        """.utf8).write(to: jsonURL)
+    // #1006: real, disk-backed ModelContainer work funnels through RealStoreTestLock so it never
+    // overlaps another suite's, in the whole process.
+    @Test func runImportPersistsRowsToAStoreOnDisk() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try tempDir()
+            let storeURL = dir.appendingPathComponent("default.store")
+            let jsonURL = dir.appendingPathComponent("seed.json")
+            try Data("""
+            [
+              { "orgName": "The Sebastians", "listingsURL": "https://www.sebastians.org/nyc-series/" },
+              { "orgName": "TENET", "listingsURL": "https://tenet.nyc/concerts" }
+            ]
+            """.utf8).write(to: jsonURL)
 
-        let summary = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
+            let summary = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
 
-        #expect(summary.added == ["The Sebastians", "TENET"])
+            #expect(summary.added == ["The Sebastians", "TENET"])
 
-        let reopened = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
-            configurations: [ModelConfiguration(url: storeURL)]))
-        #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 2)
+            let reopened = ModelContext(try ModelContainer(
+                for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
+                configurations: [ModelConfiguration(url: storeURL)]))
+            #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 2)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 
     // Assume it runs twice: a second run of the same seed adds nothing new (every entry is a host it
     // already watches) and never doubles the rows.
-    @Test func runImportIsIdempotentAcrossTwoRuns() throws {
-        let dir = try tempDir()
-        let storeURL = dir.appendingPathComponent("default.store")
-        let jsonURL = dir.appendingPathComponent("seed.json")
-        try Data("""
-        [ { "orgName": "TENET", "listingsURL": "https://tenet.nyc/concerts" } ]
-        """.utf8).write(to: jsonURL)
+    @Test func runImportIsIdempotentAcrossTwoRuns() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try tempDir()
+            let storeURL = dir.appendingPathComponent("default.store")
+            let jsonURL = dir.appendingPathComponent("seed.json")
+            try Data("""
+            [ { "orgName": "TENET", "listingsURL": "https://tenet.nyc/concerts" } ]
+            """.utf8).write(to: jsonURL)
 
-        _ = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
-        let second = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
+            _ = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
+            let second = try WatchlistSeed.runImport(storeURL: storeURL, jsonURL: jsonURL)
 
-        #expect(second.added.isEmpty)
-        #expect(second.duplicates == ["TENET"])
+            #expect(second.added.isEmpty)
+            #expect(second.duplicates == ["TENET"])
 
-        let reopened = ModelContext(try ModelContainer(
-            for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
-            configurations: [ModelConfiguration(url: storeURL)]))
-        #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 1)
+            let reopened = ModelContext(try ModelContainer(
+                for: Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self]),
+                configurations: [ModelConfiguration(url: storeURL)]))
+            #expect(try reopened.fetch(FetchDescriptor<WatchedSource>()).count == 1)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 }

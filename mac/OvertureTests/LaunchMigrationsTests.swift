@@ -26,34 +26,43 @@ struct LaunchMigrationsTests {
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
     }
 
-    @Test func persistsAllThreeLaunchMigrationsWithoutTheCallerEverCallingSave() throws {
-        let fm = FileManager.default
-        let scratch = fm.temporaryDirectory
-            .appendingPathComponent("overture-launch-migrations-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fm.removeItem(at: scratch) }
-        try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
-        let storeURL = scratch.appendingPathComponent("default.store")
+    // #1006: real, disk-backed ModelContainer work runs between an acquire()/release() pair so it
+    // never overlaps another suite's, in the whole process.
+    @Test func persistsAllThreeLaunchMigrationsWithoutTheCallerEverCallingSave() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-launch-migrations-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
 
-        let container = try openContainer(at: storeURL)
-        let context = ModelContext(container)
-        let p = makeProspect("k1")
-        p.draftBody = "Hi Emma, I photograph performing arts in New York."
-        p.setRecipients([Recipient(id: "ann@example.com", email: "ann@example.com", provenance: .act)])
-        context.insert(p)
-        try context.save()   // seed data, as if it were already durable before this launch
+            let container = try openContainer(at: storeURL)
+            let context = ModelContext(container)
+            let p = makeProspect("k1")
+            p.draftBody = "Hi Emma, I photograph performing arts in New York."
+            p.setRecipients([Recipient(id: "ann@example.com", email: "ann@example.com", provenance: .act)])
+            context.insert(p)
+            try context.save()   // seed data, as if it were already durable before this launch
 
-        let succeeded = LaunchMigrations.run(in: context)
-        #expect(succeeded)
+            let succeeded = LaunchMigrations.run(in: context)
+            #expect(succeeded)
 
-        // The caller (AppDelegate) never calls save itself. Open a brand new container/context on the
-        // SAME file: every migrated write must already be there if LaunchMigrations.run saved for real.
-        let reopened = try openContainer(at: storeURL)
-        let reContext = ModelContext(reopened)
-        let reProspects = try reContext.fetch(FetchDescriptor<Prospect>())
-        #expect(reProspects.count == 1)
-        let reProspect = try #require(reProspects.first)
-        #expect(reProspect.recipients.count == 1)
-        #expect(reProspect.recipients.first?.provenance == .act)
-        #expect(reProspect.draftBody == "I photograph performing arts in New York.")
+            // The caller (AppDelegate) never calls save itself. Open a brand new container/context on the
+            // SAME file: every migrated write must already be there if LaunchMigrations.run saved for real.
+            let reopened = try openContainer(at: storeURL)
+            let reContext = ModelContext(reopened)
+            let reProspects = try reContext.fetch(FetchDescriptor<Prospect>())
+            #expect(reProspects.count == 1)
+            let reProspect = try #require(reProspects.first)
+            #expect(reProspect.recipients.count == 1)
+            #expect(reProspect.recipients.first?.provenance == .act)
+            #expect(reProspect.draftBody == "I photograph performing arts in New York.")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 }
