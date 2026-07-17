@@ -233,7 +233,12 @@ struct RootView: View {
                     Menu {
                         Button("Run scout now") { runScout() }
                             .keyboardShortcut("r", modifiers: .command)
-                            .disabled(isScanning)
+                            // #1033: disabled through BOTH scout phases, not just the native sweep. The
+                            // detached read follows with isScanning already false, so the old
+                            // .disabled(isScanning) went clickable again mid-run. Same rule runScout
+                            // guards on before starting a run.
+                            .disabled(ScoutControlState.isRunScoutDisabled(isScanning: isScanning,
+                                                                           isReading: readingStartedAt != nil))
                         // #799: a lead Dan found himself (a link to the show, or to the org's events
                         // page). It goes through the same classify/rank/upsert chain as a scouted one.
                         // The shortcut lives on the MENU-BAR command (OvertureApp), not here: a
