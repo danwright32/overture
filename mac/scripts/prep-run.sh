@@ -50,6 +50,12 @@ printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
+# #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
+# scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
+# file wholesale, generatedAt and all); prep is the worse place for the same bug, since a stale result
+# carries real contacts and drafted email text.
+discard_previous_results "$RESULTS"
+
 PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. FIRST, once per run, do the
 'Learn from Dan's recent edits' step: read overture-voice-feedback.json if present and update
 the anonymized auto-generated section of overture-voice-guidance.md (strip all org/venue/contact

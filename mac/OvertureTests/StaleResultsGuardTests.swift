@@ -139,4 +139,49 @@ struct StaleResultsGuardTests {
 
         #expect(r.out.contains("MISSING=0"))
     }
+
+    // #1013: PR #1011 wired discard_previous_results into scout-extract-run.sh only. prep-run.sh and
+    // reply-classify-run.sh still left the last run's results file on disk, the exact #1011 bug in the
+    // two runners that find contacts and draft Dan's actual emails.
+    //
+    // Written to FIND every runner that drives a headless claude, not to check the three we happen to
+    // know about today: a careful list is exactly what missed prep and reply-classify the first time
+    // (mirrors DetachedRunCeremonyGuardTests.everyClaudeRunnerSourcesTheSharedSetup).
+    @Test func everyClaudeRunnerDiscardsItsPreviousResultsFirst() throws {
+        let scripts = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OvertureTests/
+            .deletingLastPathComponent()   // mac/
+            .appendingPathComponent("scripts")
+
+        let names = try FileManager.default.contentsOfDirectory(atPath: scripts.path)
+            .filter { $0.hasSuffix(".sh") }
+            .sorted()
+
+        var drivers: [String] = []
+        for name in names {
+            let body = try String(contentsOf: scripts.appendingPathComponent(name), encoding: .utf8)
+            guard body.contains("\"$CLAUDE\" -p") || body.contains("$CLAUDE -p") else { continue }
+            drivers.append(name)
+
+            guard let discardRange = body.range(of: "discard_previous_results \"$RESULTS\"") else {
+                Issue.record("""
+                    \(name) drives a headless claude but never discards the previous run's results, so a \
+                    run that writes nothing inherits stale data from hours ago (#1011's bug, in a runner \
+                    that missed the fix).
+                    """)
+                continue
+            }
+            // NOT just present: it must run BEFORE claude is launched, or the stale file is still there
+            // while the run starts, which is exactly the bug's timing.
+            guard let claudeRange = body.range(of: "\"$CLAUDE\" -p") ?? body.range(of: "$CLAUDE -p")
+            else { continue }
+            #expect(discardRange.lowerBound < claudeRange.lowerBound,
+                    "\(name) discards the previous results AFTER launching claude, which is too late.")
+        }
+
+        // If this trips, a runner was renamed or removed: re-point the guard rather than deleting it.
+        #expect(drivers.contains("scout-extract-run.sh"))
+        #expect(drivers.contains("prep-run.sh"))
+        #expect(drivers.contains("reply-classify-run.sh"))
+    }
 }

@@ -41,6 +41,12 @@ require_queue "$QUEUE" "reply-classify"
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
+# #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
+# scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
+# file wholesale, generatedAt and all); a stale reply-classify result carries a real draft that was
+# never actually re-derived from this run's own replies.
+discard_previous_results "$RESULTS"
+
 PROMPT="You are the Overture reply-classify + reply-drafter run (v3). Follow $RUNBOOK exactly. Read the
 work-list at $QUEUE. For EVERY item: (1) classify the reply's intent as exactly one of interested,
 wants_to_book, has_question, or declined; (2) DRAFT a short reply in Dan's voice that responds to what
