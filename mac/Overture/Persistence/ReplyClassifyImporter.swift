@@ -16,6 +16,9 @@ enum ReplyClassifyImporter {
         var skippedManual = 0          // matched but Dan had set that recipient's state by hand
         var skippedEdited = 0          // draft left untouched because Dan had hand-edited the reply (#462)
         var unmatchedKeys: [String] = []
+        // #1018: the queued replies this run never came back with (the OTHER direction from unmatchedKeys).
+        // Computed from the queue the app itself wrote, never from anything the run reported about itself.
+        var missingKeys: [ReplyClassifyKey] = []
         // #499: set when a context.save() failed, so this run's hints/drafts may not persist.
         var saveFailed = false
     }
@@ -83,9 +86,33 @@ enum ReplyClassifyImporter {
     }
 
     @MainActor
-    static func ingestFile(at url: URL, into context: ModelContext) throws -> Outcome {
+    static func ingestFile(at url: URL, into context: ModelContext,
+                           queueURL: URL = ReplyClassifyQueueBuilder.defaultURL) throws -> Outcome {
         let data = try Data(contentsOf: url)
-        return ingest(try ReplyClassifyResultsDecoder.decode(data), into: context)
+        let results = try ReplyClassifyResultsDecoder.decode(data)
+        var outcome = ingest(results, into: context)
+        // #1018: which replies the app ASKED to classify that never came back. Same shape as Prep's
+        // shortfall (#876), keyed per-recipient because reply-classify is per-recipient.
+        outcome.missingKeys = shortfall(results: results, url: url, queueURL: queueURL)
+        return outcome
+    }
+
+    // #1018. Every read here is best-effort on purpose: an unreadable queue means we have no record of
+    // what was asked, which is a gap in the app's own bookkeeping and never a reason to drop Dan's drafts
+    // or to invent a failure. It reports nothing rather than guessing. Mirrors PrepImporter.shortfall.
+    @MainActor
+    private static func shortfall(results: ReplyClassifyResults, url: URL, queueURL: URL) -> [ReplyClassifyKey] {
+        guard let queueData = try? Data(contentsOf: queueURL),
+              let queue = try? JSONDecoder().decode(ReplyClassifyQueue.self, from: queueData) else { return [] }
+        return HandoffShortfall.missingKeys(
+            queuedKeys: queue.items.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) },
+            answeredKeys: results.results.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) },
+            queueGeneratedAt: ISO8601DateFormatter().date(from: queue.generatedAt),
+            // The FILE's modification time, not the generatedAt the run wrote inside it: the run is a
+            // fallible process reporting on itself, and the one fact this guard exists to establish is
+            // exactly the one it should not be trusted to state.
+            resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        )
     }
 
     static var defaultURL: URL { ReplyClassifyResultsDecoder.defaultURL }
