@@ -658,13 +658,15 @@ struct DraftReviewView: View {
                 // #1038: a Cancel beside it stops the detached run cooperatively, so Dan can abandon a
                 // drafting run he no longer wants instead of only waiting it out.
                 HStack(spacing: OVSpacing.xs) {
+                    // #1085: the run's "N of M" count is a single run-wide fact, so it lives once at the
+                    // top of the queue (QueueView.replyRunLine), not repeated on every recipient this run
+                    // is currently drafting. This per-recipient label keeps its own genuinely per-recipient
+                    // states: spinner + elapsed (working), a stall timeout that flips to Retry, and the
+                    // run's real heartbeat, so "working / still-alive / stalled" stay distinguishable here.
                     LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
                                  timeout: RunTimeouts.replyDraft,
                                  font: OVType.meta, color: OVColor.inkSoft,
                                  onRetry: { onDraftReply(c.id) },
-                                 // #1081: the run's own "N of M" count, derived by the runner from the
-                                 // results file (never model-self-reported), re-read every tick (#1003).
-                                 progressDetail: { ReplyClassifyProgressDecoder.label(for: ReplyClassifyProgressDecoder.loadCurrent()) },
                                  runAlive: { ReplyClassifyService.isRunning(now: Date()) })
                     Button("Cancel") { onCancelReplyDraft() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.rust)

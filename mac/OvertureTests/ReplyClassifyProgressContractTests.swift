@@ -68,6 +68,36 @@ struct ReplyClassifyProgressContractTests {
         #expect(ReplyClassifyProgressDecoder.label(for: nil) == nil)
     }
 
+    // MARK: - #1085: one run-level line, not the count repeated on every drafting recipient row.
+
+    @Test func runningLabelReadsAsARunLevelSentence() {
+        let progress = ReplyClassifyProgress(version: 1, total: 5, completed: 2)
+        #expect(ReplyClassifyProgressDecoder.runningLabel(running: true, progress: progress)
+            == "Drafting replies 2 of 5")
+    }
+
+    // A stale count from a finished run must not linger at the top of the queue: no live run, no line.
+    @Test func runningLabelIsNilWhenNoRunIsAlive() {
+        let progress = ReplyClassifyProgress(version: 1, total: 5, completed: 2)
+        #expect(ReplyClassifyProgressDecoder.runningLabel(running: false, progress: progress) == nil)
+    }
+
+    // A run alive with no meaningful count yet (total 0, or the file not written) shows no run-level
+    // line; the per-recipient rows still carry the alive spinner, so aliveness is not lost.
+    @Test func runningLabelIsNilWhenThereIsNoCountYet() {
+        #expect(ReplyClassifyProgressDecoder.runningLabel(
+            running: true, progress: ReplyClassifyProgress(version: 1, total: 0, completed: 0)) == nil)
+        #expect(ReplyClassifyProgressDecoder.runningLabel(running: true, progress: nil) == nil)
+    }
+
+    // The run-level line clamps the same way the per-recipient one does: a stray extra results entry
+    // can never read as more drafted than were ever queued.
+    @Test func runningLabelClampsAStrayExtraEntryToTotal() {
+        let progress = ReplyClassifyProgress(version: 1, total: 5, completed: 7)
+        #expect(ReplyClassifyProgressDecoder.runningLabel(running: true, progress: progress)
+            == "Drafting replies 5 of 5")
+    }
+
     // Best-effort: a missing or malformed file reads as "nothing to show", never a crash or thrown
     // error surfaced to the label (the run may be mid-write when the label polls).
     @Test func loadCurrentReturnsNilForAMissingFile() {
