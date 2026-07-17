@@ -398,7 +398,11 @@ enum ScoutService {
         recordCheck(on: source, events: usable.count, health: health, now: now,
                     // #891/#987: so a native feed that stopped naming venues says so on the Sources
                     // sheet, exactly as an unreadable HTML source does, instead of going quiet.
-                    unreadable: rejectedCount)
+                    unreadable: rejectedCount,
+                    // #986/#1005: how many kept shows named WHERE they are, by the SAME rule the agent
+                    // path uses. Wired here at last: this path never fed the placement detector before,
+                    // so Carnegie's placementNote could never say a thing whatever its feed reported.
+                    placed: SourcePlacement.placedCount(locations: usable.map(\.location)))
 
         outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
                                         state: .ingested(found: usable.count),
@@ -500,28 +504,18 @@ enum ScoutService {
     // Records that this source was checked, and folds the run into its own feed-health history. Not
     // saved here: apply() already saved, and the caller's own save covers this (a lost health update is
     // recoverable, unlike a lost prospect).
+    //
+    // #1001: the shared bookkeeping (the health fold, the #891 readable/unreadable counts, the #986
+    // placement detector, the #801 warmup counter) lives on WatchedSource.recordSuccessfulRead, the ONE
+    // copy the agent path also calls. This native path adds only the piece that is genuinely its own: it
+    // no-ops when there is no row (Carnegie can scout on a store whose #800 backfill has not run yet, and
+    // there is nothing to record onto), where the agent path always has a real row.
     private static func recordCheck(on source: WatchedSource?, events: Int,
                                     health: FeedReconcile.FeedHealthState, now: Date,
-                                    unreadable: Int = 0) {
+                                    unreadable: Int = 0, placed: Int = 0) {
         guard let source else { return }
-        // #891/#987: what this run could and could not use, so the Sources sheet can say it. Recorded on
-        // the same branch as the run's success, so the counts can never describe a different run, and a
-        // source that recovers overwrites them with a zero and stops complaining.
-        source.lastReadableCount = events
-        source.lastUnreadableCount = unreadable
-
-        let updated = FeedReconcile.updatedHealth(health, currentCount: events)
-        source.baselineFeedCount = updated.baseline
-        source.degradedStreak = updated.degradedStreak
-        source.lastDegradedCount = updated.lastDegradedCount
-        source.lastCheckedAt = now
-        source.lastSucceededAt = now
-        source.health = .ok
-        source.lastFailure = nil
-        // The warmup counter (#801). A source cannot mark anything gone until it has this many checks of
-        // its own, so a brand-new source's first big import cannot look like a mass cancellation on its
-        // second run.
-        source.successfulCheckCount += 1
+        source.recordSuccessfulRead(events: events, unreadable: unreadable, placed: placed,
+                                    feedHealth: health, now: now)
     }
 
     // #800: the accessors below are `nonisolated`. They touch nothing but UserDefaults, which is

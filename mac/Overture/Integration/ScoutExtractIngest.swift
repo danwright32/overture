@@ -124,12 +124,9 @@ enum ScoutExtractIngest {
                 continue
             }
 
-            let placedCount = events.filter {
-                // #986: how many of the shows this run KEPT said where they are. Blank is not a place: the
-                // runbook asks for the page's words verbatim, and a page rendering an empty location field
-                // must not read as one that named somewhere.
-                !($0.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }.count
+            // #986: how many of the shows this run KEPT said where they are, by the SAME rule the native
+            // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
+            let placedCount = SourcePlacement.placedCount(locations: events.map(\.location))
             let unreadableCount = results.rejectedEvents(for: source.sourceId).count
 
             if result.verdict == .incompleteExtraction {
@@ -214,29 +211,18 @@ enum ScoutExtractIngest {
 
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that
     // worked (the warmup that eventually lets this source mark a show as gone).
+    //
+    // #1001: the health fold, the #891 readable/unreadable counts and the #986 placement detector (all of
+    // which the native ScoutService.recordCheck also does) live in ONE place now, on
+    // WatchedSource.recordSuccessfulRead, so the two paths can never drift. That shared step writes every
+    // count on this same success branch, so none can describe a run other than the one that produced it,
+    // and captures the pre-run placement answer before this run overwrites it. Only the hash promotion is
+    // this path's own: the native Algolia feed has no fetched page to hash.
     private static func recordSuccess(on source: WatchedSource, events: Int,
                                       health: FeedReconcile.FeedHealthState, now: Date,
                                       unreadable: Int = 0, placed: Int = 0) {
-        source.lastReadableCount = events
-        source.lastUnreadableCount = unreadable
-
-        // #986: the pre-run answer is captured BEFORE this run's count overwrites it, and in that order, or
-        // a source's first placing run would be indistinguishable from its tenth and the baseline line would
-        // never appear. Recorded on the SAME branch as the run's success, so the count can never describe a
-        // run other than the one that produced it.
-        source.hadPlacedBeforeLastRun = source.hasEverPlaced
-        source.lastPlacedCount = placed
-
-        let updated = FeedReconcile.updatedHealth(health, currentCount: events)
-        source.baselineFeedCount = updated.baseline
-        source.degradedStreak = updated.degradedStreak
-        source.lastDegradedCount = updated.lastDegradedCount
-
-        source.lastCheckedAt = now
-        source.lastSucceededAt = now
-        source.health = .ok
-        source.lastFailure = nil
-        source.successfulCheckCount += 1
+        source.recordSuccessfulRead(events: events, unreadable: unreadable, placed: placed,
+                                    feedHealth: health, now: now)
 
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
