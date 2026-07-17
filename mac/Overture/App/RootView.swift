@@ -280,7 +280,9 @@ struct RootView: View {
                             // instead of a bare indefinite spinner.
                             LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
                                          timeout: RunTimeouts.prep,
-                                         progressDetail: PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()),
+                                         // #1003: a closure so the count is re-read every tick, not
+                                         // captured whenever RootView last happened to re-render.
+                                         progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) },
                                          compact: true)
                         } else {
                             // #994: the idle tooltip belongs HERE rather than on the Menu. A live run's

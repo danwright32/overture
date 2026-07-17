@@ -19,7 +19,11 @@ struct LiveRunLabel: View {
     var onRetry: (() -> Void)? = nil
     // #354: real "N of M" progress (e.g. from a run's own progress file), inserted before the
     // ellipsis. nil when the run has no progress data to show.
-    var progressDetail: String? = nil
+    // #1003: a closure (not a plain String) so it re-reads the run's progress on every TimelineView
+    // tick, exactly as `runAlive` does, rather than reflecting a value the enclosing view captured at
+    // ITS last render (which no timer drives). Otherwise the count could sit stale for minutes beside
+    // an elapsed counter that keeps moving, reading as "alive and progressing" whether or not it was.
+    var progressDetail: (() -> String?)? = nil
     // #471: the run's real heartbeat (e.g. marker freshness), re-checked on every tick so a past-timeout
     // run that's still genuinely alive never flips to the misleading "looks stuck" state. A closure
     // (not a plain Bool) so it re-evaluates each second alongside the TimelineView tick. nil keeps the
@@ -52,7 +56,7 @@ struct LiveRunLabel: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     styled(Text(RunProgress.spinnerLabel(base, since: since, now: now,
-                                                         detail: progressDetail)))
+                                                         detail: progressDetail?())))
                 }
             }
         }
@@ -84,7 +88,7 @@ struct LiveRunLabel: View {
         case .stalled(let elapsed):
             return RunProgress.stalledLabel(base, elapsed: elapsed)
         case .running, .idle:
-            return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail)
+            return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail?())
         }
     }
 
