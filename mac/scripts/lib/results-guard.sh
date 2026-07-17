@@ -51,6 +51,30 @@ corrupt_path() {
   printf '%s' "${candidate}"
 }
 
+# discard_previous_results <results>   (#1011)
+#
+# The results file sitting on disk when a run STARTS belongs to the PREVIOUS run. The app has already
+# read it (that is what it polls for), so it is spent. Left in place it is not merely stale, it is
+# indistinguishable from this run.s own output, because nothing downstream compares its age to the
+# queue it is supposed to be answering.
+#
+# On 2026-07-16 a run wrote nothing at all. ensure_every_queued_source_reported then appended its
+# not_read entries to the 4.5-hour-old file still lying there, and carried that file.s generatedAt
+# across, so the app ingested a results file stamped hours before the queue it answered, carrying two
+# real-looking sources the run had never been asked about. The app was left saying the model had
+# rebuilt an id, which was not what happened at all: those were simply the last run.s leftovers.
+#
+# Deleted, not stamped aside: unlike a .corrupt file these bytes are not evidence of anything. They
+# are a successfully completed run.s output that has already been consumed. Keeping copies would pile
+# up under no cleanup rule (HandoffCleanup owns .corrupt, not this), for no diagnostic gain.
+#
+# NO APOSTROPHES in these comments: see the warning inside the node program below.
+discard_previous_results() {
+  local results="$1"
+  [ -f "${results}" ] || return 0
+  rm -f "${results}" 2>/dev/null || true
+}
+
 # quarantine_unreadable_results <results>   (#868)
 #
 # A results file that does not parse is not results, and leaving it in place is the quietest failure in
@@ -100,6 +124,11 @@ quarantine_unreadable_results() {
 # when things have already gone wrong.
 ensure_every_queued_source_reported() {
   local queue="$1" results="$2" log="$3" status="${4:-0}"
+  local guard_status=0
+
+  # #1011: the caller reads this to decide its own exit status. Cleared on every call so a second run
+  # in one shell cannot inherit the first run.s verdict.
+  RESULTS_MISSING_SOURCES=0
 
   [ -f "${queue}" ] || return 0                      # nothing was asked for, so nothing to guard
   command -v node >/dev/null 2>&1 || return 0        # no node: degrade to the old behaviour, never worse
@@ -169,8 +198,18 @@ ensure_every_queued_source_reported() {
     try {
       fs.writeFileSync(resultsPath, JSON.stringify(out, null, 2));
       console.log(`reported ${missing.length} source(s) the run never came back with: ${missing.join(", ")}`);
+      // #1011: 9 says the guard had to speak for the run. The caller turns that into a non-zero exit,
+      // because a run that came back with nothing is a FAILED run however calmly claude exited.
+      process.exit(9);
     } catch (e) {
       console.error(`could not write the failure results file: ${e.message}`);
     }
-  ' "${queue}" "${results}" "${log}" "${status}" "${corrupt_destination}" || true
+  ' "${queue}" "${results}" "${log}" "${status}" "${corrupt_destination}" || guard_status=$?
+
+  # #1011: 9 is the guard reporting that sources went missing, not the guard breaking. Any OTHER
+  # non-zero is this guard itself failing, and it must stay silent about that: it runs on the failure
+  # path, where things have already gone wrong, and it is the last thing between Dan and a silent loss.
+  if [ "${guard_status:-0}" = "9" ]; then
+    RESULTS_MISSING_SOURCES=1
+  fi
 }

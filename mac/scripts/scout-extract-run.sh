@@ -42,6 +42,11 @@ require_queue "$QUEUE" "scout-extract"
 HEARTBEAT_PID=$!
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
 
+# #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
+# Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and
+# all, and the app ingested hours-old results as the answer to a queue written minutes ago.
+discard_previous_results "$RESULTS"
+
 # Seed the progress file so the app shows "0 of N" immediately rather than a bare spinner while the
 # run boots (a cold Claude Code start is not instant). The run updates it as it goes.
 TOTAL=$(grep -c '"sourceId"' "$QUEUE" 2>/dev/null || echo 0)
@@ -124,5 +129,15 @@ ensure_every_queued_source_reported "$QUEUE" "$RESULTS" "$LOG" "$CLAUDE_STATUS"
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
 record_model "$RESULTS" "${OVERTURE_MODEL_EXTRACTION}"
 
-echo "scout-extract run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
-exit "$CLAUDE_STATUS"
+# #1011: fail loud. A run that came back with no results for a source it was GIVEN has failed, however
+# calmly claude exited, and claude exiting 0 while writing nothing is exactly what happened on
+# 2026-07-16: the log said "finished (claude exit 0)" over a run that lost every show it extracted.
+# The app does not read this status (it is launched detached), so this is for the log and for anyone,
+# human or script, who runs this by hand: the one line that said success must stop saying it.
+RUN_STATUS="$CLAUDE_STATUS"
+if [ "${RESULTS_MISSING_SOURCES:-0}" = "1" ] && [ "${RUN_STATUS}" = "0" ]; then
+  RUN_STATUS=9
+fi
+
+echo "scout-extract run finished (claude exit ${CLAUDE_STATUS}, run status ${RUN_STATUS}) -> $RESULTS"
+exit "$RUN_STATUS"
