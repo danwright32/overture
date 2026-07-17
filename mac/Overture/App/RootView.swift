@@ -37,6 +37,10 @@ struct RootView: View {
     // clobber the fresh run's state when it finally returns (CLAUDE.md: assume it runs twice).
     @State private var scoutGeneration = 0
     @State private var scoutTask: Task<Void, Never>?
+    // #1037: Dan asked to stop this run. The native sweep reads it between sources; the detached read is
+    // stopped via a cancel file the runner checks; and finishScout reads it to close quietly instead of
+    // popping a summary for a run he chose to abandon.
+    @State private var scoutCancelRequested = false
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
     // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
@@ -874,6 +878,7 @@ struct RootView: View {
         scoutStartedAt = Date()
         scoutSummary = nil
         scoutNativeSnapshot = nil
+        scoutCancelRequested = false   // #1037: a fresh run starts un-cancelled
         // #1034: a scout Dan STARTED takes over the screen with the progress modal; the scheduled
         // watch-only run keeps its quiet toolbar label and never pops it (his call, #1010).
         if !auto {
@@ -890,7 +895,9 @@ struct RootView: View {
                     onNativeProgress: { name, index, total in
                         guard gen == scoutGeneration else { return }
                         scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total)
-                    })
+                    },
+                    // #1037: the native sweep stops between sources when Dan cancels, and launches no read.
+                    isCancelled: { scoutCancelRequested })
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 
@@ -958,6 +965,13 @@ struct RootView: View {
         readingStartedAt = nil
         scoutIsManual = false
         scoutNativeSnapshot = nil
+        // #1037: a run Dan stopped closes quietly. It gets no summary popup: he abandoned it, so the
+        // partial warnings are not something he asked to see, and cancelScout already closed the sheet.
+        if scoutCancelRequested {
+            scoutCancelRequested = false
+            scoutSheetShown = false
+            return
+        }
         switch ScoutWarningsPresentation.decide(warnings, auto: auto) {
         case .popup(let w):
             // Setting scoutWarnings swaps the still-presented takeover to the summary in place; setting
@@ -994,6 +1008,18 @@ struct RootView: View {
                     auto: false)
     }
 
+    // #1037: stop the run for real, cooperatively. The native sweep sees the flag and stops between
+    // sources (launching no read); a detached read in flight is stopped by the cancel file the runner
+    // checks on its heartbeat. Either way the takeover closes now and the run winds down in the
+    // background; finishScout sees the flag and does not pop a summary for a run Dan abandoned. Not
+    // instant (the read stops on its next tick), but safe: no source is interrupted mid-write.
+    private func cancelScout() {
+        scoutCancelRequested = true
+        ScoutExtractService.requestCancel()
+        scoutSheetShown = false
+        scoutIsManual = false
+    }
+
     // #1034: the stalled-state Retry. A stalled modal means the run's heartbeat has gone dead, so abandon
     // this watch (its Task's completion is guarded by the generation token) and start a fresh scout,
     // which re-shows the takeover from the top.
@@ -1020,7 +1046,8 @@ struct RootView: View {
                                                     : (scoutNativeSnapshot ?? .init()) },
                 runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
                 onRetry: { retryScout() },
-                onHide: { scoutSheetShown = false })
+                onHide: { scoutSheetShown = false },
+                onCancel: { cancelScout() })
             Spacer(minLength: 0)
         }
         .frame(minWidth: 460, minHeight: 280)

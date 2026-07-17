@@ -221,7 +221,12 @@ enum ScoutService {
                          // position, total), so the modal can name the source it is checking and count
                          // "3 of 9" instead of a bare spinner. Default no-op, matching the fetch/pin/
                          // launch injection style above, so every other caller runs unchanged.
-                         onNativeProgress: (String, Int, Int) -> Void = { _, _, _ in }) async throws -> Outcome {
+                         onNativeProgress: (String, Int, Int) -> Void = { _, _, _ in },
+                         // #1037: Dan's cooperative cancel, checked between sources in the fetch loop.
+                         // When it flips true the sweep stops cleanly and, because the run was abandoned,
+                         // NO detached read is launched. Default never-cancelled, so every existing
+                         // caller sweeps and hands off exactly as before.
+                         isCancelled: () -> Bool = { false }) async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
@@ -250,6 +255,10 @@ enum ScoutService {
         // identically on the daily automatic scout and on one Dan started.
         var toRead: [(source: WatchedSource, page: FetchedPage)] = []
         for (index, source) in plan.fetch.enumerated() {
+            // #1037: Dan's cancel, checked between sources. The sweep stops cleanly here rather than mid-
+            // fetch (an await cannot be interrupted anyway), and the launch guard below then hands off no
+            // read, so a cancelled run leaves nothing behind for a detached process to finish.
+            if isCancelled() { break }
             let (result, page) = await check(source, fetch: fetch, depth: depth, now: now)
             outcome.sources.append(result)
             if let page { toRead.append((source, page)) }
@@ -270,7 +279,11 @@ enum ScoutService {
         // every source keeps its pending hash and its unread flag so the next run reads them all once
         // the runner is fixed. What must never happen is silence: a watchlist that quietly never reads
         // anything is indistinguishable from one where every calendar happens to be quiet.
-        if !toRead.isEmpty {
+        // #1037: a cancelled run launches no read. Whatever pages the sweep pinned before Dan stopped it
+        // are simply not handed off, so no detached process starts to be cancelled a moment later. The
+        // sources keep their pending hash and unread flag, exactly as an un-launched run does, so the
+        // next scout reads them.
+        if !toRead.isEmpty && !isCancelled() {
             do {
                 try queueForReading(toRead, pin: pin, launch: launch)
             } catch {

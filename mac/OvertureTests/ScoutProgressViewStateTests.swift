@@ -117,4 +117,25 @@ struct ScoutProgressViewStateTests {
         try view.inspect().find(button: "Hide").tap()
         #expect(hidden == true)
     }
+
+    // #1037: a real Cancel that STOPS the run, distinct from Hide. Present only when the caller supplies
+    // one (the takeover does; AddLeadSheet supplies its own).
+    @Test func theCancelControlFiresWhenProvided() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1010)
+        var cancelled = false
+        let view = ScoutProgressView(phase: .reading, since: since,
+                                     snapshot: snapshot("Kaufman Music Center", 2, 5),
+                                     onCancel: { cancelled = true }).content(now: now)
+        try view.inspect().find(button: "Cancel").tap()
+        #expect(cancelled == true)
+    }
+
+    @Test func thereIsNoCancelControlWhenNoneIsProvided() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let view = ScoutProgressView(phase: .scouting, since: since,
+                                     snapshot: snapshot("Carnegie Hall", 1, 9))
+            .content(now: Date(timeIntervalSince1970: 1010))
+        #expect((try? view.inspect().find(button: "Cancel")) == nil)
+    }
 }

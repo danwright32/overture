@@ -240,11 +240,29 @@ to fall straight back to a single sequential process. The split and merge are `l
 only part with an automated test (`lib/scout-parallel.test.sh`), because a partition that dropped a
 source or a merge that lost one would be a silent loss of Dan's shows.
 
+## Stopping a run (#1037)
+
+A scout Dan started can be cancelled from its progress window. The read is detached and has no trackable
+PID (the app backgrounds it via `sh -c '... &'` and keeps no handle), so there is nothing to `kill`.
+The stop is COOPERATIVE instead: the app writes an empty sentinel file, `scout-extract-cancel`, into the
+handoff dir, and the script's heartbeat (which already ticks every 60s to touch the marker and update the
+count) checks for it on each tick. When it is there, the heartbeat stops the chunk processes it recorded
+in `scout-extract-chunk-pids` and exits; the main script's `wait` then returns and it exits through its
+normal cleanup, so `lib/results-guard.sh` still speaks for every source and whatever landed is ingested.
+
+Cooperative, not instant, on purpose: a stop that lands between ticks can never interrupt a source
+mid-write and corrupt the shared results file the way a `kill -9` could. The sentinel's PRESENCE is the
+request; its contents are never read. The script clears it on exit (`lib/scout-cancel.sh`'s
+`clear_cancel`), and the app clears any stale one before starting a fresh run, so a sentinel left over
+from a cancelled run can never stop the next one. See `docs/contracts.md` for the cross-language contract.
+
 ## Files
 
 | file | who writes it |
 |---|---|
 | `overture-scout-extract-queue.json` | the app |
+| `scout-extract-cancel` | the app, to ask a running read to stop (#1037); the script reads its presence on each heartbeat and clears it on exit |
+| `scout-extract-chunk-pids` | the script, so its heartbeat knows which chunk processes to stop on a cancel (#1037); wiped every run |
 | `overture-scout-extract-results.json` | the script, merged from the per-chunk results every heartbeat and once at the end (#1028); each chunk's claude rewrites its own chunk file after every item, not only at the end (#1015) |
 | `overture-scout-extract-progress.json` | the script only, seeded and then continuously derived from the results file above; this run never writes it (#1015) |
 | `scout-extract-chunks/chunk-queue-<n>.json`, `chunk-results-<n>.json` | the script's scratch dir (#1028): the split queue each chunk reads and the results each chunk writes, wiped and rebuilt every run; the app never reads these |
