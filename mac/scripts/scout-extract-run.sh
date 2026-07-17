@@ -23,6 +23,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # #1015: derives the "N of M" progress count from the results file itself, so the toolbar can never
 # show a stale count just because the model forgot to report one.
 . "$(dirname "$0")/lib/progress-watcher.sh"
+# #1028: split the queue into chunks and merge the per-chunk results, so the sources can be read
+# concurrently instead of in one long sequential pass. The app still sees one queue, one progress file,
+# and one results file: chunking lives entirely in this runner.
+. "$(dirname "$0")/lib/scout-parallel.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -33,6 +37,17 @@ RESULTS="$SUPPORT/overture-scout-extract-results.json"
 PROGRESS="$SUPPORT/overture-scout-extract-progress.json"
 RUNBOOK="$PROJECT_DIR/docs/scout-extract-runbook.md"
 MARKER="$SUPPORT/scout-extract-running"
+
+# #1028: where the split queue and the per-chunk results live. A scratch dir under the handoff dir, never
+# read by the app: only this runner writes here, and it is wiped and rebuilt every run so a bigger
+# previous run's chunk files can never masquerade as this run's work.
+CHUNKDIR="$SUPPORT/scout-extract-chunks"
+
+# How many claude processes read the queue at once. Bounded and Dan-tunable: the total token work is
+# unchanged (the same pages, the same detail fetches), it is just done concurrently, so this trades a
+# shorter wait against more simultaneous load on the Max plan. Default 4 turns a 16-minute wait into
+# roughly 4. Set to 1 to fall straight back to the old single-process sequential run.
+MAX_PARALLEL="${SCOUT_EXTRACT_MAX_PARALLEL:-4}"
 
 require_queue "$QUEUE" "scout-extract"
 
@@ -46,13 +61,22 @@ require_queue "$QUEUE" "scout-extract"
 # This is what makes the "N of M" toolbar count a fact the script establishes on its own: it counts
 # what has actually landed in the results file, so it can never sit at 0 just because the model never
 # got around to reporting a count (2026-07-16's run never did).
+#
+# #1028: the tick first MERGES the per-chunk results into $RESULTS, so the file the app polls is the
+# live union of every chunk's work and the derived count advances across all chunks at once. When the
+# run is not chunked (a node-free machine falls back to a single process writing $RESULTS directly),
+# merge_chunk_results finds no chunk files and no-ops, and the derive reads $RESULTS as before.
 ( while :; do
     sleep 60
     touch "$MARKER" 2>/dev/null || exit
+    merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
     update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
   done ) &
 HEARTBEAT_PID=$!
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; rm -f "$MARKER"' EXIT
+# CHUNK_PIDS is filled in below once the chunk processes launch; killing them on exit stops a killed
+# script (Dan quits the app, a crash) from leaving orphaned claude processes running against the queue.
+CHUNK_PIDS=""
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; rm -f "$MARKER"' EXIT
 
 # #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and
@@ -137,19 +161,90 @@ file, every time, growing as you go:
 
 resolve_claude
 
-# Headless Claude Code run. Read (the pinned pages), Write (results + progress), WebFetch (each event's
-# detail page, for the venue and exact date, which the listings page usually lacks). No Bash, no Skill,
-# no WebSearch: this run reads files, follows links it was given, and writes two files.
+# Headless Claude Code run(s). Read (the pinned pages), Write (results + progress), WebFetch (each
+# event's detail page, for the venue and exact date, which the listings page usually lacks). No Bash, no
+# Skill, no WebSearch: this run reads files, follows links it was given, and writes two files.
 #
-# #856: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
-# (a crash, an API error, an out-of-memory kill) took the whole script down with it, right here, before
-# anything could write down what had been asked for and lost. The run vanished, and the app was left
-# polling for a file that was never coming.
+# #1028: the queue is split into up to MAX_PARALLEL contiguous chunks and one claude drives each,
+# concurrently. Every source is in exactly one chunk, so each claude writes its OWN chunk-results file
+# (never a shared one, which concurrent incremental rewrites would clobber), and the heartbeat merges
+# them into $RESULTS. The prompt is unchanged per chunk: only the two paths it names are swapped to that
+# chunk's queue and results file. run_claude_on_chunk substitutes the full-queue and full-results paths
+# (which $PROMPT was expanded against) for the chunk's own.
+run_claude_on_chunk() {
+  # $1 = chunk queue path, $2 = chunk results path, $3 = per-chunk log path
+  local chunk_prompt
+  chunk_prompt="${PROMPT//$QUEUE/$1}"
+  chunk_prompt="${chunk_prompt//$RESULTS/$2}"
+  "$CLAUDE" -p "$chunk_prompt" \
+    --model "${OVERTURE_MODEL_EXTRACTION}" \
+    --allowedTools "Read,Write,WebFetch" >> "$3" 2>&1
+}
+
 cd "$PROJECT_DIR"
+
+# Wipe any chunk files from a previous run before splitting, so a bigger run's leftovers cannot be
+# launched as this run's work (split_queue_into_chunks also clears its own chunk queues; this also
+# clears stale chunk-results). Assume-it-runs-twice.
+rm -rf "$CHUNKDIR" 2>/dev/null || true
+mkdir -p "$CHUNKDIR" 2>/dev/null || true
+# Per-chunk logs live directly in the support dir (not in CHUNKDIR), so wipe stale ones too: a bigger
+# previous run leaves higher-numbered chunk logs a smaller run never truncates, and a stale chunk-6 log
+# read as this run's would mislead.
+rm -f "$SUPPORT"/scout-extract-run.chunk-*.log 2>/dev/null || true
+
+CHUNK_COUNT="$(split_queue_into_chunks "$QUEUE" "$MAX_PARALLEL" "$CHUNKDIR")"
+
+# #856: every exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that
+# died (a crash, an API error, an out-of-memory kill) would take the whole script down with it, before
+# anything could write down what had been asked for and lost. With chunks, one dying process must not
+# take the others (or the merge and the results guard) down either: each source in a dead chunk comes
+# home as an honest not_read from the guard below, instead of the whole run vanishing.
 CLAUDE_STATUS=0
-"$CLAUDE" -p "$PROMPT" \
-  --model "${OVERTURE_MODEL_EXTRACTION}" \
-  --allowedTools "Read,Write,WebFetch" || CLAUDE_STATUS=$?
+
+if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
+  # Launch one claude per chunk, concurrently, each writing its own chunk-results file and its own log.
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    CHUNK_LOG="$SUPPORT/scout-extract-run.chunk-$k.log"
+    : > "$CHUNK_LOG"
+    run_claude_on_chunk "$CHUNKDIR/chunk-queue-$k.json" "$CHUNKDIR/chunk-results-$k.json" "$CHUNK_LOG" &
+    CHUNK_PIDS="$CHUNK_PIDS $!"
+    k=$((k + 1))
+  done
+
+  # Wait for every chunk, capturing each status so one failure is recorded without hiding the others.
+  # The first non-zero becomes the run's status; the results guard below is the load-bearing check for
+  # what actually came back, whatever the exit codes say. Written as an `if` (not `&&`) so a chunk that
+  # exits non-zero cannot trip `set -e` and take the whole script down on the failure path.
+  for pid in $CHUNK_PIDS; do
+    st=0
+    wait "$pid" || st=$?
+    if [ "$st" != "0" ] && [ "$CLAUDE_STATUS" = "0" ]; then CLAUDE_STATUS="$st"; fi
+  done
+  CHUNK_PIDS=""   # all reaped; nothing left for the trap to kill
+
+  # Fold each chunk's log tail into the main log, so the reason a chunk failed travels with the run
+  # (the results guard reads the main log's tail into the not_read note).
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    CHUNK_LOG="$SUPPORT/scout-extract-run.chunk-$k.log"
+    echo "--- chunk $k log tail ---"
+    tail -n 4 "$CHUNK_LOG" 2>/dev/null || true
+    k=$((k + 1))
+  done
+
+  # The final merge, now that every chunk has exited, so $RESULTS reflects the last writes each chunk
+  # made between the previous heartbeat tick and finishing.
+  merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
+else
+  # Fallback for a node-free machine (split printed 0): run a single claude against the full queue,
+  # writing $RESULTS directly, exactly as the sequential path always did.
+  echo "scout-extract: not chunking (node unavailable or empty queue); running one process"
+  "$CLAUDE" -p "$PROMPT" \
+    --model "${OVERTURE_MODEL_EXTRACTION}" \
+    --allowedTools "Read,Write,WebFetch" || CLAUDE_STATUS=$?
+fi
 
 # #1015: one last derive now that claude has exited, so the count reflects whatever landed between
 # the previous heartbeat tick and the process actually finishing, rather than sitting stale.
