@@ -11,36 +11,50 @@ import Testing
 // failed must be visibly distinct, and a bare indefinite spinner (or here, no spinner at all) is a
 // defect.
 //
-// It is worth its own guard because the regression is silent: remove the label and everything still
-// compiles, every other test still passes, and the only symptom is that Dan's scout looks finished
-// while it is still working.
+// #1034: that visible state moved out of a compact toolbar label and into the takeover ScoutProgressView
+// (a scout Dan started owns the screen while it runs). The regression this guards against is unchanged
+// (the reading half losing its own timeout, heartbeat and count), only its home did, so the guard now
+// checks both the RootView wiring and the modal that renders it.
+//
+// It is worth its own guard because the regression is silent: remove the surface and everything still
+// compiles, every other test still passes, and the only symptom is that Dan's scout looks finished while
+// it is still working.
 @Suite("The scout's reading half is visible while it works (#803)")
 struct ReadingHalfVisibleGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
+    private var progressView: String { SourceGuardHelper.source("Overture/UI/ScoutProgressView.swift") }
 
-    @Test func theReadingHalfHasItsOwnLiveLabel() {
+    @Test func theReadingHalfHasItsOwnLiveSurface() {
         #expect(!rootView.isEmpty)
-        #expect(rootView.contains("LiveRunLabel(base: \"Reading calendars\""))
+        #expect(!progressView.isEmpty)
+        // The detached read is entered with its own start time...
         #expect(rootView.contains("readingStartedAt = ScoutExtractService.lastRunStartedAt"))
+        // ...and shown through the modal's reading phase, not a silent wait.
+        #expect(rootView.contains("readingStartedAt != nil ? .reading : .scouting"))
     }
 
     // Judged against the DETACHED run's timeout, not the in-process scout's. RunTimeouts.scout is three
     // minutes, which is right for a native run and wrong for a batch that follows every event's detail
     // page: a perfectly healthy read would be declared stuck at three minutes, and Dan would learn that
-    // "looks stuck" means nothing.
+    // "looks stuck" means nothing. The modal picks the window from the phase.
     @Test func itIsJudgedAgainstTheDetachedRunsOwnTimeout() {
-        #expect(rootView.contains("timeout: RunTimeouts.scoutExtract"))
+        #expect(progressView.contains("RunTimeouts.scoutExtract"))
+        #expect(progressView.contains("RunTimeouts.scout"))
         #expect(RunTimeouts.scoutExtract > RunTimeouts.scout)
     }
 
-    // And against the run's real heartbeat, so a slow-but-living run never flips to "looks stuck" while
-    // a genuinely dead one does. That distinction is the whole difference between still-alive and failed.
+    // And against the run's real heartbeat, so a slow-but-living run never flips to "looks stuck" while a
+    // genuinely dead one does. That distinction is the whole difference between still-alive and failed:
+    // RootView supplies the heartbeat, the modal routes it through the shared liveness decision.
     @Test func aSlowButLivingRunIsNotCalledStuck() {
-        #expect(rootView.contains("runAlive: { ScoutExtractService.isRunning(now: Date()) }"))
+        #expect(rootView.contains("ScoutExtractService.isRunning(now: Date())"))
+        #expect(progressView.contains("RunProgress.liveness"))
     }
 
-    // Real "3 of 9", not a bare spinner, from the run's own progress file.
-    @Test func itCountsRatherThanSpins() {
-        #expect(rootView.contains("progressDetail: ScoutExtractProgressDecoder.label("))
+    // Real "3 of 9" from the run's own progress file, and the source being read RIGHT NOW, not a bare
+    // spinner. Both come from files the app already owns (#1034), read live each tick.
+    @Test func itCountsAndNamesTheSourceRatherThanSpinning() {
+        #expect(rootView.contains("ScoutExtractProgressDecoder.loadCurrent()"))
+        #expect(rootView.contains("ScoutExtractCurrentSource.loadCurrentName()"))
     }
 }

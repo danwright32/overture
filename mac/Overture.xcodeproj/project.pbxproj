@@ -23,6 +23,7 @@
 		055257ECAD4AA763C3A1B881 /* ScoutExtractService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480591F87B3AF4719ED5ACD4 /* ScoutExtractService.swift */; };
 		05D91246C0C5C2780C852575 /* FeedReconcile.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB209BD8716EB1330E81E67 /* FeedReconcile.swift */; };
 		06A4CFEDC7146983E2305A8F /* RankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD487981CBBF8C44D61938BB /* RankerTests.swift */; };
+		097F7B51588A231029CD3D3A /* ScoutProgressViewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918BA0DA11BF348127DD6754 /* ScoutProgressViewStateTests.swift */; };
 		0A64D1AF894C9FCB61A71DDA /* DayOffEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA153114B1CD8114A048DE85 /* DayOffEditingTests.swift */; };
 		0B3F94BB19E539CB2184E94F /* ShowSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E2C0BEAE1DB8F10FB628901 /* ShowSearchField.swift */; };
 		0C4E4E2EE5BCBF56CFD7F317 /* DraftModelTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C45A4E87B55511CE82F5BB2 /* DraftModelTraceTests.swift */; };
@@ -35,6 +36,7 @@
 		10E81F68130C8EB21253842E /* OmniFocusAutomationPermissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F17F7263541A45DD564327A /* OmniFocusAutomationPermissionTests.swift */; };
 		1154A5AB4544B39417A96897 /* SendReceiptSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A35B199EB33958EC197FF /* SendReceiptSaveGuardTests.swift */; };
 		11EBFE99854450DE4CDE614E /* VenueContactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34F8EF3BCFE68C62D3CFE5E /* VenueContactGuard.swift */; };
+		1307B6A3046AB97CE70510A1 /* ScoutExtractCurrentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */; };
 		1350BAE659D07E237A7CECB0 /* StoreBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AFA49345C432E2C82606573 /* StoreBackupTests.swift */; };
 		1407397D963D1CDE3690D446 /* SourcesSheetSaysEachThingOnceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BE13A6959F8630F6E80B6F1 /* SourcesSheetSaysEachThingOnceTests.swift */; };
 		1412FC939FC74701F566D9E8 /* StoreLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780FA66ADB1FB483CA9CAEAB /* StoreLock.swift */; };
@@ -297,6 +299,7 @@
 		89617C4C06DF3C1EBBD07310 /* SourceAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C47F6D032C7626D5EB10063 /* SourceAttention.swift */; };
 		899D605E7F5EE86355DC7D98 /* ProspectRowViewOrgDoNotContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C097F77457AB8AE82FD73B /* ProspectRowViewOrgDoNotContactTests.swift */; };
 		8AEAE230F42A46977A6E57D0 /* HandoffPathGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */; };
+		8AF6DFF3E530D17BDCC3DA8F /* ScoutProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59FB60BFE59656872EF77120 /* ScoutProgressView.swift */; };
 		8B69B8707839B375C62A455F /* RootViewDebugSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355E45853FE6D13E2CB22130 /* RootViewDebugSaveGuardTests.swift */; };
 		8CAACF2C9C4BC60374FD99CC /* LeadIntake.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152426A26DECFFF457CA23A /* LeadIntake.swift */; };
 		8DF5FF32C6D686C7559C0E78 /* SourceScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0751137AFFC48625463E2540 /* SourceScheduleTests.swift */; };
@@ -330,6 +333,7 @@
 		9AEAA22C9337B9B8ED187E11 /* DraftModelTraceDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC950C3DE82C614695A4DEE5 /* DraftModelTraceDisplayTests.swift */; };
 		9B286D4759A2B641194398DC /* SourceFetcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B174D89887AB01BB0F278F3F /* SourceFetcherTests.swift */; };
 		9D7CB31250C87458275579A9 /* RecentOpeners.swift in Sources */ = {isa = PBXBuildFile; fileRef = C448AE5287C23B5B098A31E7 /* RecentOpeners.swift */; };
+		9D9DF4403DB326F234B543F7 /* ScoutExtractCurrentSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5C81F668BEA208FE327FC2 /* ScoutExtractCurrentSourceTests.swift */; };
 		9E1B7C64CFE6B5C3C7238D3F /* SourceExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4AA2A7DF11509FA708E22B /* SourceExtractorTests.swift */; };
 		9E5F1559286C461A393C62F0 /* LeadSubmissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE51845D09CC5B147AFA31A /* LeadSubmissions.swift */; };
 		9EC139EDF24D569452F8A449 /* FollowUpsViewUserActionSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E897341D6DCE28A954EE361 /* FollowUpsViewUserActionSaveGuardTests.swift */; };
@@ -441,6 +445,7 @@
 		DDE9A993CA6F315D1BBB4F1F /* AlgoliaCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E61D4E3018F1962ABE8602 /* AlgoliaCalendar.swift */; };
 		DF9069647F653F6DB3F3F456 /* BounceDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF05EC0BA918EF0073F0AF09 /* BounceDetection.swift */; };
 		DF9F919C6E72FBB40D329E66 /* TicketLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB6AB214C94FAA63B14B637 /* TicketLink.swift */; };
+		E07FB07A0F1045D5570174E4 /* ScoutServiceNativeProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928DF411126F2DB5C7D3193D /* ScoutServiceNativeProgressTests.swift */; };
 		E08B44B6C2BDB07E35E3EB84 /* PrepProgressContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15694DC3BE6349887EAF4CB6 /* PrepProgressContractTests.swift */; };
 		E0D87FC4A023B61A69E5B50B /* RunVanishedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30EE55852F8B20129156B608 /* RunVanishedTests.swift */; };
 		E114D882FBC6CA53C8815530 /* SourceAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F191DF6FE6A63D02EE81A15D /* SourceAttentionTests.swift */; };
@@ -534,6 +539,7 @@
 		07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatternsView.swift; sourceTree = "<group>"; };
 		0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationConfidenceTests.swift; sourceTree = "<group>"; };
 		087ED2BE07F17339FD8E8EE1 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
+		08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractCurrentSource.swift; sourceTree = "<group>"; };
 		08E5F0DDE65E9BEA88C89FF1 /* DueWork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueWork.swift; sourceTree = "<group>"; };
 		09ABAC4E7BC597E087FB5A42 /* EventPlace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventPlace.swift; sourceTree = "<group>"; };
 		09C48829D65269F3AEC2601C /* SourceReadStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceReadStateTests.swift; sourceTree = "<group>"; };
@@ -690,6 +696,7 @@
 		58D17DC1074893CC29A3EB58 /* RunWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunWindowTests.swift; sourceTree = "<group>"; };
 		595B0E6C06FF1BA88F84DBEA /* ReconcileScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconcileScheduler.swift; sourceTree = "<group>"; };
 		59DE693FC4DE46904203D785 /* DaysOffSnoozeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffSnoozeTests.swift; sourceTree = "<group>"; };
+		59FB60BFE59656872EF77120 /* ScoutProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutProgressView.swift; sourceTree = "<group>"; };
 		5B70E5FB7C632BC18DBABE7E /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
 		5BD4279B7F55F3204ADE126D /* RunGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunGroupingTests.swift; sourceTree = "<group>"; };
 		5BE4D1EEE03D1F3B43473EBE /* DownbeatExportWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportWatcher.swift; sourceTree = "<group>"; };
@@ -749,6 +756,7 @@
 		78E5F6DE2F1B4741F5F0DF2B /* StoreUnavailableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreUnavailableView.swift; sourceTree = "<group>"; };
 		79F854DAD35A2285D9B50A03 /* ModelContextSaveOrWarnTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContextSaveOrWarnTests.swift; sourceTree = "<group>"; };
 		7A082007D0D0F3B3EA1029F1 /* SendConfirmAndReconnectAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendConfirmAndReconnectAlerts.swift; sourceTree = "<group>"; };
+		7B5C81F668BEA208FE327FC2 /* ScoutExtractCurrentSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractCurrentSourceTests.swift; sourceTree = "<group>"; };
 		7D01977E9DAA7DBA8D3010F7 /* VenueContactGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueContactGuardTests.swift; sourceTree = "<group>"; };
 		7D0698923BDAE4642DF51C75 /* BounceServiceDelayDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BounceServiceDelayDetectionTests.swift; sourceTree = "<group>"; };
 		7DDCA7E2A81DE18A0C911ACB /* QueueViewMastheadLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueViewMastheadLayoutTests.swift; sourceTree = "<group>"; };
@@ -790,7 +798,9 @@
 		8F518441FAAA42A56D2E5A00 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
 		8F786F02E6CB170766AB1D25 /* ConversationStateMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStateMenu.swift; sourceTree = "<group>"; };
 		9044C76CAA661C328A7266BC /* RecentOpenersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentOpenersService.swift; sourceTree = "<group>"; };
+		918BA0DA11BF348127DD6754 /* ScoutProgressViewStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutProgressViewStateTests.swift; sourceTree = "<group>"; };
 		922565C86AD46DC7E3C46311 /* SourceGuardHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuardHelper.swift; sourceTree = "<group>"; };
+		928DF411126F2DB5C7D3193D /* ScoutServiceNativeProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutServiceNativeProgressTests.swift; sourceTree = "<group>"; };
 		931EEF833D4EAB6EBA62DAB2 /* LoopbackListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackListener.swift; sourceTree = "<group>"; };
 		9442226C3EE107A74FB0FA39 /* StagePillCountMatchesNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePillCountMatchesNavigationTests.swift; sourceTree = "<group>"; };
 		946729B6E11E8A1EDB184CF4 /* OutcomeStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomeStats.swift; sourceTree = "<group>"; };
@@ -1270,17 +1280,20 @@
 				446CED6B3B61366AC83A38A2 /* SaveOrWarnConsolidationGuardTests.swift */,
 				544258D79D119C1CED8DC7CE /* ScoutExtractConfirmSuppressionTests.swift */,
 				A14B63BB837F86F663211749 /* ScoutExtractContractTests.swift */,
+				7B5C81F668BEA208FE327FC2 /* ScoutExtractCurrentSourceTests.swift */,
 				FE262C20F3A2B520E86B7263 /* ScoutExtractIngestTests.swift */,
 				D8FCA23278154ABDF9F2A855 /* ScoutExtractServiceTests.swift */,
 				1337617F33D2466B2BBE3A9D /* ScoutExtractWatchGuardTests.swift */,
 				CAC9D247A008ECFC97CF33CF /* ScoutFailureTests.swift */,
 				A9F977AAC23433642848CAC4 /* ScoutOneSourceTests.swift */,
 				2C000452A48174359570CDE9 /* ScoutOutcomeWarningTests.swift */,
+				918BA0DA11BF348127DD6754 /* ScoutProgressViewStateTests.swift */,
 				EA20760AEA5952634E9E368C /* ScoutProgressWiringGuardTests.swift */,
 				4DBC09A2909F1D963C0835A4 /* ScoutQueueForReadingTests.swift */,
 				2CF637553CB10A5029D06811 /* ScoutResultAuditTests.swift */,
 				259704CBCB9A08303ED7921F /* ScoutRunIdentityTests.swift */,
 				A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */,
+				928DF411126F2DB5C7D3193D /* ScoutServiceNativeProgressTests.swift */,
 				0FD328AA2D9F70B0F181D86C /* ScoutServiceSaveGuardTests.swift */,
 				75EF1A94243625631CFBC6E7 /* ScoutServiceTests.swift */,
 				FF01B805DA5B480951430061 /* ScoutStatusTests.swift */,
@@ -1505,6 +1518,7 @@
 				FE451DFEC63612B85E98AA33 /* RunTimeouts.swift */,
 				203E7EFE8858ADA4E9B22FBD /* Salutation.swift */,
 				987A65431D64CC8682BE3785 /* SalutationStrip.swift */,
+				08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */,
 				35F6A280CEB97ABFA5673233 /* ScoutExtractProgress.swift */,
 				98B399388130E19A313B20F1 /* ScoutExtractQueue.swift */,
 				12FFD569036709A600D5AFD8 /* ScoutExtractResults.swift */,
@@ -1597,6 +1611,7 @@
 				5B70E5FB7C632BC18DBABE7E /* QueueView.swift */,
 				715B637F291B723A32F86486 /* QueueView+Model.swift */,
 				EBDCFFF39EBE62517CF021C4 /* ReminderSettingsView.swift */,
+				59FB60BFE59656872EF77120 /* ScoutProgressView.swift */,
 				44AEE567A777E1BB9D9A34C2 /* ScoutSummaryView.swift */,
 				7A082007D0D0F3B3EA1029F1 /* SendConfirmAndReconnectAlerts.swift */,
 				39BF4A90E3CB13A466B45D51 /* SendConfirmSheet.swift */,
@@ -1847,12 +1862,14 @@
 				C2D89CAA95FE8022741A7F53 /* RunTimeouts.swift in Sources */,
 				8341B1DFE8F45CBC43A70A1E /* Salutation.swift in Sources */,
 				E47F654D0CA14F07894D3A32 /* SalutationStrip.swift in Sources */,
+				1307B6A3046AB97CE70510A1 /* ScoutExtractCurrentSource.swift in Sources */,
 				DC64EE8E6986813FED70FB73 /* ScoutExtractIngest.swift in Sources */,
 				F34F3DBC55406E6C54618D6B /* ScoutExtractProgress.swift in Sources */,
 				841E229EA8AA4DDF73AC9B52 /* ScoutExtractQueue.swift in Sources */,
 				754AFD394AE81E2E17C25D2F /* ScoutExtractResults.swift in Sources */,
 				055257ECAD4AA763C3A1B881 /* ScoutExtractService.swift in Sources */,
 				21840BD7971149E338692C04 /* ScoutFailure.swift in Sources */,
+				8AF6DFF3E530D17BDCC3DA8F /* ScoutProgressView.swift in Sources */,
 				7A873E681E4A5D3DE76EE8CB /* ScoutResultAudit.swift in Sources */,
 				D3466E049499F3A23A79A737 /* ScoutRunSummary.swift in Sources */,
 				F9A4D696E5BF48F27EE0BCDB /* ScoutSchedule.swift in Sources */,
@@ -2121,17 +2138,20 @@
 				F13FA6380F87B044A01A861B /* SaveOrWarnConsolidationGuardTests.swift in Sources */,
 				96C53A56386B9871B6C48EB4 /* ScoutExtractConfirmSuppressionTests.swift in Sources */,
 				760F63E988AF988954ACC8DB /* ScoutExtractContractTests.swift in Sources */,
+				9D9DF4403DB326F234B543F7 /* ScoutExtractCurrentSourceTests.swift in Sources */,
 				EB779592D1375B1D254EDDF8 /* ScoutExtractIngestTests.swift in Sources */,
 				AB834E9054ABB3875EF75DAD /* ScoutExtractServiceTests.swift in Sources */,
 				A6704E92D5B28FDEF903162A /* ScoutExtractWatchGuardTests.swift in Sources */,
 				97DCA8924C3656DB65531CD8 /* ScoutFailureTests.swift in Sources */,
 				1B4E38F31FBF5E58DA618212 /* ScoutOneSourceTests.swift in Sources */,
 				C673577557212A661D01E532 /* ScoutOutcomeWarningTests.swift in Sources */,
+				097F7B51588A231029CD3D3A /* ScoutProgressViewStateTests.swift in Sources */,
 				97FDD259C38854070EB0C6F8 /* ScoutProgressWiringGuardTests.swift in Sources */,
 				B43FBEC50A348331DF477CF3 /* ScoutQueueForReadingTests.swift in Sources */,
 				1635E412C8EB2D67F6FF4701 /* ScoutResultAuditTests.swift in Sources */,
 				4B6E036A92A98AD1ECB5FEBF /* ScoutRunIdentityTests.swift in Sources */,
 				0E4306B2FECBB993459C09B2 /* ScoutScheduleTests.swift in Sources */,
+				E07FB07A0F1045D5570174E4 /* ScoutServiceNativeProgressTests.swift in Sources */,
 				778335D364933E8F2C13FCFF /* ScoutServiceSaveGuardTests.swift in Sources */,
 				6E193C64F2947CB03E7A7F42 /* ScoutServiceTests.swift in Sources */,
 				BAFBBEF83992A1D7340C8D9C /* ScoutStatusTests.swift in Sources */,
