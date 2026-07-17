@@ -72,29 +72,41 @@ require_queue "$QUEUE" "scout-extract"
 # Heartbeat: keep the marker fresh while working, so a legitimately long batch (several pages, each
 # with detail pages to follow) is never mistaken for a crash and freed for a second run to clobber.
 #
-# #1015: the SAME tick also derives progress from $RESULTS, rather than a second background loop.
+# #1015: the marker tick also derives progress from $RESULTS, rather than a second background loop.
 # This is what makes the "N of M" toolbar count a fact the script establishes on its own: it counts
 # what has actually landed in the results file, so it can never sit at 0 just because the model never
 # got around to reporting a count (2026-07-16's run never did).
 #
-# #1028: the tick first MERGES the per-chunk results into $RESULTS, so the file the app polls is the
-# live union of every chunk's work and the derived count advances across all chunks at once. When the
+# #1028: the marker tick first MERGES the per-chunk results into $RESULTS, so the file the app polls is
+# the live union of every chunk's work and the derived count advances across all chunks at once. When the
 # run is not chunked (a node-free machine falls back to a single process writing $RESULTS directly),
 # merge_chunk_results finds no chunk files and no-ops, and the derive reads $RESULTS as before.
-# #1037: the SAME tick also honours a cancel. When Overture has written the sentinel, the heartbeat
+#
+# #1037/#1053: the loop also honours a cancel. When Overture has written the sentinel, the heartbeat
 # stops the chunk processes it recorded (a cooperative stop, so no source is interrupted mid-write) and
-# exits; the main script's `wait` then returns, and it exits through its normal cleanup. Checked right
-# after touching the marker so a cancel is noticed within one tick.
-( while :; do
-    sleep 60
-    touch "$MARKER" 2>/dev/null || exit
+# exits; the main script's `wait` then returns, and it exits through its normal cleanup. The cancel is
+# read on a SHORT poll (SCOUT_EXTRACT_CANCEL_POLL_SECONDS, default 3), DECOUPLED from the 60s marker
+# work, so a Cancel Dan clicks stops the read (and its token spend) within a few seconds instead of up
+# to a minute (#1053). marker_due gates the expensive periodic work so its cost is unchanged: only the
+# cancel latency drops. The kill still lands at a poll boundary and never interrupts a merge (the merge
+# runs only on the marker branch), so cooperative-stop safety is intact.
+CANCEL_POLL="${SCOUT_EXTRACT_CANCEL_POLL_SECONDS:-3}"
+MARKER_INTERVAL=60
+( since_marker=0
+  while :; do
+    sleep "$CANCEL_POLL"
     if cancel_requested "$CANCEL"; then
       # shellcheck disable=SC2046
       [ -s "$CHUNK_PIDS_FILE" ] && kill $(cat "$CHUNK_PIDS_FILE" 2>/dev/null) 2>/dev/null
       exit
     fi
-    merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
-    update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
+    since_marker=$((since_marker + CANCEL_POLL))
+    if marker_due "$since_marker" "$MARKER_INTERVAL"; then
+      since_marker=0
+      touch "$MARKER" 2>/dev/null || exit
+      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
+      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
+    fi
   done ) &
 HEARTBEAT_PID=$!
 # CHUNK_PIDS is filled in below once the chunk processes launch; killing them on exit stops a killed

@@ -35,12 +35,15 @@ struct ScoutProgressWiringGuardTests {
     // The real guard: the heartbeat loop (the only thing ticking while claude is alive) actually
     // CALLS the deriving function, not just sources the file that defines it. A guard and its wiring
     // are two separate claims (#887); sourcing the file proves nothing about whether it is used.
+    // #1053 decoupled the cancel poll (a few seconds) from the 60s marker work, so the derive now sits
+    // behind marker_due deeper in the loop body; the window is generous enough to reach it while still
+    // ending well before the post-claude final derive hundreds of lines later.
     @Test func theHeartbeatLoopDerivesProgressEachTick() throws {
         guard let heartbeatRange = runner.range(of: "while :; do") else {
             Issue.record("heartbeat loop not found in scout-extract-run.sh")
             return
         }
-        let nearby = runner[heartbeatRange.lowerBound...].prefix(400)
+        let nearby = runner[heartbeatRange.lowerBound...].prefix(800)
         #expect(nearby.contains("update_progress_from_results"))
     }
 
