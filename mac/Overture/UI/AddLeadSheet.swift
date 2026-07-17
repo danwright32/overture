@@ -5,11 +5,12 @@ import SwiftData
 // hands it to the extract run, and shows him what it found so he can confirm before anything is
 // written into his store.
 //
-// The sheet STAYS OPEN while it works, showing a live counter (Dan's call). That is not decoration:
+// The sheet STAYS OPEN while it works, showing live progress (Dan's call). That is not decoration:
 // CLAUDE.md's standing rule is that a slow action must make "working", "still alive" and "failed"
 // visibly different states, and a bare spinner that looks the same whether the run is progressing,
-// hung, or dead is a defect. LiveRunLabel already does exactly that (elapsed counter, real N-of-M from
-// the run's progress file, and a stalled state with a retry), so it is reused rather than reinvented.
+// hung, or dead is a defect. #1036: it now shows the SAME ScoutProgressView a scout Dan started shows
+// (#1034), rendered inline, so a lead read reads like a scout read (elapsed counter, the page being
+// read, and a stalled state with a retry) rather than a second, divergent progress surface.
 struct AddLeadSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -78,18 +79,21 @@ struct AddLeadSheet: View {
         }
     }
 
-    // Working, still-alive, and failed as three visibly different states, per CLAUDE.md. The counter
-    // keeps ticking, the run's own progress file feeds the detail, and if it genuinely stalls the label
-    // says so and offers a retry instead of spinning forever.
+    // #1036: the SAME progress surface a scout Dan started shows (#1034), rendered inline here (not a
+    // sheet-in-a-sheet: AddLeadSheet is already presented as a sheet from RootView). It reads the reading
+    // phase's source name and count from the shared live snapshot, so a lead read looks like a scout read.
+    // A pasted lead queues one page, so the source line degrades to just that page's host (the count "1
+    // of 1" is suppressed) with no special-casing here. AddLeadSheet returns to its own review/problem/
+    // added steps once the run completes, exactly as before.
+    //
+    // Working, still-alive and failed stay three visibly different states, per CLAUDE.md: the counter
+    // ticks, the count advances, and a genuine stall flips to the warning state with a retry.
     private func working(startedAt: Date) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            LiveRunLabel(base: "Reading the page",
-                         since: startedAt,
-                         timeout: RunTimeouts.scoutExtract,
-                         font: OVType.body,
-                         color: OVColor.inkSoft,
-                         onRetry: start,
-                         progressDetail: model.progressDetail)
+            ScoutProgressView(phase: .reading, since: startedAt,
+                              snapshot: { ScoutProgressView.Snapshot.liveReading() },
+                              runAlive: { ScoutExtractService.isRunning(now: Date()) },
+                              onRetry: start)
             Text("It fetches the page, then follows each show's own link to get the venue and date.")
                 .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
             HStack {

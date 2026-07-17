@@ -46,12 +46,13 @@ struct ScoutProgressView: View {
     // healthy run stuck (the #803 lesson).
     var timeout: TimeInterval { phase == .scouting ? RunTimeouts.scout : RunTimeouts.scoutExtract }
 
+    // Just the ticking content, sized to its content. The presentation chrome (the takeover's fixed
+    // frame and canvas background) is applied by the caller, so the SAME view drops into RootView's
+    // full-screen sheet and inline into AddLeadSheet (#1036) without one imposing the other's size.
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             content(now: context.date)
         }
-        .frame(minWidth: 420, minHeight: 260)
-        .background(OVColor.canvas)
     }
 
     // Internal (not private) so ScoutProgressViewStateTests can call it with a fixed `now`, the same
@@ -59,18 +60,16 @@ struct ScoutProgressView: View {
     @ViewBuilder func content(now: Date) -> some View {
         let state = RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: runAlive?())
         VStack(spacing: OVSpacing.md) {
-            Spacer(minLength: 0)
             switch state {
             case .stalled(let elapsed):
                 stalled(elapsed: elapsed)
             case .running, .idle:
                 running(now: now)
             }
-            Spacer(minLength: 0)
             controls(state: state)
         }
-        .padding(OVSpacing.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .padding(OVSpacing.lg)
     }
 
     @ViewBuilder private func running(now: Date) -> some View {
@@ -107,6 +106,23 @@ struct ScoutProgressView: View {
                     .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
             }
         }
+    }
+}
+
+extension ScoutProgressView.Snapshot {
+    // #1034/#1036: the live reading-phase snapshot, from the files the app already owns. The source being
+    // read now comes from diffing the queue the app wrote against the results the run is filling; the
+    // count from the run's own script-derived progress file (#1015). ONE definition, shared by RootView's
+    // takeover and AddLeadSheet's inline read, so the two can never disagree about what the read is
+    // showing. Injectable URLs so it is a real unit test; missing files read as an empty snapshot.
+    static func liveReading(queueURL: URL = ScoutExtractQueueBuilder.defaultURL,
+                            resultsURL: URL = ScoutExtractResultsDecoder.defaultURL,
+                            progressURL: URL = ScoutExtractProgressDecoder.defaultURL) -> ScoutProgressView.Snapshot {
+        let progress = ScoutExtractProgressDecoder.loadCurrent(from: progressURL)
+        return ScoutProgressView.Snapshot(
+            sourceName: ScoutExtractCurrentSource.loadCurrentName(queueURL: queueURL, resultsURL: resultsURL),
+            completed: progress?.completed ?? 0,
+            total: progress?.total ?? 0)
     }
 }
 

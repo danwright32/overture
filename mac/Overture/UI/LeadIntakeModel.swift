@@ -126,11 +126,6 @@ final class LeadIntakeModel {
         return nil
     }
 
-    // Real "N of M" from the run's own progress file, so the sheet counts rather than spins.
-    var progressDetail: String? {
-        ScoutExtractProgressDecoder.label(from: ScoutExtractProgressDecoder.loadCurrent())
-    }
-
     // The months of a calendar this lead actually read, in Dan's words rather than "2026-07".
     //
     // Silent on a page that was never a calendar (a single show page, an org homepage): a note that
