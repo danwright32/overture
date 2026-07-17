@@ -16,6 +16,7 @@
 		02A4BF4AFB3ADAAB63011DD4 /* FollowUpsRowArchiveJumpGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E981588D8BACEADB5D50878 /* FollowUpsRowArchiveJumpGuardTests.swift */; };
 		0340792854B123A072BB8593 /* DraftReviewNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3516FC2154B2251B6E01724 /* DraftReviewNotes.swift */; };
 		03BD933CCB910DF9DDAE98CF /* GoogleOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */; };
+		044ED92FA470C7ACF6CD944C /* RealStoreTestLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18C833C90E3A64756068B92C /* RealStoreTestLock.swift */; };
 		04602E0E963B445CB6DCC62D /* GmailSenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CEA888631E3F3292A7A5FB /* GmailSenderTests.swift */; };
 		04BEAACD81C5A7AC8D937F2B /* PrepQueueEligibilityParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CC343FE3F73EE47ACE5926 /* PrepQueueEligibilityParityTests.swift */; };
 		04FA610FA66C8446BAD3F238 /* SendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E507C0A339C96A42C60B567F /* SendService.swift */; };
@@ -249,6 +250,7 @@
 		746B1F2D1C7EE89583560ECF /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087ED2BE07F17339FD8E8EE1 /* FilterChip.swift */; };
 		74DDA85AB2C7978DB7552BCF /* ProspectMutations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5352A249A3868BCF6566AE15 /* ProspectMutations.swift */; };
 		754AFD394AE81E2E17C25D2F /* ScoutExtractResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12FFD569036709A600D5AFD8 /* ScoutExtractResults.swift */; };
+		75EC4A977F5C81D47FABA927 /* RealStoreTestLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */; };
 		760ED1E077A4CAD241B5DDFE /* ReplyDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10BF247B7FD0179047746EA2 /* ReplyDetectionTests.swift */; };
 		760F63E988AF988954ACC8DB /* ScoutExtractContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14B63BB837F86F663211749 /* ScoutExtractContractTests.swift */; };
 		763DF7652F74E8A86F82B212 /* QueueDepartingFoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5215E42CBAD77A95F94C8966 /* QueueDepartingFoldTests.swift */; };
@@ -579,6 +581,7 @@
 		15DCD819F03AD0E55E940DE5 /* SourceReadability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceReadability.swift; sourceTree = "<group>"; };
 		16EE360DB327B84791A4BF49 /* AddLeadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddLeadSheet.swift; sourceTree = "<group>"; };
 		178A580B99A434A3D0A30B04 /* ActionFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionFeedback.swift; sourceTree = "<group>"; };
+		18C833C90E3A64756068B92C /* RealStoreTestLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealStoreTestLock.swift; sourceTree = "<group>"; };
 		1912B26502F23FF9B423BE95 /* DaysOffAttention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffAttention.swift; sourceTree = "<group>"; };
 		1942D70A38A419E78AF4D91D /* BookingMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingMatchTests.swift; sourceTree = "<group>"; };
 		19431884BB6668E1797AA054 /* PerformanceStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceStatusTests.swift; sourceTree = "<group>"; };
@@ -1017,6 +1020,7 @@
 		F56875ADF0A8D3D852212940 /* SourceSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSchedule.swift; sourceTree = "<group>"; };
 		F6295038AB115F90569DD1B5 /* ExtractedEventGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEventGuardTests.swift; sourceTree = "<group>"; };
 		F71E842020A75AAB31ED0420 /* BlockedCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedCalendar.swift; sourceTree = "<group>"; };
+		F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealStoreTestLockTests.swift; sourceTree = "<group>"; };
 		F7C0F936EA18B5C7307A439E /* SourceNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceNote.swift; sourceTree = "<group>"; };
 		F908765C098BDDF1F2382335 /* DayOff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayOff.swift; sourceTree = "<group>"; };
 		FA4855E0A391F15D086981B8 /* QueueCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueCopyTests.swift; sourceTree = "<group>"; };
@@ -1267,6 +1271,8 @@
 				3FC2B2CF23A84E8672385828 /* ReachedOutRowArchiveJumpGuardTests.swift */,
 				52157C78ECE785E01811012D /* ReachedOutRowGuardTests.swift */,
 				23D99AA2372E7E6CABBD50A7 /* ReadingHalfVisibleGuardTests.swift */,
+				18C833C90E3A64756068B92C /* RealStoreTestLock.swift */,
+				F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */,
 				D4421A5A9FE3927DBDF657A5 /* RecentOpenersBuilderTests.swift */,
 				CB804095950C3B52DB306026 /* RecentOpenersContractTests.swift */,
 				BBEA40E648090718CC10B1B7 /* RecentOpenersServiceTests.swift */,
@@ -2137,6 +2143,8 @@
 				67BAC9EE252B0D945385B650 /* ReachedOutRowArchiveJumpGuardTests.swift in Sources */,
 				60E3684A2371EDBAF39ADE9B /* ReachedOutRowGuardTests.swift in Sources */,
 				C81262BCC9A17467710060AE /* ReadingHalfVisibleGuardTests.swift in Sources */,
+				044ED92FA470C7ACF6CD944C /* RealStoreTestLock.swift in Sources */,
+				75EC4A977F5C81D47FABA927 /* RealStoreTestLockTests.swift in Sources */,
 				CC6142866902A601A5D52272 /* RecentOpenersBuilderTests.swift in Sources */,
 				D7779117179C333C10155530 /* RecentOpenersContractTests.swift in Sources */,
 				64BAF44FA87FC2675F340271 /* RecentOpenersServiceTests.swift in Sources */,
