@@ -68,6 +68,19 @@ final class WatchedSource {
     // the source up again rather than skipping it forever. Defaulted, so existing rows migrate cleanly.
     var pendingContentHash: String? = nil
 
+    // #1048: the hash of the page the most recent fetch actually SAW, whether or not that run read or
+    // ingested it. Unlike lastContentHash (last INGESTED) and pendingContentHash (last READ and pinned,
+    // awaiting ingest), this is "the live page as far as we know", updated by every successful fetch
+    // including the free daily watch-only pass that notices a change but never re-reads.
+    //
+    // It exists for exactly that watch-only pass. When it sees the page move on it records the new hash
+    // here and sets hasUnreadChanges, but leaves pendingContentHash on the old bytes it never re-read. So
+    // in the Sources sheet a confirm can anchor to bytes the live page no longer serves, and the next real
+    // read will not match, so the confirmation silently fails to suppress. Comparing this against the
+    // anchor is what tells a fresh read from a stale one (see confirmReadIsStale). Defaulted, so existing
+    // rows migrate cleanly and simply carry no observation until their next check.
+    var lastObservedContentHash: String? = nil
+
     // The three UserDefaults keys of the #150/#152 self-heal machinery, per source. A merged
     // multi-source feed count must never feed a shared baseline: one healthy source's big season would
     // mask another source's dead scraper, which is the exact failure this whole model exists to make
@@ -179,6 +192,17 @@ final class WatchedSource {
     // above: decided here, never in the view.
     var runNote: String? { SourceNote.summary(notes) }
     var runNoteDetail: String? { SourceNote.detail(notes) }
+
+    // #1048: would a "This page is right" confirm made right now silently fail to stick? confirmEmpty
+    // anchors confirmedEmptyHash to the bytes last READ (pendingContentHash, or the last ingested hash).
+    // If a watch-only pass has since seen the live page change (lastObservedContentHash moved past that
+    // anchor), the next real read will not match the anchor, so the confirmation would not suppress and
+    // the source would nag again. Decided beside the data and NOT in the view (#863), so the Sources
+    // confirm affordance can warn on a tested rule rather than reasoning about hashes in SwiftUI.
+    var confirmReadIsStale: Bool {
+        SourceConfirmation.readIsStaleForConfirm(anchorHash: pendingContentHash ?? lastContentHash,
+                                                 lastSeenHash: lastObservedContentHash)
+    }
 
     init(sourceId: String, orgName: String, listingsURL: String? = nil, kind: SourceKind,
          addedAt: Date = Date()) {

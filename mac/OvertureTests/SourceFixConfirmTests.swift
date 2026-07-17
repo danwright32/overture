@@ -52,6 +52,60 @@ struct SourceFixConfirmTests {
         #expect(!SourceFailure.inconsistentResult.offersFix)        // a run bug, not a bad address
     }
 
+    // #1048: the page hash the most recent fetch actually SAW, ingested or not, defaults nil and round
+    // trips. It is the "current live page as far as we know", distinct from the last INGESTED hash and
+    // the last READ-and-pinned hash.
+    @Test func lastObservedContentHashDefaultsNilAndRoundTrips() throws {
+        let ctx = try context()
+        let source = WatchedSource(sourceId: "kaufman", orgName: "Kaufman", kind: .html)
+        #expect(source.lastObservedContentHash == nil)     // nothing fetched yet
+        source.lastObservedContentHash = "seen1"
+        ctx.insert(source)
+        try ctx.save()
+
+        let stored = try #require(try ctx.fetch(FetchDescriptor<WatchedSource>()).first)
+        #expect(stored.lastObservedContentHash == "seen1")
+    }
+
+    // #1048: the staleness predicate the Sources confirm affordance rests on. A confirm anchors to the
+    // bytes last READ (pendingContentHash, or the last ingested hash). If the live page has moved on
+    // since, a watch-only pass records the new hash and the anchor no longer matches what the next real
+    // read will see, so the confirmation cannot stick. Pure, so the warning is a tested rule and not
+    // logic buried in the view (#863).
+    @Test func readIsStaleForConfirmOnlyWhenTheSeenHashHasMovedPastTheAnchor() {
+        // fresh: the bytes we would anchor to are the bytes we last saw. The confirm will stick.
+        #expect(!SourceConfirmation.readIsStaleForConfirm(anchorHash: "A", lastSeenHash: "A"))
+        // stale: a watch-only pass saw new bytes after the read. Confirming now would anchor to the old
+        // bytes and the next read would not match, so it would silently fail to suppress.
+        #expect(SourceConfirmation.readIsStaleForConfirm(anchorHash: "A", lastSeenHash: "B"))
+        // nothing read to anchor to: not stale (confirmEmpty returns .noHash on its own).
+        #expect(!SourceConfirmation.readIsStaleForConfirm(anchorHash: nil, lastSeenHash: "B"))
+        // never observed a live hash (a legacy row from before this field): do not over-warn.
+        #expect(!SourceConfirmation.readIsStaleForConfirm(anchorHash: "A", lastSeenHash: nil))
+    }
+
+    // #1048: the row's own read of that predicate. A source whose pinned read bytes still match the last
+    // seen bytes is fresh; one the watch-only pass has since seen change is stale.
+    @Test func confirmReadIsStaleReflectsPendingVersusLastObserved() throws {
+        let ctx = try context()
+        let s = WatchedSource(sourceId: "org", orgName: "Org", listingsURL: "https://org.example/e", kind: .html)
+
+        // Just read: the pinned bytes are the bytes we last saw.
+        s.pendingContentHash = "A"
+        s.lastObservedContentHash = "A"
+        #expect(!s.confirmReadIsStale)
+
+        // A later watch-only pass saw the page change. The pinned read is now stale.
+        s.lastObservedContentHash = "B"
+        #expect(s.confirmReadIsStale)
+
+        // With no pinned read, the anchor falls back to the last ingested hash.
+        s.pendingContentHash = nil
+        s.lastContentHash = "A"
+        #expect(s.confirmReadIsStale)                       // ingested "A", live page now "B"
+        ctx.insert(s); try ctx.save()
+    }
+
     // The suppression test: a confirmed no_dated_content page whose just-read bytes still match the
     // confirmed hash is quiet; a different hash (the page changed) or a nil hash is NOT.
     @Test func confirmedQuietOnlyWhenNoDatedContentHashMatches() {

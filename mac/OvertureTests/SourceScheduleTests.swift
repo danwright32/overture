@@ -217,6 +217,29 @@ struct SourceCheckTests {
         #expect(s.lastContentHash == "abc")   // still the last hash we actually INGESTED
     }
 
+    // #1048: a check DOES record the hash it saw, ingested or not. That is what lets the Sources confirm
+    // affordance tell a fresh read from one a watch-only pass has since seen change: the free daily run
+    // notices the page moved on but never re-reads, so without this the confirm would anchor to stale
+    // bytes and silently fail to suppress. Recorded on BOTH branches (changed and unchanged) and on the
+    // watch-only run, because "the live page as far as we know" is true whatever the run did next.
+    @Test func aCheckRecordsTheHashItSaw() {
+        let changed = source(hash: "abc")
+        _ = SourceCheck.decide(source: changed, result: .success(page("xyz")),
+                               depth: .watchOnly, now: now)
+        #expect(changed.lastObservedContentHash == "xyz")     // the free daily run saw new bytes
+
+        let unchanged = source(hash: "abc")
+        _ = SourceCheck.decide(source: unchanged, result: .success(page("abc")),
+                               depth: .readChanged, now: now)
+        #expect(unchanged.lastObservedContentHash == "abc")   // still current, and now recorded
+
+        let failed = source(hash: "abc")
+        failed.lastObservedContentHash = "abc"
+        _ = SourceCheck.decide(source: failed, result: .failure(.http(500)),
+                               depth: .readChanged, now: now)
+        #expect(failed.lastObservedContentHash == "abc")      // a fetch that failed saw nothing new
+    }
+
     // MARK: - Failure is named, recorded, and never fatal to the source
 
     @Test func everyFetchFailureIsNamedOnTheRowAndTheSourceKeepsBeingWatched() {

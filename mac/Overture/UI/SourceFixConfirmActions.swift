@@ -11,6 +11,11 @@ import SwiftData
 // disable CONFIRM in the exact case it is meant for. confirmEmpty anchors to the bytes last read, and
 // the ingest match is exact, so a stale confirmation can only fail to suppress (a harmless re-nag),
 // never suppress the wrong page.
+//
+// #1048: in the Sources sheet that re-nag is invisible and confusing, because a source's last read can
+// be OLD (a watch-only pass saw the page change but never re-read). So when the read is stale
+// (WatchedSource.confirmReadIsStale) CONFIRM is still offered, but a gold hint says it will not stick
+// until the page is read again. The popup path is always fresh, so the hint never appears there.
 struct SourceFixConfirmActions: View {
     let source: WatchedSource
     let failure: SourceFailure
@@ -33,6 +38,15 @@ struct SourceFixConfirmActions: View {
             }
             if let message {
                 Text(message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // #1048: warn before a confirm that cannot stick. Gold, not rust: this is guidance, not a
+            // failure. Only when confirm is even on offer and the source's read is stale; the popup path
+            // is always fresh, so this never appears there. Whether the read is stale is decided in
+            // WatchedSource.confirmReadIsStale, never here (#863).
+            if failure.offersConfirm, !editing, source.confirmReadIsStale {
+                Text(SourceFixConfirmCopy.confirmStaleHint)
+                    .font(.system(size: 11)).foregroundStyle(OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: OVSpacing.xs) {
@@ -108,6 +122,13 @@ enum SourceFixConfirmCopy {
     static let cancelTitle = "Cancel"
     static let confirmTitle = "This page is right"
     static let confirmHelp = "Keep this page but stop flagging it, until its contents change"
+
+    // #1048: shown only in the Sources sheet, only when the page has changed since it was last read (a
+    // watch-only pass saw new bytes but did not re-read). Confirming then anchors to the old bytes, so the
+    // next read would not match and the source would quietly go on nagging. The popup never shows this: a
+    // just-scouted source's read is always current.
+    static let confirmStaleHint =
+        "The page has changed since it was last read. Confirming now won't stick until you read it again."
 
     static func fixedAck(org: String) -> String { "Updated \(org)'s address." }
     static func confirmedAck(org: String) -> String {

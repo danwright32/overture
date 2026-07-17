@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **646 sentences**, from 206 source files.
+Every sentence Overture can say to Dan: **647 sentences**, from 206 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1060,6 +1060,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/SourceFetcher.swift`
 "The page came back as \(v.rawValue)."
     `Domain/WatchedSource.swift`
+"The page has changed since it was last read. Confirming now won't stick until you read it again."
+    `UI/SourceFixConfirmActions.swift`
 "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
     `Integration/ScoutService.swift`
 "The reader came back with nothing for that page. Try again, or paste the org's events page."
