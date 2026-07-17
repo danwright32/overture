@@ -26,7 +26,7 @@ struct LiveRunLabelViewStateTests {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1010)
         let label = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60,
-                                 progressDetail: "12 of 38", compact: true)
+                                 progressDetail: { "12 of 38" }, compact: true)
         let view = label.content(now: now)
 
         // The caption is what widens a toolbar item, and the HStack is what lays one out beside the
@@ -67,12 +67,34 @@ struct LiveRunLabelViewStateTests {
         let now = Date(timeIntervalSince1970: 1010)
 
         let help = LiveRunLabel(base: "Reading calendars", since: since, timeout: 60,
-                                progressDetail: "12 of 38", compact: true).helpText(now: now)
+                                progressDetail: { "12 of 38" }, compact: true).helpText(now: now)
 
         #expect(help == RunProgress.spinnerLabel("Reading calendars", since: since, now: now,
                                                  detail: "12 of 38"))
         #expect(help.contains("12 of 38"))
         #expect(help.contains(RunProgress.elapsedLabel(since: since, now: now)!))
+    }
+
+    // #1003: the "N of M" progress must be re-read on every tick, not captured once at the caller's
+    // last render. Before this, `progressDetail` was a plain String the enclosing view evaluated when
+    // IT happened to re-render, which no timer drives: the count could sit at "3 of 38" for minutes
+    // while only the elapsed counter (which has its own TimelineView) kept moving, reading as
+    // "alive and progressing" whether or not anything was. Proven by a closure whose answer changes
+    // between two renders: the label must show the NEW figure on the second render, which a value
+    // captured once never could.
+    @Test func theProgressDetailIsReReadEachRenderNotCapturedOnce() {
+        let since = Date(timeIntervalSince1970: 1000)
+        var current = "3 of 38"
+        let label = LiveRunLabel(base: "Prepping", since: since, timeout: 60,
+                                 progressDetail: { current }, compact: true)
+
+        let first = label.helpText(now: Date(timeIntervalSince1970: 1010))
+        #expect(first.contains("3 of 38"))
+
+        current = "20 of 38"
+        let second = label.helpText(now: Date(timeIntervalSince1970: 1020))
+        #expect(second.contains("20 of 38"))
+        #expect(!second.contains("3 of 38"))
     }
 
     @Test func theCompactTooltipSaysSoWhenTheRunLooksStuck() {
