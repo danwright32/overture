@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **643 sentences**, from 203 source files.
+Every sentence Overture can say to Dan: **646 sentences**, from 203 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -595,6 +595,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HistoryMatch.swift`
 "Matched performer '\(performerName)' to a past booking-history record."
     `Domain/HistoryMatch.swift`
+"Music only travels to the five boroughs. As theater this would stay."
+    `UI/QueueView+Model.swift`
 "Name (optional)"
     `UI/DraftReviewView.swift`
 "Never checked"
@@ -745,6 +747,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Organizations that asked"
     `Domain/SuppressionReport.swift`
+"Outside New York, New Jersey and Connecticut."
+    `UI/QueueView+Model.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
@@ -1145,6 +1149,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."
     `UI/ProspectRowView.swift`
+"This town is on the skip list."
+    `UI/QueueView+Model.swift`
 "This was not a genuine reply (an auto-reply or out of office). Revert it; a new reply will still flag."
     `UI/DraftReviewView.swift`
 "This was re-prepped \(PrepStatus.relative(from: lastServedAt, to: now)). Redo it anyway?"
