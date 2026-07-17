@@ -32,8 +32,8 @@ enum SourceReadability {
             // Saying only "12 shows couldn't be read" would hide the consequence, and the consequence is the
             // part Dan can actually act on: this source can no longer tell him a show has been cancelled,
             // and it will not be able to until it can read its own pages again.
-            return "\(unreadable) of \(total) shows couldn't be read, "
-                + "so Overture won't mark anything from this source as gone until it can."
+            return "\(unreadable) of \(total) shows had no venue on their own detail page, "
+                + "so Overture won't mark anything from this source as gone until it can confirm one."
         }
 
         // #897: the run read what it found, but found far less than this source normally lists. A half
@@ -53,6 +53,6 @@ enum SourceReadability {
         // Inside the tolerance: worth stating, but it has cost the source nothing, and the copy must not
         // imply that it has. A "venue TBA" listing is a normal, permanent feature of a real calendar.
         guard unreadable > 0 else { return nil }
-        return "\(unreadable) of \(total) shows couldn't be read."
+        return "\(unreadable) of \(total) shows had no venue on their own detail page."
     }
 }
