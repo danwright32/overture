@@ -267,6 +267,14 @@ struct RootView: View {
                             Button("Redraft and find contacts") { bulkReprep(.both) }
                         }
                         .disabled(eligibleForBulkReprep.isEmpty)
+                        // #1038: stop a Prep run in flight. Present only while one is running (a detached
+                        // run has no trackable PID, so this writes the sentinel the runner checks on its
+                        // heartbeat and stops cooperatively). The label stays "Prepping" until the runner
+                        // notices on its next tick, exactly like the scout takeover's Cancel.
+                        if PrepQueueService.isRunning(now: Date()) {
+                            Divider()
+                            Button("Cancel prep", role: .destructive) { cancelPrep() }
+                        }
                     } label: {
                         if isScanning && !scoutIsManual {
                             // #1034: the compact toolbar label is now ONLY the scheduled watch-only
@@ -740,6 +748,14 @@ struct RootView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // #1038: stop a Prep run in flight, cooperatively. The detached run has no trackable PID, so this
+    // writes the sentinel the runner checks on its heartbeat; the runner stops the claude process it
+    // recorded and exits at the next tick (never mid-write, so no draft is corrupted). watchPrepRun keeps
+    // polling and ingests whatever the run had already written once the marker clears.
+    private func cancelPrep() {
+        PrepQueueService.requestCancel()
     }
 
     // Wait for the in-flight run to finish, then report what it produced. Tied to a run

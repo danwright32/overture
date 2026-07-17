@@ -100,6 +100,22 @@ printf '{"version":1,"total":3,"completed":1}' > "${PROGRESS}"
 update_progress_from_results "${QUEUE}" "${RESULTS}" "${PROGRESS}"
 assert_equals "a missing queue means the total cannot be known, so progress is left alone" "1" "$(field "${PROGRESS}" completed)"
 
+# --- #1023: the SAME function derives PREP's count, from PREP's own file shapes -------------------
+#
+# Prep switched to the identical script-derived progress as scout (#1023): its queue is `items[]` and
+# its results are `results[]` of PrepResult objects keyed by naturalKey, the same two keys this function
+# already folds through. So the ONE update_progress_from_results serves both runners, and this pins that
+# a real prep-shaped pair derives correctly rather than trusting that "same keys" holds by inspection.
+PREP_QUEUE="${TMP}/prep-queue.json"
+PREP_RESULTS="${TMP}/prep-results.json"
+PREP_PROGRESS="${TMP}/prep-progress.json"
+printf '{"version":1,"generatedAt":"2026-07-17T00:00:00Z","items":[{"naturalKey":"a|2026-03-10|carnegie-hall"},{"naturalKey":"b|undated|none"},{"naturalKey":"c|2026-09-01|weill-recital-hall"}]}' > "${PREP_QUEUE}"
+printf '{"version":1,"generatedAt":"2026-07-17T00:00:00Z","results":[{"naturalKey":"a|2026-03-10|carnegie-hall","contacts":[]}]}' > "${PREP_RESULTS}"
+printf '{"version":1,"total":3,"completed":0}' > "${PREP_PROGRESS}"
+update_progress_from_results "${PREP_QUEUE}" "${PREP_RESULTS}" "${PREP_PROGRESS}"
+assert_equals "prep total comes from the prep queue's items" "3" "$(field "${PREP_PROGRESS}" total)"
+assert_equals "prep completed counts the PrepResult entries written so far" "1" "$(field "${PREP_PROGRESS}" completed)"
+
 # No node on PATH: this is a nice-to-have, never something that can fail the run or corrupt the file.
 write_queue 3
 write_results 2

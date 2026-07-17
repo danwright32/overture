@@ -44,15 +44,16 @@ before this was codified.
   `~/Library/Application Support/Overture/overture-voice-guidance.md`: the distilled,
   anonymized voice tendencies, an editable artifact. You regenerate ONLY its
   auto-generated section; Dan's own notes section is preserved untouched.
-- **Update as you go (#354):**
-  `~/Library/Application Support/Overture/overture-prep-progress.json` (`PrepProgress`
-  version `1`: `{ version, total, completed }`). The launcher script already created this
-  file with `completed: 0` and the correct `total` before starting you; after you finish
-  EACH item (contact found or not, draft written or not, "finish" means you have moved on
-  from it), overwrite the WHOLE file with `completed` incremented by one, `total` and
-  `version` unchanged. This drives the app's live "N of M" progress display, so a stale or
-  skipped update just makes that count wrong, not a crash, but update it every item, not
-  just at the end. Never touch `total`.
+- **Write incrementally as you go (#1023):** rewrite `overture-prep-results.json` with the
+  complete `PrepResults` JSON covering EVERY item you have finished so far immediately after
+  EACH item, not just at the very end. The launcher script derives the app's live "N of M"
+  progress display by counting the entries in this file itself (`PrepProgress` version `1`:
+  `{ version, total, completed }`, seeded by the script with `completed: 0` and the correct
+  `total`), so the progress count moves forward on its own as this file grows. You do NOT
+  write the progress file: asking you to self-report a count is the exact design that left
+  scout's counter stuck at 0 through a live run on 2026-07-16 (#1015), so the script owns it
+  now. The only thing you must do for progress is keep this results file current after every
+  single item.
 
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result
 byte-for-byte. NEVER rebuild it from group/date/venue: that is the silent-mismatch
@@ -377,13 +378,14 @@ fix a draft body that:
 - contains performative enthusiasm: "love to", "thrilled", "excited", "can't wait",
   "delighted", or any exclamation point. Rephrase level before writing.
 
-### 4. Update progress (#354)
+### 4. Keep the results file current (#1023)
 
-Before moving to the next item in the work-list, overwrite
-`overture-prep-progress.json` with `completed` incremented by one (see "Input / output"
-above for the exact shape). Do this for every item, including one where you found no
-contact or wrote no draft, "finished" means you are done working it, not that it
-succeeded.
+Before moving to the next item in the work-list, rewrite `overture-prep-results.json`
+with the complete `PrepResults` JSON covering every item finished so far (see "Input /
+output" above). Do this for every item, including one where you found no contact or wrote
+no draft, "finished" means you are done working it, not that it succeeded. The launcher
+script derives the "N of M" progress display from this file's entry count on its own, so
+you never write the progress file yourself.
 
 ## One-time setup
 
