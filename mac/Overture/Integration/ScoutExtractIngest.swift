@@ -149,7 +149,8 @@ enum ScoutExtractIngest {
             }
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
-                state: .ingested(found: events.count), hadBaseline: health.baseline > 0))
+                state: .ingested(found: events.count), hadBaseline: health.baseline > 0,
+                listingsURL: source.listingsURL))
         }
 
         // #888 part B: ONE reconcile, with EVERY source this run landed.
@@ -189,7 +190,8 @@ enum ScoutExtractIngest {
         source.lastFailure = failure
         source.hasUnreadChanges = true
         outcome.sources.append(ScoutService.SourceResult(
-            sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure)))
+            sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure),
+            listingsURL: source.listingsURL))
     }
 
     // #1027: a no_dated_content page Dan already confirmed as right-but-empty, read again at the same
@@ -206,7 +208,8 @@ enum ScoutExtractIngest {
         source.pendingContentHash = nil
         source.hasUnreadChanges = false
         outcome.sources.append(ScoutService.SourceResult(
-            sourceId: source.sourceId, orgName: source.orgName, state: .confirmedEmpty))
+            sourceId: source.sourceId, orgName: source.orgName, state: .confirmedEmpty,
+            listingsURL: source.listingsURL))
     }
 
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that
