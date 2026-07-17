@@ -263,18 +263,11 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // #986: whether this source still says WHERE its shows are. #970's gate reads only that, so a
-            // run that silently stopped reporting it looks exactly like a page that never named a city, and
-            // both keep and flag everything. Only this source's own history tells them apart, which is why
-            // the ~30 venue calendars that correctly never place stay silent here.
-            //
-            // Gold on the drift, faint on the one-time baseline: one is a capability going out, the other is
-            // just it coming up for the first time. Decided in SourcePlacement, never here (#863/#885).
-            if let placement = source.placementNote {
-                Text(placement).font(.system(size: 11))
-                    .foregroundStyle(source.lastPlacedCount == 0 ? OVColor.gold : OVColor.inkFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            // #1029: the #986 venue-precision line is gone from Dan's view. It told him how many shows
+            // "said where they are", and he did not understand why it mattered ("I do not understand what
+            // that matters"). The underlying placement data still records on every run (WatchedSource's
+            // lastPlacedCount / hadPlacedBeforeLastRun); only its Dan-facing sentence was removed. The
+            // alternative, rewriting it to state its consequence, was set aside per that signal.
 
             // #875: the RUN'S OWN account of this source, which until now was decoded and thrown away
             // while Dan was shown only the generic sentence for the verdict. The generic line says WHAT

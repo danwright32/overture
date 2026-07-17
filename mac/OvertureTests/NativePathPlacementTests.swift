@@ -4,12 +4,13 @@ import SwiftData
 @testable import Overture
 
 // #1005 / #1001: the placement detector (#986) was wired into the AGENT path's recorder only, so the
-// native (Carnegie) path never set lastPlacedCount / hadPlacedBeforeLastRun and Carnegie's placementNote
-// stayed silent no matter what its feed said. Consolidating the shared bookkeeping into ONE function that
-// both paths call is the fix: the placement lines then run for both from one place, not a third copy.
+// native (Carnegie) path never set lastPlacedCount / hadPlacedBeforeLastRun and its placement count stayed
+// zero no matter what its feed said. Consolidating the shared bookkeeping into ONE function that both paths
+// call is the fix: the placement count then records for both from one place, not a third copy. (#1029 later
+// removed the Dan-facing line the count fed; the recorded count these tests pin stays, for #970's drift check.)
 //
-// These drive the REAL native scout (ScoutService.runScout over an algolia Carnegie row), because the rule
-// and the WIRE that carries it to the row are two separate claims. SourcePlacement.note can be perfect
+// These drive the REAL native scout (ScoutService.runScout over an algolia Carnegie row), because the count
+// and the WIRE that carries it to the row are two separate claims. SourcePlacement.placedCount can be perfect
 // while nothing on the native path ever feeds it, and every existing placement test would still pass. That
 // exact class of cut has gone unnoticed here before (#986/#887).
 @MainActor

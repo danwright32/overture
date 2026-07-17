@@ -185,6 +185,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
+"1 new show waiting for you"
+    `Domain/SourceYield.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "A Prep run is already in progress. Wait for it to finish."
@@ -645,8 +647,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "None due"
     `Domain/AgentRoster.swift`
-"None of the \(total) shows say where they are, which is new for this source. Until that comes back, Overture can't tell an out-of-town date from a New York one."
-    `Domain/SourcePlacement.swift`
 "Not a booking"
     `UI/ProspectRowView.swift`
 "Not a duplicate"
@@ -1307,6 +1307,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) with an unsure classification"
     `Domain/AgentRoster.swift`
+"\(n) new shows waiting for you"
+    `Domain/SourceYield.swift`
 "\(n) reply draft\(n == 1 ? "" : "s") stalled"
     `Domain/AgentRoster.swift`
 "\(name) may already be pitched for a nearby show; blocked from sending."
@@ -1343,8 +1345,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
-"\(placed) of \(total) shows say where they are, so Overture can tell an out-of-town date from a New York one."
-    `Domain/SourcePlacement.swift`
 "\(range) is no longer blocked"
     `App/ActionFeedback.swift`
 "\(range) is now blocked"
@@ -1361,7 +1361,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(tally.bookedManual) confirmed by you"
     `Domain/OutcomePatterns.swift`
-"\(tally.kept) of \(tally.found) kept"
+"\(tally.kept) of \(reviewed) kept after review"
     `Domain/SourceYield.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`

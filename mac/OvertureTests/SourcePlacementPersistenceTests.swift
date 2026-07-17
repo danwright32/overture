@@ -3,13 +3,14 @@ import Foundation
 import SwiftData
 @testable import Overture
 
-// #986, through the REAL ingest, because the rule and the WIRE that carries it to Dan are two separate
-// claims. SourcePlacement.note can be perfect while nothing ever calls it, and every test in
-// SourcePlacementTests would still pass while the sheet said nothing at all. That exact cut has gone
-// unnoticed in this repo before: #887's guard stayed green across 1,829 tests with its wire cut.
+// #986, through the REAL ingest, because the count and the WIRE that records it are two separate claims.
+// SourcePlacement.placedCount can be perfect while the ingest never folds it into the source, and every
+// unit test would still pass while the stored value stayed zero. That exact cut has gone unnoticed in this
+// repo before: #887's guard stayed green across 1,829 tests with its wire cut.
 //
-// The count also has to SURVIVE the run that produced it, or the sheet could only show it in the seconds
-// after a scout, which is exactly when Dan is not looking at the Sources sheet.
+// The count also has to SURVIVE the run that produced it: #970's drift detection compares this run against
+// whether the source had EVER placed, so the fact has to persist on the row, not live only in the seconds
+// after a scout. (#1029 removed the Dan-facing sentence this used to feed; the recorded count stays.)
 @MainActor
 @Suite("A source remembers whether its shows said where they are (#986)")
 struct SourcePlacementPersistenceTests {
@@ -46,8 +47,8 @@ struct SourcePlacementPersistenceTests {
     }
 
     // The artist page, which is what the whole #970 gate is for. A run that says where the shows are is
-    // remembered as having done so, and the row says it once.
-    @Test func aRunThatSaysWherePlacesRecordsItAndTellsDan() throws {
+    // remembered as having done so.
+    @Test func aRunThatSaysWherePlacesRecordsIt() throws {
         let ctx = try context()
         let s = source(ctx)
 
@@ -56,7 +57,6 @@ struct SourcePlacementPersistenceTests {
 
         #expect(s.lastPlacedCount == 2)
         #expect(s.hasEverPlaced == true)
-        #expect(s.placementNote == "2 of 2 shows say where they are, so Overture can tell an out-of-town date from a New York one.")
     }
 
     // The venue calendar: FRIGID's real shape. It has never said where a show is, it does not now, and it is
@@ -70,13 +70,13 @@ struct SourcePlacementPersistenceTests {
 
         #expect(s.lastPlacedCount == 0)
         #expect(s.hasEverPlaced == false)
-        #expect(s.placementNote == nil)
     }
 
     // THE failure path, end to end through the real ingest. A source that said where its shows were, and now
     // says nothing, has drifted, and the geographic gate is off for it. This is the case #986 exists for, and
-    // the one a bare "placed N of M" could never tell apart from the venue calendar above.
-    @Test func aSourceThatStopsSayingWhereIsLoudAboutIt() throws {
+    // the one a bare "placed N of M" could never tell apart from the venue calendar above. The recorded state
+    // is what #970's drift detection reads: it placed before (hasEverPlaced) but placed nothing this run.
+    @Test func aSourceThatStopsSayingWhereRemembersItPlacedBefore() throws {
         let ctx = try context()
         let s = source(ctx)
 
@@ -93,7 +93,6 @@ struct SourcePlacementPersistenceTests {
         #expect(s.lastPlacedCount == 0)
         // It remembers. A source that once placed can never become "just a venue calendar" by forgetting.
         #expect(s.hasEverPlaced == true)
-        #expect(s.placementNote == "None of the 2 shows say where they are, which is new for this source. Until that comes back, Overture can't tell an out-of-town date from a New York one.")
     }
 
     // A blank string is not a place. The runbook asks for the page's words verbatim, and a page that renders

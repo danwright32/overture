@@ -216,6 +216,19 @@ struct CopyInventoryTests {
         #expect(inventory.sentences.contains("Performative enthusiasm or an exclamation point"))
     }
 
+    // #1029: the #986 venue-precision line ("N of M shows say where they are...") was removed from Dan's
+    // view because he did not understand why it mattered. The inventory IS the canonical list of what
+    // Overture can say to Dan, so its absence here is the behavioral fact that the sentence is gone: if
+    // SourcePlacement.note (or any placement sentence) is ever re-added, this goes red. The scout summary
+    // now leads instead with the shows waiting for review, which must be present.
+    @Test func theVenuePrecisionLineIsGoneAndTheWaitingLineIsPresent() throws {
+        let inventory = try CopyInventory.build()
+        #expect(!inventory.sentences.contains { $0.contains("shows say where they are") })
+        #expect(!inventory.sentences.contains { $0.contains("out-of-town date from a New York one") })
+        #expect(inventory.sources(of: "\\(n) new shows waiting for you") == ["Domain/SourceYield.swift"])
+        #expect(inventory.sources(of: "1 new show waiting for you") == ["Domain/SourceYield.swift"])
+    }
+
     // The failure path, and the one worth being loud about. An ignore region opened and never closed
     // hides every sentence after it, silently, in a list whose whole value is that it is complete. It
     // would look exactly like a file that had nothing to say.
