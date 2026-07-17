@@ -95,16 +95,37 @@ enum ExtractedEventGuard {
     // Measured against the live store before it was written: fires on 4 of 4 fabricated rows, and cannot
     // fire on the other 128, which carry no location at all. A tempting alternative ("the venue has a
     // comma") was rejected on the same data: it would eat Bargemusic's real answer.
+    //
+    // #1057: a SPECIFIC, NAMED outdoor performance space (a park, plaza, pier) is a real venue, and the
+    // 3a runbook rule to copy `location` verbatim means it routinely repeats that same name ("Sakura
+    // Park, W 122nd St & Riverside Dr" as both `venue` and `location`), which would otherwise trip this
+    // exact check. `namesAnOutdoorPlace` is the escape hatch: a bare city/state/country name never
+    // carries a place-type word, so it can't falsely rescue the #995 fabricated rows this guard exists
+    // to catch.
     private static func restatesLocation(venue: String, location: String?) -> Bool {
         let venueKey = normalized(venue)
         guard !venueKey.isEmpty,
               let location, case let locationKey = normalized(location), !locationKey.isEmpty
         else { return false }
+        guard !namesAnOutdoorPlace(venue) else { return false }
 
         if venueKey == locationKey { return true }
         return locationKey.split(separator: ",")
             .map { normalized(String($0)) }
             .contains(venueKey)
+    }
+
+    // A bare city/state/country name never carries one of these; a specific named outdoor performance
+    // space routinely does ("Sakura Park", "Greeley Square", "Bryant Park", "Pier 5").
+    private static let outdoorPlaceMarkers: Set<String> = [
+        "park", "plaza", "square", "pier", "green", "common", "commons", "garden", "gardens",
+        "esplanade", "promenade", "amphitheater", "amphitheatre", "bandshell", "waterfront",
+        "boardwalk", "courtyard", "terrace"
+    ]
+
+    private static func namesAnOutdoorPlace(_ venue: String) -> Bool {
+        let words = venue.lowercased().split(whereSeparator: { !$0.isLetter })
+        return words.contains { outdoorPlaceMarkers.contains(String($0)) }
     }
 
     private static func normalized(_ s: String) -> String {
