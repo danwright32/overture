@@ -131,6 +131,40 @@ final class WatchedSource {
     // calendars and never be asked about it again.
     var hasEverPlaced: Bool { hadPlacedBeforeLastRun || lastPlacedCount > 0 }
 
+    // #1001/#1005: the bookkeeping a successful, fully read run folds into this source, shared by BOTH
+    // ingest paths (the native Carnegie sweep in ScoutService.recordCheck and the agent extract run in
+    // ScoutExtractIngest.recordSuccess). It used to be two near-identical copies, and the #986 placement
+    // detector was wired into only one of them, so a native run silently never recorded whether its shows
+    // said where they are. One function means the health fold, the #891 readable/unreadable counts and the
+    // #986 placement detector can never again diverge between the two doors.
+    //
+    // Every count is written HERE, on the caller's success branch, so it can only ever describe the run
+    // that produced it and never a later or earlier one (#891). The pre-run placement answer is captured
+    // BEFORE this run's count overwrites it, and in THAT order (#986), or a source's first placing run
+    // would be indistinguishable from its tenth and the baseline line would never appear.
+    //
+    // Deliberately does NOT touch the content hash. That is the agent path's alone (the native Algolia feed
+    // has no fetched page to hash), so its caller promotes the hash itself after this returns.
+    func recordSuccessfulRead(events: Int, unreadable: Int, placed: Int,
+                              feedHealth: FeedReconcile.FeedHealthState, now: Date) {
+        lastReadableCount = events
+        lastUnreadableCount = unreadable
+
+        hadPlacedBeforeLastRun = hasEverPlaced
+        lastPlacedCount = placed
+
+        let updated = FeedReconcile.updatedHealth(feedHealth, currentCount: events)
+        baselineFeedCount = updated.baseline
+        degradedStreak = updated.degradedStreak
+        lastDegradedCount = updated.lastDegradedCount
+
+        lastCheckedAt = now
+        lastSucceededAt = now
+        health = .ok
+        lastFailure = nil
+        successfulCheckCount += 1
+    }
+
     // The line the Sources sheet shows about whether this source says where its shows are, or nothing at all
     // when it is doing what it always has. Decided beside the data and NOT in the view (#863/#885).
     //

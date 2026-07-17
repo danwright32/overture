@@ -22,6 +22,16 @@ import Foundation
 // can reach, and two have already drifted here under a green suite (#863, #885).
 enum SourcePlacement {
 
+    // #986/#1005: how many of a run's kept shows named WHERE they are. ONE rule, shared by both ingest
+    // paths (the native Carnegie sweep and the agent extract run), so neither can drift on what "said
+    // where" means. Blank is not a place: the runbook (§3a) asks for the page's words verbatim, and a page
+    // rendering an empty location field must not read as one that named somewhere.
+    static func placedCount(locations: [String?]) -> Int {
+        locations.filter {
+            !($0 ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
     // The line for Dan, or nothing at all when this source is doing what it has always done. Silence has to
     // mean healthy, or the line is noise he learns to skim.
     static func note(placed: Int, total: Int, hadEverPlaced: Bool) -> String? {
