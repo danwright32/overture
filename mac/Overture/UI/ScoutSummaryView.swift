@@ -134,6 +134,17 @@ struct ScoutSummaryView: View {
                 Text(message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // #1055: the flagged page itself, so Dan can open it and judge whether it is the wrong page
+            // without leaving this popup for the Sources sheet. Clickable when it parses as a URL, plain
+            // text otherwise. Carnegie's native feed has no page and so nothing to show here.
+            if let urlString = result.listingsURL {
+                if let url = URL(string: urlString) {
+                    Link(urlString, destination: url)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.forest).lineLimit(1)
+                } else {
+                    Text(urlString).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
+                }
+            }
             // A source with an editable page (not Carnegie's native feed) gets the inline actions.
             if let source, source.kind != .algolia, case .failed(let failure) = result.state {
                 SourceFixConfirmActions(source: source, failure: failure,

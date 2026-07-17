@@ -121,6 +121,19 @@ struct ScoutExtractIngestTests {
         #expect(s.lastFailure == .verdict(.noDatedContent))
     }
 
+    // #1055: a couldn't-be-checked result carries the very page URL it was about, so the end-of-scout
+    // popup can show (and open) it without sending Dan to the Sources sheet to find out which page was
+    // flagged. This is the failed source's own listingsURL, threaded onto its SourceResult.
+    @Test func aFailedSourceCarriesItsListingsURLForThePopup() throws {
+        let ctx = try context()
+        queuedSource(ctx, id: "protestra")   // listingsURL: https://protestra.example/events
+
+        let outcome = ingest(results("protestra", verdict: .noDatedContent), into: ctx)
+
+        let failed = outcome.failedSources.first { $0.sourceId == "protestra" }
+        #expect(failed?.listingsURL == "https://protestra.example/events")
+    }
+
     // MARK: - #1012: a page the run could only read PART of
 
     // A partial read's real events are safe to ingest (FeedReconcile can never let this verdict argue a

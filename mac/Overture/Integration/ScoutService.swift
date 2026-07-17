@@ -156,6 +156,10 @@ enum ScoutService {
         // Whether this source had a feed history before this run, which is what makes an empty result
         // from it unusual rather than merely quiet.
         var hadBaseline: Bool = false
+        // #1055: the page this result is about. The end-of-scout popup shows (and opens) it beside a
+        // couldn't-be-checked failure, so Dan can judge whether it is the wrong page without leaving the
+        // popup for the Sources sheet. nil only for Carnegie's native feed, which has no page to correct.
+        var listingsURL: String? = nil
 
         enum State: Equatable, Sendable {
             case ingested(found: Int)     // ran natively and its shows are in the store (Carnegie)
@@ -295,7 +299,7 @@ enum ScoutService {
         // to be able to see that, or it could go unchecked for weeks while reporting as healthy.
         for source in plan.deferred {
             outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
-                                                state: .deferred))
+                                                state: .deferred, listingsURL: source.listingsURL))
         }
 
         outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
@@ -336,7 +340,8 @@ enum ScoutService {
             source?.health = .failing
             source?.lastFailure = failure
             var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
-            outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure))]
+            outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure),
+                                            listingsURL: source?.listingsURL)]
             return outcome
         }
 
@@ -397,7 +402,8 @@ enum ScoutService {
 
         outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName,
                                         state: .ingested(found: usable.count),
-                                        hadBaseline: hadBaseline)]
+                                        hadBaseline: hadBaseline,
+                                        listingsURL: source?.listingsURL)]
         return outcome
     }
 
@@ -408,7 +414,8 @@ enum ScoutService {
                               depth: ScoutDepth, now: Date) async -> (SourceResult, FetchedPage?) {
         func result(_ state: SourceResult.State) -> SourceResult {
             SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
-                         hadBaseline: source.baselineFeedCount > 0)
+                         hadBaseline: source.baselineFeedCount > 0,
+                         listingsURL: source.listingsURL)
         }
 
         guard let listings = source.listingsURL, let url = URL(string: listings) else {
