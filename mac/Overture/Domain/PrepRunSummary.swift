@@ -22,7 +22,7 @@ enum PrepRunSummary {
         // The promise is a real one, not a reassurance: an un-drafted prospect is re-queued by
         // PrepQueueBuilder, so "they'll be retried" states what the app will actually do next.
         if !outcome.missingKeys.isEmpty {
-            notes.append("\(outcome.missingKeys.count) didn't come back, they'll be retried")
+            notes.append(HandoffShortfall.retryNote(count: outcome.missingKeys.count))
         }
         if outcome.saveFailed { notes.append("couldn't save, try again") }
         // #754: the performer matcher ran against missing or unreadable reference data, so a past client

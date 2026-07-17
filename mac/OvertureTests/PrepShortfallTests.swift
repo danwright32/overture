@@ -26,13 +26,13 @@ struct PrepShortfallTests {
     // --- The rule, in isolation ----------------------------------------------------------------
 
     @Test func aRunThatAnswersEveryShowIsShort0() {
-        let missing = PrepShortfall.missingKeys(queuedKeys: ["a", "b"], answeredKeys: ["a", "b"],
+        let missing = HandoffShortfall.missingKeys(queuedKeys: ["a", "b"], answeredKeys: ["a", "b"],
                                                 queueGeneratedAt: queued, resultsModifiedAt: answered)
         #expect(missing.isEmpty)
     }
 
     @Test func aRunThatAnswers3Of5NamesTheOther2() {
-        let missing = PrepShortfall.missingKeys(queuedKeys: ["a", "b", "c", "d", "e"],
+        let missing = HandoffShortfall.missingKeys(queuedKeys: ["a", "b", "c", "d", "e"],
                                                 answeredKeys: ["a", "c", "e"],
                                                 queueGeneratedAt: queued, resultsModifiedAt: answered)
         #expect(missing == ["b", "d"])
@@ -48,7 +48,7 @@ struct PrepShortfallTests {
     @Test func resultsOlderThanTheQueueAreNotAnAnswerToItAndRaiseNoAlarm() {
         let staleResults = queued.addingTimeInterval(-60)   // written BEFORE the queue was even built
 
-        let missing = PrepShortfall.missingKeys(queuedKeys: ["a", "b", "c"], answeredKeys: [],
+        let missing = HandoffShortfall.missingKeys(queuedKeys: ["a", "b", "c"], answeredKeys: [],
                                                 queueGeneratedAt: queued, resultsModifiedAt: staleResults)
 
         #expect(missing.isEmpty)
@@ -56,22 +56,22 @@ struct PrepShortfallTests {
 
     // We cannot know what was asked, so we must not claim anything was dropped. Never invent a shortfall.
     @Test func anUnknownQueueRaisesNoAlarm() {
-        #expect(PrepShortfall.missingKeys(queuedKeys: [], answeredKeys: [],
+        #expect(HandoffShortfall.missingKeys(queuedKeys: [String](), answeredKeys: [],
                                           queueGeneratedAt: nil, resultsModifiedAt: answered).isEmpty)
-        #expect(PrepShortfall.missingKeys(queuedKeys: ["a"], answeredKeys: [],
+        #expect(HandoffShortfall.missingKeys(queuedKeys: ["a"], answeredKeys: [],
                                           queueGeneratedAt: nil, resultsModifiedAt: answered).isEmpty)
     }
 
     // Same reasoning from the other side: no readable results file means no run to report a shortfall for.
     @Test func anUnknownResultsFileRaisesNoAlarm() {
-        #expect(PrepShortfall.missingKeys(queuedKeys: ["a"], answeredKeys: [],
+        #expect(HandoffShortfall.missingKeys(queuedKeys: ["a"], answeredKeys: [],
                                           queueGeneratedAt: queued, resultsModifiedAt: nil).isEmpty)
     }
 
     // A run that answers a show it was never given is a DIFFERENT failure (Outcome.unmatchedKeys), and
     // must not quietly cancel out a show that genuinely went missing.
     @Test func anExtraAnswerNeverMasksAShowThatWentMissing() {
-        let missing = PrepShortfall.missingKeys(queuedKeys: ["a", "b"], answeredKeys: ["a", "zzz"],
+        let missing = HandoffShortfall.missingKeys(queuedKeys: ["a", "b"], answeredKeys: ["a", "zzz"],
                                                 queueGeneratedAt: queued, resultsModifiedAt: answered)
         #expect(missing == ["b"])
     }
