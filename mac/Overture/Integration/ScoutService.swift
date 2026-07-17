@@ -165,6 +165,11 @@ enum ScoutService {
             case changedNotRead          // its page changed, but this was the free daily run
             case deferred                // over this run's budget. NOT checked. Not fine, not failing.
             case failed(SourceFailure)   // named, recorded on the row, and never fatal to the source
+            // #1027: a no_dated_content page Dan CONFIRMED as right-but-empty, read again at the same
+            // bytes. NOT a failure (it does not nag) and NOT `.unchanged` (that means never re-read;
+            // this page WAS read and its emptiness accepted). Its own case so a future count of one can
+            // never be quietly mistaken for the other.
+            case confirmedEmpty
 
             var isFailure: Bool { if case .failed = self { return true }; return false }
 

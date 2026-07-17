@@ -68,6 +68,17 @@ enum ScoutExtractIngest {
             // once been read. `SourceFailure(verdict:)` is what decides which verdicts mean broken, and
             // a quiet off-season is deliberately not one of them.
             if let failure = SourceFailure(verdict: result.verdict) {
+                // #1027: a page Dan confirmed as right-but-empty, read again at the same bytes, is not a
+                // failure and does not nag. Checked with the hash just read (pendingContentHash), so the
+                // instant the page changes it fails here as before. Only no_dated_content is ever
+                // confirmable (isConfirmedQuiet gates on the verdict), so this cannot swallow a broken
+                // fetch or a JS page.
+                if SourceConfirmation.isConfirmedQuiet(verdict: result.verdict,
+                                                       readHash: source.pendingContentHash,
+                                                       confirmedEmptyHash: source.confirmedEmptyHash) {
+                    recordConfirmedEmpty(on: source, now: now, outcome: &outcome)
+                    continue
+                }
                 fail(source, as: failure, now: now, outcome: &outcome)
                 continue
             }
@@ -179,6 +190,23 @@ enum ScoutExtractIngest {
         source.hasUnreadChanges = true
         outcome.sources.append(ScoutService.SourceResult(
             sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure)))
+    }
+
+    // #1027: a no_dated_content page Dan already confirmed as right-but-empty, read again at the same
+    // bytes. It is accepted, not failed: stamp the hash so the daily run sees no change and stops
+    // re-reading it, clear the unread flag, and clear any prior failing display. Deliberately does NOT
+    // touch baseline or successfulCheckCount (an empty page is not this source's real size, exactly as
+    // recordPartialCheck avoids), and does NOT stamp lastSucceededAt: nothing was ingested.
+    private static func recordConfirmedEmpty(on source: WatchedSource, now: Date,
+                                             outcome: inout ScoutService.Outcome) {
+        source.lastCheckedAt = now
+        source.health = .ok
+        source.lastFailure = nil
+        source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
+        source.pendingContentHash = nil
+        source.hasUnreadChanges = false
+        outcome.sources.append(ScoutService.SourceResult(
+            sourceId: source.sourceId, orgName: source.orgName, state: .confirmedEmpty))
     }
 
     // The page landed. Only now may its hash be promoted, and only now does this count as a check that
