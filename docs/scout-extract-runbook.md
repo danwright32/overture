@@ -186,11 +186,21 @@ For each item in the work-list:
    ones. The app reads four months and stitches them, so the listing set still comes from bytes the app
    fetched and hashed.
 
-6. **Update the progress file** after each item, so the app can show "3 of 9" rather than a spinner.
+6. **Rewrite the results file immediately after finishing each item**, not only once at the very end.
+   Every write is the COMPLETE v1 ScoutExtractResults JSON covering everything finished so far, not
+   just the item you just did. The last time you do this simply is the end of the run.
+
+   #1015: the app derives "3 of 9" for the toolbar by counting entries in this file itself, on a
+   timer, so you are never asked to report a count directly. On 2026-07-16 a run never touched a
+   separate progress file even once, and the toolbar sat at "0 of 20" through a run that was doing
+   real work. Writing results incrementally is what fixes that: the app's count can only ever be as
+   current as what is actually on disk, so keeping this file current after every item is what keeps
+   Dan's toolbar honest.
 
 ## The rule that lost twenty shows
 
-**Always write the results file before you finish. A question is not an output.**
+**Always have written the results file, covering every item, before you finish. A question is not an
+output.**
 
 This run is DETACHED. Nobody is reading its output and nobody can answer it. On 2026-07-12 it read a
 paginated Kaufman Music Center page, extracted 20 events correctly, and then stopped to ask which of two
@@ -211,8 +221,8 @@ same rule for the same reason.
 | file | who writes it |
 |---|---|
 | `overture-scout-extract-queue.json` | the app |
-| `overture-scout-extract-results.json` | this run |
-| `overture-scout-extract-progress.json` | the script seeds it, this run updates it |
+| `overture-scout-extract-results.json` | this run (rewritten after every item, not only at the end; #1015) |
+| `overture-scout-extract-progress.json` | the script only, seeded and then continuously derived from the results file above; this run never writes it (#1015) |
 | `overture-scout-page-<sourceId>.html` | the app (the pinned page you read) |
 | `scout-extract-run.log` | the script (shown to Dan when a run finishes empty) |
 

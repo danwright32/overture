@@ -59,7 +59,8 @@ rules_for() {
     scout-extract-run.sh)
       # #847: the rules that would have saved the twenty shows.
       printf '%s\n' \
-        "the ALWAYS-write rule	ALWAYS write" \
+        "the ALWAYS-write rule	ALWAYS have written" \
+        "the #1015 incremental-write rule	Immediately after finishing THIS item" \
         "the never-stop-and-ask rule	Never stop to ask" \
         "the whole decide-and-record sentence	record the decision in that source's note" \
         "the rule against following pagination links	NEVER follow a link to another listings page" \
