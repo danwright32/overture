@@ -217,7 +217,6 @@ struct DraftReviewView: View {
                 if let body = item.draftBody {
                     Text(body)
                         .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                        .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 // #846: Dan's call (2026-07-13) that these stay SEPARATE tags. Both facts are true at
