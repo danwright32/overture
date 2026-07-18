@@ -39,6 +39,7 @@ What is not, and why:
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 
 ## The same sentence, said in more than one place (38)
 
