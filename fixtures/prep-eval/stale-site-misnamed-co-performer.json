@@ -1,0 +1,68 @@
+{
+  "name": "stale-site-misnamed-co-performer",
+  "rule": "A performer's own site can be stale and misname a co-performer. Flag, do not drop (partial results are fine, line 156); a performer with no corroboration against THIS performance is a misidentification risk, so mark low, not high (lines 231-234).",
+  "input": {
+    "naturalKey": "roche-pierre-duo|2026-05-18|carnegie-hall",
+    "groupName": "Roche and Pierre Duo",
+    "venue": "Carnegie Hall",
+    "performanceDate": "2026-05-18",
+    "discipline": "music",
+    "websiteURL": "https://virgileroche.example",
+    "sourceListingURL": "https://carnegiehall.example/events/roche-pierre",
+    "priorRelationship": "cold",
+    "production": "self"
+  },
+  "sources": [
+    {
+      "label": "Carnegie Hall listing (authoritative for this date)",
+      "url": "https://carnegiehall.example/events/roche-pierre",
+      "content": "Virgile Roche and Anna Pierre, piano duo, Carnegie Hall, May 18, 2026."
+    },
+    {
+      "label": "Virgile Roche own site (corroborates Roche for this date)",
+      "url": "https://virgileroche.example/schedule",
+      "content": "Virgile Roche, pianist. Upcoming: Carnegie Hall, May 18, 2026. Contact: virgile@virgileroche.example."
+    },
+    {
+      "label": "Virgile Roche bio page (STALE: names a former partner, not this date's co-performer)",
+      "url": "https://virgileroche.example/about",
+      "content": "Virgile Roche performs regularly with his duo partner Amelie Prevost. (This page has not been updated since 2023 and does not mention the May 18 Carnegie Hall program.)"
+    }
+  ],
+  "expected": {
+    "description": "Keep both performers named on the authoritative listing; hold the uncorroborated co-performer at low confidence rather than dropping her or over-trusting the stale site.",
+    "requiredPerformers": ["Virgile Roche", "Anna Pierre"],
+    "lowConfidencePerformers": ["Anna Pierre"],
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "roche-pierre-duo|2026-05-18|carnegie-hall",
+        "contacts": [
+          {
+            "name": "Virgile Roche",
+            "email": "virgile@virgileroche.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://virgileroche.example/schedule"
+          },
+          {
+            "name": "Anna Pierre",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "provenance": "performer"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Roche and Pierre at Carnegie Hall.",
+          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are performing at Carnegie Hall on May 18. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "variant": "credential_first"
+        }
+      }
+    ]
+  }
+}

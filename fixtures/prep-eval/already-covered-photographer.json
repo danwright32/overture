@@ -1,0 +1,54 @@
+{
+  "name": "already-covered-photographer",
+  "rule": "If the act's own site explicitly states it already has a photographer (a Photographer in Residence, a House Photographer), set alreadyCoveredNote as a fit-risk flag for Dan (#611). It never blocks finding a contact or drafting.",
+  "input": {
+    "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
+    "groupName": "Aurora Strings",
+    "venue": "Metro Concert Hall",
+    "performanceDate": "2026-06-04",
+    "discipline": "music",
+    "websiteURL": "https://aurorastrings.example",
+    "sourceListingURL": "https://metroconcerthall.example/events/aurora-june",
+    "priorRelationship": "cold",
+    "production": "agency"
+  },
+  "sources": [
+    {
+      "label": "Aurora Strings own staff page",
+      "url": "https://aurorastrings.example/about/staff",
+      "content": "Aurora Strings. Emma Robinson, Marketing Director: emma@aurorastrings.example. Photographer in Residence: our concert imagery is by our resident photographer."
+    }
+  ],
+  "expected": {
+    "description": "Still surface the act's marketing contact, and additionally set the already-covered fit-risk note.",
+    "requireAlreadyCoveredNote": true,
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
+        "alreadyCoveredNote": "Their staff page names a Photographer in Residence, so they may already have concert coverage.",
+        "contacts": [
+          {
+            "name": "Emma Robinson",
+            "role": "Marketing Director",
+            "email": "emma@aurorastrings.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://aurorastrings.example/about/staff"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
+          "body": "I photograph performing arts in New York and saw Aurora Strings are performing at Metro Concert Hall on June 4. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "variant": "reason_first"
+        }
+      }
+    ]
+  }
+}
