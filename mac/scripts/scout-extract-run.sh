@@ -36,6 +36,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # writes Dan's outreach data, so it is restricted to exactly Read, Write and WebFetch. The restriction is
 # real (fail-closed), not the mere pre-approval that --allowedTools used to give: see lib/scout-tools.sh.
 . "$(dirname "$0")/lib/scout-tools.sh"
+# #1009: holds a no-idle-sleep power assertion (caffeinate) for the life of this detached run, so an
+# idle-sleep timeout or a lid close cannot suspend or kill it mid run. Shared with the other two
+# detached runners; released in the EXIT trap and, crash-safe, by caffeinate's own -w on this pid.
+. "$(dirname "$0")/lib/sleep-guard.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -122,9 +126,12 @@ HEARTBEAT_PID=$!
 # CHUNK_PIDS is filled in below once the chunk processes launch; killing them on exit stops a killed
 # script (Dan quits the app, a crash) from leaving orphaned claude processes running against the queue.
 CHUNK_PIDS=""
+# #1009: arm the sleep guard now, for the whole working duration, and release it in the trap below.
+SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1037: clear the cancel sentinel and the pids file on exit too, so a stopped run never leaves a
 # sentinel that would instantly kill the next run.
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"' EXIT
+# #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"' EXIT
 
 # #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and
