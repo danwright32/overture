@@ -257,6 +257,7 @@ struct DraftReviewView: View {
         }
         if !item.draftEditedByDan, let body = item.draftBody {
             issueFlags(DraftCheck.findings(in: body,
+                                           title: item.groupName,   // #1141: don't flag the title's own "!"
                                            knownsDate: item.performanceDate != nil,
                                            knownsVenue: item.venue != nil)
                 .filter { !$0.isBlocking })
@@ -629,7 +630,8 @@ struct DraftReviewView: View {
                 }
                 // #456 / #459: flag a reply draft that asks for the date/venue this show already carries,
                 // same as the cold path, but suppressed once Dan edits (logic in replyDraftFindings).
-                issueFlags(c.replyDraftFindings(knownsDate: item.performanceDate != nil,
+                issueFlags(c.replyDraftFindings(title: item.groupName,   // #1141: don't flag the title's own "!"
+                                                knownsDate: item.performanceDate != nil,
                                                 knownsVenue: item.venue != nil))
                 if let since = replySendSince(c.id) {
                     LiveRunLabel(base: "Sending reply", since: since, timeout: RunTimeouts.send,

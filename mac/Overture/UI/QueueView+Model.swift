@@ -265,9 +265,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // The deterministic self-check findings to surface on the reply draft (#456), or none once Dan has
     // edited it: it's his text then, the same suppression the cold path applies via draftEditedByDan
     // (#459). Lives here, not in the view, so the suppression is unit-testable.
-    func replyDraftFindings(knownsDate: Bool, knownsVenue: Bool) -> [DraftIssue] {
+    func replyDraftFindings(title: String? = nil, knownsDate: Bool, knownsVenue: Bool) -> [DraftIssue] {
         guard !replyDraftEditedByDan, let body = replyDraftBody else { return [] }
-        return DraftCheck.findings(in: body, knownsDate: knownsDate, knownsVenue: knownsVenue)
+        return DraftCheck.findings(in: body, title: title, knownsDate: knownsDate, knownsVenue: knownsVenue)
     }
     // A draft was requested but hasn't arrived yet: show progress.
     var isDraftingReply: Bool { replyDraftRequestedAt != nil && !hasReplyDraft }
