@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **656 sentences**, from 218 source files.
+Every sentence Overture can say to Dan: **657 sentences**, from 218 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -28,6 +28,7 @@ What is not, and why:
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -202,6 +203,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
+"A Gmail connection is already in progress. Finish it in the browser."
+    `Integration/GmailAuthManager.swift`
 "A Prep run is already in progress. Wait for it to finish."
     `Integration/PrepQueueService.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."

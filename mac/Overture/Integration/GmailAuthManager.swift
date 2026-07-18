@@ -13,7 +13,7 @@ final class GmailAuthManager {
     static let shared = GmailAuthManager()
 
     enum AuthError: LocalizedError {
-        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired, tokenSaveFailed
+        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired, tokenSaveFailed, alreadyConnecting
         var errorDescription: String? {
             switch self {
             case .noClientConfig: return "Gmail client config is missing. Re-run the Google setup."
@@ -24,6 +24,7 @@ final class GmailAuthManager {
             case .refreshFailed(let m): return "Gmail couldn't refresh right now (temporary): \(m)"
             case .authExpired: return "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
             case .tokenSaveFailed: return "Couldn't save the Gmail credentials to disk. Check available storage and try Connect Gmail again."
+            case .alreadyConnecting: return "A Gmail connection is already in progress. Finish it in the browser."
             }
         }
     }
@@ -33,16 +34,39 @@ final class GmailAuthManager {
     private var pendingPKCE: PKCE?
     private var codeContinuation: CheckedContinuation<String, Error>?
     private var timeoutTask: Task<Void, Never>?
+    // The re-entrancy latch. A live connect binds a loopback listener on a throwaway port; a SECOND
+    // connect() cancelling the first's listener on the very port Google is about to redirect to is what
+    // produced "Safari can't connect to 127.0.0.1" (a single Connect tap can fire the SwiftUI toolbar
+    // action twice). Set/cleared only via begin/endConnectAttempt below, which are the seam the
+    // re-entrancy rule is tested through.
+    private var isConnecting = false
+
+    // Atomically claims the connect flow. Returns false if one is already in flight (so the caller must
+    // NOT proceed, and in particular must not tear down the live listener). @MainActor, and there is no
+    // await between the check and the set, so two calls racing on the main actor can never both win.
+    func beginConnectAttempt() -> Bool {
+        if isConnecting { return false }
+        isConnecting = true
+        return true
+    }
+
+    func endConnectAttempt() { isConnecting = false }
 
     var isConnected: Bool { GmailCredentials.isConnected }
 
     // Begin the consent flow: open the browser, await the loopback redirect, exchange
     // the code, and store tokens. Throws on any failure; sends nothing.
     func connect() async throws {
+        // Refuse a second attempt while one is in flight: the old code cancelled the prior attempt's
+        // listener at the top of every connect(), and a double-fired Connect tap then killed the live
+        // listener on the exact port Google was redirecting to. Claimed synchronously before any await.
+        guard beginConnectAttempt() else { throw AuthError.alreadyConnecting }
+        defer { endConnectAttempt() }
+
         guard let client = GmailCredentials.loadClient() else { throw AuthError.noClientConfig }
 
-        // Cancel any half-finished prior attempt so a fresh click always starts clean
-        // (avoids stale listeners on dead ports that leave old browser tabs hanging).
+        // Cancel any half-finished PRIOR attempt (one that already ended and cleared the latch but left a
+        // dead listener/tab). The latch above guarantees this never runs against a still-live attempt.
         cancelInFlight()
 
         let port = try await startListener()
@@ -186,6 +210,11 @@ final class GmailAuthManager {
 
     // Tears down any in-flight flow: cancels the listener and fails a pending wait.
     private func cancelInFlight() {
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+        if codeContinuation != nil {
+            NSLog("[Overture] Gmail connect: tearing down an attempt that was still waiting for the redirect.")
+        }
+        // copy-inventory:ignore-end
         timeoutTask?.cancel(); timeoutTask = nil
         stopListener()
         let cont = codeContinuation
