@@ -29,6 +29,15 @@ struct FollowUpsView: View {
     // QueueView/ArchiveView's outboundSending/replySending, so this sheet's Send buttons get the
     // same live "Sending…" feedback instead of staying clickable during the send.
     @State private var sending: [String: Date] = [:]
+    // #976: the section at the top of the scroll, bound so the list holds its place while its rows
+    // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
+    // sheet, and a plain ScrollView drops its offset to the top on each one (the #974 shape). Pinned to
+    // the top visible section, which is the granularity that holds up when a run reshuffles the rows
+    // within. The recipient reveal below scrolls by a different identity (the contact's id), so this is
+    // cleared when a reveal starts, letting proxy.scrollTo own that jump. Its own identity, not the
+    // section's display title, so the scroll wiring never becomes a second copy of that copy (#843).
+    private enum ScrollSection: Hashable { case conversations, silent }
+    @State private var topSection: ScrollSection?
 
     // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
     // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
@@ -103,6 +112,8 @@ struct FollowUpsView: View {
                                         conversationRow(d, since: sending[d.recipient.id]); Divider()
                                     }
                                 }
+                                // #976: identity for the position modifier, so the top section pins.
+                                .id(ScrollSection.conversations)
                             }
                             if !due.isEmpty {
                                 section("Silent follow-ups") {
@@ -110,15 +121,22 @@ struct FollowUpsView: View {
                                         row(d, since: sending[d.recipient.id]); Divider()
                                     }
                                 }
+                                .id(ScrollSection.silent)   // #976
                             }
                         }
+                        .scrollTargetLayout()
                         .padding(OVSpacing.lg)
                     }
+                    // #976: hold the scroll on the top visible section across a @Query rebuild (topSection).
+                    .scrollPosition(id: $topSection, anchor: .top)
                     // #682: reuses ArchiveReveal's cancellation-safe scroll-after-delay timing
                     // (the same one ArchiveView uses for its own search/deep-link jumps) instead
                     // of a second copy of that logic.
                     .task(id: highlightedRecipientId) {
                         guard let key = highlightedRecipientId else { return }
+                        // #976: release the pinned section so a rebuild during this jump cannot restore
+                        // the old top over the contact we are revealing; the scrollTo below owns it.
+                        topSection = nil
                         await ArchiveReveal.scrollAfterDelay(key: key) { key in
                             withAnimation { proxy.scrollTo(key, anchor: .center) }
                         }

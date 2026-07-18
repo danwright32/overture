@@ -105,6 +105,36 @@ enum SourceYield {
         }
     }
 
+    // A source needs a read history of its own before Overture judges its yield, the same bar the
+    // self-heal machinery uses before it will let a source mark a show gone (WatchedSource.warmupRuns).
+    // Three full reads that have still never once surfaced a pitchable show is a real pattern, not a
+    // source still warming up.
+    static let neverYieldedAfterReads = 3
+
+    // #978: the standing signal `line(_:)` above cannot give. That line goes silent when a source has
+    // surfaced nothing at all (found == 0), because a brand-new or off-season source is neither dead
+    // weight nor broken. But a source READ many times that has still never once surfaced a pitchable show
+    // is exactly the dead weight #794 exists to make visible: an org homepage watched in place of a
+    // calendar, a season page that renders empty, a site gone dormant. #794's own "0 of N kept" needs a
+    // show to have been found first, so it cannot see a page that never yielded even one. The single fact
+    // that tells that apart from a source simply new to the watchlist is how many times it has actually
+    // been read, so the read count is the one extra input this overload takes.
+    //
+    // `reads` is the source's successfulCheckCount: the times a page was read IN FULL and landed (an
+    // all-past or all-filtered read counts, having genuinely produced no pitchable show; a failed or
+    // confirmed-empty read never increments it). That is the honest denominator for "read N times and
+    // produced no dated event".
+    //
+    // Informational ONLY, exactly like line(_:): it removes nothing and disables nothing. Retiring or
+    // repointing the source stays Dan's call, served by the Stop watching and Fix controls on the row.
+    static func line(_ tally: Tally, reads: Int) -> String? {
+        // Once there is any yield to describe, this is the ordinary #794 line: the read count changes
+        // nothing, and the never-yielded signal is only ever the found == 0 case.
+        guard tally.found == 0 else { return line(tally) }
+        guard reads >= neverYieldedAfterReads else { return nil }
+        return "Read \(reads) times, never turned up a show to pitch."
+    }
+
     // "8 new shows waiting for you" / "1 new show waiting for you". Two complete literals rather than a
     // composed one, per the copy-inventory rule above.
     private static func waiting(_ n: Int) -> String {

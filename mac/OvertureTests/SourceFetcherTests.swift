@@ -368,6 +368,107 @@ struct SourceFetcherTests {
         #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))
     }
 
+    // #1056: the candidate set is a small, fixed list of calendar paths taken off the site ROOT, with the
+    // query and fragment dropped. No crawling, no growth with the page's own depth.
+    @Test func siblingCandidatesAreABoundedSetOffTheSiteRoot() {
+        let url = URL(string: "https://www.nyys.org/some/deep/programs?view=list#top")!
+        let candidates = SiblingCalendar.candidates(for: url).map(\.absoluteString)
+        #expect(candidates == [
+            "https://www.nyys.org/events/",
+            "https://www.nyys.org/calendar/",
+            "https://www.nyys.org/events",
+            "https://www.nyys.org/calendar",
+        ])
+    }
+
+    // #1056: the set never re-tries the exact page we already failed to read. A watched page at /events/
+    // (whether or not it has a trailing slash) drops both /events forms from the candidates.
+    @Test func theSiblingSetNeverRetriesThePageWeAlreadyFailedToRead() {
+        let candidates = SiblingCalendar.candidates(for: URL(string: "https://org.example/events/")!)
+            .map(\.absoluteString)
+        #expect(candidates == [
+            "https://org.example/calendar/",
+            "https://org.example/calendar",
+        ])
+    }
+
+    // #1056 the whole point: NYYS's watched URL is a JavaScript shell that even a browser render cannot
+    // read, but the org keeps a plain-HTML calendar at /events/. Rather than declaring the source
+    // unreadable, the fetch tries the sibling path and reads it, and it SAYS which page it fell back to.
+    @Test func aJavaScriptShellFallsBackToAReadablePlainSibling() async throws {
+        PageStubURLProtocol.reset()
+        let watched = "https://org.example/programs"
+        let sibling = "https://org.example/events/"
+        PageStubURLProtocol.bodiesByURL = [
+            watched: """
+            <html><body>
+            <div><a href="/">Home</a> <a href="/about">About</a> <a href="/contact">Contact</a></div>
+            <div>Proudly created with Wix.com</div>
+            </body></html>
+            """,
+            sibling: """
+            <html><body><h1>Upcoming Events</h1>
+            <div><h3>October 3, 2026</h3><p>New York Youth Symphony at Carnegie Hall.</p></div>
+            <div><h3>November 14, 2026</h3><p>Works of Brahms and Dvorak.</p></div>
+            </body></html>
+            """,
+        ]
+
+        // The watched page stays a shell even after a browser render, so the sibling is the only way in.
+        let page = try await SourceFetcher.fetch(URL(string: watched)!, session: stubSession(),
+                                                 render: { _ in "<html><body><div>Loading</div></body></html>" })
+
+        #expect(PageNormalizer.carriesReadableContent(page.normalizedHTML))
+        #expect(page.normalizedHTML.contains("October 3"))
+        #expect(page.finalURL == sibling)                 // we ended up on the readable sibling
+        #expect(page.readableSiblingOf == watched)        // and we can SAY which page we fell back from
+    }
+
+    // #1056 failure path: when the watched page is unreadable AND every sibling guess 404s, the source
+    // stays honestly unreadable rather than being papered over. A missing sibling is expected (we are
+    // guessing paths), so it is swallowed, but the overall verdict is still the loud one.
+    @Test func whenNoSiblingReadsTheSourceStaysHonestlyUnreadable() async throws {
+        PageStubURLProtocol.reset()
+        let watched = "https://org.example/programs"
+        PageStubURLProtocol.bodiesByURL = [watched: """
+            <html><body>
+            <div><a href="/">Home</a> <a href="/about">About</a> <a href="/contact">Contact</a></div>
+            <div>Proudly created with Wix.com</div>
+            </body></html>
+            """]
+        PageStubURLProtocol.statusByURL = [
+            "https://org.example/events/": 404,
+            "https://org.example/calendar/": 404,
+            "https://org.example/events": 404,
+            "https://org.example/calendar": 404,
+        ]
+
+        let page = try await SourceFetcher.fetch(URL(string: watched)!, session: stubSession(),
+                                                 render: { _ in "<html><body><div>Loading</div></body></html>" })
+
+        #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))
+        #expect(page.readableSiblingOf == nil)
+        #expect(page.finalURL == watched)                 // it kept the page Dan actually gave us
+    }
+
+    // #1056 cost guard: a page that reads on its own must never fire a single sibling request. The probe
+    // is a rescue for unreadable pages only, not something the watchlist pays for on every healthy source.
+    @Test func aReadablePageNeverProbesSiblings() async throws {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.body = Data("""
+        <html><body><h1>Concerts for July 2026</h1>
+        <table><tr><td><div>11</div><a href="/c/a">Immortal Gifts: Mozart and Schubert</a></td></tr></table>
+        </body></html>
+        """.utf8)
+
+        let page = try await SourceFetcher.fetch(URL(string: "https://org.example/events")!,
+                                                 session: stubSession(),
+                                                 render: { _ in "" })
+
+        #expect(page.readableSiblingOf == nil)
+        #expect(PageStubURLProtocol.requestedURLs == ["https://org.example/events"])
+    }
+
     // The hash is the cost model. A page whose CONTENT has not changed must hash the same even though
     // its bytes differ, because sites churn whitespace, script nonces and analytics blobs on every
     // request. If the hash moved on every fetch, the AI would re-read every source every day forever

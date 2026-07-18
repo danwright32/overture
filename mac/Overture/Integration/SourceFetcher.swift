@@ -44,6 +44,11 @@ struct FetchedPage: Equatable, Sendable {
     // Center's, and silently swapping the page under him would be exactly the kind of quiet cleverness
     // that makes a tool untrustworthy.
     var followedTicketLinkFrom: String? = nil
+    // #1056: set when the watched page itself came back unreadable (a JavaScript shell that even a full
+    // browser render could not read) and the listings were found on a sibling calendar path of the SAME
+    // site instead (the watched page rendered empty, but /events/ is plain HTML). Holds the watched URL
+    // we fell back FROM, so the swap is recorded rather than silent.
+    var readableSiblingOf: String? = nil
     // WHO the lead is about, read from the page Dan actually pasted. Only set when we had to leave that
     // page: a venue page is a page about MANY organizations, and without this we hand him the hall's
     // other tenants (which is exactly what happened).
@@ -103,10 +108,12 @@ enum SourceFetcher {
                       session: URLSession = .shared,
                       render: ((URL) async throws -> String)? = nil,
                       allowTicketLinkHop: Bool = true,
+                      allowSiblingProbe: Bool = true,
                       monthHorizon: Int = 1,
                       now: Date = Date()) async throws -> FetchedPage {
         let landing = try await fetchSinglePage(secured(url), session: session, render: render,
-                                                allowTicketLinkHop: allowTicketLinkHop)
+                                                allowTicketLinkHop: allowTicketLinkHop,
+                                                allowSiblingProbe: allowSiblingProbe)
 
         // Not asked to paginate, or we are no longer on the page Dan gave us. A ticket-link hop means we
         // are reading somebody else's page (a venue's) on behalf of one org's lead, and walking THAT
@@ -162,7 +169,8 @@ enum SourceFetcher {
             }
 
             guard let page = try? await fetchSinglePage(month, session: session, render: render,
-                                                        allowTicketLinkHop: false) else {
+                                                        allowTicketLinkHop: false,
+                                                        allowSiblingProbe: false) else {
                 // NAMED, never merely absent. A month we could not read means fewer shows came back, and
                 // fewer shows is what the reconcile reads as "these were cancelled". A shortfall that
                 // cannot say its own name is the one way this feature destroys data.
@@ -203,7 +211,85 @@ enum SourceFetcher {
     private static func fetchSinglePage(_ url: URL,
                                         session: URLSession,
                                         render: ((URL) async throws -> String)?,
-                                        allowTicketLinkHop: Bool) async throws -> FetchedPage {
+                                        allowTicketLinkHop: Bool,
+                                        allowSiblingProbe: Bool = true) async throws -> FetchedPage {
+        let (html, normalized, finalURL) = try await plainFetch(url, session: session)
+
+        // #806. If the download carried something to read, we are done, and the browser is never touched.
+        // That matters: rendering costs seconds and a whole WebKit instance per source, and the watchlist
+        // re-checks dozens of sources on a schedule, so "just render everything" would quietly make the
+        // daily run an order of magnitude slower for no gain on the sources that work fine.
+        if PageNormalizer.carriesReadableContent(normalized) {
+            return FetchedPage(normalizedHTML: normalized,
+                               finalURL: finalURL.absoluteString,
+                               contentHash: PageNormalizer.contentHash(normalized))
+        }
+
+        // Nothing readable came down the wire. The page is probably drawn by JavaScript (Wix,
+        // Squarespace, and most of the small arts orgs Dan pitches), so load it the way a browser does,
+        // let its scripts run, and read the finished page instead.
+        let renderer = render ?? { try await RenderedPage.html(for: $0) }
+        var best = normalized
+        var rendered = false
+        if let renderedHTML = try? await renderer(finalURL) {
+            best = PageNormalizer.normalize(renderedHTML)
+            rendered = true
+            if PageNormalizer.carriesReadableContent(best) {
+                return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
+                                   contentHash: PageNormalizer.contentHash(best), wasRendered: true)
+            }
+        }
+        // A browser that hangs, crashes or is unavailable must not take the whole fetch down with it:
+        // `best` stays the raw page, and the honest "I can't read this" path can still run.
+
+        // #1056: before we conclude this source is JavaScript-drawn and unreadable, try a small, bounded
+        // set of sibling calendar paths on the SAME site (/events/, /calendar/, ...). NYYS is the case
+        // this exists for: its watched URL renders as a JS shell, yet it keeps a plain-HTML calendar at
+        // /events/, so the "drawn by JavaScript" verdict was really a wrong-URL misdiagnosis. The watched
+        // URL still gets BOTH of its own chances first (a plain download, then a full browser render):
+        // only when neither reads do we look sideways, so a working JS calendar is never displaced by a
+        // guess. Same site, and tried before the off-site ticket hop below.
+        if allowSiblingProbe, let sibling = await readableSibling(of: finalURL, session: session) {
+            return sibling
+        }
+
+        // Still nothing. Now look at where the page's LINKS go. Dan's own first lead is exactly this: his
+        // ensemble's show page is a poster IMAGE and a "BUY TIX HERE" button, and the button points at
+        // lincolncenter.org, which carries the whole listing (Alice Tully Hall, the date, the programme).
+        // The information was never on the ensemble's site at all: THE LINK IS THE LEAD. "A poster and a
+        // buy button" is how a great many small ensembles publish a show.
+        //
+        // One hop only, and never back to the site we just failed to read (TicketLink), so this cannot
+        // wander or loop.
+        // Look in the RENDERED page first (it is the fuller one), but fall back to the raw page, because
+        // a render that half-succeeds can drop the very link we need. A test caught exactly that: the
+        // rendered page came back as an image and nothing else, and the "BUY TIX HERE" link that was
+        // sitting in the raw HTML all along would have been thrown away with it.
+        let ticketCandidate = TicketLink.candidate(in: best, from: finalURL)
+            ?? TicketLink.candidate(in: normalized, from: finalURL)
+
+        if allowTicketLinkHop, let ticket = ticketCandidate {
+            if var followed = try? await fetch(ticket, session: session, render: render,
+                                               allowTicketLinkHop: false, allowSiblingProbe: false),
+               PageNormalizer.carriesReadableContent(followed.normalizedHTML) {
+                followed.followedTicketLinkFrom = finalURL.absoluteString
+                // We are now reading somebody else's page (a venue's). Remember whose lead this is, or
+                // the venue's whole calendar comes back as if it belonged to the org Dan pasted.
+                followed.onlyForOrg = OrgIdentity.name(inPage: html, url: finalURL)
+                return followed
+            }
+        }
+
+        return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
+                           contentHash: PageNormalizer.contentHash(best), wasRendered: rendered)
+    }
+
+    // The plain download half of a fetch, shared by the primary page and by the #1056 sibling probe so
+    // the two can never diverge on the content-type, redirect, or decoding rules. Returns the raw HTML
+    // (the ticket hop's OrgIdentity read needs it), the normalized HTML, and the resolved final URL.
+    // Throws a TYPED SourceFetchError on any HTTP, content-type, redirect, or transport failure.
+    private static func plainFetch(_ url: URL, session: URLSession)
+        async throws -> (html: String, normalized: String, finalURL: URL) {
         let (data, response): (Data, URLResponse)
         do {
             var request = URLRequest(url: url)
@@ -241,64 +327,26 @@ enum SourceFetcher {
         let html = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .isoLatin1)
             ?? ""
-        let normalized = PageNormalizer.normalize(html)
+        return (html, PageNormalizer.normalize(html), finalURL)
+    }
 
-        // #806. If the download carried something to read, we are done, and the browser is never touched.
-        // That matters: rendering costs seconds and a whole WebKit instance per source, and the watchlist
-        // re-checks dozens of sources on a schedule, so "just render everything" would quietly make the
-        // daily run an order of magnitude slower for no gain on the sources that work fine.
-        if PageNormalizer.carriesReadableContent(normalized) {
+    // #1056: try the bounded sibling calendar paths in order and return the first that reads as plain
+    // HTML. A sibling that 404s, serves JSON, redirects off site, or comes back empty is EXPECTED (we
+    // are guessing paths, not crawling), so each per-candidate failure is swallowed and the next is
+    // tried. When none reads, this returns nil and the caller falls through to the honest unreadable
+    // verdict, so the whole attempt can only ever RESCUE a source, never mask a real failure with a
+    // wrong page. Each candidate is a plain download only: no browser render and no ticket hop, so the
+    // probe stays cheap even across all four guesses.
+    private static func readableSibling(of url: URL, session: URLSession) async -> FetchedPage? {
+        for candidate in SiblingCalendar.candidates(for: url) {
+            guard let (_, normalized, finalURL) = try? await plainFetch(candidate, session: session),
+                  PageNormalizer.carriesReadableContent(normalized) else { continue }
             return FetchedPage(normalizedHTML: normalized,
                                finalURL: finalURL.absoluteString,
-                               contentHash: PageNormalizer.contentHash(normalized))
+                               contentHash: PageNormalizer.contentHash(normalized),
+                               readableSiblingOf: url.absoluteString)
         }
-
-        // Nothing readable came down the wire. The page is probably drawn by JavaScript (Wix,
-        // Squarespace, and most of the small arts orgs Dan pitches), so load it the way a browser does,
-        // let its scripts run, and read the finished page instead.
-        let renderer = render ?? { try await RenderedPage.html(for: $0) }
-        var best = normalized
-        var rendered = false
-        if let renderedHTML = try? await renderer(finalURL) {
-            best = PageNormalizer.normalize(renderedHTML)
-            rendered = true
-            if PageNormalizer.carriesReadableContent(best) {
-                return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
-                                   contentHash: PageNormalizer.contentHash(best), wasRendered: true)
-            }
-        }
-        // A browser that hangs, crashes or is unavailable must not take the whole fetch down with it:
-        // `best` stays the raw page, and the honest "I can't read this" path can still run.
-
-        // Still nothing. Now look at where the page's LINKS go. Dan's own first lead is exactly this: his
-        // ensemble's show page is a poster IMAGE and a "BUY TIX HERE" button, and the button points at
-        // lincolncenter.org, which carries the whole listing (Alice Tully Hall, the date, the programme).
-        // The information was never on the ensemble's site at all: THE LINK IS THE LEAD. "A poster and a
-        // buy button" is how a great many small ensembles publish a show.
-        //
-        // One hop only, and never back to the site we just failed to read (TicketLink), so this cannot
-        // wander or loop.
-        // Look in the RENDERED page first (it is the fuller one), but fall back to the raw page, because
-        // a render that half-succeeds can drop the very link we need. A test caught exactly that: the
-        // rendered page came back as an image and nothing else, and the "BUY TIX HERE" link that was
-        // sitting in the raw HTML all along would have been thrown away with it.
-        let ticketCandidate = TicketLink.candidate(in: best, from: finalURL)
-            ?? TicketLink.candidate(in: normalized, from: finalURL)
-
-        if allowTicketLinkHop, let ticket = ticketCandidate {
-            if var followed = try? await fetch(ticket, session: session, render: render,
-                                               allowTicketLinkHop: false),
-               PageNormalizer.carriesReadableContent(followed.normalizedHTML) {
-                followed.followedTicketLinkFrom = finalURL.absoluteString
-                // We are now reading somebody else's page (a venue's). Remember whose lead this is, or
-                // the venue's whole calendar comes back as if it belonged to the org Dan pasted.
-                followed.onlyForOrg = OrgIdentity.name(inPage: html, url: finalURL)
-                return followed
-            }
-        }
-
-        return FetchedPage(normalizedHTML: best, finalURL: finalURL.absoluteString,
-                           contentHash: PageNormalizer.contentHash(best), wasRendered: rendered)
+        return nil
     }
 
     private static func sameSite(_ a: String, _ b: String) -> Bool {

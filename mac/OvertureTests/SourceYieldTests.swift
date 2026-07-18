@@ -156,6 +156,55 @@ struct SourceYieldTests {
         #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: [])) == nil)
     }
 
+    // #978: the standing signal #794's line cannot give. A source READ enough times to have a history of
+    // its own that has still never once surfaced a pitchable show (found == 0) is dead weight: an org
+    // homepage watched in place of a calendar, a season page that renders empty, a site gone dormant. Read
+    // often enough, past the threshold, it says so.
+    @Test func aSourceReadOftenThatNeverYieldedSaysSo() {
+        let t = SourceYield.Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
+        #expect(SourceYield.line(t, reads: 3) == "Read 3 times, never turned up a show to pitch.")
+        #expect(SourceYield.line(t, reads: 5) == "Read 5 times, never turned up a show to pitch.")
+    }
+
+    // #978: below the threshold the source is still warming up, not dead weight. A brand-new or off-season
+    // source read once or twice with nothing to show is neither broken nor a mistake, and stays silent, so
+    // this line can never be the thing a fresh source shows.
+    @Test func aSourceReadTooFewTimesStaysQuiet() {
+        let t = SourceYield.Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
+        #expect(SourceYield.line(t, reads: 0) == nil)
+        #expect(SourceYield.line(t, reads: 2) == nil)
+        // The threshold is exactly WatchedSource.warmupRuns: a source needs a read history of its own
+        // before Overture judges its yield, the same bar the self-heal machinery uses.
+        #expect(SourceYield.line(t, reads: SourceYield.neverYieldedAfterReads - 1) == nil)
+        #expect(SourceYield.line(t, reads: SourceYield.neverYieldedAfterReads) != nil)
+    }
+
+    // #978: the moment a source has surfaced even one show, found > 0, and the reads overload behaves
+    // EXACTLY like line(_:): the never-yielded signal is only ever the found == 0 case, and the read count
+    // changes nothing once there is yield to describe. A dead-weight source (kept none) still reads as
+    // "0 of N kept after review", not as "never turned up a show", however many times it has been read.
+    @Test func onceAShowIsFoundTheReadsOverloadMatchesTheYieldLine() {
+        let deadWeight = SourceYield.Tally(found: 12, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
+        #expect(SourceYield.line(deadWeight, reads: 9) == "0 of 12 kept after review")
+        #expect(SourceYield.line(deadWeight, reads: 9) == SourceYield.line(deadWeight))
+
+        let waiting = SourceYield.Tally(found: 8, unreviewed: 8, kept: 0, approved: 0, sent: 0, booked: 0)
+        #expect(SourceYield.line(waiting, reads: 9) == "8 new shows waiting for you")
+        #expect(SourceYield.line(waiting, reads: 9) == SourceYield.line(waiting))
+    }
+
+    // #978, against NAMED rows through the real tally: a source with zero prospects but a real read
+    // history reads as never-yielded, while the same source once it has surfaced a show does not. Pins the
+    // rendered result, not the function restating its own definition (#996).
+    @Test func namedRowsRenderNeverYieldedWhenReadOftenWithNothingFound() {
+        #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: []), reads: 4)
+                == "Read 4 times, never turned up a show to pitch.")
+
+        let oneShow = [show("a", sources: ["s"], status: .new)]
+        #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: oneShow), reads: 4)
+                == "1 new show waiting for you")
+    }
+
     // #1029, against NAMED rows through the real tally rather than a hand-built Tally, so the test pins
     // what the sheet renders and not the function restating its own definition (#996). A source whose
     // three shows are all still `.new` reads as waiting; the same source once all three are dismissed
