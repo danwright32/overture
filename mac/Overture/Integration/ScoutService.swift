@@ -458,6 +458,10 @@ enum ScoutService {
             // ingest: that happens minutes later in another process, by which time the live page may have
             // moved on, and re-hashing would stamp a hash for bytes nobody ever read.
             source.pendingContentHash = page.contentHash
+            // #897: remember which months this pin actually stitched together, so ingest can tell a run
+            // that read all of them from one that skimmed some. Empty on the single-month default, where
+            // SweepCoverage is inert. Held like the hash, and cleared on the same success branch.
+            source.pendingPageMonths = page.monthsRead
             return (result(.queuedForReading), page)
         }
     }

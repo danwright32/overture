@@ -1,0 +1,55 @@
+{
+  "name": "carnegie-citywide-press-inbox",
+  "rule": "A press/media/PR inbox is disqualified at any confidence (#635). A Carnegie Hall Citywide listing must never surface publicrelations@carnegiehall.org; fall through to the act's own form.",
+  "input": {
+    "naturalKey": "solaris-quartet|2026-04-02|carnegie-hall",
+    "groupName": "Solaris Quartet",
+    "venue": "Carnegie Hall",
+    "performanceDate": "2026-04-02",
+    "discipline": "music",
+    "websiteURL": "https://solarisquartet.example",
+    "sourceListingURL": "https://carnegiehall.example/citywide/solaris-quartet",
+    "priorRelationship": "cold",
+    "production": "agency"
+  },
+  "sources": [
+    {
+      "label": "Carnegie Hall Citywide listing",
+      "url": "https://carnegiehall.example/citywide/solaris-quartet",
+      "content": "Carnegie Hall Citywide presents Solaris Quartet, April 2, 2026. Press enquiries: publicrelations@carnegiehall.org."
+    },
+    {
+      "label": "Solaris Quartet own site contact page",
+      "url": "https://solarisquartet.example/contact",
+      "content": "Solaris Quartet. For all enquiries please use our contact form at https://solarisquartet.example/contact. Press: publicrelations@carnegiehall.org via Carnegie Hall."
+    }
+  ],
+  "expected": {
+    "description": "No press inbox at any confidence; fall through to the act's own contact form.",
+    "forbiddenEmails": ["publicrelations@carnegiehall.org"],
+    "forbiddenEmailPatterns": ["publicrelations@", "press@", "media@"],
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "solaris-quartet|2026-04-02|carnegie-hall",
+        "contacts": [
+          {
+            "method": "form_or_dm",
+            "confidence": "low",
+            "provenance": "act",
+            "formUrl": "https://solarisquartet.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Solaris Quartet at Carnegie Hall.",
+          "body": "I photograph performing arts in New York and saw Solaris Quartet are performing at Carnegie Hall on April 2. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "variant": "credential_first"
+        }
+      }
+    ]
+  }
+}

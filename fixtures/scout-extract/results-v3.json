@@ -1,0 +1,30 @@
+{
+  "generatedAt" : "2026-07-18T14:00:00Z",
+  "results" : [
+    {
+      "events" : [
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-07-06",
+          "presenter" : "Kaufman Music Center",
+          "sourceUrl" : "https://www.kaufmanmusiccenter.org/mch/event/july-recital/",
+          "title" : "Summer Recital",
+          "venue" : "Merkin Hall"
+        },
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-10-14",
+          "presenter" : "Kaufman Music Center",
+          "sourceUrl" : "https://www.kaufmanmusiccenter.org/mch/event/october-gala/",
+          "title" : "Autumn Gala",
+          "venue" : "Merkin Hall"
+        }
+      ],
+      "monthsCovered" : ["2026-07", "2026-08", "2026-09", "2026-10"],
+      "note" : "Read all four stitched months of the calendar.",
+      "sourceId" : "kaufman-music-center",
+      "verdict" : "upcoming_listings"
+    }
+  ],
+  "version" : 3
+}

@@ -11,10 +11,17 @@ import SwiftData
 enum PrepQueueService {
     // Build the work-list from the local store: only kept (.queued) prospects that
     // have no draft yet, each carrying its EXACT stored naturalKey as an opaque token.
-    static func buildQueue(from context: ModelContext, generatedAt: String) -> PrepQueue {
+    //
+    // #953: `includedKeys` is the per-run subset Dan chose in the Prep sheet. nil means "no subset
+    // chosen", so every eligible prospect runs, exactly as before this change (every existing call site
+    // relies on that). A non-nil set narrows the eligible prospects to only those keys; an empty set
+    // therefore yields an empty queue, which startPrep reports as nothing to prep.
+    static func buildQueue(from context: ModelContext, generatedAt: String,
+                           includedKeys: Set<String>? = nil) -> PrepQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let items: [PrepQueueItem] = all
             .filter(PrepQueueBuilder.needsPrepEligible)
+            .filter { includedKeys?.contains($0.naturalKey) ?? true }
             .map { p in
                 PrepQueueItem(
                     naturalKey: p.naturalKey,
@@ -95,6 +102,7 @@ enum PrepQueueService {
     // URLs are injectable for testing; production uses the default locations.
     @discardableResult
     static func startPrep(from context: ModelContext, now: Date,
+                          includedKeys: Set<String>? = nil,
                           queueURL: URL = PrepQueueBuilder.defaultURL,
                           markerURL: URL = defaultMarkerURL,
                           voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
@@ -104,7 +112,9 @@ enum PrepQueueService {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
         let stamp = ISO8601DateFormatter().string(from: now)
-        let queue = buildQueue(from: context, generatedAt: stamp)
+        // #953: only the rows Dan checked in the Prep sheet. nil (the default) keeps every eligible
+        // prospect, so nothing but the sheet ever narrows the run.
+        let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: includedKeys)
         guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
 
         // Take the lock ATOMICALLY (#480, mirrors ReplyClassifyService): clear any stale marker, then

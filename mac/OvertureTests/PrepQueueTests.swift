@@ -14,10 +14,10 @@ struct PrepQueueTests {
     @discardableResult
     private func insert(_ ctx: ModelContext, group: String, status: ReviewStatus, hasDraft: Bool = false,
                         reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
-                        sentAt: Date? = nil) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "Weill Recital Hall")
+                        sentAt: Date? = nil, performanceDate: String = "2026-07-01") -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: performanceDate, venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-07-01", sourceListingURL: "https://src", websiteURL: "https://site",
+                         performanceDate: performanceDate, sourceListingURL: "https://src", websiteURL: "https://site",
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -235,6 +235,124 @@ struct PrepQueueTests {
                                            launch: { throw LaunchFailed() })
         }
         #expect(FileManager.default.fileExists(atPath: markerURL.path) == false)   // lock released
+    }
+
+    // MARK: - #953: per-run subset selection, defaulted by how far out the show is
+
+    // The default a Prep run opens with: a kept show inside the calendar horizon (today through
+    // today + defaultHorizon months) is CHECKED; one beyond it is HELD (unchecked), so a long
+    // lead-time show is not drafted before it is worth reaching out. July + 3 months is inside the
+    // four-month window; July + 5 months is past it.
+    @Test func nearShowsDefaultIncludedAndFarOnesHeld() {
+        let now = EasternDate.date(from: "2026-07-01")!
+        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: "2026-10-01", now: now) == true)
+        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: "2026-12-01", now: now) == false)
+    }
+
+    // An undated kept prospect has no date to hold it by, so it defaults IN, preserving the
+    // pre-#953 behaviour of prepping everything eligible.
+    @Test func anUndatedProspectDefaultsIncluded() {
+        let now = EasternDate.date(from: "2026-07-01")!
+        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: nil, now: now) == true)
+    }
+
+    // The subset threads all the way through: only the chosen keys reach the built work-list, even
+    // though both prospects are eligible.
+    @Test func buildQueueIncludesOnlyTheSelectedKeys() throws {
+        let ctx = ModelContext(try container())
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now",
+                                                includedKeys: [near.naturalKey])
+        #expect(queue.items.map(\.groupName) == ["Near Show"])
+        #expect(!queue.items.contains { $0.naturalKey == far.naturalKey })
+    }
+
+    // The whole point of the checkboxes: the selection OVERRIDES the date default in both directions.
+    // Dan holds a near show (it drops out) and includes a far one (it rides along), so the chosen set
+    // is exactly what runs, not the date-derived default.
+    @Test func aToggledSelectionOverridesTheDateDefault() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")   // defaults IN
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")  // defaults OUT
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now",
+                                                includedKeys: [far.naturalKey])
+        #expect(queue.items.map(\.groupName) == ["Far Show"])
+    }
+
+    // A nil selection means "no subset chosen": every eligible prospect runs, exactly as before #953,
+    // so the change is backward compatible for every existing call site.
+    @Test func aNilSelectionRunsEveryEligibleProspect() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", includedKeys: nil)
+        #expect(Set(queue.items.map(\.groupName)) == ["Near Show", "Far Show"])
+    }
+
+    // startPrep honours the subset end to end: the work-list it writes carries only the selected row,
+    // even though a second eligible prospect exists. (The launch throws so this stays offline, but the
+    // file is written before launch, so the subset is observable.)
+    @Test func startPrepWritesOnlyTheSelectedSubset() throws {
+        let ctx = ModelContext(try container())
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prep-queue-\(UUID().uuidString).json")
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp); try? FileManager.default.removeItem(at: marker) }
+
+        #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
+            try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                           includedKeys: [near.naturalKey],
+                                           queueURL: tmp, markerURL: marker,
+                                           launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
+        }
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: Data(contentsOf: tmp))
+        #expect(decoded.items.map(\.groupName) == ["Near Show"])
+    }
+
+    // The edge case Dan can reach from the sheet: uncheck the last near show and select nothing. A run
+    // with an empty selection has nothing to prep, so it refuses rather than launching an empty run.
+    @Test func startPrepWithAnEmptySelectionReportsNothingToPrep() throws {
+        let ctx = ModelContext(try container())
+        insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
+
+        #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
+            try PrepQueueService.startPrep(from: ctx, now: Date(), includedKeys: [],
+                                           markerURL: marker, launch: {})
+        }
+    }
+
+    // The run button names how many shows the current selection will prep, pluralized. The count is
+    // the number of checked rows, so the sentence and the checkboxes can never disagree.
+    @Test func runButtonNamesTheSelectedCount() {
+        #expect(PrepSelectionCopy.runButton(0) == "Prep 0 shows")
+        #expect(PrepSelectionCopy.runButton(1) == "Prep 1 show")
+        #expect(PrepSelectionCopy.runButton(3) == "Prep 3 shows")
+    }
+
+    // A row's dim second line: venue then date, joined only when both are present, so Dan can see why a
+    // row defaulted checked or held (the date is the whole basis of the default).
+    @Test func rowDetailShowsVenueThenDate() {
+        #expect(PrepSelectionCopy.rowDetail(venue: "Weill Recital Hall", performanceDate: "2026-10-01")
+                == "Weill Recital Hall · Oct 1")
+        #expect(PrepSelectionCopy.rowDetail(venue: nil, performanceDate: "2026-10-01") == "Oct 1")
+        #expect(PrepSelectionCopy.rowDetail(venue: "Weill Recital Hall", performanceDate: nil)
+                == "Weill Recital Hall")
+    }
+
+    // With neither a venue nor a date there is nothing to show, so the detail is empty and the sheet
+    // hides the line rather than inventing a third copy of "Date to be confirmed" (already duplicated in
+    // QueueView+Model, #843) that would only drift.
+    @Test func rowDetailIsEmptyWhenNothingIsKnown() {
+        #expect(PrepSelectionCopy.rowDetail(venue: nil, performanceDate: nil) == "")
     }
 
     @Test func roundTripsThroughJSON() throws {

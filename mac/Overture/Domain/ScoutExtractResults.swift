@@ -70,6 +70,15 @@ struct ScoutExtractResult: Codable, Equatable, Sendable {
     var verdict: PageVerdict
     var events: [ScoutExtractEvent]
     var note: String?             // for Dan to read, never parsed
+    // v3 (#897): which of the pinned page's stitched month sections (`<!-- overture-month ... -->`, #858)
+    // this run actually read. Optional, so a v1/v2 file written before the run was ever asked for it still
+    // decodes and simply carries none. It exists for one job: a stitched multi-month page is a trustworthy
+    // feed for reconcile ONLY once the run has read every month the app put in front of it, and the run's
+    // own verdict cannot tell "the calendar shrank" from "I read three of the four sections". The app holds
+    // the stitched set (it built the pin), compares it to this, and treats a shortfall as a NAMED
+    // incomplete read rather than a smaller feed (SweepCoverage). Absent on a single-month page, where the
+    // check is inert; irrelevant to any non-paginated source.
+    var monthsCovered: [String]? = nil
 }
 
 // The wire shape of one event. Deliberately mirrors `ExtractedEvent` field for field, and converts
