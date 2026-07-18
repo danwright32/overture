@@ -140,4 +140,44 @@ struct GmailSenderTests {
         #expect(json["threadId"] as? String == "th-1")
         #expect(base64urlDecode(json["raw"] as! String).contains("In-Reply-To: <orig@x.org>"))
     }
+
+    // #1144: a styled signature is attached to the outgoing message (multipart/alternative with the HTML
+    // part carrying the markup).
+    @Test func aStyledSignatureIsAttachedToTheSentMessage() async throws {
+        let captured = Captured()
+        let fetch: (URLRequest) async throws -> (Data, URLResponse) = { req in
+            captured.body = req.httpBody
+            return (Data(#"{"threadId":"t","id":"m"}"#.utf8),
+                    HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        _ = try await GmailSender.performSend(
+            mail: mail, fromName: "Dan", fromEmail: "dan@x.org", token: "tok",
+            signature: OutboundSignature(html: "<b style=\"color:teal\">Dan Wright</b>", plainText: "Best"),
+            fetch: fetch, onAuthExpired: {})
+
+        let json = try JSONSerialization.jsonObject(with: captured.body!) as! [String: Any]
+        let raw = base64urlDecode(json["raw"] as! String)
+        #expect(raw.contains("multipart/alternative"))
+        #expect(raw.contains("<b style=\"color:teal\">Dan Wright</b>"))
+    }
+
+    // The failure path: with no styled signature available, the send still carries the plain-text sign-off
+    // rather than going out signature-less silently.
+    @Test func withoutAStyledSignatureTheSendStillCarriesThePlainSignoff() async throws {
+        let captured = Captured()
+        let fetch: (URLRequest) async throws -> (Data, URLResponse) = { req in
+            captured.body = req.httpBody
+            return (Data(#"{"threadId":"t","id":"m"}"#.utf8),
+                    HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        _ = try await GmailSender.performSend(
+            mail: mail, fromName: "Dan", fromEmail: "dan@x.org", token: "tok",
+            signature: .plainFallback, fetch: fetch, onAuthExpired: {})
+
+        let json = try JSONSerialization.jsonObject(with: captured.body!) as! [String: Any]
+        let raw = base64urlDecode(json["raw"] as! String)
+        #expect(!raw.contains("multipart/alternative"))
+        #expect(raw.contains("Best,"))
+        #expect(raw.contains("Dan Wright Photography"))
+    }
 }

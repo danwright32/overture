@@ -15,10 +15,13 @@ enum GmailMessage {
 
     // copy-inventory:ignore-start  RFC822 headers: a mail server reads these, not Dan (#915)
 
-    // A minimal text/plain RFC 2822 message. From is the authorized sender; the
-    // subject is RFC 2047 encoded only when it contains non-ASCII (e.g. an accented
-    // org name) so headers stay 7-bit clean.
+    // An RFC 2822 message. From is the authorized sender; the subject is RFC 2047 encoded only when it
+    // contains non-ASCII (e.g. an accented org name) so headers stay 7-bit clean. #1144: when the
+    // signature carries HTML the message is multipart/alternative (a text/plain part plus a text/html part
+    // that renders the styled Gmail signature); otherwise it stays a single text/plain part. The sign-off
+    // is appended HERE, once, so no body producer carries its own.
     static func rfc822(fromName: String, fromEmail: String, to: String, subject: String, body: String,
+                       signature: OutboundSignature = .none, boundary: String? = nil,
                        messageID: String? = nil, inReplyTo: String? = nil) -> String {
         let headerSubject = isASCII(subject) ? subject : encodedWord(subject)
         var headers = [
@@ -34,20 +37,59 @@ enum GmailMessage {
             headers.append("In-Reply-To: \(inReplyTo)")
             headers.append("References: \(inReplyTo)")
         }
-        headers += [
-            "MIME-Version: 1.0",
-            "Content-Type: text/plain; charset=UTF-8",
-            "Content-Transfer-Encoding: 8bit",
-            "",
-            body,
-        ]
+        let plainBody = signature.plainText.isEmpty ? body : body + "\n\n" + signature.plainText
+        if let html = signature.html, !html.isEmpty {
+            let b = boundary ?? freshBoundary()
+            headers += [
+                "MIME-Version: 1.0",
+                "Content-Type: multipart/alternative; boundary=\"\(b)\"",
+                "",
+                "--\(b)",
+                "Content-Type: text/plain; charset=UTF-8",
+                "Content-Transfer-Encoding: 8bit",
+                "",
+                plainBody,
+                "--\(b)",
+                "Content-Type: text/html; charset=UTF-8",
+                "Content-Transfer-Encoding: 8bit",
+                "",
+                htmlDocument(body: body, signatureHTML: html),
+                "--\(b)--",
+            ]
+        } else {
+            headers += [
+                "MIME-Version: 1.0",
+                "Content-Type: text/plain; charset=UTF-8",
+                "Content-Transfer-Encoding: 8bit",
+                "",
+                plainBody,
+            ]
+        }
         return headers.joined(separator: "\r\n")
     }
+
+    // The text/html part: the drafted body, HTML-escaped and newline-to-<br> so it can't inject markup and
+    // its line breaks survive, followed by the styled signature (already HTML, inserted verbatim).
+    private static func htmlDocument(body: String, signatureHTML: String) -> String {
+        let escaped = htmlEscape(body).replacingOccurrences(of: "\n", with: "<br>\n")
+        return "<div>\(escaped)</div><br>\n\(signatureHTML)"
+    }
+
+    private static func htmlEscape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")   // must be first
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    // A unique MIME boundary. Not derived from the content, so it can never appear inside either part.
+    private static func freshBoundary() -> String { "=_Overture_\(UUID().uuidString)" }
     // copy-inventory:ignore-end
 
     static func rawField(fromName: String, fromEmail: String, to: String, subject: String, body: String,
+                         signature: OutboundSignature = .none,
                          messageID: String? = nil, inReplyTo: String? = nil) -> String {
         base64url(Data(rfc822(fromName: fromName, fromEmail: fromEmail, to: to, subject: subject, body: body,
+                              signature: signature,
                               messageID: messageID, inReplyTo: inReplyTo).utf8))
     }
 

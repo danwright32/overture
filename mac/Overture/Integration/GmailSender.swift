@@ -50,15 +50,27 @@ struct GmailSender: MailSender {
         fromName: String,
         fromEmail: String,
         token: String,
+        signature: OutboundSignature? = nil,
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) },
         onAuthExpired: () async -> Void = { await GmailAuthManager.shared.signalAuthExpired() }
     ) async throws -> SentReceipt {
         // Always stamp a Message-ID (use a caller-supplied one, else mint one) so the receipt can
         // hand it back for a future follow-up to thread against (#74).
         let messageID = mail.messageID ?? GmailMessage.newMessageID(senderEmail: fromEmail)
+        // #1144: attach Dan's signature. Prefer his live styled Gmail signature (stored by
+        // GmailSignatureService); if none is stored (fetch never succeeded, or he hasn't re-authorized for
+        // the settings scope yet) fall back to the plain-text sign-off and log loudly, rather than sending
+        // a signature-less email silently.
+        let sig = signature ?? GmailSignatureStore.currentSignature()
+        if sig.html == nil {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+            NSLog("[Overture] Sending with the plain-text sign-off: no styled Gmail signature is stored. Reconnect Gmail to fetch it.")
+            // copy-inventory:ignore-end
+        }
         let raw = GmailMessage.rawField(
             fromName: fromName, fromEmail: fromEmail,
             to: mail.to, subject: mail.subject, body: mail.body,
+            signature: sig,
             messageID: messageID, inReplyTo: mail.inReplyTo)
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)

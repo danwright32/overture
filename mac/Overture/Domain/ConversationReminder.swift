@@ -242,7 +242,6 @@ enum ConversationReminder {
     static func nudgeBody(for state: ConversationState, contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
         let g = groupName + venueClause(venue)
-        let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
         let middle: String
         switch state {
         case .interested:
@@ -258,7 +257,8 @@ enum ConversationReminder {
         case .declined:
             middle = "\n\nFollowing up on photographing \(g)."   // unreachable: declined is never active
         }
-        return greeting + middle + signoff
+        // #1144: the signature is appended once at the send layer, so this ends at its last sentence.
+        return greeting + middle
     }
 
     // The gracious post-event close: a kind "perhaps another time" that keeps the relationship warm
@@ -266,10 +266,10 @@ enum ConversationReminder {
     static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
         let g = groupName + venueClause(venue)
-        let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
+        // #1144: signature appended at the send layer; this ends at its last sentence.
         return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
             + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
-            + "then. Either way, it was good to be in touch." + signoff
+            + "then. Either way, it was good to be in touch."
     }
 
     // copy-inventory:ignore-end
