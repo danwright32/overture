@@ -92,11 +92,18 @@ enum DraftCheck {
     // `knownsDate`/`knownsVenue` opt the caller into the #456 known-fact check: the flag fires ONLY
     // when Overture actually holds that fact, since asking is legitimate when it doesn't. Defaulting
     // both to false keeps every existing single-argument call site byte-for-byte unchanged.
-    static func findings(in body: String, knownsDate: Bool = false, knownsVenue: Bool = false) -> [DraftIssue] {
+    static func findings(in body: String, title: String? = nil,
+                         knownsDate: Bool = false, knownsVenue: Bool = false) -> [DraftIssue] {
         let text = body.lowercased()
         var issues: [DraftIssue] = []
         if body.contains(Typography.emDash) { issues.append(.emDash) }
-        if body.contains("!") || performative.contains(where: text.contains) { issues.append(.performativeEnthusiasm) }
+        // #1141: an exclamation point inside the show's OWN title (e.g. "...Glee!") is part of its name,
+        // not enthusiasm the drafter added, so strip the known title before hunting for a stray "!". A
+        // performative word anywhere still fires (the title never licenses "thrilled"), and with no title
+        // supplied (the blocking path, legacy call sites) this is byte-for-byte the old check.
+        if bodyOutsideTitle(body, title: title).contains("!") || performative.contains(where: text.contains) {
+            issues.append(.performativeEnthusiasm)
+        }
         if booking.contains(where: text.contains) { issues.append(.presumesBooking) }
         if coldHedges.contains(where: text.contains) { issues.append(.coldHedge) }
         let asksKnownDate = knownsDate && dateRequests.contains(where: text.contains)
@@ -114,6 +121,15 @@ enum DraftCheck {
     // known (the send gate, the queue, the UI) without threading the prospect's facts through.
     static func blockingFindings(in body: String) -> [DraftIssue] {
         findings(in: body).filter(\.isBlocking)
+    }
+
+    // #1141: the body with the show's own title removed, so an exclamation point (or other punctuation)
+    // that belongs to the title can't trip a text check. Case-insensitive because the drafter may recase
+    // the title; a blank or absent title changes nothing. Only the "!" check reads this: every other
+    // check still sees the whole body.
+    private static func bodyOutsideTitle(_ body: String, title: String?) -> String {
+        guard let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }
+        return body.replacingOccurrences(of: title, with: " ", options: .caseInsensitive)
     }
 
     private static func hasConcession(_ text: String) -> Bool {

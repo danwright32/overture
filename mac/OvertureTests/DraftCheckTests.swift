@@ -26,6 +26,36 @@ struct DraftCheckTests {
         #expect(DraftCheck.findings(in: "Looking forward to it!").contains { $0 == .performativeEnthusiasm })
     }
 
+    // #1141: an exclamation point that is part of the show's OWN title is the show's name, not enthusiasm
+    // the drafter added, so it must not trip the performative-enthusiasm check.
+    @Test func doesNotFlagAnExclamationThatBelongsToTheShowTitle() {
+        let title = "Oh Em Gee, They Sang This on Glee!"
+        let body = "Hi Sam, I photograph performances and would like to cover \(title) at 54 Below."
+        #expect(!DraftCheck.findings(in: body, title: title).contains { $0 == .performativeEnthusiasm })
+    }
+
+    // But a stray exclamation the drafter added ELSEWHERE, on top of a title that ends in one, is still
+    // caught: stripping the title must not blanket-clear every exclamation in the body.
+    @Test func stillFlagsAnExclamationTheDrafterAddedOutsideTheTitle() {
+        let title = "Oh Em Gee, They Sang This on Glee!"
+        let body = "Hi Sam, I would love to cover \(title). It will be amazing!"
+        #expect(DraftCheck.findings(in: body, title: title).contains { $0 == .performativeEnthusiasm })
+    }
+
+    // A performative WORD is independent of the title-exclamation exclusion: a title ending in "!" does
+    // not license "thrilled" in the body.
+    @Test func aTitleExclamationDoesNotExcusePerformativeWords() {
+        let title = "Bang!"
+        #expect(DraftCheck.findings(in: "I'm thrilled to cover \(title).", title: title)
+            .contains { $0 == .performativeEnthusiasm })
+    }
+
+    // With no title supplied (the blocking-path and legacy call sites), behaviour is unchanged: any
+    // exclamation flags.
+    @Test func withNoTitleAnyExclamationStillFlags() {
+        #expect(DraftCheck.findings(in: "Come see the show!").contains { $0 == .performativeEnthusiasm })
+    }
+
     @Test func flagsEmDashes() {
         #expect(DraftCheck.findings(in: "I shoot performances — and I'm local.").contains { $0 == .emDash })
     }
