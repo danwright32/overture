@@ -71,6 +71,51 @@ struct DisciplineSignalGuardTests {
         )
     }
 
+    // The aggregate fallback share above is dominated by music, so it can stay green while a thin
+    // non-music list (dance, opera, theater, band, comedy) rots: a handful of rows sliding to `.other`
+    // barely moves the whole-corpus share. #1079 seeds each of those lists with real live-store rows and
+    // asserts a per-discipline floor, so a single list going stale trips this even when the aggregate
+    // does not. Under #970 that matters: discipline picks the geographic gate, so a stale non-music list
+    // quietly files a show under the wrong rule.
+    //
+    // The floors are the honest real coverage found in the live store (313 prospects) for #1079, not
+    // aspirations. The store holds few real dance/opera/band/comedy rows, so those floors are low by
+    // necessity: opera is the thinnest at 2 (all the real opera rows there are). See
+    // fixtures/discipline-corpus/README.md for the per-discipline counts and provenance. This uses the
+    // real classifier and never restates a word list, so it cannot become a test compared against its
+    // own definition.
+    private static let disciplineFloors: [Discipline: Int] = [
+        .music: 14,
+        .theater: 10,
+        .dance: 4,
+        .band: 4,
+        .comedy: 4,
+        .opera: 2
+    ]
+
+    @Test func eachDisciplineIsExercisedByRealTitles() throws {
+        let entries = try loadCorpus()
+        var counts: [Discipline: Int] = [:]
+        for entry in entries {
+            let discipline = EventClassifier.classify(ExtractedEvent(
+                title: entry.title,
+                presenter: entry.presenter,
+                venue: nil,
+                performanceDate: nil,
+                sourceUrl: nil,
+                location: nil
+            )).discipline
+            counts[discipline, default: 0] += 1
+        }
+        for (discipline, floor) in Self.disciplineFloors {
+            let have = counts[discipline, default: 0]
+            #expect(
+                have >= floor,
+                "only \(have) real \(discipline.rawValue) titles resolve in the corpus (floor \(floor)); a discipline word list may have gone stale or the corpus lost coverage"
+            )
+        }
+    }
+
     // Proves the bar is not vacuous and would fire on the failure it exists to catch. A corpus the
     // classifier mostly cannot read (real live rows carrying no discipline signal) is the end-state
     // a stale word list produces: rows that should resolve fall to `.other` and the share climbs
