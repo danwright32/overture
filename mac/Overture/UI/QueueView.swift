@@ -60,8 +60,14 @@ struct QueueView: View {
     // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
     @Binding var deepLinkedKeys: [String]?
     @State private var focusedKeys: [String]?
+    // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
+    // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
+    // live from this stage on every render, so a show that leaves the stage (a draft sent) drops out
+    // instead of lingering on a key set frozen at tap time.
+    @State private var focusedStage: StageFocus?
     // #338: the heading focusedSection shows while focused. nil falls back to the #308
-    // away-leads phrasing; a stage-pill tap sets an explicit one instead.
+    // away-leads phrasing; a stage-pill tap sets an explicit one instead. #1140: in stage mode this is a
+    // fallback only; the heading is recomputed live from `focusedStage` while it is set.
     @State private var focusedHeading: String?
 
     // #488: lets the Reconnect Gmail alert start the same OAuth flow the onboarding screen uses,
@@ -252,14 +258,18 @@ struct QueueView: View {
     // in the alert, as a flat list (booked leads that drop out of both pipelines still appear because it
     // filters all non-dismissed prospects, not the windowed queue). "Show all" returns to the queue.
     @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
-        let wanted = Set(keys)
+        // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft drops
+        // out); in leads mode, keep the frozen key set. The dispatch lives in StageNavigation.focusedKeys
+        // so it is tested, not decided inline in this view.
+        let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: keys,
+                                                     in: prospects, today: today, now: Date()))
         let rows = data.items.filter { wanted.contains($0.id) }
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text(focusedHeading ?? QueueModel.newLeadsHeading(count: rows.count))
+                Text(focusedStageHeading(rows: rows))
                     .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
-                Button("Show all") { focusedKeys = nil; focusedHeading = nil }
+                Button("Show all") { focusedKeys = nil; focusedHeading = nil; focusedStage = nil }
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -272,6 +282,18 @@ struct QueueView: View {
         }
     }
 
+    // #1140: the focused list's heading, recomputed live while focused on a stage so its count decrements
+    // as shows leave the stage (Scout/Prep/Review/Unsure map one-to-one to a live status; so does Send
+    // while its most-urgent focus is still the one Dan tapped). Falls back to the heading captured at tap
+    // time (the rare Send-focus-shifted case), then to the #308 away-leads phrasing.
+    private func focusedStageHeading(rows: [QueueItem]) -> String {
+        if let stage = focusedStage,
+           let live = AgentRoster.statuses(agentInputs).first(where: { $0.focus == stage }) {
+            return "\(live.name): \(live.detail)"
+        }
+        return focusedHeading ?? QueueModel.newLeadsHeading(count: rows.count)
+    }
+
     // #308: enter the focused new-leads view and scroll its first (still-visible) lead into view.
     // Clears the request once handled, mirroring navigateToLead (#236). #674: a lead dismissed
     // between the notification firing and Dan tapping it is no longer in `items` at all, so this
@@ -279,6 +301,7 @@ struct QueueView: View {
     // (possibly stale) notification.
     private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
         focusedKeys = keys
+        focusedStage = nil   // #1140: a named leads set, not a stage; keep it frozen, don't re-derive.
         deepLinkedKeys = nil
         // #976: release any pinned date group so the persisted restore cannot fight this jump. The
         // focused view is a flat list without scroll targets anyway, so there is nothing to hold here.
@@ -296,6 +319,10 @@ struct QueueView: View {
     // them, so "3 sent, but replies can't be tracked" landed Dan in the approved queue, which contains
     // none of them.
     private func focusOnStage(_ status: AgentStatus) {
+        // #1140: remember the STAGE, not just a snapshot of its keys, so the focused list re-derives its
+        // membership live and a show that leaves the stage (a draft sent) drops out. The heading and keys
+        // set here are the initial/fallback values; focusedSection recomputes both live while in stage mode.
+        focusedStage = status.focus
         focusedHeading = "\(status.name): \(status.detail)"
         focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today, now: Date())
     }
@@ -304,6 +331,7 @@ struct QueueView: View {
     // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
         focusedKeys = nil   // #308: leave any focused new-leads view so the row is reachable in the queue
+        focusedStage = nil  // #1140: and leave stage mode, so the row renders in the normal queue below
         // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
         // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: prospects, now: Date()).map(\.prospect.naturalKey))
