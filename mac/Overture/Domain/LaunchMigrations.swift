@@ -29,6 +29,12 @@ enum LaunchMigrations {
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)
+        // #1064: re-key existing prospects with the new venue normalization so a bare venue name and the
+        // same venue with its street address appended stop keying as two separate rows for one show.
+        // Idempotent (a re-keyed row already equals its folded key); merges only provably-empty duplicates
+        // and defers any collision where two rows both carry outreach history. Can delete a row, so the
+        // launch backup (#601/#602) taken just before this matters here most.
+        NaturalKeyVenueMigration.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show

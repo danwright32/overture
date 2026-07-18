@@ -23,10 +23,45 @@ struct VenueDisplay: Equatable {
               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return VenueDisplay(hall: "Venue TBD", parent: nil, location: nil)
         }
-        let hall = strippingEmbeddedAddress(raw)
-        let known = map[normalize(hall)]
-        let location = known?.location ?? safeCityStateLine(eventLocation)
-        return VenueDisplay(hall: hall, parent: known?.parent, location: location)
+        // The displayed hall preserves Dan's own venue text (case and spacing), address stripped, exactly
+        // as before. The map LOOKUP, by contrast, goes through VenueNormalization.fold so a slash-spacing
+        // or abbreviation variant still matches a curated key (#1064).
+        let hall = VenueNormalization.strippingEmbeddedAddress(raw)
+        let fallback = safeCityStateLine(eventLocation)
+
+        if let known = map[lookupKey(hall)] {
+            return VenueDisplay(hall: hall, parent: known.parent, location: known.location ?? fallback)
+        }
+        // #1064: a trailing clause that merely names a known parent building ("..., Carnegie Hall") is not
+        // a street address, so strippingEmbeddedAddress keeps it and the full string misses the map. Try
+        // the lookup again with that parent clause dropped; on a hit the map itself supplies the parent
+        // back, so the card still reads "Stern Auditorium / Perelman Stage, Carnegie Hall" AND regains its
+        // "New York, NY" line. Done only when it actually produces a hit, so a non-map venue keeps its full
+        // display string untouched (the Abrons/Fabbri parent clauses below still survive).
+        if let dropped = droppingTrailingKnownParent(hall), let known = map[lookupKey(dropped)] {
+            return VenueDisplay(hall: VenueNormalization.fold(dropped),
+                                parent: known.parent, location: known.location ?? fallback)
+        }
+        return VenueDisplay(hall: hall, parent: nil, location: fallback)
+    }
+
+    // The curated map is keyed on the folded, normalized form so a slash-spacing or street-suffix variant
+    // of a known venue still resolves.
+    private static func lookupKey(_ s: String) -> String {
+        normalize(VenueNormalization.fold(s))
+    }
+
+    // The set of parent-building names the map knows ("carnegie hall"), pre-normalized. A trailing venue
+    // clause matching one of these is dropped before a retry lookup (#1064).
+    private static let knownParents: Set<String> = Set(
+        map.values.compactMap { $0.parent }.map { normalize($0) }
+    )
+
+    private static func droppingTrailingKnownParent(_ s: String) -> String? {
+        let clauses = s.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard clauses.count > 1, let last = clauses.last,
+              knownParents.contains(normalize(last)) else { return nil }
+        return clauses.dropLast().joined(separator: ", ")
     }
 
     // #1030 follow-up: the runbook explicitly allows `location` to be a full street address ("123 E
@@ -54,29 +89,10 @@ struct VenueDisplay: Equatable {
         return looksLikeAnAddress ? nil : trimmed
     }
 
-    // A source page can bake the street address directly into the venue string. The heuristic: split
-    // on commas, always keep the first clause (the venue's own name, however it is spelled, even if it
-    // itself starts with a digit like "54 Below"), then keep walking clauses only until one starts with
-    // a digit, which every real street-address clause in the live store does ("115 MacDougal Street",
-    // "1140 Park Avenue", "7 East 95th Street"...). Everything from that clause onward (the street, and
-    // any city/state/zip after it) is dropped. A clause with no leading digit ("Carnegie Hall",
-    // "Abrons Arts Center", "Fabbri Mansion") is a real parent-venue name and is kept.
+    // The embedded-address stripping (splitting on commas and dropping the first digit-leading clause and
+    // everything after it) now lives in VenueNormalization.strippingEmbeddedAddress, shared with the
+    // natural-key path (#1064), so display and de-duplication strip an address identically.
     //
-    // Measured against the live store's 66 distinct venue strings: correctly strips every comma-address
-    // shape and leaves every parent-venue clause untouched.
-    private static func strippingEmbeddedAddress(_ raw: String) -> String {
-        let clauses = raw.split(separator: ",", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        guard clauses.count > 1 else { return raw }
-
-        var kept = [clauses[0]]
-        for clause in clauses.dropFirst() {
-            guard let first = clause.first, !first.isNumber else { break }
-            kept.append(clause)
-        }
-        return kept.joined(separator: ", ")
-    }
-
     // Venue-specific normalization. Deliberately NOT GroupNameMatch.normalize, which is an org/
     // presenter normalizer that truncates a name at " - " / ": " and would merge distinct rooms.
     // Here we only case-fold and collapse runs of whitespace, preserving "/", commas, etc.
