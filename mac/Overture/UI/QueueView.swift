@@ -39,6 +39,15 @@ struct QueueView: View {
     // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
     @Binding var deepLinkedKey: String?
     @State private var highlightedKey: String?
+    // #976: the date group at the top of the scroll, bound so the queue holds its place while the rows
+    // underneath rebuild. `prospects` is a @Query and this is the window Dan reviews in (~119 shows),
+    // rebuilt by every scout and Prep run; a plain ScrollView drops its offset to the top on each one
+    // (the #974 shape), so mid review the queue snaps away before he can act on a row. Pinned to the top
+    // visible date group, not the individual show, because the groups are the stable landmarks a run
+    // reshuffles shows within. Only the to-send date list carries the scroll target layout, so this stays
+    // nil (no restore, nothing to fight) while the reached-out list or a focused lead view is showing, and
+    // the intentional jumps clear it so a rebuilt restore can never override proxy.scrollTo (see below).
+    @State private var topGroup: String?
 
     // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
@@ -187,6 +196,8 @@ struct QueueView: View {
                 .frame(maxWidth: 760, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
+            // #976: hold the scroll on the top visible date group across a @Query rebuild (see topGroup).
+            .scrollPosition(id: $topGroup, anchor: .top)
             .onChange(of: deepLinkedKey) { _, key in
                 if let key { navigateToLead(key, proxy: proxy) }
             }
@@ -219,9 +230,15 @@ struct QueueView: View {
             if groups.isEmpty {
                 emptyState
             } else {
-                ForEach(groups) { group in
-                    dateSection(group)
+                // #976: the date groups are the scroll targets, so the position modifier on the ScrollView
+                // can pin the top visible one across a rebuild. Same spacing the outer stack gave each
+                // group before, so the layout is unchanged; no scrollTargetBehavior, so nothing snaps.
+                LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
+                    ForEach(groups) { group in
+                        dateSection(group)
+                    }
                 }
+                .scrollTargetLayout()
             }
         } else {
             reachedOutList
@@ -260,6 +277,9 @@ struct QueueView: View {
     private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
         focusedKeys = keys
         deepLinkedKeys = nil
+        // #976: release any pinned date group so the persisted restore cannot fight this jump. The
+        // focused view is a flat list without scroll targets anyway, so there is nothing to hold here.
+        topGroup = nil
         let target = QueueModel.firstVisibleKey(keys, among: items)
         DispatchQueue.main.async {
             if let target { withAnimation { proxy.scrollTo(target, anchor: .top) } }
@@ -288,6 +308,10 @@ struct QueueView: View {
         showTooFarOnly = false
         highlightedKey = key
         deepLinkedKey = nil
+        // #976: release any pinned date group so a rebuild during this jump cannot restore the old top
+        // over the row we are scrolling to. The scrollTo below (dispatched after the filter change lays
+        // out) then owns the position, and normal scrolling re-populates topGroup afterward.
+        topGroup = nil
         // Let the pipeline/filter change lay out before scrolling to the row.
         DispatchQueue.main.async {
             withAnimation { proxy.scrollTo(key, anchor: .center) }
