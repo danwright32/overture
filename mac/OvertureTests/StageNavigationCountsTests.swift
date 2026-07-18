@@ -71,9 +71,6 @@ struct StageNavigationCountsTests {
 
         let held = show(ctx, "held", status: .contacted, sentAt: now)
         contact(ctx, on: held, email: "held@org.example").looksLikeVenue = true
-
-        let unsure = show(ctx, "unsure", status: .new, hasDraft: false)
-        unsure.classificationConfidence = Confidence.uncertain.rawValue
     }
 
     // Every focus that resolves queue keys, counted in one pass, agrees with counting it the old way
@@ -85,7 +82,7 @@ struct StageNavigationCountsTests {
 
         let counts = StageNavigation.counts(in: all, today: today, now: now)
         let focuses: [StageFocus] = [.scout, .prep, .review, .sendApproved, .sendBlocked,
-                                     .sendErrors, .sendStuck, .sendDegraded, .uncertainClassification]
+                                     .sendErrors, .sendStuck, .sendDegraded]
 
         for focus in focuses {
             let navCount = StageNavigation.naturalKeys(for: focus, in: all, today: today, now: now).count
@@ -102,7 +99,7 @@ struct StageNavigationCountsTests {
 
         let counts = StageNavigation.counts(in: all, today: today, now: now)
         let focuses: [StageFocus] = [.scout, .prep, .review, .sendApproved, .sendBlocked,
-                                     .sendErrors, .sendStuck, .sendDegraded, .uncertainClassification]
+                                     .sendErrors, .sendStuck, .sendDegraded]
         for focus in focuses {
             #expect(counts[focus] ?? 0 == 0)
         }
@@ -128,6 +125,5 @@ struct StageNavigationCountsTests {
         #expect(inputs.stuckSends == nav(.sendStuck))
         #expect(inputs.degradedReplyTracking == nav(.sendDegraded))
         #expect(inputs.blockedContacts == nav(.sendBlocked))
-        #expect(inputs.uncertainClassifications == nav(.uncertainClassification))
     }
 }

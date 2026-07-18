@@ -177,14 +177,11 @@ struct AgentRosterTests {
         #expect(!detail.lowercased().contains("nudge"))
     }
 
-    // #357: an unconfirmed classification quietly waited on Dan with no top-level pill anywhere. Folds
-    // into the same roster/count invariant every other pill already follows.
-    @Test func unsureNeedsAttentionWithUncertainClassifications() {
-        var i = calm; i.uncertainClassifications = 2
-        #expect(status("Unsure", i).state == .needsAttention)
-        #expect(status("Unsure", i).count == 2)
-        #expect(status("Unsure", i).focus == .uncertainClassification)
-        #expect(status("Unsure", calm).state == .idle)
+    // #1133: the Unsure pill is gone. Dan (2026-07-18): discipline is a small slice of the fit score and
+    // reviewing it gates nothing, so a 209-show "unsure" queue is not worth its own top-level pill. He
+    // corrects a wrong classification organically from the row when he sees it (the row-level badge stays).
+    @Test func statusesNoLongerIncludeUnsure() {
+        #expect(AgentRoster.statuses(calm).contains { $0.name == "Unsure" } == false)
     }
 
     // Dan (2026-07-18): OmniFocus sync health used to have its own pill here (#357), redundant with the toolbar's
@@ -192,15 +189,6 @@ struct AgentRosterTests {
     // already shows). Dan's call: the toolbar button is the only access point now.
     @Test func statusesNoLongerIncludeOmniFocus() {
         #expect(AgentRoster.statuses(calm).contains { $0.name == "OmniFocus" } == false)
-    }
-
-    @Test func rollUpCountsUnsureToo() {
-        var i = calm; i.uncertainClassifications = 1
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 1)
-    }
-
-    @Test func conceptSummaryCoversUnsure() {
-        #expect(AgentRoster.conceptSummary(for: "Unsure").contains("classification"))
     }
 
     // #357: what a chip tap actually DOES, pulled out of QueueView's Button closure (the #863 lesson:
@@ -218,7 +206,7 @@ struct AgentRosterTests {
     @Test func chipActionFocusesTheQueueForEveryOtherPill() {
         var i = calm; i.toTriage = 1
         #expect(AgentRoster.chipAction(for: status("Scout", i)) == .focusOnStage)
-        i = calm; i.uncertainClassifications = 1
-        #expect(AgentRoster.chipAction(for: status("Unsure", i)) == .focusOnStage)
+        i = calm; i.toReview = 1
+        #expect(AgentRoster.chipAction(for: status("Review", i)) == .focusOnStage)
     }
 }
