@@ -25,34 +25,50 @@ It asserts the aggregate signal instead.
 
 ## Provenance
 
-Every title here is a real live-store row, cited as such in the `#970` Phase 0 comments in
+Every title here is a real live-store row. The first block came from the `#970` Phase 0 comments in
 `mac/OvertureTests/EventClassifierTests.swift` (the "live titles", "Real rows from the live
-store", and "Live high-tier rows" cases). Nothing here is invented. The mix is faithful to the
-live store's real shape: overwhelmingly music, with a small tail of genuinely unreadable titles
-(for example the Under St Marks rows "A Man Called Paris", "Gigi in Punk", "Honey, Drop It")
-that carry no discipline signal and legitimately resolve to `.other`.
+store", and "Live high-tier rows" cases). The non-music block was pulled for #1079 directly from the
+live Release store (`ZPROSPECT.ZGROUPNAME`, and `ZPRESENTER` where the store carried one), read from
+a copy so the write-ahead log was included. Nothing here is invented. A small tail of genuinely
+unreadable titles (for example the Under St Marks rows "A Man Called Paris", "Gigi in Punk",
+"Honey, Drop It") carry no discipline signal and legitimately resolve to `.other`.
 
 Each entry is a `title` and an optional `presenter` (the classifier reads both, joined, when
-detecting discipline).
+detecting discipline). A few titles hold a real em dash, written as the JSON escape (backslash u 2014) so the
+file carries no literal dash character; the decoder restores the true title.
 
 ## The threshold, and why
 
 The guard fails when the `.other` fallback share over this corpus rises above **0.35**.
 
-The healthy classifier resolves this corpus at roughly 0.21 fallback (the genuinely unreadable
-tail). The bar sits at 0.35, leaving headroom so a few more genuinely-signal-free rows can be
-added without a false alarm, while any wholesale list failure trips it. The defect this guard
-exists to catch (the music list going dark, as it was before #970 Phase 0) sends the share to
-roughly 0.84 on this corpus, because only the two choir/chorus rows and the one theater row
-survive: far past 0.35. `DisciplineSignalGuardTests` confirms the bar is not vacuous by also
-measuring a deliberately rot-heavy corpus and asserting it crosses the bar.
+The healthy classifier resolves this corpus at roughly 0.10 fallback (the genuinely unreadable
+tail, now a smaller share of a larger corpus). The bar sits at 0.35, leaving headroom so a few
+more genuinely-signal-free rows can be added without a false alarm, while any wholesale list
+failure trips it. The defect this guard exists to catch (the music list going dark, as it was
+before #970 Phase 0) sends the share far past 0.35 on this corpus, because only the rows that
+carry a non-music signal survive. `DisciplineSignalGuardTests` confirms the bar is not vacuous by
+also measuring a deliberately rot-heavy corpus and asserting it crosses the bar.
 
-## Known coverage gap (for Dan, not fixed here)
+## Per-discipline coverage (#1079)
 
-The live store is overwhelmingly music, so this corpus mostly exercises the music list, which
-is the list the defect actually hit and the dominant bucket. The dance, opera, theater, band,
-and comedy lists are thinly represented here (theater has one real row, the others none),
-purely because the live store holds few or no real rows for them. The guard's power over those
-lists is therefore limited by the real distribution. Expanding coverage there (seeding real
-dance/opera/band/comedy titles as they appear in the store) is a follow-up, not part of #981,
-which is the GUARD, not a re-tuning or expansion of the lists.
+The aggregate fallback share is dominated by music, so it can stay green while a thin non-music
+list rots: a handful of rows sliding to `.other` barely moves the whole-corpus number. #1079
+seeds each thin list with real live-store rows and adds a second assertion,
+`eachDisciplineIsExercisedByRealTitles`, that classifies every corpus row with the real classifier
+and requires a per-discipline floor. A single non-music list going stale now trips the guard even
+when the aggregate share does not. The floors are the honest coverage found in the live store (313
+prospects at the time of #1079), not aspirations:
+
+- music: 14
+- theater: 10
+- dance: 4
+- band: 4
+- comedy: 4
+- opera: 2
+
+Opera is the thinnest, at 2, because those are all the real opera rows the store holds. Dance,
+band, and comedy sit at 4 each for the same reason: the live store simply has few real rows for
+them. These floors are minimums, so adding more real titles later is free, but any drop (a list
+going dark, or coverage lost from the corpus) fails the assertion and is visible in the diff. The
+assertion uses the real classifier and never restates a word list, so it cannot become a test
+compared against its own definition.
