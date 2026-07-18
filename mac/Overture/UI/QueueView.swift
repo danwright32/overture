@@ -89,41 +89,50 @@ struct QueueView: View {
         var label: String { self == .toSend ? "To send" : "Reached out" }
     }
 
-    // Contacted RECIPIENTS Dan is still working, ordered by when to next reach out to that contact
-    // (soonest first). Booked, lost, and finished-sequence recipients drop off (ReachedOutQueue
-    // returns no next date). #652: one entry per recipient, so a multi-contact show can appear more
-    // than once here, each with its own contact and its own timing.
-    private var reachedOutRecipients: [(prospect: Prospect, recipient: Recipient, next: Date)] {
-        ReachedOutQueue.activeWithDates(from: prospects, now: Date())
-    }
-    private var reachedOutKeys: Set<String> { Set(reachedOutRecipients.map(\.prospect.naturalKey)) }
-
-    // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
-    private var filtered: [QueueItem] {
-        QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
-                          pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly,
-                          userExcludedTowns: userExcludedTowns)
-    }
-
-    // What the queue actually shows: the filtered set windowed to the bookable date range
-    // (past hidden, beyond-horizon hidden) with too-close events demoted to the bottom,
-    // computed live against today so it stays correct between scout runs.
-    private var visible: [QueueItem] {
-        QueueModel.toSendQueue(filtered, reachedOutKeys: reachedOutKeys, today: today)
-    }
-
-    private var disciplines: [String] {
-        Array(Set(items.map(\.discipline))).sorted()
-    }
-
     private var today: String { QueueModel.easternToday() }
+
+    // #1121: every heavy derived collection, built ONCE per render and threaded down, instead of a
+    // half-dozen computed properties each re-running QueueModel.items(from:) (a full map that faults
+    // every prospect's `recipients` relationship on the main thread). A pill tap flips @State
+    // (focusedKeys) and invalidates the body; before, that alone rebuilt `items` seven-plus times and
+    // re-faulted the store on each one, which is what froze the machine for a beat on every switch.
+    struct RenderData {
+        let items: [QueueItem]
+        let visible: [QueueItem]
+        // Contacted RECIPIENTS Dan is still working, soonest-first. #652: one entry per recipient, so a
+        // multi-contact show can appear more than once, each with its own contact and timing.
+        let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
+        let reachedOutKeys: Set<String>
+        let disciplines: [String]
+        let pendingBookings: Int
+    }
+
+    private func makeRenderData() -> RenderData {
+        let items = self.items
+        let now = Date()
+        let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
+        let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
+        // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
+        let filtered = QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
+                                         pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly,
+                                         userExcludedTowns: userExcludedTowns)
+        // What the queue actually shows: the filtered set windowed to the bookable date range (past
+        // hidden, beyond-horizon hidden) with too-close events demoted to the bottom, computed live
+        // against today so it stays correct between scout runs.
+        let visible = QueueModel.toSendQueue(filtered, reachedOutKeys: reachedOutKeys, today: today)
+        return RenderData(items: items, visible: visible, reachedOut: reachedOut,
+                          reachedOutKeys: reachedOutKeys,
+                          disciplines: Array(Set(items.map(\.discipline))).sorted(),
+                          pendingBookings: QueueModel.pendingBookingCount(items))
+    }
 
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
     // the editor type-checks it quickly (#56); the real compiler was always fine.
     // Kept deliberately small: the toolbar, alerts, and their bindings are extracted so no
     // single expression sits near the SwiftUI type-checker's complexity threshold (#122).
     var body: some View {
-        mainContent
+        let data = makeRenderData()
+        return mainContent(data)
             .sendConfirmAndReconnectAlerts(
                 pendingConfirm: $pendingConfirm,
                 showReconnect: $showReconnect,
@@ -132,16 +141,15 @@ struct QueueView: View {
             )
     }
 
-    private var mainContent: some View {
-        queueScroll
+    private func mainContent(_ data: RenderData) -> some View {
+        queueScroll(data)
             .background(OVColor.canvas)
-            .toolbar { bookingsToolbar }
+            .toolbar { bookingsToolbar(data) }
     }
 
     @ToolbarContentBuilder
-    private var bookingsToolbar: some ToolbarContent {
-        let pendingBookings = QueueModel.pendingBookingCount(items)
-        if pendingBookings > 0 {
+    private func bookingsToolbar(_ data: RenderData) -> some ToolbarContent {
+        if data.pendingBookings > 0 {
             ToolbarItem(placement: .secondaryAction) {
                 Button {
                     showPendingBookingsOnly.toggle()
@@ -150,27 +158,27 @@ struct QueueView: View {
                     // on hover via .help). Active state (#118): filled seal + forest tint when the filter is
                     // engaged, mirroring the high-fit chip's active treatment, so it's clear why rows are
                     // hidden instead of "where did my rows go?".
-                    ToolbarHoverLabel(title: QueueModel.confirmBookingsLabel(count: pendingBookings),
+                    ToolbarHoverLabel(title: QueueModel.confirmBookingsLabel(count: data.pendingBookings),
                                       systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
                 }
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
                 .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
-                                                    count: pendingBookings))
+                                                    count: data.pendingBookings))
             }
         }
     }
 
-    private var queueScroll: some View {
+    private func queueScroll(_ data: RenderData) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: visible, items: items)
+                    masthead(visible: data.visible, items: data.items)
                     // #308: a tapped multi-lead away alert focuses the queue on exactly those leads;
                     // otherwise the normal pipeline view shows.
                     if let focused = focusedKeys {
-                        focusedSection(focused)
+                        focusedSection(focused, data: data)
                     } else {
-                        pipelineContent
+                        pipelineContent(data)
                     }
                 }
                 .padding(.horizontal, OVSpacing.xl)
@@ -191,11 +199,12 @@ struct QueueView: View {
 
     // The normal queue: pipeline picker plus the to-send date groups or the reached-out list. Lifted
     // out of queueScroll so the focused/normal branch stays a small expression (#122).
-    @ViewBuilder private var pipelineContent: some View {
+    @ViewBuilder private func pipelineContent(_ data: RenderData) -> some View {
+        let visible = data.visible
         Picker("Pipeline", selection: $pipeline) {
             ForEach(Pipeline.allCases, id: \.self) { p in
                 Text(p == .toSend ? QueueModel.toSendLabel(count: visible.count)
-                                  : QueueModel.reachedOutLabel(count: reachedOutRecipients.count)).tag(p)
+                                  : QueueModel.reachedOutLabel(count: data.reachedOut.count)).tag(p)
             }
         }
         .pickerStyle(.segmented)
@@ -207,12 +216,12 @@ struct QueueView: View {
             // looking at the To send queue, not behind Archive/Sources/Days off/Patterns/Voice guidance
             // (which sit as sheets over the same window, so a toolbar item stayed visible through all
             // of them).
-            let tooFar = QueueModel.tooFarCount(items, discipline: disciplineFilter, highOnly: highOnly,
+            let tooFar = QueueModel.tooFarCount(data.items, discipline: disciplineFilter, highOnly: highOnly,
                                                 pendingBookingsOnly: showPendingBookingsOnly,
-                                                reachedOutKeys: reachedOutKeys, today: today,
+                                                reachedOutKeys: data.reachedOutKeys, today: today,
                                                 userExcludedTowns: userExcludedTowns)
             QueueFilterBar(
-                disciplines: disciplines,
+                disciplines: data.disciplines,
                 activeDiscipline: $disciplineFilter,
                 highOnly: $highOnly,
                 tooFarCount: tooFar,
@@ -222,7 +231,7 @@ struct QueueView: View {
             // leaving delight in place before the glide-up removes it.
             let groups = QueueModel.groupByDate(QueueModel.withDeparting(visible, departing: departing))
             if groups.isEmpty {
-                emptyState
+                emptyState(data)
             } else {
                 // #976: the date groups are the scroll targets, so the position modifier on the ScrollView
                 // can pin the top visible one across a rebuild. Same spacing the outer stack gave each
@@ -235,16 +244,16 @@ struct QueueView: View {
                 .scrollTargetLayout()
             }
         } else {
-            reachedOutList
+            reachedOutList(data.reachedOut)
         }
     }
 
     // #308: the focused new-leads view a tapped multi-lead away alert lands on, exactly the leads named
     // in the alert, as a flat list (booked leads that drop out of both pipelines still appear because it
     // filters all non-dismissed prospects, not the windowed queue). "Show all" returns to the queue.
-    @ViewBuilder private func focusedSection(_ keys: [String]) -> some View {
+    @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
         let wanted = Set(keys)
-        let rows = items.filter { wanted.contains($0.id) }
+        let rows = data.items.filter { wanted.contains($0.id) }
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text(focusedHeading ?? QueueModel.newLeadsHeading(count: rows.count))
@@ -295,6 +304,9 @@ struct QueueView: View {
     // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
         focusedKeys = nil   // #308: leave any focused new-leads view so the row is reachable in the queue
+        // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
+        // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
+        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: prospects, now: Date()).map(\.prospect.naturalKey))
         pipeline = reachedOutKeys.contains(key) ? .reachedOut : .toSend
         disciplineFilter = nil
         highOnly = false
@@ -506,8 +518,7 @@ struct QueueView: View {
     // times appears twice, each labeled with that contact's own timing. #661: a lightweight row
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
-    @ViewBuilder private var reachedOutList: some View {
-        let dated = reachedOutRecipients
+    @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
         if dated.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
@@ -600,11 +611,11 @@ struct QueueView: View {
         }
     }
 
-    private var emptyState: some View {
+    private func emptyState(_ data: RenderData) -> some View {
         VStack(spacing: OVSpacing.xs) {
             // #885: "there is nothing" and "your filter hid it" are different problems with different
             // fixes, and telling them apart is the whole job of this copy (EmptyState).
-            let empty = EmptyState.queue(hasAnyItems: !items.isEmpty)
+            let empty = EmptyState.queue(hasAnyItems: !data.items.isEmpty)
             Text(empty.title)
                 .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             Text(empty.detail)

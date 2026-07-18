@@ -35,6 +35,34 @@ enum StageNavigation {
         prospects.filter { matches(focus, $0, today: today, now: now) }.map(\.naturalKey)
     }
 
+    // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
+    // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
+    static let countedFocuses: [StageFocus] = [
+        .scout, .prep, .review,
+        .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
+        .uncertainClassification
+    ]
+
+    // #1121: one pass over the prospects for ALL pill counts, instead of one full pass per focus. The
+    // per-focus `naturalKeys` above still exists for navigation (a tap needs the keys, not just the
+    // count), but the masthead only needs the counts, and computing nine of them meant nine traversals
+    // that each re-faulted every prospect's `recipients` relationship on the main thread. Here each
+    // prospect is visited once and every focus decided against it before moving on, so its recipients
+    // fault at most once. It goes through the SAME private `matches` predicate as `naturalKeys`, so
+    // counts[focus] is identical to naturalKeys(for: focus).count by construction, which is the #863
+    // invariant (the number a pill shows is the rows its tap lands on). Pinned by StageNavigationCountsTests.
+    static func counts(in prospects: [Prospect],
+                       today: String = QueueModel.easternToday(),
+                       now: Date = Date()) -> [StageFocus: Int] {
+        var result: [StageFocus: Int] = [:]
+        for p in prospects {
+            for focus in countedFocuses where matches(focus, p, today: today, now: now) {
+                result[focus, default: 0] += 1
+            }
+        }
+        return result
+    }
+
     private static func matches(_ focus: StageFocus, _ p: Prospect, today: String, now: Date) -> Bool {
         switch focus {
         case .scout:
