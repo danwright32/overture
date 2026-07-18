@@ -226,6 +226,19 @@ enum ActionAck {
     static func resumedWatching(org: String) -> String {
         "Watching \(org) again."
     }
+
+    // #991: Dan refused a town from a row. Reversible from the banner (the #845 principle): the skip list
+    // is the one place that refusal is written down, so a mis-click has to be undoable from where it
+    // happened. "again" is honest, the town will not reappear in the queue.
+    static func townExcluded(town: String) -> String {
+        "Won't show you shows in \(town) again"
+    }
+
+    // The idempotent no-op said plainly: the town was already covered (by the seed or an earlier
+    // refusal), so nothing changed and nothing needs undoing.
+    static func townAlreadyExcluded(town: String) -> String {
+        "\(town) is already on your skip list"
+    }
 }
 
 extension ModelContext {

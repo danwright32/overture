@@ -168,6 +168,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // placed it out of range. Shown on the row only while the "Too far" filter is engaged. Decided in
     // QueueModel (tested), not the SwiftUI body (#863).
     var tooFarReason: String? { QueueModel.tooFarReason(self) }
+
+    // #991: the same reason line, but reading Dan's stored refusals too, so a row hidden because he
+    // excluded its town explains itself with the skip-list sentence. The queue passes the union; the
+    // property above (seed only) stays for callers that have no store.
+    func tooFarReason(userExcludedTowns: Set<String>) -> String? {
+        QueueModel.tooFarReason(self, userExcludedTowns: userExcludedTowns)
+    }
+
+    // #991: the town Dan's "never show me shows in this town" action would add, or nil when this row has
+    // no in-region, non-borough town worth offering (see EventPlace.excludableTown).
+    var excludableTown: String? { EventPlace.excludableTown(from: location) }
 }
 
 // One contact on a performance, flattened for the conversation surface (#418 B1). The per-contact
@@ -312,7 +323,8 @@ enum QueueModel {
     // (toSendQueue) was always tested; THIS half was written in the view, so the pill's number was only
     // ever as trustworthy as its untested part. A count is a promise about rows (#863).
     static func filter(_ items: [QueueItem], discipline: String?, highOnly: Bool,
-                       pendingBookingsOnly: Bool, tooFarOnly: Bool = false) -> [QueueItem] {
+                       pendingBookingsOnly: Bool, tooFarOnly: Bool = false,
+                       userExcludedTowns: Set<String> = []) -> [QueueItem] {
         items.filter { item in
             if let discipline, item.discipline != discipline { return false }
             if highOnly, !item.isHighFit { return false }
@@ -320,7 +332,7 @@ enum QueueModel {
             // #970. The gate. `tooFarOnly` inverts it, which is how a hidden show stays one click away
             // rather than gone: the same predicate decides both, so the chip's count and the rows it
             // reveals cannot drift apart (#863).
-            if isTooFar(item) != tooFarOnly { return false }
+            if isTooFar(item, userExcludedTowns: userExcludedTowns) != tooFarOnly { return false }
             return true
         }
     }
@@ -336,9 +348,14 @@ enum QueueModel {
     // (a positive placement hides, an unknown location always keeps) is pinned by QueueGeoFilterTests
     // independently of what the store currently holds, so this comment is not the only thing keeping it
     // true (#1099).
-    static func isTooFar(_ item: QueueItem) -> Bool {
+    // The seed-only overload, kept as a distinct one-argument method (not a defaulted parameter) so it
+    // stays usable as a first-class function value, e.g. `items.filter(QueueModel.isTooFar)`.
+    static func isTooFar(_ item: QueueItem) -> Bool { isTooFar(item, userExcludedTowns: []) }
+
+    static func isTooFar(_ item: QueueItem, userExcludedTowns: Set<String>) -> Bool {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
-        return EventPlace.resolve(location: item.location, discipline: discipline).verdict == .outOfRange
+        return EventPlace.resolve(location: item.location, discipline: discipline,
+                                  userExcludedTowns: userExcludedTowns).verdict == .outOfRange
     }
 
     // #992. The chip's number says HOW MANY the gate hid; this says WHY this row in particular was, in one
@@ -347,11 +364,17 @@ enum QueueModel {
     // stored, like the verdict), so a rule change re-decides every row's reason at once.
     //
     // nil unless the gate positively placed this row out of range, so a kept or unknown row shows nothing.
-    static func tooFarReason(_ item: QueueItem) -> String? {
+    static func tooFarReason(_ item: QueueItem, userExcludedTowns: Set<String> = []) -> String? {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
-        let reason = EventPlace.resolve(location: item.location, discipline: discipline).reason
+        let reason = EventPlace.resolve(location: item.location, discipline: discipline,
+                                        userExcludedTowns: userExcludedTowns).reason
         return tooFarReasonSentence(reason)
     }
+
+    // #991: the label on the row's "never show me shows in this town" action, a complete literal template
+    // (not a fragment, #copy-inventory) so the checked-in inventory reads it as one sentence. Decided in
+    // the tested model, never in the SwiftUI body (#863).
+    static func excludeTownLabel(town: String) -> String { "Never show me shows in \(town)" }
 
     // The three hiding reasons are three genuinely different situations, and Dan reacts to each
     // differently, so each gets its own sentence rather than a shared phrasing of "too far" (#843/#844):
@@ -389,18 +412,19 @@ enum QueueModel {
     // (#887), and a number that overstates by 4x cannot do that job.
     static func tooFar(_ items: [QueueItem], discipline: String?, highOnly: Bool,
                        pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
-                       today: String) -> [QueueItem] {
+                       today: String, userExcludedTowns: Set<String> = []) -> [QueueItem] {
         toSendQueue(filter(items, discipline: discipline, highOnly: highOnly,
-                           pendingBookingsOnly: pendingBookingsOnly, tooFarOnly: true),
+                           pendingBookingsOnly: pendingBookingsOnly, tooFarOnly: true,
+                           userExcludedTowns: userExcludedTowns),
                     reachedOutKeys: reachedOutKeys, today: today)
     }
 
     static func tooFarCount(_ items: [QueueItem], discipline: String?, highOnly: Bool,
                             pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
-                            today: String) -> Int {
+                            today: String, userExcludedTowns: Set<String> = []) -> Int {
         tooFar(items, discipline: discipline, highOnly: highOnly,
                pendingBookingsOnly: pendingBookingsOnly, reachedOutKeys: reachedOutKeys,
-               today: today).count
+               today: today, userExcludedTowns: userExcludedTowns).count
     }
 
     // #996: the chip must stay clickable while it is ON, even when it now reveals nothing. Changing a
