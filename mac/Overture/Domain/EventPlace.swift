@@ -59,9 +59,14 @@ enum EventPlace {
 
     // copy-inventory:ignore-start  Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 
-    // Pre-seeded with places that are in-state but plainly not an hour away, so Dan does not have to
-    // refuse the obvious ones himself. GROWS ONLY BY HIS REFUSAL. Town-level, never state-level:
-    // excluding Buffalo must not take the rest of New York with it.
+    // The SEED. Pre-seeded with places that are in-state but plainly not an hour away, so Dan does not
+    // have to refuse the obvious ones himself. Town-level, never state-level: excluding Buffalo must not
+    // take the rest of New York with it.
+    //
+    // #991: this is only HALF the list. The exclude rule grows only by Dan's refusal (#979), and his
+    // refusals live in the ExcludedTown store, not here in source. `resolve` reads the UNION of this seed
+    // and his stored refusals (its `userExcludedTowns` argument), which is what lets him add a twentieth
+    // town without a code change.
     //
     // "Never show me this town again" reads as absolute, so it holds for every discipline.
     static let excludedTowns: Set<String> = [
@@ -110,7 +115,11 @@ enum EventPlace {
 
     // copy-inventory:ignore-end
 
-    static func resolve(location: String?, discipline: Discipline) -> Result {
+    // #991: `userExcludedTowns` is Dan's stored refusals (ExcludedTown, lowercased), unioned with the
+    // seed here so the gate reads both at queue time. Defaulted empty, so every existing caller and test
+    // is unchanged and only the live queue passes the real set.
+    static func resolve(location: String?, discipline: Discipline,
+                        userExcludedTowns: Set<String> = []) -> Result {
         let raw = (location ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return Result(verdict: .unknown, reason: .noLocation) }
 
@@ -118,7 +127,8 @@ enum EventPlace {
         let tokens = commaTokens(text)
 
         // A refusal wins over everything, including the boroughs, because it is Dan speaking directly.
-        if tokens.contains(where: { excludedTowns.contains($0) }) {
+        let allExcluded = excludedTowns.union(userExcludedTowns)
+        if tokens.contains(where: { allExcluded.contains($0) }) {
             return Result(verdict: .outOfRange, reason: .excludedTown)
         }
 
@@ -167,6 +177,53 @@ enum EventPlace {
         for t in tokens {
             let head = t.split(separator: " ").first.map(String.init) ?? t
             if head.count == 2, usStateCodes.contains(head) { return head }
+        }
+        return nil
+    }
+
+    // #991: the town Dan's "never show me shows in this town" action would exclude, taken from a row's
+    // own location string, or nil when there is nothing worth offering. It returns the town in its
+    // ORIGINAL case (for the message he reads); storage lowercases it.
+    //
+    // The town is the piece just before the state ("Poughkeepsie" in "Poughkeepsie, NY", and in "123 Main
+    // St, Poughkeepsie, NY, 12601"), so the offer targets the city, never the street or the ZIP.
+    //
+    // Three deliberate refusals, each so the offer only ever appears where excluding actually helps:
+    //   - no US state named -> nil. "Amsterdam" could be Amsterdam, New York; guessing is the #979 mistake.
+    //   - the state is OUT of NY/NJ/CT -> nil. The state already hides it, so there is no town to add.
+    //   - the town is one of the five boroughs -> nil. That is the in-range core Dan always wants;
+    //     "never show me New York" would silently empty his whole queue.
+    static func excludableTown(from location: String?) -> String? {
+        let raw = (location ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+
+        // Original-case comma tokens (for the returned town) alongside the lowercased ones the state
+        // detection needs, split the same way commaTokens splits, so the two stay aligned by index.
+        let rawTokens: [String] = raw.split(separator: ",").map {
+            var t = $0.trimmingCharacters(in: .whitespaces)
+            if t.lowercased().hasPrefix("and ") { t = String(t.dropFirst(4)) }
+            return t.trimmingCharacters(in: .whitespaces)
+        }
+        let lowerTokens = rawTokens.map { $0.lowercased() }
+
+        guard let (stateIndex, stateCode) = stateToken(in: lowerTokens), stateIndex > 0,
+              inRangeStates.contains(stateCode) else { return nil }
+
+        let city = rawTokens[stateIndex - 1].trimmingCharacters(in: .whitespaces)
+        let cityLower = city.lowercased()
+        guard !cityLower.isEmpty, !boroughs.contains(cityLower) else { return nil }
+        return city
+    }
+
+    // The index of the comma token that carries the state, and its code, scanned from the END so a
+    // leading city that happens to be a state name ("New York" in "New York, NY") is read as the city and
+    // the trailing "NY" as the state, not the other way round.
+    private static func stateToken(in lowerTokens: [String]) -> (index: Int, code: String)? {
+        for i in lowerTokens.indices.reversed() {
+            let t = lowerTokens[i]
+            if let code = stateNames[t] { return (i, code) }
+            let head = t.split(separator: " ").first.map(String.init) ?? t
+            if head.count == 2, usStateCodes.contains(head) { return (i, head) }
         }
         return nil
     }

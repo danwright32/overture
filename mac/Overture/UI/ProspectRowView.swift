@@ -63,6 +63,10 @@ struct ProspectRowView: View {
     // #992: the "Too far" filter is engaged, so a revealed row shows WHY it was placed out of range.
     // Off by default (Archive and the normal queue never show this line).
     var showingTooFar: Bool = false
+    // #991: Dan's stored town refusals, so the too-far reason line reads the union (seed + his refusals),
+    // and the Dismiss menu can offer to add this row's town.
+    var userExcludedTowns: Set<String> = []
+    var onExcludeTown: () -> Void = {}
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
@@ -242,7 +246,7 @@ struct ProspectRowView: View {
     // placed out of range. Sits right under the location line it explains. The sentence is decided in
     // QueueModel (tested); this view only draws it.
     @ViewBuilder private var tooFarReasonNote: some View {
-        if showingTooFar, let reason = item.tooFarReason {
+        if showingTooFar, let reason = item.tooFarReason(userExcludedTowns: userExcludedTowns) {
             HStack(spacing: 5) {
                 Image(systemName: "location.slash")
                 Text(reason)
@@ -580,6 +584,14 @@ struct ProspectRowView: View {
                     // whose date passed untriaged; Dan cannot decide that a date has passed.
                     ForEach(DismissReason.danCanChoose, id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
+                    }
+                    // #991: the geographic refusal, the missing half of the rule (#979). Unlike a dismiss,
+                    // which only hides THIS show, this banishes the whole town: it drops out now and never
+                    // returns. Offered only where it does something, an in-region, non-borough town
+                    // (EventPlace.excludableTown), so it does not clutter every row.
+                    if let town = item.excludableTown {
+                        Divider()
+                        Button(QueueModel.excludeTownLabel(town: town)) { onExcludeTown() }
                     }
                 } label: {
                     Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)

@@ -18,6 +18,12 @@ struct QueueView: View {
     )
     private var prospects: [Prospect]
 
+    // #991: Dan's stored town refusals. A @Query so ADDING one re-renders the queue and the gate
+    // re-decides every row against the new union at once, which is the "no migration" property #990's
+    // derived verdict makes possible.
+    @Query private var excludedTownRows: [ExcludedTown]
+    private var userExcludedTowns: Set<String> { Set(excludedTownRows.map(\.town)) }
+
     @State private var disciplineFilter: String?
     @State private var highOnly = false
     @State private var showPendingBookingsOnly = false
@@ -98,7 +104,8 @@ struct QueueView: View {
     // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
     private var filtered: [QueueItem] {
         QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
-                          pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly)
+                          pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly,
+                          userExcludedTowns: userExcludedTowns)
     }
 
     // What the queue actually shows: the filtered set windowed to the bookable date range
@@ -163,7 +170,8 @@ struct QueueView: View {
     private var tooFarToolbar: some ToolbarContent {
         let tooFar = QueueModel.tooFarCount(items, discipline: disciplineFilter, highOnly: highOnly,
                                             pendingBookingsOnly: showPendingBookingsOnly,
-                                            reachedOutKeys: reachedOutKeys, today: today)
+                                            reachedOutKeys: reachedOutKeys, today: today,
+                                            userExcludedTowns: userExcludedTowns)
         if QueueModel.chipIsShown(count: tooFar, showingOnly: showTooFarOnly) {
             ToolbarItem(placement: .secondaryAction) {
                 Button {
@@ -605,7 +613,8 @@ struct QueueView: View {
                                   highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                                   replySendSince: { rid in replySending[rid] },
                                   onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
-                                  showingTooFar: showTooFarOnly)
+                                  showingTooFar: showTooFarOnly,
+                                  userExcludedTowns: userExcludedTowns)
         }
     }
 

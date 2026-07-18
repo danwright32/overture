@@ -165,6 +165,26 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #991: Dan refuses a town from a row ("never show me shows in this town"). It adds that row's town
+    // to the stored exclude set, which the queue gate reads in union with the seed at queue time, so the
+    // refusal re-decides every row at once and this show (and any future one there) drops out. Idempotent
+    // (a town already excluded is a no-op), and reversible from the banner. The town comes from the item,
+    // decided once in EventPlace.excludableTown, so this stays a thin wiring layer.
+    static func excludeTown(_ item: QueueItem, context: ModelContext, feedback: ActionFeedback) {
+        guard let town = item.excludableTown else { return }
+        switch ExcludedTownEditing.exclude(town: town, into: context) {
+        case .added:
+            feedback.acknowledge(ActionAck.townExcluded(town: town),
+                                 action: .init(label: "Undo") {
+                                     ExcludedTownEditing.remove(town: town, in: context)
+                                 })
+        case .alreadyExcluded:
+            feedback.acknowledge(ActionAck.townAlreadyExcluded(town: town))
+        case .noTown:
+            break   // nothing placeable to exclude; the action is not offered in this case anyway
+        }
+    }
+
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
