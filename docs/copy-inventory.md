@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **655 sentences**, from 218 source files.
+Every sentence Overture can say to Dan: **656 sentences**, from 218 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -33,7 +33,7 @@ What is not, and why:
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 
-## The same sentence, said in more than one place (37)
+## The same sentence, said in more than one place (38)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -117,6 +117,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Send anyway?"
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
+- "Send issues"
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
 - "Send nudge"
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
@@ -256,8 +264,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
     `App/OvertureApp.swift`
-"Approved emails waiting to be sent."
-    `Domain/AgentRoster.swift`
 "Asking macOS for OmniFocus permission…"
     `UI/OnboardingView.swift`
 "Asks for the date or venue Overture already knows"
@@ -943,6 +949,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Send failed: \(raw)"
     `Domain/SendFailureLine.swift`
+"Send issues"
+    `Domain/AgentRoster.swift`
 "Send nudge"
     `UI/FollowUpsView.swift`
 "Send reply"
@@ -963,6 +971,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Sending reply"
     `UI/DraftReviewView.swift`
+"Sent emails that hit a problem, or approved ones you can't send yet."
+    `Domain/AgentRoster.swift`
 "Set a state"
     `UI/ConversationStateMenu.swift`
     `UI/FollowUpsView.swift`

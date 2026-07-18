@@ -154,7 +154,7 @@ struct BlockedContactVisibilityTests {
         inputs.blockedContacts = 2
 
         let statuses = AgentRoster.statuses(inputs)
-        let send = try! #require(statuses.first { $0.name == "Send" })
+        let send = try! #require(statuses.first { $0.name == "Send issues" })
 
         #expect(send.state == .needsAttention)
         #expect(send.detail.contains("2"))
@@ -170,7 +170,7 @@ struct BlockedContactVisibilityTests {
                                  readyToSend: 0, gmailConnected: true, sendErrors: 1, followUpsDue: 0)
         inputs.blockedContacts = 2
 
-        let send = AgentRoster.statuses(inputs).first { $0.name == "Send" }
+        let send = AgentRoster.statuses(inputs).first { $0.name == "Send issues" }
         #expect(send?.state == .error)
         #expect(send?.detail.localizedCaseInsensitiveContains("failed") == true)
     }

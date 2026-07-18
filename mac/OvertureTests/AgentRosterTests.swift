@@ -45,22 +45,24 @@ struct AgentRosterTests {
         #expect(status("Review", i).state == .needsAttention)
     }
 
-    @Test func sendNeedsAttentionErrorsAndDisconnected() {
+    @Test func sendIssuesSurfacesProblemsAndTheCantConnectBlocker() {
+        // #1146: a connected, ready-to-send show is NOT an issue (Approve and Send are the same card, so
+        // it's transient), so with only that the Send-issues pill is absent from the strip entirely.
         var ready = calm; ready.readyToSend = 1
-        #expect(status("Send", ready).state == .needsAttention)
-        #expect(status("Send", ready).needsGmailConnect == false)
+        #expect(AgentRoster.statuses(ready).contains { $0.name == "Send issues" } == false)
 
-        var failed = calm; failed.readyToSend = 1; failed.sendErrors = 1
-        #expect(status("Send", failed).state == .error)
-        #expect(status("Send", failed).needsGmailConnect == false)
+        // A failed send is a real problem: the pill appears as an error.
+        var failed = calm; failed.sendErrors = 1
+        #expect(status("Send issues", failed).state == .error)
+        #expect(status("Send issues", failed).needsGmailConnect == false)
 
+        // Approved emails he can't send because Gmail isn't connected: a real blocker worth surfacing.
         var disconnected = calm; disconnected.readyToSend = 1; disconnected.gmailConnected = false
-        #expect(status("Send", disconnected).state == .needsAttention)
-        #expect(status("Send", disconnected).detail.contains("connect Gmail"))
+        #expect(status("Send issues", disconnected).state == .needsAttention)
+        #expect(status("Send issues", disconnected).detail.contains("connect Gmail"))
         // #565: a structured flag, not a text match on `detail`, so the chip can route a tap to
-        // the actual Gmail-connect flow (#488) instead of just filtering the queue, which read as
-        // an instruction ("connect Gmail to send") with nothing behind it to act on.
-        #expect(status("Send", disconnected).needsGmailConnect == true)
+        // the actual Gmail-connect flow (#488) instead of just filtering the queue.
+        #expect(status("Send issues", disconnected).needsGmailConnect == true)
     }
 
     // #475/#476: an interrupted send (crash, or a save that never landed) must outrank even a
@@ -71,16 +73,16 @@ struct AgentRosterTests {
     // show) promised him two rows and delivered one.
     @Test func sendFlagsAStuckSendAheadOfAConfirmedFailure() {
         var i = calm; i.stuckSends = 1
-        #expect(status("Send", i).state == .error)
-        #expect(status("Send", i).detail == "1 show with an unconfirmed send: check Gmail")
-        #expect(status("Send", i).focus == .sendStuck)
+        #expect(status("Send issues", i).state == .error)
+        #expect(status("Send issues", i).detail == "1 show with an unconfirmed send: check Gmail")
+        #expect(status("Send issues", i).focus == .sendStuck)
 
         i.stuckSends = 2
-        #expect(status("Send", i).detail == "2 shows with an unconfirmed send: check Gmail")
+        #expect(status("Send issues", i).detail == "2 shows with an unconfirmed send: check Gmail")
 
         i.sendErrors = 1   // a stuck send still wins even alongside a confirmed failure
-        #expect(status("Send", i).detail == "2 shows with an unconfirmed send: check Gmail")
-        #expect(status("Send", i).focus == .sendStuck)
+        #expect(status("Send issues", i).detail == "2 shows with an unconfirmed send: check Gmail")
+        #expect(status("Send issues", i).focus == .sendStuck)
     }
 
     // #483: a send that went out but came back with no usable threadId can never be watched
@@ -88,23 +90,23 @@ struct AgentRosterTests {
     // failed send, so it needs attention rather than reading as an error.
     @Test func sendFlagsDegradedReplyTrackingWhenAThreadIdCouldNotBeRecovered() {
         var i = calm; i.degradedReplyTracking = 1
-        #expect(status("Send", i).state == .needsAttention)
-        #expect(status("Send", i).detail == "1 show sent, but replies can't be tracked: check Gmail")
+        #expect(status("Send issues", i).state == .needsAttention)
+        #expect(status("Send issues", i).detail == "1 show sent, but replies can't be tracked: check Gmail")
         // #863: these shows are already SENT, so they are neither approved nor holding a blocked
         // contact. Keyed by the pill's name, the tap resolved the approved queue, which contains none
         // of them: the pill stated a number and took him nowhere.
-        #expect(status("Send", i).focus == .sendDegraded)
+        #expect(status("Send issues", i).focus == .sendDegraded)
 
         i.degradedReplyTracking = 2
-        #expect(status("Send", i).detail == "2 shows sent, but replies can't be tracked: check Gmail")
+        #expect(status("Send issues", i).detail == "2 shows sent, but replies can't be tracked: check Gmail")
     }
 
     @Test func stuckSendsAndSendErrorsOutrankDegradedReplyTracking() {
         var stuck = calm; stuck.degradedReplyTracking = 1; stuck.stuckSends = 1
-        #expect(status("Send", stuck).detail.contains("unconfirmed"))
+        #expect(status("Send issues", stuck).detail.contains("unconfirmed"))
 
         var failed = calm; failed.degradedReplyTracking = 1; failed.sendErrors = 1
-        #expect(status("Send", failed).detail == "1 failed to send")
+        #expect(status("Send issues", failed).detail == "1 failed to send")
     }
 
     @Test func followUpsNeedAttentionWhenDue() {
@@ -134,7 +136,7 @@ struct AgentRosterTests {
         #expect(AgentRoster.conceptSummary(for: "Scout").contains("keep") || AgentRoster.conceptSummary(for: "Scout").contains("dismiss"))
         #expect(AgentRoster.conceptSummary(for: "Prep").contains("draft"))
         #expect(AgentRoster.conceptSummary(for: "Review").contains("approve"))
-        #expect(AgentRoster.conceptSummary(for: "Send").contains("sent") || AgentRoster.conceptSummary(for: "Send").contains("send"))
+        #expect(AgentRoster.conceptSummary(for: "Send issues").contains("sent") || AgentRoster.conceptSummary(for: "Send issues").contains("send"))
         #expect(AgentRoster.conceptSummary(for: "Follow-ups").contains("reached out"))
     }
 
@@ -154,18 +156,18 @@ struct AgentRosterTests {
         #expect(!help.contains("Finding contacts and drafting"))
     }
 
-    @Test func approvedSendsShowOnlyTheCountOnceConnected() {
+    // #1146: a connected, ready-to-send show no longer surfaces a pill at all (it's transient, sent from
+    // the card), so there is no "N ready" detail to check any more.
+    @Test func aConnectedReadyToSendShowShowsNoPill() {
         var i = calm; i.readyToSend = 3
-        #expect(status("Send", i).detail == "3 ready")
-        // "approved" and "to send" both live in the concept already; the detail no longer repeats them.
-        let help = AgentRoster.chipHelp(name: "Send", detail: status("Send", i).detail)
-        #expect(!help.contains("approved, ready to send"))
+        #expect(AgentRoster.statuses(i).contains { $0.name == "Send issues" } == false)
+        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 0)
     }
 
     // The not-connected line is untouched: it carries a real instruction the concept does not.
     @Test func disconnectedSendStillTellsHimToConnectGmail() {
         var i = calm; i.readyToSend = 2; i.gmailConnected = false
-        #expect(status("Send", i).detail == "2 approved, connect Gmail to send")
+        #expect(status("Send issues", i).detail == "2 approved, connect Gmail to send")
     }
 
     @Test func dueFollowUpsShowOnlyTheCount() {
@@ -195,7 +197,7 @@ struct AgentRosterTests {
     // logic inside a SwiftUI view is untestable) so this dispatch has a seam a test can reach.
     @Test func chipActionRoutesGmailConnectAheadOfEverythingElse() {
         var i = calm; i.readyToSend = 1; i.gmailConnected = false
-        #expect(AgentRoster.chipAction(for: status("Send", i)) == .connectGmail)
+        #expect(AgentRoster.chipAction(for: status("Send issues", i)) == .connectGmail)
     }
 
     @Test func chipActionOpensFollowUpsInsteadOfNavigating() {
