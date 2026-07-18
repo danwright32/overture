@@ -87,6 +87,7 @@ struct RootView: View {
     // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
+    @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
@@ -254,8 +255,11 @@ struct RootView: View {
                         Button("Add a lead...") { addLead.request() }
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                         Divider()
+                        // #953: opens the per-run picker rather than prepping every kept show at once, so
+                        // Dan can hold a long lead-time show out of this run. The sheet defaults the
+                        // selection by performance date and hands back exactly the rows he chose.
                         Button {
-                            startPrep()
+                            showPrepSelection = true
                         } label: {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
@@ -588,6 +592,11 @@ struct RootView: View {
                 onHighlightConsumed: { followUpsHighlightRecipientId = nil })
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
+            // #953: pick which kept shows this Prep run covers. Defaults by performance date; the run
+            // fires with exactly the rows Dan leaves checked.
+            .sheet(isPresented: $showPrepSelection) {
+                PrepSelectionSheet(prospects: toPrep) { includedKeys in startPrep(includedKeys: includedKeys) }
+            }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
@@ -750,12 +759,14 @@ struct RootView: View {
         }
     }
 
-    private func startPrep() {
+    // #953: `includedKeys` is the per-run subset Dan chose in the Prep selection sheet. It is always an
+    // explicit set (possibly empty), never nil, so this run covers exactly the rows he left checked.
+    private func startPrep(includedKeys: Set<String>) {
         do {
             // #353: no separate "started" message. The button's own "Prepping…" state and
             // QueueView's masthead count already say a run is in progress; a second message
             // saying the same thing was redundant.
-            _ = try PrepQueueService.startPrep(from: context, now: Date())
+            _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys)
             // Watch this run so Dan sees the outcome (drafts ingested, or a clear notice
             // that it finished without producing anything) rather than silent waiting (#48).
             Task { await watchPrepRun() }
