@@ -86,6 +86,35 @@ struct ProspectAssemblerTests {
         #expect(p.presenter == nil)
     }
 
+    // #1087: a titleless-but-genuine show is named from its presenter, and that derived name is what
+    // becomes the prospect's `groupName`, not the empty title string. The assembler is the single place
+    // that turns an extracted event into a prospect, so this is where the rescued name has to land, or a
+    // kept show would still surface nameless and key badly.
+    @Test func aTitlelessShowIsNamedFromItsPresenterInGroupName() {
+        let d = ProspectAssembler.decide(
+            event: ExtractedEvent(title: "", presenter: "Aurora Strings", venue: "Merkin Hall",
+                                  performanceDate: "2026-09-19", sourceUrl: nil, location: nil),
+            classification: classification(), verdict: verdict())
+        guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
+        #expect(p.groupName == "Aurora Strings")
+        // groupName is half the natural key (Prospect.makeNaturalKey pairs it with date and venue), so a
+        // rescued name must produce a real, non-empty key rather than one that starts with a blank slot.
+        let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: p.performanceDate,
+                                          venue: p.venue)
+        #expect(key == "aurora strings|2026-09-19|merkin hall")
+    }
+
+    // With no presenter either, the venue names the show and reaches `groupName`. The order matches the
+    // guard: presenter first, venue only when there is no presenter.
+    @Test func aTitlelessPresenterlessShowIsNamedFromItsVenueInGroupName() {
+        let d = ProspectAssembler.decide(
+            event: ExtractedEvent(title: "", presenter: nil, venue: "Merkin Hall",
+                                  performanceDate: "2026-09-19", sourceUrl: nil, location: nil),
+            classification: classification(), verdict: verdict())
+        guard case let .prospect(p) = d else { #expect(Bool(false), "expected a prospect"); return }
+        #expect(p.groupName == "Merkin Hall")
+    }
+
     @Test func priorBookingCarriesIntoTheScore() {
         let d = ProspectAssembler.decide(
             event: event(), classification: classification(),

@@ -86,8 +86,12 @@ enum ProspectAssembler {
 
         return .prospect(AssembledProspect(
             // Decode entities for the displayed name (issue #25); the key canonicalizes
-            // independently, so matching is unaffected either way.
-            groupName: Prospect.decodeHTMLEntities(event.title),
+            // independently, so matching is unaffected either way. #1087: the name is
+            // ExtractedEventGuard's derived name (title, else presenter, else venue), not the raw title,
+            // so a titleless-but-genuine show the guard rescued surfaces named rather than blank. The
+            // guard is the single authority on the name; only usable events reach here, so the fallback
+            // is unreachable in practice and exists only to keep the type non-optional.
+            groupName: Prospect.decodeHTMLEntities(ExtractedEventGuard.displayName(for: event) ?? event.title),
             presenter: event.presenter,
             location: event.location,
             discipline: c.discipline.rawValue,
