@@ -50,13 +50,21 @@ enum OrgIdentity {
     // "Second Ending Ensemble" as the venue's page spells it, and the whole constraint would silently do
     // nothing, which is the failure mode that produced four strangers' concerts in Dan's queue.
     static func splitCamelCase(_ s: String) -> String {
-        // An acronym (BAM, MoMA) is not several words, and splitting it would make it match nothing.
+        // An all-caps acronym (BAM) is not several words, and splitting it would make it match nothing.
         guard s.contains(where: { $0.isLowercase }) else { return s }
         guard !s.contains(" ") else { return s }
 
+        // Split ONLY where an uppercase BEGINS a new lowercase-continued word ("...dEnd..." -> "...d End...").
+        // A mixed-case acronym ("MoMA") has an uppercase followed by another uppercase or the end of the
+        // string, not by a lowercase, so its run stays whole. The all-caps guard above alone did not catch
+        // "MoMA" (its internal "o" is a lowercase), and #982 found it came out "Mo MA", which silently
+        // matches nothing on the venue page: the exact #799 failure this constraint exists to prevent.
+        let chars = Array(s)
         var out = ""
-        for (i, ch) in s.enumerated() {
-            if i > 0, ch.isUppercase, let prev = out.last, prev.isLowercase || prev.isNumber {
+        for i in chars.indices {
+            let ch = chars[i]
+            let beginsLowerWord = i + 1 < chars.count && chars[i + 1].isLowercase
+            if i > 0, ch.isUppercase, beginsLowerWord, let prev = out.last, prev.isLowercase || prev.isNumber {
                 out.append(" ")
             }
             out.append(ch)

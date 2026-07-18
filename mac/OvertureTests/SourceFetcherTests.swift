@@ -625,6 +625,41 @@ struct SourceFetcherTests {
     }
 }
 
+// #972: an http source is upgraded to https before the fetch. The comment on `secured` rests its whole
+// "cannot regress anything" argument on two facts, both pinned here: a working (https) source is handed
+// back untouched, and a non-http scheme is left alone, so the only URL this ever rewrites is a cleartext
+// one that (with no ATS exception) could not have succeeded anyway. #982: previously untested.
+@Suite("Scheme upgrade (#972)")
+struct SecuredSchemeTests {
+    @Test func cleartextHttpIsUpgradedToHttps() {
+        #expect(SourceFetcher.secured(URL(string: "http://rainercrosett.com/events")!)
+                == URL(string: "https://rainercrosett.com/events")!)
+    }
+
+    // The scheme match is case-insensitive, so a stored "HTTP://" is upgraded too rather than slipping
+    // through as if it were already secure.
+    @Test func anUppercaseHttpSchemeIsAlsoUpgraded() {
+        #expect(SourceFetcher.secured(URL(string: "HTTP://example.org/x")!).scheme == "https")
+    }
+
+    // The path, query and fragment survive the swap: only the scheme changes.
+    @Test func onlyTheSchemeChanges() {
+        #expect(SourceFetcher.secured(URL(string: "http://ex.org/a/b?q=1#f")!)
+                == URL(string: "https://ex.org/a/b?q=1#f")!)
+    }
+
+    // The load-bearing half of "cannot regress anything": a source that already works (https) is returned
+    // byte-for-byte, and a non-http scheme (mailto, ftp) is left alone rather than mangled into an https URL.
+    @Test func httpsAndOtherSchemesPassThroughUntouched() {
+        let https = URL(string: "https://carnegiehall.org/calendar")!
+        #expect(SourceFetcher.secured(https) == https)
+        let mailto = URL(string: "mailto:press@example.org")!
+        #expect(SourceFetcher.secured(mailto) == mailto)
+        let ftp = URL(string: "ftp://files.example.org/x")!
+        #expect(SourceFetcher.secured(ftp) == ftp)
+    }
+}
+
 // The pinned page is the exact file the agent reads. It must live FLAT in the handoff directory (the
 // #321 guard) and its name must be derived safely: a source id is data, and data must never be able to
 // reach outside the folder it is written into.
@@ -650,5 +685,16 @@ struct ScoutPagePinTests {
 
     @Test func distinctSourcesGetDistinctFiles() {
         #expect(ScoutPagePin.url(forSourceId: "a") != ScoutPagePin.url(forSourceId: "b"))
+    }
+
+    // #982: safeName's comment claims the mapping "only collapses characters, never whole ids: an empty
+    // result still gets a stable stand-in". The stand-in branch fires only when every character was
+    // dropped, which happens for the empty id (each character maps to itself or a dash, never to nothing).
+    // Without it an empty id would build "overture-scout-page-.html" and every empty-id page would collide.
+    @Test func anEmptySourceIdGetsAStableStandInName() {
+        #expect(ScoutPagePin.safeName("") == "unnamed")
+        // A non-empty id is never wholesale-replaced by the stand-in: its characters are only collapsed.
+        #expect(ScoutPagePin.safeName("a/b") == "a-b")
+        #expect(ScoutPagePin.safeName("!!!") != "unnamed")
     }
 }
