@@ -69,7 +69,7 @@ enum PrepRunSummary {
                                                        guidanceNotesRestored: guidanceNotesRestored)
     }
 
-    // #___: what belongs in the toolbar's shared status slot, which also carries an unattended scout's
+    // Dan (2026-07-18): what belongs in the toolbar's shared status slot, which also carries an unattended scout's
     // warning. That slot is for "does something need me", not a running tally, so this drops
     // routineNotes ("N drafted", "N kept your edits": already visible in the queue, nothing to act on)
     // and keeps only concernNotes plus the two voice-guidance facts, every one of them the run telling

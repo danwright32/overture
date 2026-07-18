@@ -932,7 +932,7 @@ struct RootView: View {
         // #499: this run's intent hints/drafts were written in memory but never persisted. The save
         // failure is the actionable one, so it wins the single status line.
         //
-        // #___: both branches here are already shortfall/failure-only (ReplyClassifyRunSummary is
+        // Dan (2026-07-18): both branches here are already shortfall/failure-only (ReplyClassifyRunSummary is
         // scoped to the drop count on purpose, never a routine "N replies classified" tally), so both
         // are worth .warning, the same tier as the scout's own unattended-run warning.
         if outcome.saveFailed {
@@ -1218,7 +1218,7 @@ struct RootView: View {
             do {
                 _ = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
-                // #___: no routine "N due, N created" receipt here anymore. The OmniFocus toolbar menu
+                // Dan (2026-07-18): no routine "N due, N created" receipt here anymore. The OmniFocus toolbar menu
                 // already shows "last synced" when opened, and the only thing worth the shared status
                 // slot is a failure, handled below.
             } catch {
@@ -1253,7 +1253,7 @@ struct RootView: View {
         // #885: the WHOLE sentence, including the two notes above and the prefix, now comes from
         // PrepRunSummary. #876 extracted half of it and left the rest here, so a green test of that type
         // said nothing about the line Dan actually reads.
-        // #___: only what needs Dan's attention lands here now; the routine "N drafted" tally is dropped
+        // Dan (2026-07-18): only what needs Dan's attention lands here now; the routine "N drafted" tally is dropped
         // (the queue already shows it), and what remains is promoted to .warning so it can't be silently
         // overwritten by a later routine receipt the way an .info write could be.
         if let message = PrepRunSummary.attentionMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,

@@ -66,7 +66,7 @@ struct PrepRunSummaryTests {
                 == ["1 drafted", "2 kept your edits"])
     }
 
-    // #___: the toolbar status slot also carries an unattended scout's warning, so a routine "N drafted"
+    // Dan (2026-07-18): the toolbar status slot also carries an unattended scout's warning, so a routine "N drafted"
     // tally (the shows already show it) doesn't belong there. A run that only drafted, with nothing else
     // to say, has nothing worth the toolbar's attention.
     @Test func aRoutineRunHasNoAttentionMessage() {

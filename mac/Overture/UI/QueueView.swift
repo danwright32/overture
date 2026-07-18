@@ -658,7 +658,7 @@ private struct QueueFilterBar: View {
     let disciplines: [String]
     @Binding var activeDiscipline: String?
     @Binding var highOnly: Bool
-    // #970/#___: the "too far" chip. Moved here from the window toolbar, which stayed visible even
+    // #970. Dan (2026-07-18): the "too far" chip moved here from the window toolbar, which stayed visible even
     // while Archive/Sources/Days off/Patterns/Voice guidance were open over the same window, so it read
     // as clutter that showed up "everywhere" instead of just on the queue it actually filters.
     let tooFarCount: Int

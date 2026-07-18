@@ -187,7 +187,7 @@ struct AgentRosterTests {
         #expect(status("Unsure", calm).state == .idle)
     }
 
-    // #___: OmniFocus sync health used to have its own pill here (#357), redundant with the toolbar's
+    // Dan (2026-07-18): OmniFocus sync health used to have its own pill here (#357), redundant with the toolbar's
     // own OmniFocus button (its live "Syncing…" state, and the separate "sync failing" warning it
     // already shows). Dan's call: the toolbar button is the only access point now.
     @Test func statusesNoLongerIncludeOmniFocus() {
