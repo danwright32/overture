@@ -141,7 +141,7 @@ struct StagePillCountMatchesNavigationTests {
         contact(ctx, on: degraded).replyTrackingDegraded = true
         show(ctx, "unrelated-approved", status: .approved)
 
-        let send = try pill(ctx, "Send")
+        let send = try pill(ctx, "Send issues")
 
         #expect(send.focus == .sendDegraded)
         #expect(send.count == 1)
@@ -156,7 +156,7 @@ struct StagePillCountMatchesNavigationTests {
         show(ctx, "healthy-1", status: .approved)
         show(ctx, "healthy-2", status: .approved)
 
-        let send = try pill(ctx, "Send")
+        let send = try pill(ctx, "Send issues")
 
         #expect(send.focus == .sendErrors)
         #expect(send.count == 1)
@@ -173,7 +173,7 @@ struct StagePillCountMatchesNavigationTests {
         r.sendClaimedAt = now.addingTimeInterval(-RunTimeouts.send - 60)
         show(ctx, "healthy", status: .approved)
 
-        let send = try pill(ctx, "Send")
+        let send = try pill(ctx, "Send issues")
 
         #expect(send.focus == .sendStuck)
         #expect(send.count == 1)
@@ -189,7 +189,7 @@ struct StagePillCountMatchesNavigationTests {
         contact(ctx, on: held, email: "one@org.example").looksLikeVenue = true
         contact(ctx, on: held, email: "two@org.example").looksLikePressContact = true
 
-        let send = try pill(ctx, "Send")
+        let send = try pill(ctx, "Send issues")
 
         #expect(send.focus == .sendBlocked)
         #expect(send.count == 1)
@@ -197,17 +197,18 @@ struct StagePillCountMatchesNavigationTests {
         #expect(try targets(ctx, send) == ["two-held"])
     }
 
-    // The ordinary case still works: nothing abnormal, so the pill is the approved queue it always was.
-    @Test func anOrdinaryApprovedQueueStillLandsOnItsApprovedShows() throws {
+    // #1146: a plain approved-and-ready queue with Gmail connected no longer surfaces a pill at all (it's
+    // transient, sent from the review card), so the strip carries no "Send issues" pill for it.
+    @Test func aConnectedApprovedQueueSurfacesNoSendIssuesPill() throws {
         let ctx = try context()
         show(ctx, "approved-1", status: .approved)
         show(ctx, "approved-2", status: .approved)
-        show(ctx, "already-sent", status: .contacted, sentAt: now)
 
-        let send = try pill(ctx, "Send")
-
-        #expect(send.focus == .sendApproved)
-        #expect(send.count == 2)
-        #expect(Set(try targets(ctx, send)) == Set(["approved-1", "approved-2"]))
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        let statuses = AgentRoster.statuses(try inputs(ctx))
+        #expect(statuses.contains { $0.name == "Send issues" } == false)
+        // The navigation itself still resolves the approved unsent shows (used by the disconnected pill).
+        #expect(Set(StageNavigation.naturalKeys(for: .sendApproved, in: all, today: today, now: now))
+                == Set(["approved-1", "approved-2"]))
     }
 }

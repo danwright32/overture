@@ -90,7 +90,13 @@ enum AgentChipAction: Equatable, Sendable {
 
 enum AgentRoster {
     static func statuses(_ i: AgentInputs) -> [AgentStatus] {
-        [scout(i), prep(i), review(i), send(i), followUps(i)]
+        // #1146: the Send-issues pill appears only when it has a real problem/blocker to show; when idle
+        // it is dropped from the strip entirely rather than resting at a permanent zero.
+        let sendIssues = send(i)
+        var result = [scout(i), prep(i), review(i)]
+        if sendIssues.state != .idle { result.append(sendIssues) }
+        result.append(followUps(i))
+        return result
     }
 
     // #565/#338: needsGmailConnect outranks everything (a real instruction with something to click),
@@ -125,7 +131,7 @@ enum AgentRoster {
         case "Scout": return "Freshly found events waiting for you to keep or dismiss."
         case "Prep": return "Finds a contact and drafts an email for shows you've kept."
         case "Review": return "Drafts waiting for you to read, edit, and approve."
-        case "Send": return "Approved emails waiting to be sent."
+        case "Send issues": return "Sent emails that hit a problem, or approved ones you can't send yet."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
         default: return ""
         }
@@ -170,50 +176,51 @@ enum AgentRoster {
     // tap follows the sentence. Each count is a count of shows for the same reason: the number Dan reads
     // is a promise about how many rows he is about to land on. "3 contacts held" landing him on 2 rows
     // breaks that promise just as surely as landing him on none.
+    // #1146: the Send pill is now "Send issues". It surfaces ONLY when a send needs Dan: a post-send
+    // problem (stuck / failed / can't-be-watched-for-a-reply / a contact held for a check), or approved
+    // emails he can't send because Gmail isn't connected. The ordinary "approved and ready to send" case
+    // is deliberately NOT surfaced: Approve and Send are two buttons on the same review card, so a
+    // connected, ready-to-send show is one click from done and only rested the old pill at a permanent
+    // zero. When idle, `statuses` drops this pill from the strip entirely rather than showing a dead "0".
     private static func send(_ i: AgentInputs) -> AgentStatus {
         // An interrupted send outranks even a confirmed failure (#475/#476): Dan doesn't yet know
         // whether it actually went out, so it needs his eyes on Gmail, not just a retry.
         if i.stuckSends > 0 {
             let n = i.stuckSends
-            return AgentStatus(name: "Send", state: .error,
+            return AgentStatus(name: "Send issues", state: .error,
                                detail: "\(n) \(shows(n)) with an unconfirmed send: check Gmail",
                                focus: .sendStuck, count: n)
         }
         if i.sendErrors > 0 {
-            return AgentStatus(name: "Send", state: .error, detail: "\(i.sendErrors) failed to send",
+            return AgentStatus(name: "Send issues", state: .error, detail: "\(i.sendErrors) failed to send",
                                focus: .sendErrors, count: i.sendErrors)
         }
         // #483: the send went out fine, just with no usable threadId to watch for a reply. Not a
         // failure, but silent otherwise, so it still has to surface.
         if i.degradedReplyTracking > 0 {
             let n = i.degradedReplyTracking
-            return AgentStatus(name: "Send", state: .needsAttention,
+            return AgentStatus(name: "Send issues", state: .needsAttention,
                                detail: "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail",
                                focus: .sendDegraded, count: n)
         }
         // #792: a contact held back by a review guard. It ranks BELOW a real failure (a send that failed,
         // or one whose outcome is unknown, needs Dan's eyes more urgently than a heuristic he only has to
-        // glance at) and ABOVE an ordinary queue of approved sends, because an approved send is waiting on
-        // a click and this one is waiting on a decision he does not yet know he owes.
+        // glance at).
         if i.blockedContacts > 0 {
             let n = i.blockedContacts
-            return AgentStatus(name: "Send", state: .needsAttention,
+            return AgentStatus(name: "Send issues", state: .needsAttention,
                                detail: "\(n) \(shows(n)) with a contact held for a check",
                                focus: .sendBlocked, count: n)
         }
-        if i.readyToSend > 0 {
-            // #843: the connected line follows the concept ("Approved emails waiting to be sent.") in the
-            // tooltip, so "N approved, ready to send" restated all of it but the number. The count is the
-            // only new thing, so that is all it says now. The not-connected line stays as it is: "connect
-            // Gmail to send" is a real instruction the concept does not carry.
-            let detail = i.gmailConnected
-                ? "\(i.readyToSend) ready"
-                : "\(i.readyToSend) approved, connect Gmail to send"
-            return AgentStatus(name: "Send", state: .needsAttention, detail: detail,
-                               focus: .sendApproved, count: i.readyToSend,
-                               needsGmailConnect: !i.gmailConnected)
+        // #1146: approved emails Dan can't send because Gmail isn't connected is a real blocker worth
+        // surfacing. The connected, ready-to-send case is intentionally NOT surfaced (see the header) and
+        // falls through to idle.
+        if i.readyToSend > 0 && !i.gmailConnected {
+            return AgentStatus(name: "Send issues", state: .needsAttention,
+                               detail: "\(i.readyToSend) approved, connect Gmail to send",
+                               focus: .sendApproved, count: i.readyToSend, needsGmailConnect: true)
         }
-        return AgentStatus(name: "Send", state: .idle, detail: "Nothing to send",
+        return AgentStatus(name: "Send issues", state: .idle, detail: "Nothing to send",
                            focus: .sendApproved, count: 0)
     }
 
