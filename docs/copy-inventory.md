@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **660 sentences**, from 215 source files.
+Every sentence Overture can say to Dan: **657 sentences**, from 215 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -738,8 +738,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
-"OmniFocus: \(due) due · existing \(existing) · created \(created) · completed \(completed)"
-    `Domain/OmniFocusSync.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
 "One source couldn't be checked."
@@ -1023,8 +1021,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
     `App/ActionFeedback.swift`
-"Sync failing: tap to retry"
-    `Domain/AgentRoster.swift`
 "Sync now"
     `App/RootView.swift`
 "Thalia Spanish Theatre"
@@ -1073,8 +1069,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DaysOffAttention.swift`
 "The email that will send"
     `UI/SendConfirmSheet.swift`
-"The health of the automatic sync to OmniFocus."
-    `Domain/AgentRoster.swift`
 "The last day is before the first day."
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."

@@ -141,17 +141,6 @@ struct StageNavigationTests {
 
         #expect(StageNavigation.naturalKeys(for: .uncertainClassification, in: all).isEmpty)
     }
-
-    // Not a queue filter for anyone: OmniFocus sync health is an app-level state, not a property of any
-    // one show, so its pill resolves no queue rows at all (mirrors Follow-ups).
-    @MainActor
-    @Test func omniFocusSyncResolvesNoQueueKeys() throws {
-        let ctx = makeContext()
-        _ = prospect(ctx, key: "x", status: .queued, hasDraft: false)
-        let all = try ctx.fetch(FetchDescriptor<Prospect>())
-
-        #expect(StageNavigation.naturalKeys(for: .omniFocusSync, in: all).isEmpty)
-    }
 }
 
 // #861: the Scout pill counted shows that had already happened.

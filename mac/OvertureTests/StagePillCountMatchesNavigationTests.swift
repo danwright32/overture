@@ -211,9 +211,9 @@ struct StagePillCountMatchesNavigationTests {
         #expect(Set(try targets(ctx, send)) == Set(["approved-1", "approved-2"]))
     }
 
-    // #357: AgentInputs.from derives BOTH new pills' counts the same way as every existing one, through
-    // StageNavigation, so their number and their tap target can never drift apart either.
-    @Test func inputsFromCountsUncertainClassificationsAndCarriesOmniFocusFailure() throws {
+    // #357: AgentInputs.from derives this pill's count the same way as every existing one, through
+    // StageNavigation, so its number and its tap target can never drift apart either.
+    @Test func inputsFromCountsUncertainClassifications() throws {
         let ctx = try context()
         let unsure = show(ctx, "unsure", status: .new, hasDraft: false)
         unsure.classificationConfidence = Confidence.uncertain.rawValue
@@ -221,14 +221,8 @@ struct StagePillCountMatchesNavigationTests {
             .classificationConfidence = Confidence.confident.rawValue
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let withoutFailure = AgentInputs.from(prospects: all, now: now, today: today,
-                                              gmailConnected: true, prepRunning: false, replyRunAlive: false)
-        #expect(withoutFailure.uncertainClassifications == 1)
-        #expect(withoutFailure.omniFocusSyncFailed == false)
-
-        let withFailure = AgentInputs.from(prospects: all, now: now, today: today,
-                                           gmailConnected: true, prepRunning: false, replyRunAlive: false,
-                                           omniFocusSyncFailed: true)
-        #expect(withFailure.omniFocusSyncFailed == true)
+        let inputs = AgentInputs.from(prospects: all, now: now, today: today,
+                                      gmailConnected: true, prepRunning: false, replyRunAlive: false)
+        #expect(inputs.uncertainClassifications == 1)
     }
 }

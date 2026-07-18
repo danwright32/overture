@@ -80,9 +80,6 @@ struct QueueView: View {
     // second one. #685: also carries which contact Dan clicked from, so a multi-recipient show
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
-    // #357: the OmniFocus pill has no rows to navigate to, so its tap retries the sync directly
-    // instead (RootView owns the actual sync call).
-    var onRetryOmniFocusSync: () -> Void = {}
 
     private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
@@ -139,7 +136,6 @@ struct QueueView: View {
         queueScroll
             .background(OVColor.canvas)
             .toolbar { bookingsToolbar }
-            .toolbar { tooFarToolbar }        // #970
     }
 
     @ToolbarContentBuilder
@@ -160,28 +156,6 @@ struct QueueView: View {
                 .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
                 .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
                                                     count: pendingBookings))
-            }
-        }
-    }
-
-    // #970: the shows the geo gate took. Only appears when it actually took some, so a queue with
-    // nothing out of range says nothing, and a filter bug is loud rather than invisible (#887).
-    @ToolbarContentBuilder
-    private var tooFarToolbar: some ToolbarContent {
-        let tooFar = QueueModel.tooFarCount(items, discipline: disciplineFilter, highOnly: highOnly,
-                                            pendingBookingsOnly: showPendingBookingsOnly,
-                                            reachedOutKeys: reachedOutKeys, today: today,
-                                            userExcludedTowns: userExcludedTowns)
-        if QueueModel.chipIsShown(count: tooFar, showingOnly: showTooFarOnly) {
-            ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    showTooFarOnly.toggle()
-                } label: {
-                    ToolbarHoverLabel(title: QueueModel.tooFarLabel(count: tooFar),
-                                      systemImage: showTooFarOnly ? "location.slash.fill" : "location.slash")
-                }
-                .foregroundStyle(showTooFarOnly ? OVColor.forest : OVColor.inkSoft)
-                .help(QueueModel.tooFarHelp(showingOnly: showTooFarOnly, count: tooFar))
             }
         }
     }
@@ -227,10 +201,22 @@ struct QueueView: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         if pipeline == .toSend {
+            // #970: the shows the geo gate took. Only appears when it actually took some, so a queue
+            // with nothing out of range says nothing, and a filter bug is loud rather than invisible
+            // (#887). Lives in this row, not the toolbar, so it only ever shows while Dan is actually
+            // looking at the To send queue, not behind Archive/Sources/Days off/Patterns/Voice guidance
+            // (which sit as sheets over the same window, so a toolbar item stayed visible through all
+            // of them).
+            let tooFar = QueueModel.tooFarCount(items, discipline: disciplineFilter, highOnly: highOnly,
+                                                pendingBookingsOnly: showPendingBookingsOnly,
+                                                reachedOutKeys: reachedOutKeys, today: today,
+                                                userExcludedTowns: userExcludedTowns)
             QueueFilterBar(
                 disciplines: disciplines,
                 activeDiscipline: $disciplineFilter,
-                highOnly: $highOnly
+                highOnly: $highOnly,
+                tooFarCount: tooFar,
+                showTooFarOnly: $showTooFarOnly
             )
             // #361: fold any departing (just-sent) rows back into the date groups so each plays its
             // leaving delight in place before the glide-up removes it.
@@ -418,8 +404,7 @@ struct QueueView: View {
             prospects: prospects, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
-            replyRunAlive: ReplyClassifyService.isRunning(now: now),
-            omniFocusSyncFailed: OmniFocusSyncStatus.lastFailure() != nil
+            replyRunAlive: ReplyClassifyService.isRunning(now: now)
         )
     }
 
@@ -448,9 +433,6 @@ struct QueueView: View {
             // instead of just filtering the queue to prospects Dan still can't send to.
             case .connectGmail: onConnectGmail()
             case .showFollowUps: onShowFollowUps()
-            // #357: no rows to navigate to (app-level sync health, not a property of any show), so
-            // the tap retries the sync directly instead.
-            case .retryOmniFocusSync: onRetryOmniFocusSync()
             case .focusOnStage: focusOnStage(s)
             }
         } label: {
@@ -676,6 +658,11 @@ private struct QueueFilterBar: View {
     let disciplines: [String]
     @Binding var activeDiscipline: String?
     @Binding var highOnly: Bool
+    // #970. Dan (2026-07-18): the "too far" chip moved here from the window toolbar, which stayed visible even
+    // while Archive/Sources/Days off/Patterns/Voice guidance were open over the same window, so it read
+    // as clutter that showed up "everywhere" instead of just on the queue it actually filters.
+    let tooFarCount: Int
+    @Binding var showTooFarOnly: Bool
 
     var body: some View {
         WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
@@ -695,6 +682,20 @@ private struct QueueFilterBar: View {
                 .background(Capsule().fill(highOnly ? OVColor.gold.opacity(0.15) : .clear))
             }
             .buttonStyle(.plain)
+            if QueueModel.chipIsShown(count: tooFarCount, showingOnly: showTooFarOnly) {
+                Button { showTooFarOnly.toggle() } label: {
+                    HStack(spacing: 5) {
+                        Circle().fill(showTooFarOnly ? OVColor.forest : OVColor.inkFaint)
+                            .frame(width: 6, height: 6)
+                        Text(QueueModel.tooFarLabel(count: tooFarCount)).font(OVType.tag)
+                    }
+                    .foregroundStyle(showTooFarOnly ? OVColor.forest : OVColor.inkSoft)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
+                    .background(Capsule().fill(showTooFarOnly ? OVColor.forest.opacity(0.15) : .clear))
+                }
+                .buttonStyle(.plain)
+                .help(QueueModel.tooFarHelp(showingOnly: showTooFarOnly, count: tooFarCount))
+            }
         }
     }
 
