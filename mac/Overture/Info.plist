@@ -18,6 +18,8 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Dan Wright Photography</string>
 	<key>NSAppleEventsUsageDescription</key>
