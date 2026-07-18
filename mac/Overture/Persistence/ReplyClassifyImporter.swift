@@ -92,27 +92,14 @@ enum ReplyClassifyImporter {
         let results = try ReplyClassifyResultsDecoder.decode(data)
         var outcome = ingest(results, into: context)
         // #1018: which replies the app ASKED to classify that never came back. Same shape as Prep's
-        // shortfall (#876), keyed per-recipient because reply-classify is per-recipient.
-        outcome.missingKeys = shortfall(results: results, url: url, queueURL: queueURL)
+        // shortfall (#876), through the shared handoff check (#1020), keyed per-recipient because
+        // reply-classify is per-recipient (two contacts on one show are two independent items).
+        outcome.missingKeys = HandoffShortfall.missingKeys(
+            queueURL: queueURL, resultsURL: url, decodingQueue: ReplyClassifyQueue.self,
+            queuedKeys: { $0.items.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) } },
+            generatedAt: { $0.generatedAt },
+            answeredKeys: results.results.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) })
         return outcome
-    }
-
-    // #1018. Every read here is best-effort on purpose: an unreadable queue means we have no record of
-    // what was asked, which is a gap in the app's own bookkeeping and never a reason to drop Dan's drafts
-    // or to invent a failure. It reports nothing rather than guessing. Mirrors PrepImporter.shortfall.
-    @MainActor
-    private static func shortfall(results: ReplyClassifyResults, url: URL, queueURL: URL) -> [ReplyClassifyKey] {
-        guard let queueData = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(ReplyClassifyQueue.self, from: queueData) else { return [] }
-        return HandoffShortfall.missingKeys(
-            queuedKeys: queue.items.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) },
-            answeredKeys: results.results.map { ReplyClassifyKey(naturalKey: $0.naturalKey, recipientId: $0.recipientId) },
-            queueGeneratedAt: ISO8601DateFormatter().date(from: queue.generatedAt),
-            // The FILE's modification time, not the generatedAt the run wrote inside it: the run is a
-            // fallible process reporting on itself, and the one fact this guard exists to establish is
-            // exactly the one it should not be trusted to state.
-            resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        )
     }
 
     static var defaultURL: URL { ReplyClassifyResultsDecoder.defaultURL }

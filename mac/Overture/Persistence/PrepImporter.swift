@@ -363,27 +363,14 @@ enum PrepImporter {
         outcome.matchDataWarning = matchDataWarning(clientHealth: loaded.health,
                                                     historyUnreadable: history.unreadable)
         // #876: what did the app ASK for that never came back? Computed from the queue the app itself
-        // wrote, never from anything the run reported about itself.
-        outcome.missingKeys = shortfall(results: results, url: url, queueURL: queueURL)
+        // wrote (never from anything the run reported about itself), through the shared handoff check
+        // (#1020) so Prep and reply-classify cannot word the same rule two ways.
+        outcome.missingKeys = HandoffShortfall.missingKeys(
+            queueURL: queueURL, resultsURL: url, decodingQueue: PrepQueue.self,
+            queuedKeys: { $0.items.map(\.naturalKey) },
+            generatedAt: { $0.generatedAt },
+            answeredKeys: results.results.map(\.naturalKey))
         return outcome
-    }
-
-    // #876. Every read here is best-effort on purpose: an unreadable queue means we have no record of
-    // what was asked, which is a gap in the app's own bookkeeping and never a reason to drop Dan's drafts
-    // or to invent a failure. It reports nothing rather than guessing.
-    @MainActor
-    private static func shortfall(results: PrepResults, url: URL, queueURL: URL) -> [String] {
-        guard let queueData = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(PrepQueue.self, from: queueData) else { return [] }
-        return HandoffShortfall.missingKeys(
-            queuedKeys: queue.items.map(\.naturalKey),
-            answeredKeys: results.results.map(\.naturalKey),
-            queueGeneratedAt: ISO8601DateFormatter().date(from: queue.generatedAt),
-            // The FILE's modification time, not the generatedAt the run wrote inside it: the run is a
-            // fallible process reporting on itself, and the one fact this guard exists to establish is
-            // exactly the one it should not be trusted to state.
-            resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        )
     }
 
     // #884: consume a results file exactly ONCE, and return nil for one the app has already read.

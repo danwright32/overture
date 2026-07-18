@@ -48,6 +48,35 @@ enum HandoffShortfall {
         return queuedKeys.filter { answered.contains($0) ? false : seen.insert($0).inserted }
     }
 
+    // The plumbing every APP-side handoff shortfall shares (Prep #876, reply-classify #1018): read the
+    // work-list file the app itself wrote, and compare it to the results using the results FILE's clock,
+    // never the generatedAt the run reported about itself. Each caller supplies only what is type-specific:
+    // its own queue type, how to pull the queued keys and generatedAt from it, and the keys its results
+    // answered. Written once (#1020) so the load-bearing "trust the file's mtime, not the run's self-report"
+    // rule cannot be stated one way in one importer and drift to another in the next (the #1013/#1011
+    // pattern, where a fix reached one of two near-identical runners and quietly missed its sibling).
+    static func missingKeys<Queue: Decodable, Key: Hashable>(
+        queueURL: URL,
+        resultsURL: URL,
+        decodingQueue queueType: Queue.Type,
+        queuedKeys: (Queue) -> [Key],
+        generatedAt: (Queue) -> String,
+        answeredKeys: [Key]
+    ) -> [Key] {
+        // Best-effort on purpose: an unreadable queue means we have no record of what was asked, which is
+        // a gap in the app's own bookkeeping and never a reason to invent a failure. Report nothing.
+        guard let queueData = try? Data(contentsOf: queueURL),
+              let queue = try? JSONDecoder().decode(queueType, from: queueData) else { return [] }
+        return missingKeys(
+            queuedKeys: queuedKeys(queue),
+            answeredKeys: answeredKeys,
+            queueGeneratedAt: ISO8601DateFormatter().date(from: generatedAt(queue)),
+            // The FILE's modification time, not the generatedAt the run wrote inside it: the run is a
+            // fallible process reporting on itself, and the one fact this guard exists to establish is
+            // exactly the one it should not be trusted to state.
+            resultsModifiedAt: (try? FileManager.default.attributesOfItem(atPath: resultsURL.path))?[.modificationDate] as? Date)
+    }
+
     // The one sentence a shortfall says to Dan, shared by every handoff that can come back short (Prep
     // #876, reply-classify #1018) so the two cannot word the same promise two ways. The promise is a real
     // one, not a reassurance: an un-answered item is re-queued by its builder next run, so "they'll be
