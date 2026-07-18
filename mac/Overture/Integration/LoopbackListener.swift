@@ -40,8 +40,18 @@ enum LoopbackListener {
             let box = ContinuationBox(cont)
             // Give up if the listener never reaches .ready, so Connect Gmail can't hang on a
             // wedged bind (#54). The box resumes once, so whichever fires first wins.
+            //
+            // CRITICAL: the sleep MUST propagate cancellation. When .ready fires it calls
+            // timeoutTask.cancel(); a `try?` there would SWALLOW the CancellationError and fall through to
+            // listener.cancel(), tearing down the just-ready listener so the browser's redirect hits a dead
+            // port ("Safari can't connect to 127.0.0.1"). The `catch { return }` leaves a live, ready
+            // listener alone; only a genuine 10s timeout reaches cancel().
             let timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                } catch {
+                    return
+                }
                 box.resume(throwing: LoopbackError.timedOut)
                 listener.cancel()
             }

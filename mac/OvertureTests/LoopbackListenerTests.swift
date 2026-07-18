@@ -31,4 +31,41 @@ struct LoopbackListenerTests {
         defer { listener.cancel() }
         #expect(port != 0)
     }
+
+    // A one-shot latch so a connection's state handler resolves the round-trip exactly once.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func fire() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+    }
+
+    // The live round-trip the header notes was removed for "routinely never reaching .ready": that WAS
+    // the bug. The bind-timeout task did `try? await Task.sleep` then `listener.cancel()`; when .ready
+    // fired and cancelled that task, the swallowed cancellation fell through to cancel the just-ready
+    // listener, so a client could never connect (and Google's redirect hit a dead port). With the sleep's
+    // cancellation propagated, a ready listener stays alive and accepts. A 3s ceiling keeps this from ever
+    // freezing the suite the way the old version did.
+    @Test func aReadyListenerStaysAliveAndAcceptsAConnection() async throws {
+        let queue = DispatchQueue(label: "test-loopback-roundtrip")
+        let (listener, port) = try await LoopbackListener.start(queue: queue) { conn in
+            conn.start(queue: queue)
+            conn.send(content: Data("hi".utf8), completion: .contentProcessed { _ in conn.cancel() })
+        }
+        defer { listener.cancel() }
+
+        let connected: Bool = await withCheckedContinuation { cont in
+            let once = Once()
+            let client = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+            client.stateUpdateHandler = { state in
+                switch state {
+                case .ready: if once.fire() { cont.resume(returning: true) }; client.cancel()
+                case .failed, .cancelled: if once.fire() { cont.resume(returning: false) }
+                default: break
+                }
+            }
+            client.start(queue: queue)
+            Task { try? await Task.sleep(nanoseconds: 3_000_000_000); if once.fire() { cont.resume(returning: false) } }
+        }
+        #expect(connected)
+    }
 }
