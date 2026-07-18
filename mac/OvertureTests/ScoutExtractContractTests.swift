@@ -127,6 +127,25 @@ struct ScoutExtractContractTests {
         #expect(barge.events.allSatisfy { $0.location == nil })
     }
 
+    // v3 (#897): a stitched multi-month result reports which months the run actually read, so the app can
+    // tell a full sweep from a page it only skimmed part of. Verbatim off the wire; the completeness rule
+    // lives in SweepCoverage, not in the decoder.
+    @Test func aVersionThreeResultsFileCarriesTheMonthsTheRunRead() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v3.json"))
+        let kaufman = try #require(results.results.first { $0.sourceId == "kaufman-music-center" })
+        #expect(kaufman.monthsCovered == ["2026-07", "2026-08", "2026-09", "2026-10"])
+    }
+
+    // The field is optional, so a v1/v2 file written before the run was ever asked which months it read
+    // still decodes and simply carries none. A single-month page never needs it, which is why the check
+    // it feeds (SweepCoverage) is inert whenever it is absent.
+    @Test func anEarlierResultsFileDecodesWithNoMonthsCovered() throws {
+        let v2 = try ScoutExtractResultsDecoder.decode(fixture("results-v2.json"))
+        #expect(v2.results.allSatisfy { $0.monthsCovered == nil })
+        let v1 = try ScoutExtractResultsDecoder.decode(fixture("results-v1.json"))
+        #expect(v1.results.allSatisfy { $0.monthsCovered == nil })
+    }
+
     // ScoutExtractEvent mirrors ExtractedEvent field for field and converts straight across, on purpose:
     // #799's whole point is ONE pipeline, so an agent-read event and a Carnegie-read event are the same
     // thing downstream. A location that decodes off the wire and then falls out of `asExtractedEvent`

@@ -34,6 +34,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # --allowedTools alone only PRE-approves; the --permission-mode manual this carries is what actually
 # denies Edit and everything else the inherited "auto" default would otherwise grant a headless run.
 . "$(dirname "$0")/lib/claude-run-scope.sh"
+# #1009: holds a no-idle-sleep power assertion (caffeinate) for the life of this detached run, so an
+# idle-sleep timeout or a lid close cannot suspend or kill it mid draft. Shared with the other two
+# detached runners; released in the EXIT trap and, crash-safe, by caffeinate's own -w on this pid.
+. "$(dirname "$0")/lib/sleep-guard.sh"
 open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -107,9 +111,12 @@ HEARTBEAT_PID=$!
 # CLAUDE_PID is filled in below once claude launches; killing it on exit stops a killed script (Dan
 # quits the app, a crash) from leaving an orphaned claude running against the queue.
 CLAUDE_PID=""
+# #1009: arm the sleep guard now, for the whole working duration, and release it in the trap below.
+SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1038: clear the cancel sentinel and the pid file on exit too, so a stopped run never leaves a sentinel
 # that would instantly kill the next run.
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"' EXIT
+# #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's

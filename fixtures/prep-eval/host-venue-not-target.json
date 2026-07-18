@@ -1,0 +1,59 @@
+{
+  "name": "host-venue-not-target",
+  "rule": "The target is the performing act, never the host venue (#366/#368). A venue address is disqualified, not a weak fallback.",
+  "input": {
+    "naturalKey": "aurora-strings|2026-03-10|metro-concert-hall",
+    "groupName": "Aurora Strings",
+    "venue": "Metro Concert Hall",
+    "performanceDate": "2026-03-10",
+    "discipline": "music",
+    "websiteURL": "https://aurorastrings.example",
+    "sourceListingURL": "https://metroconcerthall.example/events/aurora-strings",
+    "priorRelationship": "cold",
+    "production": "agency"
+  },
+  "sources": [
+    {
+      "label": "Listing on the venue's site",
+      "url": "https://metroconcerthall.example/events/aurora-strings",
+      "content": "Aurora Strings perform at Metro Concert Hall on March 10, 2026. Box office and general enquiries: info@metroconcerthall.example."
+    },
+    {
+      "label": "Aurora Strings own staff page",
+      "url": "https://aurorastrings.example/about/staff",
+      "content": "Aurora Strings. Emma Robinson, Marketing Director, handles press and imagery: emma@aurorastrings.example."
+    }
+  ],
+  "expected": {
+    "description": "Surface the act's own marketing contact; never the venue inbox or its domain.",
+    "forbiddenEmails": ["info@metroconcerthall.example"],
+    "forbiddenDomains": ["metroconcerthall.example"],
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "aurora-strings|2026-03-10|metro-concert-hall",
+        "contacts": [
+          {
+            "name": "Emma Robinson",
+            "role": "Marketing Director",
+            "email": "emma@aurorastrings.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://aurorastrings.example/about/staff"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
+          "body": "I photograph performing arts in New York and saw Aurora Strings are performing at Metro Concert Hall on March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "variant": "rate_stated"
+        }
+      }
+    ]
+  }
+}

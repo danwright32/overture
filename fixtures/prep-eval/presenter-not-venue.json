@@ -1,0 +1,68 @@
+{
+  "name": "presenter-not-venue",
+  "rule": "When the act publishes no email, its own contact form outranks any venue inbox (waterfall step 3). A genuine presenting org is an additive presenter contact; the host venue is never a contact.",
+  "input": {
+    "naturalKey": "lumen-dance|2026-03-12|grand-theatre",
+    "groupName": "Lumen Dance",
+    "venue": "Grand Theatre",
+    "performanceDate": "2026-03-12",
+    "discipline": "dance",
+    "websiteURL": "https://lumendance.example",
+    "sourceListingURL": "https://grandtheatre.example/whats-on/lumen-dance",
+    "priorRelationship": "cold",
+    "production": "agency"
+  },
+  "sources": [
+    {
+      "label": "Grand Theatre listing (the host venue)",
+      "url": "https://grandtheatre.example/whats-on/lumen-dance",
+      "content": "Downtown Presents brings Lumen Dance to the Grand Theatre, March 12, 2026. Grand Theatre box office: boxoffice@grandtheatre.example."
+    },
+    {
+      "label": "Lumen Dance own site",
+      "url": "https://lumendance.example/contact",
+      "content": "Lumen Dance. We do not publish an email; please reach us through our contact form at https://lumendance.example/contact."
+    },
+    {
+      "label": "Downtown Presents (the presenting org)",
+      "url": "https://presentingorg.example/about",
+      "content": "Downtown Presents produces contemporary dance across the city. General enquiries: hello@presentingorg.example."
+    }
+  ],
+  "expected": {
+    "description": "Surface the act's form and the presenting org; never the Grand Theatre box office or its domain.",
+    "forbiddenEmails": ["boxoffice@grandtheatre.example"],
+    "forbiddenDomains": ["grandtheatre.example"],
+    "requirePresenter": true,
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/dance"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "lumen-dance|2026-03-12|grand-theatre",
+        "contacts": [
+          {
+            "method": "form_or_dm",
+            "confidence": "low",
+            "provenance": "act",
+            "formUrl": "https://lumendance.example/contact"
+          },
+          {
+            "email": "hello@presentingorg.example",
+            "method": "generic_inbox",
+            "confidence": "medium",
+            "provenance": "presenter"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Lumen Dance at Grand Theatre.",
+          "body": "I photograph performing arts in New York and saw Lumen Dance are performing at Grand Theatre on March 12. I shoot unobtrusive, no-flash documentary coverage and it would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/dance. Let me know how that lands.",
+          "variant": "reason_first"
+        }
+      }
+    ]
+  }
+}

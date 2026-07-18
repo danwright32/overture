@@ -194,6 +194,15 @@ For each item in the work-list:
    Read every marked section and return the shows from all of them as one set under that one `sourceId`.
    Do not stop at the first, and do not report "page 1 of N".
 
+   **Report which months you read in `monthsCovered`** (#897): the list of month labels from the markers
+   of every section you actually read, for example `["2026-07", "2026-08", "2026-09", "2026-10"]`. This
+   is not bookkeeping. The app fetched and stitched those months and knows exactly which ones it handed
+   you; if `monthsCovered` is missing any of them, the app treats the read as incomplete rather than as a
+   smaller calendar, keeps whatever shows you found, and reads the page again next scout instead of
+   trusting its silence about the months you skipped. A stitched page whose sections you did not all read
+   is the one way this step can quietly cancel a live show, so report honestly: list a month only if you
+   read its section, and list every month you did. On a single-section (one-month) page, omit the field.
+
    Never follow a link to another listings page (`/P20`, `?page=2`, "next month") yourself. That rule has
    not changed and the reason has not either: the app fetched and hashed the bytes it handed you, so
    anything you wander off to find is not part of the set it reconciles against, and a run that wanders

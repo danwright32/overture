@@ -83,6 +83,22 @@ enum ScoutExtractIngest {
                 continue
             }
 
+            // #897: a stitched multi-month page (#858) is a trustworthy feed for reconcile ONLY once the
+            // run read every month the app stitched into it. A run that covered fewer months read a SHORTER
+            // page than the app fetched and hashed, and treating its silence about a show as evidence that
+            // show was cancelled is the exact data loss #858 shipped pagination OFF to avoid. When the
+            // sweep is short we DOWNGRADE the run's own verdict to incomplete_extraction: the shows it did
+            // find still land as adds and updates, but the page is not marked finished (its hash is not
+            // stamped, so the next scout re-reads it) and no feed health is recorded, exactly as a
+            // partially read page already behaves (#1012). absenceIsEvidence can never fire for
+            // incomplete_extraction, so a short sweep can never mark a live show gone.
+            //
+            // Inert on the single-month watchlist default (pendingPageMonths has 0 or 1 entry), so this
+            // changes nothing until pagination is raised above one month on a reconciling path.
+            let sweepComplete = SweepCoverage.isComplete(stitchedMonths: source.pendingPageMonths,
+                                                         monthsCovered: result.monthsCovered)
+            let effectiveVerdict = sweepComplete ? result.verdict : PageVerdict.incompleteExtraction
+
             // We read the page. It may have had nothing upcoming on it, which is the NORMAL state (5 of
             // the 7 sites in the #770 spike, in July) and is not a failure: we know what that page says,
             // and re-reading it daily until the season starts would be paying to be told so again.
@@ -111,7 +127,7 @@ enum ScoutExtractIngest {
                 feed: ScoutService.FeedCheck(sourceId: source.sourceId,
                                              baseline: health.baseline,
                                              successfulCheckCount: source.successfulCheckCount,
-                                             verdict: result.verdict,
+                                             verdict: effectiveVerdict,
                                              rejectedCount: rejection.total),
                 today: today, sourceIds: [source.sourceId], into: context)
             outcome.merge(applied)
@@ -131,7 +147,7 @@ enum ScoutExtractIngest {
             // path uses (SourcePlacement.placedCount), so the two ingest doors can never disagree on it.
             let placedCount = SourcePlacement.placedCount(locations: events.map(\.location))
 
-            if result.verdict == .incompleteExtraction {
+            if effectiveVerdict == .incompleteExtraction {
                 // #1012: real events, so they land, but the run only read PART of this page. Stamping the
                 // hash or clearing the unread flag here would mean never going back for the rest of it:
                 // the source would report healthy and unchanged forever, having been read exactly once.
@@ -209,6 +225,7 @@ enum ScoutExtractIngest {
         source.lastFailure = nil
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
+        source.pendingPageMonths = []
         source.hasUnreadChanges = false
         outcome.sources.append(ScoutService.SourceResult(
             sourceId: source.sourceId, orgName: source.orgName, state: .confirmedEmpty,
@@ -233,6 +250,9 @@ enum ScoutExtractIngest {
 
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
+        // #897: the stitched-month expectation is spent once the run read the page in full. Cleared here on
+        // the same success branch as the hash, so it can never carry stale months into a later comparison.
+        source.pendingPageMonths = []
         source.hasUnreadChanges = false
     }
 

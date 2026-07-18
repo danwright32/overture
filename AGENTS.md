@@ -76,6 +76,15 @@ already drifting from the Swift version it mirrored.
   venues, portfolio link, the four opener shapes, the soft close). It rides along in
   `scripts/test-all.sh`, and skips cleanly on any machine without the skill installed, so edit a
   drafting rule in one place and a local pre-push run flags the other side going stale.
+- Regression harness for the runbook's JUDGMENT (#591). The runbook is a prompt, not code, so a rule
+  it encodes (never the host venue, never a press inbox, both named performers, strict confidence) can
+  be silently broken by an unrelated edit. Two layers guard it. The ALWAYS-ON free layer runs on every
+  `pnpm test`: `src/lib/prepRunbookRules.test.ts` asserts each guarded rule stays in the runbook text,
+  and `src/lib/prepEval.test.ts` scores recorded outputs against `fixtures/prep-eval/` expectations. The
+  OPT-IN real-AI layer, `scripts/eval-prep-runbook.sh --yes`, runs the CURRENT runbook against those
+  fixtures through the same headless `claude -p` mechanism as `prep-run.sh` and scores each real output
+  with the SAME engine (`src/lib/prepEval.ts`). It SPENDS TOKENS and is wired into no CI job: run it by
+  hand before shipping a runbook edit. See `fixtures/prep-eval/README.md`.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed

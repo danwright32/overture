@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "new-york-ny",
+      "runbook": "3a",
+      "pageText": "Smoke Ring Quartet Live at Gotham Hall New York, NY June 11",
+      "venue": "Gotham Hall",
+      "location": "New York, NY"
+    },
+    {
+      "id": "louisville-ky",
+      "runbook": "3a",
+      "pageText": "Tour dates Recital Louisville, KY March 3",
+      "venue": null,
+      "location": "Louisville, KY"
+    },
+    {
+      "id": "baltimore-maryland-verbatim",
+      "runbook": "3a",
+      "pageText": "Upcoming appearances Guest soloist Baltimore, Maryland Nov 14",
+      "venue": null,
+      "location": "Baltimore, Maryland"
+    },
+    {
+      "id": "harrogate-uk-verbatim",
+      "runbook": "3a",
+      "pageText": "LABBS 50th Convention Harrogate Convention Centre Harrogate, UK Oct 30",
+      "venue": "Harrogate Convention Centre",
+      "location": "Harrogate, UK"
+    },
+    {
+      "id": "amsterdam-no-country",
+      "runbook": "3a",
+      "pageText": "Winter tour Concertgebouw Amsterdam Dec 2",
+      "venue": "Concertgebouw",
+      "location": "Amsterdam"
+    },
+    {
+      "id": "southern-norway-region",
+      "runbook": "3a",
+      "pageText": "Summer festival appearances southern Norway July 20",
+      "venue": null,
+      "location": "southern Norway"
+    },
+    {
+      "id": "multi-city-string",
+      "runbook": "3a",
+      "pageText": "California residency Orange County, Santa Barbara, Pasadena, and Santa Monica",
+      "venue": null,
+      "location": "Orange County, Santa Barbara, Pasadena, and Santa Monica"
+    },
+    {
+      "id": "berlin-full-address",
+      "runbook": "3a",
+      "pageText": "Studio concert 26 Thorwaldsenstrasse Berlin, BE, 12157 Germany Feb 9",
+      "venue": null,
+      "location": "26 Thorwaldsenstrasse Berlin, BE, 12157 Germany"
+    },
+    {
+      "id": "no-location-is-null",
+      "runbook": "3a",
+      "pageText": "Carnegie Hall Debut Recital Weill Recital Hall April 6",
+      "venue": "Weill Recital Hall",
+      "location": null
+    },
+    {
+      "id": "sakura-park-named-outdoor-venue",
+      "runbook": "3",
+      "pageText": "Sakura Park, W 122nd St & Riverside Dr Oct 25",
+      "venue": "Sakura Park, W 122nd St & Riverside Dr",
+      "location": "Sakura Park, W 122nd St & Riverside Dr"
+    },
+    {
+      "id": "greeley-square-named-venue",
+      "runbook": "3",
+      "pageText": "Golden Hour Series at Greeley Square Aug 12",
+      "venue": "Greeley Square",
+      "location": null
+    },
+    {
+      "id": "downtown-brooklyn-is-location-only",
+      "runbook": "3",
+      "pageText": "Outdoor pop-up downtown Brooklyn, NY Sept 4",
+      "venue": null,
+      "location": "downtown Brooklyn, NY"
+    },
+    {
+      "id": "baltimore-city-is-location-only",
+      "runbook": "3",
+      "pageText": "Guest soloist Baltimore, Maryland Nov 14",
+      "venue": null,
+      "location": "Baltimore, Maryland"
+    }
+  ]
+}

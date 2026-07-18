@@ -68,6 +68,20 @@ final class WatchedSource {
     // the source up again rather than skipping it forever. Defaulted, so existing rows migrate cleanly.
     var pendingContentHash: String? = nil
 
+    // #897: the months SourceFetcher stitched into the pinned page this run is about to read (#858), held
+    // alongside pendingContentHash until the run comes back. A stitched multi-month page is a trustworthy
+    // feed for reconcile ONLY once the run has read every one of these; a run that covered fewer of them
+    // read a SHORTER page than the app fetched and hashed, and its silence about a show is then worth
+    // nothing (SweepCoverage). Stored as a newline-joined scalar rather than a `[String]` column so
+    // existing rows migrate with no transformable storage. Empty for the single-month watchlist default
+    // (monthHorizon 1), where the check is inert, which is what keeps this dormant until pagination is on.
+    var pendingPageMonthsRaw: String = ""
+
+    var pendingPageMonths: [String] {
+        get { pendingPageMonthsRaw.isEmpty ? [] : pendingPageMonthsRaw.components(separatedBy: "\n") }
+        set { pendingPageMonthsRaw = newValue.joined(separator: "\n") }
+    }
+
     // #1048: the hash of the page the most recent fetch actually SAW, whether or not that run read or
     // ingested it. Unlike lastContentHash (last INGESTED) and pendingContentHash (last READ and pinned,
     // awaiting ingest), this is "the live page as far as we know", updated by every successful fetch
