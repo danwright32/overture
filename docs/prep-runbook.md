@@ -286,7 +286,8 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   URL that 404s in an email Dan actually sends. There is nothing to choose between here.
   (The `variant` field itself is still live and still used, for the opener archetypes of
   #362; this drops only the offer half of the test.)
-- **CTA:** soft. "let me know how that lands."
+- **CTA:** soft. "Happy to answer any questions." Never "let me know how that lands,"
+  Dan flagged it as sounding douchey.
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials
   (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
   Center / Radio City Music Hall venues) plus the portfolio link
@@ -295,6 +296,12 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   Carnegie tenure, another marquee venue can lead with itself or pair with the
   Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
+- **Don't overclaim genre experience:** Dan has shot far more concert, choral, and
+  opera work than dance. When pitching a dance company or another genre he's less
+  experienced in, don't describe genre-specific technique as established practice (for
+  example, don't claim a particular way of "moving with the room" for dancers). Keep
+  the approach description general (no-flash, unobtrusive, back-of-house documentary
+  style) and let the credentials above carry the confidence instead.
 - **Anti-repetition within the run (#362):** before finalizing each draft, compare it
   against the one or two drafts immediately before it in this run. Don't reuse the
   same opening line, hook, or distinctive phrase back to back.
