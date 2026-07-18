@@ -58,9 +58,10 @@ extension AgentInputs {
                      gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
-        func count(_ focus: StageFocus) -> Int {
-            StageNavigation.naturalKeys(for: focus, in: prospects, today: today, now: now).count
-        }
+        // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
+        // the send-related counts fault each prospect's `recipients` at most once instead of once each.
+        let focusCounts = StageNavigation.counts(in: prospects, today: today, now: now)
+        func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         return AgentInputs(
             toTriage: count(.scout),
             keptToPrep: count(.prep),
