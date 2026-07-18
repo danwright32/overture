@@ -232,8 +232,15 @@ struct SourcesView: View {
             // with sent/booked appended when present. A source that extracts perfectly and produces
             // nothing Dan keeps is dead weight ("0 of 12 kept"), and that has to be visible, or a source
             // sits generating junk forever. Nothing here removes it: only a refusal (or Dan's own removal)
-            // takes a source off the list. Silent when the source has found nothing yet.
-            if let yield = SourceYield.line(SourceYield.tally(sourceId: source.sourceId, in: prospects)) {
+            // takes a source off the list.
+            //
+            // #978: the read count is handed in so the same line can cover the case #794 alone cannot: a
+            // source read many times that has NEVER once surfaced a pitchable show (found is still zero).
+            // A brand-new or off-season source read only once or twice stays silent; past the threshold it
+            // reads "Read N times, never turned up a show to pitch." The decision lives in SourceYield, so
+            // this view still has no counting of its own.
+            if let yield = SourceYield.line(SourceYield.tally(sourceId: source.sourceId, in: prospects),
+                                            reads: source.successfulCheckCount) {
                 Text(yield).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
