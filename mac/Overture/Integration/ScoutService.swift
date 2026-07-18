@@ -931,6 +931,15 @@ enum ScoutService {
         return prospect
     }
 
+    // #1132: whether a re-scout should clear Dan's plain "confirm" acknowledgement so the row's unsure
+    // badge resurfaces. True ONLY when the fresh guess is uncertain AND he had merely confirmed the prior
+    // guess (reviewed) without correcting it (not overridden). A confident fresh guess has no badge to
+    // resurface; a never-confirmed show already shows the badge; a corrected show is protected. Pure, so
+    // this rule is pinned by ReScoutConfidenceAckTests without a full scout run.
+    nonisolated static func reScoutClearsConfidenceAck(freshConfidence: String, wasReviewed: Bool, wasOverridden: Bool) -> Bool {
+        freshConfidence == Confidence.uncertain.rawValue && wasReviewed && !wasOverridden
+    }
+
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
     private static func apply(_ p: AssembledProspect, to existing: Prospect) {
         existing.groupName = p.groupName
@@ -947,13 +956,24 @@ enum ScoutService {
         // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
         // (via ClassificationOverride.rescored) and by the fresh score in p.
         existing.passedOnThisShow = p.passedOnThisShow
+        // #1132: read the prior acknowledgement BEFORE overwriting the confidence, so the decision below
+        // uses the state as Dan last left it.
+        let clearAck = reScoutClearsConfidenceAck(freshConfidence: p.confidence,
+                                                  wasReviewed: existing.confidenceReviewedByDan,
+                                                  wasOverridden: existing.classificationOverriddenByDan)
         existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
         // #901: scout-owned too, and refreshed to whatever is true NOW: a vacation Dan cancelled stops
         // flagging the show, and a shoot booked over a week he was merely away re-flags it under a new
         // key, which is a fact he has not seen and so is not covered by anything he cleared.
         existing.setScoutConflict(p.conflictKey)
         // NOTE: never touch conflictClearedKey here; Dan owns that decision (#901).
-        // NOTE: never touch confidenceReviewedByDan here; Dan owns that acknowledgement.
+        // #1132: confidenceReviewedByDan is Dan's acknowledgement, and normally the scout never touches it.
+        // The ONE exception: a plain "confirm" (reviewed, not corrected) acknowledged the specific guess he
+        // saw, so when a later run re-guesses the show as uncertain again that acknowledgement is stale and
+        // would hide the row's "Unsure call" badge over a fresh guess he hasn't seen. Clear it in exactly
+        // that case so the badge resurfaces. A show he CORRECTED (classificationOverriddenByDan) is kept and
+        // re-scored above, never re-guessed, so it is left protected.
+        if clearAck { existing.confidenceReviewedByDan = false }
         // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
 
         // Two guards run over this prospect, and they are ORTHOGONAL: Dan can correct a prospect's
