@@ -30,10 +30,19 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # kill of the script is off the table; the stop is cooperative, and it lands at a poll boundary so it can
 # never interrupt a draft mid-write and corrupt the shared results file.
 . "$(dirname "$0")/lib/scout-cancel.sh"
+# #1097: the fail-closed tool scope for this detached run, shared with scout-extract and reply-classify.
+# --allowedTools alone only PRE-approves; the --permission-mode manual this carries is what actually
+# denies Edit and everything else the inherited "auto" default would otherwise grant a headless run.
+. "$(dirname "$0")/lib/claude-run-scope.sh"
 open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
+
+# #1097: resolve the scope once and refuse to start if it has drifted unsafe (an auto-approving mode, or
+# Edit smuggled into the allowlist). Fail loud: a detached run that drafts emails reaching strangers in
+# Dan's voice must never fall back to a shell-and-edit posture in silence.
+PREP_SCOPE="$(prep_claude_scope)" || { echo "prep: aborting, unsafe tool scope" >&2; exit 1; }
 
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
@@ -125,7 +134,10 @@ decide and record the decision in the result. Do the web research needed to find
 
 resolve_claude
 
-# Headless Claude Code run. Tools limited to what the run needs.
+# Headless Claude Code run. Read, Write, WebSearch, WebFetch, Bash and Skill (the six tools this run's
+# job needs); Edit and everything else are denied because $PREP_SCOPE carries --permission-mode manual,
+# so anything outside the allowlist is refused rather than auto-approved by the inherited settings
+# (#1026/#1097). See lib/claude-run-scope.sh.
 cd "$PROJECT_DIR"
 # #868: the exit status is CAPTURED, never allowed to kill the script. Under `set -e` a claude that died
 # (a crash, an API error, an out-of-memory kill) took the whole script down with it, right here, before
@@ -137,9 +149,10 @@ cd "$PROJECT_DIR"
 # cancel kills it; either way its status is captured. Written as `|| ...` so a non-zero status (including
 # the signal from a cancel) cannot trip `set -e` and take the whole script down on the failure path.
 CLAUDE_STATUS=0
+# shellcheck disable=SC2086  # $PREP_SCOPE MUST word-split into --allowedTools <list> --permission-mode <mode>
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_DRAFTING}" \
-  --allowedTools "Read,Write,WebSearch,WebFetch,Bash,Skill" &
+  $PREP_SCOPE &
 CLAUDE_PID=$!
 printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
 wait "$CLAUDE_PID" || CLAUDE_STATUS=$?

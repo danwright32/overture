@@ -23,6 +23,12 @@
 # One file, so the restriction cannot be right on one launch path and missing on the other. The runner
 # launches claude in two places (one per chunk, and a single-process fallback on a node-free machine);
 # both build their flags from scout_extract_claude_scope below.
+#
+# #1097: the guard itself (the mode check, the forbidden-tool check, the fail-loud refusal) now lives in
+# lib/claude-run-scope.sh, shared with the prep and reply-classify runners so it cannot be right here and
+# a drifted near-copy there. This file keeps only scout's OWN posture (its three tools, its forbidden set)
+# and delegates the enforcement.
+. "$(dirname "${BASH_SOURCE[0]}")/claude-run-scope.sh"
 
 # The tools this run is allowed to call. Exactly the three its job needs.
 SCOUT_EXTRACT_ALLOWED_TOOLS="Read,Write,WebFetch"
@@ -33,44 +39,14 @@ SCOUT_EXTRACT_ALLOWED_TOOLS="Read,Write,WebFetch"
 # run can supply, so the allowlist becomes a hard boundary rather than a mere pre-approval.
 SCOUT_EXTRACT_PERMISSION_MODE="manual"
 
-# The permission modes that leave tools outside the allowlist reachable. If SCOUT_EXTRACT_PERMISSION_MODE
-# is ever set to one of these (or left empty), the scope function refuses to emit and the run fails loud.
-SCOUT_EXTRACT_UNSAFE_MODES="auto bypassPermissions dontAsk acceptEdits"
-
 # Tools this run must NEVER be able to call, enumerated so the guard can prove none has crept into the
 # allowlist through a later edit. Bash and Edit are the two the 2026-07-17 run actually used.
 SCOUT_EXTRACT_FORBIDDEN_TOOLS="Bash Edit Skill WebSearch"
 
-# Emits the claude flags that scope the scout-extract run, and REFUSES (returns nonzero, emits nothing) if
-# the scope has drifted into an unsafe posture: an auto-approving (or empty) permission mode, or a
-# forbidden tool smuggled into the allowlist. Failing loud here is deliberate: a partial or unsafe scope
-# is worse than none, because it would silently hand a detached run reading untrusted pages a shell again.
+# Emits the claude flags that scope the scout-extract run, refusing loudly on an unsafe posture. Thin
+# wrapper over the shared guard so scout's public name and its env-overridable globals stay unchanged
+# (the runner and its own fixture still call scout_extract_claude_scope exactly as before).
 scout_extract_claude_scope() {
-  local mode="${SCOUT_EXTRACT_PERMISSION_MODE}"
-
-  # The mode must not be empty (which falls back to the inherited auto) or any approve-everything mode.
-  if [ -z "${mode}" ]; then
-    echo "scout-extract: refusing to run: no permission mode set (an empty mode inherits the auto-approve default)" >&2
-    return 1
-  fi
-  local unsafe
-  for unsafe in ${SCOUT_EXTRACT_UNSAFE_MODES}; do
-    if [ "${mode}" = "${unsafe}" ]; then
-      echo "scout-extract: refusing to run: permission mode '${mode}' auto-approves tools outside the allowlist" >&2
-      return 1
-    fi
-  done
-
-  # No forbidden tool may appear in the allowlist. Compared with commas around both sides so "WebFetch"
-  # can never match "WebSearch" and "Read" can never match a substring of another tool name.
-  local forbidden
-  for forbidden in ${SCOUT_EXTRACT_FORBIDDEN_TOOLS}; do
-    case ",${SCOUT_EXTRACT_ALLOWED_TOOLS}," in
-      *",${forbidden},"*)
-        echo "scout-extract: refusing to run: '${forbidden}' must never be in the scout allowlist" >&2
-        return 1 ;;
-    esac
-  done
-
-  printf '%s' "--allowedTools ${SCOUT_EXTRACT_ALLOWED_TOOLS} --permission-mode ${mode}"
+  claude_run_scope "${SCOUT_EXTRACT_ALLOWED_TOOLS}" "${SCOUT_EXTRACT_PERMISSION_MODE}" \
+    "${SCOUT_EXTRACT_FORBIDDEN_TOOLS}" "scout-extract"
 }
