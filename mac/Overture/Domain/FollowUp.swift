@@ -102,18 +102,20 @@ enum FollowUp {
     // A short, low-key nudge in Dan's voice: no performative enthusiasm, no em dashes. The
     // final nudge (attempt == maxFollowUps) reads as a softer last note so the second touch
     // isn't a verbatim repeat of the first (#75).
+    // #1144: no sign-off here any more. Every outbound email's signature is appended once at the send
+    // layer (GmailMessage, from OutboundSignature), so this body ends at its last sentence and the styled
+    // signature reaches follow-ups too, not just a flat "Best, Dan" line.
     static func nudgeBody(contactName: String?, groupName: String, venue: String?, attempt: Int = 1) -> String {
         let venueClause = (venue?.isEmpty == false) ? " at \(venue!)" : ""
         let greeting = Salutation.greeting(for: contactName)
-        let signoff = "\n\nBest,\nDan Wright\nDan Wright Photography"
         if attempt >= FollowUpConfig().maxFollowUps {
             return greeting + "\n\nOne last note on photographing \(groupName)\(venueClause). "
                 + "If it would be useful down the line I'm glad to help, and if not, no need to reply. "
-                + "I'll leave it here either way." + signoff
+                + "I'll leave it here either way."
         }
         return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
-            + "No problem if the timing isn't right." + signoff
+            + "No problem if the timing isn't right."
     }
     // copy-inventory:ignore-end
 }

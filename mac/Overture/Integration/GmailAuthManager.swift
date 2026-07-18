@@ -74,6 +74,10 @@ final class GmailAuthManager {
 
         let tokens = try await exchange(config: config, code: code, pkce: pkce)
         try persistExchangedTokens(tokens)
+        // #1144: Dan just granted consent (including the settings scope), so fetch and cache his styled
+        // Gmail signature now. Best-effort: a failure here leaves any stored signature intact and never
+        // blocks the connect from succeeding.
+        await GmailSignatureService.refresh()
     }
 
     // Split from connect() so a failed save after a real consent grant is testable without the

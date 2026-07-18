@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **658 sentences**, from 215 source files.
+Every sentence Overture can say to Dan: **658 sentences**, from 218 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -25,9 +25,13 @@ What is not, and why:
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
+- `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 
 ## The same sentence, said in more than one place (37)
 

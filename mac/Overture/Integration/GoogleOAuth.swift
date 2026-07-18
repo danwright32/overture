@@ -15,6 +15,11 @@ struct OAuthConfig: Equatable, Sendable {
     static let gmailScopes = [
         "https://www.googleapis.com/auth/gmail.send",
         "https://www.googleapis.com/auth/gmail.readonly",
+        // #1144: read-only access to Dan's Gmail settings, so Overture can fetch his real styled
+        // signature (users/me/settings/sendAs) and attach it to every outgoing email. Adding this scope
+        // means Dan re-authorizes Overture once to grant it; until then the send falls back to a
+        // plain-text sign-off.
+        "https://www.googleapis.com/auth/gmail.settings.basic",
     ]
 }
 
