@@ -30,6 +30,24 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FAILURES=0
 
+# #1097: the runners no longer carry a literal --allowedTools flag; each folds through a scope function
+# (scout_extract_claude_scope, prep_claude_scope, reply_classify_claude_scope) that emits the flag AND a
+# fail-closed --permission-mode. Source them so the "can the run obey its own prompt" check below can ask
+# each run's REAL effective scope instead of grepping a literal that no longer exists. scout-tools.sh
+# sources lib/claude-run-scope.sh, so this one line brings in all three scope functions.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/scout-tools.sh"
+
+# The claude flags each runner actually launches with, resolved through its own scope function (the same
+# value the runner splices onto the command line), so a check on tool access reflects the real posture.
+effective_scope_for() {
+  case "$1" in
+    scout-extract-run.sh) scout_extract_claude_scope ;;
+    prep-run.sh) prep_claude_scope ;;
+    reply-classify-run.sh) reply_classify_claude_scope ;;
+  esac
+}
+
 fail() {
   echo "FAIL - $1"
   if [[ $# -gt 1 ]]; then echo "  $2"; fi
@@ -117,13 +135,14 @@ assert_tools_can_obey_the_prompt() {
     echo "ok - ${script}: asks for no skill, so it needs no Skill tool"
     return
   fi
+  # #1097: ask the run's REAL effective scope (resolved through its scope function), not a literal flag.
   local tools
-  tools="$(printf '%s' "${body}" | grep -o -- '--allowedTools "[^"]*"' | head -1)"
+  tools="$(effective_scope_for "${script}")"
   if [[ "${tools}" == *"Skill"* ]]; then
     echo "ok - ${script}: its prompt invokes a skill AND the run is allowed the Skill tool"
   else
     fail "${script}: the prompt invokes a skill but the run cannot call one" \
-         "allowedTools is ${tools:-missing}. The model would silently invent Dan's voice instead."
+         "effective scope is ${tools:-missing}. The model would silently invent Dan's voice instead."
   fi
 }
 
