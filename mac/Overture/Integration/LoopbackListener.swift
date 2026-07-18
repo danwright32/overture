@@ -23,6 +23,7 @@ enum LoopbackListener {
     static func start(
         queue: DispatchQueue,
         timeout: TimeInterval = 10,
+        log: (@Sendable (String) -> Void)? = nil,
         onConnection: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> (listener: NWListener, port: UInt16) {
         let params = NWParameters.tcp
@@ -45,6 +46,11 @@ enum LoopbackListener {
                 listener.cancel()
             }
             listener.stateUpdateHandler = { state in
+                // Logged so a listener that reports .ready and then quietly drops its socket (the bug
+                // where the browser hits a dead port) is visible as a state transition after .ready.
+                // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+                log?("listener state: \(state)")
+                // copy-inventory:ignore-end
                 switch state {
                 case .ready:
                     timeoutTask.cancel()

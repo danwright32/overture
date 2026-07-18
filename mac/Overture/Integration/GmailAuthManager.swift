@@ -56,7 +56,7 @@ final class GmailAuthManager {
     // Traces the connect flow to ~/Library/Logs/Overture/gmail-connect-debug.log. The app runs resident
     // via a LaunchAgent whose stdout/stderr are separate, and NSLog did not surface in `log show`, so a
     // dedicated file is the reliable way to see exactly how far a failing connect got.
-    static func connectDebugLog(_ line: String) {
+    nonisolated static func connectDebugLog(_ line: String) {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Overture", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -208,12 +208,21 @@ final class GmailAuthManager {
 
     // MARK: - loopback listener
 
+    // The loopback listener runs on its OWN dedicated queue, NOT the app's main queue. When Overture
+    // opens the browser it goes to the background, and a listener bound to the main queue could have its
+    // socket torn down while the main thread is throttled, so it reported .ready and then silently held no
+    // socket (the redirect hit a dead port). A private serial queue is always serviced.
+    nonisolated private static let listenerQueue = DispatchQueue(label: "com.danwright.overture.gmail-loopback")
+
     private func startListener() async throws -> Int {
         // The port is only real once the listener is bound and .ready; reading it
         // earlier returned 0, which made redirect_uri=http://127.0.0.1:0 and hung
         // Google's consent page (#51). LoopbackListener waits for .ready and forces IPv4.
-        let (listener, port) = try await LoopbackListener.start(queue: .main) { [weak self] conn in
-            conn.start(queue: .main)
+        let (listener, port) = try await LoopbackListener.start(
+            queue: Self.listenerQueue,
+            log: { Self.connectDebugLog($0) }
+        ) { [weak self] conn in
+            conn.start(queue: Self.listenerQueue)
             conn.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, _ in
                 let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 Task { @MainActor in self?.handleRedirect(request: request, conn: conn) }

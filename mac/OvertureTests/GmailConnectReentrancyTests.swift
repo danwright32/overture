@@ -42,4 +42,19 @@ struct GmailConnectReentrancyTests {
         #expect(src.contains("ProcessInfo.processInfo.beginActivity"))
         #expect(src.contains("ProcessInfo.processInfo.endActivity"))
     }
+
+    // The loopback catcher must run on a DEDICATED serial queue, not the app's main queue: a main-queue
+    // NWListener can stop accepting when the main thread is throttled while Overture is in the background
+    // during consent (the "Safari can't connect to 127.0.0.1" failure). The catcher CODE is correct (an
+    // external client connects to a dedicated-queue listener; verified out of band), so the only thing to
+    // pin is that it isn't bound to .main. No behavioural seam reaches this (a same-process connect gives
+    // false negatives and the real symptom needs backgrounding), so it is source-guarded like the App Nap
+    // assertion above.
+    @Test func theLoopbackCatcherRunsOffTheMainQueue() {
+        let src = SourceGuardHelper.source("Overture/Integration/GmailAuthManager.swift")
+        #expect(src.contains("listenerQueue = DispatchQueue(label:"))
+        #expect(src.contains("queue: Self.listenerQueue"))
+        #expect(src.contains("conn.start(queue: Self.listenerQueue)"))
+        #expect(!src.contains("LoopbackListener.start(queue: .main)"))
+    }
 }
