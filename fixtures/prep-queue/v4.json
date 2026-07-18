@@ -1,0 +1,27 @@
+{
+  "version" : 4,
+  "generatedAt" : "2026-06-25T00:00:00.000Z",
+  "items" : [
+    {
+      "naturalKey" : "aurora-strings|2026-03-10|carnegie-hall",
+      "groupName" : "Aurora Strings",
+      "venue" : "Carnegie Hall",
+      "performanceDate" : "2026-03-10",
+      "runEndDate" : "2026-03-14",
+      "discipline" : "music",
+      "websiteURL" : "https://aurorastrings.example",
+      "sourceListingURL" : "https://example.org/aurora-10",
+      "possibleMatchName" : "Aurora Strings",
+      "priorRelationship" : "warm",
+      "production" : "self",
+      "openingNightPassed" : true
+    },
+    {
+      "naturalKey" : "lumen-dance|undated|none",
+      "groupName" : "Lumen Dance",
+      "discipline" : "dance",
+      "priorRelationship" : "cold",
+      "production" : "agency"
+    }
+  ]
+}

@@ -17,7 +17,8 @@ enum PrepQueueService {
     // relies on that). A non-nil set narrows the eligible prospects to only those keys; an empty set
     // therefore yields an empty queue, which startPrep reports as nothing to prep.
     static func buildQueue(from context: ModelContext, generatedAt: String,
-                           includedKeys: Set<String>? = nil) -> PrepQueue {
+                           includedKeys: Set<String>? = nil,
+                           today: String = EasternDate.today()) -> PrepQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let items: [PrepQueueItem] = all
             .filter(PrepQueueBuilder.needsPrepEligible)
@@ -28,6 +29,8 @@ enum PrepQueueService {
                     groupName: p.groupName,
                     venue: p.venue,
                     performanceDate: p.performanceDate,
+                    // #1122: the run's closing night, so a draft can pitch the whole run.
+                    runEndDate: p.runEndDate,
                     discipline: p.discipline,
                     websiteURL: p.websiteURL,
                     sourceListingURL: p.sourceListingURL,
@@ -39,7 +42,13 @@ enum PrepQueueService {
                     production: p.production,
                     reprepMode: PrepQueueBuilder.reprepModeString(
                         draftRequested: p.reprepDraftRequested,
-                        contactsRequested: p.reprepContactsRequested)
+                        contactsRequested: p.reprepContactsRequested),
+                    // #1122: set only when the opening night has passed while later dates remain, so the
+                    // drafter pitches only the remaining dates and never names the gone opening. Absent
+                    // otherwise (single-night, or a run not yet started), so the common case is unchanged.
+                    openingNightPassed: PrepQueueBuilder.openingNightPassed(
+                        performanceDate: p.performanceDate, runEndDate: p.runEndDate, today: today)
+                        ? true : nil
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)

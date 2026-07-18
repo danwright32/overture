@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion3() {
+    @Test func theBuilderNowStampsVersion4() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
-        #expect(q.version == 3)
+        #expect(q.version == 4)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -111,6 +111,20 @@ struct PrepQueueContractTests {
         #expect(decoded.version == 3)
         #expect(decoded.items[0].reprepMode == "draft_only")
         #expect(decoded.items[1].reprepMode == "contacts_only")
+    }
+
+    // v4 (#1122): the queue item gains `runEndDate` (the run's closing night) and `openingNightPassed`
+    // (true only for a run whose opening night has passed while later dates remain), so the Prep run can
+    // pitch the whole run and never reference a gone opening night. Additive, so v1-v3 fixtures still
+    // decode with both absent (nil).
+    @Test func theV4FixtureCarriesTheRunRangeAndPassedOpening() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v4.json"))
+        #expect(decoded.version == 4)
+        #expect(decoded.items[0].runEndDate == "2026-03-14")
+        #expect(decoded.items[0].openingNightPassed == true)
+        // The second item is single-night with no passed opening: both fields absent.
+        #expect(decoded.items[1].runEndDate == nil)
+        #expect(decoded.items[1].openingNightPassed == nil)
     }
 
     // MARK: - Negative paths (#747)
@@ -154,6 +168,9 @@ struct PrepQueueContractTests {
         let decoded = try decoding(minimal)
         #expect(decoded.items[0].production == nil)
         #expect(decoded.items[0].reprepMode == nil)
+        // v4 (#1122) fields are optional too: a minimal item omits them and decodes to nil.
+        #expect(decoded.items[0].runEndDate == nil)
+        #expect(decoded.items[0].openingNightPassed == nil)
     }
 
     @Test func garbageIsRejectedRatherThanReadAsAnEmptyQueue() {

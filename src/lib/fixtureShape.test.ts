@@ -32,7 +32,7 @@ describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
   it("covers exactly the known prep-queue files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json"]);
   });
 
   for (const file of files) {
@@ -41,6 +41,14 @@ describe("prep-queue fixture shapes", () => {
       expect(() => assertPrepQueueShape(readJson("prep-queue", file), file, version)).not.toThrow();
     });
   }
+
+  // #1122: the run fields are v4 additions, so the guard must reject them appearing in an older
+  // fixture, the same way the prep-results guard rejects a too-new field below.
+  it("rejects a v4 run field appearing in a v3 fixture", () => {
+    const mutated = readJson("prep-queue", "v3.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].runEndDate = "2026-03-14";
+    expect(() => assertPrepQueueShape(mutated, "v3.json", 3)).toThrow(/runEndDate.*before version 4/);
+  });
 });
 
 describe("prep-results fixture shapes", () => {

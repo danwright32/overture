@@ -24,6 +24,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "never-host-venue-target",
       "no-pattern-guessed-high",
       "partial-performer-results-ok",
+      "passed-opening-not-named",
       "performer-misidentification-low",
       "press-media-disqualified",
       "pursue-each-named-performer",

@@ -56,13 +56,17 @@ const REPREP_MODE = ["draft_only", "contacts_only"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-3, additive: production at v2+ #586, reprepMode at v3+ #367)
+// overture-prep-queue.json (versions 1-4, additive: production at v2+ #586, reprepMode at v3+ #367,
+// runEndDate + openingNightPassed at v4+ #1122)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const items = requireArray(root.items, file, "items");
+  // v4 (#1122): the run's closing night and a passed-opening flag, so the drafter can pitch the whole
+  // run and never name a gone opening night.
+  const runFieldsAllowed = version >= 4;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -76,6 +80,17 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
     optionalString(o.possibleMatchName, file, `items[${i}].possibleMatchName`);
     if (o.production !== undefined) requireEnum(o.production, file, `items[${i}].production`, PRODUCTION);
     if (o.reprepMode !== undefined) requireEnum(o.reprepMode, file, `items[${i}].reprepMode`, REPREP_MODE);
+    if (runFieldsAllowed) {
+      optionalString(o.runEndDate, file, `items[${i}].runEndDate`);
+      if (o.openingNightPassed !== undefined && typeof o.openingNightPassed !== "boolean") {
+        fail(file, `items[${i}].openingNightPassed must be a boolean`);
+      }
+    } else {
+      if (o.runEndDate !== undefined) fail(file, `items[${i}].runEndDate must not be present before version 4`);
+      if (o.openingNightPassed !== undefined) {
+        fail(file, `items[${i}].openingNightPassed must not be present before version 4`);
+      }
+    }
   });
 }
 
