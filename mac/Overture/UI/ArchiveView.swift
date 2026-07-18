@@ -43,6 +43,14 @@ struct ArchiveView: View {
     @State private var replySending: [String: Date] = [:]
     @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
+    // #976: the show at the top of the scroll, bound so the list holds its place while its rows rebuild.
+    // `prospects` is a @Query, so any scout, Prep, send, or reply that touches one re-emits it and
+    // rebuilds this list, and a plain ScrollView drops its offset to the top on every one of those (the
+    // exact #974 shape SourcesView already carries). The identity is the show's own key, the SAME space
+    // the reveal jump below scrolls by, so a search or deep-link jump and this restore agree rather than
+    // fight: reveal sets this to its target before it scrolls, so the later rebuild holds the revealed
+    // row instead of yanking back to a stale top.
+    @State private var topKey: String?
 
     var initialHighlightKey: String? = nil
     var initialHighlightRecipientId: String? = nil
@@ -134,14 +142,20 @@ struct ArchiveView: View {
                                 dayOffOffer: dayOffOffer, outboundSendSince: outboundSending[item.id])
                         }
                     }
+                    .scrollTargetLayout()
                     .padding(OVSpacing.lg)
                 }
+                // #976: hold the scroll where Dan left it across a @Query rebuild (see topKey).
+                .scrollPosition(id: $topKey, anchor: .top)
                 // task(id:) restarts whenever highlightedKey changes, so this covers both the
                 // initial appearance (a jump from the global search bar) and every later reveal
                 // from this screen's own search field, not just the first one.
                 .task(id: highlightedKey) {
                     guard let key = highlightedKey else { return }
                     await ArchiveReveal.scrollAfterDelay(key: key) { key in
+                        // #976: point the persisted position at the reveal's target FIRST, so the
+                        // restore cooperates with the jump instead of racing it back to a stale row.
+                        topKey = key
                         withAnimation { proxy.scrollTo(key, anchor: .center) }
                     }
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
