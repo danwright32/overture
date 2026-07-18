@@ -36,7 +36,7 @@ the workflow's runbook is its spec.
 | `reply-classify-cancel` | App (`ReplyClassifyService.requestCancel`) writes it to ask a running reply-classify run to stop; App (`startClassify`) clears any stale one before a fresh run | `reply-classify-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename), `HandoffCleanupTests.swift` (retention) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
-| `overture-scout-extract-results.json` | Scout-extract run (workflow, rewrites it after every item, not only once at the end; #1015) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
+| `overture-scout-extract-results.json` | Scout-extract run (workflow, rewrites it after every item, not only once at the end; #1015) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1, 2, 3 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` **only**: seeds it, then derives every update from `overture-scout-extract-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`). #1015: the workflow never writes this file; a run that forgets to self-report (2026-07-16) can no longer leave the count wrong. | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `lib/progress-watcher.test.sh`, `ScoutProgressWiringGuardTests.swift` |
 | `scout-extract-cancel` | App (`ScoutExtractService.requestCancel`) writes it to ask a running read to stop; App (`startExtract`) clears any stale one before a fresh run | `scout-extract-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `ScoutCancelTests.swift`, `lib/scout-cancel.test.sh`, `ScoutCancelWiringGuardTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
@@ -321,3 +321,20 @@ locations. That is the same outcome as a v2 run that looked and found none. The 
 apart and does not need to, so do not add a version check to invent the distinction. `results-v1.json`
 stays byte-identical as that proof; `results-v2.json` is the location spec, and its cases are real rows
 from real pages.
+
+Version 3 (#897) adds an optional `monthsCovered` to each result: which of the pinned page's stitched
+month sections (the `<!-- overture-month ... -->` markers #858 writes) the run actually read. It exists
+to close a data-loss hole that opens the moment calendar pagination is turned on for the watchlist. A
+stitched page holds several months under one `sourceId` and one hash; a run that reads three of the four
+sections does not fail, it just returns fewer shows, and on a reconciling feed "fewer shows" reads as
+"those shows were cancelled". Nothing in the run's own verdict can tell "the calendar shrank" from "I
+read three of the four months", because a show the run never returned is not one it rejected. The app
+holds the truth the run cannot fake (the set of months it stitched into the pin, persisted on the source
+as `pendingPageMonths`), compares it to `monthsCovered`, and treats a shortfall as a NAMED incomplete
+read (`SweepCoverage` downgrades the effective verdict to `incomplete_extraction`): the shows the run did
+find still land, but the page is not marked finished and no feed health is recorded, so a short sweep can
+never mark a live show gone. Purely additive, and like `location` the version bump is documentation, not
+a behavioral gate: nothing reads `version`, and an absent `monthsCovered` (a v1/v2 file, or any
+single-month page) makes the check inert, which is exactly its dormant state on the watchlist today
+(`monthHorizon` is still 1). `results-v1.json`/`results-v2.json` stay byte-identical as that proof;
+`results-v3.json` is the coverage spec.
