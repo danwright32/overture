@@ -21,12 +21,26 @@ struct ProspectRowViewDraftTraceTests {
         return i
     }
 
+    // Archived / no draft body: the review panel isn't rendering, so the row badge is where the trace
+    // survives (the whole point of #879).
     @Test func aDraftedShowShowsWhichModelWroteIt() throws {
         let view = ProspectRowView(item: item(draftModel: "opus"), today: "2026-07-09",
                                    onKeep: {}, onDismiss: { _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.contains("Drafted by opus") })
+    }
+
+    // #1136: a card still in review (it has a draft body, so the DraftReviewView panel renders and shows
+    // "Drafted by opus" next to "Edited"). The row badge must NOT restate it, so the trace appears exactly
+    // once on the card, not twice.
+    @Test func aCardStillInReviewShowsTheTraceExactlyOnce() throws {
+        var reviewing = item(draftModel: "opus")
+        reviewing.draftBody = "Hello, I photograph performances."   // hasDraft -> the panel renders
+        let view = ProspectRowView(item: reviewing, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.filter { $0.contains("Drafted by opus") }.count == 1)
     }
 
     @Test func noModelStampShowsNoTraceTag() throws {

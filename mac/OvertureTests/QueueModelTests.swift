@@ -412,6 +412,37 @@ struct QueueWindowTests {
     }
 }
 
+// #1136: "Drafted by opus" showed twice on a card still in review, once in the row's badge and once
+// inside the draft-review panel (next to "Edited"). The panel renders exactly when the item has a draft
+// body (hasDraft), and it shows the trace itself, so the row badge only has a job to do once the panel is
+// gone (an archived show whose draft body is no longer carried), which is the case #879 built the badge
+// for. rowDraftTraceLabel is that rule, pulled out of the SwiftUI row so it can be pinned.
+@Suite("The row draft-trace badge yields to the panel (#1136)")
+struct RowDraftTraceBadgeTests {
+    @Test func hiddenWhileTheDraftPanelIsRendering() {
+        var q = item()
+        q.draftModel = "opus"
+        q.draftBody = "Hello, I photograph performances."   // hasDraft -> the panel renders and shows the trace
+        #expect(q.hasDraft)
+        #expect(q.rowDraftTraceLabel == nil)
+    }
+
+    @Test func shownOnceThePanelIsGone() {
+        var q = item()
+        q.draftModel = "opus"
+        q.draftBody = nil   // no draft body -> the panel does not render, so the badge carries the trace
+        #expect(!q.hasDraft)
+        #expect(q.rowDraftTraceLabel == "Drafted by opus")
+    }
+
+    @Test func nilWithNoModelStamp() {
+        var q = item()
+        q.draftModel = nil
+        q.draftBody = nil
+        #expect(q.rowDraftTraceLabel == nil)
+    }
+}
+
 // #1122: a multi-night run is judged by its CLOSING night, never its opening one (the rule
 // EasternDate.runLastNight already states and the scout import guard already honors). A run that opened
 // last week but runs through next week is still a live, pitchable show. Two queue surfaces keyed on the
