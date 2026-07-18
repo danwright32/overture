@@ -35,6 +35,19 @@ enum StageNavigation {
         prospects.filter { matches(focus, $0, today: today, now: now) }.map(\.naturalKey)
     }
 
+    // #1140: which rows the focused list shows. A stage pill (`stage` non-nil) re-derives its membership
+    // LIVE from the current prospects on every render, so a show that leaves the stage (a draft sent, so
+    // its status moves off `.drafted`) drops out of the focused list instead of lingering because the key
+    // set was frozen at tap time. The #308 away-alert leads path (`stage` nil) is not a stage: it is a
+    // specific named set Dan asked to see, so its keys are returned verbatim (the flat list renders
+    // whichever of them still exist). This lives here, not in the SwiftUI view, so it can be tested at all
+    // (the #863 lesson: a rule computed inside a view has no seam a test can reach).
+    static func focusedKeys(stage: StageFocus?, leadKeys: [String], in prospects: [Prospect],
+                            today: String = QueueModel.easternToday(), now: Date = Date()) -> [String] {
+        guard let stage else { return leadKeys }
+        return naturalKeys(for: stage, in: prospects, today: today, now: now)
+    }
+
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [
