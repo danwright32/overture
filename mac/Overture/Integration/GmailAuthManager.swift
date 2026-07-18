@@ -52,6 +52,24 @@ final class GmailAuthManager {
 
     func endConnectAttempt() { isConnecting = false }
 
+    // copy-inventory:ignore-start  developer diagnostic log to a file, not the app's own voice (#915)
+    // Traces the connect flow to ~/Library/Logs/Overture/gmail-connect-debug.log. The app runs resident
+    // via a LaunchAgent whose stdout/stderr are separate, and NSLog did not surface in `log show`, so a
+    // dedicated file is the reliable way to see exactly how far a failing connect got.
+    static func connectDebugLog(_ line: String) {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/Overture", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("gmail-connect-debug.log")
+        let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()
+        } else {
+            try? entry.data(using: .utf8)?.write(to: url)
+        }
+    }
+    // copy-inventory:ignore-end
+
     var isConnected: Bool { GmailCredentials.isConnected }
 
     // Begin the consent flow: open the browser, await the loopback redirect, exchange
@@ -62,6 +80,18 @@ final class GmailAuthManager {
         // listener on the exact port Google was redirecting to. Claimed synchronously before any await.
         guard beginConnectAttempt() else { throw AuthError.alreadyConnecting }
         defer { endConnectAttempt() }
+        // copy-inventory:ignore-start  developer diagnostic + a system activity reason, not the app's voice (#915)
+        Self.connectDebugLog("connect() begin")
+
+        // Hold an activity assertion for the whole flow so macOS App Nap does NOT suspend Overture while
+        // it waits in the BACKGROUND (Safari is frontmost during consent) for the loopback redirect. A
+        // napped app stops servicing its main dispatch queue, so the loopback listener silently stops
+        // accepting connections and Google's redirect hits a dead port ("Safari can't connect to
+        // 127.0.0.1"), instantly and every time. Ended when connect() returns or throws.
+        let napBlocker = ProcessInfo.processInfo.beginActivity(options: [.userInitiated],
+                                                               reason: "Connecting Gmail")
+        // copy-inventory:ignore-end
+        defer { ProcessInfo.processInfo.endActivity(napBlocker) }
 
         guard let client = GmailCredentials.loadClient() else { throw AuthError.noClientConfig }
 
@@ -70,6 +100,9 @@ final class GmailAuthManager {
         cancelInFlight()
 
         let port = try await startListener()
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("listener ready on 127.0.0.1:\(port)")
+        // copy-inventory:ignore-end
         let redirect = "http://127.0.0.1:\(port)"
         let pkce = GoogleOAuth.makePKCE(verifierBytes: Self.randomBytes(32))
         let state = Self.randomURLSafe(16)
@@ -81,6 +114,9 @@ final class GmailAuthManager {
         let authURL = GoogleOAuth.authorizationURL(config: config, pkce: pkce, state: state,
                                                    loginHint: SendIdentity.danWright.email)
         NSWorkspace.shared.open(authURL)
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("opened browser to Google; awaiting redirect on port \(port)")
+        // copy-inventory:ignore-end
 
         // Auto-give-up so the UI can never deadlock on "Connecting…" if the redirect
         // never arrives (stale tab, Google-side hang, etc.).
@@ -188,6 +224,9 @@ final class GmailAuthManager {
     }
 
     private func handleRedirect(request: String, conn: NWConnection) {
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("redirect received by the listener")
+        // copy-inventory:ignore-end
         // First line: "GET /?code=...&state=... HTTP/1.1"
         let firstLine = request.split(separator: "\r\n").first.map(String.init) ?? ""
         let path = firstLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
@@ -226,6 +265,9 @@ final class GmailAuthManager {
 
     private func failTimeout() {
         guard codeContinuation != nil else { return }
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("timed out waiting for the redirect (120s)")
+        // copy-inventory:ignore-end
         stopListener()
         let cont = codeContinuation
         codeContinuation = nil

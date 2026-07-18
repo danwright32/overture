@@ -30,4 +30,16 @@ struct GmailConnectReentrancyTests {
         // Now a genuine retry is allowed again.
         #expect(manager.beginConnectAttempt() == true)
     }
+
+    // While Overture waits IN THE BACKGROUND (Safari is frontmost during consent) for the loopback
+    // redirect, macOS App Nap can suspend it, which stops its main queue and silently kills the loopback
+    // listener, so Google's redirect hits a dead port ("Safari can't connect to 127.0.0.1"). connect()
+    // must hold an activity assertion for the whole flow to prevent that. This is system power-management
+    // behaviour with no runtime seam a unit test can reach, so it is guarded at the source (the same way
+    // the other view/flow-only invariants in this repo are).
+    @Test func connectHoldsAnActivityAssertionToPreventAppNap() {
+        let src = SourceGuardHelper.source("Overture/Integration/GmailAuthManager.swift")
+        #expect(src.contains("ProcessInfo.processInfo.beginActivity"))
+        #expect(src.contains("ProcessInfo.processInfo.endActivity"))
+    }
 }

@@ -28,7 +28,13 @@ What is not, and why:
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log to a file, not the app's own voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic + a system activity reason, not the app's voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
