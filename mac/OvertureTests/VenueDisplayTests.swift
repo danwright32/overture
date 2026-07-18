@@ -64,16 +64,31 @@ struct VenueDisplayTests {
         }
     }
 
-    // A comma-separated clause that names a real parent building, not a street address, must survive:
-    // it has no leading digit, which is the signal a real street-address clause always carries.
-    @Test func aRealParentVenueClauseIsKeptNotStripped() {
+    // A comma-separated clause that names a real parent building the map does NOT know, not a street
+    // address, must survive in the displayed hall: it has no leading digit, the signal a real
+    // street-address clause always carries.
+    @Test func anUnknownParentVenueClauseIsKeptNotStripped() {
         #expect(VenueDisplay.resolve("Playhouse Stage, Abrons Arts Center").hall
                 == "Playhouse Stage, Abrons Arts Center")
-        #expect(VenueDisplay.resolve("Stern Auditorium / Perelman Stage, Carnegie Hall").hall
-                == "Stern Auditorium / Perelman Stage, Carnegie Hall")
         // A non-address clause ("Fabbri Mansion") survives; the street clause after it does not.
         #expect(VenueDisplay.resolve("House of the Redeemer, Fabbri Mansion, 7 East 95th Street").hall
                 == "House of the Redeemer, Fabbri Mansion")
+    }
+
+    // #1064: "Stern Auditorium / Perelman Stage, Carnegie Hall" (and the slash-spacing variant) used to
+    // miss the curated map, because the trailing "Carnegie Hall" clause is not a street address so it was
+    // never stripped, so the row silently lost its "New York, NY" line while the bare-Stern rows kept it.
+    // Now the trailing known-parent clause is folded into the structured parent field: the card reads the
+    // same "Stern Auditorium / Perelman Stage, Carnegie Hall" AND regains its location.
+    @Test func aParentBuildingClauseInTheMapResolvesToLocation() {
+        for raw in ["Stern Auditorium / Perelman Stage, Carnegie Hall",
+                    "Stern Auditorium/Perelman Stage, Carnegie Hall"] {
+            let v = VenueDisplay.resolve(raw)
+            #expect(v.hall == "Stern Auditorium / Perelman Stage", "\(raw) hall")
+            #expect(v.parent == "Carnegie Hall", "\(raw) parent")
+            #expect(v.location == "New York, NY", "\(raw) location")
+            #expect(v.nameLine == "Stern Auditorium / Perelman Stage, Carnegie Hall", "\(raw) nameLine")
+        }
     }
 
     // The curated map is still the authority when it has an entry; the event's own `location` (#970)

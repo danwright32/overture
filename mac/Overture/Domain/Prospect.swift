@@ -730,8 +730,15 @@ final class Prospect {
     // part is CANONICALIZED so a scraped name and the same name fetched/decoded
     // elsewhere produce one key (the silent-mismatch root): HTML entities decoded,
     // unicode normalized (NFC), exotic whitespace folded, lowercased, trimmed.
+    // #1064: the venue is normalized through VenueNormalization BEFORE canonicalize, so two spellings of
+    // one physical venue (a bare name versus the same name with its street address appended, a comma
+    // before a state code, a street-suffix abbreviation, slash spacing) collapse to ONE key instead of
+    // inserting a second prospect row for the same show. canonicalize still lowercases, folds unicode
+    // whitespace, and decodes HTML entities on top. Existing stored rows carry their OLD, unfolded keys
+    // until NaturalKeyVenueMigration re-keys them at launch.
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {
-        [groupName, performanceDate ?? "", venue ?? ""]
+        let normalizedVenue = venue.map(VenueNormalization.normalizeForKey)
+        return [groupName, performanceDate ?? "", normalizedVenue ?? ""]
             .map(canonicalize)
             .joined(separator: "|")
     }
