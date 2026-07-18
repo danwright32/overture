@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **650 sentences**, from 210 source files.
+Every sentence Overture can say to Dan: **655 sentences**, from 211 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -536,6 +536,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Just this show"
     `UI/DraftReviewView.swift`
+"Keep 1 show"
+    `Domain/CancelledReadDisposition.swift`
+"Keep \(n) shows"
+    `Domain/CancelledReadDisposition.swift`
 "Keep editing"
     `UI/DaysOffView.swift`
 "Keep this page but stop flagging it, until its contents change"
@@ -835,6 +839,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "Reached out (\(count))"
     `UI/QueueView+Model.swift`
+"Read 1 show before you cancelled."
+    `Domain/CancelledReadDisposition.swift`
+"Read \(n) shows before you cancelled."
+    `Domain/CancelledReadDisposition.swift`
 "Read \(reads) times, never turned up a show to pitch."
     `Domain/SourceYield.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
@@ -913,6 +921,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Scout results"
     `UI/ScoutSummaryView.swift`
+"Scout stopped"
+    `Domain/CancelledReadDisposition.swift`
 "Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily."
     `App/RootView.swift`
 "Search shows, venues, contacts"
