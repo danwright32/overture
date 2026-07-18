@@ -164,6 +164,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // cannot drift into saying it differently.
     var draftTraceLabel: String? { DraftTrace.label(for: draftModel) }
 
+    // #1136: the draft trace for the ROW badge specifically. The draft-review panel renders exactly when
+    // the item has a draft body (hasDraft) and shows this same "Drafted by opus" line next to "Edited", so
+    // a row badge would state it twice. The badge is therefore shown only once the panel is gone (no draft
+    // body), which is the archived case #879 built the row badge for: model-vs-outcome staying visible
+    // after review. Decided here, tested, not in the SwiftUI row (#863).
+    var rowDraftTraceLabel: String? { hasDraft ? nil : draftTraceLabel }
+
     // #992: the one-line reason this show was placed too far, or nil unless the geo gate positively
     // placed it out of range. Shown on the row only while the "Too far" filter is engaged. Decided in
     // QueueModel (tested), not the SwiftUI body (#863).

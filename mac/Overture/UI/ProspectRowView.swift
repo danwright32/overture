@@ -288,12 +288,12 @@ struct ProspectRowView: View {
             // #596: surface at a glance when more than one recipient was found (e.g. 2 named
             // performers, #366), so Dan doesn't have to expand the row to notice.
             item.contactCountLabel.map { Tag(text: $0, tone: .info) },
-            // #879: which model wrote this draft, so the Archive (where the outcome eventually
-            // lands) can compare landed emails against ones that didn't by model. Shown on every
-            // row, not just Archive's, since it's the same durable tag idiom as the ones above and
-            // this is the one part of the card that survives after DraftReviewView's own review
-            // panel (the other place #846 shows this) stops rendering once a show is archived.
-            item.draftTraceLabel.map { Tag(text: $0, tone: .info) },
+            // #879/#1136: which model wrote this draft, so the Archive can compare landed emails against
+            // ones that didn't by model. Via rowDraftTraceLabel, which shows it ONLY once the draft-review
+            // panel is gone (no draft body): while the panel renders it shows the same line next to
+            // "Edited" (#846), so a row badge there would state it twice (#1136). This is the durable tag
+            // that survives after the panel stops rendering.
+            item.rowDraftTraceLabel.map { Tag(text: $0, tone: .info) },
         ].compactMap { $0 })
         .padding(.top, 2)
     }
