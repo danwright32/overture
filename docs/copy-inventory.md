@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **649 sentences**, from 208 source files.
+Every sentence Overture can say to Dan: **650 sentences**, from 208 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -834,6 +834,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "Reached out (\(count))"
     `UI/QueueView+Model.swift`
+"Read \(reads) times, never turned up a show to pitch."
+    `Domain/SourceYield.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
 "Read the \(count) I fixed"

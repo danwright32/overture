@@ -32,10 +32,20 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # the table; a cooperative stop between ticks also can never interrupt a source mid-write and corrupt the
 # shared results file the way a kill -9 could.
 . "$(dirname "$0")/lib/scout-cancel.sh"
+# #1026: the tool scope for this DETACHED run, in one place. The run reads untrusted web content and
+# writes Dan's outreach data, so it is restricted to exactly Read, Write and WebFetch. The restriction is
+# real (fail-closed), not the mere pre-approval that --allowedTools used to give: see lib/scout-tools.sh.
+. "$(dirname "$0")/lib/scout-tools.sh"
 open_run_log "scout-extract-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
+
+# #1026: resolve the fail-closed tool scope once, and refuse to start if it has drifted unsafe (an
+# auto-approving permission mode, or a forbidden tool in the allowlist). Both claude launch paths below
+# use this ONE value, so the restriction cannot be right on one and missing on the other. Fail loud: a
+# detached run that reads untrusted pages must never fall back to a shell-capable posture in silence.
+SCOUT_SCOPE="$(scout_extract_claude_scope)" || { echo "scout-extract: aborting, unsafe tool scope" >&2; exit 1; }
 
 QUEUE="$SUPPORT/overture-scout-extract-queue.json"
 RESULTS="$SUPPORT/overture-scout-extract-results.json"
@@ -200,8 +210,9 @@ file, every time, growing as you go:
 resolve_claude
 
 # Headless Claude Code run(s). Read (the pinned pages), Write (results + progress), WebFetch (each
-# event's detail page, for the venue and exact date, which the listings page usually lacks). No Bash, no
-# Skill, no WebSearch: this run reads files, follows links it was given, and writes two files.
+# event's detail page, for the venue and exact date, which the listings page usually lacks). Bash, Edit,
+# Skill and WebSearch are NOT reachable: SCOUT_SCOPE carries --permission-mode manual, so anything outside
+# the allowlist is denied rather than auto-approved by the inherited settings (#1026). See lib/scout-tools.sh.
 #
 # #1028: the queue is split into up to MAX_PARALLEL contiguous chunks and one claude drives each,
 # concurrently. Every source is in exactly one chunk, so each claude writes its OWN chunk-results file
@@ -214,9 +225,10 @@ run_claude_on_chunk() {
   local chunk_prompt
   chunk_prompt="${PROMPT//$QUEUE/$1}"
   chunk_prompt="${chunk_prompt//$RESULTS/$2}"
+  # shellcheck disable=SC2086
   "$CLAUDE" -p "$chunk_prompt" \
     --model "${OVERTURE_MODEL_EXTRACTION}" \
-    --allowedTools "Read,Write,WebFetch" >> "$3" 2>&1
+    $SCOUT_SCOPE >> "$3" 2>&1
 }
 
 cd "$PROJECT_DIR"
@@ -282,9 +294,10 @@ else
   # Fallback for a node-free machine (split printed 0): run a single claude against the full queue,
   # writing $RESULTS directly, exactly as the sequential path always did.
   echo "scout-extract: not chunking (node unavailable or empty queue); running one process"
+  # shellcheck disable=SC2086
   "$CLAUDE" -p "$PROMPT" \
     --model "${OVERTURE_MODEL_EXTRACTION}" \
-    --allowedTools "Read,Write,WebFetch" || CLAUDE_STATUS=$?
+    $SCOUT_SCOPE || CLAUDE_STATUS=$?
 fi
 
 # #1015: one last derive now that claude has exited, so the count reflects whatever landed between
