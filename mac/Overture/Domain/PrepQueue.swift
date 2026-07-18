@@ -69,6 +69,25 @@ enum PrepQueueBuilder {
                  hasUnclearedConflict: p.hasUnclearedConflict)
     }
 
+    // #953: whether a kept prospect defaults to INCLUDED when Dan opens a Prep run, decided purely by
+    // how far out its performance is. A show inside the calendar horizon (today through today +
+    // `monthsAhead` months) defaults checked; one beyond it defaults held (unchecked), so a long
+    // lead-time show is not drafted before it is worth reaching out. This is only the DEFAULT: Dan can
+    // toggle any row before running, and the selection is per-run and transient, never a stored flag.
+    //
+    // An undated prospect defaults IN: there is no date to hold it by, and this preserves the pre-#953
+    // behaviour of prepping everything eligible. The horizon reuses CalendarMonthIndex.defaultHorizon
+    // (the same four-month cap the scout reads its calendars to, Dan's call) so this window and that one
+    // can never drift into two different answers.
+    static func defaultsIncludedInPrepRun(performanceDate: String?, now: Date,
+                                          monthsAhead: Int = CalendarMonthIndex.defaultHorizon) -> Bool {
+        guard let performanceDate, let showDay = EasternDate.date(from: performanceDate) else { return true }
+        let todayStart = EasternDate.date(from: EasternDate.today(now)) ?? now
+        guard let boundary = EasternDate.calendar.date(byAdding: .month, value: monthsAhead, to: todayStart)
+        else { return true }
+        return showDay <= boundary
+    }
+
     // The #Predicate mirror of needsPrep above, for the one call site (RootView's toPrep @Query)
     // that needs a compiled SwiftData predicate rather than a plain Swift function. Kept as a
     // single named, shared value so there is exactly one place this expression lives, not one
