@@ -58,8 +58,71 @@ struct ExtractedEventGuardTests {
         }
     }
 
-    @Test func anEventWithNoTitleIsRejected() {
-        #expect(ExtractedEventGuard.rejection(for: event(title: "", venue: "Merkin Hall")) == .noTitle)
+    // #1087: an empty title no longer drops a show on its own. This row (the helper always carries a
+    // presenter) now has a name derived from that presenter, so it is KEPT rather than rejected as
+    // `.noTitle`. The dedicated rescue tests below pin the naming, the precedence, and the one case
+    // where nothing at all can name the show.
+    @Test func anEmptyTitleWithAPresenterIsRescuedNotRejected() {
+        #expect(ExtractedEventGuard.rejection(for: event(title: "", venue: "Merkin Hall")) == nil)
+    }
+
+    // #1087: a genuine performance can arrive with an EMPTY title but a real presenter (the act itself),
+    // venue, and date. A touring artist page that lists dates under one performer names no per-show
+    // "title" at all, only the performer. Dropping such a show as `.noTitle` is the silent loss #799's
+    // venue guard exists to prevent, from the other side: the show has a perfectly good name (its
+    // presenter). The guard now tries to name it before dropping, so the row is kept and its name is the
+    // presenter, which flows through to the prospect's `groupName` and becomes half its natural key.
+    @Test func aTitlelessShowIsRescuedAndNamedByItsPresenter() {
+        let e = ExtractedEvent(title: "", presenter: "Aurora Strings", venue: "Merkin Hall",
+                               performanceDate: "2026-09-19", sourceUrl: "https://org.example/a",
+                               location: nil)
+        #expect(ExtractedEventGuard.rejection(for: e) == nil)
+        #expect(ExtractedEventGuard.displayName(for: e) == "Aurora Strings")
+    }
+
+    // No title AND no presenter, but a real venue: the venue names it. A named room is a weaker name than
+    // the act, but it is a real one and far better than dropping a genuine show. It becomes the
+    // prospect's `groupName`.
+    @Test func aTitlelessPresenterlessShowIsRescuedByItsVenue() {
+        let e = ExtractedEvent(title: "", presenter: nil, venue: "Merkin Hall",
+                               performanceDate: "2026-09-19", sourceUrl: "https://org.example/a",
+                               location: nil)
+        #expect(ExtractedEventGuard.rejection(for: e) == nil)
+        #expect(ExtractedEventGuard.displayName(for: e) == "Merkin Hall")
+    }
+
+    // Precedence is title, then presenter, then venue: the "who" is named before the "where", because
+    // that is what Dan reads first and what the pitch is about. When both a presenter and a venue are
+    // present on a titleless row, the presenter wins.
+    @Test func presenterWinsOverVenueWhenNamingATitlelessShow() {
+        let e = ExtractedEvent(title: "   ", presenter: "Aurora Strings", venue: "Merkin Hall",
+                               performanceDate: "2026-09-19", sourceUrl: "https://org.example/a",
+                               location: nil)
+        #expect(ExtractedEventGuard.displayName(for: e) == "Aurora Strings")
+    }
+
+    // A real title still names the show, ahead of both presenter and venue. The rescue is a fallback, not
+    // a replacement.
+    @Test func aTitledShowIsStillNamedByItsTitle() {
+        let e = ExtractedEvent(title: "Winter Gala", presenter: "Aurora Strings", venue: "Merkin Hall",
+                               performanceDate: "2026-09-19", sourceUrl: "https://org.example/a",
+                               location: nil)
+        #expect(ExtractedEventGuard.displayName(for: e) == "Winter Gala")
+    }
+
+    // Nothing to name it with: empty title, empty presenter, empty venue. THIS is what `.noTitle` now
+    // means, a row with no name and no way to derive one, rather than merely an absent title string.
+    // Whitespace-only fields count as empty.
+    @Test func aShowWithNothingToNameItIsStillDroppedAsNoTitle() {
+        #expect(ExtractedEventGuard.rejection(for: ExtractedEvent(
+            title: "", presenter: nil, venue: nil, performanceDate: "2026-09-19",
+            sourceUrl: "https://org.example/a", location: nil)) == .noTitle)
+        #expect(ExtractedEventGuard.rejection(for: ExtractedEvent(
+            title: "   ", presenter: "  ", venue: "  ", performanceDate: "2026-09-19",
+            sourceUrl: "https://org.example/a", location: nil)) == .noTitle)
+        #expect(ExtractedEventGuard.displayName(for: ExtractedEvent(
+            title: "", presenter: nil, venue: nil, performanceDate: nil,
+            sourceUrl: nil, location: nil)) == nil)
     }
 
     // #995. A city is not a room, and a run that copies the location into the venue defeats this whole
@@ -219,7 +282,7 @@ struct ScoutExtractResultsGuardTests {
             extracted("No venue", venue: nil),                                       // venue
             extracted("Placeholder", venue: "3"),                                    // venue
             extracted("City", venue: "Harrogate, UK", location: "Harrogate, UK"),    // venue
-            extracted("", venue: "Merkin Hall")                                      // title
+            extracted("", venue: nil)                                                // title (#1087: nothing to name it, and no venue either)
         ])
         #expect(counts.venueRelated == 3)
         #expect(counts.titleRelated == 1)

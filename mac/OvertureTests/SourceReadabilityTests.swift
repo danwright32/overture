@@ -205,16 +205,21 @@ struct SourceReadabilityPersistenceTests {
         #expect(s.readabilityNote?.contains("won't mark anything") == true)   // 50%, far past tolerance
     }
 
-    // #1032: a row with a venue but no NAME is dropped and recorded as a title drop, apart from the venue
+    // #1032: a row with genuinely NO name is dropped and recorded as a title drop, apart from the venue
     // drops, so the source's own note names it correctly ("no title") instead of "no venue on their own
     // detail page" (which no detail page would ever fix). Through the REAL ingest, so the wire that carries
     // the split to Dan is exercised, not only the pure note.
+    //
+    // #1087: "no name" now means title AND presenter AND venue all empty. A row with a real venue (or a
+    // real presenter) is no longer a title drop, it is RESCUED and named from that field, so this uses a
+    // row with nothing at all to name it (the helper sets presenter = title, so an empty title also
+    // leaves the presenter empty; a nil venue leaves nothing to fall back to).
     @Test func anIngestRecordsATitlelessDropSeparately() throws {
         let ctx = try context()
         let s = source(ctx)
 
         ingest([event("Read", venue: "Merkin Hall"),
-                event("", venue: "Merkin Hall")], into: ctx)   // a real venue, but no name at all
+                event("", venue: nil)], into: ctx)   // no title, no presenter, no venue: nothing to name it
 
         #expect(s.lastReadableCount == 1)
         #expect(s.lastUnreadableCount == 1)

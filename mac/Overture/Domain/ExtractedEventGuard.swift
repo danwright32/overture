@@ -72,8 +72,13 @@ enum ExtractedEventGuard {
     ]
 
     static func rejection(for event: ExtractedEvent) -> Rejection? {
-        let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return .noTitle }
+        // #1087: drop for a missing NAME, not for a missing title STRING. A genuine performance can come
+        // back with an empty `title` but a real `presenter` (the act itself) and venue: a touring artist
+        // page lists dates under one performer and names no per-show title at all. That show has a
+        // perfectly good name (its presenter, then its venue), and dropping it is the same silent loss
+        // the venue guard exists to prevent, from the other side. So `.noTitle` fires only when there is
+        // genuinely nothing to name it with. See `displayName` for the precedence.
+        guard displayName(for: event) != nil else { return .noTitle }
 
         let venue = (event.venue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !venue.isEmpty else { return .noVenue }
@@ -83,6 +88,27 @@ enum ExtractedEventGuard {
         if venue.allSatisfy({ $0.isNumber }) { return .placeholderVenue }
         if nonAnswers.contains(venue.lowercased()) { return .placeholderVenue }
         if restatesLocation(venue: venue, location: event.location) { return .locationAsVenue }
+        return nil
+    }
+
+    // #1087: the name this show will carry, and the SINGLE authority on it, so the guard's `.noTitle`
+    // decision and the name ProspectAssembler stamps into `groupName` can never disagree. Precedence is
+    // title, then presenter, then venue: the show's own title if it has one, else the act (the "who",
+    // which is what the pitch is about and what Dan reads first), else the room (the "where"), each
+    // trimmed. `groupName` is half the natural key (Prospect.makeNaturalKey pairs it with the date and
+    // venue), so a derived name keys the same way a real title would. Returns nil only when title,
+    // presenter, and venue are all empty or blank, which is exactly the row `.noTitle` now rejects: a
+    // show with no name and no way to derive one.
+    //
+    // A caveat this deliberately accepts: if a later scout returns the SAME show WITH a title, its
+    // groupName shifts from the presenter to the title and its natural key moves, the same re-key a title
+    // edit already causes. ScoutService's existing re-key guards (source listing + date, shared member
+    // URL) absorb that; this does not introduce a new class of drift, it reuses the one already handled.
+    static func displayName(for event: ExtractedEvent) -> String? {
+        for candidate in [event.title, event.presenter ?? "", event.venue ?? ""] {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
         return nil
     }
 
