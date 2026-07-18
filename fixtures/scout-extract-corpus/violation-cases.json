@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "state-name-shortened-to-abbreviation",
+      "runbook": "3a",
+      "why": "Page wrote 'Baltimore, Maryland'; a run that tidied it to 'Baltimore, MD' has normalized a verbatim location.",
+      "pageText": "Upcoming appearances Guest soloist Baltimore, Maryland Nov 14",
+      "venue": null,
+      "location": "Baltimore, MD",
+      "expectViolation": "location-not-verbatim"
+    },
+    {
+      "id": "country-appended-to-city",
+      "runbook": "3a",
+      "why": "Page wrote only 'Amsterdam'; a run that expanded it to 'Amsterdam, Netherlands' added a country the page never stated.",
+      "pageText": "Winter tour Concertgebouw Amsterdam Dec 2",
+      "venue": "Concertgebouw",
+      "location": "Amsterdam, Netherlands",
+      "expectViolation": "location-not-verbatim"
+    },
+    {
+      "id": "city-guessed-from-org-name",
+      "runbook": "3a",
+      "why": "The page names no city anywhere; a run that inferred 'New York, NY' from the ensemble's home base guessed a place, the one failure that can hide a real show.",
+      "pageText": "Smoke Ring Quartet Gigs LABBS 50th Convention Harrogate Convention Centre Oct 30",
+      "venue": "Harrogate Convention Centre",
+      "location": "New York, NY",
+      "expectViolation": "location-not-verbatim"
+    },
+    {
+      "id": "location-copied-into-venue-with-location-set",
+      "runbook": "3",
+      "why": "The real venue-less scout returned venue: 'Baltimore, Maryland'. A city is not a room; it belongs in location, never venue.",
+      "pageText": "Guest soloist Baltimore, Maryland Nov 14",
+      "venue": "Baltimore, Maryland",
+      "location": "Baltimore, Maryland",
+      "expectViolation": "location-in-venue"
+    },
+    {
+      "id": "location-copied-into-venue-with-location-null",
+      "runbook": "3",
+      "why": "Same disguise as above but the run left location null, so the equality check alone would miss it. venue: 'Harrogate, UK' still names a bare place, not a room.",
+      "pageText": "LABBS 50th Convention Harrogate, UK Oct 30",
+      "venue": "Harrogate, UK",
+      "location": null,
+      "expectViolation": "location-in-venue"
+    }
+  ]
+}
