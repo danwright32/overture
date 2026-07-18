@@ -9,6 +9,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# shellcheck source=scripts/lib/install-dedupe.sh
+source "$(pwd)/scripts/lib/install-dedupe.sh"
+
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
 CONFIG="Release"
@@ -68,6 +71,12 @@ xattr -dr com.apple.quarantine "${DEST}" 2>/dev/null || true
 # Ad-hoc re-sign so the bundle identity is stable across rebuilds
 # (helps TCC/Full Disk Access grants persist).
 codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
+
+# Drop the stray build copy and make /Applications the canonical overture:// handler, so the
+# `open overture://show` surface below can only resolve to the installed bundle. Without this a
+# second Release copy in the build products shadowed it and launched a duplicate the store lock
+# then refused (the "Overture's data is unavailable" clash, 2026-07-18).
+overture_dedupe_installed_bundle "${BUILT_APP}" "${DEST}"
 
 # Install/refresh the login agent and load it into the user's GUI (Aqua) session — the GUI session
 # is what the menu-bar NSStatusItem requires (a system domain would have no menu bar). RunAtLoad then
