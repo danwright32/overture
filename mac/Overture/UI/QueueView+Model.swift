@@ -330,7 +330,12 @@ enum QueueModel {
     //
     // ONLY a positive placement hides. Unknown keeps, always (Dan's spec), which is what makes this
     // safe to ship on all 38 sources at once: it can only take shows the resolver can actually place
-    // out of range. Every live row today has no location, so this is a no-op on the queue Dan has.
+    // out of range. When this shipped no live row carried a location yet, so it changed nothing on the
+    // queue Dan had then; that was a point in time observation, not a standing guarantee, and as the
+    // geography work (#970) starts naming locations this gate takes effect. The behavior that matters
+    // (a positive placement hides, an unknown location always keeps) is pinned by QueueGeoFilterTests
+    // independently of what the store currently holds, so this comment is not the only thing keeping it
+    // true (#1099).
     static func isTooFar(_ item: QueueItem) -> Bool {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
         return EventPlace.resolve(location: item.location, discipline: discipline).verdict == .outOfRange
