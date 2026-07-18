@@ -39,6 +39,13 @@ echo "==> scripts/check-brand-voice-drift.sh"
 echo "==> scripts/check-health-recorder-drift.sh"
 "${REPO_ROOT}/scripts/check-health-recorder-drift.sh"
 
+# Fails if any detached "$CLAUDE" -p runner under mac/scripts hardcodes a literal --allowedTools
+# instead of folding through a *_claude_scope function in mac/scripts/lib/claude-run-scope.sh (#1102).
+# Guards against a FUTURE fourth runner reintroducing the bare --allowedTools hole #1026/#1097 already
+# closed for scout-extract, prep and reply-classify.
+echo "==> scripts/check-detached-runner-scope.sh"
+"${REPO_ROOT}/scripts/check-detached-runner-scope.sh"
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 
