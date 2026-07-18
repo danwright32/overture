@@ -299,6 +299,14 @@ a run actually read and what it produced when something went wrong.
 
 ## Tools
 
-`--allowedTools "Read,Write,WebFetch"`. No `Bash`, no `Skill`, no `WebSearch`: this run reads files,
-follows links it was handed, and writes two files. `reply-classify-run.sh` already ships the tighter
-`"Read,Write"` grant; only `prep-run.sh` needs a wide one.
+`--allowedTools "Read,Write,WebFetch" --permission-mode manual` (built from `lib/scout-tools.sh`, #1026).
+This run reads files, follows links it was handed, and writes two files, nothing else. `Bash`, `Edit`,
+`Skill` and `WebSearch` are genuinely unreachable, not merely un-listed: `--allowedTools` on its own only
+PRE-APPROVES the three named tools, and a detached `claude -p` inherits `~/.claude` settings where
+`permissions.defaultMode` is `auto`, which auto-approves every other tool too (a 2026-07-17 run made 13
+`Bash` and 14 `Edit` calls with no denials). `--permission-mode manual` overrides that inherited auto, so
+anything outside the allowlist needs an approval the detached run cannot give and is denied. If the scope
+is ever edited into an unsafe posture (an auto-approving mode, or a forbidden tool in the allowlist) the
+runner refuses to start rather than silently regaining a shell. `reply-classify-run.sh` and `prep-run.sh`
+still carry the older `--allowedTools`-only posture (prep deliberately wants `Bash`/`Skill` for the
+brand-voice skill); tightening those the same way is tracked separately.
