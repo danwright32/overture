@@ -54,6 +54,15 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     func verdict(for sourceId: String) -> PageVerdict? {
         results.first { $0.sourceId == sourceId }?.verdict
     }
+
+    // #1054: how many shows across all sources would survive the guard and could actually land in the
+    // queue. This is the honest number the cancel prompt shows Dan, counted through the SAME
+    // ExtractedEventGuard the ingest uses, so "read 7 shows" can never disagree with what Keep imports.
+    var usableEventCount: Int {
+        results.reduce(0) { total, result in
+            total + result.events.filter { ExtractedEventGuard.isUsable($0.asExtractedEvent) }.count
+        }
+    }
 }
 
 struct ScoutExtractResult: Codable, Equatable, Sendable {
@@ -91,5 +100,12 @@ enum ScoutExtractResultsDecoder {
     static var defaultURL: URL {
         StoreLocation.handoffDirectory
             .appendingPathComponent("overture-scout-extract-results.json")
+    }
+
+    // #1054: throw the partial file away when Dan discards a cancelled read. Deleting it (not merely
+    // skipping the import) is what makes discard stick: the reattach path (#1035) re-reads this exact file
+    // at the next launch, so a lingering file would silently resurrect the shows he just chose to drop.
+    static func discard(at url: URL = defaultURL) {
+        try? FileManager.default.removeItem(at: url)
     }
 }

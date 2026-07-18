@@ -44,6 +44,9 @@ struct RootView: View {
     // stopped via a cancel file the runner checks; and finishScout reads it to close quietly instead of
     // popping a summary for a run he chose to abandon.
     @State private var scoutCancelRequested = false
+    // #1054: non-nil while the keep-or-discard prompt is up, holding the count of shows a cancelled read
+    // wrote before it stopped. Its partial results file is NOT imported until Dan answers.
+    @State private var cancelledScoutRead: Int?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
     // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
@@ -545,6 +548,17 @@ struct RootView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+            // #1054: a scout Dan cancelled had already read some shows before it stopped. Rather than
+            // import them silently after he hit Cancel, ask. Keep is the default (the shows are real finds
+            // and keeping is reversible); Discard is destructive because it drops them and deletes the file.
+            .alert(CancelledReadCopy.title, isPresented: cancelledReadBinding,
+                   presenting: cancelledScoutRead) { count in
+                Button(CancelledReadCopy.keepLabel(readCount: count)) { keepCancelledRead() }
+                    .keyboardShortcut(.defaultAction)
+                Button(CancelledReadCopy.discardLabel, role: .destructive) { discardCancelledRead() }
+            } message: { count in
+                Text(CancelledReadCopy.message(readCount: count))
+            }
             // #1034/#1027: ONE presented sheet for a manual scout, from click to results. While the run
             // is in flight (scoutWarnings still nil) it is the ScoutProgressView takeover; the instant the
             // run finishes with something to say it becomes #1027's ScoutSummaryView, in the same sheet,
@@ -789,7 +803,17 @@ struct RootView: View {
     // #1027: returns what the read produced so runScout can fold it into ONE end-of-scout popup, instead
     // of setting a warning here (mid-run, before the popup) as it used to. The finishedEmpty message is
     // its own return, because that signal (the reader ran and produced nothing) has no source to attach to.
-    private func watchScoutExtractRun() async -> (outcome: ScoutService.Outcome?, finishedEmpty: String?) {
+    // #1054: what a scout-extract read produced. Richer than the old (outcome, finishedEmpty) tuple so one
+    // case can carry "cancelled with partial shows, deliberately NOT imported yet" up to the caller, which
+    // then shows Dan the keep-or-discard prompt instead of importing them silently.
+    private enum ScoutReadResult {
+        case ingested(ScoutService.Outcome?)
+        case finishedEmpty(String)
+        case idle
+        case cancelledWithPartial(readCount: Int)
+    }
+
+    private func watchScoutExtractRun() async -> ScoutReadResult {
         while ScoutExtractService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
@@ -798,13 +822,33 @@ struct RootView: View {
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
-            return (ingestScoutExtract(), nil)
+            // #1054: a read Dan cancelled is not imported here. The decision (ask, and with what count) is
+            // the pure CancelledReadDisposition, so the rule stays testable rather than living in the view.
+            switch CancelledReadDisposition.decide(
+                cancelled: scoutCancelRequested,
+                readCount: scoutCancelRequested ? pendingCancelledReadCount() : 0) {
+            case .ingest:
+                return .ingested(ingestScoutExtract())
+            case .promptKeepOrDiscard(let count):
+                return .cancelledWithPartial(readCount: count)
+            case .discardSilently:
+                ScoutExtractResultsDecoder.discard()   // nothing usable to keep; do not leave it to reattach
+                return .idle
+            }
         case .finishedEmpty:
-            return (nil, DetachedRunOutcome.finishedEmptyMessage(
+            return .finishedEmpty(DetachedRunOutcome.finishedEmptyMessage(
                 .scoutExtract, tail: RunLog.tail(8, from: RunLog.scoutExtractURL)))
         case .idle:
-            return (nil, nil)
+            return .idle
         }
+    }
+
+    // #1054: how many shows the cancelled read wrote that would actually survive the guard, read from the
+    // same results file the ingest would use, without importing anything.
+    private func pendingCancelledReadCount() -> Int {
+        guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL),
+              let results = try? ScoutExtractResultsDecoder.decode(data) else { return 0 }
+        return results.usableEventCount
     }
 
     @discardableResult
@@ -862,6 +906,11 @@ struct RootView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    // #1054: presents the keep-or-discard alert while a cancelled read is awaiting Dan's choice.
+    private var cancelledReadBinding: Binding<Bool> {
+        Binding(get: { cancelledScoutRead != nil }, set: { if !$0 { cancelledScoutRead = nil } })
     }
 
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
@@ -961,9 +1010,18 @@ struct RootView: View {
                     scoutNativeSnapshot = nil
                     let read = await watchScoutExtractRun()
                     guard gen == scoutGeneration else { return }
-                    extract = read.outcome
-                    finishedEmpty = read.finishedEmpty
                     readingStartedAt = nil
+                    switch read {
+                    case .ingested(let o): extract = o
+                    case .finishedEmpty(let m): finishedEmpty = m
+                    case .idle: break
+                    case .cancelledWithPartial(let count):
+                        // #1054: a cancelled read's shows are not imported yet. Wind the run down and hand
+                        // the keep-or-discard choice to Dan; its buttons own what happens next, so skip
+                        // finishScout (which would quietly close a cancelled run and drop the choice).
+                        presentCancelledRead(count: count)
+                        return
+                    }
                 }
                 // #1027/#1034: ONE surface at the true end of the whole run. A manual run's takeover
                 // becomes the branded summary in place; an unattended scheduled run leaves a quiet line.
@@ -1036,10 +1094,19 @@ struct RootView: View {
         let read = await watchScoutExtractRun()
         guard gen == scoutGeneration else { return }
         readingStartedAt = nil
-        finishScout(ScoutWarnings.from(native: ScoutService.Outcome(found: 0, inserted: 0, updated: 0,
-                                                                    skipped: 0, uncertain: 0),
-                                       extract: read.outcome, finishedEmpty: read.finishedEmpty),
-                    auto: false)
+        let emptyNative = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        switch read {
+        case .ingested(let o):
+            finishScout(ScoutWarnings.from(native: emptyNative, extract: o, finishedEmpty: nil), auto: false)
+        case .finishedEmpty(let m):
+            finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: m), auto: false)
+        case .idle:
+            finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: nil), auto: false)
+        case .cancelledWithPartial(let count):
+            // #1054: not expected on a reattach (Dan did not cancel this run), but surface the choice
+            // rather than importing silently if it ever does.
+            presentCancelledRead(count: count)
+        }
     }
 
     // #1037: stop the run for real, cooperatively. The native sweep sees the flag and stops between
@@ -1052,6 +1119,33 @@ struct RootView: View {
         ScoutExtractService.requestCancel()
         scoutSheetShown = false
         scoutIsManual = false
+    }
+
+    // #1054: the cancelled read stopped with partial shows. Wind the run down and raise the keep-or-discard
+    // prompt; its buttons decide whether those shows enter the queue. Clearing scoutCancelRequested hands
+    // the decision to Dan (the flag has done its job of stopping the run).
+    private func presentCancelledRead(count: Int) {
+        isScanning = false
+        scoutStartedAt = nil
+        readingStartedAt = nil
+        scoutIsManual = false
+        scoutNativeSnapshot = nil
+        scoutCancelRequested = false
+        cancelledScoutRead = count
+    }
+
+    // #1054: Dan kept the cancelled read's shows. Import the partial file the normal way (dedup and
+    // classify still apply); they join the queue like any other find.
+    private func keepCancelledRead() {
+        ingestScoutExtract()
+        cancelledScoutRead = nil
+    }
+
+    // #1054: Dan discarded them. Delete the partial file so the reattach path cannot re-import it on a
+    // later launch, and clear the prompt. Nothing enters the queue.
+    private func discardCancelledRead() {
+        ScoutExtractResultsDecoder.discard()
+        cancelledScoutRead = nil
     }
 
     // #1034: the stalled-state Retry. A stalled modal means the run's heartbeat has gone dead, so abandon
