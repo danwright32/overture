@@ -33,6 +33,12 @@ echo "==> scripts/run-shell-fixtures.sh"
 echo "==> scripts/check-brand-voice-drift.sh"
 "${REPO_ROOT}/scripts/check-brand-voice-drift.sh"
 
+# Fails if a second near-copy source-health recorder has been reintroduced in the scout ingest files
+# (#1073). The #987/#1001/#1005 defect (two recorders drifting until one silently stops writing a
+# field) is caught at push time instead of in production.
+echo "==> scripts/check-health-recorder-drift.sh"
+"${REPO_ROOT}/scripts/check-health-recorder-drift.sh"
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 
