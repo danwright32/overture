@@ -116,6 +116,18 @@ struct OrgIdentityTests {
         #expect(OrgIdentity.splitCamelCase("BAM") == "BAM")           // an acronym is not three words
     }
 
+    // #982: the source comment names "MoMA" as an acronym the splitter leaves whole, but a mixed-case
+    // acronym carries an internal lowercase, so the all-caps guard alone did not catch it and "MoMA"
+    // came out "Mo MA". A mangled org name silently matches nothing on the venue page, which is the exact
+    // #799 failure this file exists to prevent (strangers' shows leaking into the queue). The split now
+    // fires only where an uppercase BEGINS a lowercase-continued word, so a real word boundary still
+    // splits while an acronym's uppercase run stays intact.
+    @Test func leavesAMixedCaseAcronymWhole() {
+        #expect(OrgIdentity.splitCamelCase("MoMA") == "MoMA")
+        // The genuine camelCase boundary must still split, so the fix is a narrowing, not a blanket off.
+        #expect(OrgIdentity.splitCamelCase("SecondEndingEnsemble") == "Second Ending Ensemble")
+    }
+
     // Falls back to the page title, which is where most sites put the org's name.
     @Test func fallsBackToTheTitleThenTheDomain() {
         #expect(OrgIdentity.name(inPage: "<title>Brooklyn Youth Chorus | Home</title>", url: url)
