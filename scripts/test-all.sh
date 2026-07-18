@@ -39,6 +39,16 @@ echo "==> scripts/check-brand-voice-drift.sh"
 echo "==> scripts/check-health-recorder-drift.sh"
 "${REPO_ROOT}/scripts/check-health-recorder-drift.sh"
 
+# Lists every LIVE-STORE-CLAIM tag (a doc/comment count measured against Dan's live SwiftData store,
+# e.g. "0 of 26 distinct venue strings contain a city") with its last-verified date, and warns
+# (advisory only) on a stale one or a claim that looks measured but carries no tag at all (#1063). The
+# #1060 fix caught one instance of exactly this by accident; three more copies of that same stale claim
+# had survived untouched elsewhere in the repo until this issue's own sweep found them. Never depends on
+# the live store itself (CI and any machine without it simply can't have that file), so it only fails on
+# a genuinely malformed tag or a checked-in fixture that disagrees with its own claim.
+echo "==> scripts/check-live-store-claims.sh"
+"${REPO_ROOT}/scripts/check-live-store-claims.sh"
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 

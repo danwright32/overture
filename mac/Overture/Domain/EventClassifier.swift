@@ -16,8 +16,9 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     // comma-joined list of four cities, and deciding what any of that MEANS is a resolver's job, not
     // the wire's. Nil means the page named no place, which is common and is not an error.
     //
-    // The venue cannot stand in for this. Measured on the live store: 0 of 26 distinct venue strings
-    // contain a comma, and the touring artist pages this exists for frequently name no venue at all.
+    // The venue cannot stand in for this reliably: a venue can pick up a comma only when a source page
+    // bakes a full street address into it (#1030), an artifact of the address rather than a location
+    // report, and the touring artist pages this exists for frequently name no venue at all.
     var location: String?
 }
 

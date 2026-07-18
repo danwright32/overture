@@ -87,10 +87,11 @@ struct ScoutExtractContractTests {
     // #970 Phase 1. The run reports WHERE a show is, verbatim, as the page wrote it.
     //
     // This exists because the alternatives were measured and do not work. Reading the city out of the
-    // venue string fires on nothing (0 of 26 live venue strings contain a comma). Reading it out of the
-    // title fires only on Carnegie's NYO tour convention, and on no other source. The touring artist
-    // pages this is for carry the city in a field of their own, and often name no venue at all, so the
-    // only way the app can learn a place is for the run to hand it over.
+    // venue string is unreliable: a venue only picks up a comma when a source page bakes a full street
+    // address into it (#1030), an artifact of the address rather than a location report. Reading it out
+    // of the title fires only on Carnegie's NYO tour convention, and on no other source. The touring
+    // artist pages this is for carry the city in a field of their own, and often name no venue at all,
+    // so the only way the app can learn a place is for the run to hand it over.
     //
     // Verbatim, NOT normalized: the run must not decide what "Harrogate, UK" means. Every real shape
     // has to survive the wire intact for the resolver to judge later.

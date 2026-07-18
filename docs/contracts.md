@@ -290,9 +290,11 @@ Version 2 (#970) adds an optional `location` to each event: where the page says 
 exactly as written. It is the only way the app can learn where a show is, and it exists because the
 alternatives were measured against real data and do not work:
 
-- The **venue** cannot answer it. On the live store, 0 of 26 distinct venue strings contain a city, and
-  the touring artist pages this serves frequently name no venue at all (`smokeringquartet.com/gigs`
-  publishes a city and never a room).
+- The **venue** cannot answer it reliably. A venue can end up carrying a city when a source page bakes a
+  full street address into it (#1030: "The Players Theatre, 115 MacDougal Street, New York, NY"), but
+  that is an artifact of the address, not a location report, and it does not help the touring artist
+  pages this serves, which frequently name no venue at all (`smokeringquartet.com/gigs` publishes a city
+  and never a room).
 - The **title** cannot answer it either, except on Carnegie's NYO tour convention
   (`NYO Jazz in Beijing, China`), which no other source shares.
 

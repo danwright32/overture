@@ -11,11 +11,14 @@ import SwiftData
 // touched ScoutExtractResults, so it never saw the guard at all. The same show got a different verdict
 // depending on which door it came through.
 //
-// This was invisible because 37 of 38 sources have never successfully scouted, and Carnegie (the one
-// that produces prospects) always publishes a venue: measured on the live store, 0 of 132 rows have a
-// missing, placeholder, or numeric-id venue. So guarding the native path changes nothing today. It is
-// insurance, and it is the reason #970's place-aware venue rule (#979) can be written ONCE rather than
-// forked across two paths that already disagree.
+// LIVE-STORE-CLAIM verified=2026-07-18 measure="sources that have never scouted successfully, and live rows with a missing/placeholder/numeric-id venue"
+// This was invisible when #987 shipped because 37 of 38 sources had never successfully scouted, and
+// Carnegie (the one that produced prospects) always publishes a venue: measured on the live store then,
+// 0 of 132 rows had a missing, placeholder, or numeric-id venue. Re-checked 2026-07-18: 30 of 38 sources
+// have since scouted successfully and the store has grown to 313 rows, still with 0 missing a venue, so
+// guarding the native path still changes nothing today. It is insurance, and it is the reason #970's
+// place-aware venue rule (#979) can be written ONCE rather than forked across two paths that already
+// disagree.
 //
 // The guard's own argument is what settles it, and it is path-independent: a prospect with no venue puts
 // the wrong place in Dan's email, and nothing downstream can catch it, because nothing downstream knows

@@ -358,7 +358,8 @@ enum ScoutService {
         // the raw feed straight to applySweep and never see the guard, so the same show got a different
         // verdict depending on which door it came through, and nobody chose that.
         //
-        // A no-op on today's data (0 of 132 live rows have a missing, placeholder, or numeric-id venue,
+        // LIVE-STORE-CLAIM verified=2026-07-18 measure="live rows with a missing, placeholder, or numeric-id venue"
+        // A no-op on today's data (0 of 313 live rows have a missing, placeholder, or numeric-id venue,
         // because Carnegie always names a hall), and that is the point: it is insurance, and it means
         // #979's place-aware venue rule can be written ONCE instead of forked across two paths. The
         // guard's argument does not care which door an event used: a prospect with no venue puts the
