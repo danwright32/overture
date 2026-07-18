@@ -147,12 +147,6 @@ enum OmniFocusSync {
                                    reminderConfig: reminderConfig), client: client)
     }
 
-    // #885: the receipt Dan sees after a sync HE asked for, out of RootView's body. Four counts that
-    // must add up to what actually happened, which is exactly the kind of claim worth a test.
-    static func receipt(due: Int, existing: Int, created: Int, completed: Int) -> String {
-        "OmniFocus: \(due) due · existing \(existing) · created \(created) · completed \(completed)"
-    }
-
     // The OmniFocus I/O half, over value types only, so it can run off the main actor while the
     // prospect read (desired) stays on it. Each step is independent: a failed Apple event on one
     // task doesn't abort the rest.

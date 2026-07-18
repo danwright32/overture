@@ -177,9 +177,8 @@ struct AgentRosterTests {
         #expect(!detail.lowercased().contains("nudge"))
     }
 
-    // #357: two more categories that quietly waited on Dan with no top-level pill anywhere: an
-    // unconfirmed classification, and a failed OmniFocus sync. Both fold into the same roster/count
-    // invariant every other pill already follows.
+    // #357: an unconfirmed classification quietly waited on Dan with no top-level pill anywhere. Folds
+    // into the same roster/count invariant every other pill already follows.
     @Test func unsureNeedsAttentionWithUncertainClassifications() {
         var i = calm; i.uncertainClassifications = 2
         #expect(status("Unsure", i).state == .needsAttention)
@@ -188,24 +187,20 @@ struct AgentRosterTests {
         #expect(status("Unsure", calm).state == .idle)
     }
 
-    @Test func omniFocusPillReflectsSyncFailure() {
-        var i = calm; i.omniFocusSyncFailed = true
-        #expect(status("OmniFocus", i).state == .error)
-        #expect(status("OmniFocus", i).focus == .omniFocusSync)
-        #expect(status("OmniFocus", calm).state == .idle)
-        // #863: this pill resolves no queue rows (mirrors Follow-ups), so its count is always 0,
-        // never a promise about rows tapping it would land on.
-        #expect(status("OmniFocus", i).count == 0)
+    // #___: OmniFocus sync health used to have its own pill here (#357), redundant with the toolbar's
+    // own OmniFocus button (its live "Syncing…" state, and the separate "sync failing" warning it
+    // already shows). Dan's call: the toolbar button is the only access point now.
+    @Test func statusesNoLongerIncludeOmniFocus() {
+        #expect(AgentRoster.statuses(calm).contains { $0.name == "OmniFocus" } == false)
     }
 
-    @Test func rollUpCountsUnsureAndOmniFocusToo() {
-        var i = calm; i.uncertainClassifications = 1; i.omniFocusSyncFailed = true
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 2)
+    @Test func rollUpCountsUnsureToo() {
+        var i = calm; i.uncertainClassifications = 1
+        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 1)
     }
 
-    @Test func conceptSummaryCoversTheTwoNewPills() {
+    @Test func conceptSummaryCoversUnsure() {
         #expect(AgentRoster.conceptSummary(for: "Unsure").contains("classification"))
-        #expect(AgentRoster.conceptSummary(for: "OmniFocus").contains("sync"))
     }
 
     // #357: what a chip tap actually DOES, pulled out of QueueView's Button closure (the #863 lesson:
@@ -218,12 +213,6 @@ struct AgentRosterTests {
     @Test func chipActionOpensFollowUpsInsteadOfNavigating() {
         var i = calm; i.followUpsDue = 1
         #expect(AgentRoster.chipAction(for: status("Follow-ups", i)) == .showFollowUps)
-    }
-
-    @Test func chipActionRetriesOmniFocusSyncInsteadOfNavigating() {
-        var i = calm; i.omniFocusSyncFailed = true
-        #expect(AgentRoster.chipAction(for: status("OmniFocus", i)) == .retryOmniFocusSync)
-        #expect(AgentRoster.chipAction(for: status("OmniFocus", calm)) == .retryOmniFocusSync)
     }
 
     @Test func chipActionFocusesTheQueueForEveryOtherPill() {

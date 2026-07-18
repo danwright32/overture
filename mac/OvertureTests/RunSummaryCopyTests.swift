@@ -83,12 +83,6 @@ struct RunSummaryCopyTests {
 
     // MARK: - OmniFocus
 
-    @Test func theOmniFocusReceiptCountsWhatItDid() {
-        let line = OmniFocusSync.receipt(due: 7, existing: 4, created: 2, completed: 1)
-
-        #expect(line == "OmniFocus: 7 due · existing 4 · created 2 · completed 1")
-    }
-
     @Test func aNeverSyncedOmniFocusSaysSoRatherThanShowingAnEmptyTime() {
         #expect(OmniFocusSyncStatus.line(lastSuccessAt: nil, now: Date()) == "Not yet synced")
     }

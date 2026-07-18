@@ -18,8 +18,6 @@ enum StageFocus: String, Equatable, Sendable {
     case followUps
     // #357: cross-cutting (any status), not tied to one pipeline stage.
     case uncertainClassification
-    // #357: app-level sync health, not a property of any one show. Not a queue filter, like followUps.
-    case omniFocusSync
 }
 
 // #338/#370: the stage pills (Scout/Prep/Review/Send/Follow-ups) are real navigation, taking Dan to
@@ -84,9 +82,6 @@ enum StageNavigation {
 
         case .uncertainClassification:
             return p.classificationConfidence == Confidence.uncertain.rawValue && !p.confidenceReviewedByDan
-
-        case .omniFocusSync:
-            return false
         }
     }
 }

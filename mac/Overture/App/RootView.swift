@@ -202,8 +202,7 @@ struct RootView: View {
                       archiveJumpKey = key
                       archiveJumpRecipientId = recipientId
                       showArchive = true
-                  },
-                  onRetryOmniFocusSync: { syncOmniFocus(force: true) })
+                  })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
@@ -932,11 +931,15 @@ struct RootView: View {
         guard let outcome = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context) else { return }
         // #499: this run's intent hints/drafts were written in memory but never persisted. The save
         // failure is the actionable one, so it wins the single status line.
+        //
+        // #___: both branches here are already shortfall/failure-only (ReplyClassifyRunSummary is
+        // scoped to the drop count on purpose, never a routine "N replies classified" tally), so both
+        // are worth .warning, the same tier as the scout's own unattended-run warning.
         if outcome.saveFailed {
-            status.set("Reply-classify results couldn't save. Try again.")
+            status.set("Reply-classify results couldn't save. Try again.", priority: .warning)
         } else if let message = ReplyClassifyRunSummary.statusMessage(for: outcome) {
             // #1018: replies the run never came back with, so a silently dropped reply is no longer invisible.
-            status.set(message)
+            status.set(message, priority: .warning)
         }
     }
 
@@ -1213,12 +1216,11 @@ struct RootView: View {
         // handful of Apple events, so the brief main-actor occupancy is acceptable.
         Task { @MainActor in
             do {
-                let r = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                _ = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
-                if force {
-                    status.set(OmniFocusSync.receipt(due: desired.count, existing: r.existing,
-                                                     created: r.created, completed: r.completed))
-                }
+                // #___: no routine "N due, N created" receipt here anymore. The OmniFocus toolbar menu
+                // already shows "last synced" when opened, and the only thing worth the shared status
+                // slot is a failure, handled below.
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
                 OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
@@ -1251,9 +1253,12 @@ struct RootView: View {
         // #885: the WHOLE sentence, including the two notes above and the prefix, now comes from
         // PrepRunSummary. #876 extracted half of it and left the rest here, so a green test of that type
         // said nothing about the line Dan actually reads.
-        if let message = PrepRunSummary.statusMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,
-                                                      guidanceNotesRestored: restored) {
-            status.set(message)
+        // #___: only what needs Dan's attention lands here now; the routine "N drafted" tally is dropped
+        // (the queue already shows it), and what remains is promoted to .warning so it can't be silently
+        // overwritten by a later routine receipt the way an .info write could be.
+        if let message = PrepRunSummary.attentionMessage(for: outcome, voiceGuidanceLeaked: !leaks.isEmpty,
+                                                          guidanceNotesRestored: restored) {
+            status.set(message, priority: .warning)
         }
     }
 }

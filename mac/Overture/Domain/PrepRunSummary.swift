@@ -11,9 +11,22 @@ enum PrepRunSummary {
     // In the order Dan should hear them: what he GOT, then what he KEPT, then what went wrong. A run's
     // good news first, so a summary is not read as a failure when it mostly worked.
     static func notes(for outcome: PrepImporter.Outcome) -> [String] {
+        routineNotes(for: outcome) + concernNotes(for: outcome)
+    }
+
+    // The good-news tally: nothing for Dan to act on, and already visible in the queue itself (a drafted
+    // show reads as drafted there too). Split out so a "does something need me" slot (the toolbar status
+    // line) can drop this half and keep only concernNotes below.
+    private static func routineNotes(for outcome: PrepImporter.Outcome) -> [String] {
         var notes: [String] = []
         if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
+        return notes
+    }
+
+    // What the run is telling him went differently than it should have.
+    private static func concernNotes(for outcome: PrepImporter.Outcome) -> [String] {
+        var notes: [String] = []
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run
         // after run with no explanation, and a show the model chokes on every time is retried forever
@@ -31,15 +44,10 @@ enum PrepRunSummary {
         return notes
     }
 
-    // #885: the rest of it. #876 extracted `notes(for:)` and left two more conditional notes, the
-    // "Prep: " prefix and the join in RootView's body, so a test of this type could pass while the
-    // sentence Dan actually reads was assembled somewhere it could not see.
-    //
-    // The two extra facts are not part of the run's Outcome (they come from auditing the voice guidance
-    // file afterwards), so they are passed in rather than reached for.
-    static func notes(for outcome: PrepImporter.Outcome,
-                      voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> [String] {
-        var notes = self.notes(for: outcome)
+    // The two facts auditing the voice guidance file afterwards can add, shared by both callers below so
+    // the two sentences exist in exactly one place each.
+    private static func voiceGuidanceNotes(voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> [String] {
+        var notes: [String] = []
         // #249: the distiller put a real name into the voice guidance, and that section is quarantined
         // so it can never feed a future draft. Dan has to know it happened.
         if voiceGuidanceLeaked { notes.append("voice guidance leaked a name, quarantined") }
@@ -49,12 +57,29 @@ enum PrepRunSummary {
         return notes
     }
 
-    // The whole line, or nothing at all. A run with nothing to report says nothing rather than showing
-    // an empty "Prep:" with a blank after it.
-    static func statusMessage(for outcome: PrepImporter.Outcome,
-                              voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> String? {
-        let notes = notes(for: outcome, voiceGuidanceLeaked: voiceGuidanceLeaked,
-                          guidanceNotesRestored: guidanceNotesRestored)
+    // #885: the rest of it. #876 extracted `notes(for:)` and left two more conditional notes, the
+    // "Prep: " prefix and the join in RootView's body, so a test of this type could pass while the
+    // sentence Dan actually reads was assembled somewhere it could not see.
+    //
+    // The two extra facts are not part of the run's Outcome (they come from auditing the voice guidance
+    // file afterwards), so they are passed in rather than reached for.
+    static func notes(for outcome: PrepImporter.Outcome,
+                      voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> [String] {
+        self.notes(for: outcome) + voiceGuidanceNotes(voiceGuidanceLeaked: voiceGuidanceLeaked,
+                                                       guidanceNotesRestored: guidanceNotesRestored)
+    }
+
+    // #___: what belongs in the toolbar's shared status slot, which also carries an unattended scout's
+    // warning. That slot is for "does something need me", not a running tally, so this drops
+    // routineNotes ("N drafted", "N kept your edits": already visible in the queue, nothing to act on)
+    // and keeps only concernNotes plus the two voice-guidance facts, every one of them the run telling
+    // Dan something didn't go as expected. A run with nothing to report says nothing at all, rather than
+    // showing an empty "Prep:" with a blank after it.
+    static func attentionMessage(for outcome: PrepImporter.Outcome,
+                                 voiceGuidanceLeaked: Bool, guidanceNotesRestored: Bool) -> String? {
+        let notes = concernNotes(for: outcome)
+            + voiceGuidanceNotes(voiceGuidanceLeaked: voiceGuidanceLeaked,
+                                 guidanceNotesRestored: guidanceNotesRestored)
         guard !notes.isEmpty else { return nil }
         return "Prep: " + notes.joined(separator: " · ")
     }

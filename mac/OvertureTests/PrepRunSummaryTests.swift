@@ -65,4 +65,38 @@ struct PrepRunSummaryTests {
         #expect(PrepRunSummary.notes(for: outcome(drafted: 1, skippedEdited: 2))
                 == ["1 drafted", "2 kept your edits"])
     }
+
+    // #___: the toolbar status slot also carries an unattended scout's warning, so a routine "N drafted"
+    // tally (the shows already show it) doesn't belong there. A run that only drafted, with nothing else
+    // to say, has nothing worth the toolbar's attention.
+    @Test func aRoutineRunHasNoAttentionMessage() {
+        let message = PrepRunSummary.attentionMessage(for: outcome(drafted: 3, skippedEdited: 1),
+                                                       voiceGuidanceLeaked: false, guidanceNotesRestored: false)
+        #expect(message == nil)
+    }
+
+    // The shortfall promise still has to reach him, just without the routine "N drafted" ahead of it.
+    @Test func aShortfallStillProducesAnAttentionMessageWithoutTheRoutineTally() {
+        let message = PrepRunSummary.attentionMessage(for: outcome(drafted: 3, missing: ["b", "d"]),
+                                                       voiceGuidanceLeaked: false, guidanceNotesRestored: false)
+        #expect(message == "Prep: 2 didn't come back, they'll be retried")
+    }
+
+    @Test func aSaveFailureStillProducesAnAttentionMessage() {
+        let message = PrepRunSummary.attentionMessage(for: outcome(drafted: 2, saveFailed: true),
+                                                       voiceGuidanceLeaked: false, guidanceNotesRestored: false)
+        #expect(message == "Prep: couldn't save, try again")
+    }
+
+    @Test func aVoiceGuidanceLeakStillProducesAnAttentionMessageEvenWithNoOtherConcern() {
+        let message = PrepRunSummary.attentionMessage(for: outcome(drafted: 4),
+                                                       voiceGuidanceLeaked: true, guidanceNotesRestored: false)
+        #expect(message == "Prep: voice guidance leaked a name, quarantined")
+    }
+
+    @Test func restoredGuidanceNotesStillProducesAnAttentionMessage() {
+        let message = PrepRunSummary.attentionMessage(for: outcome(drafted: 4),
+                                                       voiceGuidanceLeaked: false, guidanceNotesRestored: true)
+        #expect(message == "Prep: restored your guidance notes")
+    }
 }
