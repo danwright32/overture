@@ -43,8 +43,6 @@ struct AgentInputs: Sendable {
     // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
     // "sendable", so it left the queue and nothing ever surfaced the person still waiting.
     var blockedContacts: Int = 0
-    // #357: quietly waited on Dan with no top-level pill anywhere.
-    var uncertainClassifications: Int = 0
 }
 
 // #863: every count a pill can show is built HERE, from the same prospects StageNavigation resolves
@@ -76,8 +74,7 @@ extension AgentInputs {
             },
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
-            blockedContacts: count(.sendBlocked),
-            uncertainClassifications: count(.uncertainClassification)
+            blockedContacts: count(.sendBlocked)
         )
     }
 }
@@ -93,7 +90,7 @@ enum AgentChipAction: Equatable, Sendable {
 
 enum AgentRoster {
     static func statuses(_ i: AgentInputs) -> [AgentStatus] {
-        [scout(i), prep(i), review(i), send(i), followUps(i), unsureClassifications(i)]
+        [scout(i), prep(i), review(i), send(i), followUps(i)]
     }
 
     // #565/#338: needsGmailConnect outranks everything (a real instruction with something to click),
@@ -130,7 +127,6 @@ enum AgentRoster {
         case "Review": return "Drafts waiting for you to read, edit, and approve."
         case "Send": return "Approved emails waiting to be sent."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
-        case "Unsure": return "Prospects whose classification you haven't confirmed yet."
         default: return ""
         }
     }
@@ -254,19 +250,5 @@ enum AgentRoster {
                                focus: .followUps, count: i.followUpsDue)
         }
         return AgentStatus(name: "Follow-ups", state: .idle, detail: "None due", focus: .followUps, count: 0)
-    }
-
-    // #357: an unconfirmed classification quietly waited on Dan with no top-level pill anywhere; only
-    // a small badge on the individual row. Cross-cutting (any status), so it needs its own pill rather
-    // than folding into an existing stage.
-    private static func unsureClassifications(_ i: AgentInputs) -> AgentStatus {
-        if i.uncertainClassifications > 0 {
-            let n = i.uncertainClassifications
-            return AgentStatus(name: "Unsure", state: .needsAttention,
-                               detail: "\(n) \(shows(n)) with an unsure classification",
-                               focus: .uncertainClassification, count: n)
-        }
-        return AgentStatus(name: "Unsure", state: .idle, detail: "Nothing unsure",
-                           focus: .uncertainClassification, count: 0)
     }
 }

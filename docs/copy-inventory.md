@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **658 sentences**, from 218 source files.
+Every sentence Overture can say to Dan: **655 sentences**, from 218 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -710,8 +710,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Nothing tracked yet"
     `Domain/EmptyState.swift`
-"Nothing unsure"
-    `Domain/AgentRoster.swift`
 "Nothing upcoming for \(org) on that page. The other shows there belong to the venue's own programme, not to them, so I've left them out."
     `Domain/LeadIntake.swift`
 "Nothing waiting"
@@ -815,8 +813,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Production type"
     `UI/ProspectRowView.swift`
-"Prospects whose classification you haven't confirmed yet."
-    `Domain/AgentRoster.swift`
 "Put this prospect back in the queue as undecided"
     `UI/ProspectRowView.swift`
 "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
@@ -1327,8 +1323,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(n) \(shows(n)) with a contact held for a check"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) with an unconfirmed send: check Gmail"
-    `Domain/AgentRoster.swift`
-"\(n) \(shows(n)) with an unsure classification"
     `Domain/AgentRoster.swift`
 "\(n) new shows waiting for you"
     `Domain/SourceYield.swift`
