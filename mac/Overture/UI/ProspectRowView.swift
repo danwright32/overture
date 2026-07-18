@@ -69,7 +69,8 @@ struct ProspectRowView: View {
     var onExcludeTown: () -> Void = {}
 
     private var timing: QueueModel.Timing {
-        QueueModel.displayTiming(performanceDate: item.performanceDate, today: today, isBooked: item.isBooked)
+        QueueModel.displayTiming(performanceDate: item.performanceDate, runEndDate: item.runEndDate,
+                                 today: today, isBooked: item.isBooked)
     }
 
     var body: some View {
@@ -216,7 +217,9 @@ struct ProspectRowView: View {
                 if QueueModel.headerShowsTimingLine(isBooked: item.isBooked) {
                     Text("·").foregroundStyle(OVColor.lineStrong)
                     Text(timing.label)
-                        .foregroundStyle(timing.urgency == .imminent ? OVColor.rust
+                        // #1122: an underway run reads with the act-now colour too, not the faint
+                        // "plenty of time" grey, since its remaining window is by definition short.
+                        .foregroundStyle(timing.urgency == .imminent || timing.urgency == .underway ? OVColor.rust
                                          : timing.urgency == .booked ? OVColor.forest : OVColor.inkFaint)
                 }
             }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **657 sentences**, from 215 source files.
+Every sentence Overture can say to Dan: **658 sentences**, from 215 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -911,6 +911,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Run the scout to comb the venue calendars. Ranked candidates land here for review."
     `Domain/EmptyState.swift`
+"Run underway, still bookable"
+    `UI/QueueView+Model.swift`
 "Running now…"
     `Domain/AgentRoster.swift`
 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;"

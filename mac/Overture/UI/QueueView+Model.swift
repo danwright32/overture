@@ -580,15 +580,28 @@ enum QueueModel {
         return EasternDate.daysUntil(from: today, to: performanceDate)
     }
 
-    enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown, booked }
+    // #1122: `underway` is a run whose opening night has passed but whose closing night has not, so it is
+    // still a live, pitchable show. Distinct from `past` (the whole run is over) and from the ordinary
+    // upcoming urgencies (it has already started).
+    enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown, booked, underway }
     struct Timing: Equatable { let label: String; let urgency: Urgency
         static func == (l: Timing, r: Timing) -> Bool { l.label == r.label && l.urgency == r.urgency } }
 
-    static func outreachTiming(performanceDate: String?, today: String) -> Timing {
+    static func outreachTiming(performanceDate: String?, runEndDate: String? = nil, today: String) -> Timing {
+        // #1122: a run is judged by its CLOSING night, never its opening one (EasternDate.runLastNight,
+        // the same rule the scout import guard already honors). A run that opened last week and runs
+        // through next week is still live, so only once its last night is behind us has it "passed".
+        let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
+        if EasternDate.runHasPassed(lastNight: lastNight, today: today) {
+            return Timing(label: "Performance passed", urgency: .past)
+        }
         guard let days = daysUntil(performanceDate: performanceDate, today: today) else {
             return Timing(label: "Date TBD", urgency: .unknown)
         }
-        if days < 0 { return Timing(label: "Performance passed", urgency: .past) }
+        // The opening night is behind us but the closing-night check above let the run through, so it is
+        // underway and still bookable. The row shows the full date range beside this, so the label only
+        // has to say the run has started and can still be pitched (Dan's big note on #1122).
+        if days < 0 { return Timing(label: "Run underway, still bookable", urgency: .underway) }
         if days == 0 { return Timing(label: "Performs today, too close to book", urgency: .tooSoon) }
         if days <= tooCloseDays {
             return Timing(label: "In \(days) day\(days == 1 ? "" : "s"), likely too close to book", urgency: .tooSoon)
@@ -604,9 +617,10 @@ enum QueueModel {
 
     // A booked prospect reads "Booked" instead of any outreach urgency, so the row never nags
     // Dan to pitch someone he has already booked (#198). Otherwise the normal outreach timing.
-    static func displayTiming(performanceDate: String?, today: String, isBooked: Bool) -> Timing {
+    static func displayTiming(performanceDate: String?, runEndDate: String? = nil,
+                              today: String, isBooked: Bool) -> Timing {
         if isBooked { return Timing(label: "Booked", urgency: .booked) }
-        return outreachTiming(performanceDate: performanceDate, today: today)
+        return outreachTiming(performanceDate: performanceDate, runEndDate: runEndDate, today: today)
     }
 
     // #843: a booked row already carries "BOOKED" on its seal (the whole point of the seal is to make the
@@ -642,11 +656,19 @@ enum QueueModel {
                 bookable.append(item)
                 continue
             }
+            // #1122: judged by the run's CLOSING night for the past check (a run still running tonight
+            // stays visible, consistent with the scout import guard), but by the OPENING night for the
+            // far-future check (a run that has not started and opens beyond the lead-time window is still
+            // too far out). A single-night show has runEndDate nil, so its closing night IS its date and
+            // this collapses to the old `days < 0` behaviour.
+            let lastNight = EasternDate.runLastNight(runEndDate: item.runEndDate,
+                                                     performanceDate: item.performanceDate)
+            if EasternDate.runHasPassed(lastNight: lastNight, today: today) { continue }
             guard let days = daysUntil(performanceDate: item.performanceDate, today: today) else {
                 bookable.append(item)
                 continue
             }
-            if days < 0 || days > leadTimeWindowDays { continue }
+            if days > leadTimeWindowDays { continue }
             // #1014: a too-close show is neither hidden nor reordered, only kept (falls through to
             // the same append as everything else). #901, Dan's call REVISED after he walked the build
             // (2026-07-14): a conflicted show keeps its normal date position and is NOT reordered
