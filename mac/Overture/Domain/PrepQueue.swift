@@ -16,7 +16,10 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     var naturalKey: String        // opaque; echo verbatim, do NOT rebuild
     var groupName: String         // research only
     var venue: String?
-    var performanceDate: String?
+    var performanceDate: String?  // the run's OPENING night (also the grouping/natural-key date)
+    // v4 (#1122): the run's CLOSING night, nil for a single-night show. Present so a draft can pitch the
+    // whole run (performanceDate through runEndDate), not just the opening night.
+    var runEndDate: String? = nil
     var discipline: String
     var websiteURL: String?
     var sourceListingURL: String?
@@ -26,10 +29,27 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // v3 (#367): "draft_only" | "contacts_only", absent means do both. Set only for a prospect Dan
     // asked to re-prep; tells the run which half to skip for this item.
     var reprepMode: String? = nil
+    // v4 (#1122): true only when this is a multi-night run whose OPENING night has already passed while
+    // later dates remain. Absent (the common case: single-night, or a run not yet started) means "no
+    // passed opening to work around". Derived with Swift date math (openingNightPassed below), never left
+    // to the drafter to infer, so a draft never pitches or names the gone opening night.
+    var openingNightPassed: Bool? = nil
 }
 
 enum PrepQueueBuilder {
-    static let version = 3
+    static let version = 4
+
+    // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
+    // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
+    // (no dates remain to pitch), and so is a single-night show whatever its date, since there is no
+    // "opening passed but later dates remain" case for one night. Judged through the same closing-night
+    // helper the queue label and filter use (EasternDate.runLastNight/runHasPassed), so all three agree.
+    static func openingNightPassed(performanceDate: String?, runEndDate: String?, today: String) -> Bool {
+        let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
+        guard !EasternDate.runHasPassed(lastNight: lastNight, today: today) else { return false }
+        guard let performanceDate else { return false }
+        return performanceDate < today
+    }
 
     // A prospect is "to prep" when Dan kept it (.queued) and it has no draft yet, OR (#367) he
     // explicitly asked for a re-prep on a prospect that already has one, restricted to statuses

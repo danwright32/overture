@@ -26,6 +26,9 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   { name: "high-confidence-only-when-read", pattern: /allowed ONLY for an\s+address actually READ from a real page/i },
   { name: "no-pattern-guessed-high", pattern: /NEVER emit a pattern-guessed address/i },
   { name: "partial-performer-results-ok", pattern: /Partial results are fine/i },
+  // #1122: a run whose opening night has passed must be pitched on its remaining dates only, never
+  // naming the gone opening. Dropping this rule would let a draft cite a date already behind us.
+  { name: "passed-opening-not-named", pattern: /NEVER name or reference the passed opening night/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

@@ -412,6 +412,88 @@ struct QueueWindowTests {
     }
 }
 
+// #1122: a multi-night run is judged by its CLOSING night, never its opening one (the rule
+// EasternDate.runLastNight already states and the scout import guard already honors). A run that opened
+// last week but runs through next week is still a live, pitchable show. Two queue surfaces keyed on the
+// opening night instead and broke that: the timing label called the whole run "Performance passed", and
+// queueOrder dropped it out of To Send entirely, the moment its first night went by.
+@Suite("A multi-night run is judged by its closing night (#1122)")
+struct MultiDateRunQueueTests {
+    private func run(_ open: String?, _ close: String?, key: String = "run") -> QueueItem {
+        var q = item(performanceDate: open, key: key)
+        q.runEndDate = close
+        return q
+    }
+
+    // MARK: - The timing label (surface 1)
+
+    // Opening night is behind us, the closing night is still ahead: the run is underway and still
+    // bookable, NOT "Performance passed". The row already shows the full date range beside this label, so
+    // the label's job is to say the run has started and can still be pitched.
+    @Test func aRunUnderwayReadsAsBookableNotPassed() {
+        let t = QueueModel.outreachTiming(performanceDate: "2026-07-17", runEndDate: "2026-07-25",
+                                          today: "2026-07-20")
+        #expect(t.urgency == .underway)
+        #expect(t.label != "Performance passed")
+    }
+
+    // Once the CLOSING night is behind us the whole run really has passed.
+    @Test func aRunWhoseLastNightHasPassedReadsAsPassed() {
+        let t = QueueModel.outreachTiming(performanceDate: "2026-07-10", runEndDate: "2026-07-15",
+                                          today: "2026-07-20")
+        #expect(t.urgency == .past)
+        #expect(t.label == "Performance passed")
+    }
+
+    // A single-night show (no runEndDate) is unchanged: judged by its one and only date.
+    @Test func aSingleNightShowIsUnchanged() {
+        let passed = QueueModel.outreachTiming(performanceDate: "2026-07-17", runEndDate: nil,
+                                               today: "2026-07-20")
+        #expect(passed.urgency == .past)
+        let upcoming = QueueModel.outreachTiming(performanceDate: "2026-07-27", runEndDate: nil,
+                                                 today: "2026-07-20")
+        #expect(upcoming.urgency == .imminent)
+    }
+
+    // displayTiming threads runEndDate through to outreachTiming, and a booking still wins over it.
+    @Test func displayTimingCarriesTheRunEndDate() {
+        #expect(QueueModel.displayTiming(performanceDate: "2026-07-17", runEndDate: "2026-07-25",
+                                         today: "2026-07-20", isBooked: false)
+                == QueueModel.outreachTiming(performanceDate: "2026-07-17", runEndDate: "2026-07-25",
+                                             today: "2026-07-20"))
+        #expect(QueueModel.displayTiming(performanceDate: "2026-07-17", runEndDate: "2026-07-25",
+                                         today: "2026-07-20", isBooked: true).urgency == .booked)
+    }
+
+    // MARK: - The To Send queue (surface 2)
+
+    // The run whose opening night passed but which is still running stays in the queue.
+    @Test func aRunStillRunningStaysInToSend() {
+        let result = QueueModel.queueOrder([run("2026-07-17", "2026-07-25")], today: "2026-07-20")
+        #expect(result.count == 1)
+    }
+
+    // A run whose closing night has passed is dropped, like any other past show.
+    @Test func aFullyPastRunIsDropped() {
+        let result = QueueModel.queueOrder([run("2026-07-10", "2026-07-15")], today: "2026-07-20")
+        #expect(result.isEmpty)
+    }
+
+    // The far-future gate still keys on the OPENING night: a run that has not started yet and opens
+    // beyond the lead-time window is still held out, exactly as a single show that far out would be.
+    @Test func aRunOpeningBeyondTheWindowIsStillHeld() {
+        let result = QueueModel.queueOrder([run("2026-12-01", "2026-12-10")], today: "2026-07-20")
+        #expect(result.isEmpty)
+    }
+
+    // A single-night past show is still dropped (unchanged), so the closing-night rule didn't loosen the
+    // ordinary case.
+    @Test func aSingleNightPastShowIsStillDropped() {
+        let result = QueueModel.queueOrder([run("2026-07-17", nil)], today: "2026-07-20")
+        #expect(result.isEmpty)
+    }
+}
+
 @Suite("Grouping and summary")
 struct GroupingTests {
     @Test func groupsByDateWithWeekday() {

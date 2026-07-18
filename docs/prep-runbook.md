@@ -12,13 +12,16 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `3`: `items[]` each with `naturalKey`, `groupName`, `venue`,
-  `performanceDate`, `discipline`, `websiteURL`, `sourceListingURL`,
-  `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`). `production` is
-  `self` / `agency` / `unknown`; a v1 item omits it (treat as `unknown`). `reprepMode` is
-  `draft_only` / `contacts_only`; absent (the normal case for a fresh, never-drafted prospect)
-  means do both, exactly as today. See "Re-prep mode" under "Per prospect" below for what each
-  value means for that item.
+  (`PrepQueue` version `4`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
+  `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
+  `openingNightPassed`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
+  for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
+  "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
+  night (absent for a single-night show); `openingNightPassed` is `true` only for a run whose
+  opening night has already passed while later dates remain (absent otherwise). See "Run dates"
+  under the show-date rule below.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
   optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
@@ -315,6 +318,15 @@ rate-flexibility in a cold email.
 "your March 10 concert at Carnegie Hall", never "let me know the date and venue". Asking for known
 details reads as careless and undercuts the researched-your-specific-show impression the targeting
 is built on. A draft must never request ANY field the work-list already supplies.
+
+**Run dates (#1122).** When an item carries a `runEndDate`, it is a multi-night run, not a single
+date: `performanceDate` is the opening night and `runEndDate` is the closing night. Reference the
+run, e.g. "your run at BAM, March 10 to 14", not just the opening date. When `openingNightPassed`
+is `true`, the opening night has already gone by while later dates remain: pitch only the remaining
+dates and NEVER name or reference the passed opening night (writing "your March 10 opening" when
+March 10 is behind us reads as a stale, unread listing). Say "the remaining performances" or name a
+specific still-upcoming date from the run; when in doubt, refer to the run's closing night, which is
+always still ahead in this case.
 
 **No performative enthusiasm (Dan).** Keep it level and professional, not eager.
 Avoid "I'd love to", "exactly the kind of work I love", "thrilled", "so excited",
