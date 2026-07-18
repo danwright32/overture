@@ -1,0 +1,73 @@
+{
+  "name": "self-produced-duo-both-performers",
+  "rule": "A self-produced show with 1-2 named leads pursues EACH performer directly (#366), never the act. Each gets a second-person overrideBody naming the co-performer correctly (#634).",
+  "input": {
+    "naturalKey": "roche-pierre-duo|2026-03-10|carnegie-hall",
+    "groupName": "Roche and Pierre Duo",
+    "venue": "Carnegie Hall",
+    "performanceDate": "2026-03-10",
+    "discipline": "music",
+    "websiteURL": "https://rocheduo.example",
+    "sourceListingURL": "https://rocheduo.example/us-debut",
+    "priorRelationship": "cold",
+    "production": "self"
+  },
+  "sources": [
+    {
+      "label": "Duo's own concert page",
+      "url": "https://rocheduo.example/us-debut",
+      "content": "Virgile Roche and Anna Pierre make their U.S. debut at Carnegie Hall on March 10, 2026. This recital is self-produced by the two pianists."
+    },
+    {
+      "label": "Virgile Roche bio and contact",
+      "url": "https://virgileroche.example/contact",
+      "content": "Virgile Roche, pianist. Appearing with Anna Pierre at Carnegie Hall, March 10, 2026. Contact: virgile@virgileroche.example."
+    },
+    {
+      "label": "Anna Pierre bio and contact",
+      "url": "https://annapierre.example/contact",
+      "content": "Anna Pierre, pianist. Carnegie Hall recital with Virgile Roche, March 10, 2026. Contact: anna@annapierre.example."
+    }
+  ],
+  "expected": {
+    "description": "Both named performers surfaced as performer contacts, no act contact, each with a second-person overrideBody.",
+    "requiredPerformers": ["Virgile Roche", "Anna Pierre"],
+    "forbidActProvenance": true,
+    "performerOverrideBodyRequired": true,
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-18T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "roche-pierre-duo|2026-03-10|carnegie-hall",
+        "contacts": [
+          {
+            "name": "Virgile Roche",
+            "email": "virgile@virgileroche.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://virgileroche.example/contact",
+            "overrideBody": "I photograph performing arts in New York and saw you and Anna Pierre are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands."
+          },
+          {
+            "name": "Anna Pierre",
+            "email": "anna@annapierre.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://annapierre.example/contact",
+            "overrideBody": "I photograph performing arts in New York and saw you and Virgile Roche are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Roche and Pierre's Carnegie Hall debut.",
+          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are making their U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "variant": "credential_first"
+        }
+      }
+    ]
+  }
+}
