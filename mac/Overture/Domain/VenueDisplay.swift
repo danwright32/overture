@@ -71,8 +71,11 @@ struct VenueDisplay: Equatable {
     // with a digit. Anything address-shaped is omitted rather than guessed at, the same conservative
     // rule `map` itself follows ("anything uncertain is omitted so it falls through").
     //
+    // LIVE-STORE-CLAIM verified=2026-07-18 measure="distinct non-null `location` field values in the live store, checked against this address-shape heuristic"
     // Measured against the live store's 11 distinct `location` values: rejects every street-address
-    // shape found there and passes through every clean one ("Brooklyn", "North Adams, MA").
+    // shape found there and passes through every clean one ("Brooklyn", "North Adams, MA"). Re-checked
+    // 2026-07-18: the store has grown to 313 prospects since this was written but still holds exactly
+    // 11 distinct location values, and the heuristic still rejects every address-shaped one among them.
     //
     // #1065: this is the STRICTER of `location`'s two independent consumers. The other is the geography
     // gate (EventPlace.resolve), which reads the messier shapes this one rejects (a full address, a

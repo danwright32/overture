@@ -29,9 +29,15 @@ import Foundation
 //
 // Until #987 the native path did not apply it at all: it handed the raw feed straight to `applySweep`
 // and never touched `ScoutExtractResults`, so the same show got a different verdict depending on which
-// door it came through. That was invisible because 37 of 38 sources have never successfully scouted and
-// Carnegie always names a hall (0 of 132 live rows had a missing, placeholder, or numeric-id venue), so
-// guarding it changed nothing on the day it was done. It is insurance, and it is what lets #979's
+// door it came through.
+//
+// LIVE-STORE-CLAIM verified=2026-07-18 measure="sources that had never scouted successfully, and live rows with a missing/placeholder/numeric-id venue, on the day #987 shipped"
+// That was invisible because 37 of 38 sources had never successfully scouted and Carnegie always names
+// a hall (0 of 132 live rows had a missing, placeholder, or numeric-id venue), so guarding it changed
+// nothing on the day it was done (2026-07-16). This is a historical snapshot, not an ongoing guarantee:
+// as of 2026-07-18 the store holds 313 rows and 30 of 38 sources have since scouted successfully, still
+// with 0 rows missing a venue, so the guard's insurance argument keeps holding even as those counts
+// move. It is what lets #979's
 // place-aware venue rule (Dan's ruling: a venue-less NYC show is worth chasing, a venue-less Harrogate
 // one is not) be written ONCE rather than forked across two paths that already disagreed.
 //
@@ -122,9 +128,13 @@ enum ExtractedEventGuard {
     // own city ("Brooklyn Bridge Park Boathouse at Pier 5, Brooklyn, NY" against "Brooklyn, NY"), so a
     // loose "one contains the other" rule would reject the exact answer the runbook holds up as correct.
     //
-    // Measured against the live store before it was written: fires on 4 of 4 fabricated rows, and cannot
-    // fire on the other 128, which carry no location at all. A tempting alternative ("the venue has a
-    // comma") was rejected on the same data: it would eat Bargemusic's real answer.
+    // LIVE-STORE-CLAIM verified=2026-07-18 measure="restatesLocation firing against a one-time snapshot of fabricated-plus-real live-store rows, at the time this guard was written"
+    // Measured against the live store before it was written (2026-07-16): fires on 4 of 4 fabricated
+    // rows, and cannot fire on the other 128, which carry no location at all. That 4/128/132 split is a
+    // one-time development snapshot, not a rerunnable assertion (the 4 fabricated rows do not persist in
+    // the store), so it is not expected to still add up against today's larger store. A tempting
+    // alternative ("the venue has a comma") was rejected on the same data: it would eat Bargemusic's real
+    // answer.
     //
     // #1057: a SPECIFIC, NAMED outdoor performance space (a park, plaza, pier) is a real venue, and the
     // 3a runbook rule to copy `location` verbatim means it routinely repeats that same name ("Sakura
