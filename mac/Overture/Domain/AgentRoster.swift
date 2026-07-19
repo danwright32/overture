@@ -80,7 +80,7 @@ extension AgentInputs {
             blockedContacts: count(.sendBlocked),
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
-            reachedOut: ReachedOutQueue.activeWithDates(from: prospects, now: now).count
+            reachedOut: ReachedOutQueue.showCount(from: prospects, now: now)   // #1194: shows, not recipients
         )
     }
 }

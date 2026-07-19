@@ -55,6 +55,16 @@ enum ReachedOutQueue {
             .map { (prospect: $0.prospect, recipient: $0.recipient) }
     }
 
+    // #1194: how many SHOWS Dan has active outreach on, counting each show once no matter how many of
+    // its contacts he has pitched. The Reached-out stage pill uses this so its number reads like the
+    // other stage pills (Scout/Prep/Review all count shows), while the list under it stays per-recipient.
+    static func showCount(from prospects: [Prospect], now: Date,
+                          followUpConfig: FollowUpConfig = .init(),
+                          reminderConfig: ConversationReminderConfig = .init()) -> Int {
+        Set(activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig,
+                            reminderConfig: reminderConfig).map { $0.prospect.naturalKey }).count
+    }
+
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
     // now or overdue reads "Reach out now"; future dates read "in N day(s)" (whole days, rounded up).
     static func timingLabel(next: Date, now: Date) -> String {

@@ -166,4 +166,22 @@ struct ReachedOutQueueTests {
         #expect(list.map(\.recipient.id) == [overdue.id, fresh.id])   // soonest (overdue) first
         #expect(list[0].next < list[1].next)
     }
+
+    // #1194: the Reached-out stage PILL counts SHOWS (distinct prospects), like the other stage pills,
+    // even though the LIST under it still shows one row per contacted recipient. A show pitched to two
+    // contacts is one show reached out to, not two, so the pill reads consistently with its neighbours.
+    @Test func showCountCountsDistinctShowsNotRecipients() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 10_000_000)
+        let sent = now.addingTimeInterval(-86_400)
+
+        let a = makeShow(ctx, group: "A")
+        _ = makeRecipient(ctx, on: a, id: "one@a.org", sentAt: sent)
+        _ = makeRecipient(ctx, on: a, id: "two@a.org", sentAt: sent)   // same show, second contact
+        let b = makeShow(ctx, group: "B")
+        _ = makeRecipient(ctx, on: b, id: "one@b.org", sentAt: sent)
+
+        #expect(ReachedOutQueue.active(from: [a, b], now: now).count == 3)   // three contacted recipients
+        #expect(ReachedOutQueue.showCount(from: [a, b], now: now) == 2)      // but two shows
+    }
 }
