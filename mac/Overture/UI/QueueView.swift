@@ -273,7 +273,10 @@ struct QueueView: View {
     // is tested; this view just renders it in the same dashed-border card the queue used before.
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
         let counts = StageNavigation.counts(in: prospects, today: today, now: Date())
-        let message = StageEmptyState.message(for: stage, counts: counts, reachedOut: data.reachedOut.count)
+        // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
+        // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
+        let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
+        let message = StageEmptyState.message(for: stage, counts: counts, reachedOut: reachedOutShows)
         return VStack(spacing: OVSpacing.xs) {
             Text(message.title).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             // #1195: a send-issues stage has no resting detail, so show the title alone rather than a

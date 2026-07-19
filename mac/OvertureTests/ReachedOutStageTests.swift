@@ -63,23 +63,24 @@ struct ReachedOutStageTests {
         #expect(!StageNavigation.countedFocuses.contains(.reachedOut))
     }
 
-    // The pill count Dan sees comes from ReachedOutQueue, so it equals the rows the reached-out view
-    // shows (the #863 promise), one per recipient.
-    @Test func inputsReachedOutCountMatchesReachedOutQueue() throws {
+    // #1194 (Dan's call): the Reached-out pill counts SHOWS, like every other stage pill (Scout/Prep/
+    // Review), even though its LIST stays one row per recipient (#652). So a show pitched to two contacts
+    // makes the pill read one fewer than the list, and that is intended: cross-pill consistency (a stage
+    // number always means shows) wins over this one pill matching its per-recipient list.
+    @Test func inputsReachedOutPillCountsShowsNotRecipients() throws {
         let ctx = try context()
         let a = show(ctx, "one", status: .contacted)
         reachedOutContact(ctx, on: a, id: "a@org.example")
         let b = show(ctx, "two", status: .contacted)
         reachedOutContact(ctx, on: b, id: "b@org.example")
-        reachedOutContact(ctx, on: b, id: "c@org.example")   // two contacts, two rows
+        reachedOutContact(ctx, on: b, id: "c@org.example")   // two contacts on show "two"
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         let inputs = AgentInputs.from(prospects: all, now: now, today: today,
                                       gmailConnected: true, prepRunning: false, replyRunAlive: false)
-        let queued = ReachedOutQueue.activeWithDates(from: all, now: now).count
 
-        #expect(queued == 3)
-        #expect(inputs.reachedOut == queued)
+        #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 3)   // three recipient rows
+        #expect(inputs.reachedOut == 2)                                           // but two shows
     }
 
     // Deep-link routing: a lead already in the reached-out queue focuses the Reached out stage, so a
