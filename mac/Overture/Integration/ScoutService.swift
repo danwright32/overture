@@ -209,7 +209,9 @@ enum ScoutService {
                          // Dan pointed at one source and asked for it. Absent means the ordinary run.
                          only: Set<String>? = nil,
                          extractor: any SourceExtractor = CarnegieExtractor(),
-                         fetch: (URL) async throws -> FetchedPage = { try await SourceFetcher.fetch($0) },
+                         // #1127: the source's orgName rides along (2nd arg) so a feed adapter that cannot
+                         // learn the venue name from the feed itself (VenueTix) can attribute the shows.
+                         fetch: (URL, String?) async throws -> FetchedPage = { try await SourceFetcher.fetch($0, sourceName: $1) },
                          // Injected for the same reason the fetch is: pinning writes a file to the
                          // handoff directory and launching starts a real Claude run, so a test that used
                          // the real ones would litter Dan's store and spend his tokens.
@@ -421,7 +423,7 @@ enum ScoutService {
     // One html source: fetch it, hash it, and decide. Never throws. Returns the page ONLY when this run
     // is going to read it, so the caller cannot accidentally spend a token on a run Dan did not start.
     private static func check(_ source: WatchedSource,
-                              fetch: (URL) async throws -> FetchedPage,
+                              fetch: (URL, String?) async throws -> FetchedPage,
                               depth: ScoutDepth, now: Date) async -> (SourceResult, FetchedPage?) {
         func result(_ state: SourceResult.State) -> SourceResult {
             SourceResult(sourceId: source.sourceId, orgName: source.orgName, state: state,
@@ -441,7 +443,7 @@ enum ScoutService {
 
         let fetched: Result<FetchedPage, SourceFetchError>
         do {
-            fetched = .success(try await fetch(url))
+            fetched = .success(try await fetch(url, source.orgName))
         } catch {
             fetched = .failure(fetchError(from: error))
         }
