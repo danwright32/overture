@@ -149,6 +149,23 @@ struct OperaAmericaCalendarTests {
         #expect(months == CalendarMonthIndex.defaultHorizon)
     }
 
+    // #1184: a non-empty body that does not DECODE is a format change too (a required field drifted, not
+    // just the date field the all-dropped guard catches). It must read the same clear "format has probably
+    // changed" way, not the misleading "couldn't reach that page" a raw DecodingError maps to.
+    @Test func aNonEmptyBodyThatDoesNotDecodeReadsAsFormatChanged() {
+        #expect(throws: SourceFetchError.feedShapeChanged) {
+            _ = try OperaAmericaCalendar.parsePage(Data("[]".utf8))   // expects an object, got an array
+        }
+    }
+
+    // An EMPTY body is genuine no-content, not a format change, so it keeps its original decoding error
+    // (which the fetch layer reads as a connectivity problem), rather than claiming the format changed.
+    @Test func anEmptyBodyIsNotAFormatChange() {
+        #expect(throws: DecodingError.self) {
+            _ = try OperaAmericaCalendar.parsePage(Data())
+        }
+    }
+
     @Test func handlesOperaAmericaHostsOnly() {
         #expect(OperaAmericaCalendar.handles(URL(string: "https://www.operaamerica.org/calendar/")!))
         #expect(OperaAmericaCalendar.handles(URL(string: "https://operaamerica.org/")!))

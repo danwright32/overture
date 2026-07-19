@@ -46,7 +46,17 @@ enum VenueTixCalendar {
     }
 
     static func parseEvents(_ data: Data) throws -> [VTEvent] {
-        let items = try JSONDecoder().decode([Item].self, from: data)
+        let items: [Item]
+        do {
+            items = try JSONDecoder().decode([Item].self, from: data)
+        } catch let error as DecodingError {
+            // #1184: a NON-EMPTY body we could not decode is a FORMAT change (a required field like `title`
+            // drifted), and must read the same clear "format has probably changed" way as the all-dropped
+            // guard below, not the misleading "couldn't reach that page" a raw DecodingError maps to
+            // (ScoutService.fetchError). An empty body is genuine no-content, so it keeps its original error.
+            guard !data.isEmpty else { throw error }
+            throw SourceFetchError.feedShapeChanged
+        }
         let events: [VTEvent] = items.compactMap { item in
             // A row we cannot date is not a listing we can pitch or reconcile, so drop it rather than
             // invent a date. Every real row has carried dateTime, so this is a guard, not an expected path.

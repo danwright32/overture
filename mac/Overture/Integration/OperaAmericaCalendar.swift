@@ -54,7 +54,17 @@ enum OperaAmericaCalendar {
     }()
 
     static func parsePage(_ data: Data) throws -> OAPage {
-        let env = try JSONDecoder().decode(Envelope.self, from: data)
+        let env: Envelope
+        do {
+            env = try JSONDecoder().decode(Envelope.self, from: data)
+        } catch let error as DecodingError {
+            // #1184: a NON-EMPTY body we could not decode is a FORMAT change (a required field drifted),
+            // and must read the same clear "format has probably changed" way as the all-dropped guard
+            // below, not the misleading "couldn't reach that page" a raw DecodingError maps to
+            // (ScoutService.fetchError). An empty body is genuine no-content, so it keeps its original error.
+            guard !data.isEmpty else { throw error }
+            throw SourceFetchError.feedShapeChanged
+        }
         let events: [OAEvent] = env.items.compactMap { item in
             // A row we cannot date is not a listing we can safely pitch or reconcile, so drop it rather than
             // invent a date. The feed has always carried a date, so this is a guard, not an expected path.

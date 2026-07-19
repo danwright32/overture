@@ -80,6 +80,16 @@ struct VenueTixCalendarTests {
         #expect(empty.isEmpty)
     }
 
+    // #1184: a required field drifting (here `title`) makes the top-level decode throw a DecodingError,
+    // which without this reads as the misleading "couldn't reach that page". On a non-empty body it is a
+    // format change and must read the same clear way as the renamed-date-field guard above.
+    @Test func aNonEmptyBodyMissingARequiredFieldReadsAsFormatChanged() {
+        let missingTitle = #"[{"dateTime":1781832600000}]"#   // real-shaped item, but `title` is gone
+        #expect(throws: SourceFetchError.feedShapeChanged) {
+            _ = try VenueTixCalendar.parseEvents(Data(missingTitle.utf8))
+        }
+    }
+
     @Test func handlesVenuetixSubdomainsOnly() {
         #expect(VenueTixCalendar.handles(URL(string: "https://thegreenroom42.venuetix.com/")!))
         #expect(!VenueTixCalendar.handles(URL(string: "https://venuetix.com.evil.com/")!))
