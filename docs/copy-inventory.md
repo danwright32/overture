@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **676 sentences**, from 225 source files.
+Every sentence Overture can say to Dan: **675 sentences**, from 225 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -756,8 +756,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "Nothing waiting"
     `Domain/AgentRoster.swift`
-"Nothing waiting on you here."
-    `Domain/StageEmptyState.swift`
 "Nothing was added and nothing will go out to them."
     `Domain/SuppressionReport.swift`
 "Notifications allowed."
