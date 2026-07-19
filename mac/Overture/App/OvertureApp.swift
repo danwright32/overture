@@ -9,6 +9,9 @@ struct OvertureApp: App {
     let modelContainer: ModelContainer?
     private let storeLock: StoreLock?      // held for the process lifetime to keep the single-writer lock
     private let degradedReason: String?
+    // #1160: whether this launch is healthy, a duplicate (defer to the resident and quit), or a broken
+    // store (show the degraded screen). Distinguishes the last two, which both leave modelContainer nil.
+    private let launchOutcome: StoreLaunchOutcome
     // #265: an app-level delegate owns the ReconcileScheduler so the safe reconciles run independent of
     // any window. The container is handed to it via AppDelegate.sharedContainer below.
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -89,6 +92,17 @@ struct OvertureApp: App {
         self.modelContainer = container
         self.storeLock = lock
         self.degradedReason = reason
+        // #1160: classify the launch so a duplicate (another live copy holds the single-writer lock)
+        // defers to the resident and quits, instead of lingering on the degraded screen as a second
+        // instance. A store that opened badly still shows StoreUnavailableView (see classify's edge).
+        // Tests build in-memory stores and never touch the real lock, so this is only meaningful for a
+        // real launch; under XCTest lockAcquired is effectively true and this stays .ready/.unavailable.
+        let outcome = StoreLaunchOutcome.classify(
+            lockAcquired: AppEnvironment.isRunningUnderTests || lock != nil,
+            storeOpened: container != nil,
+            reason: reason)
+        self.launchOutcome = outcome
+        AppDelegate.launchOutcome = outcome
         // #899: with no store there is no RootView, and so no sheet for the Add-a-Lead command to open.
         // The command lives on the scene and would still be there, still enabled, firing into nothing.
         _addLead = State(initialValue: AddLeadPresenter(store: container))
@@ -101,8 +115,13 @@ struct OvertureApp: App {
         Window("Overture", id: "main") {
             if let modelContainer {
                 RootView().modelContainer(modelContainer).environment(addLead)
+            } else if launchOutcome == .duplicateInstance {
+                // #1160: this process is a redundant duplicate; AppDelegate terminates it at launch and
+                // it defers to the resident copy. Show nothing (no degraded screen) so a duplicate that
+                // briefly renders before terminating doesn't flash the "data is unavailable" message.
+                Color.clear
             } else {
-                StoreUnavailableView(reason: degradedReason ?? "Overture's data is unavailable.")
+                StoreUnavailableView(reason: degradedReason ?? StoreLaunchOutcome.defaultUnavailableReason)
             }
         }
         .defaultSize(width: 860, height: 720)
