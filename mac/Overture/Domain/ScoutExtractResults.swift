@@ -104,10 +104,15 @@ struct ScoutExtractEvent: Codable, Equatable, Sendable {
     // #970: where the page says this show is, VERBATIM, exactly as written. Optional, so a v1 file
     // written before the run was ever asked for one still decodes and simply has no locations.
     var location: String?
+    // #1174 (v4): the source's own production id, when it publishes one that ties several performances of
+    // one show together (VenueTix tags every night of a run with a shared seriesId). Optional and additive,
+    // so a v1/v2/v3 file written before the run was ever asked for it still decodes and simply carries none.
+    var seriesId: String?
 
     var asExtractedEvent: ExtractedEvent {
         ExtractedEvent(title: title, presenter: presenter, venue: venue,
-                       performanceDate: performanceDate, sourceUrl: sourceUrl, location: location)
+                       performanceDate: performanceDate, sourceUrl: sourceUrl, location: location,
+                       seriesId: seriesId)
     }
 }
 

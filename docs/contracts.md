@@ -338,3 +338,17 @@ a behavioral gate: nothing reads `version`, and an absent `monthsCovered` (a v1/
 single-month page) makes the check inert, which is exactly its dormant state on the watchlist today
 (`monthHorizon` is still 1). `results-v1.json`/`results-v2.json` stay byte-identical as that proof;
 `results-v3.json` is the coverage spec.
+
+Version 4 (#1174) adds an optional `seriesId` to each event: the source's own production id, when it
+publishes one that ties several performances of one show together. VenueTix (Green Room 42) tags every
+night of a run with a shared id, and without carrying it a six-night run became six separate prospects to
+review. The wire carries the id VERBATIM; the grouping rule lives in the app, not the decoder. Every event
+that shares a non-null `seriesId` is one production, and `RunGrouping` collapses those nights into a single
+prospect that renders an opening-to-closing span, REGARDLESS of the usual same-venue, close-together-dates
+rule (a residency's nights can be weeks apart). It is the authoritative "these are one show" signal, so it
+does not depend on the titles matching. Purely additive, and like `location` and `monthsCovered` the
+version bump is documentation, not a behavioral gate: nothing reads `version`, and an absent `seriesId`
+(a v1/v2/v3 file, or any source that publishes no production id, which is nearly all of them) decodes
+unchanged and simply never collapses, which is the same outcome as before this field existed.
+`results-v1.json`/`results-v2.json`/`results-v3.json` stay byte-identical as that proof; `results-v4.json`
+is the seriesId spec, a three-night run sharing one id plus a standalone show that carries none.

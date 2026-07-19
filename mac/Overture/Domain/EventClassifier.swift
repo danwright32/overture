@@ -20,6 +20,11 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     // bakes a full street address into it (#1030), an artifact of the address rather than a location
     // report, and the touring artist pages this exists for frequently name no venue at all.
     var location: String?
+    // #1174: the source's own production id, when it publishes one that ties several performances of one
+    // show together (VenueTix tags every night of a run with a shared seriesId). It is not classified or
+    // normalized here: RunGrouping uses it downstream to collapse those nights into one run regardless of
+    // how far apart they fall. Nil for every source that names no such id, which is nearly all of them.
+    var seriesId: String?
 }
 
 enum Confidence: String, Sendable { case confident, uncertain }

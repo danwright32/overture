@@ -1,0 +1,48 @@
+{
+  "generatedAt" : "2026-07-19T14:00:00Z",
+  "results" : [
+    {
+      "events" : [
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-11-07",
+          "presenter" : "The Green Room 42",
+          "seriesId" : "run-1",
+          "sourceUrl" : "https://thegreenroom42.venuetix.com/",
+          "title" : "An Evening With: Opening Night",
+          "venue" : "The Green Room 42"
+        },
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-11-14",
+          "presenter" : "The Green Room 42",
+          "seriesId" : "run-1",
+          "sourceUrl" : "https://thegreenroom42.venuetix.com/",
+          "title" : "An Evening With: Second Night",
+          "venue" : "The Green Room 42"
+        },
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-11-21",
+          "presenter" : "The Green Room 42",
+          "seriesId" : "run-1",
+          "sourceUrl" : "https://thegreenroom42.venuetix.com/",
+          "title" : "An Evening With: Closing Night",
+          "venue" : "The Green Room 42"
+        },
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-11-30",
+          "presenter" : "The Green Room 42",
+          "sourceUrl" : "https://thegreenroom42.venuetix.com/",
+          "title" : "A One Night Only Cabaret",
+          "venue" : "The Green Room 42"
+        }
+      ],
+      "note" : "A three-night run (shared seriesId) plus one standalone show.",
+      "sourceId" : "the-green-room-42",
+      "verdict" : "upcoming_listings"
+    }
+  ],
+  "version" : 4
+}

@@ -13,6 +13,28 @@ enum VenueTixCalendar {
         var superTitle: String?
         var subTitle: String?
         var date: Date
+        // #1174: the feed's own production id, shared by every night of one show. Nil when the feed names
+        // none. It is the authoritative "these dates are one production" signal (it does not depend on
+        // titles matching or nights being close together, so a weekly residency still reads as one show).
+        // For any production that spans MORE THAN ONE night in a document, listingHTML stamps each of its
+        // nights with a shared `Series:` tag the extractor copies into the event's seriesId, and
+        // RunGrouping collapses those nights into one run that renders an opening-to-closing span.
+        var seriesId: String? = nil
+    }
+
+    // #1174: the production id ties every night of one show together. Captured live it is a JSON string
+    // ("seriesId":"s1"), but tolerate a number or null too so a single field's type can never fail the
+    // whole parse; anything empty or absent yields no id, and those rows simply never collapse.
+    private struct SeriesID: Decodable {
+        let value: String?
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { value = nil }
+            else if let s = try? c.decode(String.self) { value = s.isEmpty ? nil : s }
+            else if let i = try? c.decode(Int.self) { value = String(i) }
+            else if let d = try? c.decode(Double.self) { value = String(Int(d)) }
+            else { value = nil }
+        }
     }
 
     private struct Item: Decodable {
@@ -20,6 +42,7 @@ enum VenueTixCalendar {
         var superTitle: String?
         var subTitle: String?
         var dateTime: Double?   // epoch MILLISECONDS
+        var seriesId: SeriesID?
     }
 
     static func parseEvents(_ data: Data) throws -> [VTEvent] {
@@ -31,7 +54,8 @@ enum VenueTixCalendar {
             return VTEvent(title: item.title,
                            superTitle: item.superTitle,
                            subTitle: item.subTitle,
-                           date: Date(timeIntervalSince1970: ms / 1000))
+                           date: Date(timeIntervalSince1970: ms / 1000),
+                           seriesId: item.seriesId.flatMap { $0.value })
         }
         // #1171: the feed answered with items but NONE parsed, so its shape has changed (a renamed date
         // field drops every row). Fail loud rather than hand back an empty list that would read as an empty
@@ -55,18 +79,39 @@ enum VenueTixCalendar {
         return f
     }()
 
+    // #1174: assigns a clean, run-local tag ("run-1", "run-2", ...) to each production that spans MORE
+    // THAN ONE night in this document, in first-appearance order. The synthesized HTML shows that short
+    // token (never the feed's opaque id) so the extractor echoes it faithfully into each night's seriesId,
+    // and RunGrouping collapses those nights into one run. A production with a single night gets no tag, so
+    // its article stays byte-for-byte what it was before. Run-local is enough: RunGrouping runs fresh each
+    // scout, so the tag never has to be stable across runs.
+    static func seriesTags(_ events: [VTEvent]) -> [String: String] {
+        var counts: [String: Int] = [:]
+        for e in events { if let s = e.seriesId, !s.isEmpty { counts[s, default: 0] += 1 } }
+        var tags: [String: String] = [:]
+        for e in events {
+            guard let s = e.seriesId, !s.isEmpty, (counts[s] ?? 0) > 1, tags[s] == nil else { continue }
+            tags[s] = "run-\(tags.count + 1)"
+        }
+        return tags
+    }
+
     // Renders the events as one plain HTML document the extractor reads like any fetched page. Every show
     // is attributed to the venue by NAME (threaded from the source) and carries an EXPLICIT ISO date.
     // #1175: when Dan has supplied the venue's location, it is appended to each show's place line so the
     // extractor reads a real city and the geography gate places the shows in-region; with no location the
     // document is byte-for-byte what it was before, so an existing source's content hash does not churn.
+    // #1174: a production that runs more than one night stamps each night with a shared `Series:` tag (see
+    // seriesTags), the one signal that lets those nights collapse into a single run downstream.
     // copy-inventory:ignore-start  synthesized source HTML the extractor reads, not the app's voice (#915)
     static func listingHTML(_ events: [VTEvent], venueName: String, location: String? = nil) -> String {
         let place = location.map { "\(venueName), \($0)" } ?? venueName
+        let tags = seriesTags(events)
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
-            return "<article><h2>\(e.title)</h2>\(bits)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
+            let seriesLine = e.seriesId.flatMap { tags[$0] }.map { "<p>Series: \($0)</p>" } ?? ""
+            return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
         }.joined(separator: "\n")
         return "<section title=\"\(venueName)\">\n\(rows)\n</section>"
     }
