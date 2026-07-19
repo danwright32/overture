@@ -13,6 +13,9 @@ struct ScoutSummaryView: View {
     let warnings: ScoutWarnings
     // Reads exactly the sources Dan corrected, in one run. Wired by RootView to runScout(only:).
     var onReadFixed: (Set<String>) -> Void = { _ in }
+    // #1190: re-runs the ordinary scout so the next batch of over-budget sources gets checked. Wired by
+    // RootView to the same runScout() a "Run scout" press uses, never a second run path.
+    var onRunAgain: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
@@ -24,14 +27,43 @@ struct ScoutSummaryView: View {
             header
             Divider().overlay(OVColor.line)
 
-            ScrollView { sectionStack }.frame(maxHeight: 460)
+            // #1190: the re-run prompt sits ABOVE the scrolling sections so it can never scroll out of
+            // view: it is the one thing on this popup that changes what the run covered.
+            if let rerunPrompt {
+                rerunBanner(rerunPrompt)
+                Divider().overlay(OVColor.line)
+            }
 
-            Divider().overlay(OVColor.line)
+            // A deferred-only run has no sections; skip the empty scroll box entirely.
+            if !warnings.sections.isEmpty {
+                ScrollView { sectionStack }.frame(maxHeight: 460)
+                Divider().overlay(OVColor.line)
+            }
             footer
         }
         .frame(width: 560)
         .background(OVColor.canvas)
         .actionFeedbackBanner()
+    }
+
+    // #1190: shown only for a manual run (this popup never opens for a scheduled one) that hit its
+    // budget and left sources unchecked. nil the rest of the time.
+    private var rerunPrompt: ScoutRerunPrompt? {
+        ScoutRerunPrompt.after(deferredCount: warnings.deferredCount, auto: false)
+    }
+
+    // The prompt: what is waiting, and one click to check it.
+    private func rerunBanner(_ prompt: ScoutRerunPrompt) -> some View {
+        HStack(spacing: OVSpacing.md) {
+            Text(prompt.line)
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(OVColor.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: OVSpacing.sm)
+            Button(prompt.buttonLabel) { onRunAgain() }
+                .buttonStyle(.borderedProminent)
+                .tint(OVColor.forest)
+        }
+        .padding(OVSpacing.lg)
     }
 
     // The subtitle explains the inline actions, so it is shown ONLY when there is something to act on. A
@@ -168,6 +200,28 @@ enum ScoutSummaryRow {
     static func displayURL(result: ScoutService.SourceResult, source: WatchedSource?) -> String? {
         source?.listingsURL ?? result.listingsURL
     }
+}
+
+// #1190: the manual scout summary's "N venues still to check, run again" prompt, kept out of the view
+// body so its show/hide rule and its singular/plural wording are testable (#863: logic that lived in a
+// view drifted twice under a green suite). An automatic (scheduled) run never shows it: those runs defer
+// nothing by design, and even if that changed, the re-run affordance is a manual surface Dan opened, so
+// `auto` is refused here rather than relied on to be false upstream.
+struct ScoutRerunPrompt: Equatable {
+    let deferredCount: Int
+
+    static func after(deferredCount: Int, auto: Bool) -> ScoutRerunPrompt? {
+        guard !auto, deferredCount > 0 else { return nil }
+        return ScoutRerunPrompt(deferredCount: deferredCount)
+    }
+
+    var line: String {
+        deferredCount == 1
+            ? "1 venue is still waiting to be checked."
+            : "\(deferredCount) venues are still waiting to be checked."
+    }
+
+    var buttonLabel: String { "Run scout again" }
 }
 
 enum ScoutSummaryCopy {

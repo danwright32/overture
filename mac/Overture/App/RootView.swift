@@ -592,7 +592,12 @@ struct RootView: View {
                 if let scoutWarnings {
                     // Fires once, at the true end of a manual run; lets Dan fix or confirm a source inline.
                     ScoutSummaryView(warnings: scoutWarnings,
-                                     onReadFixed: { ids in runScout(only: ids) })
+                                     onReadFixed: { ids in runScout(only: ids) },
+                                     // #1190: check the sources this run was over budget to reach. The
+                                     // ordinary runScout() reads the next batch first (its fairness clock
+                                     // keeps the deferred ones next in line); no dismiss, so the sheet
+                                     // swaps to progress in place, exactly as "Read the ones I fixed" does.
+                                     onRunAgain: { runScout() })
                 } else {
                     scoutProgressModal
                 }

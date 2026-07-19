@@ -20,6 +20,10 @@ struct ScoutWarningsTests {
         ScoutService.SourceResult(sourceId: id, orgName: org, state: .failed(f))
     }
 
+    private func deferred(_ id: String, _ org: String) -> ScoutService.SourceResult {
+        ScoutService.SourceResult(sourceId: id, orgName: org, state: .deferred)
+    }
+
     @Test func aCleanRunHasNoWarnings() {
         let w = ScoutWarnings.from(native: outcome(), extract: nil, finishedEmpty: nil)
         #expect(w.isEmpty)
@@ -78,6 +82,33 @@ struct ScoutWarningsTests {
         #expect(w.sections == [.readerFinishedEmpty("the reader ran but produced nothing")])
     }
 
+    // MARK: - Deferred venues (#1190): over the run's budget, not checked, and NOT "clean"
+
+    // A run that deferred sources carries the count home so the manual summary can prompt a re-run.
+    // A deferred-only run is not clean: the popup must open (isEmpty false) so Dan sees what is waiting.
+    @Test func deferredSourcesCountIntoTheWarnings() {
+        var native = outcome()
+        native.sources = [deferred("a", "A"), deferred("b", "B")]
+        let w = ScoutWarnings.from(native: native, extract: nil, finishedEmpty: nil)
+        #expect(w.deferredCount == 2)
+        #expect(!w.isEmpty)
+    }
+
+    // Deferred sources are counted from whichever half recorded them.
+    @Test func deferredCountUnionsBothHalves() {
+        var native = outcome(); native.sources = [deferred("a", "A")]
+        var extract = outcome(); extract.sources = [deferred("b", "B")]
+        let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
+        #expect(w.deferredCount == 2)
+    }
+
+    // No sources deferred: nothing waiting, and (absent other warnings) still a clean run.
+    @Test func noDeferredSourcesLeavesTheCountZero() {
+        let w = ScoutWarnings.from(native: outcome(), extract: nil, finishedEmpty: nil)
+        #expect(w.deferredCount == 0)
+        #expect(w.isEmpty)
+    }
+
     // MARK: - The quiet line an unattended scheduled run leaves instead of the popup
 
     @Test func aCleanRunLeavesNoQuietLine() {
@@ -120,5 +151,40 @@ struct ScoutSummaryCopyTests {
     @Test func theReadButtonPluralizes() {
         #expect(ScoutSummaryCopy.readFixed(1) == "Read the one I fixed")
         #expect(ScoutSummaryCopy.readFixed(2) == "Read the 2 I fixed")
+    }
+}
+
+// #1190: the "N venues still waiting, run again" prompt a MANUAL scout summary shows when the run hit
+// its per-scout budget and deferred sources. The show/hide rule and the singular/plural wording live in
+// a helper rather than the view body, so a plural bug or a leak into scheduled runs shows in the diff
+// (#863: view-computed logic drifted twice under a green suite).
+@MainActor
+@Suite("Re-run prompt after a budget-capped scout (#1190)")
+struct ScoutRerunPromptTests {
+    // (a) a manual run that deferred sources offers the prompt, with a line and a one-click button.
+    @Test func aManualRunWithDeferredSourcesOffersARerun() {
+        let prompt = ScoutRerunPrompt.after(deferredCount: 3, auto: false)
+        #expect(prompt != nil)
+        #expect(prompt?.line == "3 venues are still waiting to be checked.")
+        #expect(prompt?.buttonLabel == "Run scout again")
+    }
+
+    // The line pluralizes: one waiting venue is singular.
+    @Test func theLinePluralizes() {
+        #expect(ScoutRerunPrompt.after(deferredCount: 1, auto: false)?.line
+                == "1 venue is still waiting to be checked.")
+        #expect(ScoutRerunPrompt.after(deferredCount: 5, auto: false)?.line
+                == "5 venues are still waiting to be checked.")
+    }
+
+    // (b) nothing deferred, nothing to prompt.
+    @Test func noDeferredSourcesShowsNoPrompt() {
+        #expect(ScoutRerunPrompt.after(deferredCount: 0, auto: false) == nil)
+    }
+
+    // (c) an automatic scheduled run never nags Dan to run again. Scheduled runs defer nothing by
+    // design, and even if that changed, the re-run affordance is a manual surface he chose to open.
+    @Test func aScheduledRunStaysQuiet() {
+        #expect(ScoutRerunPrompt.after(deferredCount: 4, auto: true) == nil)
     }
 }

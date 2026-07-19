@@ -38,6 +38,11 @@ struct ScoutWarnings: Equatable, Sendable {
     var unqueuedIds: [String]               // results returned under an id we never queued (#857)
     var silentlyEmptyFeed: Bool             // an established feed came back empty (#27)
     var clientListWarning: String?          // the past-client export was missing/stale (#22/#23)
+    // #1190: how many watched sources this run was over budget to check. A real state, not silence: they
+    // were NOT checked, so the manual summary offers a one-click re-run rather than letting them go
+    // unchecked for weeks while the run reports as done. Always 0 for a scheduled watch-only run, which
+    // defers nothing by design.
+    var deferredCount: Int = 0
 
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
@@ -50,6 +55,12 @@ struct ScoutWarnings: Equatable, Sendable {
             failures.append(r)
         }
 
+        // The deferred sources are recorded on whichever outcome the schedule budgeted them out of (the
+        // native half, today). Count across both halves so the source of the record cannot change the
+        // number Dan sees.
+        let deferred = native.sources.filter { $0.state == .deferred }.count
+            + (extract?.sources.filter { $0.state == .deferred }.count ?? 0)
+
         return ScoutWarnings(
             saveFailed: native.saveFailed || (extract?.saveFailed ?? false),
             extractLaunchFailure: native.extractLaunchFailure ?? extract?.extractLaunchFailure,
@@ -57,10 +68,14 @@ struct ScoutWarnings: Equatable, Sendable {
             failedSources: failures,
             unqueuedIds: native.unqueuedResultIds + (extract?.unqueuedResultIds ?? []),
             silentlyEmptyFeed: native.silentlyEmptyFeed || (extract?.silentlyEmptyFeed ?? false),
-            clientListWarning: native.clientListWarning ?? extract?.clientListWarning)
+            clientListWarning: native.clientListWarning ?? extract?.clientListWarning,
+            deferredCount: deferred)
     }
 
-    var isEmpty: Bool { sections.isEmpty }
+    // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
+    // healthy sources still has 18 it did not reach, and the manual summary has to open to say so, or
+    // that tail could go unchecked indefinitely while every run reports as done.
+    var isEmpty: Bool { sections.isEmpty && deferredCount == 0 }
 
     // One entry per applicable warning, ranked: app-level (most urgent, nothing Dan can fix per-source)
     // first, then the actionable per-source failures, then the informational notes. Show ALL, because a
