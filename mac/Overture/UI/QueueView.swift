@@ -24,11 +24,6 @@ struct QueueView: View {
     @Query private var excludedTownRows: [ExcludedTown]
     private var userExcludedTowns: Set<String> { Set(excludedTownRows.map(\.town)) }
 
-    @State private var disciplineFilter: String?
-    @State private var highOnly = false
-    @State private var showPendingBookingsOnly = false
-    @State private var showTooFarOnly = false        // #970
-    @State private var pipeline: Pipeline = .toSend
     @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
@@ -64,7 +59,10 @@ struct QueueView: View {
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
     // live from this stage on every render, so a show that leaves the stage (a draft sent) drops out
     // instead of lingering on a key set frozen at tap time.
-    @State private var focusedStage: StageFocus?
+    // #1134: stage-only navigation is the only mode, so the queue opens on Scout by default (the
+    // away-alert leads path and a deep link override this on their onChange). Never auto-jumps off an
+    // empty Scout: an empty stage shows its own empty state instead.
+    @State private var focusedStage: StageFocus? = StageNavigation.openingStage
     // #338: the heading focusedSection shows while focused. nil falls back to the #308
     // away-leads phrasing; a stage-pill tap sets an explicit one instead. #1140: in stage mode this is a
     // fallback only; the heading is recomputed live from `focusedStage` while it is set.
@@ -86,16 +84,19 @@ struct QueueView: View {
     // second one. #685: also carries which contact Dan clicked from, so a multi-recipient show
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
+    // #1129: a discoverable "Prep these N" button in the Prep stage view starts a Prep run through
+    // RootView's existing #953 selection-sheet flow (mirrors the readOne closure SourcesView receives),
+    // so a first-time user need not know the Cmd+P shortcut or the toolbar menu. Declared last so the
+    // RootView call site can keep onOpenInArchive near the top for ReachedOutRowArchiveJumpGuardTests.
+    var onStartPrep: () -> Void = {}
 
     private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
-    // #217: split the queue into people still to email and people already reached out to.
-    enum Pipeline: String, CaseIterable {
-        case toSend, reachedOut
-        var label: String { self == .toSend ? "To send" : "Reached out" }
-    }
-
     private var today: String { QueueModel.easternToday() }
+
+    // #1129: a Prep run is in flight. The discoverable Prep button hides while one runs (RootView's
+    // canStartPrep gates the start too); read from the same source AgentInputs.from uses.
+    private var prepRunning: Bool { PrepQueueService.isRunning(now: Date()) }
 
     // #1121: every heavy derived collection, built ONCE per render and threaded down, instead of a
     // half-dozen computed properties each re-running QueueModel.items(from:) (a full map that faults
@@ -109,7 +110,6 @@ struct QueueView: View {
         // multi-contact show can appear more than once, each with its own contact and timing.
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
         let reachedOutKeys: Set<String>
-        let disciplines: [String]
         let pendingBookings: Int
     }
 
@@ -118,17 +118,15 @@ struct QueueView: View {
         let now = Date()
         let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
-        // #885: the filter behind the "To send (N)" pill lives in QueueModel, where a test can read it.
-        let filtered = QueueModel.filter(items, discipline: disciplineFilter, highOnly: highOnly,
-                                         pendingBookingsOnly: showPendingBookingsOnly, tooFarOnly: showTooFarOnly,
-                                         userExcludedTowns: userExcludedTowns)
-        // What the queue actually shows: the filtered set windowed to the bookable date range (past
-        // hidden, beyond-horizon hidden) with too-close events demoted to the bottom, computed live
-        // against today so it stays correct between scout runs.
-        let visible = QueueModel.toSendQueue(filtered, reachedOutKeys: reachedOutKeys, today: today)
+        // The masthead's at-a-glance summary reflects the actionable to-send queue (not reached-out,
+        // windowed to the bookable date range with too-close events demoted). #1134 removed the filter
+        // chips, so this is the whole to-send queue, unfiltered but for Dan's standing town refusals.
+        let visible = QueueModel.toSendQueue(
+            QueueModel.filter(items, discipline: nil, highOnly: false, pendingBookingsOnly: false,
+                              tooFarOnly: false, userExcludedTowns: userExcludedTowns),
+            reachedOutKeys: reachedOutKeys, today: today)
         return RenderData(items: items, visible: visible, reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
-                          disciplines: Array(Set(items.map(\.discipline))).sorted(),
                           pendingBookings: QueueModel.pendingBookingCount(items))
     }
 
@@ -150,28 +148,6 @@ struct QueueView: View {
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
             .background(OVColor.canvas)
-            .toolbar { bookingsToolbar(data) }
-    }
-
-    @ToolbarContentBuilder
-    private func bookingsToolbar(_ data: RenderData) -> some ToolbarContent {
-        if data.pendingBookings > 0 {
-            ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    showPendingBookingsOnly.toggle()
-                } label: {
-                    // #932: the shared toolbar component, like every other toolbar button (icon-only, name
-                    // on hover via .help). Active state (#118): filled seal + forest tint when the filter is
-                    // engaged, mirroring the high-fit chip's active treatment, so it's clear why rows are
-                    // hidden instead of "where did my rows go?".
-                    ToolbarHoverLabel(title: QueueModel.confirmBookingsLabel(count: data.pendingBookings),
-                                      systemImage: showPendingBookingsOnly ? "checkmark.seal.fill" : "checkmark.seal")
-                }
-                .foregroundStyle(showPendingBookingsOnly ? OVColor.forest : OVColor.inkSoft)
-                .help(QueueModel.pendingBookingsHelp(showingOnly: showPendingBookingsOnly,
-                                                    count: data.pendingBookings))
-            }
-        }
     }
 
     private func queueScroll(_ data: RenderData) -> some View {
@@ -179,13 +155,10 @@ struct QueueView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(visible: data.visible, items: data.items)
-                    // #308: a tapped multi-lead away alert focuses the queue on exactly those leads;
-                    // otherwise the normal pipeline view shows.
-                    if let focused = focusedKeys {
-                        focusedSection(focused, data: data)
-                    } else {
-                        pipelineContent(data)
-                    }
+                    // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
+                    // what shows; this always renders the focused view for the current stage (Scout by
+                    // default), or the exact away-alert leads (#308) when focusedStage is nil.
+                    focusedSection(focusedKeys ?? [], data: data)
                 }
                 .padding(.horizontal, OVSpacing.xl)
                 .padding(.vertical, OVSpacing.xl)
@@ -203,89 +176,76 @@ struct QueueView: View {
         }
     }
 
-    // The normal queue: pipeline picker plus the to-send date groups or the reached-out list. Lifted
-    // out of queueScroll so the focused/normal branch stays a small expression (#122).
-    @ViewBuilder private func pipelineContent(_ data: RenderData) -> some View {
-        let visible = data.visible
-        Picker("Pipeline", selection: $pipeline) {
-            ForEach(Pipeline.allCases, id: \.self) { p in
-                Text(p == .toSend ? QueueModel.toSendLabel(count: visible.count)
-                                  : QueueModel.reachedOutLabel(count: data.reachedOut.count)).tag(p)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        if pipeline == .toSend {
-            // #970: the shows the geo gate took. Only appears when it actually took some, so a queue
-            // with nothing out of range says nothing, and a filter bug is loud rather than invisible
-            // (#887). Lives in this row, not the toolbar, so it only ever shows while Dan is actually
-            // looking at the To send queue, not behind Archive/Sources/Days off/Patterns/Voice guidance
-            // (which sit as sheets over the same window, so a toolbar item stayed visible through all
-            // of them).
-            let tooFar = QueueModel.tooFarCount(data.items, discipline: disciplineFilter, highOnly: highOnly,
-                                                pendingBookingsOnly: showPendingBookingsOnly,
-                                                reachedOutKeys: data.reachedOutKeys, today: today,
-                                                userExcludedTowns: userExcludedTowns)
-            QueueFilterBar(
-                disciplines: data.disciplines,
-                activeDiscipline: $disciplineFilter,
-                highOnly: $highOnly,
-                tooFarCount: tooFar,
-                showTooFarOnly: $showTooFarOnly
-            )
-            // #361: fold any departing (just-sent) rows back into the date groups so each plays its
-            // leaving delight in place before the glide-up removes it.
-            let groups = QueueModel.groupByDate(QueueModel.withDeparting(visible, departing: departing))
-            if groups.isEmpty {
-                emptyState(data)
-            } else {
-                // #976: the date groups are the scroll targets, so the position modifier on the ScrollView
-                // can pin the top visible one across a rebuild. Same spacing the outer stack gave each
-                // group before, so the layout is unchanged; no scrollTargetBehavior, so nothing snaps.
-                LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    ForEach(groups) { group in
-                        dateSection(group)
+    // #1134: the one content view, driven by the current stage. Reached out renders its per-recipient
+    // list (which owns its own heading and empty state); every other stage shows the standard focused
+    // rows for that stage, or the #308 away-alert leads when focusedStage is nil.
+    @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
+        if focusedStage == .reachedOut {
+            reachedOutList(data.reachedOut)
+        } else {
+            // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft
+            // drops out); in leads mode, keep the frozen key set. The dispatch lives in
+            // StageNavigation.focusedKeys so it is tested, not decided inline in this view.
+            let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: keys,
+                                                         in: prospects, today: today, now: Date()))
+            // #361: fold any departing (just-sent) rows back in so each plays its leaving delight in place.
+            let rows = QueueModel.withDeparting(data.items.filter { wanted.contains($0.id) },
+                                                departing: departing)
+            VStack(alignment: .leading, spacing: OVSpacing.sm) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(focusedStageHeading(rows: rows))
+                        .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                    Spacer()
+                    // #1129: the discoverable Prep button, only on the Prep stage with kept shows and no
+                    // run already in flight. Starts the run through RootView's existing selection sheet.
+                    if PrepQueueButton.shouldShow(stage: focusedStage, keptToPrep: rows.count,
+                                                  prepRunning: prepRunning) {
+                        Button(PrepQueueButton.label(count: rows.count)) { onStartPrep() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(OVColor.forest)
                     }
                 }
-                .scrollTargetLayout()
+                .padding(.bottom, OVSpacing.xxs)
+                .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+                if rows.isEmpty {
+                    if focusedStage == nil {
+                        // #308: the away-alert leads path names specific leads; some may have since left.
+                        Text("These leads are no longer in your queue.")
+                            .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    } else {
+                        stageEmptyState(for: focusedStage ?? StageNavigation.openingStage, data: data)
+                    }
+                } else {
+                    ForEach(rows) { item in prospectRow(item) }
+                }
             }
-        } else {
-            reachedOutList(data.reachedOut)
         }
     }
 
-    // #308: the focused new-leads view a tapped multi-lead away alert lands on, exactly the leads named
-    // in the alert, as a flat list (booked leads that drop out of both pipelines still appear because it
-    // filters all non-dismissed prospects, not the windowed queue). "Show all" returns to the queue.
-    @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
-        // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft drops
-        // out); in leads mode, keep the frozen key set. The dispatch lives in StageNavigation.focusedKeys
-        // so it is tested, not decided inline in this view.
-        let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: keys,
-                                                     in: prospects, today: today, now: Date()))
-        let rows = data.items.filter { wanted.contains($0.id) }
-        VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(focusedStageHeading(rows: rows))
-                    .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                Spacer()
-                Button("Show all") { focusedKeys = nil; focusedHeading = nil; focusedStage = nil }
-            }
-            .padding(.bottom, OVSpacing.xxs)
-            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
-            if rows.isEmpty {
-                Text("These leads are no longer in your queue.")
-                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-            } else {
-                ForEach(rows) { item in prospectRow(item) }
-            }
+    // #1134: an empty stage says what it is and, when there is work elsewhere, points Dan to the next
+    // stage that has some (never auto-jumping there). The pointer logic is the pure StageEmptyState so it
+    // is tested; this view just renders it in the same dashed-border card the queue used before.
+    private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
+        let counts = StageNavigation.counts(in: prospects, today: today, now: Date())
+        let message = StageEmptyState.message(for: stage, counts: counts, reachedOut: data.reachedOut.count)
+        return VStack(spacing: OVSpacing.xs) {
+            Text(message.title).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            Text(message.detail).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, OVSpacing.hero)
+        .padding(.horizontal, OVSpacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(OVColor.lineStrong, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
     }
 
     // #1140: the focused list's heading, recomputed live while focused on a stage so its count decrements
-    // as shows leave the stage (Scout/Prep/Review/Unsure map one-to-one to a live status; so does Send
-    // while its most-urgent focus is still the one Dan tapped). Falls back to the heading captured at tap
-    // time (the rare Send-focus-shifted case), then to the #308 away-leads phrasing.
+    // as shows leave the stage (Scout/Prep/Review map one-to-one to a live status; so does Send while its
+    // most-urgent focus is still the one Dan tapped). Falls back to the heading captured at tap time (the
+    // rare Send-focus-shifted case), then to the #308 away-leads phrasing.
     private func focusedStageHeading(rows: [QueueItem]) -> String {
         if let stage = focusedStage,
            let live = AgentRoster.statuses(agentInputs).first(where: { $0.focus == stage }) {
@@ -327,26 +287,26 @@ struct QueueView: View {
         focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today, now: Date())
     }
 
-    // #236: land on a deep-linked lead: switch to the pipeline holding it, clear filters that would
-    // hide it, scroll it into view, and briefly highlight it. Clears the request once handled.
+    // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
+    // gone), so the row is actually on screen, then scroll to it and briefly highlight it. Clears the
+    // request once handled.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
-        focusedKeys = nil   // #308: leave any focused new-leads view so the row is reachable in the queue
-        focusedStage = nil  // #1140: and leave stage mode, so the row renders in the normal queue below
         // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
         // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: prospects, now: Date()).map(\.prospect.naturalKey))
-        pipeline = reachedOutKeys.contains(key) ? .reachedOut : .toSend
-        disciplineFilter = nil
-        highOnly = false
-        showPendingBookingsOnly = false
-        showTooFarOnly = false
+        // #1134: focus the stage that contains this lead so its row renders; fall back to Scout if the
+        // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
+        focusedStage = StageNavigation.stage(containing: key, in: prospects,
+                                             reachedOutKeys: reachedOutKeys) ?? StageNavigation.openingStage
+        focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
+        focusedHeading = nil
         highlightedKey = key
         deepLinkedKey = nil
         // #976: release any pinned date group so a rebuild during this jump cannot restore the old top
-        // over the row we are scrolling to. The scrollTo below (dispatched after the filter change lays
+        // over the row we are scrolling to. The scrollTo below (dispatched after the stage change lays
         // out) then owns the position, and normal scrolling re-populates topGroup afterward.
         topGroup = nil
-        // Let the pipeline/filter change lay out before scrolling to the row.
+        // Let the stage change lay out before scrolling to the row.
         DispatchQueue.main.async {
             withAnimation { proxy.scrollTo(key, anchor: .center) }
         }
@@ -474,7 +434,10 @@ struct QueueView: View {
                 Circle().fill(agentColor(s.state)).frame(width: 6, height: 6)
                 Text(s.name).font(OVType.tag)
                     .foregroundStyle(s.state == .idle ? OVColor.inkFaint : OVColor.ink)
-                if s.state != .idle {
+                // #1134: Reached out is idle by design (never "needs you") but is a navigation stop that
+                // should still show its count, so its detail shows even while idle. Other idle pills keep
+                // hiding their "Nothing new" detail as before.
+                if !s.detail.isEmpty, s.state != .idle || s.focus == .reachedOut {
                     Text(s.detail).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
                 }
             }
@@ -494,37 +457,6 @@ struct QueueView: View {
         case .working: return OVColor.forest
         case .needsAttention: return OVColor.gold
         case .error: return OVColor.rust
-        }
-    }
-
-    private func dateSection(_ group: QueueModel.DateGroup) -> some View {
-        VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
-                if !group.weekday.isEmpty {
-                    Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
-                        .tracking(1.4).foregroundStyle(OVColor.inkFaint)
-                }
-                Text(group.monthDay).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                if !group.year.isEmpty {
-                    Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
-                }
-                // #901 (Dan's walk, 2026-07-14): "up by the date". When any show on this date is a day he
-                // can't work, the header itself says so, so a blocked day reads at a glance.
-                if QueueModel.groupIsUnavailable(group.items) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar.badge.exclamationmark")
-                        Text("Unavailable")
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(OVColor.onRust)
-                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                    .background(Capsule().fill(OVColor.rust))
-                }
-            }
-            .padding(.bottom, OVSpacing.xxs)
-            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
-
-            ForEach(group.items) { item in prospectRow(item) }
         }
     }
 
@@ -622,28 +554,9 @@ struct QueueView: View {
                                   highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                                   replySendSince: { rid in replySending[rid] },
                                   onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
-                                  showingTooFar: showTooFarOnly,
+                                  showingTooFar: false,
                                   userExcludedTowns: userExcludedTowns)
         }
-    }
-
-    private func emptyState(_ data: RenderData) -> some View {
-        VStack(spacing: OVSpacing.xs) {
-            // #885: "there is nothing" and "your filter hid it" are different problems with different
-            // fixes, and telling them apart is the whole job of this copy (EmptyState).
-            let empty = EmptyState.queue(hasAnyItems: !data.items.isEmpty)
-            Text(empty.title)
-                .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Text(empty.detail)
-                .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, OVSpacing.hero)
-        .padding(.horizontal, OVSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(OVColor.lineStrong, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-        )
     }
 
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).
@@ -678,61 +591,5 @@ struct QueueView: View {
                                     markSending: { replySending[$0] = Date() },
                                     clearSending: { replySending[$0] = nil },
                                     onNeedsReconnect: { showReconnect = true })
-    }
-}
-
-private struct QueueFilterBar: View {
-    let disciplines: [String]
-    @Binding var activeDiscipline: String?
-    @Binding var highOnly: Bool
-    // #970. Dan (2026-07-18): the "too far" chip moved here from the window toolbar, which stayed visible even
-    // while Archive/Sources/Days off/Patterns/Voice guidance were open over the same window, so it read
-    // as clutter that showed up "everywhere" instead of just on the queue it actually filters.
-    let tooFarCount: Int
-    @Binding var showTooFarOnly: Bool
-
-    var body: some View {
-        WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
-            chip("All disciplines", active: activeDiscipline == nil) { activeDiscipline = nil }
-            ForEach(disciplines, id: \.self) { d in
-                chip(QueueModel.disciplineLabel(d), active: activeDiscipline == d) {
-                    activeDiscipline = activeDiscipline == d ? nil : d
-                }
-            }
-            Button { highOnly.toggle() } label: {
-                HStack(spacing: 5) {
-                    Circle().fill(highOnly ? OVColor.gold : OVColor.inkFaint).frame(width: 6, height: 6)
-                    Text("High-fit only").font(OVType.tag)
-                }
-                .foregroundStyle(highOnly ? OVColor.gold : OVColor.inkSoft)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-                .background(Capsule().fill(highOnly ? OVColor.gold.opacity(0.15) : .clear))
-            }
-            .buttonStyle(.plain)
-            if QueueModel.chipIsShown(count: tooFarCount, showingOnly: showTooFarOnly) {
-                Button { showTooFarOnly.toggle() } label: {
-                    HStack(spacing: 5) {
-                        Circle().fill(showTooFarOnly ? OVColor.forest : OVColor.inkFaint)
-                            .frame(width: 6, height: 6)
-                        Text(QueueModel.tooFarLabel(count: tooFarCount)).font(OVType.tag)
-                    }
-                    .foregroundStyle(showTooFarOnly ? OVColor.forest : OVColor.inkSoft)
-                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-                    .background(Capsule().fill(showTooFarOnly ? OVColor.forest.opacity(0.15) : .clear))
-                }
-                .buttonStyle(.plain)
-                .help(QueueModel.tooFarHelp(showingOnly: showTooFarOnly, count: tooFarCount))
-            }
-        }
-    }
-
-    private func chip(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(OVType.tag)
-                .foregroundStyle(active ? OVColor.onForest : OVColor.inkSoft)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-                .background(Capsule().fill(active ? OVColor.forest : Color.clear))
-        }
-        .buttonStyle(.plain)
     }
 }

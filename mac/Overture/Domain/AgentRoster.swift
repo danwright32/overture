@@ -43,6 +43,9 @@ struct AgentInputs: Sendable {
     // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
     // "sendable", so it left the queue and nothing ever surfaced the person still waiting.
     var blockedContacts: Int = 0
+    // #1134: contacted recipients Dan is still working, counted from ReachedOutQueue (one per recipient),
+    // so the Reached out pill's number equals the rows the reached-out view lands him on.
+    var reachedOut: Int = 0
 }
 
 // #863: every count a pill can show is built HERE, from the same prospects StageNavigation resolves
@@ -74,7 +77,10 @@ extension AgentInputs {
             },
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
-            blockedContacts: count(.sendBlocked)
+            blockedContacts: count(.sendBlocked),
+            // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
+            // that list agree by construction (one per contacted recipient still in play).
+            reachedOut: ReachedOutQueue.activeWithDates(from: prospects, now: now).count
         )
     }
 }
@@ -95,6 +101,9 @@ enum AgentRoster {
         let sendIssues = send(i)
         var result = [scout(i), prep(i), review(i)]
         if sendIssues.state != .idle { result.append(sendIssues) }
+        // #1134: Reached out is its own navigation stage now (separate from Follow-ups), always present so
+        // Dan can get to it. It is never "needs you": the people to nudge surface under Follow-ups.
+        result.append(reachedOut(i))
         result.append(followUps(i))
         return result
     }
@@ -123,7 +132,9 @@ enum AgentRoster {
     // joins them was the view's, which meant the one thing nobody could test was the only part that was
     // ever going to be got wrong (a missing space, a swapped order).
     static func chipHelp(name: String, detail: String) -> String {
-        "\(conceptSummary(for: name)) \(detail)"
+        // #1134: a stage with no live detail yet (Reached out with no one in it) shows only the concept,
+        // with no dangling trailing space after it.
+        detail.isEmpty ? conceptSummary(for: name) : "\(conceptSummary(for: name)) \(detail)"
     }
 
     static func conceptSummary(for name: String) -> String {
@@ -132,6 +143,7 @@ enum AgentRoster {
         case "Prep": return "Finds a contact and drafts an email for shows you've kept."
         case "Review": return "Drafts waiting for you to read, edit, and approve."
         case "Send issues": return "Sent emails that hit a problem, or approved ones you can't send yet."
+        case "Reached out": return "Shows you've pitched and are waiting to hear back on."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
         default: return ""
         }
@@ -222,6 +234,16 @@ enum AgentRoster {
         }
         return AgentStatus(name: "Send issues", state: .idle, detail: "Nothing to send",
                            focus: .sendApproved, count: 0)
+    }
+
+    // #1134: the Reached out stage. Informational, never "needs you" (Follow-ups owns what is due), so it
+    // stays .idle; the count rides in `detail` and the view shows it beside the name even while idle
+    // (agentChip special-cases .reachedOut for exactly this). Empty detail when there is no one yet, so
+    // the pill reads just "Reached out" rather than a bare "0".
+    private static func reachedOut(_ i: AgentInputs) -> AgentStatus {
+        AgentStatus(name: "Reached out", state: .idle,
+                    detail: i.reachedOut > 0 ? "\(i.reachedOut)" : "",
+                    focus: .reachedOut, count: i.reachedOut)
     }
 
     private static func shows(_ n: Int) -> String { Plural.word(n, "show") }   // #885: one pluralizer

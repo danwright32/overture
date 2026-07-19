@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **665 sentences**, from 223 source files.
+Every sentence Overture can say to Dan: **675 sentences**, from 225 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -50,7 +50,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 
-## The same sentence, said in more than one place (38)
+## The same sentence, said in more than one place (39)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -122,6 +122,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Production type"
   - `UI/ProspectRowView.swift`
   - `UI/ProspectRowView.swift`
+- "Reached out"
+  - `Domain/AgentRoster.swift`
+  - `Domain/AgentRoster.swift`
 - "Redraft and find contacts"
   - `App/RootView.swift`
   - `UI/DraftReviewView.swift`
@@ -265,8 +268,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "All caught up"
     `Domain/PrepStatus.swift`
-"All disciplines"
-    `UI/QueueView.swift`
 "All set"
     `UI/OnboardingView.swift`
 "Allow OmniFocus control"
@@ -531,8 +532,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Hide this for a week"
     `Domain/DaysOffAttention.swift`
-"High-fit only"
-    `UI/QueueView.swift`
 "How Overture drafts in your voice. Your notes are yours and are never auto-edited; the observed tendencies are learned from your edits after each Prep run."
     `UI/VoiceGuidanceView.swift`
 "How long to wait before nudging an active conversation, and how close to the event a reminder may still fire."
@@ -575,6 +574,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Keep \(n) shows"
     `Domain/CancelledReadDisposition.swift`
+"Keep a show from Scout and it lands here to prep."
+    `Domain/StageEmptyState.swift`
 "Keep editing"
     `UI/DaysOffView.swift`
 "Keep this page but stop flagging it, until its contents change"
@@ -653,6 +654,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "New York, NY"
     `Domain/VenueDisplay.swift`
+"New finds land here to keep or dismiss."
+    `Domain/StageEmptyState.swift`
 "New listings, not read yet. Run a scout to read them."
     `Domain/SourceReadState.swift`
 "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
@@ -663,6 +666,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "No drafted or approved prospects to re-prep"
     `App/ActionFeedback.swift`
+"No drafts to review"
+    `Domain/StageEmptyState.swift`
 "No email yet"
     `UI/QueueView+Model.swift`
 "No kept prospects need prepping. Keep some prospects first."
@@ -725,16 +730,22 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSyncStatus.swift`
 "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
     `UI/DaysOffView.swift`
+"Nothing here right now"
+    `Domain/StageEmptyState.swift`
 "Nothing matches this filter"
     `Domain/EmptyState.swift`
 "Nothing new"
     `Domain/AgentRoster.swift`
 "Nothing new on the watched calendars"
     `Domain/ScoutRunSummary.swift`
+"Nothing new to triage"
+    `Domain/StageEmptyState.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
 "Nothing to act on. Leads you've emailed show up here for a gentle follow-up, active conversations for a re-touch, and they drop off the moment they reply, book, or you close them out."
     `UI/FollowUpsView.swift`
+"Nothing to prep yet"
+    `Domain/StageEmptyState.swift`
 "Nothing to review"
     `Domain/AgentRoster.swift`
 "Nothing to send"
@@ -745,6 +756,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "Nothing waiting"
     `Domain/AgentRoster.swift`
+"Nothing waiting on you here."
+    `Domain/StageEmptyState.swift`
 "Nothing was added and nothing will go out to them."
     `Domain/SuppressionReport.swift`
 "Notifications allowed."
@@ -840,8 +853,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
     `UI/QueueView+Model.swift`
+"Prep these \(count) shows"
+    `Domain/PrepQueueButton.swift`
+"Prep this 1 show"
+    `Domain/PrepQueueButton.swift`
 "Prep's research found this show may already have its own photographer. Tap if that's wrong."
     `UI/ProspectRowView.swift`
+"Prepped drafts land here to read and approve."
+    `Domain/StageEmptyState.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
 "Production type"
@@ -869,9 +888,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Reach out now"
     `Domain/ReachedOutQueue.swift`
 "Reached out"
-    `UI/QueueView.swift`
-"Reached out (\(count))"
-    `UI/QueueView+Model.swift`
+    `Domain/AgentRoster.swift`
 "Read 1 show before you cancelled."
     `Domain/CancelledReadDisposition.swift`
 "Read \(n) shows before you cancelled."
@@ -1010,8 +1027,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Set up Overture…"
     `App/MenuBarContent.swift`
-"Show all"
-    `UI/QueueView.swift`
 "Show in Finder"
     `App/StoreUnavailableView.swift`
 "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
@@ -1030,6 +1045,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Shows too far out to pitch yet start unchecked. Include any you want prepped now."
     `Domain/PrepSelectionCopy.swift`
+"Shows you've pitched and are waiting to hear back on."
+    `Domain/AgentRoster.swift`
 "Silent follow-ups"
     `UI/FollowUpsView.swift`
 "Snoozed \(org). I'll remind you later."
@@ -1225,10 +1242,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."
     `Integration/GmailAuthManager.swift`
-"To send"
-    `UI/QueueView.swift`
-"To send (\(count))"
-    `UI/QueueView+Model.swift`
 "Too far (\(count))"
     `UI/QueueView+Model.swift`
 "Try a different discipline, or clear the high-fit filter."
@@ -1317,6 +1330,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DayOffOffer.swift`
 "You entered days off but haven't blocked them yet."
     `UI/DaysOffView.swift`
+"You have \(pointerPhrase(for: target, count: n)) next."
+    `Domain/StageEmptyState.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."
@@ -1329,8 +1344,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmAndReconnectAlerts.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
+"\(Plural.count(count, "draft")) to review"
+    `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
+"\(Plural.count(count, "show")) to prep"
+    `Domain/StageEmptyState.swift`
+"\(Plural.count(count, "show")) to triage"
+    `Domain/StageEmptyState.swift`
+"\(Plural.count(count, "show")) you've pitched"
+    `Domain/StageEmptyState.swift`
 "\(added) from watched calendars"
     `Domain/ScoutRunSummary.swift`
 "\(base) looks stuck (\(elapsed))"

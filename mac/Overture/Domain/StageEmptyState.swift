@@ -1,0 +1,66 @@
+import Foundation
+
+// #1134: with stage-only navigation the queue opens on Scout and any stage can be empty on its own. An
+// empty stage must never leave Dan staring at a blank screen: it says what the stage is, and (this is
+// the point of #1134's decision 3) when the stage he is on is empty, it points him to the next stage
+// that actually has work rather than auto-jumping there for him.
+//
+// The pointer logic lives here, not inside the SwiftUI view, so it can be tested at all (the #863
+// lesson: a rule computed inside a view has no seam a test can reach).
+enum StageEmptyState {
+    struct Message: Equatable, Sendable {
+        var title: String
+        var detail: String
+    }
+
+    // The stages Dan works, in order, so the pointer sends him to the EARLIEST one holding work.
+    static let pointerOrder: [StageFocus] = [.scout, .prep, .review, .reachedOut]
+
+    static func message(for stage: StageFocus, counts: [StageFocus: Int], reachedOut: Int) -> Message {
+        let detail = pointer(excluding: stage, counts: counts, reachedOut: reachedOut)
+            ?? restingDetail(for: stage)
+        return Message(title: title(for: stage), detail: detail)
+    }
+
+    // The first stage (other than the one shown) that has work, phrased as a nudge toward it.
+    private static func pointer(excluding stage: StageFocus, counts: [StageFocus: Int],
+                                reachedOut: Int) -> String? {
+        for target in pointerOrder where target != stage {
+            let n = target == .reachedOut ? reachedOut : (counts[target] ?? 0)
+            if n > 0 { return "You have \(pointerPhrase(for: target, count: n)) next." }
+        }
+        return nil
+    }
+
+    private static func pointerPhrase(for target: StageFocus, count: Int) -> String {
+        switch target {
+        case .scout: return "\(Plural.count(count, "show")) to triage"
+        case .prep: return "\(Plural.count(count, "show")) to prep"
+        case .review: return "\(Plural.count(count, "draft")) to review"
+        case .reachedOut: return "\(Plural.count(count, "show")) you've pitched"
+        default: return Plural.count(count, "show")
+        }
+    }
+
+    // The reached-out stage renders reachedOutList (which owns its own empty copy), so message() is never
+    // called for .reachedOut here; only pointerPhrase(.reachedOut) is reachable (pointing TO it from
+    // another empty stage). The default arm covers the send focuses, which can empty out while focused.
+    private static func title(for stage: StageFocus) -> String {
+        switch stage {
+        case .scout: return "Nothing new to triage"
+        case .prep: return "Nothing to prep yet"
+        case .review: return "No drafts to review"
+        default: return "Nothing here right now"
+        }
+    }
+
+    // Shown only when there is no work anywhere to point at, so it explains what the stage is for.
+    private static func restingDetail(for stage: StageFocus) -> String {
+        switch stage {
+        case .scout: return "New finds land here to keep or dismiss."
+        case .prep: return "Keep a show from Scout and it lands here to prep."
+        case .review: return "Prepped drafts land here to read and approve."
+        default: return "Nothing waiting on you here."
+        }
+    }
+}

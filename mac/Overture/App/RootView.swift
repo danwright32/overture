@@ -207,7 +207,10 @@ struct RootView: View {
                       archiveJumpKey = key
                       archiveJumpRecipientId = recipientId
                       showArchive = true
-                  })
+                  },
+                  // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
+                  // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
+                  onStartPrep: { showPrepSelection = true })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
