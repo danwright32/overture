@@ -92,6 +92,7 @@ struct RootView: View {
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
     @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
+    @State private var prepSheetShown = false      // #1130: the Prep run's takeover progress screen
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
@@ -523,6 +524,10 @@ struct RootView: View {
                 // If a run is in flight at launch, watch it to completion; otherwise just ingest any
                 // results already on disk, without nagging about an old failed run (#48).
                 if PrepQueueService.isRunning(now: Date()) {
+                    // #1130: a detached Prep run outlives the app, so one can still be going at launch.
+                    // Reopen the takeover and follow it to completion, mirroring the scout's #1035 reattach,
+                    // so a live run is never invisible now that the takeover is the primary progress signal.
+                    prepSheetShown = true
                     await watchPrepRun()
                 } else {
                     ingestPrep()
@@ -609,6 +614,11 @@ struct RootView: View {
             .sheet(isPresented: $showPrepSelection) {
                 PrepSelectionSheet(prospects: toPrep) { includedKeys in startPrep(includedKeys: includedKeys) }
             }
+            // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
+            // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
+            // subtle toolbar label. Shown while the run is in flight (set by startPrep and on launch-reattach)
+            // and cleared by watchPrepRun when the run ends; Hide keeps the run going, Cancel stops it.
+            .sheet(isPresented: $prepSheetShown) { prepProgressModal }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
@@ -779,6 +789,9 @@ struct RootView: View {
             // QueueView's masthead count already say a run is in progress; a second message
             // saying the same thing was redundant.
             _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys)
+            // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
+            // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
+            prepSheetShown = true
             // Watch this run so Dan sees the outcome (drafts ingested, or a clear notice
             // that it finished without producing anything) rather than silent waiting (#48).
             Task { await watchPrepRun() }
@@ -802,6 +815,9 @@ struct RootView: View {
         while PrepQueueService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
+        // #1130: the run has ended (the marker cleared). Close the takeover so it does not sit showing a
+        // finished run; the outcome surfaces below via ingest / the empty-run notice.
+        prepSheetShown = false
         let started = PrepQueueService.lastRunStartedAt
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
@@ -1208,6 +1224,28 @@ struct RootView: View {
                 onRetry: { retryScout() },
                 onHide: { scoutSheetShown = false },
                 onCancel: { cancelScout() })
+            Spacer(minLength: 0)
+        }
+        .frame(minWidth: 460, minHeight: 280)
+        .background(OVColor.canvas)
+    }
+
+    // #1130: the Prep run's takeover, the same shared component and chrome as the scout's, in the .prepping
+    // phase. The count comes live from the run's own progress file (livePrepping); the still-alive/stalled
+    // state from the run marker via PrepQueueService.isRunning, so a slow-but-living run never flips to
+    // "looks stuck". Hide keeps the run going (the toolbar "Prepping" label remains the indicator); Cancel
+    // stops it cooperatively. No Retry: a Prep run needs a which-shows selection, so restarting goes back
+    // through the picker rather than a one-click retry.
+    private var prepProgressModal: some View {
+        VStack {
+            Spacer(minLength: 0)
+            ScoutProgressView(
+                phase: .prepping,
+                since: PrepQueueService.lastRunStartedAt,
+                snapshot: { ScoutProgressView.Snapshot.livePrepping() },
+                runAlive: { PrepQueueService.isRunning(now: Date()) },
+                onHide: { prepSheetShown = false },
+                onCancel: { cancelPrep() })
             Spacer(minLength: 0)
         }
         .frame(minWidth: 460, minHeight: 280)
