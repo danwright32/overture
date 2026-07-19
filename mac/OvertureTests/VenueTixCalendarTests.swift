@@ -107,8 +107,51 @@ struct VenueTixCalendarTests {
         let stub = FetchedPage(normalizedHTML: "VT-STUB", finalURL: vt.absoluteString, contentHash: "h")
         var threadedName: String?
         let out = try await SourceFetcher.fetch(vt, sourceName: "The Green Room 42",
-                                                venuetixFeed: { _, name in threadedName = name; return stub })
+                                                venuetixFeed: { _, name, _ in threadedName = name; return stub })
         #expect(out.normalizedHTML == "VT-STUB")
         #expect(threadedName == "The Green Room 42")   // the source's orgName reaches the adapter
+    }
+
+    // #1175: the feed carries only an opaque venue id, no city, so a single-venue source resolves to
+    // `.unknown` in the geography gate rather than the confirmed NYC it is. When Dan supplies the venue's
+    // location, it is stamped into every event's place line so the extractor reads a real city and the gate
+    // places the shows in-region. The address string itself is one Dan wrote, not the app's own voice.
+    @Test func synthesizesTheVenueLocationWhenProvided() throws {
+        let events = try VenueTixCalendar.parseEvents(Data(Self.feed.utf8))
+        let html = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42",
+                                                location: "570 Tenth Ave, New York, NY 10036")
+        #expect(html.contains("570 Tenth Ave, New York, NY 10036"))
+        // The location EventPlace reads out of that string must place in-range, closing the actual gap.
+        #expect(EventPlace.resolve(location: "570 Tenth Ave, New York, NY 10036",
+                                   discipline: .music).verdict == .inRange)
+    }
+
+    // With no location supplied the document is unchanged, so an existing source with no location behaves
+    // exactly as before (no churn to its content hash from this feature).
+    @Test func omitsTheLocationLineWhenNoneProvided() throws {
+        let events = try VenueTixCalendar.parseEvents(Data(Self.feed.utf8))
+        let withNil = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42", location: nil)
+        let legacy = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42")
+        #expect(withNil == legacy)
+    }
+
+    @Test func fetchThreadsTheVenueLocationIntoTheDocument() async throws {
+        let url = URL(string: "https://thegreenroom42.venuetix.com/")!
+        let before = Date(timeIntervalSince1970: 1_781_000_000)
+        let result = try await VenueTixCalendar.fetch(url: url, venueName: "The Green Room 42",
+                                                      location: "New York, NY", now: before) { _ in
+            Data(Self.feed.utf8)
+        }
+        #expect(result.normalizedHTML.contains("New York, NY"))
+    }
+
+    @Test func sourceFetcherThreadsTheSourceLocationToTheAdapter() async throws {
+        let vt = URL(string: "https://thegreenroom42.venuetix.com/")!
+        let stub = FetchedPage(normalizedHTML: "VT-STUB", finalURL: vt.absoluteString, contentHash: "h")
+        var threadedLocation: String? = "unset"
+        _ = try await SourceFetcher.fetch(vt, sourceName: "The Green Room 42",
+                                          sourceLocation: "New York, NY",
+                                          venuetixFeed: { _, _, location in threadedLocation = location; return stub })
+        #expect(threadedLocation == "New York, NY")
     }
 }

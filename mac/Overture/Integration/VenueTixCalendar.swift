@@ -51,12 +51,16 @@ enum VenueTixCalendar {
 
     // Renders the events as one plain HTML document the extractor reads like any fetched page. Every show
     // is attributed to the venue by NAME (threaded from the source) and carries an EXPLICIT ISO date.
+    // #1175: when Dan has supplied the venue's location, it is appended to each show's place line so the
+    // extractor reads a real city and the geography gate places the shows in-region; with no location the
+    // document is byte-for-byte what it was before, so an existing source's content hash does not churn.
     // copy-inventory:ignore-start  synthesized source HTML the extractor reads, not the app's voice (#915)
-    static func listingHTML(_ events: [VTEvent], venueName: String) -> String {
+    static func listingHTML(_ events: [VTEvent], venueName: String, location: String? = nil) -> String {
+        let place = location.map { "\(venueName), \($0)" } ?? venueName
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
-            return "<article><h2>\(e.title)</h2>\(bits)<p>\(dayFormatter.string(from: e.date)) at \(venueName)</p></article>"
+            return "<article><h2>\(e.title)</h2>\(bits)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
         }.joined(separator: "\n")
         return "<section title=\"\(venueName)\">\n\(rows)\n</section>"
     }
@@ -88,21 +92,21 @@ enum VenueTixCalendar {
     // Reads the venue's complete upcoming list in ONE request, filters to now-or-later, and synthesizes one
     // document. `get` is injected so the network is testable. A failed fetch THROWS (never an empty
     // document): an empty list would read to the reconcile as "every show was cancelled".
-    static func fetch(url: URL, venueName: String, now: Date,
+    static func fetch(url: URL, venueName: String, location: String? = nil, now: Date,
                       get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
         let host = url.host ?? ""
         let data = try await get(feedRequest(forVenueHost: host))
         let events = upcoming(try parseEvents(data), now: now)
-        let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName))
+        let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName, location: location))
         return FetchedPage(normalizedHTML: html,
                            finalURL: url.absoluteString,
                            contentHash: PageNormalizer.contentHash(html))
     }
 
     // The real network fetch, used by the router.
-    static func liveFetch(url: URL, venueName: String, now: Date = Date(),
+    static func liveFetch(url: URL, venueName: String, location: String? = nil, now: Date = Date(),
                           session: URLSession = .shared) async throws -> FetchedPage {
-        try await fetch(url: url, venueName: venueName, now: now) { req in
+        try await fetch(url: url, venueName: venueName, location: location, now: now) { req in
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw SourceFetchError.unreachable
