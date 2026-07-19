@@ -137,7 +137,9 @@ struct ScoutSummaryView: View {
             // #1055: the flagged page itself, so Dan can open it and judge whether it is the wrong page
             // without leaving this popup for the Sources sheet. Clickable when it parses as a URL, plain
             // text otherwise. Carnegie's native feed has no page and so nothing to show here.
-            if let urlString = result.listingsURL {
+            // #1125: the address comes off the LIVE source when one matches, not the run-time snapshot,
+            // so a correction Dan just saved shows the new URL instead of reading as a no-op.
+            if let urlString = ScoutSummaryRow.displayURL(result: result, source: source) {
                 if let url = URL(string: urlString) {
                     Link(urlString, destination: url)
                         .font(.system(size: 11)).foregroundStyle(OVColor.forest).lineLimit(1)
@@ -154,6 +156,17 @@ struct ScoutSummaryView: View {
         .padding(.horizontal, OVSpacing.sm)
         .padding(.vertical, OVSpacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// #1125: which address a couldn't-be-checked row shows, kept out of the SwiftUI view so it can be tested
+// (logic in a view body is untestable, #863). The `SourceResult` is a SNAPSHOT captured when the scout
+// ran; the live `WatchedSource` is what "Fix the address" writes to. Prefer the live value whenever a row
+// matches, so a saved correction is visible immediately instead of reading as a no-op. The snapshot is
+// the fallback only for a result with no live watchlist row of its own.
+enum ScoutSummaryRow {
+    static func displayURL(result: ScoutService.SourceResult, source: WatchedSource?) -> String? {
+        source?.listingsURL ?? result.listingsURL
     }
 }
 
