@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **660 sentences**, from 218 source files.
+Every sentence Overture can say to Dan: **660 sentences**, from 219 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -41,6 +41,8 @@ What is not, and why:
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
+- `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
+- `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
 
 ## The same sentence, said in more than one place (38)
 
