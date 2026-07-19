@@ -23,6 +23,10 @@ struct QueueView: View {
     // derived verdict makes possible.
     @Query private var excludedTownRows: [ExcludedTown]
     private var userExcludedTowns: Set<String> { Set(excludedTownRows.map(\.town)) }
+    // #1221: seed towns Dan has un-skipped. Read the same way (a @Query) so an un-skip re-decides every
+    // affected row the instant it changes, with no migration (the geo verdict is derived, #990).
+    @Query private var allowedSeedTownRows: [AllowedSeedTown]
+    private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
 
     @State private var pendingConfirm: PendingSend?
     @State private var showReconnect = false
@@ -123,7 +127,8 @@ struct QueueView: View {
         // chips, so this is the whole to-send queue, unfiltered but for Dan's standing town refusals.
         let visible = QueueModel.toSendQueue(
             QueueModel.filter(items, discipline: nil, highOnly: false, pendingBookingsOnly: false,
-                              tooFarOnly: false, userExcludedTowns: userExcludedTowns),
+                              tooFarOnly: false, userExcludedTowns: userExcludedTowns,
+                              allowedSeedTowns: allowedSeedTowns),
             reachedOutKeys: reachedOutKeys, today: today)
         return RenderData(items: items, visible: visible, reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
@@ -600,7 +605,8 @@ struct QueueView: View {
                                   replySendSince: { rid in replySending[rid] },
                                   onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                                   showingTooFar: false,
-                                  userExcludedTowns: userExcludedTowns)
+                                  userExcludedTowns: userExcludedTowns,
+                                  allowedSeedTowns: allowedSeedTowns)
         }
     }
 

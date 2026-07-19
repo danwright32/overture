@@ -25,6 +25,9 @@ struct ExcludedTownsView: View {
     // Bound, so a Remove redraws this sheet the instant the row is gone. The seed half is read the same
     // way through the tested listing, so the two can never disagree about what is skipped.
     @Query(sort: \ExcludedTown.town) private var userRows: [ExcludedTown]
+    // #1221: bound so an Allow / Skip again redraws the seed sections the instant a row changes, the same
+    // way userRows drives his own half. The tested listing reads the same rows, so the two cannot disagree.
+    @Query(sort: \AllowedSeedTown.town) private var allowedRows: [AllowedSeedTown]
 
     private var listing: ExcludedTownEditing.Listing { ExcludedTownEditing.listing(in: context) }
 
@@ -36,6 +39,7 @@ struct ExcludedTownsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
                     yourTowns
+                    allowedBack
                     alwaysSkipped
                 }
                 .padding(OVSpacing.lg)
@@ -87,22 +91,71 @@ struct ExcludedTownsView: View {
         }
     }
 
-    // MARK: - The built-in half: read-only, because he never chose it
+    // MARK: - The built-in half: skipped from the start, and now his to take back too (#1221)
 
     private var alwaysSkipped: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Always skipped", systemImage: "map", count: listing.seed.count)
-            // Says something the heading does not: these are built in, not his, so there is no Remove on
-            // them and nothing here he forgot to do.
-            Text("Far towns skipped from the start, so you never had to refuse the obvious ones.")
+            sectionHeading("Always skipped", systemImage: "map", count: listing.seedSkipped.count)
+            // Says something the heading does not: these are built in, so he never had to refuse them, and
+            // (since #1221) Allow takes one back if a presenter he now follows starts programming there.
+            Text("Far towns skipped from the start. Allow one back if you now want its shows.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            // A wrapped line rather than a row each: nineteen fixed, unremovable names read as a list to
-            // scan, not a list to act on.
-            Text(listing.seed.map(ExcludedTownEditing.displayName).joined(separator: ", "))
-                .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
-                .fixedSize(horizontal: false, vertical: true)
+            ForEach(listing.seedSkipped, id: \.self) { town in
+                HStack(spacing: OVSpacing.sm) {
+                    Text(ExcludedTownEditing.displayName(town))
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                    Spacer()
+                    Button("Allow") { allow(town) }
+                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                }
+                .padding(.vertical, 3)
+            }
         }
+    }
+
+    // MARK: - Built-in towns he has taken back (#1221)
+
+    @ViewBuilder private var allowedBack: some View {
+        if !listing.seedAllowed.isEmpty {
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                sectionHeading("Allowed back in", systemImage: "map.circle", count: listing.seedAllowed.count)
+                Text("Built-in towns you took back onto the queue. Skip again to undo.")
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(listing.seedAllowed, id: \.self) { town in
+                    HStack(spacing: OVSpacing.sm) {
+                        Text(ExcludedTownEditing.displayName(town))
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                        Spacer()
+                        Button("Skip again") { reskip(town) }
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+        }
+    }
+
+    // #1221: un-skip a built-in seed town, reversible from the banner it happened in (#845). The Undo
+    // re-skips exactly what was allowed, reusing the same wording as taking back one of his own refusals.
+    private func allow(_ town: String) {
+        let shown = ExcludedTownEditing.displayName(town)
+        ExcludedTownEditing.allowSeedTown(town, into: context)
+        feedback.acknowledge(ActionAck.townUnexcluded(town: shown),
+                             action: .init(label: "Undo") {
+                                 ExcludedTownEditing.reskipSeedTown(town, in: context)
+                             })
+    }
+
+    // The way back the other direction: re-skip a built-in town, Undo re-allows it.
+    private func reskip(_ town: String) {
+        let shown = ExcludedTownEditing.displayName(town)
+        ExcludedTownEditing.reskipSeedTown(town, in: context)
+        feedback.acknowledge(ActionAck.townExcluded(town: shown),
+                             action: .init(label: "Undo") {
+                                 ExcludedTownEditing.allowSeedTown(town, into: context)
+                             })
     }
 
     // Reversible from the banner it happened in (#845): a mis-clicked Remove otherwise means retyping the

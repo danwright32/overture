@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **689 sentences**, from 228 source files.
+Every sentence Overture can say to Dan: **692 sentences**, from 228 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -283,6 +283,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Allow notifications"
     `UI/OnboardingView.swift`
+"Allowed back in"
+    `UI/ExcludedTownsView.swift`
 "Already booked"
     `Domain/ReviewStatus.swift`
 "Already watching \(orgName)'s calendar, so their shows turn up on their own."
@@ -332,6 +334,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "Brooklyn, NY"
     `Domain/VenueDisplay.swift`
+"Built-in towns you took back onto the queue. Skip again to undo."
+    `UI/ExcludedTownsView.swift`
 "Calendar page"
     `UI/AddLeadSheet.swift`
 "Cancel prep"
@@ -469,7 +473,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
     `App/RootView.swift`
-"Far towns skipped from the start, so you never had to refuse the obvious ones."
+"Far towns skipped from the start. Allow one back if you now want its shows."
     `UI/ExcludedTownsView.swift`
 "Find contacts only"
     `App/RootView.swift`
@@ -1066,6 +1070,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Silent follow-ups"
     `UI/FollowUpsView.swift`
+"Skip again"
+    `UI/ExcludedTownsView.swift`
 "Skipped towns"
     `App/RootView.swift`
     `UI/ExcludedTownsView.swift`

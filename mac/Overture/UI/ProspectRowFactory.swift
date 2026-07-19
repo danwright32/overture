@@ -14,7 +14,8 @@ enum ProspectRowFactory {
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
                     onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
-                    userExcludedTowns: Set<String> = []) -> AnyView {
+                    userExcludedTowns: Set<String> = [],
+                    allowedSeedTowns: Set<String> = []) -> AnyView {
         let model = prospects.first(where: { $0.naturalKey == item.id })
         let row = ProspectRowView(
             item: item,
@@ -80,6 +81,7 @@ enum ProspectRowFactory {
             highlightedRecipientId: highlightedRecipientId,
             showingTooFar: showingTooFar,
             userExcludedTowns: userExcludedTowns,
+            allowedSeedTowns: allowedSeedTowns,
             onExcludeTown: { ProspectMutations.excludeTown(item, context: context, feedback: feedback) }
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.

@@ -27,6 +27,22 @@ final class ExcludedTown {
     }
 }
 
+// #1221: a built-in SEED town Dan has UN-SKIPPED from inside the app. The seed list is no longer one-way:
+// a far town he now cares about (a presenter he follows started programming there) can be taken back, and
+// re-skipped, without a code change. Stored NORMALIZED like ExcludedTown, so the resolver (which subtracts
+// these names from the exclusion set) and the store agree on one spelling. Only a name that is actually on
+// EventPlace.excludedTowns is ever stored here; his own refusals are taken back with ExcludedTown.remove.
+@Model
+final class AllowedSeedTown {
+    @Attribute(.unique) var town: String
+    var addedAt: Date
+
+    init(town: String, addedAt: Date = Date()) {
+        self.town = town
+        self.addedAt = addedAt
+    }
+}
+
 // Adding and removing a refused town, kept OUT of the view that draws the action, for the same reason
 // WatchlistEditing and DayOffEditing are: a rule stated in a SwiftUI body is a rule no test can reach,
 // and this repo's #863 is the proof that such rules drift under a fully green suite.
@@ -50,12 +66,60 @@ enum ExcludedTownEditing {
     static func exclude(town raw: String, into context: ModelContext) -> Result {
         let name = normalize(raw)
         guard !name.isEmpty else { return .noTown }
-        if EventPlace.excludedTowns.contains(name) || names(in: context).contains(name) {
+        if EventPlace.excludedTowns.contains(name) {
+            // #1221: a seed town. If Dan had un-skipped it, refusing it again re-skips it, so "never show
+            // me this town" always ends with the town skipped. Otherwise the seed already excludes it and
+            // there is nothing to store.
+            if allowedSeedNames(in: context).contains(name) {
+                reskipSeedTown(name, in: context)
+                return .added
+            }
             return .alreadyExcluded
         }
+        if names(in: context).contains(name) { return .alreadyExcluded }
         context.insert(ExcludedTown(town: name))
         try? context.save()
         return .added
+    }
+
+    // #1221: un-skip a built-in seed town. Only a name actually on EventPlace.excludedTowns can be
+    // un-skipped; a non-seed town is not this operation's business (a stored refusal is taken back with
+    // `remove`). Idempotent, like `exclude`.
+    enum AllowResult: Equatable, Sendable {
+        case allowed
+        case notASeedTown
+        case alreadyAllowed
+        case noTown
+    }
+
+    @discardableResult
+    static func allowSeedTown(_ raw: String, into context: ModelContext) -> AllowResult {
+        let name = normalize(raw)
+        guard !name.isEmpty else { return .noTown }
+        guard EventPlace.excludedTowns.contains(name) else { return .notASeedTown }
+        if allowedSeedNames(in: context).contains(name) { return .alreadyAllowed }
+        context.insert(AllowedSeedTown(town: name))
+        try? context.save()
+        return .allowed
+    }
+
+    // The way back: re-skip an un-skipped seed town, leaving no stored allow. Used by the sheet's "Skip
+    // again" and by the Undo the un-skip banner offers.
+    static func reskipSeedTown(_ raw: String, in context: ModelContext) {
+        let name = normalize(raw)
+        guard let row = allowedRows(in: context).first(where: { $0.town == name }) else { return }
+        context.delete(row)
+        try? context.save()
+    }
+
+    static func allowedRows(in context: ModelContext) -> [AllowedSeedTown] {
+        (try? context.fetch(FetchDescriptor<AllowedSeedTown>(sortBy: [SortDescriptor(\.town)]))) ?? []
+    }
+
+    // What the queue gate subtracts from the exclusion set at resolve time: the un-skipped seed towns, as
+    // a plain lowercased set.
+    static func allowedSeedNames(in context: ModelContext) -> Set<String> {
+        Set(allowedRows(in: context).map(\.town))
     }
 
     // The way back (the #845 principle): the same refusal, reversed. Used by the Undo the banner offers,
@@ -88,13 +152,18 @@ extension ExcludedTownEditing {
     // His OWN refusals are the stored rows, his to take back. Both sorted here so the view has no ordering
     // or membership rule of its own to get wrong.
     struct Listing: Equatable, Sendable {
-        var seed: [String]        // the built-in far towns, normalized, sorted
-        var userAdded: [String]   // Dan's own stored refusals, normalized, sorted
+        // #1221: the seed is split into what is still skipped and what Dan has taken back, so the sheet can
+        // offer un-skip on one and re-skip on the other without any membership rule of its own (#863).
+        var seedSkipped: [String]   // built-in far towns still in force, normalized, sorted
+        var seedAllowed: [String]   // built-in far towns Dan un-skipped, normalized, sorted
+        var userAdded: [String]     // Dan's own stored refusals, normalized, sorted
     }
 
     static func listing(in context: ModelContext) -> Listing {
-        Listing(seed: EventPlace.excludedTowns.sorted(),
-                userAdded: rows(in: context).map(\.town).sorted())
+        let allowed = allowedSeedNames(in: context)
+        return Listing(seedSkipped: EventPlace.excludedTowns.subtracting(allowed).sorted(),
+                       seedAllowed: allowed.sorted(),
+                       userAdded: rows(in: context).map(\.town).sorted())
     }
 
     // The town as Dan reads it. Towns are stored and seeded lowercased so the resolver can compare tokens

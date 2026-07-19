@@ -10,7 +10,7 @@ import SwiftData
 @Suite("Excluding a town from inside the app (#991)")
 struct ExcludedTownEditingTests {
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self]),
+        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self, AllowedSeedTown.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
@@ -58,7 +58,7 @@ struct ExcludedTownEditingTests {
 @Suite("The 'never show me this town' row action (#991)")
 struct ExcludeTownActionTests {
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self]),
+        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self, AllowedSeedTown.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
@@ -93,7 +93,7 @@ struct ExcludeTownActionTests {
 @Suite("Reviewing and un-excluding skipped towns (#1118)")
 struct ExcludedTownListingTests {
     private func context() throws -> ModelContext {
-        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self]),
+        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self, AllowedSeedTown.self]),
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
@@ -107,15 +107,16 @@ struct ExcludedTownListingTests {
         let listing = ExcludedTownEditing.listing(in: ctx)
 
         #expect(listing.userAdded == ["new haven", "poughkeepsie"])   // stored, normalized, sorted
-        #expect(listing.seed == EventPlace.excludedTowns.sorted())     // the built-in far towns, in full
-        #expect(listing.seed.contains("albany"))
+        #expect(listing.seedSkipped == EventPlace.excludedTowns.sorted())  // the built-in far towns, in full
+        #expect(listing.seedSkipped.contains("albany"))
+        #expect(listing.seedAllowed.isEmpty)                           // none un-skipped yet
     }
 
     // With no refusals of his own, the user half is empty (the sheet's empty state) while the seed stands.
     @Test func theUserHalfIsEmptyUntilDanRefusesATown() throws {
         let ctx = try context()
         #expect(ExcludedTownEditing.listing(in: ctx).userAdded.isEmpty)
-        #expect(ExcludedTownEditing.listing(in: ctx).seed == EventPlace.excludedTowns.sorted())
+        #expect(ExcludedTownEditing.listing(in: ctx).seedSkipped == EventPlace.excludedTowns.sorted())
     }
 
     // The whole point of the feature: removing a town takes it off the listing AND flips the geo verdict
@@ -148,14 +149,87 @@ struct ExcludedTownListingTests {
         #expect(ExcludedTownEditing.names(in: ctx).isEmpty)
     }
 
-    // The edge case that keeps the seed section honest: a seed town has no stored row, so removing it is a
-    // no-op and it stays skipped. Taking a built-in far town back is not something this sheet does.
+    // The edge case that keeps the seed section honest: a seed town has no stored row, so PLAIN remove is a
+    // no-op and it stays skipped. Taking a built-in far town back now happens through allowSeedTown (#1221),
+    // not remove, so remove leaves the seed alone exactly as before.
     @Test func aSeedTownStaysSkippedBecauseThereIsNoRowToRemove() throws {
         let ctx = try context()
         ExcludedTownEditing.remove(town: "Albany", in: ctx)
 
-        #expect(ExcludedTownEditing.listing(in: ctx).seed.contains("albany"))
+        #expect(ExcludedTownEditing.listing(in: ctx).seedSkipped.contains("albany"))
         #expect(EventPlace.resolve(location: "Albany, NY", discipline: .opera,
                                    userExcludedTowns: ExcludedTownEditing.names(in: ctx)).verdict == .outOfRange)
+    }
+}
+
+// #1221: the seed exclude list is no longer one-way. A built-in far town Dan now cares about (a presenter
+// he follows started programming there) can be un-skipped, and re-skipped, from inside the app. The
+// verdict is derived (#990), so an un-skip re-decides every affected row at once with no migration.
+@MainActor
+@Suite("Un-skipping a built-in seed town (#1221)")
+struct AllowedSeedTownTests {
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self, AllowedSeedTown.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    // The core: a seed town, out of range while skipped, is decided in range once un-skipped (opera, so
+    // the region rule applies rather than the music boroughs-only rule; Buffalo is in NY, which is in range).
+    @Test func unskippingASeedTownBringsItBackIntoRange() throws {
+        let ctx = try context()
+        #expect(EventPlace.resolve(location: "Buffalo, NY", discipline: .opera).verdict == .outOfRange)
+
+        #expect(ExcludedTownEditing.allowSeedTown("Buffalo", into: ctx) == .allowed)
+        #expect(ExcludedTownEditing.allowedSeedNames(in: ctx) == ["buffalo"])
+        #expect(EventPlace.resolve(location: "Buffalo, NY", discipline: .opera,
+                                   allowedSeedTowns: ExcludedTownEditing.allowedSeedNames(in: ctx)).verdict == .inRange)
+    }
+
+    // Only a built-in seed town can be un-skipped. A town that is not on the seed is not this operation's
+    // business (his own refusal is taken back with remove), so it stores nothing and says so.
+    @Test func onlyASeedTownCanBeUnskipped() throws {
+        let ctx = try context()
+        #expect(ExcludedTownEditing.allowSeedTown("Poughkeepsie", into: ctx) == .notASeedTown)
+        #expect(ExcludedTownEditing.allowedSeedNames(in: ctx).isEmpty)
+    }
+
+    // Idempotent, like exclude: un-skipping the same seed town twice stores nothing new.
+    @Test func unskippingTheSameSeedTownTwiceIsANoOp() throws {
+        let ctx = try context()
+        #expect(ExcludedTownEditing.allowSeedTown("Buffalo", into: ctx) == .allowed)
+        #expect(ExcludedTownEditing.allowSeedTown(" buffalo ", into: ctx) == .alreadyAllowed)
+        #expect(ExcludedTownEditing.allowedSeedNames(in: ctx).count == 1)
+    }
+
+    // The way back: re-skip puts a built-in town back on the skip list, out of range again.
+    @Test func reskippingASeedTownSkipsItAgain() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.allowSeedTown("Buffalo", into: ctx)
+        ExcludedTownEditing.reskipSeedTown("Buffalo", in: ctx)
+        #expect(ExcludedTownEditing.allowedSeedNames(in: ctx).isEmpty)
+        #expect(EventPlace.resolve(location: "Buffalo, NY", discipline: .opera,
+                                   allowedSeedTowns: ExcludedTownEditing.allowedSeedNames(in: ctx)).verdict == .outOfRange)
+    }
+
+    // Refusing an un-skipped seed town from a row re-skips it, so "never show me this town" always ends
+    // with the town skipped, never silently allowed because it happened to be a seed town he had un-skipped.
+    @Test func refusingAnUnskippedSeedTownReskipsIt() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.allowSeedTown("Buffalo", into: ctx)
+        #expect(ExcludedTownEditing.exclude(town: "Buffalo", into: ctx) == .added)
+        #expect(ExcludedTownEditing.allowedSeedNames(in: ctx).isEmpty)   // the allow is gone; it is skipped again
+    }
+
+    // The listing splits the seed into what is still skipped and what Dan has taken back, each sorted, so
+    // the sheet has no membership rule of its own (the #863 lesson).
+    @Test func theListingSplitsSkippedFromAllowedSeedTowns() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.allowSeedTown("Buffalo", into: ctx)
+
+        let listing = ExcludedTownEditing.listing(in: ctx)
+        #expect(listing.seedAllowed == ["buffalo"])
+        #expect(listing.seedSkipped.contains("buffalo") == false)
+        #expect(listing.seedSkipped.contains("albany"))                 // the rest stay skipped
+        #expect(listing.seedSkipped == EventPlace.excludedTowns.subtracting(["buffalo"]).sorted())
     }
 }
