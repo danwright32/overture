@@ -376,7 +376,8 @@ enum ScoutService {
         // guard's argument does not care which door an event used: a prospect with no venue puts the
         // wrong place in Dan's email, and nothing downstream can catch it. A structured feed that stops
         // naming a facility produces exactly that, silently.
-        let usable = events.filter(ExtractedEventGuard.isUsable)
+        let usable = events.map(ExtractedEventGuard.placed)   // #1214: carry a rescued outdoor venue on
+            .filter(ExtractedEventGuard.isUsable)
         // #1032: the drops split by family (venue vs title), the SAME helper the agent door counts
         // through, so the two paths can never disagree. `total` is the tolerance-gate count; the title
         // share travels on so the Sources note names a titleless drop correctly rather than "no venue".

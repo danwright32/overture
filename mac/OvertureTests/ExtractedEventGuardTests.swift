@@ -196,6 +196,33 @@ struct ExtractedEventGuardTests {
         #expect(ExtractedEventGuard.rejection(for: event(venue: "Bryant Park", location: "Bryant Park"))
                 == nil)
     }
+
+    // #1214: the model sometimes NULLS the venue for a named outdoor space and leaves the place only in
+    // `location` (the runbook says a named outdoor space IS the venue, but a prompt is a request, not a
+    // guarantee). The deterministic net: when the venue is blank but the location names an outdoor
+    // place, promote that location into the venue rather than dropping a real, pitchable show. This is
+    // the exact Every Voice Choirs / Sakura Park drop found live, read correctly then discarded.
+    @Test func aVenuelessOutdoorLocationIsPromotedToTheVenue() {
+        let e = event(venue: nil, location: "Sakura Park, W 122nd St & Riverside Dr")
+        #expect(ExtractedEventGuard.rejection(for: e) == nil)
+        #expect(ExtractedEventGuard.placed(e).venue == "Sakura Park, W 122nd St & Riverside Dr")
+    }
+
+    // The promotion is strictly the #1057 outdoor carve-out, never a bare city: "Baltimore, Maryland"
+    // carries no place-type word, so it is not promoted and the show stays dropped as venueless.
+    // Without this the #995 "city in the venue field" bug would walk right back in.
+    @Test func aVenuelessBareCityLocationIsNotPromoted() {
+        let e = event(venue: nil, location: "Baltimore, Maryland")
+        #expect(ExtractedEventGuard.rejection(for: e) == .noVenue)
+        #expect(ExtractedEventGuard.placed(e).venue == nil)
+    }
+
+    // Idempotent: a show that already names its own venue is never touched, even when its location also
+    // names an outdoor place.
+    @Test func placedLeavesAnExistingVenueAlone() {
+        let e = event(venue: "Merkin Hall", location: "Bryant Park")
+        #expect(ExtractedEventGuard.placed(e).venue == "Merkin Hall")
+    }
 }
 
 // The guard is wired into the results boundary itself, not left as a helper an ingest might forget to
@@ -254,6 +281,19 @@ struct ScoutExtractResultsGuardTests {
         #expect(rejected.count == 1)
         #expect(rejected.first?.title == "LABBS 50th Convention")
         #expect(rejected.first?.reason == .locationAsVenue)
+    }
+
+    // #1214: a venueless show whose location names an outdoor space comes OUT of the boundary with the
+    // location PROMOTED into the venue, so it reaches the prospect placed rather than dropped. The
+    // guard's verdict alone is not enough: the event that becomes a prospect has to actually carry the
+    // venue, or the pitch names nowhere.
+    @Test func aVenuelessOutdoorShowIsPromotedAndSurvivesTheBoundary() {
+        let r = results([event("Pumpkin Singalong", venue: nil,
+                               location: "Sakura Park, W 122nd St & Riverside Dr")])
+        let usable = r.events(for: "s")
+        #expect(usable.count == 1)
+        #expect(usable.first?.venue == "Sakura Park, W 122nd St & Riverside Dr")
+        #expect(r.rejectedEvents(for: "s").isEmpty)
     }
 
     @Test func aSourceWhoseEventsAreAllVenuelessIsVisiblyBrokenRatherThanEmpty() {

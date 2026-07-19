@@ -110,6 +110,11 @@ For each item in the work-list:
    A city is not a room. `location` (3a) is where that fact belongs, and it has its own field precisely
    so `venue` never has to absorb it.
 
+   **Before you null, check the outdoor exception below.** Null is right only when the page names no
+   specific place at all. A specific NAMED outdoor space (a park, plaza, pier) is a real venue, not a
+   location, so it belongs in `venue`. Nulling "Sakura Park" is the exact slip #1214 was filed for: the
+   general rule above was applied to a named place it does not cover.
+
    **A specific, NAMED outdoor performance space IS a venue** (#1057), even though it is not a room. Dan's
    call: the pitch email can say "your Oct 25 concert at Sakura Park" the same way it says "at Carnegie
    Hall," so a named park, plaza, or pier belongs in `venue`, not `location`. The distinction is between a
