@@ -6,10 +6,16 @@ import SwiftUI
 struct ConversationStateMenu: View {
     let currentState: ConversationState?
     let label: String
+    // #1139: an optional icon + accent, so a caller that sits this control right next to another one
+    // (the draft-review row's "Mark…" outcome menu) can make the two read as a deliberate, distinct pair
+    // rather than two identical dropdowns. Both default to nil, so every other caller (Follow-ups, the
+    // reached-out row) renders exactly as before: a plain borderless text menu on the system default.
+    var systemImage: String? = nil
+    var accent: Color? = nil
     let onSet: (ConversationState) -> Void
 
     var body: some View {
-        Menu(label) {
+        Menu {
             ForEach(ConversationState.allCases, id: \.self) { s in
                 Button {
                     onSet(s)
@@ -18,9 +24,26 @@ struct ConversationStateMenu: View {
                     else { Text(s.label) }
                 }
             }
+        } label: {
+            menuLabel
         }
         .menuStyle(.borderlessButton).fixedSize()
         .font(OVType.meta)
+    }
+
+    @ViewBuilder private var menuLabel: some View {
+        let base = Group {
+            if let systemImage { Label(label, systemImage: systemImage) }
+            else { Text(label) }
+        }
+        if let accent {
+            base
+                .foregroundStyle(accent)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
+                .background(Capsule().strokeBorder(accent.opacity(0.4), lineWidth: 1))
+        } else {
+            base
+        }
     }
 }
 
@@ -31,6 +54,11 @@ struct ConversationStateMenu: View {
 struct ConversationStateControl: View {
     let currentState: ConversationState?
     let stateSource: OutcomeSource?
+    // #1139: threaded straight through to the underlying menu (see ConversationStateMenu); nil for
+    // every caller except the draft-review row, which sets them so this control reads as clearly its
+    // own kind next to the adjacent "Mark…" outcome menu.
+    var systemImage: String? = nil
+    var accent: Color? = nil
     let onSet: (ConversationState) -> Void
     let onConfirm: () -> Void
 
@@ -40,12 +68,14 @@ struct ConversationStateControl: View {
                 Text(ConversationState.looksLikeNote(currentState)).foregroundStyle(OVColor.inkSoft)
                 Button("Confirm", action: onConfirm)
                     .buttonStyle(.plain).foregroundStyle(OVColor.forest)
-                ConversationStateMenu(currentState: currentState, label: "Change", onSet: onSet)
+                ConversationStateMenu(currentState: currentState, label: "Change",
+                                      systemImage: systemImage, accent: accent, onSet: onSet)
             }
             .font(OVType.meta)
         } else {
             ConversationStateMenu(currentState: currentState,
-                                  label: currentState == nil ? "Set a state" : "Change", onSet: onSet)
+                                  label: currentState == nil ? "Set a state" : "Change",
+                                  systemImage: systemImage, accent: accent, onSet: onSet)
         }
     }
 }

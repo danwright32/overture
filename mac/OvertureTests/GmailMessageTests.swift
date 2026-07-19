@@ -127,4 +127,32 @@ struct GmailMessageTests {
         #expect(msg.contains("A &lt;b&gt; &amp; one"))   // escaped, not raw markup
         #expect(msg.contains("<br"))                     // the newline became a break
     }
+
+    // MARK: - #1157: draft-review preview shows what actually goes out (body + sign-off)
+
+    // The review card previews the outgoing message INCLUDING the sign-off, so what Dan approves is
+    // what goes out. previewBody is the single composition used by BOTH the card and the send path.
+    @Test func previewBodyAppendsTheSignoffAfterTheBody() {
+        let sig = OutboundSignature(html: nil, plainText: "Best,\nDan Wright\nDan Wright Photography")
+        let preview = GmailMessage.previewBody(body: "Hi Emma,\n\nText.", signature: sig)
+        #expect(preview == "Hi Emma,\n\nText.\n\nBest,\nDan Wright\nDan Wright Photography")
+    }
+
+    // No sign-off (OutboundSignature.none) leaves the body untouched, so an unsigned preview is just
+    // the draft, never a stray blank block.
+    @Test func previewBodyWithNoSignoffIsJustTheBody() {
+        #expect(GmailMessage.previewBody(body: "Hi Emma,", signature: .none) == "Hi Emma,")
+    }
+
+    // The previewed text is exactly the text/plain part the send builds, for both the plain-only and
+    // the HTML-signature cases, so the card can never drift from the wire message.
+    @Test func previewBodyIsThePlainTextPartTheSendComposes() {
+        for sig in [OutboundSignature(html: nil, plainText: "Best,\nDan Wright"),
+                    OutboundSignature(html: "<div>sig</div>", plainText: "Best,\nDan Wright")] {
+            let preview = GmailMessage.previewBody(body: "Hi Emma,\n\nText.", signature: sig)
+            let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+                                          subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig, boundary: "B")
+            #expect(msg.contains(preview))   // the card's preview IS the plain part inside the sent message
+        }
+    }
 }

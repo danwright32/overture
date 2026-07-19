@@ -60,6 +60,12 @@ struct DraftReviewView: View {
     // #685: which contact, if any, a deep link (Reached Out row / Follow-ups sheet) targeted, so
     // that one row is gold-highlighted instead of just the whole card.
     var highlightedRecipientId: String? = nil
+    // #1157: the styled sign-off is appended at SEND time (GmailMessage.rfc822), so the card used to
+    // show the body WITHOUT it, and Dan approved an email without seeing the closing the recipient
+    // actually gets. Preview the outgoing message's plain-text body (body + sign-off) using the SAME
+    // composition the send path uses (GmailMessage.previewBody), so what he approves is what goes out.
+    // Sourced from the stored Gmail signature; falls back to the plain sign-off when none is fetched yet.
+    var outboundSignature: OutboundSignature = GmailSignatureStore.currentSignature()
 
     @State private var editing = false
     @State private var askAboutWholeOrg = false   // #769
@@ -215,7 +221,10 @@ struct DraftReviewView: View {
                     Text(subject).font(.system(size: 13, weight: .semibold)).foregroundStyle(OVColor.ink)
                 }
                 if let body = item.draftBody {
-                    Text(body)
+                    // #1157: show the body WITH the sign-off the send path appends, so Dan approves the
+                    // real outgoing message. previewBody is the exact text/plain composition GmailMessage
+                    // sends, so the card can't drift from the wire.
+                    Text(GmailMessage.previewBody(body: body, signature: outboundSignature))
                         .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -504,9 +513,12 @@ struct DraftReviewView: View {
         let highlighted = highlightedRecipientId == c.id
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: OVSpacing.xs) {
-                Image(systemName: "person.crop.circle").foregroundStyle(OVColor.inkFaint)
+                // #1137: no provenance tag ("act"/"performer"/"presenter"/"added") here: it repeats what
+                // the contact summary above already tells Dan. And the leading glyph does double duty: for
+                // a still-pending contact it IS the remove control (see leadingGlyph), so there's no
+                // separate "Remove" row below.
+                leadingGlyph(for: c)
                 Text(c.displayName).fontWeight(.medium).foregroundStyle(OVColor.ink)
-                Text(provenanceLabel(c.provenance)).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
                 Spacer()
                 // #656: a soft/temporary Gmail delay, purely informational, alongside (never in
                 // place of) the status line, since it must never affect isSilent/eligibility.
@@ -551,9 +563,14 @@ struct DraftReviewView: View {
                         // without recording an outcome".
                         Button("Remove", role: .destructive) { onRemoveRecipient(c.id) }
                     } label: {
-                        Text("Mark…").font(OVType.meta).foregroundStyle(OVColor.forest)
+                        // #1139: this menu records an OUTCOME. Its outcome flag icon and forest accent
+                        // (both from ContactRowControls.Kind.outcome, tested) mark it as a different KIND
+                        // of control from the conversation-state menu beside it, so the two no longer read
+                        // as duplicates and the colour difference is deliberate, not incidental.
+                        Label("Mark…", systemImage: ContactRowControls.Kind.outcome.icon)
+                            .font(OVType.meta).foregroundStyle(ContactRowControls.Kind.outcome.accent.color)
                             .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
-                            .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
+                            .background(Capsule().strokeBorder(ContactRowControls.Kind.outcome.accent.color.opacity(0.4), lineWidth: 1))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
                     stateControl(for: c)
@@ -569,20 +586,10 @@ struct DraftReviewView: View {
                     }
                 }
                 .padding(.leading, 20)
-            } else if c.sendState == .pending {
-                // #399: a never-sent contact can be removed outright (Prospect.removeOrSuppressRecipient
-                // hard-deletes a still-pending row), so this is a plain delete, not a menu of outcomes.
-                Button { onRemoveRecipient(c.id) } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "xmark.circle").font(.system(size: 10))
-                        Text("Remove").font(OVType.meta)
-                    }
-                    .foregroundStyle(OVColor.inkSoft)
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 20)
-                .help("Remove this contact")
             }
+            // #1137: a still-pending contact no longer gets its own indented "Remove" row. Its leading
+            // glyph is the X that removes it (leadingGlyph / #399: Prospect.removeOrSuppressRecipient
+            // hard-deletes a still-pending row).
             if c.replied { replyDraftBlock(c) }
         }
         .padding(.vertical, 3)
@@ -683,7 +690,22 @@ struct DraftReviewView: View {
         .padding(.leading, 20)
     }
 
-    private func provenanceLabel(_ p: RecipientProvenance) -> String { p.label }   // #885
+    // #1137: for a still-pending contact the leading glyph IS the remove control (the X sits exactly
+    // where the person icon used to be, so a click there removes the contact), which is why the separate
+    // "Remove" row is gone. A sent contact keeps a plain, non-interactive person icon (it can't be
+    // hard-deleted; its removal is the destructive item inside the "Mark…" menu). The which-and-whether
+    // rule lives in ContactRowControls, tested, not in this view body.
+    @ViewBuilder private func leadingGlyph(for c: RecipientSnapshot) -> some View {
+        let icon = Image(systemName: ContactRowControls.leadingIcon(sendState: c.sendState))
+            .foregroundStyle(OVColor.inkFaint)
+        if ContactRowControls.leadingIsRemove(sendState: c.sendState) {
+            Button { onRemoveRecipient(c.id) } label: { icon }
+                .buttonStyle(.plain)
+                .help("Remove this contact")
+        } else {
+            icon
+        }
+    }
 
     private func contactStatusColor(_ c: RecipientSnapshot) -> Color {
         if c.resolution == .booked { return OVColor.forest }
@@ -709,7 +731,13 @@ struct DraftReviewView: View {
     // different vocabulary: terminal outcomes there, in-flight conversation state here), mirroring
     // FollowUpsView's own set/confirm split for the same per-recipient state.
     private func stateControl(for c: RecipientSnapshot) -> some View {
+        // #1139: this control sets the in-flight CONVERSATION STATE, a different kind of thing from the
+        // "Mark…" outcome menu beside it. Its conversation icon and gold accent (from
+        // ContactRowControls.Kind.conversationState, tested) pair with, but stay clearly distinct from,
+        // the outcome menu's flag + forest, so the two read as a deliberate system rather than duplicates.
         ConversationStateControl(currentState: c.conversationState, stateSource: c.conversationStateSource,
+                                 systemImage: ContactRowControls.Kind.conversationState.icon,
+                                 accent: ContactRowControls.Kind.conversationState.accent.color,
                                  onSet: { onSetRecipientConversationState(c.id, $0) },
                                  onConfirm: { onConfirmRecipientConversationState(c.id) })
     }
