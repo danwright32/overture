@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **676 sentences**, from 227 source files.
+Every sentence Overture can say to Dan: **679 sentences**, from 227 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -222,6 +222,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
+"1 venue is still waiting to be checked."
+    `UI/ScoutSummaryView.swift`
 "A Gmail connection is already in progress. Finish it in the browser."
     `Integration/GmailAuthManager.swift`
 "A Prep run is already in progress. Wait for it to finish."
@@ -955,6 +957,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Run reconcile now"
     `App/MenuBarContent.swift`
+"Run scout again"
+    `UI/ScoutSummaryView.swift`
 "Run scout now"
     `App/RootView.swift`
 "Run the scout to comb the venue calendars. Ranked candidates land here for review."
@@ -1368,6 +1372,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
     `Domain/SourceAttention.swift`
+"\(deferredCount) venues are still waiting to be checked."
+    `UI/ScoutSummaryView.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
 "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
