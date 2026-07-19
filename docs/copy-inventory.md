@@ -906,7 +906,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Read this source's listings now, without scouting the rest of the list"
     `Domain/WatchlistEditing.swift`
 "Reading calendars"
-    `UI/ScoutProgressView.swift`
+    `UI/RunProgressView.swift`
 "Reconcile complete: "
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."

@@ -16,7 +16,7 @@ import SwiftUI
 // This is not decoration. CLAUDE.md's standing rule is that a slow action must make working, still-
 // alive and failed visibly different states; the ticking counter and the stalled warning are exactly
 // that, routed through the same RunProgress.liveness every other long action uses.
-struct ScoutProgressView: View {
+struct RunProgressView: View {
     // #1130: `prepping` is the detached Prep run (contact-finding + drafting per prospect), which takes
     // minutes and so needs the same visible working/stalled state as the scout rather than a bare label.
     enum Phase: Equatable { case scouting, reading, prepping }
@@ -67,7 +67,7 @@ struct ScoutProgressView: View {
         }
     }
 
-    // Internal (not private) so ScoutProgressViewStateTests can call it with a fixed `now`, the same
+    // Internal (not private) so RunProgressViewStateTests can call it with a fixed `now`, the same
     // reason LiveRunLabel.content(now:) is (see its #470 comment).
     @ViewBuilder func content(now: Date) -> some View {
         let state = RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: runAlive?())
@@ -87,9 +87,9 @@ struct ScoutProgressView: View {
     @ViewBuilder private func running(now: Date) -> some View {
         let snap = snapshot()
         ProgressView().controlSize(.large).tint(OVColor.gold)
-        Text(ScoutProgressCopy.title(phase))
+        Text(RunProgressCopy.title(phase))
             .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-        if let line = ScoutProgressCopy.sourceLine(name: snap.sourceName,
+        if let line = RunProgressCopy.sourceLine(name: snap.sourceName,
                                                    completed: snap.completed, total: snap.total) {
             Text(line).font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 .multilineTextAlignment(.center)
@@ -103,7 +103,7 @@ struct ScoutProgressView: View {
     @ViewBuilder private func stalled(elapsed: String) -> some View {
         Image(systemName: "exclamationmark.triangle.fill")
             .font(.system(size: 28)).foregroundStyle(OVColor.rust)
-        Text(RunProgress.stalledLabel(ScoutProgressCopy.title(phase), elapsed: elapsed))
+        Text(RunProgress.stalledLabel(RunProgressCopy.title(phase), elapsed: elapsed))
             .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
             .multilineTextAlignment(.center)
     }
@@ -127,7 +127,7 @@ struct ScoutProgressView: View {
     }
 }
 
-extension ScoutProgressView.Snapshot {
+extension RunProgressView.Snapshot {
     // #1034/#1036: the live reading-phase snapshot, from the files the app already owns. The source being
     // read now comes from diffing the queue the app wrote against the results the run is filling; the
     // count from the run's own script-derived progress file (#1015). ONE definition, shared by RootView's
@@ -135,32 +135,32 @@ extension ScoutProgressView.Snapshot {
     // showing. Injectable URLs so it is a real unit test; missing files read as an empty snapshot.
     static func liveReading(queueURL: URL = ScoutExtractQueueBuilder.defaultURL,
                             resultsURL: URL = ScoutExtractResultsDecoder.defaultURL,
-                            progressURL: URL = ScoutExtractProgressDecoder.defaultURL) -> ScoutProgressView.Snapshot {
+                            progressURL: URL = ScoutExtractProgressDecoder.defaultURL) -> RunProgressView.Snapshot {
         let progress = ScoutExtractProgressDecoder.loadCurrent(from: progressURL)
-        return ScoutProgressView.Snapshot(
+        return RunProgressView.Snapshot(
             sourceName: ScoutExtractCurrentSource.loadCurrentName(queueURL: queueURL, resultsURL: resultsURL),
             completed: progress?.completed ?? 0,
             total: progress?.total ?? 0)
     }
 }
 
-extension ScoutProgressView.Snapshot {
+extension RunProgressView.Snapshot {
     // #1130: the live Prep-run snapshot, from the run's own progress file (overture-prep-progress.json,
     // total/completed, written by the workflow, decoded by PrepProgressDecoder). The Prep run works by
     // prospect but does not publish which one, so there is no per-item name: sourceLine degrades to just
     // "N of M". Injectable URL so it is a real unit test; a missing/mid-write file reads as an empty
     // snapshot (completed 0, total 0), which sourceLine renders as no count line at all.
-    static func livePrepping(progressURL: URL = PrepProgressDecoder.defaultURL) -> ScoutProgressView.Snapshot {
+    static func livePrepping(progressURL: URL = PrepProgressDecoder.defaultURL) -> RunProgressView.Snapshot {
         let progress = PrepProgressDecoder.loadCurrent(from: progressURL)
-        return ScoutProgressView.Snapshot(sourceName: nil,
+        return RunProgressView.Snapshot(sourceName: nil,
                                           completed: progress?.completed ?? 0,
                                           total: progress?.total ?? 0)
     }
 }
 
 // The modal's words, pure so a test reads them directly rather than digging them out of the view.
-enum ScoutProgressCopy {
-    static func title(_ phase: ScoutProgressView.Phase) -> String {
+enum RunProgressCopy {
+    static func title(_ phase: RunProgressView.Phase) -> String {
         switch phase {
         case .scouting: return "Scouting"
         case .reading:  return "Reading calendars"
