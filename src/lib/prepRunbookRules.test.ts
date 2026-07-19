@@ -28,6 +28,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "performer-misidentification-low",
       "press-media-disqualified",
       "pursue-each-named-performer",
+      "returning-client-register",
       "venue-address-disqualified",
     ]);
   });

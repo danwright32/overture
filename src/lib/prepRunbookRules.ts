@@ -29,6 +29,10 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // #1122: a run whose opening night has passed must be pitched on its remaining dates only, never
   // naming the gone opening. Dropping this rule would let a draft cite a date already behind us.
   { name: "passed-opening-not-named", pattern: /NEVER name or reference the passed opening night/i },
+  // #1215: a returning client (booked) or a warm lead (warm) must not be reintroduced cold. Dropping
+  // this rule would send a stranger's self-introduction and credential recital to someone who already
+  // knows Dan, and would remove the guardrail against inventing a past-project memory to sound warm.
+  { name: "returning-client-register", pattern: /a returning-client register does not license invented history/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

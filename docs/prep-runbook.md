@@ -251,6 +251,26 @@ app surfaces to Dan so he can judge it himself.
 INVOKE the `dan-wright-brand-voice` skill and follow it. Then, as secondary nudges only,
 apply the distilled voice guidance from "Once per run" above (the skill always wins). Anatomy:
 
+- **Relationship register: read `priorRelationship` first (#1215).** The handoff's
+  `priorRelationship` is already the confirmation-gated value (`priorRelationshipForDrafting`,
+  #752), so act on it directly and never re-derive it. It decides who you are writing to, and
+  most of the anatomy below (the opener archetypes, the credential + portfolio scaffolding) is
+  the COLD register:
+  - `booked` (Dan has actually shot for them, a returning client): write to someone who ALREADY
+    KNOWS his work. Skip the cold self-introduction ("My name is Dan and I'm a professional arts
+    photographer") AND the credential + portfolio scaffolding below; they need neither. Open warm
+    and familiar, reference the specific upcoming show, and go straight to the offer.
+  - `warm` (a warm lead or connection Dan has NOT shot for yet): drop the cold self-introduction
+    and write in a warmer, more familiar register, but since they have not seen his work FOR them,
+    still keep ONE light credential and the portfolio link (below) as soft proof.
+  - anything else (`none`, `contacted`, `declined_by_you`, `lost_soft`, `lost_hard`): the cold
+    pitch is unchanged, exactly as the rest of this section describes.
+
+  Across all three, warm the TONE only. NEVER fabricate a specific past-project claim ("loved
+  shooting your Spring Concert") unless it is actually known:
+  **a returning-client register does not license invented history**. The greeting rule below still
+  applies in every register.
+
 - **No greeting in the body (#393).** The drafted `body` MUST start at the first real
   sentence with NO greeting token: write "I photograph performing arts in New York and
   saw..." NOT "Hi Emma, I photograph...". The app owns the greeting and renders it per
