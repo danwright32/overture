@@ -102,7 +102,7 @@ enum ScoutExtractIngest {
             // We read the page. It may have had nothing upcoming on it, which is the NORMAL state (5 of
             // the 7 sites in the #770 spike, in July) and is not a failure: we know what that page says,
             // and re-reading it daily until the season starts would be paying to be told so again.
-            let events = results.events(for: result.sourceId)
+            let events = results.events(for: result.sourceId, today: today)
             // #1032: the drops this run threw away, split by family (venue vs title), computed once and
             // used for BOTH the #887 tolerance gate (its total) and the Sources note (its title share).
             let rejection = results.rejectionCounts(for: result.sourceId)
