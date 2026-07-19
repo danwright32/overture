@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **657 sentences**, from 218 source files.
+Every sentence Overture can say to Dan: **660 sentences**, from 218 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -30,6 +30,7 @@ What is not, and why:
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log to a file, not the app's own voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic + a system activity reason, not the app's voice (#915)
+- `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
@@ -366,6 +367,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Couldn't block \(range)"
     `UI/ProspectMutations.swift`
+"Couldn't connect Gmail"
+    `App/RootView.swift`
 "Couldn't connect Gmail: \(reason)"
     `Domain/OnboardingState.swift`
 "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
@@ -780,6 +783,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
     `UI/DraftReviewView.swift`
+"Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
+    `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
@@ -1212,6 +1217,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."
     `Domain/EmptyState.swift`
+"Try again"
+    `App/RootView.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Unclear producer; needs a closer look before pitching."
