@@ -152,12 +152,19 @@ enum OperaAmericaCalendar {
     }
     // copy-inventory:ignore-end
 
+    // #1183: the end of the feed's horizon window, derived from the ONE shared calendar horizon
+    // (CalendarMonthIndex.defaultHorizon) rather than a private copy of "4 months". If the horizon ever
+    // changes, the OPERA feed moves with it instead of silently drifting out of sync with the scout.
+    static func windowEnd(from now: Date) -> Date {
+        Calendar.current.date(byAdding: .month, value: CalendarMonthIndex.defaultHorizon, to: now) ?? now
+    }
+
     // The real network fetch: reads every page from the live feed over a horizon window. `from`..`to`
-    // default to now through four months out, matching the scout's calendar horizon.
+    // default to now through the shared calendar horizon (#1183), matching the rest of the scout.
     static func liveFetch(url: URL, now: Date = Date(), pageSize: Int = 100,
                           session: URLSession = .shared) async throws -> FetchedPage {
         let host = url.host ?? "www.operaamerica.org"
-        let to = Calendar.current.date(byAdding: .month, value: 4, to: now) ?? now
+        let to = windowEnd(from: now)
         return try await fetch(url: url) { page in
             let req = filteredRequest(host: host, from: now, to: to, page: page, pageSize: pageSize)
             let (data, response) = try await session.data(for: req)
