@@ -193,6 +193,37 @@ struct AgentRosterTests {
         #expect(AgentRoster.statuses(calm).contains { $0.name == "OmniFocus" } == false)
     }
 
+    // #1134: Reached out is its own stage now, always present in the strip so Dan can navigate to it. It
+    // is informational (never "needs you"): the people actually due for a nudge surface under Follow-ups.
+    @Test func reachedOutIsAlwaysPresentAndNeverNeedsYou() {
+        var i = calm; i.reachedOut = 5
+        let s = status("Reached out", i)
+        #expect(s.focus == .reachedOut)
+        #expect(s.state == .idle)                 // never gold/rust: it is not attention
+        #expect(s.detail == "5")                  // the count Dan sees, which the reached-out view matches
+        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 0)
+    }
+
+    // With no one reached out yet, the pill still appears (a navigation stop) but carries no bare "0".
+    @Test func reachedOutWithNoOneShowsNoCount() {
+        let s = status("Reached out", calm)
+        #expect(s.state == .idle)
+        #expect(s.detail == "")
+    }
+
+    // Tapping Reached out navigates the queue (to its per-recipient list), like every non-action pill.
+    @Test func reachedOutChipNavigates() {
+        var i = calm; i.reachedOut = 2
+        #expect(AgentRoster.chipAction(for: status("Reached out", i)) == .focusOnStage)
+    }
+
+    // Its concept sentence is distinct from Follow-ups (waiting to hear back, vs a nudge that is due).
+    @Test func reachedOutConceptIsDistinctFromFollowUps() {
+        let reached = AgentRoster.conceptSummary(for: "Reached out")
+        #expect(reached.contains("hear back"))
+        #expect(reached != AgentRoster.conceptSummary(for: "Follow-ups"))
+    }
+
     // #357: what a chip tap actually DOES, pulled out of QueueView's Button closure (the #863 lesson:
     // logic inside a SwiftUI view is untestable) so this dispatch has a seam a test can reach.
     @Test func chipActionRoutesGmailConnectAheadOfEverythingElse() {

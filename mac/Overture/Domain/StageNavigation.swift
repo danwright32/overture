@@ -16,6 +16,10 @@ enum StageFocus: String, Equatable, Sendable {
     case sendApproved, sendBlocked, sendErrors, sendStuck, sendDegraded
     // Not a queue filter: the pill opens FollowUpsView, which lists the due RECIPIENTS itself.
     case followUps
+    // #1134: like .followUps, not a matches-based focus. Its rows are per-recipient (rendered by
+    // reachedOutList, not standard QueueItem rows), and its count comes from ReachedOutQueue, so it
+    // resolves no queue keys here.
+    case reachedOut
 }
 
 // #338/#370: the stage pills (Scout/Prep/Review/Send/Follow-ups) are real navigation, taking Dan to
@@ -27,10 +31,26 @@ enum StageFocus: String, Equatable, Sendable {
 // rather than by two places being edited together. It was stated here and unenforced for four months,
 // and drifted twice in that time (#792, #861).
 enum StageNavigation {
+    // #1134: the queue opens on Scout, always (never auto-jumping to another stage even when Scout is
+    // empty). A named constant, not a literal buried in the view, so the choice has a testable seam.
+    static let openingStage: StageFocus = .scout
+
     static func naturalKeys(for focus: StageFocus, in prospects: [Prospect],
                             today: String = QueueModel.easternToday(),
                             now: Date = Date()) -> [String] {
         prospects.filter { matches(focus, $0, today: today, now: now) }.map(\.naturalKey)
+    }
+
+    // #1134: which stage a deep-linked lead belongs to, so a tapped OmniFocus follow-up or a search pick
+    // focuses the stage that actually contains the show now that the pipeline picker is gone. A
+    // reached-out lead focuses .reachedOut (its rows come from ReachedOutQueue, keyed separately); every
+    // other lead is placed by the same `matches` predicate the pills count with. nil for a lead in no
+    // stage at all (RootView routes those to Archive instead).
+    static func stage(containing key: String, in prospects: [Prospect], reachedOutKeys: Set<String>,
+                      today: String = QueueModel.easternToday(), now: Date = Date()) -> StageFocus? {
+        if reachedOutKeys.contains(key) { return .reachedOut }
+        guard let p = prospects.first(where: { $0.naturalKey == key }) else { return nil }
+        return countedFocuses.first { matches($0, p, today: today, now: now) }
     }
 
     // #1140: which rows the focused list shows. A stage pill (`stage` non-nil) re-derives its membership
@@ -116,6 +136,11 @@ enum StageNavigation {
             return p.recipients.contains { $0.replyTrackingDegraded }
 
         case .followUps:
+            return false
+
+        case .reachedOut:
+            // #1134: like .followUps, resolves no queue keys here. Its rows are per-recipient and its
+            // count comes from ReachedOutQueue; the reached-out view renders reachedOutList directly.
             return false
         }
     }
