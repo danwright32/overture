@@ -13,9 +13,12 @@ enum VenueTixCalendar {
         var superTitle: String?
         var subTitle: String?
         var date: Date
-        // #1174: the feed's own production id, shared by every night of one show. Nil when the feed
-        // names none. It is the authoritative "these dates are one production" signal, so it does not
-        // depend on titles matching or nights being close together (a residency can run weekly).
+        // #1174: the feed's own production id, shared by every night of one show. Nil when the feed names
+        // none. It is the authoritative "these dates are one production" signal (it does not depend on
+        // titles matching or nights being close together, so a weekly residency still reads as one show).
+        // Parsed and available; how a multi-night run is surfaced to Dan as one review card that still
+        // names every night is pending a decision (it needs a field the current extraction contract and
+        // Prospect model do not carry). See the PR discussion on #1174.
         var seriesId: String? = nil
     }
 
@@ -76,37 +79,15 @@ enum VenueTixCalendar {
         return f
     }()
 
-    // #1174: collapse events that share a seriesId into one production BEFORE the document is synthesized,
-    // so a six-night run reads as one show (one prospect to review) instead of six. This is done here, at
-    // the one point that still holds the feed's own production id: the id is deterministic feed data, while
-    // everything downstream reads the synthesized HTML through the AI extractor, which carries no opaque-id
-    // field. Grouping by the id (not by date proximity, RunGrouping's job) is what lets non-consecutive
-    // nights of a residency still collapse. Order is preserved (each group sits where its id first appears),
-    // and a group is date-sorted so its earliest upcoming night is the representative. Rows without a
-    // shared id each stand alone, keyed by position so two id-less rows never merge, which keeps the
-    // document byte-for-byte identical to before whenever no two events share an id.
-    static func seriesGroups(_ events: [VTEvent]) -> [[VTEvent]] {
-        var order: [String] = []
-        var groups: [String: [VTEvent]] = [:]
-        for (i, e) in events.enumerated() {
-            let key = (e.seriesId?.isEmpty == false) ? "s:\(e.seriesId!)" : "i:\(i)"
-            if groups[key] == nil { order.append(key); groups[key] = [] }
-            groups[key]?.append(e)
-        }
-        return order.map { key in (groups[key] ?? []).sorted { $0.date < $1.date } }
-    }
-
     // Renders the events as one plain HTML document the extractor reads like any fetched page. Every show
     // is attributed to the venue by NAME (threaded from the source) and carries an EXPLICIT ISO date.
     // #1175: when Dan has supplied the venue's location, it is appended to each show's place line so the
     // extractor reads a real city and the geography gate places the shows in-region; with no location the
     // document is byte-for-byte what it was before, so an existing source's content hash does not churn.
-    // #1174: one <article> per production (see seriesGroups), represented by its earliest upcoming night.
     // copy-inventory:ignore-start  synthesized source HTML the extractor reads, not the app's voice (#915)
     static func listingHTML(_ events: [VTEvent], venueName: String, location: String? = nil) -> String {
         let place = location.map { "\(venueName), \($0)" } ?? venueName
-        let rows = seriesGroups(events).map { group -> String in
-            let e = group[0]
+        let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
             return "<article><h2>\(e.title)</h2>\(bits)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
