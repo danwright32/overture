@@ -33,11 +33,6 @@ struct QueueCopyTests {
         #expect(QueueModel.newLeadsHeading(count: 4) == "4 new leads while you were away")
     }
 
-    @Test func thePipelineTabsCountWhatTheyContain() {
-        #expect(QueueModel.toSendLabel(count: 3) == "To send (3)")
-        #expect(QueueModel.reachedOutLabel(count: 0) == "Reached out (0)")
-    }
-
     // The verb agrees with the count, and it inverts: ONE needs you, THREE need you. The inline version
     // wrote this backwards from every other pluralization in the app (`n == 1 ? "s" : ""`), which is
     // exactly the kind of thing that is right until somebody "tidies" it.

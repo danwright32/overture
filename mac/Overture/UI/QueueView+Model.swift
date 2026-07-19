@@ -451,10 +451,6 @@ enum QueueModel {
         return "Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
     }
 
-    static func toSendLabel(count: Int) -> String { "To send (\(count))" }
-
-    static func reachedOutLabel(count: Int) -> String { "Reached out (\(count))" }
-
     // #308: the heading on the focused view a multi-lead away alert lands on. It names how many leads it
     // is about to show, so it is a promise about the rows directly beneath it.
     static func newLeadsHeading(count: Int) -> String {

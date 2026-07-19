@@ -123,14 +123,13 @@ struct ToolbarConsolidationGuardTests {
         #expect(sheet.contains("Look-ahead window"))                  // the setting that has no other home stays
     }
 
-    // #932: the pending-bookings toolbar button was the last one built with a bare Label instead of the
-    // shared ToolbarHoverLabel, so it behaved differently from every other toolbar button (it read as an
-    // orphaned checkmark in the overflow during the #901 walk). Pin that it now routes through the shared
-    // component, icon-only with its name on hover via .help, like the rest.
-    @Test func theBookingsToolbarButtonUsesTheSharedLabel() {
+    // #1134: stage-only navigation removed the four queue filters, including the pending-bookings toolbar
+    // toggle (#932). The masthead still shows the "N to confirm" count; there is simply no filter toggle
+    // for it any more. Pin that the removed toggle stays gone (it must not creep back into the toolbar).
+    @Test func theBookingsFilterToggleIsGone() {
         #expect(!queueView.isEmpty)
-        #expect(queueView.contains("ToolbarHoverLabel(title: QueueModel.confirmBookingsLabel"))
-        #expect(!queueView.contains("Label(QueueModel.confirmBookingsLabel"))   // the old bare Label is gone
+        #expect(!queueView.contains("showPendingBookingsOnly"))
+        #expect(!queueView.contains("QueueModel.confirmBookingsLabel"))
     }
 
     // #901 (Dan's walk, 2026-07-14): the toolbar is icon-only, names on hover. Animating a button's width

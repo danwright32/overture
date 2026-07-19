@@ -23,9 +23,10 @@ struct FocusedStageWiringGuardTests {
         #expect(body.contains("StageNavigation.focusedKeys(stage: focusedStage"))
     }
 
-    // Tapping a stage pill records the stage (so the list can re-derive), and every exit clears it, so a
-    // later render can't keep re-deriving a stage Dan has left.
-    @Test func stageIsSetOnEntryAndClearedOnEveryExit() {
+    // #1134: stage-only navigation. Tapping a stage pill records the stage (so the list can re-derive);
+    // the away-alert leads path clears it to nil (a frozen named set, not a stage); and a deep-link jump
+    // sets the stage that actually CONTAINS the lead, so the row is on screen when it scrolls to it.
+    @Test func stageIsSetOnEntryAndRoutedOnEveryOtherPath() {
         // Set when a pill is tapped.
         guard let focusOnStage = SourceGuardHelper.propertyBody(
             "private func focusOnStage(_ status: AgentStatus) {", in: queueView) else {
@@ -33,17 +34,18 @@ struct FocusedStageWiringGuardTests {
         }
         #expect(focusOnStage.contains("focusedStage = status.focus"))
 
-        // Cleared by "Show all", by the away-alert leads path, and by a deep-link navigation.
-        #expect(queueView.contains("focusedKeys = nil; focusedHeading = nil; focusedStage = nil"))
+        // The away-alert leads path is not a stage: it clears focusedStage so the flat named list renders.
         guard let focusOnLeads = SourceGuardHelper.propertyBody(
             "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {", in: queueView) else {
             Issue.record("expected focusOnLeads's body"); return
         }
         #expect(focusOnLeads.contains("focusedStage = nil"))
+
+        // A deep-linked lead focuses the stage that contains it, so the row renders before the scroll.
         guard let navigateToLead = SourceGuardHelper.propertyBody(
             "private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {", in: queueView) else {
             Issue.record("expected navigateToLead's body"); return
         }
-        #expect(navigateToLead.contains("focusedStage = nil"))
+        #expect(navigateToLead.contains("focusedStage = StageNavigation.stage(containing: key"))
     }
 }
