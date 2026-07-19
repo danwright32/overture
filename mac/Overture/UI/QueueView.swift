@@ -362,7 +362,6 @@ struct QueueView: View {
     // FollowUpsView/ArchiveView/QueueView's other retrofits this cycle.
     func masthead(visible: [QueueItem], items: [QueueItem]) -> some View {
         let summary = QueueModel.summary(visible)
-        let priority = QueuePriorityBreakdown.summarize(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(spacing: OVSpacing.xs) {
@@ -391,20 +390,15 @@ struct QueueView: View {
                 }
             }
             .font(.system(size: 12))
-            // #92: shows whether high-fit is mostly warm orgs (relationship) or genuinely strong
-            // cold events (merit), so an over-filled high tier is visible before recalibrating.
-            // #335: phrased as "Of the N high-fit: ..." so it reads as a breakdown, not a new total.
-            if let breakdown = priority.highFitBreakdownLabel() {
-                Text(breakdown)
-                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-            }
-            HStack(spacing: OVSpacing.xs) {
-                Text(ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt()).summary(now: Date()))
-                Text("·").foregroundStyle(OVColor.lineStrong)
-                Text(prepStatus.summary(now: Date()))
-            }
-            .font(.system(size: 11))
-            .foregroundStyle(OVColor.inkFaint)
+            // #1131: the "Of the N high-fit: ... relationship / ... merit" breakdown line was dropped from
+            // the masthead (Dan does not read it). The relationship/merit split still exists as an internal
+            // diagnostic on QueuePriorityBreakdown (#92); it is simply no longer surfaced here.
+            // #1131: only the "Scouted X ago" half stays. The prep/review/approved counts and "last prep"
+            // timing that prepStatus.summary added here are duplicated by the Prep/Review/Send pill row
+            // (agentStrip) directly below, so they are dropped; "Scouted X ago" is not shown anywhere else.
+            Text(ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt()).summary(now: Date()))
+                .font(.system(size: 11))
+                .foregroundStyle(OVColor.inkFaint)
             replyRunLine
             agentStrip
         }
@@ -501,12 +495,6 @@ struct QueueView: View {
         case .needsAttention: return OVColor.gold
         case .error: return OVColor.rust
         }
-    }
-
-    private var prepStatus: PrepStatus {
-        PrepStatus.from(prospects: prospects,
-                        lastRunStartedAt: PrepQueueService.lastRunStartedAt,
-                        running: PrepQueueService.isRunning(now: Date()))
     }
 
     private func dateSection(_ group: QueueModel.DateGroup) -> some View {
