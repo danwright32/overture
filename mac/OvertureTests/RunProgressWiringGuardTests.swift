@@ -9,7 +9,7 @@ import Foundation
 // exactly the same "the script knows, so the script should write it" reasoning as record_model in
 // models.sh.
 @Suite("The runner derives scout-extract progress itself (#1015)")
-struct ScoutProgressWiringGuardTests {
+struct RunProgressWiringGuardTests {
     private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
         SourceGuardHelper.source(relativeFromMac, file: file)
     }

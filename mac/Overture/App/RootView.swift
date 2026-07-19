@@ -34,12 +34,12 @@ struct RootView: View {
     @State private var scoutWarnings: ScoutWarnings?
     // #1034: the takeover progress modal, shown while a scout Dan STARTED runs (never the scheduled
     // watch-only run, which keeps its quiet toolbar label). One presented sheet carries the whole run:
-    // it shows ScoutProgressView while scoutWarnings is nil, then swaps to #1027's ScoutSummaryView once
+    // it shows RunProgressView while scoutWarnings is nil, then swaps to #1027's ScoutSummaryView once
     // the run finishes with something to say, so the takeover becomes the results without a dismiss/
     // re-present flicker between two sheets.
     @State private var scoutIsManual = false          // this run is one Dan started (drives the modal)
     @State private var scoutSheetShown = false        // the sheet is presented (vs hidden while it runs)
-    @State private var scoutNativeSnapshot: ScoutProgressView.Snapshot?   // latest native-phase heartbeat
+    @State private var scoutNativeSnapshot: RunProgressView.Snapshot?   // latest native-phase heartbeat
     // Supersedes an abandoned run's completion after a stalled-state Retry, so the old Task cannot
     // clobber the fresh run's state when it finally returns (CLAUDE.md: assume it runs twice).
     @State private var scoutGeneration = 0
@@ -293,12 +293,12 @@ struct RootView: View {
                         if isScanning && !scoutIsManual {
                             // #1034: the compact toolbar label is now ONLY the scheduled watch-only
                             // scout's treatment. A scout Dan STARTED takes over the screen with the
-                            // ScoutProgressView modal instead (both the native "Scouting" sweep and the
+                            // RunProgressView modal instead (both the native "Scouting" sweep and the
                             // detached "Reading calendars" read), so its progress never shows here. The
                             // detached-read branch that used to live here moved into the modal wholesale:
                             // a watch-only run never reads, so readingStartedAt is only ever set by a
                             // manual run, which the modal owns.
-                            LiveRunLabel(base: ScoutProgressCopy.title(.scouting), since: scoutStartedAt,
+                            LiveRunLabel(base: RunProgressCopy.title(.scouting), since: scoutStartedAt,
                                          timeout: RunTimeouts.scout, compact: true)
                         } else if PrepQueueService.isRunning(now: Date()) {
                             // #354: real "N of M" progress from the run's own progress file,
@@ -584,7 +584,7 @@ struct RootView: View {
                 Text(CancelledReadCopy.message(readCount: count))
             }
             // #1034/#1027: ONE presented sheet for a manual scout, from click to results. While the run
-            // is in flight (scoutWarnings still nil) it is the ScoutProgressView takeover; the instant the
+            // is in flight (scoutWarnings still nil) it is the RunProgressView takeover; the instant the
             // run finishes with something to say it becomes #1027's ScoutSummaryView, in the same sheet,
             // so there is no dismiss-then-present flicker between two separate sheets. A run with nothing
             // to report just closes it.
@@ -1211,17 +1211,17 @@ struct RootView: View {
     }
 
     // #1034: the takeover itself. Phase, start, and live providers are read from the run's state; the
-    // per-second ticking happens inside ScoutProgressView's own TimelineView. The reading phase reads its
-    // source name and count live from the files the app owns via the shared ScoutProgressView.Snapshot
+    // per-second ticking happens inside RunProgressView's own TimelineView. The reading phase reads its
+    // source name and count live from the files the app owns via the shared RunProgressView.Snapshot
     // .liveReading() (#1036 uses the same in AddLeadSheet). The chrome (fixed frame + canvas, centered) is
     // applied HERE because the component itself is sized to content so it can also render inline.
     private var scoutProgressModal: some View {
         VStack {
             Spacer(minLength: 0)
-            ScoutProgressView(
+            RunProgressView(
                 phase: readingStartedAt != nil ? .reading : .scouting,
                 since: readingStartedAt ?? scoutStartedAt,
-                snapshot: { readingStartedAt != nil ? ScoutProgressView.Snapshot.liveReading()
+                snapshot: { readingStartedAt != nil ? RunProgressView.Snapshot.liveReading()
                                                     : (scoutNativeSnapshot ?? .init()) },
                 runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
                 onRetry: { retryScout() },
@@ -1242,10 +1242,10 @@ struct RootView: View {
     private var prepProgressModal: some View {
         VStack {
             Spacer(minLength: 0)
-            ScoutProgressView(
+            RunProgressView(
                 phase: .prepping,
                 since: PrepQueueService.lastRunStartedAt,
-                snapshot: { ScoutProgressView.Snapshot.livePrepping() },
+                snapshot: { RunProgressView.Snapshot.livePrepping() },
                 runAlive: { PrepQueueService.isRunning(now: Date()) },
                 onHide: { prepSheetShown = false },
                 onCancel: { cancelPrep() })

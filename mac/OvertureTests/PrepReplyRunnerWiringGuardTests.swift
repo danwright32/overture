@@ -25,7 +25,7 @@ struct PrepReplyRunnerWiringGuardTests {
 
     // Matches a real sourcing LINE, not merely a mention: every runner also names its lib files in header
     // comments, so a bare `contains("scout-cancel.sh")` would stay green even if the actual `.` line were
-    // deleted (the same reasoning as ScoutProgressWiringGuardTests).
+    // deleted (the same reasoning as RunProgressWiringGuardTests).
     private func sources(_ libName: String, in body: String) -> Bool {
         body.split(separator: "\n").contains { line in
             let t = line.trimmingCharacters(in: .whitespaces)

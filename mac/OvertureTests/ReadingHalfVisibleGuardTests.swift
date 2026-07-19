@@ -11,7 +11,7 @@ import Testing
 // failed must be visibly distinct, and a bare indefinite spinner (or here, no spinner at all) is a
 // defect.
 //
-// #1034: that visible state moved out of a compact toolbar label and into the takeover ScoutProgressView
+// #1034: that visible state moved out of a compact toolbar label and into the takeover RunProgressView
 // (a scout Dan started owns the screen while it runs). The regression this guards against is unchanged
 // (the reading half losing its own timeout, heartbeat and count), only its home did, so the guard now
 // checks both the RootView wiring and the modal that renders it.
@@ -22,7 +22,7 @@ import Testing
 @Suite("The scout's reading half is visible while it works (#803)")
 struct ReadingHalfVisibleGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
-    private var progressView: String { SourceGuardHelper.source("Overture/UI/ScoutProgressView.swift") }
+    private var progressView: String { SourceGuardHelper.source("Overture/UI/RunProgressView.swift") }
 
     @Test func theReadingHalfHasItsOwnLiveSurface() {
         #expect(!rootView.isEmpty)
@@ -53,11 +53,11 @@ struct ReadingHalfVisibleGuardTests {
 
     // Real "3 of 9" from the run's own progress file, and the source being read RIGHT NOW, not a bare
     // spinner. Both come from files the app already owns (#1034), read live each tick. The snapshot that
-    // reads them is shared with AddLeadSheet (#1036), so the loaders live in ScoutProgressView; RootView
+    // reads them is shared with AddLeadSheet (#1036), so the loaders live in RunProgressView; RootView
     // wires that shared snapshot into the reading phase.
     @Test func itCountsAndNamesTheSourceRatherThanSpinning() {
         #expect(progressView.contains("ScoutExtractProgressDecoder.loadCurrent("))
         #expect(progressView.contains("ScoutExtractCurrentSource.loadCurrentName("))
-        #expect(rootView.contains("ScoutProgressView.Snapshot.liveReading()"))
+        #expect(rootView.contains("RunProgressView.Snapshot.liveReading()"))
     }
 }

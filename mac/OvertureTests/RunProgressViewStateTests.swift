@@ -11,40 +11,40 @@ import ViewInspector
 // tests do (see LiveRunLabel.swift's #470 comment: `body` wraps it in a real TimelineView).
 @MainActor
 @Suite("Scout progress modal view state (#1034)")
-struct ScoutProgressViewStateTests {
+struct RunProgressViewStateTests {
     private func allTexts(_ view: some View) throws -> [String] {
         try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
-    private func snapshot(_ name: String?, _ completed: Int, _ total: Int) -> () -> ScoutProgressView.Snapshot {
-        { ScoutProgressView.Snapshot(sourceName: name, completed: completed, total: total) }
+    private func snapshot(_ name: String?, _ completed: Int, _ total: Int) -> () -> RunProgressView.Snapshot {
+        { RunProgressView.Snapshot(sourceName: name, completed: completed, total: total) }
     }
 
     // MARK: - The pure copy
 
     @Test func phaseTitlesAreDistinctAndStable() {
-        #expect(ScoutProgressCopy.title(.scouting) == "Scouting")
-        #expect(ScoutProgressCopy.title(.reading) == "Reading calendars")
+        #expect(RunProgressCopy.title(.scouting) == "Scouting")
+        #expect(RunProgressCopy.title(.reading) == "Reading calendars")
     }
 
     @Test func theSourceLineNamesTheSourceAndItsPositionWhenThereAreSeveral() {
-        #expect(ScoutProgressCopy.sourceLine(name: "Carnegie Hall", completed: 3, total: 9)
+        #expect(RunProgressCopy.sourceLine(name: "Carnegie Hall", completed: 3, total: 9)
                 == "Carnegie Hall · 3 of 9")
     }
 
     // A single-item run (a pasted lead, #1036) shows just the name: "1 of 1" is noise, so the count is
     // shown only when there is genuinely more than one source to get through.
     @Test func theSourceLineDropsTheCountForASingleSourceRun() {
-        #expect(ScoutProgressCopy.sourceLine(name: "Some Org", completed: 1, total: 1) == "Some Org")
+        #expect(RunProgressCopy.sourceLine(name: "Some Org", completed: 1, total: 1) == "Some Org")
     }
 
     @Test func theSourceLineShowsJustTheCountWhenTheSourceIsntKnownYet() {
-        #expect(ScoutProgressCopy.sourceLine(name: nil, completed: 2, total: 5) == "2 of 5")
+        #expect(RunProgressCopy.sourceLine(name: nil, completed: 2, total: 5) == "2 of 5")
     }
 
     @Test func theSourceLineIsNilWhenThereIsNeitherANameNorAMeaningfulCount() {
-        #expect(ScoutProgressCopy.sourceLine(name: nil, completed: 0, total: 0) == nil)
-        #expect(ScoutProgressCopy.sourceLine(name: "Org", completed: 0, total: 0) == "Org")
+        #expect(RunProgressCopy.sourceLine(name: nil, completed: 0, total: 0) == nil)
+        #expect(RunProgressCopy.sourceLine(name: "Org", completed: 0, total: 0) == "Org")
     }
 
     // MARK: - The rendered states
@@ -52,7 +52,7 @@ struct ScoutProgressViewStateTests {
     @Test func runningNamesThePhaseTheSourceAndTheElapsedCounter() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1042)   // 42s in, well under the scout timeout
-        let view = ScoutProgressView(phase: .scouting, since: since,
+        let view = RunProgressView(phase: .scouting, since: since,
                                      snapshot: snapshot("Carnegie Hall", 3, 9)).content(now: now)
         let texts = try allTexts(view)
 
@@ -67,7 +67,7 @@ struct ScoutProgressViewStateTests {
     @Test func theReadingPhaseNamesItselfDistinctlyFromScouting() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1030)
-        let view = ScoutProgressView(phase: .reading, since: since,
+        let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5)).content(now: now)
         #expect(try allTexts(view).contains("Reading calendars"))
         #expect(try allTexts(view).contains("Kaufman Music Center · 2 of 5"))
@@ -81,7 +81,7 @@ struct ScoutProgressViewStateTests {
         let now = since.addingTimeInterval(RunTimeouts.scoutExtract + 30)
         let elapsed = RunProgress.elapsedLabel(since: since, now: now)!
         var retried = false
-        let view = ScoutProgressView(phase: .reading, since: since,
+        let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5),
                                      runAlive: { false }, onRetry: { retried = true }).content(now: now)
 
@@ -98,7 +98,7 @@ struct ScoutProgressViewStateTests {
     @Test func pastTimeoutButAliveRendersAsRunningNotStalled() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let now = since.addingTimeInterval(RunTimeouts.scoutExtract + 30)
-        let view = ScoutProgressView(phase: .reading, since: since,
+        let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5),
                                      runAlive: { true }).content(now: now)
         #expect(!(try allTexts(view).contains { $0.contains("looks stuck") }))
@@ -111,7 +111,7 @@ struct ScoutProgressViewStateTests {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1010)
         var hidden = false
-        let view = ScoutProgressView(phase: .scouting, since: since,
+        let view = RunProgressView(phase: .scouting, since: since,
                                      snapshot: snapshot("Carnegie Hall", 1, 9),
                                      onHide: { hidden = true }).content(now: now)
         try view.inspect().find(button: "Hide").tap()
@@ -124,7 +124,7 @@ struct ScoutProgressViewStateTests {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1010)
         var cancelled = false
-        let view = ScoutProgressView(phase: .reading, since: since,
+        let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5),
                                      onCancel: { cancelled = true }).content(now: now)
         try view.inspect().find(button: "Cancel").tap()
@@ -133,7 +133,7 @@ struct ScoutProgressViewStateTests {
 
     @Test func thereIsNoCancelControlWhenNoneIsProvided() throws {
         let since = Date(timeIntervalSince1970: 1000)
-        let view = ScoutProgressView(phase: .scouting, since: since,
+        let view = RunProgressView(phase: .scouting, since: since,
                                      snapshot: snapshot("Carnegie Hall", 1, 9))
             .content(now: Date(timeIntervalSince1970: 1010))
         #expect((try? view.inspect().find(button: "Cancel")) == nil)

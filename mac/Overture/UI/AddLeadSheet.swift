@@ -8,7 +8,7 @@ import SwiftData
 // The sheet STAYS OPEN while it works, showing live progress (Dan's call). That is not decoration:
 // CLAUDE.md's standing rule is that a slow action must make "working", "still alive" and "failed"
 // visibly different states, and a bare spinner that looks the same whether the run is progressing,
-// hung, or dead is a defect. #1036: it now shows the SAME ScoutProgressView a scout Dan started shows
+// hung, or dead is a defect. #1036: it now shows the SAME RunProgressView a scout Dan started shows
 // (#1034), rendered inline, so a lead read reads like a scout read (elapsed counter, the page being
 // read, and a stalled state with a retry) rather than a second, divergent progress surface.
 struct AddLeadSheet: View {
@@ -90,8 +90,8 @@ struct AddLeadSheet: View {
     // ticks, the count advances, and a genuine stall flips to the warning state with a retry.
     private func working(startedAt: Date) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            ScoutProgressView(phase: .reading, since: startedAt,
-                              snapshot: { ScoutProgressView.Snapshot.liveReading() },
+            RunProgressView(phase: .reading, since: startedAt,
+                              snapshot: { RunProgressView.Snapshot.liveReading() },
                               runAlive: { ScoutExtractService.isRunning(now: Date()) },
                               onRetry: start)
             Text("It fetches the page, then follows each show's own link to get the venue and date.")

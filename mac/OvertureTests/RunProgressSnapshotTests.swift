@@ -7,7 +7,7 @@ import Foundation
 // RootView's takeover and AddLeadSheet's inline read, so there is ONE definition of "what is the reading
 // phase showing right now", not two that drift. Driven against temp files, no run.
 @Suite("Scout reading-phase snapshot (#1036)")
-struct ScoutProgressSnapshotTests {
+struct RunProgressSnapshotTests {
     private func tempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("scout-snapshot-\(UUID().uuidString)")
@@ -47,11 +47,11 @@ struct ScoutProgressSnapshotTests {
         let results = try writeResults(["a"], to: dir)          // a done, b in flight
         let progress = try writeProgress(completed: 1, total: 3, to: dir)
 
-        let snap = ScoutProgressView.Snapshot.liveReading(queueURL: queue, resultsURL: results, progressURL: progress)
+        let snap = RunProgressView.Snapshot.liveReading(queueURL: queue, resultsURL: results, progressURL: progress)
         #expect(snap.sourceName == "Kaufman Music Center")
         #expect(snap.completed == 1)
         #expect(snap.total == 3)
-        #expect(ScoutProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
+        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
                 == "Kaufman Music Center · 1 of 3")
     }
 
@@ -64,17 +64,17 @@ struct ScoutProgressSnapshotTests {
         let results = try writeResults([], to: dir)
         let progress = try writeProgress(completed: 0, total: 1, to: dir)
 
-        let snap = ScoutProgressView.Snapshot.liveReading(queueURL: queue, resultsURL: results, progressURL: progress)
+        let snap = RunProgressView.Snapshot.liveReading(queueURL: queue, resultsURL: results, progressURL: progress)
         #expect(snap.sourceName == "www.example.org")   // no org name, so the listing host
         #expect(snap.total == 1)
-        #expect(ScoutProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
+        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
                 == "www.example.org")
     }
 
     // Missing files read as an empty snapshot, never a crash (the run may not have written anything yet).
     @Test func missingFilesGiveAnEmptySnapshot() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent("nope-\(UUID().uuidString)")
-        let snap = ScoutProgressView.Snapshot.liveReading(queueURL: missing, resultsURL: missing, progressURL: missing)
+        let snap = RunProgressView.Snapshot.liveReading(queueURL: missing, resultsURL: missing, progressURL: missing)
         #expect(snap.sourceName == nil)
         #expect(snap.completed == 0)
         #expect(snap.total == 0)
