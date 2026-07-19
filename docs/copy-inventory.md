@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **681 sentences**, from 227 source files.
+Every sentence Overture can say to Dan: **689 sentences**, from 228 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -50,7 +50,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 
-## The same sentence, said in more than one place (39)
+## The same sentence, said in more than one place (40)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -155,6 +155,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Set up Overture"
   - `App/AppDelegate.swift`
   - `UI/OnboardingView.swift`
+- "Skipped towns"
+  - `App/RootView.swift`
+  - `UI/ExcludedTownsView.swift`
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
@@ -286,6 +289,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Already watching \(orgName)'s calendar."
     `Domain/WatchlistEditing.swift`
+"Always skipped"
+    `UI/ExcludedTownsView.swift`
 "An established calendar came back empty this run."
     `Domain/ScoutWarnings.swift`
 "An organization that asked"
@@ -464,6 +469,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
     `App/RootView.swift`
+"Far towns skipped from the start, so you never had to refuse the obvious ones."
+    `UI/ExcludedTownsView.swift`
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -702,6 +709,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "None due"
     `Domain/AgentRoster.swift`
+"None yet. Refuse a town from a show and it lands here, where you can take it back."
+    `UI/ExcludedTownsView.swift`
 "Not a booking"
     `UI/ProspectRowView.swift`
 "Not a duplicate"
@@ -1047,6 +1056,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
     `UI/QueueView+Model.swift`
+"Shows in \(town) can appear again"
+    `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
 "Shows too far out to pitch yet start unchecked. Include any you want prepped now."
@@ -1055,6 +1066,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Silent follow-ups"
     `UI/FollowUpsView.swift`
+"Skipped towns"
+    `App/RootView.swift`
+    `UI/ExcludedTownsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
 "Some changed calendars couldn't be read this run."
@@ -1252,6 +1266,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Too soon"
     `Domain/ReviewStatus.swift`
+"Towns Overture keeps out of your queue."
+    `UI/ExcludedTownsView.swift`
+"Towns you skipped"
+    `UI/ExcludedTownsView.swift`
+"Towns you've told Overture to skip. Take one back off the list here."
+    `App/RootView.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."

@@ -78,3 +78,30 @@ enum ExcludedTownEditing {
         Set(rows(in: context).map(\.town))
     }
 }
+
+// #1118: the management surface's data, kept OUT of the view for the same reason the add/remove is (#863):
+// a listing rule stated in a SwiftUI body is a rule no test can reach.
+extension ExcludedTownEditing {
+    // The two halves the "Skipped towns" sheet draws, held apart because Dan can only take back one of
+    // them. The SEED (EventPlace.excludedTowns) is built into the app so he never had to refuse the obvious
+    // far towns himself, and it lives in code, not as rows, so this sheet shows it but does not remove it.
+    // His OWN refusals are the stored rows, his to take back. Both sorted here so the view has no ordering
+    // or membership rule of its own to get wrong.
+    struct Listing: Equatable, Sendable {
+        var seed: [String]        // the built-in far towns, normalized, sorted
+        var userAdded: [String]   // Dan's own stored refusals, normalized, sorted
+    }
+
+    static func listing(in context: ModelContext) -> Listing {
+        Listing(seed: EventPlace.excludedTowns.sorted(),
+                userAdded: rows(in: context).map(\.town).sorted())
+    }
+
+    // The town as Dan reads it. Towns are stored and seeded lowercased so the resolver can compare tokens
+    // directly (see ExcludedTown.town); this is the one place a town is upper-cased, for display only.
+    // `remove` lowercases its argument again, so handing this capitalized string back to it still matches
+    // the stored row: the sheet never keeps a second normalization rule of its own.
+    static func displayName(_ town: String) -> String {
+        town.capitalized
+    }
+}
