@@ -89,10 +89,16 @@ struct RunProgressView: View {
         ProgressView().controlSize(.large).tint(OVColor.gold)
         Text(RunProgressCopy.title(phase))
             .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-        if let line = RunProgressCopy.sourceLine(name: snap.sourceName,
-                                                   completed: snap.completed, total: snap.total) {
-            Text(line).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+        // #1124: the source being read RIGHT NOW and the overall count are two independent facts, so they
+        // sit on separate lines. Gluing them into "name · N of M" read as if the number indexed the named
+        // source (and, since the two come from uncoordinated sources, was effectively off by one).
+        if let current = RunProgressCopy.currentSourceLine(name: snap.sourceName) {
+            Text(current).font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 .multilineTextAlignment(.center)
+        }
+        if let progress = RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) {
+            Text(progress).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                .monospacedDigit()
         }
         if let elapsed = RunProgress.elapsedLabel(since: since, now: now) {
             Text(elapsed).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
@@ -147,9 +153,9 @@ extension RunProgressView.Snapshot {
 extension RunProgressView.Snapshot {
     // #1130: the live Prep-run snapshot, from the run's own progress file (overture-prep-progress.json,
     // total/completed, written by the workflow, decoded by PrepProgressDecoder). The Prep run works by
-    // prospect but does not publish which one, so there is no per-item name: sourceLine degrades to just
-    // "N of M". Injectable URL so it is a real unit test; a missing/mid-write file reads as an empty
-    // snapshot (completed 0, total 0), which sourceLine renders as no count line at all.
+    // prospect but does not publish which one, so there is no per-item name: currentSourceLine is nil and
+    // only the "N of M done" progress line shows. Injectable URL so it is a real unit test; a missing or
+    // mid-write file reads as an empty snapshot (completed 0, total 0), which renders no count line at all.
     static func livePrepping(progressURL: URL = PrepProgressDecoder.defaultURL) -> RunProgressView.Snapshot {
         let progress = PrepProgressDecoder.loadCurrent(from: progressURL)
         return RunProgressView.Snapshot(sourceName: nil,
@@ -168,17 +174,25 @@ enum RunProgressCopy {
         }
     }
 
-    // "Carnegie Hall · 3 of 9" while a run has several sources, or just the name for a single-source run
-    // (a pasted lead, where "1 of 1" is noise), or just the count before the source is known, or nil when
-    // there is neither. The count shows only when total > 1, which is what makes the lead case degrade
-    // without any special-casing at the call site (#1036).
-    static func sourceLine(name: String?, completed: Int, total: Int) -> String? {
-        let count = total > 1 ? "\(min(completed, total)) of \(total)" : nil
-        switch (name, count) {
-        case let (name?, count?): return "\(name) · \(count)"
-        case let (name?, nil):    return name
-        case let (nil, count?):   return count
-        case (nil, nil):          return nil
-        }
+    // #1124: the name and the count are two uncoordinated facts (the name is the source being read RIGHT
+    // NOW, from the queue/results diff; the count is how many are DONE, from the run's own progress file),
+    // so they are rendered as two separate lines, never glued into "name · N of M". That glued form read
+    // as if the number indexed the named source ("Carnegie Hall is #3 of 9") and, because the halves drift
+    // independently, was effectively off by one (the name sat on one source while the count ticked past).
+
+    // The source being read RIGHT NOW, on its own line, or nil before any source is known (or for a run
+    // that publishes no per-item name, like Prep). Just the name: no count, no position.
+    static func currentSourceLine(name: String?) -> String? {
+        guard let name, !name.isEmpty else { return nil }
+        return name
+    }
+
+    // Overall progress across the whole run, worded as a COMPLETED count ("N of M done") so it reads as
+    // separate overall progress rather than the named source's position. Shown only when there is more
+    // than one source to get through: "1 of 1 done" is noise for a pasted lead, which is what lets the
+    // lead case degrade to the name alone without any special-casing at the call site (#1036).
+    static func overallProgressLine(completed: Int, total: Int) -> String? {
+        guard total > 1 else { return nil }
+        return "\(min(completed, total)) of \(total) done"
     }
 }
