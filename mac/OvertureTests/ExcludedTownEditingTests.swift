@@ -85,3 +85,77 @@ struct ExcludeTownActionTests {
         #expect(ExcludedTownEditing.names(in: ctx).isEmpty)
     }
 }
+
+// #1118: the management surface. #991 could only add a town (and undo it while the banner was up); once
+// the banner cleared, the skip list only grew and the way back was a code change. These pin the listing
+// the sheet draws and the removal that takes a town back off, verdict and all.
+@MainActor
+@Suite("Reviewing and un-excluding skipped towns (#1118)")
+struct ExcludedTownListingTests {
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([ExcludedTown.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    // The listing shows both halves the sheet needs: the built-in seed (read-only) and Dan's own stored
+    // refusals, each sorted so the view has no ordering rule of its own.
+    @Test func theListingShowsTheSeedAndDansOwnRefusals() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.exclude(town: "New Haven", into: ctx)
+        _ = ExcludedTownEditing.exclude(town: "Poughkeepsie", into: ctx)
+
+        let listing = ExcludedTownEditing.listing(in: ctx)
+
+        #expect(listing.userAdded == ["new haven", "poughkeepsie"])   // stored, normalized, sorted
+        #expect(listing.seed == EventPlace.excludedTowns.sorted())     // the built-in far towns, in full
+        #expect(listing.seed.contains("albany"))
+    }
+
+    // With no refusals of his own, the user half is empty (the sheet's empty state) while the seed stands.
+    @Test func theUserHalfIsEmptyUntilDanRefusesATown() throws {
+        let ctx = try context()
+        #expect(ExcludedTownEditing.listing(in: ctx).userAdded.isEmpty)
+        #expect(ExcludedTownEditing.listing(in: ctx).seed == EventPlace.excludedTowns.sorted())
+    }
+
+    // The whole point of the feature: removing a town takes it off the listing AND flips the geo verdict
+    // back, because the verdict is derived (#990) rather than stored. Undo-then-verify is the way back.
+    @Test func removingATownTakesItOffTheListAndBackIntoRange() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.exclude(town: "New Haven", into: ctx)
+        // While excluded, a New Haven show is out of range.
+        #expect(EventPlace.resolve(location: "New Haven, CT", discipline: .opera,
+                                   userExcludedTowns: ExcludedTownEditing.names(in: ctx)).verdict == .outOfRange)
+
+        ExcludedTownEditing.remove(town: "New Haven", in: ctx)
+
+        #expect(ExcludedTownEditing.listing(in: ctx).userAdded.isEmpty)
+        // And its shows are decided in range again, with no migration and no re-scout.
+        #expect(EventPlace.resolve(location: "New Haven, CT", discipline: .opera,
+                                   userExcludedTowns: ExcludedTownEditing.names(in: ctx)).verdict == .inRange)
+    }
+
+    // A capitalized display string handed back to remove still matches the lowercased stored row, so the
+    // sheet can show "New Haven" and remove it without keeping a second normalization rule of its own.
+    @Test func removingByTheDisplayedNameStillMatchesTheStoredRow() throws {
+        let ctx = try context()
+        _ = ExcludedTownEditing.exclude(town: "New Haven", into: ctx)
+        let shown = ExcludedTownEditing.displayName(ExcludedTownEditing.listing(in: ctx).userAdded[0])
+        #expect(shown == "New Haven")
+
+        ExcludedTownEditing.remove(town: shown, in: ctx)
+
+        #expect(ExcludedTownEditing.names(in: ctx).isEmpty)
+    }
+
+    // The edge case that keeps the seed section honest: a seed town has no stored row, so removing it is a
+    // no-op and it stays skipped. Taking a built-in far town back is not something this sheet does.
+    @Test func aSeedTownStaysSkippedBecauseThereIsNoRowToRemove() throws {
+        let ctx = try context()
+        ExcludedTownEditing.remove(town: "Albany", in: ctx)
+
+        #expect(ExcludedTownEditing.listing(in: ctx).seed.contains("albany"))
+        #expect(EventPlace.resolve(location: "Albany, NY", discipline: .opera,
+                                   userExcludedTowns: ExcludedTownEditing.names(in: ctx)).verdict == .outOfRange)
+    }
+}

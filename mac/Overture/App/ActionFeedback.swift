@@ -249,6 +249,13 @@ enum ActionAck {
     static func townAlreadyExcluded(town: String) -> String {
         "\(town) is already on your skip list"
     }
+
+    // #1118: Dan took a town back off his skip list from the management sheet, the reverse of townExcluded
+    // and worded as its mirror (the consequence he cares about, not the mechanism). Reversible from the
+    // banner (#845): the Undo re-excludes it, so a mis-clicked Remove costs nothing.
+    static func townUnexcluded(town: String) -> String {
+        "Shows in \(town) can appear again"
+    }
 }
 
 extension ModelContext {

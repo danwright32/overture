@@ -81,10 +81,10 @@ struct ToolbarConsolidationGuardTests {
     @Test func toolbarButtonsUseTheSharedLabel() {
         #expect(!rootView.isEmpty)
         let occurrences = rootView.components(separatedBy: "ToolbarHoverLabel(").count - 1
-        // Dismissed, Due, What converts, Voice guidance, Sources (#800), Days off (#901), the merged
-        // Scout/Prep idle state, the disconnected-Gmail CTA, and the OmniFocus menu's idle state: nine
-        // call sites.
-        #expect(occurrences == 9)
+        // Dismissed, Due, What converts, Voice guidance, Sources (#800), Days off (#901), Skipped towns
+        // (#1118), the merged Scout/Prep idle state, the disconnected-Gmail CTA, and the OmniFocus menu's
+        // idle state: ten call sites.
+        #expect(occurrences == 10)
     }
 
     // #901 (Dan's walk, 2026-07-14): Days off is ordered AHEAD of the settings-ish buttons (What
