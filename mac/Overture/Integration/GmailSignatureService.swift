@@ -60,4 +60,26 @@ enum GmailSignatureService {
                                             fetch: fetch ?? { try await GmailNetworking.session.data(for: $0) })
         store(html)
     }
+
+    // #1158: opportunistic refresh so the cached signature stays current WITHOUT a manual reconnect and
+    // WITHOUT hammering the network. Ridden along the safe-reconcile tick (launch + periodic + export-
+    // change), it actually fetches at most once per `minimumInterval`: it no-ops when Gmail isn't
+    // connected, and when the last attempt was more recent than the interval. The attempt time is
+    // recorded before the fetch, so a persistent failure retries on the NEXT interval rather than on
+    // every tick. A failed fetch still cannot clobber a good stored signature: that is refresh()'s (and
+    // GmailSignatureStore.store's) guarantee, which this reuses rather than duplicating.
+    @MainActor
+    static func refreshIfDue(
+        minimumInterval: TimeInterval = 24 * 60 * 60,
+        now: Date = Date(),
+        isConnected: () -> Bool = { GmailAuthManager.shared.isConnected },
+        lastAttemptAt: () -> Date? = { GmailSignatureStore.lastRefreshAttemptAt() },
+        recordAttemptAt: (Date) -> Void = { GmailSignatureStore.setLastRefreshAttemptAt($0) },
+        performRefresh: () async -> Void = { await GmailSignatureService.refresh() }
+    ) async {
+        guard isConnected() else { return }
+        if let last = lastAttemptAt(), now.timeIntervalSince(last) < minimumInterval { return }
+        recordAttemptAt(now)
+        await performRefresh()
+    }
 }
