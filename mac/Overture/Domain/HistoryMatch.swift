@@ -74,6 +74,23 @@ enum HistoryMatch {
         (status ?? "").trimmingCharacters(in: .whitespaces).lowercased() == value
     }
 
+    // #1216: the identities a show is matched against. The event's TITLE and its PRESENTER/org, taken
+    // together, because the ensemble name often lives only in the presenter: the title is the show's
+    // own name ("The Pumpkin Singalong at Sakura Park") while the group ("Every Voice Choirs") sits in
+    // the presenter field, so a title-only match reads a proven past client cold. Both are specific
+    // identities; the venue and location are deliberately NOT candidates, because a shared hall or
+    // city is not the group (the #995 venue-vs-location rule). The presenter is dropped when it
+    // normalizes to the same thing as the title, so a title that already carries the org does no
+    // double work.
+    private static func candidateNames(_ title: String, _ presenter: String?) -> [String] {
+        var names = [title]
+        if let p = presenter?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty,
+           GroupNameMatch.normalize(p) != GroupNameMatch.normalize(title) {
+            names.append(p)
+        }
+        return names
+    }
+
     // The history status vocabulary the ranker understands. An unrecognized or empty status
     // on a confidently matched record is treated as a neutral cold contact, never a boost.
     private static func relationship(forStatus status: String?) -> PriorRelationship {
@@ -102,11 +119,16 @@ enum HistoryMatch {
     // safe direction to fail in.
     static func matchRelationship(
         name: String,
+        presenter: String? = nil,
         venue: String? = nil,
         clients: [DownbeatClient],
         history: [HistoryRecord]
     ) -> MatchVerdict {
-        let confidentHistory = history.filter { GroupNameMatch.isConfident(name, $0.groupName) }
+        // #1216: match the title AND the presenter identity, taking the strongest confident match.
+        let names = candidateNames(name, presenter)
+        let confidentHistory = history.filter { rec in
+            names.contains { GroupNameMatch.isConfident($0, rec.groupName) }
+        }
 
         // #384: Dan passed on this exact show before (same org, same venue). Computed on its own, and
         // deliberately EXCLUDED from the relationship signals below, for two reasons. It must not make
@@ -126,7 +148,7 @@ enum HistoryMatch {
         }
 
         let confidentClient = clients.first { c in
-            clientNames(c).contains { GroupNameMatch.isConfident(name, $0) }
+            clientNames(c).contains { cn in names.contains { GroupNameMatch.isConfident($0, cn) } }
         }
         if let client = confidentClient {
             return MatchVerdict(relationship: .booked, suppressed: false,
@@ -146,7 +168,7 @@ enum HistoryMatch {
         }
 
         if let possibleClient = clients.first(where: { c in
-            clientNames(c).contains { GroupNameMatch.isPossible(name, $0) }
+            clientNames(c).contains { cn in names.contains { GroupNameMatch.isPossible($0, cn) } }
         }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
@@ -154,7 +176,9 @@ enum HistoryMatch {
                                 passedOnThisShow: passedOnThisShow)
         }
 
-        if let possibleHistory = history.first(where: { GroupNameMatch.isPossible(name, $0.groupName) }) {
+        if let possibleHistory = history.first(where: { rec in
+            names.contains { GroupNameMatch.isPossible($0, rec.groupName) }
+        }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
                                 possible: PossibleMatch(source: "history", ref: "", name: possibleHistory.groupName),

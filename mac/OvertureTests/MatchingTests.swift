@@ -133,6 +133,54 @@ struct HistoryMatchTests {
         let v = HistoryMatch.matchRelationship(name: "Mixed Signals Ensemble", clients: [], history: history)
         #expect(v.relationship == .warm)
     }
+
+    // #1216: the ensemble identity lives in the presenter field, not the title. Every Voice Choirs
+    // is a 3x-booked client, but their upcoming show's title is "The Pumpkin Singalong at Sakura
+    // Park", which carries none of the org name. Matching on the title alone reads it cold; the
+    // presenter must be considered too.
+    @Test func matchesHistoryOnPresenterWhenTitleLacksIt() {
+        let history = [HistoryRecord(groupName: "Every Voice Choirs", status: "booked")]
+        let v = HistoryMatch.matchRelationship(
+            name: "The Pumpkin Singalong at Sakura Park",
+            presenter: "Every Voice Choirs",
+            clients: [], history: history)
+        #expect(v.relationship == .booked)
+    }
+
+    // A do-not-contact org named in the presenter field must still suppress: broadening the match to
+    // the presenter must broaden suppression with it, never leave a DNC org through the back door.
+    @Test func dncOnPresenterSuppresses() {
+        let history = [HistoryRecord(groupName: "Loud Neighbors Choir", status: "dnc")]
+        let v = HistoryMatch.matchRelationship(
+            name: "Winter Songs at the Firehouse",
+            presenter: "Loud Neighbors Choir",
+            clients: [], history: history)
+        #expect(v.suppressed == true)
+    }
+
+    // The title path is not replaced by the presenter: when the title carries the org and the
+    // presenter is unrelated (or empty), the title match still resolves.
+    @Test func titleStillMatchesWhenPresenterUnrelated() {
+        let history = [HistoryRecord(groupName: "Referral Choir", status: "warm")]
+        let v = HistoryMatch.matchRelationship(
+            name: "Referral Choir - Spring Concert",
+            presenter: "Merkin Concert Hall",
+            clients: [], history: history)
+        #expect(v.relationship == .warm)
+    }
+
+    // Precision: a presenter that only shares a generic word with an unrelated past org must not
+    // confidently warm the lead. The presenter is a specific identity, but sharing one common token
+    // is not that identity.
+    @Test func presenterSharingOneGenericWordDoesNotWarm() {
+        let history = [HistoryRecord(groupName: "Every Nation Church", status: "booked")]
+        let v = HistoryMatch.matchRelationship(
+            name: "The Pumpkin Singalong at Sakura Park",
+            presenter: "Every Voice Choirs",
+            clients: [], history: history)
+        #expect(v.relationship == .none)
+        #expect(v.possible == nil)
+    }
 }
 
 @Suite("Ingest persistence")

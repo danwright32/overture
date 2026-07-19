@@ -684,7 +684,8 @@ enum ScoutService {
             if c.confidence == .uncertain { uncertain += 1 }
             // #384: the venue is what aims a "don't want to shoot this" pass at ONE show rather than
             // at the whole org.
-            let verdict = HistoryMatch.matchRelationship(name: e.title, venue: e.venue,
+            let verdict = HistoryMatch.matchRelationship(name: e.title, presenter: e.presenter,
+                                                         venue: e.venue,
                                                          clients: clients, history: history)
             switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict) {
             case .skip(let reason):
