@@ -164,6 +164,54 @@ struct VenueTixCalendarTests {
         #expect(result.normalizedHTML.contains("New York, NY"))
     }
 
+    // #1174: the feed tags every night of one production with a shared seriesId, and Green Room 42
+    // routinely runs a show on multiple nights. Without this, a six-night run becomes six separate
+    // prospects to review. Events that share a seriesId collapse into ONE synthesized listing (so the
+    // extractor reads one show, one prospect), keyed on the feed's own production id rather than on date
+    // proximity, so nights weeks apart still read as one production. The collapsed run is represented by
+    // its earliest upcoming night. Shows without a shared id are untouched, one listing each.
+    @Test func collapsesEventsSharingASeriesIdIntoOneListing() throws {
+        let feed = #"""
+        [
+          {"eventId":"a1","seriesId":"run-1","title":"Long Run: Opening","dateTime":1781832600000,"venue":"v"},
+          {"eventId":"a2","seriesId":"run-1","title":"Long Run: Night Two","dateTime":1782005400000,"venue":"v"},
+          {"eventId":"a3","seriesId":"run-1","title":"Long Run: Finale","dateTime":1790000000000,"venue":"v"},
+          {"eventId":"b1","seriesId":"solo-1","title":"A Different Show","dateTime":1781910000000,"venue":"v"}
+        ]
+        """#
+        let events = try VenueTixCalendar.parseEvents(Data(feed.utf8))
+        let html = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42")
+
+        let articleCount = html.components(separatedBy: "<article>").count - 1
+        #expect(articleCount == 2)   // one collapsed run + one standalone show, not four rows
+        #expect(html.contains("Long Run: Opening"))         // represented by its earliest night
+        #expect(!html.contains("Long Run: Night Two"))      // the other nights are not their own rows
+        #expect(!html.contains("Long Run: Finale"))
+        #expect(html.contains("A Different Show"))          // an unrelated show stays its own listing
+    }
+
+    // The parse carries the feed's production id through (the two fixture shows are different productions).
+    @Test func parseCarriesTheSeriesId() throws {
+        let events = try VenueTixCalendar.parseEvents(Data(Self.feed.utf8))
+        #expect(events[0].seriesId == "s1")
+        #expect(events[1].seriesId == "s2")
+    }
+
+    // A feed that names no production id parses fine and simply collapses nothing: two id-less shows stay
+    // two listings, so the absence of the id is never read as "these are the same show".
+    @Test func eventsWithoutASeriesIdAreNotCollapsed() throws {
+        let feed = #"""
+        [
+          {"title":"Show One","dateTime":1781832600000,"venue":"v"},
+          {"title":"Show Two","dateTime":1781919000000,"venue":"v"}
+        ]
+        """#
+        let events = try VenueTixCalendar.parseEvents(Data(feed.utf8))
+        #expect(events.allSatisfy { $0.seriesId == nil })
+        let html = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42")
+        #expect(html.components(separatedBy: "<article>").count - 1 == 2)
+    }
+
     @Test func sourceFetcherThreadsTheSourceLocationToTheAdapter() async throws {
         let vt = URL(string: "https://thegreenroom42.venuetix.com/")!
         let stub = FetchedPage(normalizedHTML: "VT-STUB", finalURL: vt.absoluteString, contentHash: "h")
