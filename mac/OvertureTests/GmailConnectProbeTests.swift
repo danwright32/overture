@@ -89,4 +89,63 @@ struct GmailConnectProbeTests {
         let reachable = await GmailAuthManager.probeListenerReachable(port: port)
         #expect(reachable == true)
     }
+
+    // #1167: the pre-browser probe cannot catch a listener that only dies AFTER Overture backgrounds while
+    // Dan is on Google's consent screen. A heartbeat re-probes partway through the wait: if the listener has
+    // gone unreachable and no redirect has arrived, connect() fails fast with the same retryable error
+    // instead of waiting out the full give-up clock. Here the probe passes once (pre-browser) then reports
+    // dead (heartbeat), and the long hardTimeout proves the failure came from the heartbeat, not the clock.
+    @Test func aListenerThatDiesMidWaitFailsFastNotAtTheTimeout() async throws {
+        let manager = GmailAuthManager()
+        let clientURL = try tmpClient()
+        defer { try? FileManager.default.removeItem(at: clientURL) }
+
+        let calls = CallCounter()
+        var thrown: GmailAuthManager.AuthError?
+        do {
+            try await manager.connect(
+                clientURL: clientURL,
+                openBrowser: { _ in },
+                probe: { _ in await calls.tick() == 1 },   // alive pre-browser, dead on the heartbeat
+                hardTimeout: 30,                            // long: a pass here proves we did NOT wait it out
+                heartbeatInterval: 0.1)
+            Issue.record("expected connect() to fail fast when the listener dies mid-wait")
+        } catch let error as GmailAuthManager.AuthError {
+            thrown = error
+        }
+        guard case .listenerUnreachable = thrown else {
+            Issue.record("expected .listenerUnreachable from the heartbeat, got \(String(describing: thrown))")
+            return
+        }
+    }
+
+    // The heartbeat must NOT false-fire on a healthy listener. Running the REAL probe against a genuinely
+    // live listener mid-wait, connect() must still fail only by TIMING OUT (no redirect arrives in a test),
+    // never by the heartbeat wrongly reporting the live listener dead or its throwaway connection corrupting
+    // the waiter.
+    @Test func aHealthyListenerSurvivesTheHeartbeatAndTimesOutInstead() async throws {
+        let manager = GmailAuthManager()
+        let clientURL = try tmpClient()
+        defer { try? FileManager.default.removeItem(at: clientURL) }
+
+        var thrown: GmailAuthManager.AuthError?
+        do {
+            try await manager.connect(clientURL: clientURL, openBrowser: { _ in },
+                                      hardTimeout: 0.8, heartbeatInterval: 0.2)
+            Issue.record("expected a timeout (no redirect ever arrives in a test)")
+        } catch let error as GmailAuthManager.AuthError {
+            thrown = error
+        }
+        guard case .exchangeFailed = thrown else {
+            Issue.record("expected a timeout (.exchangeFailed), got \(String(describing: thrown))")
+            return
+        }
+    }
+}
+
+// Counts probe calls across suspension points so a test probe can answer differently on the pre-browser
+// check (call 1) than on the heartbeat (call 2+).
+private actor CallCounter {
+    private var n = 0
+    func tick() -> Int { n += 1; return n }
 }
