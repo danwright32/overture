@@ -66,6 +66,7 @@ struct ProspectRowView: View {
     // #991: Dan's stored town refusals, so the too-far reason line reads the union (seed + his refusals),
     // and the Dismiss menu can offer to add this row's town.
     var userExcludedTowns: Set<String> = []
+    var allowedSeedTowns: Set<String> = []
     var onExcludeTown: () -> Void = {}
 
     private var timing: QueueModel.Timing {
@@ -249,7 +250,8 @@ struct ProspectRowView: View {
     // placed out of range. Sits right under the location line it explains. The sentence is decided in
     // QueueModel (tested); this view only draws it.
     @ViewBuilder private var tooFarReasonNote: some View {
-        if showingTooFar, let reason = item.tooFarReason(userExcludedTowns: userExcludedTowns) {
+        if showingTooFar, let reason = item.tooFarReason(userExcludedTowns: userExcludedTowns,
+                                                         allowedSeedTowns: allowedSeedTowns) {
             HStack(spacing: 5) {
                 Image(systemName: "location.slash")
                 Text(reason)

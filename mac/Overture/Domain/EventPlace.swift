@@ -123,7 +123,11 @@ enum EventPlace {
     // seed here so the gate reads both at queue time. Defaulted empty, so every existing caller and test
     // is unchanged and only the live queue passes the real set.
     static func resolve(location: String?, discipline: Discipline,
-                        userExcludedTowns: Set<String> = []) -> Result {
+                        userExcludedTowns: Set<String> = [],
+                        // #1221: seed towns Dan has UN-SKIPPED from inside the app. Subtracted from the
+                        // exclusion set, so a built-in far town he now cares about resolves normally again.
+                        // Defaulted empty, so every existing caller and test is unchanged.
+                        allowedSeedTowns: Set<String> = []) -> Result {
         let raw = (location ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return Result(verdict: .unknown, reason: .noLocation) }
 
@@ -131,7 +135,8 @@ enum EventPlace {
         let tokens = commaTokens(text)
 
         // A refusal wins over everything, including the boroughs, because it is Dan speaking directly.
-        let allExcluded = excludedTowns.union(userExcludedTowns)
+        // #1221: minus the seed towns he has un-skipped, so an allow can take a built-in far town back.
+        let allExcluded = excludedTowns.union(userExcludedTowns).subtracting(allowedSeedTowns)
         if tokens.contains(where: { allExcluded.contains($0) }) {
             return Result(verdict: .outOfRange, reason: .excludedTown)
         }

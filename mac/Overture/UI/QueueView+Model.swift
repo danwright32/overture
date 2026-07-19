@@ -179,8 +179,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #991: the same reason line, but reading Dan's stored refusals too, so a row hidden because he
     // excluded its town explains itself with the skip-list sentence. The queue passes the union; the
     // property above (seed only) stays for callers that have no store.
-    func tooFarReason(userExcludedTowns: Set<String>) -> String? {
-        QueueModel.tooFarReason(self, userExcludedTowns: userExcludedTowns)
+    func tooFarReason(userExcludedTowns: Set<String>, allowedSeedTowns: Set<String> = []) -> String? {
+        QueueModel.tooFarReason(self, userExcludedTowns: userExcludedTowns,
+                                allowedSeedTowns: allowedSeedTowns)
     }
 
     // #991: the town Dan's "never show me shows in this town" action would add, or nil when this row has
@@ -331,7 +332,8 @@ enum QueueModel {
     // ever as trustworthy as its untested part. A count is a promise about rows (#863).
     static func filter(_ items: [QueueItem], discipline: String?, highOnly: Bool,
                        pendingBookingsOnly: Bool, tooFarOnly: Bool = false,
-                       userExcludedTowns: Set<String> = []) -> [QueueItem] {
+                       userExcludedTowns: Set<String> = [],
+                       allowedSeedTowns: Set<String> = []) -> [QueueItem] {
         items.filter { item in
             if let discipline, item.discipline != discipline { return false }
             if highOnly, !item.isHighFit { return false }
@@ -339,7 +341,8 @@ enum QueueModel {
             // #970. The gate. `tooFarOnly` inverts it, which is how a hidden show stays one click away
             // rather than gone: the same predicate decides both, so the chip's count and the rows it
             // reveals cannot drift apart (#863).
-            if isTooFar(item, userExcludedTowns: userExcludedTowns) != tooFarOnly { return false }
+            if isTooFar(item, userExcludedTowns: userExcludedTowns,
+                        allowedSeedTowns: allowedSeedTowns) != tooFarOnly { return false }
             return true
         }
     }
@@ -359,10 +362,12 @@ enum QueueModel {
     // stays usable as a first-class function value, e.g. `items.filter(QueueModel.isTooFar)`.
     static func isTooFar(_ item: QueueItem) -> Bool { isTooFar(item, userExcludedTowns: []) }
 
-    static func isTooFar(_ item: QueueItem, userExcludedTowns: Set<String>) -> Bool {
+    static func isTooFar(_ item: QueueItem, userExcludedTowns: Set<String>,
+                         allowedSeedTowns: Set<String> = []) -> Bool {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
         return EventPlace.resolve(location: item.location, discipline: discipline,
-                                  userExcludedTowns: userExcludedTowns).verdict == .outOfRange
+                                  userExcludedTowns: userExcludedTowns,
+                                  allowedSeedTowns: allowedSeedTowns).verdict == .outOfRange
     }
 
     // #992. The chip's number says HOW MANY the gate hid; this says WHY this row in particular was, in one
@@ -371,10 +376,12 @@ enum QueueModel {
     // stored, like the verdict), so a rule change re-decides every row's reason at once.
     //
     // nil unless the gate positively placed this row out of range, so a kept or unknown row shows nothing.
-    static func tooFarReason(_ item: QueueItem, userExcludedTowns: Set<String> = []) -> String? {
+    static func tooFarReason(_ item: QueueItem, userExcludedTowns: Set<String> = [],
+                             allowedSeedTowns: Set<String> = []) -> String? {
         let discipline = Discipline(rawValue: item.discipline) ?? .other
         let reason = EventPlace.resolve(location: item.location, discipline: discipline,
-                                        userExcludedTowns: userExcludedTowns).reason
+                                        userExcludedTowns: userExcludedTowns,
+                                        allowedSeedTowns: allowedSeedTowns).reason
         return tooFarReasonSentence(reason)
     }
 
