@@ -230,8 +230,12 @@ struct QueueView: View {
         let message = StageEmptyState.message(for: stage, counts: counts, reachedOut: data.reachedOut.count)
         return VStack(spacing: OVSpacing.xs) {
             Text(message.title).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Text(message.detail).font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                .multilineTextAlignment(.center)
+            // #1195: a send-issues stage has no resting detail, so show the title alone rather than a
+            // generic second line that just restates it.
+            if !message.detail.isEmpty {
+                Text(message.detail).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, OVSpacing.hero)
