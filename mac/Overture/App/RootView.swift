@@ -528,10 +528,10 @@ struct RootView: View {
                 // results already on disk, without nagging about an old failed run (#48).
                 if PrepQueueService.isRunning(now: Date()) {
                     // #1130: a detached Prep run outlives the app, so one can still be going at launch.
-                    // Reopen the takeover and follow it to completion, mirroring the scout's #1035 reattach,
-                    // so a live run is never invisible now that the takeover is the primary progress signal.
+                    // Reopen the takeover so a live run is never invisible; the continuous watchPrepRuns
+                    // task (below) follows it to completion, so this no longer awaits here (which also
+                    // stops an in-flight Prep from blocking the scout reattach that follows).
                     prepSheetShown = true
-                    await watchPrepRun()
                 } else {
                     ingestPrep()
                 }
@@ -549,6 +549,14 @@ struct RootView: View {
                 // Follow every reply-classify run to completion so a finished draft clears the spinner
                 // and ingests at once instead of waiting for the next launch (#435).
                 await watchReplyClassifyRuns()
+            }
+            .task {
+                guard AppEnvironment.shouldStartBackgroundServices else { return }
+                // #1143: follow every Prep run to completion, the same way. A per-row Re-prep click
+                // launches a Prep run straight from ProspectMutations, with no RootView startPrep call
+                // to open the takeover or ingest its results, so without this a re-prepped show's drafts
+                // would only surface on the next launch and its progress would be invisible mid-session.
+                await watchPrepRuns()
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -799,10 +807,9 @@ struct RootView: View {
             _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys)
             // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
             // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
+            // #1143: the continuous watchPrepRuns task follows this run to completion (ingest, or a clear
+            // empty-run notice), so it is no longer started per-launch here; one watcher owns every run.
             prepSheetShown = true
-            // Watch this run so Dan sees the outcome (drafts ingested, or a clear notice
-            // that it finished without producing anything) rather than silent waiting (#48).
-            Task { await watchPrepRun() }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -837,6 +844,21 @@ struct RootView: View {
                 .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
         case .idle:
             break
+        }
+    }
+
+    // #1143: continuously watch for a Prep run to begin (a per-row Re-prep click, an explicit "Prep kept"
+    // run, or one in flight at launch) and follow it to completion. Mirrors watchReplyClassifyRuns exactly:
+    // it polls the run marker and only enters watchPrepRun when a run is genuinely live, so an old failed
+    // run never re-nags on a normal open (#48). One watcher owns every run, so there is a single ingest/
+    // takeover path rather than a per-launch Task at each start site.
+    private func watchPrepRuns() async {
+        while !Task.isCancelled {
+            if PrepQueueService.isRunning(now: Date()) {
+                prepSheetShown = true
+                await watchPrepRun()
+            }
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
     }
 

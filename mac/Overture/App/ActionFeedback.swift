@@ -136,20 +136,30 @@ enum ActionAck {
         "Updated \(org)'s classification"
     }
 
-    // #367: the per-prospect re-prep confirmation. draftGranted false for a requested draft-
-    // affecting mode means the show had already been sent to, so only the contacts half applied;
-    // Dan needs to see that narrowing, not just "queued".
-    static func reprepQueued(mode: ReprepMode, draftGranted: Bool, org: String) -> String {
+    // #367/#1143: the per-prospect re-prep confirmation. Re-prep now LAUNCHES a run for just this show,
+    // so it says the run is under way, not merely "queued". draftGranted false for the `both` mode means
+    // the show had already been sent to, so only the contacts half runs; Dan needs to see that narrowing.
+    static func reprepStarted(mode: ReprepMode, draftGranted: Bool, org: String) -> String {
         switch mode {
         case .contactsOnly:
-            return "Queued \(org) to find new contacts"
+            return "Re-prepping \(org) to find new contacts"
         case .draftOnly:
-            return draftGranted ? "Queued \(org) to redraft"
-                                : "\(org) has already been sent to, so nothing was queued"
+            return "Re-prepping \(org) to redraft"
         case .both:
-            return draftGranted ? "Queued \(org) to redraft and find new contacts"
-                                : "\(org) has already been sent to; queued to find new contacts only"
+            return draftGranted ? "Re-prepping \(org) to redraft and find new contacts"
+                                : "\(org) has already been sent to; re-prepping to find new contacts only"
         }
+    }
+
+    // #1143: a draft-only re-prep of a show already emailed has nothing to redraft, so no run starts.
+    static func reprepNothingToRedraft(org: String) -> String {
+        "\(org) has already been sent to, so there's nothing to redraft"
+    }
+
+    // #1143: a Prep run was already in progress when Dan clicked Re-prep. The flag is saved, so the show
+    // is queued to re-prep on the next run rather than launching a second run over the one in flight.
+    static func reprepRunInFlight(org: String) -> String {
+        "A Prep run is already in progress. \(org) is queued to re-prep on the next run"
     }
 
     static let bulkReprepNothingEligible = "No drafted or approved prospects to re-prep"

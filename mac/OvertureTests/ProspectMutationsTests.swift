@@ -424,7 +424,8 @@ struct ProspectMutationsTests {
         #expect(alreadySent.lintOverriddenBody == nil)
     }
 
-    // #367: the per-prospect re-prep action just delegates to ReprepRequest.apply and saves.
+    // #367: the per-prospect re-prep action applies the requested mode and saves.
+    // #1143: it now also LAUNCHES a scoped Prep run; an injected launch seam keeps this hermetic.
     @Test func reprepAppliesTheRequestedModeAndSaves() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .drafted)
@@ -432,11 +433,85 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx, feedback: feedback,
+                                 startPrep: { _, _, _ in })
 
         #expect(p.reprepContactsRequested == true)
         #expect(p.reprepDraftRequested == false)
         #expect(feedback.message != nil)
+    }
+
+    // #1143: clicking Re-prep must actually launch a Prep run scoped to JUST that prospect's key,
+    // not merely flip the flag and wait for some future run.
+    @Test func reprepLaunchesAScopedPrepRunForJustThatProspect() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, key: "only-me", status: .drafted)
+        p.draftBody = "Hi"
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        var launchedKeys: [Set<String>] = []
+        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback,
+                                 startPrep: { _, _, keys in launchedKeys.append(keys) })
+
+        #expect(launchedKeys == [["only-me"]])   // launched exactly once, scoped to this show
+        #expect(p.reprepContactsRequested == true)
+        #expect(feedback.message != nil)
+    }
+
+    // #1143 / CLAUDE.md "assume it runs twice": a second click (or a run already in flight) must not
+    // launch a second run. The guard is startPrep's own in-flight marker, reused here: the first click
+    // creates it, the second throws .alreadyRunning and no second launch happens.
+    @Test func reprepDoesNotLaunchTwiceWhenARunIsAlreadyInFlight() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, key: "twice", status: .drafted)
+        p.draftBody = "Hi"
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("reprep-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let marker = base.appendingPathComponent("prep-running")
+        let queue = base.appendingPathComponent("queue.json")
+
+        var launches = 0
+        // Route the seam through the REAL startPrep so the real marker guard is exercised, with every
+        // file location pointed at the temp dir so nothing touches the live handoff directory.
+        let seam: @MainActor (ModelContext, Date, Set<String>) throws -> Void = { ctx, now, keys in
+            _ = try PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys,
+                                               queueURL: queue, markerURL: marker,
+                                               voiceFeedbackURL: base.appendingPathComponent("voice.json"),
+                                               recentOpenersURL: base.appendingPathComponent("openers.json"),
+                                               cancelURL: base.appendingPathComponent("prep-cancel"),
+                                               launch: { launches += 1 })
+        }
+
+        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback, startPrep: seam)
+        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback, startPrep: seam)
+
+        #expect(launches == 1)                       // the in-flight marker blocked the second launch
+        #expect(p.reprepContactsRequested == true)   // the flag is still recorded for the next run
+        #expect(feedback.message != nil)             // and the "already running" case is surfaced, not silent
+    }
+
+    // #1143: a draft-only re-prep of a show already emailed has nothing to redraft (ReprepRequest gates
+    // the draft half on sentAt == nil), so there is no dead work to launch. Fail-loud, not a phantom run.
+    @Test func reprepDraftOnlyOnAnAlreadySentShowLaunchesNothing() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, key: "sent", status: .approved)
+        p.draftBody = "Hi"
+        p.sentAt = Date(timeIntervalSince1970: 10)
+        try? ctx.save()
+        let feedback = ActionFeedback()
+
+        var launches = 0
+        ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, prospects: [p], context: ctx, feedback: feedback,
+                                 startPrep: { _, _, _ in launches += 1 })
+
+        #expect(launches == 0)                     // nothing to redraft, so no run
+        #expect(p.reprepDraftRequested == false)   // and the draft half was never granted
+        #expect(feedback.message != nil)           // Dan is told why, not left with a silent no-op
     }
 
     // #367: the bulk action only touches prospects that already have a draft and aren't in a
