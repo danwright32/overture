@@ -235,6 +235,16 @@ enum SourceFetcher {
                                         allowSiblingProbe: Bool = true) async throws -> FetchedPage {
         let (html, normalized, finalURL) = try await plainFetch(url, session: session)
 
+        // #1127: a tickettailor box-office embed's events live in its widget URL, not this shell (which
+        // reads as "readable" but carries no events). Follow it once to the server-rendered widget and read
+        // THAT instead. Plain and deterministic (browser headers, no render). Recorded transparently via
+        // followedTicketLinkFrom, and gated like the ticket-link hop so a sub-fetch never wanders.
+        if allowTicketLinkHop, let widget = TicketTailor.widgetURL(inPage: html) {
+            var page = try await TicketTailor.fetchWidget(widget) { try await session.data(for: $0) }
+            page.followedTicketLinkFrom = finalURL.absoluteString
+            return page
+        }
+
         // #806. If the download carried something to read, we are done, and the browser is never touched.
         // That matters: rendering costs seconds and a whole WebKit instance per source, and the watchlist
         // re-checks dozens of sources on a schedule, so "just render everything" would quietly make the
