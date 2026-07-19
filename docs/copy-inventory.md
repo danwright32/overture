@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **664 sentences**, from 223 source files.
+Every sentence Overture can say to Dan: **665 sentences**, from 223 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1070,6 +1070,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
     `Domain/WatchedSource.swift`
+"That calendar's feed answered but nothing could be read from it, so its format has probably changed."
+    `Integration/SourceFetcher.swift`
 "That contact"
     `App/ActionFeedback.swift`
 "That doesn't look like a link. Paste the web address of the show or the org's events page."

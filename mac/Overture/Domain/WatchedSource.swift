@@ -362,6 +362,7 @@ enum SourceFailure: Equatable, Sendable {
         case .fetch(.notHTML(let type)):     return "not_html:\(type ?? "")"
         case .fetch(.redirectedAway(let h)): return "redirected:\(h)"
         case .fetch(.unreachable):           return "unreachable"
+        case .fetch(.feedShapeChanged):      return "feed_shape_changed"
         case .verdict(let v):                return "verdict_\(v.rawValue)"
         case .inconsistentResult:            return "inconsistent"
         }
@@ -376,6 +377,8 @@ enum SourceFailure: Equatable, Sendable {
         switch token {
         case "unreachable":
             self = .fetch(.unreachable)
+        case "feed_shape_changed":
+            self = .fetch(.feedShapeChanged)
         case "inconsistent":
             self = .inconsistentResult
         case "not_html":
@@ -410,7 +413,9 @@ enum SourceFailure: Equatable, Sendable {
     // run bug, not a bad page).
     var offersFix: Bool {
         switch self {
-        case .verdict(.notRead), .inconsistentResult: return false
+        // #1171: a changed feed FORMAT is not a wrong ADDRESS. Re-pointing the URL cannot fix a platform's
+        // feed shape change, so offering "Fix the address" here would be a false affordance (like notRead).
+        case .verdict(.notRead), .inconsistentResult, .fetch(.feedShapeChanged): return false
         default: return true
         }
     }

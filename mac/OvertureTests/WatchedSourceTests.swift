@@ -110,6 +110,7 @@ struct SourceFailureTests {
         let cases: [SourceFailure] = [
             .fetch(.http(401)), .fetch(.http(429)), .fetch(.unreachable),
             .fetch(.notHTML("application/pdf")), .fetch(.redirectedAway("thirdstreetmusicschool.org")),
+            .fetch(.feedShapeChanged),   // #1171
             .verdict(.noDatedContent), .verdict(.unreadable),
         ]
         for failure in cases {
@@ -143,5 +144,14 @@ struct SourceFailureTests {
     @Test func anUnknownStoredStringIsRefusedRatherThanGuessed() {
         #expect(SourceFailure(raw: "wat") == nil)
         #expect(SourceFailure(raw: "") == nil)
+    }
+
+    // #1171: a feed that answered but parsed to nothing is a broken feed, not a fixable address. Re-pointing
+    // cannot change a platform's feed format, so this failure offers no "Fix the address" affordance (like
+    // notRead), and it names the format change so it reads as broken rather than as a quiet off-season.
+    @Test func aFeedShapeChangeIsNamedAndOffersNoAddressFix() {
+        #expect(SourceFailure.fetch(.feedShapeChanged).message.isEmpty == false)
+        #expect(SourceFailure.fetch(.feedShapeChanged).offersFix == false)
+        #expect(SourceFailure.fetch(.feedShapeChanged).offersConfirm == false)
     }
 }

@@ -32,7 +32,10 @@ enum OperaAmericaCalendar {
     private struct Item: Decodable {
         var title: String
         var company: String?
-        var date: String
+        // #1171: optional so a renamed/removed date key decodes to nil and funnels through the drop guard
+        // (and the all-dropped feedShapeChanged guard below) with the right "feed format changed" reason,
+        // rather than a raw DecodingError that would surface as the misleading "couldn't reach that page".
+        var date: String?
         var time: String?
         var venue: String?
         var city: String?
@@ -55,7 +58,7 @@ enum OperaAmericaCalendar {
         let events: [OAEvent] = env.items.compactMap { item in
             // A row we cannot date is not a listing we can safely pitch or reconcile, so drop it rather than
             // invent a date. The feed has always carried a date, so this is a guard, not an expected path.
-            guard let date = dateParser.date(from: item.date) else { return nil }
+            guard let raw = item.date, let date = dateParser.date(from: raw) else { return nil }
             return OAEvent(title: item.title,
                            company: item.company ?? "",
                            date: date,
@@ -65,6 +68,10 @@ enum OperaAmericaCalendar {
                            state: item.state,
                            eventLink: item.eventLink)
         }
+        // #1171: the feed answered with items but NONE parsed, so its shape has changed (a renamed date
+        // field drops every row). Fail loud rather than hand back an empty page that would read as an empty
+        // calendar. An empty page (items itself empty) is a genuine off-season and passes through untouched.
+        if !env.items.isEmpty && events.isEmpty { throw SourceFetchError.feedShapeChanged }
         return OAPage(totalPages: env.totalPages, totalItems: env.totalItems, events: events)
     }
 

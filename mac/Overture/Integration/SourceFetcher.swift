@@ -20,6 +20,11 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
     case notHTML(String?)           // a PDF season, an image, a JSON endpoint
     case redirectedAway(String)     // answered 200, on a different site (see below)
     case unreachable                // timeout, DNS, connection refused
+    // #1171: a platform feed adapter (OPERA America, VenueTix) answered with items but parsed NONE of them,
+    // so the feed's shape has almost certainly changed. Distinct from a genuinely empty (off-season) feed,
+    // which parses to zero from zero and is a normal quiet result. Named so drift reads as broken and is
+    // caught on the first bad fetch, rather than looking like an empty calendar and going unnoticed.
+    case feedShapeChanged
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +32,7 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
         case .notHTML(let type):     return "That link isn't a web page (it served \(type ?? "an unknown type"))."
         case .redirectedAway(let h): return "That link redirects to a different site (\(h)). Check the address."
         case .unreachable:           return "Couldn't reach that page."
+        case .feedShapeChanged:      return "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
         }
     }
 }
