@@ -756,8 +756,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "Nothing waiting"
     `Domain/AgentRoster.swift`
-"Nothing waiting on you here."
-    `Domain/StageEmptyState.swift`
 "Nothing was added and nothing will go out to them."
     `Domain/SuppressionReport.swift`
 "Notifications allowed."
@@ -1244,6 +1242,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Too far (\(count))"
     `UI/QueueView+Model.swift`
+"Too soon"
+    `Domain/ReviewStatus.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."

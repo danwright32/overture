@@ -109,6 +109,10 @@ enum DismissReason: String, CaseIterable, Sendable {
     case dontWantToShoot = "dont_want_to_shoot"   // #351: personal taste, distinct from "Not a fit"
     case alreadyBooked = "already_booked"
     case duplicate
+    // #1128: a show Dan WOULD want but found out about too late to pitch. Distinct from `dateConflict`
+    // (he is free, there just wasn't time) and from `notInterested`/`dontWantToShoot` (he does want it).
+    // A missed opportunity, never a bad-fit signal, so it must never be folded into `notInterested`.
+    case tooSoon = "too_soon"
     case wentBy = "went_by"
 
     var label: String {
@@ -118,6 +122,7 @@ enum DismissReason: String, CaseIterable, Sendable {
         case .dontWantToShoot: return "Don't want to shoot this"
         case .alreadyBooked: return "Already booked"
         case .duplicate: return "Duplicate"
+        case .tooSoon: return "Too soon"
         case .wentBy: return "Went by"
         }
     }

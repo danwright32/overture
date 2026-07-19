@@ -16,7 +16,8 @@ struct DayOffOfferTests {
     }
 
     @Test func doesNotOfferForNonCalendarReasons() {
-        for reason in [DismissReason.notInterested, .dontWantToShoot, .duplicate, .wentBy] {
+        // #1128: "Too soon" means Dan is FREE, there just wasn't time to reach out, so it captures no day off.
+        for reason in [DismissReason.notInterested, .dontWantToShoot, .duplicate, .wentBy, .tooSoon] {
             #expect(DayOffOffer.offer(reason: reason, performanceDate: "2026-11-18", runEndDate: nil) == nil,
                     "did not expect an offer for \(reason)")
         }

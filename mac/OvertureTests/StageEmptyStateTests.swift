@@ -52,4 +52,19 @@ struct StageEmptyStateTests {
         #expect(StageEmptyState.message(for: .prep, counts: [:], reachedOut: 0).title == "Nothing to prep yet")
         #expect(StageEmptyState.message(for: .review, counts: [:], reachedOut: 0).title == "No drafts to review")
     }
+
+    // #1195/#843: the Send-issues stages (the default arm) have no stage-specific resting line, so when
+    // nothing is waiting anywhere their empty state shows only the title ("Nothing here right now") and
+    // never a second sentence that just restates it ("Nothing waiting on you here.").
+    @Test func aSendIssuesStageDoesNotRestateItsTitleWhenIdle() {
+        let msg = StageEmptyState.message(for: .sendApproved, counts: [:], reachedOut: 0)
+        #expect(msg.title == "Nothing here right now")
+        #expect(msg.detail.isEmpty)
+    }
+
+    // The trim only drops the resting line: an idle Send-issues stage still points Dan to work elsewhere.
+    @Test func aSendIssuesStageStillPointsToWorkElsewhere() {
+        let msg = StageEmptyState.message(for: .sendApproved, counts: [.prep: 2], reachedOut: 0)
+        #expect(msg.detail == "You have 2 shows to prep next.")
+    }
 }
