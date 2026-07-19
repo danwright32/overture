@@ -249,6 +249,39 @@ struct SourceCheckTests {
         #expect(s.lastCheckedAt == now)
     }
 
+    // #1217: a source whose last read DROPPED events (the degraded "won't mark anything gone until it
+    // can confirm a venue" state, lastUnreadableCount > 0) is re-read on the next MANUAL scout even when
+    // its page is byte-for-byte unchanged, on the assumption Dan fixed the underlying cause (a code fix,
+    // a runbook fix, a corrected URL) between scouts. Without this the fix never reaches the already-seen
+    // show, because an unchanged hash reads as "nothing to do".
+    @Test func aDegradedSourceIsReReadOnAManualScoutEvenWhenUnchanged() {
+        let s = source(hash: "abc")
+        s.lastUnreadableCount = 1
+        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+                                          depth: .readChanged, now: now)
+        #expect(decision == .read(page("abc")))
+    }
+
+    // A source whose last CHECK was a hard fetch failure is likewise re-read on a manual scout when it
+    // now fetches an unchanged page: Dan may have fixed the address or the site may be back up, and the
+    // fix has to reach the show even though the bytes match the last ingest.
+    @Test func aFailingSourceIsReReadOnAManualScoutWhenItNowFetchesUnchanged() {
+        let s = source(hash: "abc", health: .failing)
+        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+                                          depth: .readChanged, now: now)
+        #expect(decision == .read(page("abc")))
+    }
+
+    // The retry is the SPEND path only. The free daily watch-only run never re-reads a degraded source:
+    // it costs a token, and the daily run's whole promise is that it never spends.
+    @Test func aDegradedSourceIsNotReReadOnTheFreeDailyRun() {
+        let s = source(hash: "abc")
+        s.lastUnreadableCount = 1
+        let decision = SourceCheck.decide(source: s, result: .success(page("abc")),
+                                          depth: .watchOnly, now: now)
+        #expect(decision == .unchanged)
+    }
+
     // A source with no hash yet has never been ingested, so it is changed by definition.
     @Test func aSourceNeverIngestedCountsAsChanged() {
         let s = source(hash: nil)

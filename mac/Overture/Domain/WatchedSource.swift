@@ -310,6 +310,16 @@ final class WatchedSource {
         set { lastErrorRaw = newValue?.raw }
     }
 
+    // #1217: did this source's LAST check end in anything other than a clean success? Either a hard fetch
+    // failure (health failing, or a recorded lastFailure), or a read that dropped one or more events (the
+    // degraded "won't mark anything gone until it can confirm a venue" state, lastUnreadableCount > 0). A
+    // clean unchanged success is NOT this. It is read off state Overture already stores, no new
+    // persistence, and it is what lets a MANUAL scout force a re-read of a still-broken source even when
+    // the page hash is unchanged, on the assumption Dan fixed the underlying cause between scouts.
+    var lastCheckWasNotCleanSuccess: Bool {
+        health == .failing || lastFailure != nil || lastUnreadableCount > 0
+    }
+
     // The dispatch rule, stated as a property of the row so Phase 4's loop cannot be written any other
     // way. Carnegie's endpoint is a POST search API that needs an app id, an api key and a JSON body
     // (CarnegieExtractor.swift). SourceFetcher's GET cannot retrieve it, hash it or diff it, so the

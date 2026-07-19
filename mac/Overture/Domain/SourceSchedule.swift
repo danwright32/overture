@@ -144,6 +144,9 @@ enum SourceCheck {
 
     static func decide(source: WatchedSource, result: Result<FetchedPage, SourceFetchError>,
                        depth: ScoutDepth, now: Date) -> Decision {
+        // #1217: captured BEFORE the success branch below resets health and lastFailure, so a source that
+        // did not cleanly succeed last time can still be recognized after it fetches fine this time.
+        let retryStillBroken = source.lastCheckWasNotCleanSuccess
         source.lastCheckedAt = now
 
         switch result {
@@ -182,6 +185,13 @@ enum SourceCheck {
             // never been ingested is changed by definition.
             guard page.contentHash != source.lastContentHash else {
                 source.hasUnreadChanges = false
+                // #1217: a scout Dan started re-reads a source that did NOT cleanly succeed last time,
+                // even when the page is byte-for-byte unchanged, on the assumption he fixed the
+                // underlying cause (a code fix, a runbook fix, a corrected URL) between scouts. The free
+                // daily watch-only run never does this: it costs a token, which only Dan's run may spend.
+                if depth == .readChanged && retryStillBroken {
+                    return .read(page)
+                }
                 return .unchanged
             }
 
