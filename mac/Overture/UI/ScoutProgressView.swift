@@ -9,14 +9,17 @@ import SwiftUI
 // before Prepping, which keeps its own toolbar label.
 //
 // Shared, deliberately: RootView presents it as a sheet for a manual scout (#1034), reopens it on
-// launch when a run is still going (#1035), and AddLeadSheet renders it inline while a pasted lead is
-// read (#1036). One progress surface, not three that drift.
+// launch when a run is still going (#1035), AddLeadSheet renders it inline while a pasted lead is
+// read (#1036), and #1130 reuses it for the Prep run's takeover. One progress surface, not several
+// that drift. (It is named for the scout it first served; it is the app's shared run-progress takeover.)
 //
 // This is not decoration. CLAUDE.md's standing rule is that a slow action must make working, still-
 // alive and failed visibly different states; the ticking counter and the stalled warning are exactly
 // that, routed through the same RunProgress.liveness every other long action uses.
 struct ScoutProgressView: View {
-    enum Phase: Equatable { case scouting, reading }
+    // #1130: `prepping` is the detached Prep run (contact-finding + drafting per prospect), which takes
+    // minutes and so needs the same visible working/stalled state as the scout rather than a bare label.
+    enum Phase: Equatable { case scouting, reading, prepping }
 
     // What the modal shows RIGHT NOW, re-read each tick inside the TimelineView. The caller wires this
     // to the native progress callback's captured values (scouting) or to the queue/results diff plus the
@@ -47,7 +50,13 @@ struct ScoutProgressView: View {
     // Each phase's own stall window: an in-process sweep is quick, a detached read that follows detail
     // pages legitimately runs long, so reusing the sweep's 3-minute ceiling for the read would declare a
     // healthy run stuck (the #803 lesson).
-    var timeout: TimeInterval { phase == .scouting ? RunTimeouts.scout : RunTimeouts.scoutExtract }
+    var timeout: TimeInterval {
+        switch phase {
+        case .scouting: return RunTimeouts.scout
+        case .reading:  return RunTimeouts.scoutExtract
+        case .prepping: return RunTimeouts.prep
+        }
+    }
 
     // Just the ticking content, sized to its content. The presentation chrome (the takeover's fixed
     // frame and canvas background) is applied by the caller, so the SAME view drops into RootView's
@@ -135,12 +144,27 @@ extension ScoutProgressView.Snapshot {
     }
 }
 
+extension ScoutProgressView.Snapshot {
+    // #1130: the live Prep-run snapshot, from the run's own progress file (overture-prep-progress.json,
+    // total/completed, written by the workflow, decoded by PrepProgressDecoder). The Prep run works by
+    // prospect but does not publish which one, so there is no per-item name: sourceLine degrades to just
+    // "N of M". Injectable URL so it is a real unit test; a missing/mid-write file reads as an empty
+    // snapshot (completed 0, total 0), which sourceLine renders as no count line at all.
+    static func livePrepping(progressURL: URL = PrepProgressDecoder.defaultURL) -> ScoutProgressView.Snapshot {
+        let progress = PrepProgressDecoder.loadCurrent(from: progressURL)
+        return ScoutProgressView.Snapshot(sourceName: nil,
+                                          completed: progress?.completed ?? 0,
+                                          total: progress?.total ?? 0)
+    }
+}
+
 // The modal's words, pure so a test reads them directly rather than digging them out of the view.
 enum ScoutProgressCopy {
     static func title(_ phase: ScoutProgressView.Phase) -> String {
         switch phase {
         case .scouting: return "Scouting"
         case .reading:  return "Reading calendars"
+        case .prepping: return "Prepping"
         }
     }
 
