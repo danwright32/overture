@@ -146,6 +146,39 @@ struct ScoutExtractContractTests {
         #expect(v1.results.allSatisfy { $0.monthsCovered == nil })
     }
 
+    // v4 (#1174): every night of one production carries the source's shared seriesId, so RunGrouping can
+    // collapse a multi-night run (VenueTix's Green Room 42) into one prospect regardless of the gap. The
+    // wire carries the id verbatim; the grouping rule lives in RunGrouping, not the decoder.
+    @Test func aVersionFourResultsFileCarriesTheSharedSeriesId() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v4.json"))
+        let gr42 = try #require(results.results.first { $0.sourceId == "the-green-room-42" })
+
+        let run = gr42.events.filter { $0.seriesId == "run-1" }
+        #expect(run.count == 3)                                   // the three nights of the run share it
+        let standalone = try #require(gr42.events.first { $0.title == "A One Night Only Cabaret" })
+        #expect(standalone.seriesId == nil)                       // the one-off carries none
+    }
+
+    // The field is optional, so a v1/v2/v3 file written before the run was ever asked for a seriesId still
+    // decodes and simply carries none. That is the same outcome as a v4 run reading a source that publishes
+    // no production id, which is nearly all of them.
+    @Test func anEarlierResultsFileDecodesWithNoSeriesId() throws {
+        for name in ["results-v1.json", "results-v2.json", "results-v3.json"] {
+            let results = try ScoutExtractResultsDecoder.decode(fixture(name))
+            #expect(results.results.allSatisfy { $0.events.allSatisfy { $0.seriesId == nil } })
+        }
+    }
+
+    // The seriesId decodes off the wire AND survives the hop into the app's own ExtractedEvent, the same
+    // way `location` must: a field that decoded but fell out of `asExtractedEvent` would leave this green
+    // while RunGrouping downstream still saw nothing to collapse.
+    @Test func theSeriesIdSurvivesTheHopIntoTheAppsOwnEventType() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v4.json"))
+        let events = results.events(for: "the-green-room-42")
+        let run = events.filter { $0.seriesId == "run-1" }
+        #expect(run.count == 3)
+    }
+
     // ScoutExtractEvent mirrors ExtractedEvent field for field and converts straight across, on purpose:
     // #799's whole point is ONE pipeline, so an agent-read event and a Carnegie-read event are the same
     // thing downstream. A location that decodes off the wire and then falls out of `asExtractedEvent`

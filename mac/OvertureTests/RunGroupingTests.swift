@@ -2,12 +2,45 @@ import Testing
 import Foundation
 @testable import Overture
 
-private func row(_ group: String, _ date: String?, venue: String? = "The Joyce", url: String? = nil) -> RunGrouping.RunRow {
-    RunGrouping.RunRow(groupName: group, venue: venue, performanceDate: date, sourceListingURL: url ?? (date.map { "u-\($0)" }))
+private func row(_ group: String, _ date: String?, venue: String? = "The Joyce", url: String? = nil,
+                 seriesId: String? = nil) -> RunGrouping.RunRow {
+    RunGrouping.RunRow(groupName: group, venue: venue, performanceDate: date,
+                       sourceListingURL: url ?? (date.map { "u-\($0)" }), seriesId: seriesId)
 }
 
 @Suite("Run grouping")
 struct RunGroupingTests {
+    // #1174: nights that share a feed seriesId are one production and collapse into ONE run with a date
+    // SPAN, even when they are weeks apart (past the gap rule) and their per-night titles differ. A
+    // VenueTix residency (Green Room 42) is exactly this: same venue, same production id, nights not
+    // consecutive. Without the id these would be three separate prospects; here they are one run
+    // rendering "opening to closing", so no night is hidden and Dan can pick a later one.
+    @Test func collapsesSameSeriesNightsAcrossAnyGapIntoOneRunWithASpan() {
+        let out = RunGrouping.group([
+            row("An Evening With: Night 1", "2026-11-07", venue: "Green Room 42", seriesId: "gr42-run"),
+            row("An Evening With: Night 2", "2026-11-14", venue: "Green Room 42", seriesId: "gr42-run"),
+            row("An Evening With: Finale", "2026-11-21", venue: "Green Room 42", seriesId: "gr42-run"),
+        ])
+        #expect(out.count == 1)                              // ONE prospect, not three
+        #expect(out[0].row.performanceDate == "2026-11-07")  // opening night is the primary/sort date
+        #expect(out[0].runEndDate == "2026-11-21")           // closing night gives the span
+        #expect(out[0].memberIds.count == 3)                 // every night folded in, none dropped
+    }
+
+    // A shared seriesId groups the production even when other, unrelated shows sit between its nights in
+    // the date order. Adjacency-based clustering would strand a later night in its own run; keying on the
+    // id must not.
+    @Test func sameSeriesNightsInterleavedWithOtherShowsStillCollapse() {
+        let out = RunGrouping.group([
+            row("The Residency", "2026-11-07", venue: "Green Room 42", seriesId: "resid"),
+            row("Someone Else", "2026-11-10", venue: "Green Room 42", seriesId: "other-show"),
+            row("The Residency", "2026-11-21", venue: "Green Room 42", seriesId: "resid"),
+        ])
+        let residency = try! #require(out.first { $0.row.groupName == "The Residency" })
+        #expect(residency.runEndDate == "2026-11-21")
+        #expect(residency.memberIds.count == 2)
+        #expect(out.count == 2)   // the residency (one run) plus the unrelated show
+    }
     @Test func mergesConsecutiveNightsIntoOneRunWithRange() {
         let out = RunGrouping.group([row("Mark Morris", "2026-07-14"), row("Mark Morris", "2026-07-15"), row("Mark Morris", "2026-07-16")])
         #expect(out.count == 1)

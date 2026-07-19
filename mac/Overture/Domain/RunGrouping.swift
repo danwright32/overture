@@ -18,6 +18,12 @@ enum RunGrouping {
         var venue: String?
         var performanceDate: String?
         var sourceListingURL: String?
+        // #1174: the feed's own production id, when the source supplies one (VenueTix tags every night of
+        // one show with a shared seriesId). It is authoritative: rows that share a non-nil seriesId are one
+        // production and collapse into a single run REGARDLESS of the gap-and-title rule below, which is
+        // what lets a residency's nights weeks apart still read as one run. Nil for every source that names
+        // no such id, which is all of them today except VenueTix, so their grouping is unchanged.
+        var seriesId: String? = nil
     }
 
     struct GroupedRun: Equatable, Sendable {
@@ -67,33 +73,59 @@ enum RunGrouping {
         var out: [GroupedRun] = []
         for key in order {
             let venueRows = (byVenue[key] ?? []).sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
-            var runs: [[RunRow]] = []
+
+            // #1174: a shared seriesId is authoritative, so those nights are grouped FIRST, by id, before
+            // the gap-and-title walk ever sees them. Keying on the id (not adjacency) is deliberate: the
+            // nights can be weeks apart and can have other shows between them in the date order, and a
+            // sequential walk would strand a later night in its own run. `venueRows` is date-sorted, so
+            // each id's rows stay date-sorted, and its representative is the earliest (opening) night.
+            var seriesOrder: [String] = []
+            var seriesClusters: [String: [RunRow]] = [:]
+            var untaggedRows: [RunRow] = []
             for r in venueRows {
-                if let last = runs.last, let prev = last.last,
+                if let sid = r.seriesId, !sid.isEmpty {
+                    if seriesClusters[sid] == nil { seriesOrder.append(sid); seriesClusters[sid] = [] }
+                    seriesClusters[sid]?.append(r)
+                } else {
+                    untaggedRows.append(r)
+                }
+            }
+
+            // #369: the remaining, id-less rows still cluster by the gap-and-title walk exactly as before.
+            var gapRuns: [[RunRow]] = []
+            for r in untaggedRows {
+                if let last = gapRuns.last, let prev = last.last,
                    let gap = EasternDate.daysUntil(from: prev.performanceDate!, to: r.performanceDate!),
                    gap <= gapDays,
                    GroupNameMatch.isConfident(prev.groupName, r.groupName) {
-                    runs[runs.count - 1].append(r)
+                    gapRuns[gapRuns.count - 1].append(r)
                 } else {
-                    runs.append([r])
+                    gapRuns.append([r])
                 }
             }
-            // #369: a run is "related" to another run at this same venue only when their
-            // representative titles are the same act by GroupNameMatch, not merely "this venue
-            // produced more than one run" (which would also flag two genuinely different,
-            // unrelated acts that happen to share a venue). This generalizes the old exact-key
-            // behavior (same title, same venue, split by a date gap) to the new similarity check.
+
+            // Each run paired with its representative: an id-grouped run reads off its OPENING night (so
+            // the collapsed prospect sorts and keys on the earliest date, even when the nights carry
+            // different titles); a gap-walk run keeps the #369 shortest-title representative.
+            let runs: [(rows: [RunRow], open: RunRow)] =
+                seriesOrder.map { (rows: seriesClusters[$0]!, open: seriesClusters[$0]!.first!) }
+                + gapRuns.map { (rows: $0, open: representativeRow($0)) }
+
+            // #369: a run is "related" to another run at this same venue only when their representative
+            // titles are the same act by GroupNameMatch, not merely "this venue produced more than one
+            // run" (which would also flag two genuinely different, unrelated acts that happen to share a
+            // venue). This generalizes the old exact-key behavior (same title, same venue, split by a date
+            // gap) to the new similarity check.
             for (i, run) in runs.enumerated() {
-                let open = representativeRow(run)
                 let related = runs.indices.contains { j in
-                    j != i && GroupNameMatch.isConfident(open.groupName, representativeRow(runs[j]).groupName)
+                    j != i && GroupNameMatch.isConfident(run.open.groupName, runs[j].open.groupName)
                 }
                 out.append(GroupedRun(
-                    row: open,
-                    runEndDate: run.count > 1 ? run.last?.performanceDate : nil,
+                    row: run.open,
+                    runEndDate: run.rows.count > 1 ? run.rows.last?.performanceDate : nil,
                     partOfRelatedRun: related,
-                    runSourceURLs: run.compactMap { $0.sourceListingURL },
-                    memberIds: run.map(\.id)
+                    runSourceURLs: run.rows.compactMap { $0.sourceListingURL },
+                    memberIds: run.rows.map(\.id)
                 ))
             }
         }

@@ -18,6 +18,10 @@ struct AssembledProspect: Equatable, Sendable {
     var discipline: String
     var venue: String?
     var performanceDate: String?
+    // #1174: the source's production id, carried through so RunGrouping can collapse every night of a
+    // multi-night run (VenueTix's shared seriesId) into one prospect. Transient: it feeds RunGrouping and
+    // is never persisted on the Prospect, so no store migration. Nil for sources that publish no such id.
+    var seriesId: String? = nil
     var sourceListingURL: String?
     var websiteURL: String?
     var reachable: Bool
@@ -97,6 +101,7 @@ enum ProspectAssembler {
             discipline: c.discipline.rawValue,
             venue: event.venue,
             performanceDate: event.performanceDate,
+            seriesId: event.seriesId,
             sourceListingURL: event.sourceUrl,
             websiteURL: nil,
             reachable: c.reachable,

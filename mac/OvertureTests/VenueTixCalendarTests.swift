@@ -189,6 +189,35 @@ struct VenueTixCalendarTests {
         #expect(events.allSatisfy { $0.seriesId == nil })
     }
 
+    // #1174: a production that runs more than one night is stamped, on every one of its nights, with the
+    // SAME short run-local `Series:` tag, so the extractor echoes one token per night and RunGrouping
+    // collapses them into a single run. The tag is a clean "run-N", never the feed's opaque id.
+    @Test func stampsAMultiNightProductionWithAOneSharedSeriesTag() throws {
+        let feed = #"""
+        [
+          {"eventId":"a1","seriesId":"opaque-9f3","title":"The Residency","dateTime":1781832600000,"venue":"v"},
+          {"eventId":"a2","seriesId":"opaque-9f3","title":"The Residency","dateTime":1782005400000,"venue":"v"},
+          {"eventId":"a3","seriesId":"opaque-9f3","title":"The Residency","dateTime":1790000000000,"venue":"v"}
+        ]
+        """#
+        let events = try VenueTixCalendar.parseEvents(Data(feed.utf8))
+        let html = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42")
+
+        // Three nights, three articles (nothing collapsed at synthesis; the collapse is RunGrouping's job).
+        #expect(html.components(separatedBy: "<article>").count - 1 == 3)
+        // The same clean tag appears on every night, and the opaque feed id is never emitted.
+        #expect(html.components(separatedBy: "<p>Series: run-1</p>").count - 1 == 3)
+        #expect(!html.contains("opaque-9f3"))
+    }
+
+    // A production with a single night in the document carries NO series tag, so its article is byte-for-
+    // byte what it was before this feature (no churn to an existing single-show source's content hash).
+    @Test func aSingleNightShowGetsNoSeriesTag() throws {
+        let events = try VenueTixCalendar.parseEvents(Data(Self.feed.utf8))   // two distinct productions
+        let html = VenueTixCalendar.listingHTML(events, venueName: "The Green Room 42")
+        #expect(!html.contains("Series:"))
+    }
+
     @Test func sourceFetcherThreadsTheSourceLocationToTheAdapter() async throws {
         let vt = URL(string: "https://thegreenroom42.venuetix.com/")!
         let stub = FetchedPage(normalizedHTML: "VT-STUB", finalURL: vt.absoluteString, contentHash: "h")

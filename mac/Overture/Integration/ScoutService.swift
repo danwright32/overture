@@ -713,7 +713,8 @@ enum ScoutService {
                 groupName: p.groupName,
                 venue: p.venue,
                 performanceDate: p.performanceDate,
-                sourceListingURL: p.sourceListingURL
+                sourceListingURL: p.sourceListingURL,
+                seriesId: p.seriesId          // #1174: carry the production id into run grouping
             )
         }
         let grouped = RunGrouping.group(rows)

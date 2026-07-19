@@ -167,6 +167,19 @@ For each item in the work-list:
 
    Unlike `venue`, a missing `location` does **not** drop the event.
 
+3b. **Report `seriesId` when the page marks several performances as one production** (#1174). Some
+   listings tag every night of one show with a shared production id or run marker. The clearest case is
+   Overture's own synthesized VenueTix listings, which print a line reading exactly `Series: run-1` (or
+   `run-2`, and so on) inside every article that belongs to the same multi-night run. When a listing
+   carries such a marker, copy its value VERBATIM into `seriesId` for EACH performance that shows it, so
+   every night of the run carries the identical string. Nights of different productions carry different
+   markers, and a show that is not part of any marked run carries no marker: leave its `seriesId` null.
+
+   Do not invent one. If the page draws no such marker, `seriesId` is null, which is the normal case for
+   almost every source. Its only job is to let Overture recognise that several dates are one show and
+   collapse them into a single run for Dan; a wrong or guessed id would wrongly merge two different shows,
+   so report only what the page literally marks.
+
 4. **Judge the page and report one verdict.** This is the part that matters most, because an empty
    event list is ambiguous and all three readings occur in the wild:
 
