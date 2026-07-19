@@ -132,7 +132,12 @@ enum SourceYield {
         // nothing, and the never-yielded signal is only ever the found == 0 case.
         guard tally.found == 0 else { return line(tally) }
         guard reads >= neverYieldedAfterReads else { return nil }
-        return "Read \(reads) times, never turned up a show to pitch."
+        // #1178: an actionable nudge, not a bare fact. A page that reads fine yet has surfaced nothing over
+        // many reads is most likely aimed at the wrong page (The Cell's empty box office read as perfectly
+        // healthy while its real programming was on another host, #1127). Now that #1177 offers the Fix
+        // control on this very row, the line points Dan at it instead of leaving the gap silent. Still
+        // informational only: it removes and disables nothing, the re-point stays his call.
+        return "Read \(reads) times but never turned up a show. It may be pointed at the wrong page."
     }
 
     // "8 new shows waiting for you" / "1 new show waiting for you". Two complete literals rather than a
