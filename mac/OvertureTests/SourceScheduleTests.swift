@@ -11,11 +11,14 @@ import SwiftData
 @Suite("What one scout run does to each source (#802)")
 struct SourceScheduleTests {
     private func source(_ id: String, kind: SourceKind = .html, active: Bool = true,
-                        lastChecked: Date? = nil) -> WatchedSource {
+                        lastChecked: Date? = nil, lastManualRead: Date? = nil,
+                        hasUnreadChanges: Bool = false) -> WatchedSource {
         let s = WatchedSource(sourceId: id, orgName: id, listingsURL: "https://\(id).example/events",
                               kind: kind)
         s.isActive = active
         s.lastCheckedAt = lastChecked
+        s.lastManualReadAt = lastManualRead
+        s.hasUnreadChanges = hasUnreadChanges
         return s
     }
 
@@ -54,25 +57,27 @@ struct SourceScheduleTests {
         #expect(plan.native.isEmpty)
     }
 
-    // Oldest first, so a budget STAGGERS rather than starves: a source at the back of the queue moves
-    // to the front next run because its lastCheckedAt did not move.
-    @Test func theLongestUncheckedSourceGoesFirst() {
+    // #1189: a run Dan started orders by the manual scout's OWN fairness clock, not the shared fetch
+    // clock. Oldest-manual-read first, so a budget STAGGERS rather than starves: a source at the back of
+    // one press moves to the front of the next, because the daily watch-only run never advances this clock
+    // and so cannot flatten it into a tie the way it flattens lastCheckedAt.
+    @Test func theLongestUnreadSourceGoesFirst() {
         let plan = SourceSchedule.plan(
-            sources: [source("yesterday", lastChecked: daysAgo(1)),
-                      source("ancient", lastChecked: daysAgo(30)),
-                      source("never", lastChecked: nil),
-                      source("week", lastChecked: daysAgo(7))],
+            sources: [source("yesterday", lastManualRead: daysAgo(1)),
+                      source("ancient", lastManualRead: daysAgo(30)),
+                      source("never", lastManualRead: nil),
+                      source("week", lastManualRead: daysAgo(7))],
             depth: .readChanged, budget: 20, now: now)
 
-        // Never checked is the oldest thing there is: it has been waiting since Dan added it.
+        // Never manually read is the oldest thing there is: it has been waiting since Dan added it.
         #expect(plan.fetch.map(\.sourceId) == ["never", "ancient", "week", "yesterday"])
     }
 
     @Test func theBudgetCapsHowManySourcesAreCheckedAndDefersTheRest() {
         let plan = SourceSchedule.plan(
-            sources: [source("a", lastChecked: daysAgo(3)),
-                      source("b", lastChecked: daysAgo(2)),
-                      source("c", lastChecked: daysAgo(1))],
+            sources: [source("a", lastManualRead: daysAgo(3)),
+                      source("b", lastManualRead: daysAgo(2)),
+                      source("c", lastManualRead: daysAgo(1))],
             depth: .readChanged, budget: 2, now: now)
 
         #expect(plan.fetch.map(\.sourceId) == ["a", "b"])
@@ -81,15 +86,59 @@ struct SourceScheduleTests {
 
     // Deferred is a real state and it is neither of the other two. It is not "fine" and it is not
     // "failing": it is "not checked today", and Dan has to be able to see that, or a source could go
-    // unchecked for weeks while reporting as healthy.
-    @Test func aDeferredSourceKeepsItsOldLastCheckedSoItIsFirstInLineNextRun() {
-        let c = source("c", lastChecked: daysAgo(1))
+    // unchecked for weeks while reporting as healthy. The plan never advances a clock, so the deferred
+    // source's manual clock is untouched and it is genuinely first in line next press.
+    @Test func aDeferredSourceKeepsItsOldManualReadSoItIsFirstInLineNextRun() {
+        let c = source("c", lastManualRead: daysAgo(1))
         let plan = SourceSchedule.plan(
-            sources: [source("a", lastChecked: daysAgo(3)), source("b", lastChecked: daysAgo(2)), c],
+            sources: [source("a", lastManualRead: daysAgo(3)), source("b", lastManualRead: daysAgo(2)), c],
             depth: .readChanged, budget: 2, now: now)
 
         #expect(plan.deferred.map(\.sourceId) == ["c"])
-        #expect(c.lastCheckedAt == daysAgo(1))   // untouched: the plan does not pretend it was checked
+        #expect(c.lastManualReadAt == daysAgo(1))   // untouched: the plan does not pretend it was read
+    }
+
+    // MARK: - #1189: changed-first, and the manual clock the daily flatten cannot defeat
+
+    // The starvation the daily run created, reproduced. The overnight watch-only run stamps an identical
+    // lastCheckedAt on every fetchable source, and the list is longer than the cap. A source with unread
+    // changes sitting deep in what used to be the deferred tail MUST still be read: a changed calendar is
+    // never starved behind unchanged ones (an unchanged one has nothing to read).
+    @Test func aChangedSourceInTheTailIsNeverStarvedByTheDailyFlatten() {
+        let flat = daysAgo(1)   // the overnight run just stamped everyone identically
+        var sources = (1...25).map { source("org-\($0)", lastChecked: flat) }
+        // The changed source sorts LAST by every non-#1189 key (newest id, same flat clock), so before the
+        // fix it lived permanently in the deferred tail past the cap of 20.
+        sources.append(source("zzz-changed", lastChecked: flat, hasUnreadChanges: true))
+
+        let plan = SourceSchedule.plan(sources: sources, depth: .readChanged, budget: 20, now: now)
+
+        #expect(plan.fetch.contains { $0.sourceId == "zzz-changed" })
+        #expect(plan.deferred.contains { $0.sourceId == "zzz-changed" } == false)
+        // And it is first: a changed venue outranks every unchanged one.
+        #expect(plan.fetch.first?.sourceId == "zzz-changed")
+    }
+
+    // Changed sources are ordered ahead of unchanged ones, even when the changed one looks "newer" by the
+    // fetch clock. Coverage then converges: each press clears up to the cap of changed sources, and their
+    // flag clears on successful ingest, so the next press reads the next batch.
+    @Test func changedSourcesAreOrderedAheadOfUnchangedOnes() {
+        let unchangedButOldest = source("a-unchanged", lastChecked: daysAgo(30))
+        let changedButNewest = source("z-changed", lastChecked: daysAgo(1), hasUnreadChanges: true)
+        let plan = SourceSchedule.plan(sources: [unchangedButOldest, changedButNewest],
+                                       depth: .readChanged, budget: 20, now: now)
+
+        #expect(plan.fetch.map(\.sourceId) == ["z-changed", "a-unchanged"])
+    }
+
+    // The per-press cap still bounds paid AI reads even when MORE than the cap have changed at once (a
+    // first-ever run, or a big batch): changed-first must never let a run read more than the cap.
+    @Test func theCapStillBoundsReadsWhenMoreThanTheCapHaveChanged() {
+        let sources = (1...30).map { source("org-\($0)", hasUnreadChanges: true) }
+        let plan = SourceSchedule.plan(sources: sources, depth: .readChanged, budget: 20, now: now)
+
+        #expect(plan.fetch.count == 20)
+        #expect(plan.deferred.count == 10)
     }
 
     // MARK: - Watching is free. Reading is not. (Dan's 4th decision, 2026-07-12)
