@@ -22,6 +22,20 @@ enum GmailSignatureStore {
 
     static func clear(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
 
+    // #1158: when the periodic refresh last ATTEMPTED a fetch. GmailSignatureService.refreshIfDue uses it
+    // to fetch at most once per interval so the resident app stays current without hammering Gmail. Stored
+    // as a Unix time; nil (0) means never attempted, which reads as due.
+    static let lastRefreshKey = "gmailSignatureLastRefreshAt"
+
+    static func lastRefreshAttemptAt(defaults: UserDefaults = .standard) -> Date? {
+        let t = defaults.double(forKey: lastRefreshKey)
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
+    static func setLastRefreshAttemptAt(_ date: Date, defaults: UserDefaults = .standard) {
+        defaults.set(date.timeIntervalSince1970, forKey: lastRefreshKey)
+    }
+
     // The signature to attach to an outgoing email: the stored HTML when present, otherwise the plain-text
     // fallback (so a send is never left signature-less silently).
     static func currentSignature(defaults: UserDefaults = .standard) -> OutboundSignature {

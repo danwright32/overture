@@ -26,8 +26,18 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     // silently skipped: an event with no real venue (Bargemusic's listings page carries numeric venue
     // ids) reads as perfectly well-formed and would put the wrong place in an email. See
     // ExtractedEventGuard.
-    func events(for sourceId: String) -> [ExtractedEvent] {
-        rawEvents(for: sourceId).filter(ExtractedEventGuard.isUsable)
+    //
+    // #1126: it also NORMALIZES the recurring-listing date here, at the same boundary and for the same
+    // reason the venue guard lives here: a fabricated far-future placeholder (Jalopy's weekly open mic
+    // came back dated 2028-03-15) reads as perfectly well-formed and would silently drop the show out of
+    // Prep's four-month cutoff and show Dan a wrong date. RecurringEventDate resolves a weekly listing to
+    // its next occurrence, or omits the date when no weekday is determinable, so nothing downstream ever
+    // sees the placeholder. `today` defaults to the Eastern day so a lead paste needs no clock passed;
+    // ScoutExtractIngest passes its own run day so the whole ingest reckons one consistent "today".
+    func events(for sourceId: String, today: String = EasternDate.today()) -> [ExtractedEvent] {
+        rawEvents(for: sourceId)
+            .filter(ExtractedEventGuard.isUsable)
+            .map { RecurringEventDate.normalized($0, today: today) }
     }
 
     // What was thrown out, and why, so it can be reported against the source that produced it. A source

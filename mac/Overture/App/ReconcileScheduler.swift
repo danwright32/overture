@@ -94,6 +94,11 @@ final class ReconcileScheduler {
         reapplyConflicts(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
+        // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
+        // without a manual reconnect. Rides this safe, free tick (launch + periodic + export-change) but
+        // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a
+        // failed fetch. Best-effort and free, like the reply detection above; no paid AI run.
+        await GmailSignatureService.refreshIfDue()
         var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {

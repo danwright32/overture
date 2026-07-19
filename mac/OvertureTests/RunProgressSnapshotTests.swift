@@ -51,13 +51,14 @@ struct RunProgressSnapshotTests {
         #expect(snap.sourceName == "Kaufman Music Center")
         #expect(snap.completed == 1)
         #expect(snap.total == 3)
-        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
-                == "Kaufman Music Center · 1 of 3")
+        // #1124: the two facts render as separate lines, never glued into "name · N of M".
+        #expect(RunProgressCopy.currentSourceLine(name: snap.sourceName) == "Kaufman Music Center")
+        #expect(RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) == "1 of 3 done")
     }
 
     // #1036: a pasted lead queues exactly ONE item, so its snapshot has total 1. The shared component
-    // must degrade to just the source name ("1 of 1" is noise), which is exactly what the sourceLine
-    // rule does. This is the behavioral proof that AddLeadSheet reuses the component without special-casing.
+    // must degrade to just the source name (the count line is noise), which is exactly what the copy
+    // rules do. This is the behavioral proof that AddLeadSheet reuses the component without special-casing.
     @Test func aSingleSourceLeadReadShowsJustTheSourceNoOneOfOne() throws {
         let dir = try tempDir()
         let queue = try writeQueue([item("lead-x", org: nil, listings: "https://www.example.org/events")], to: dir)
@@ -67,8 +68,8 @@ struct RunProgressSnapshotTests {
         let snap = RunProgressView.Snapshot.liveReading(queueURL: queue, resultsURL: results, progressURL: progress)
         #expect(snap.sourceName == "www.example.org")   // no org name, so the listing host
         #expect(snap.total == 1)
-        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total)
-                == "www.example.org")
+        #expect(RunProgressCopy.currentSourceLine(name: snap.sourceName) == "www.example.org")
+        #expect(RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) == nil)
     }
 
     // Missing files read as an empty snapshot, never a crash (the run may not have written anything yet).

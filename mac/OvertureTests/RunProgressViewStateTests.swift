@@ -27,24 +27,37 @@ struct RunProgressViewStateTests {
         #expect(RunProgressCopy.title(.reading) == "Reading calendars")
     }
 
-    @Test func theSourceLineNamesTheSourceAndItsPositionWhenThereAreSeveral() {
-        #expect(RunProgressCopy.sourceLine(name: "Carnegie Hall", completed: 3, total: 9)
-                == "Carnegie Hall · 3 of 9")
+    // #1124: the name (the source being read RIGHT NOW) and the count (how many are DONE) are two
+    // uncoordinated facts, so they must never be glued into "name · N of M", which read as if the number
+    // indexed the named source (and was off by one). The current source is its own line, just the name,
+    // carrying no count and no middot.
+    @Test func theCurrentSourceLineIsJustTheNameNeverPairedWithACount() {
+        let line = RunProgressCopy.currentSourceLine(name: "Carnegie Hall")
+        #expect(line == "Carnegie Hall")
+        #expect(!(line ?? "").contains("·"))
+        #expect(!(line ?? "").contains(" of "))
     }
 
-    // A single-item run (a pasted lead, #1036) shows just the name: "1 of 1" is noise, so the count is
-    // shown only when there is genuinely more than one source to get through.
-    @Test func theSourceLineDropsTheCountForASingleSourceRun() {
-        #expect(RunProgressCopy.sourceLine(name: "Some Org", completed: 1, total: 1) == "Some Org")
+    @Test func theCurrentSourceLineIsNilWhenTheSourceIsntKnownYet() {
+        #expect(RunProgressCopy.currentSourceLine(name: nil) == nil)
     }
 
-    @Test func theSourceLineShowsJustTheCountWhenTheSourceIsntKnownYet() {
-        #expect(RunProgressCopy.sourceLine(name: nil, completed: 2, total: 5) == "2 of 5")
+    // #1124: overall progress is a SEPARATE line, worded as a completed count ("done") so it cannot read
+    // as the named source's position, and carrying no name and no middot.
+    @Test func theOverallProgressLineReadsAsACompletedCountNotAPosition() {
+        let line = RunProgressCopy.overallProgressLine(completed: 3, total: 9)
+        #expect(line == "3 of 9 done")
+        #expect(!(line ?? "").contains("·"))
     }
 
-    @Test func theSourceLineIsNilWhenThereIsNeitherANameNorAMeaningfulCount() {
-        #expect(RunProgressCopy.sourceLine(name: nil, completed: 0, total: 0) == nil)
-        #expect(RunProgressCopy.sourceLine(name: "Org", completed: 0, total: 0) == "Org")
+    // A single-item run (a pasted lead, #1036) shows no count line: "1 of 1 done" is noise, so the count
+    // shows only when there is genuinely more than one source to get through.
+    @Test func theOverallProgressLineIsHiddenForASingleSourceRun() {
+        #expect(RunProgressCopy.overallProgressLine(completed: 1, total: 1) == nil)
+    }
+
+    @Test func theOverallProgressLineIsNilWhenThereIsNoMeaningfulCount() {
+        #expect(RunProgressCopy.overallProgressLine(completed: 0, total: 0) == nil)
     }
 
     // MARK: - The rendered states
@@ -57,7 +70,10 @@ struct RunProgressViewStateTests {
         let texts = try allTexts(view)
 
         #expect(texts.contains("Scouting"))
-        #expect(texts.contains("Carnegie Hall · 3 of 9"))
+        // #1124: the name and the count are two separate lines, never glued with a middot.
+        #expect(texts.contains("Carnegie Hall"))
+        #expect(texts.contains("3 of 9 done"))
+        #expect(!texts.contains { $0.contains("·") })
         #expect(texts.contains(RunProgress.elapsedLabel(since: since, now: now)!))
         #expect((try? view.inspect().find(ViewType.ProgressView.self)) != nil)
         #expect(!texts.contains { $0.contains("looks stuck") })
@@ -69,8 +85,13 @@ struct RunProgressViewStateTests {
         let now = Date(timeIntervalSince1970: 1030)
         let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5)).content(now: now)
-        #expect(try allTexts(view).contains("Reading calendars"))
-        #expect(try allTexts(view).contains("Kaufman Music Center · 2 of 5"))
+        let texts = try allTexts(view)
+        #expect(texts.contains("Reading calendars"))
+        // #1124: the current calendar and the overall count read as two separate facts, never as
+        // "Kaufman Music Center · 2 of 5" (which implied Kaufman was calendar #2 of 5).
+        #expect(texts.contains("Kaufman Music Center"))
+        #expect(texts.contains("2 of 5 done"))
+        #expect(!texts.contains { $0.contains("·") })
     }
 
     // Past the phase's timeout with a dead heartbeat: a visibly distinct stalled state, not a spinner

@@ -35,20 +35,22 @@ struct PrepProgressTakeoverTests {
         let snap = RunProgressView.Snapshot.livePrepping(progressURL: url)
         #expect(snap.total == 6)
         #expect(snap.completed == 2)
-        // The Prep run publishes no per-prospect name, so the line degrades to just the count.
+        // The Prep run publishes no per-prospect name, so there is no current-source line, only the count.
         #expect(snap.sourceName == nil)
-        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total) == "2 of 6")
+        #expect(RunProgressCopy.currentSourceLine(name: snap.sourceName) == nil)
+        #expect(RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) == "2 of 6 done")
     }
 
     // A missing/mid-write progress file reads as an empty snapshot (no crash, no thrown error), which the
-    // shared sourceLine renders as no count line at all rather than a bogus "0 of 0".
+    // shared copy renders as no count line at all rather than a bogus "0 of 0".
     @Test func livePreppingReadsAMissingFileAsEmpty() {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("prep-progress-missing-\(UUID().uuidString).json")
         let snap = RunProgressView.Snapshot.livePrepping(progressURL: missing)
         #expect(snap.total == 0)
         #expect(snap.completed == 0)
-        #expect(RunProgressCopy.sourceLine(name: snap.sourceName, completed: snap.completed, total: snap.total) == nil)
+        #expect(RunProgressCopy.currentSourceLine(name: snap.sourceName) == nil)
+        #expect(RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) == nil)
     }
 }
 
