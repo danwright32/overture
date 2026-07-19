@@ -45,17 +45,14 @@ struct MastheadGuardTests {
         #expect(queueView.contains("\"Debug\""))
     }
 
-    // #339: the status line listed "last prep" before "Scouted", reversing the order Dan
-    // actually reads events in (scout finds them, then prep works the ones he kept).
-    @Test func statusLineShowsScoutedBeforePrepped() {  // #339
+    // #1131: the masthead status line now shows ONLY "Scouted X ago". The prep/review/approved counts and
+    // "last prep" timing (prepStatus.summary) were dropped because the Prep/Review/Send pill row below
+    // duplicates them; "Scouted X ago" is not shown anywhere else, so it stays. (Supersedes #339's
+    // scouted-before-prepped ordering guard, which no longer has two halves to order.)
+    @Test func statusLineShowsScoutedAndNoLongerPrepCounts() {  // #1131 (was #339)
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        let scoutedRange = queueView.range(of: "ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt())")
-        let prepRange = queueView.range(of: "prepStatus.summary(now: Date())")
-        #expect(scoutedRange != nil)
-        #expect(prepRange != nil)
-        if let scoutedRange, let prepRange {
-            #expect(scoutedRange.lowerBound < prepRange.lowerBound)
-        }
+        #expect(queueView.contains("ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt())"))
+        #expect(!queueView.contains("prepStatus.summary(now: Date())"))
     }
 }

@@ -32,24 +32,25 @@ struct QueueViewMastheadLayoutTests {
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)
     }
 
-    @Test func aMastheadWithNoHighFitItemsRendersWithoutTheBreakdownLine() {
+    @Test func aMastheadRendersWithHeight() {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
         #expect(renderedHeight(view.masthead(visible: items, items: items)) > 0)
     }
 
-    // Proves the conditional breakdown line (#92/#335: "Of the N high-fit: ...") actually shows
-    // when there's a high-fit item to break down, instead of silently never appearing.
-    @Test func aMastheadWithAHighFitItemRendersMeaningfullyTallerThanOneWithout() {
+    // #1131: the "Of the N high-fit: ..." breakdown line was removed from the masthead. So a high-fit item
+    // must no longer make the masthead taller: with the breakdown line gone, the height is the same whether
+    // or not a high-fit item is present. If someone re-introduced the breakdown line, this would fail.
+    @Test func aHighFitItemNoLongerAddsABreakdownLine() {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
         let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit))
-        let withBreakdown = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit))
+        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit))
 
         #expect(baseline > 0)
-        #expect(withBreakdown > baseline)
+        #expect(withHigh == baseline)
     }
 }
