@@ -110,7 +110,16 @@ enum SourceFetcher {
                       allowTicketLinkHop: Bool = true,
                       allowSiblingProbe: Bool = true,
                       monthHorizon: Int = 1,
-                      now: Date = Date()) async throws -> FetchedPage {
+                      now: Date = Date(),
+                      operaFeed: ((URL) async throws -> FetchedPage)? = nil) async throws -> FetchedPage {
+        // #1127: OPERA America's calendar is a JS app a plain fetch cannot read; route it to the adapter
+        // that reads its public event feed directly (deterministic, hashable, safe for the reconcile).
+        let target = secured(url)
+        if OperaAmericaCalendar.handles(target) {
+            let feed = operaFeed ?? { try await OperaAmericaCalendar.liveFetch(url: $0, now: now) }
+            return try await feed(target)
+        }
+
         let landing = try await fetchSinglePage(secured(url), session: session, render: render,
                                                 allowTicketLinkHop: allowTicketLinkHop,
                                                 allowSiblingProbe: allowSiblingProbe)
