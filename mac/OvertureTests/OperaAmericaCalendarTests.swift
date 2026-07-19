@@ -65,6 +65,31 @@ struct OperaAmericaCalendarTests {
     // so the extractor and the content hash work unchanged. Each event must render its own title, company,
     // an explicit ISO date (the Bargemusic lesson: never leave a date implied), venue/city/state, and the
     // ticket link, so the reader can pull a real listing out of it.
+    // #1171: the Umbraco feed is undocumented and will change shape eventually. A page that answers with
+    // items whose fields have been renamed parses to zero events, which would make the source read as empty
+    // rather than broken. When items are present but NONE parse, that is drift, so fail loud.
+    @Test func parsingThrowsWhenItemsArePresentButNoneParse() throws {
+        // A page that reports items but whose date field was renamed (eventDate instead of date): every row
+        // fails to parse, from a non-empty item list. That is a shape change, not an empty calendar.
+        let drifted = #"""
+        {
+          "currentPage": 1, "totalPages": 1, "totalItems": 1, "itemsPerPage": 12,
+          "items": [ { "title": "A Show", "company": "Some Opera", "eventDate": "2026-07-18T00:00:00" } ]
+        }
+        """#
+        #expect(throws: SourceFetchError.feedShapeChanged) {
+            _ = try OperaAmericaCalendar.parsePage(Data(drifted.utf8))
+        }
+    }
+
+    // A genuinely empty page (nothing in range) is NOT drift: zero items parse to zero events, and that must
+    // stay a normal quiet result, never a failure.
+    @Test func parsingAnEmptyPageIsNotTreatedAsDrift() throws {
+        let empty = #"{ "currentPage": 1, "totalPages": 1, "totalItems": 0, "itemsPerPage": 12, "items": [] }"#
+        let page = try OperaAmericaCalendar.parsePage(Data(empty.utf8))
+        #expect(page.events.isEmpty)
+    }
+
     @Test func synthesizesAReadableDeterministicDocument() throws {
         let events = try OperaAmericaCalendar.parsePage(Data(Self.feedPage1.utf8)).events
         let html = OperaAmericaCalendar.listingHTML(events)

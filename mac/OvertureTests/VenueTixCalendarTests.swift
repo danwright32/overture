@@ -61,6 +61,25 @@ struct VenueTixCalendarTests {
         #expect(kept.map(\.title) == ["Tomorrow"])
     }
 
+    // #1171: an undocumented public feed will change shape eventually. A feed that answers with items but
+    // whose fields have been renamed parses to zero events, which would make the source read as empty
+    // rather than broken. When the feed carried items but NONE parsed, that is drift, so fail loud.
+    @Test func parsingThrowsWhenTheFeedHasItemsButNoneParse() throws {
+        // A real-shaped array whose date field was renamed (dateTimeMs instead of dateTime): every row
+        // fails to parse, from a non-empty feed. That is a shape change, not an empty calendar.
+        let drifted = #"[{"title":"A Show","dateTimeMs":1781832600000},{"title":"Another","dateTimeMs":1781910000000}]"#
+        #expect(throws: SourceFetchError.feedShapeChanged) {
+            _ = try VenueTixCalendar.parseEvents(Data(drifted.utf8))
+        }
+    }
+
+    // A genuinely empty feed (the venue has nothing loaded) is NOT drift: it parses to zero from zero, and
+    // must stay a normal quiet result, never a failure.
+    @Test func parsingAnEmptyFeedIsNotTreatedAsDrift() throws {
+        let empty = try VenueTixCalendar.parseEvents(Data("[]".utf8))
+        #expect(empty.isEmpty)
+    }
+
     @Test func handlesVenuetixSubdomainsOnly() {
         #expect(VenueTixCalendar.handles(URL(string: "https://thegreenroom42.venuetix.com/")!))
         #expect(!VenueTixCalendar.handles(URL(string: "https://venuetix.com.evil.com/")!))

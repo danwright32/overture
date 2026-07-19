@@ -23,7 +23,8 @@ enum VenueTixCalendar {
     }
 
     static func parseEvents(_ data: Data) throws -> [VTEvent] {
-        try JSONDecoder().decode([Item].self, from: data).compactMap { item in
+        let items = try JSONDecoder().decode([Item].self, from: data)
+        let events: [VTEvent] = items.compactMap { item in
             // A row we cannot date is not a listing we can pitch or reconcile, so drop it rather than
             // invent a date. Every real row has carried dateTime, so this is a guard, not an expected path.
             guard let ms = item.dateTime else { return nil }
@@ -32,6 +33,11 @@ enum VenueTixCalendar {
                            subTitle: item.subTitle,
                            date: Date(timeIntervalSince1970: ms / 1000))
         }
+        // #1171: the feed answered with items but NONE parsed, so its shape has changed (a renamed date
+        // field drops every row). Fail loud rather than hand back an empty list that would read as an empty
+        // calendar. An empty feed (items itself empty) is a genuine off-season and passes through untouched.
+        if !items.isEmpty && events.isEmpty { throw SourceFetchError.feedShapeChanged }
+        return events
     }
 
     // Keep shows whose start instant is now-or-later; a show already begun cannot be pitched. Filtering a
