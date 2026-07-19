@@ -52,10 +52,9 @@ enum SourceSchedule {
     // `only` scopes a read to named sources: Dan pointed at one and asked for it. Absent means the
     // ordinary run.
     //
-    // It exists because "read THIS source" is otherwise impossible to express. Every source shares a
-    // lastCheckedAt (the daily run checks them in one pass), so oldest-first is a tie across the whole
-    // list and the budget then picks arbitrarily among them. Capping a run to 3 does not read the 3 you
-    // meant, it reads 3 drawn by lot.
+    // It exists because "read THIS source" is otherwise impossible to express. The daily run checks every
+    // source in one pass, so the ordinary read plan cannot know which source Dan cares about right now;
+    // capping a run to 3 reads the 3 the fairness order happens to surface, not the 3 he meant.
     static func plan(sources: [WatchedSource], depth: ScoutDepth, only: Set<String>? = nil,
                      budget: Int = defaultBudget, now: Date) -> Plan {
         // An org that asked Dan to stop, or a dead source he removed, is not checked at all. Not
@@ -67,37 +66,65 @@ enum SourceSchedule {
         let watched = sources.filter(\.isActive)
 
         let native = watched.filter(\.usesNativeExtractor)
-        // Oldest first, so a budget staggers rather than starves: a source pushed to the back this run
-        // is at the front of the next one, because a deferred source's lastCheckedAt never moved. A
-        // source never checked at all has been waiting since Dan added it, so it is the oldest thing
-        // there is.
-        let fetchable = watched
-            .filter(\.isGenericallyFetchable)
-            .sorted { ($0.lastCheckedAt ?? .distantPast) < ($1.lastCheckedAt ?? .distantPast) }
+        let fetchable = watched.filter(\.isGenericallyFetchable)
 
         switch depth {
         case .watchOnly:
-            // Nothing to ration: this run spends nothing whatever it checks. Capping it would mean
-            // silently not watching a source Dan asked us to watch, which is the one thing the
-            // watchlist promises never to do.
-            return Plan(native: native, fetch: fetchable, deferred: [], depth: depth)
+            // The free daily run reads nothing and defers nothing, so its order is immaterial: it checks
+            // every fetchable source whatever the budget. Kept oldest-first by the shared fetch clock only
+            // so the "checking 3 of 9" heartbeat advances through them in a sensible order. Nothing to
+            // ration: capping this run would mean silently not watching a source Dan asked us to watch,
+            // which is the one thing the watchlist promises never to do.
+            let ordered = fetchable.sorted {
+                ($0.lastCheckedAt ?? .distantPast) < ($1.lastCheckedAt ?? .distantPast)
+            }
+            return Plan(native: native, fetch: ordered, deferred: [], depth: depth)
         case .readChanged:
-            // Dan named the sources, so the budget does not apply: it is a backstop against reading
-            // fifty by accident, and an explicit request is not an accident. Nothing is deferred
-            // either, because the rest were never asked for and are not waiting on anything. An id
-            // that matches nothing reads nothing, rather than falling back to reading everything: a
-            // typo must not launch twenty runs.
+            // #1189: a run Dan started reads CHANGED venues first, then oldest by the manual scout's OWN
+            // fairness clock, then by sourceId as a stable final tie-break (see manualReadOrder). This is
+            // the whole fix for the coverage loss the daily run created: the uncapped overnight watch-only
+            // run stamps an identical lastCheckedAt on every fetchable source, flattening the old oldest-
+            // lastCheckedAt-first order into one big tie, so "the first 20" was the same 20 every press and
+            // the same ~17-source tail was deferred forever. Changed-first means a changed calendar is
+            // never starved behind unchanged ones (an unchanged one has nothing to read), and the manual
+            // clock (which the daily run never touches) keeps a deferred source genuinely next in line.
+            let ordered = fetchable.sorted(by: manualReadOrder)
+            // Dan named the sources, so the budget does not apply: it is a backstop against reading fifty
+            // by accident, and an explicit request is not an accident. Nothing is deferred either, because
+            // the rest were never asked for and are not waiting on anything. An id that matches nothing
+            // reads nothing, rather than falling back to reading everything: a typo must not launch twenty
+            // runs.
             if let only {
                 return Plan(native: native.filter { only.contains($0.sourceId) },
-                            fetch: fetchable.filter { only.contains($0.sourceId) },
+                            fetch: ordered.filter { only.contains($0.sourceId) },
                             deferred: [], depth: depth)
             }
             let cap = max(0, budget)
             return Plan(native: native,
-                        fetch: Array(fetchable.prefix(cap)),
-                        deferred: Array(fetchable.dropFirst(cap)),
+                        fetch: Array(ordered.prefix(cap)),
+                        deferred: Array(ordered.dropFirst(cap)),
                         depth: depth)
         }
+    }
+
+    // #1189: the order a run Dan started reads its fetchable sources in. Three keys, in strict order:
+    //
+    //   1. Changed-first (hasUnreadChanges). A changed venue is never starved behind an unchanged one,
+    //      which has nothing to read anyway. This alone converges coverage: each press clears up to the
+    //      cap of changed venues, and their flag clears on successful ingest, so the next press reads the
+    //      next batch.
+    //   2. Oldest by the manual scout's own fairness clock (lastManualReadAt, nil sorting oldest). The
+    //      daily watch-only run never advances this clock, so unlike lastCheckedAt it is not flattened
+    //      every morning: a source the last press deferred stays genuinely next in line across days. This
+    //      is what fairly distributes reads when MORE than the cap have changed at once (a big batch).
+    //   3. sourceId, a deterministic final tie-break, so the order is stable rather than dependent on the
+    //      store's internal (unsorted) FetchDescriptor row order.
+    private static func manualReadOrder(_ a: WatchedSource, _ b: WatchedSource) -> Bool {
+        if a.hasUnreadChanges != b.hasUnreadChanges { return a.hasUnreadChanges }
+        let aClock = a.lastManualReadAt ?? .distantPast
+        let bClock = b.lastManualReadAt ?? .distantPast
+        if aClock != bClock { return aClock < bClock }
+        return a.sourceId < b.sourceId
     }
 }
 

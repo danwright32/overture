@@ -34,6 +34,21 @@ final class WatchedSource {
     var healthRaw: String
     var lastErrorRaw: String?
     var lastCheckedAt: Date?
+    // #1189: the manual scout's OWN fairness clock, held apart from the shared lastCheckedAt above.
+    //
+    // lastCheckedAt is the shared fetch/hash clock: the free daily watch-only run stamps it on EVERY
+    // fetchable source every morning. That daily flatten is exactly what broke coverage. The manual read
+    // plan used to order purely by oldest lastCheckedAt, so once the overnight run had reset all ~37
+    // sources to one identical value, "the first 20" was the same 20 every press and the same ~17-source
+    // tail was deferred forever, their changed calendars silently never read.
+    //
+    // This clock is advanced ONLY by a run Dan started (ScoutService's fetch loop at .readChanged) and
+    // only for the sources that run actually checked; the daily watch-only run never touches it. Ordering
+    // the read plan by it means a source the last press deferred stays genuinely next in line across days,
+    // no matter how many times the daily run re-stamps lastCheckedAt. Defaulted, so existing rows migrate
+    // cleanly as a lightweight SwiftData migration and simply carry no manual-read history (nil sorts
+    // oldest, so every source is fairly first-in-line on the first manual press after upgrade).
+    var lastManualReadAt: Date? = nil
     var lastSucceededAt: Date?
     // Stamped ONLY after a successful ingest that saved, never at fetch time. Stamp it at fetch time
     // and a run that classifies everything and then fails to persist (the #499 saveFailed path) leaves

@@ -268,6 +268,13 @@ enum ScoutService {
             // read, so a cancelled run leaves nothing behind for a detached process to finish.
             if isCancelled() { break }
             let (result, page) = await check(source, fetch: fetch, depth: depth, now: now)
+            // #1189: advance the manual scout's OWN fairness clock, but ONLY on a run Dan started and only
+            // for the sources it actually checked. The free daily watch-only run leaves it untouched (it
+            // advances only the shared lastCheckedAt, inside SourceCheck.decide), so a source this run
+            // deferred keeps its older lastManualReadAt and is genuinely first in line on the next press,
+            // regardless of the daily run re-stamping lastCheckedAt every morning. A source not reached
+            // this run (deferred, or past a cancel) is never advanced, which is exactly what keeps it next.
+            if depth == .readChanged { source.lastManualReadAt = now }
             outcome.sources.append(result)
             if let page { toRead.append((source, page)) }
             // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
