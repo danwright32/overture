@@ -250,12 +250,38 @@ enum ProspectMutations {
         }
     }
 
-    // #367: queue this one prospect for the next Prep run even though it already has a draft.
-    static func reprep(_ item: QueueItem, mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+    // #367/#1143: re-prep this one show. It applies the requested mode's flags, saves, and then actually
+    // LAUNCHES a Prep run scoped to just this show (reusing PrepQueueService.startPrep, the same detached
+    // path "Prep kept" uses), rather than only flagging it for some future run Dan has to remember to
+    // start. The launch is an injected seam so it stays testable; production defaults to the real service.
+    static func reprep(_ item: QueueItem, mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                       now: Date = Date(),
+                       startPrep: @MainActor (ModelContext, Date, Set<String>) throws -> Void = { ctx, now, keys in
+                           _ = try PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
+                       }) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         let draftGranted = ReprepRequest.apply(mode, to: model)
-        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
-            feedback.acknowledge(ActionAck.reprepQueued(mode: mode, draftGranted: draftGranted, org: item.groupName))
+        guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
+
+        // A draft-only re-prep of a show already emailed grants nothing (ReprepRequest gates the draft
+        // half on sentAt == nil), so there is no work to run: say why rather than launch an empty run.
+        guard mode != .draftOnly || draftGranted else {
+            feedback.acknowledge(ActionAck.reprepNothingToRedraft(org: item.groupName))
+            return
+        }
+
+        // Launch the run for JUST this show. The double-launch guard is startPrep's own in-flight marker
+        // (CLAUDE.md "assume it runs twice"): a second click, or a run already going, throws
+        // .alreadyRunning, and since the flag is already saved the show simply rides the next run.
+        do {
+            try startPrep(context, now, [item.id])
+            feedback.acknowledge(ActionAck.reprepStarted(mode: mode, draftGranted: draftGranted, org: item.groupName))
+        } catch PrepQueueService.PrepLaunchError.alreadyRunning {
+            feedback.acknowledge(ActionAck.reprepRunInFlight(org: item.groupName))
+        } catch {
+            // Fail loud (CLAUDE.md): a launch that could not start (runner unavailable, write failure)
+            // must not leave the badge implying work is under way. The flag stays saved for a later run.
+            feedback.acknowledge(error.localizedDescription, tone: .warning)
         }
     }
 

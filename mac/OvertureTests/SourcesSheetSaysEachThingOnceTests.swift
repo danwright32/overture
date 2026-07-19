@@ -175,3 +175,69 @@ struct StopWatchingAffordanceGuardTests {
         #expect(!sourcesView[range.lowerBound...].prefix(500).contains("OVColor.rust"))
     }
 }
+
+// #1185: a single-venue feed (VenueTix) carries no city in its own data, so until Dan supplies its
+// address its shows resolve as location-unknown and never place in his area. #1175 gave him the control
+// to add it, but nothing prompted him while a watched calendar sat unplaced, so the feature relied on him
+// remembering it exists. When such a source has ACTUALLY surfaced shows and still has no address, the row
+// says the concrete consequence ("its shows are not placed in your area") rather than the setup prompt.
+//
+// The two are one line that varies, not two lines, so the row never states the missing address twice
+// (#843): the setup prompt before any shows exist, the consequence once they do.
+@Suite("A single-venue feed with no address nudges once it has shows (#1185)")
+struct SingleVenueFeedAddressNudgeTests {
+
+    // Before any shows have surfaced, the row shows the neutral setup prompt: there is no problem yet, only
+    // a thing worth doing.
+    @Test func withNoShowsYetItIsTheNeutralSetupPrompt() {
+        #expect(VenueLocationCopy.promptWhenUnset(hasSurfacedShows: false)
+                == "Add this venue's address so its shows count as in your area.")
+    }
+
+    // Once shows exist, they are actively unplaced, so the row states that consequence and points at the
+    // same Add address control.
+    @Test func withShowsSurfacedItStatesTheConsequence() {
+        #expect(VenueLocationCopy.promptWhenUnset(hasSurfacedShows: true)
+                == "No address yet, so its shows are not placed in your area.")
+    }
+
+    // The guard and its wiring are two claims (#887): the varying prompt is only true on screen if the row
+    // actually hands it whether shows have surfaced. Without the argument the nudge never appears.
+    @Test func theRowFeedsWhetherShowsHaveSurfacedIntoThePrompt() {
+        let sourcesView = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        #expect(sourcesView.contains("VenueLocationCopy.promptWhenUnset(hasSurfacedShows:"))
+    }
+}
+
+// #1177: the address editor is offered on EVERY active, editable (non-algolia) source row, not only on a
+// failed one. Before this, "Fix the address" appeared only inside the failure block, so The Cell (which
+// reads fine but is empty, no failure) could never be re-pointed from the sheet. The safe re-point logic
+// (WatchlistEditing.editURL) and the editor (SourceFixConfirmActions) already existed; this wires them in
+// without a second edit path.
+@MainActor
+@Suite("The address editor is offered on every editable source row (#1177)")
+struct SourceAddressEditorEverywhereTests {
+
+    // With no failure the editor still offers Fix (a wrong address is exactly what a persistently empty
+    // but readable source might have) and never offers Confirm (there is no empty-page failure to confirm).
+    @Test func aHealthySourceOffersFixButNotConfirm() {
+        #expect(SourceFixConfirmActions.offersFix(nil))
+        #expect(!SourceFixConfirmActions.offersConfirm(nil))
+    }
+
+    // A real failure keeps deciding exactly as before: the two predicates on the failure itself win.
+    @Test func aFailingSourceDefersToTheFailuresOwnPredicates() {
+        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent)))
+        #expect(SourceFixConfirmActions.offersFix(.verdict(.noDatedContent)))
+        #expect(!SourceFixConfirmActions.offersFix(.verdict(.notRead)))          // self-heals; no address fix
+        #expect(!SourceFixConfirmActions.offersConfirm(.fetch(.http(404))))
+    }
+
+    // The wiring claim: the sheet renders the editor for active non-algolia rows regardless of failure,
+    // passing the live (optional) failure. A guard, because a view has no behavioural surface a domain
+    // test can reach (#887).
+    @Test func theSheetRendersTheEditorOutsideTheFailureBlock() {
+        let sourcesView = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        #expect(sourcesView.contains("SourceFixConfirmActions(source: source, failure: source.lastFailure)"))
+    }
+}
