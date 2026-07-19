@@ -111,13 +111,24 @@ enum SourceFetcher {
                       allowSiblingProbe: Bool = true,
                       monthHorizon: Int = 1,
                       now: Date = Date(),
-                      operaFeed: ((URL) async throws -> FetchedPage)? = nil) async throws -> FetchedPage {
-        // #1127: OPERA America's calendar is a JS app a plain fetch cannot read; route it to the adapter
+                      sourceName: String? = nil,
+                      operaFeed: ((URL) async throws -> FetchedPage)? = nil,
+                      venuetixFeed: ((URL, String) async throws -> FetchedPage)? = nil) async throws -> FetchedPage {
+        // #1127: some watched calendars are JS apps a plain fetch cannot read; route each to the adapter
         // that reads its public event feed directly (deterministic, hashable, safe for the reconcile).
         let target = secured(url)
         if OperaAmericaCalendar.handles(target) {
             let feed = operaFeed ?? { try await OperaAmericaCalendar.liveFetch(url: $0, now: now) }
             return try await feed(target)
+        }
+        if VenueTixCalendar.handles(target) {
+            // The venue NAME is not in the feed, so it is threaded from the source's orgName; fall back to
+            // the host only if a caller had none.
+            // copy-inventory:ignore-start  a fallback venue label in synthesized source HTML, not app voice (#915)
+            let name = sourceName ?? target.host ?? "the venue"
+            // copy-inventory:ignore-end
+            let feed = venuetixFeed ?? { u, n in try await VenueTixCalendar.liveFetch(url: u, venueName: n, now: now) }
+            return try await feed(target, name)
         }
 
         let landing = try await fetchSinglePage(secured(url), session: session, render: render,

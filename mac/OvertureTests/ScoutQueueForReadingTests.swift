@@ -33,8 +33,8 @@ struct ScoutQueueForReadingTests {
     private let noEvents = StubSourceExtractor(listing: ExtractedListing(events: [],
                                                                          verdict: .upcomingListings))
 
-    private func page(_ hash: String) -> (URL) async throws -> FetchedPage {
-        { url in FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString,
+    private func page(_ hash: String) -> (URL, String?) async throws -> FetchedPage {
+        { url, _ in FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString,
                              contentHash: hash) }
     }
 
