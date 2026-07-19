@@ -27,10 +27,12 @@ enum RunTimeouts {
     // clobber the shared results file. Matched to replyClassify, the other heavy detached run.
     static let scoutExtract: TimeInterval = 10 * 60
 
-    // Gmail OAuth connect: the visible "looks stuck" warning, set below GmailAuthManager's hard 120s
-    // internal give-up so Dan gets a heads-up to check the browser sign-in window before connect()
-    // self-aborts and surfaces its failure alert.
-    static let gmailConnect: TimeInterval = 90
+    // Gmail OAuth connect: the visible "looks stuck" warning, set below GmailAuthManager's hard 90s
+    // internal give-up (#1163) so Dan gets a heads-up to check the browser sign-in window before connect()
+    // self-aborts and surfaces its actionable, retryable failure alert. The common dead-handoff case now
+    // fails in ~2s via the pre-browser listener health check, so this only paces the rarer case that check
+    // can't catch.
+    static let gmailConnect: TimeInterval = 60
 
     // Outbound / reply send: a token refresh plus a single Gmail API call, both bounded at 30s
     // each by GmailNetworking's timeout (#468), so 60s covers the real worst case of a

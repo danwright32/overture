@@ -13,12 +13,13 @@ final class GmailAuthManager {
     static let shared = GmailAuthManager()
 
     enum AuthError: LocalizedError {
-        case noClientConfig, notConnected, listenerFailed, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired, tokenSaveFailed, alreadyConnecting
+        case noClientConfig, notConnected, listenerFailed, listenerUnreachable, stateMismatch, exchangeFailed(String), refreshFailed(String), authExpired, tokenSaveFailed, alreadyConnecting
         var errorDescription: String? {
             switch self {
             case .noClientConfig: return "Gmail client config is missing. Re-run the Google setup."
             case .notConnected: return "Gmail isn't connected. Use Connect Gmail first."
             case .listenerFailed: return "Couldn't open the local login listener."
+            case .listenerUnreachable: return "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
             case .stateMismatch: return "Login response didn't match the request. Try again."
             case .exchangeFailed(let m): return "Login failed: \(m)"
             case .refreshFailed(let m): return "Gmail couldn't refresh right now (temporary): \(m)"
@@ -74,7 +75,14 @@ final class GmailAuthManager {
 
     // Begin the consent flow: open the browser, await the loopback redirect, exchange
     // the code, and store tokens. Throws on any failure; sends nothing.
-    func connect() async throws {
+    // clientURL / openBrowser / probe / hardTimeout are injected (defaulting to the real ones) so the
+    // health-check-before-browser behavior (#1163) is unit-testable without a live browser or network.
+    func connect(
+        clientURL: URL = GmailCredentials.clientConfigURL,
+        openBrowser: (URL) -> Void = { NSWorkspace.shared.open($0) },
+        probe: (UInt16) async -> Bool = { await GmailAuthManager.probeListenerReachable(port: $0) },
+        hardTimeout: TimeInterval = 90
+    ) async throws {
         // Refuse a second attempt while one is in flight: the old code cancelled the prior attempt's
         // listener at the top of every connect(), and a double-fired Connect tap then killed the live
         // listener on the exact port Google was redirecting to. Claimed synchronously before any await.
@@ -93,7 +101,7 @@ final class GmailAuthManager {
         // copy-inventory:ignore-end
         defer { ProcessInfo.processInfo.endActivity(napBlocker) }
 
-        guard let client = GmailCredentials.loadClient() else { throw AuthError.noClientConfig }
+        guard let client = GmailCredentials.loadClient(from: clientURL) else { throw AuthError.noClientConfig }
 
         // Cancel any half-finished PRIOR attempt (one that already ended and cleared the latch but left a
         // dead listener/tab). The latch above guarantees this never runs against a still-live attempt.
@@ -103,6 +111,21 @@ final class GmailAuthManager {
         // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
         Self.connectDebugLog("listener ready on 127.0.0.1:\(port)")
         // copy-inventory:ignore-end
+
+        // #1163: confirm the just-bound listener actually accepts a connection BEFORE opening the browser.
+        // A listener that reported .ready but holds no accepting socket would otherwise send Dan to a dead
+        // "can't connect to 127.0.0.1" tab and leave connect() waiting the whole give-up window with no
+        // actionable failure. Catching it here fails in ~2s with a specific, retryable error and no dead
+        // tab. Safe against the live flow: no codeContinuation exists yet, so the probe's own throwaway
+        // connection resolves nothing when the listener handles it.
+        guard await probe(UInt16(port)) else {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+            Self.connectDebugLog("listener probe failed on 127.0.0.1:\(port); aborting before opening the browser")
+            // copy-inventory:ignore-end
+            stopListener()
+            throw AuthError.listenerUnreachable
+        }
+
         let redirect = "http://127.0.0.1:\(port)"
         let pkce = GoogleOAuth.makePKCE(verifierBytes: Self.randomBytes(32))
         let state = Self.randomURLSafe(16)
@@ -113,7 +136,7 @@ final class GmailAuthManager {
                                  redirectURI: redirect, scopes: OAuthConfig.gmailScopes)
         let authURL = GoogleOAuth.authorizationURL(config: config, pkce: pkce, state: state,
                                                    loginHint: SendIdentity.danWright.email)
-        NSWorkspace.shared.open(authURL)
+        openBrowser(authURL)
         // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
         Self.connectDebugLog("opened browser to Google; awaiting redirect on port \(port)")
         // copy-inventory:ignore-end
@@ -122,7 +145,7 @@ final class GmailAuthManager {
         // never arrives (stale tab, Google-side hang, etc.).
         timeoutTask?.cancel()
         timeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(hardTimeout * 1_000_000_000))
             await MainActor.run { self?.failTimeout() }
         }
 
@@ -214,6 +237,39 @@ final class GmailAuthManager {
     // socket (the redirect hit a dead port). A private serial queue is always serviced.
     nonisolated private static let listenerQueue = DispatchQueue(label: "com.danwright.overture.gmail-loopback")
 
+    // #1163: a fast health check on the just-bound listener, BEFORE opening the browser. Opens a throwaway
+    // loopback connection to the port and reports whether it can actually establish; the real Google
+    // redirect will hit that same port from the browser. A dead listener (reported .ready but holds no
+    // accepting socket) fails this in ~2s, so connect() can abort with an actionable error instead of
+    // stranding Dan on a "can't connect to 127.0.0.1" tab through the whole give-up window. A same-process
+    // probe cannot reproduce a listener that only dies AFTER the app backgrounds (documented false
+    // negative), so it never wrongly reports a healthy listener as dead: a false negative just falls
+    // through to the shorter give-up + retry backstop, it never aborts a working sign-in.
+    nonisolated static func probeListenerReachable(port: UInt16, timeout: TimeInterval = 2) async -> Bool {
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return false }
+        let conn = NWConnection(host: "127.0.0.1", port: nwPort, using: .tcp)
+        let once = ProbeLatch()
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            conn.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    if once.fire() { cont.resume(returning: true) }
+                    conn.cancel()
+                case .failed, .cancelled:
+                    if once.fire() { cont.resume(returning: false) }
+                default:
+                    break
+                }
+            }
+            conn.start(queue: Self.listenerQueue)
+            // Bound the probe so a wedged connect attempt can't hang the whole connect flow.
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                if once.fire() { cont.resume(returning: false); conn.cancel() }
+            }
+        }
+    }
+
     private func startListener() async throws -> Int {
         // The port is only real once the listener is bound and .ready; reading it
         // earlier returned 0, which made redirect_uri=http://127.0.0.1:0 and hung
@@ -242,6 +298,13 @@ final class GmailAuthManager {
         let comps = URLComponents(string: "http://127.0.0.1\(path)")
         let code = comps?.queryItems?.first { $0.name == "code" }?.value
         let state = comps?.queryItems?.first { $0.name == "state" }?.value
+
+        // #1163: only a genuine OAuth redirect resolves the waiting sign-in. A connection carrying neither a
+        // code nor a state is not the redirect: it is the pre-browser health-check probe, a port scan, or a
+        // browser prefetch. Resolving the waiter from one of those (a real Google redirect always carries
+        // state) would fail a healthy connect with a bogus state mismatch, which is exactly how the probe
+        // could corrupt the flow. Drop it without touching codeContinuation.
+        guard code != nil || state != nil else { conn.cancel(); return }
 
         let body = "<html><body style='font-family:-apple-system;padding:40px'>Overture is connected to Gmail. You can close this tab.</body></html>"
         let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
@@ -293,4 +356,12 @@ final class GmailAuthManager {
         return Data(bytes)
     }
     private static func randomURLSafe(_ n: Int) -> String { GoogleOAuth.base64url(randomBytes(n)) }
+}
+
+// One-shot resume guard for the reachability probe: the NWConnection state handler and the timeout Task
+// race to resolve the continuation, but a CheckedContinuation must resume exactly once.
+private final class ProbeLatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func fire() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
 }

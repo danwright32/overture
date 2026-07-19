@@ -25,6 +25,10 @@ struct RootView: View {
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
+    // #1163: a Gmail-connect failure gets its OWN alert (not the shared "Something went wrong" one) so it
+    // can offer a one-click Try again, since a failed handoff is the one connect error Dan recovers from by
+    // simply retrying.
+    @State private var gmailConnectError: String?
     // #1027: the finished scout's warnings, as one branded popup shown ONCE at the true end of a manual
     // run. Replaces the plain warningMessage alert that fired after the native sweep, before the read.
     @State private var scoutWarnings: ScoutWarnings?
@@ -551,6 +555,15 @@ struct RootView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+            // #1163: a Gmail-connect failure (the handoff never landed) is recoverable by simply retrying,
+            // so its alert leads with Try again instead of a bare OK, and fires as soon as the attempt gives
+            // up rather than leaving Dan on a silent "Connecting…".
+            .alert("Couldn't connect Gmail", isPresented: gmailConnectErrorBinding) {
+                Button("Try again") { gmailConnectError = nil; connectGmail() }
+                Button("Cancel", role: .cancel) { gmailConnectError = nil }
+            } message: {
+                Text(gmailConnectError ?? "")
+            }
             // #1054: a scout Dan cancelled had already read some shows before it stopped. Rather than
             // import them silently after he hit Cancel, ask. Keep is the default (the shows are real finds
             // and keeping is reversible); Discard is destructive because it drops them and deletes the file.
@@ -751,7 +764,7 @@ struct RootView: View {
                 gmailConnected = true
                 status.set("Gmail connected. You can now send approved emails.")
             } catch {
-                errorMessage = error.localizedDescription
+                gmailConnectError = error.localizedDescription
             }
             isConnectingGmail = false
             gmailConnectStartedAt = nil
@@ -916,6 +929,11 @@ struct RootView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    // #1163: drives the Gmail-connect failure alert, which unlike the shared error alert offers a Try again.
+    private var gmailConnectErrorBinding: Binding<Bool> {
+        Binding(get: { gmailConnectError != nil }, set: { if !$0 { gmailConnectError = nil } })
     }
 
     // #1054: presents the keep-or-discard alert while a cancelled read is awaiting Dan's choice.
