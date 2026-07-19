@@ -95,6 +95,7 @@ struct RootView: View {
     @State private var prepSheetShown = false      // #1130: the Prep run's takeover progress screen
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
+    @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
     @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
     // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
@@ -399,6 +400,19 @@ struct RootView: View {
                             .foregroundStyle(noBookedShootData ? OVColor.gold : Color.primary)
                     }
                     .help(DaysOffAttention.help(needsALook: noBookedShootData))
+
+                    // #1118: the towns Overture keeps out of the queue, and where Dan takes one back off.
+                    // It shares this group with Sources and Days off (SwiftUI's toolbar builder tops out at
+                    // ten children, and a fourth ToolbarItem would not compile), and it belongs with them:
+                    // all three say what Overture is working from, one the calendars it reads, one the days
+                    // it keeps clear, one the places it stays out of. No attention state of its own: the
+                    // skip list is Dan's to review when he chooses, never something that needs him.
+                    Button {
+                        showExcludedTowns = true
+                    } label: {
+                        ToolbarHoverLabel(title: "Skipped towns", systemImage: "hand.raised")
+                    }
+                    .help("Towns you've told Overture to skip. Take one back off the list here.")
                 }
                 // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
                 // Sources/Days off group, not before it. With every toolbar label now always shown the row
@@ -637,6 +651,7 @@ struct RootView: View {
             .sheet(isPresented: $prepSheetShown) { prepProgressModal }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
+            .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
             .sheet(item: Bindable(dayOffOffer).pending) { pending in BlockDaysSheet(pending: pending) }
