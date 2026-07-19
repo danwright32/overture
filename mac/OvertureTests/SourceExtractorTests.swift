@@ -214,7 +214,7 @@ struct ScoutSourceInjectionTests {
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
             into: ctx, extractor: stub,
-            fetch: { url, _ in
+            fetch: { url, _, _ in
                 if url.absoluteString.contains("broken") { throw SourceFetchError.http(500) }
                 return FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString,
                                    contentHash: "new")
@@ -251,7 +251,7 @@ struct ScoutSourceInjectionTests {
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .watchOnly, extractor: stub,
-            fetch: { url, _ in
+            fetch: { url, _, _ in
                 FetchedPage(normalizedHTML: "<p>new shows</p>", finalURL: url.absoluteString,
                             contentHash: "changed")
             },

@@ -63,6 +63,40 @@ struct WatchlistEditURLTests {
         #expect(s.hasUnreadChanges)                               // marked for a fresh read
     }
 
+    // MARK: - setVenueLocation (#1175)
+
+    // Setting a location must NOT reset feed history the way editURL does: the SET of shows is unchanged,
+    // only their place annotation, so the source keeps its earned baseline. It IS marked for a fresh read
+    // so the correction actually reaches the store on the next scout rather than waiting for the calendar
+    // to change on its own.
+    @Test func settingAVenueLocationStoresItAndMarksForARead() throws {
+        let ctx = try context()
+        let s = WatchedSource(sourceId: "gr42", orgName: "The Green Room 42",
+                              listingsURL: "https://thegreenroom42.venuetix.com/", kind: .html)
+        s.baselineFeedCount = 20
+        s.successfulCheckCount = 8
+        s.hasUnreadChanges = false
+        ctx.insert(s); try ctx.save()
+
+        WatchlistEditing.setVenueLocation(s, to: "  570 Tenth Ave, New York, NY 10036  ", in: ctx)
+
+        #expect(s.venueLocation == "570 Tenth Ave, New York, NY 10036")   // trimmed
+        #expect(s.hasUnreadChanges)                                       // re-read so the fix lands
+        #expect(s.baselineFeedCount == 20)                               // history untouched: same shows
+        #expect(s.successfulCheckCount == 8)
+    }
+
+    @Test func clearingAVenueLocationStoresNil() throws {
+        let ctx = try context()
+        let s = WatchedSource(sourceId: "gr42", orgName: "The Green Room 42",
+                              listingsURL: "https://thegreenroom42.venuetix.com/", kind: .html)
+        s.venueLocation = "New York, NY"
+        ctx.insert(s); try ctx.save()
+
+        WatchlistEditing.setVenueLocation(s, to: "   ", in: ctx)
+        #expect(s.venueLocation == nil)
+    }
+
     @Test func fixingToNonsenseIsRefused() throws {
         let ctx = try context()
         let s = WatchedSource(sourceId: "org", orgName: "Org", listingsURL: "https://org.example/e", kind: .html)

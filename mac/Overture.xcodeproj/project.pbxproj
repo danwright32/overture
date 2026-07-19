@@ -154,6 +154,7 @@
 		3DC5F8EA28D4817B5E9D7F34 /* QueueViewMastheadLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DDCA7E2A81DE18A0C911ACB /* QueueViewMastheadLayoutTests.swift */; };
 		3E8AB5472C1105A3EFAEB575 /* SourceReadStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C48829D65269F3AEC2601C /* SourceReadStateTests.swift */; };
 		3F8AA010C237FC233C3FC20F /* ClassificationConfidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */; };
+		3FE299F95CB2F2BB587C3B77 /* OVCapsuleButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA18BC286E92761C5A33E6F8 /* OVCapsuleButton.swift */; };
 		40AD22AE3FD1F3431D3E032E /* DraftLintSendGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AEFF6EC8D64C1453FACB334 /* DraftLintSendGateTests.swift */; };
 		40B3316573C729F05955D39B /* StoreLaunchOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78AD6E161E510665CE7F4A8 /* StoreLaunchOutcome.swift */; };
 		40D0B69B9A5E54E0AFD6F01D /* RunnerScriptLoggingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DA0DD70773DEC1C34403EBB /* RunnerScriptLoggingTests.swift */; };
@@ -1100,6 +1101,7 @@
 		E8756FC6C0288732BE6DA264 /* ShowSearchFieldGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSearchFieldGuardTests.swift; sourceTree = "<group>"; };
 		E894E2E958EE3100C3C5FE02 /* OmniFocusSyncStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncStatusTests.swift; sourceTree = "<group>"; };
 		E9FD33A4882802D6484467A5 /* ArchiveViewRestoreSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveViewRestoreSaveGuardTests.swift; sourceTree = "<group>"; };
+		EA18BC286E92761C5A33E6F8 /* OVCapsuleButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OVCapsuleButton.swift; sourceTree = "<group>"; };
 		EA20760AEA5952634E9E368C /* ScoutProgressWiringGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutProgressWiringGuardTests.swift; sourceTree = "<group>"; };
 		EB5A2F5574E4996590E04C43 /* SourceFetcherPaginationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFetcherPaginationTests.swift; sourceTree = "<group>"; };
 		EBDCFFF39EBE62517CF021C4 /* ReminderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSettingsView.swift; sourceTree = "<group>"; };
@@ -1795,6 +1797,7 @@
 				242373DDCA3D46E218959411 /* LiveRunLabel.swift */,
 				BEEBD1BC6A5C55DC146DC993 /* OnboardingView.swift */,
 				07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */,
+				EA18BC286E92761C5A33E6F8 /* OVCapsuleButton.swift */,
 				42648357B14F6F8F3E8B13EE /* PrepSelectionSheet.swift */,
 				5352A249A3868BCF6566AE15 /* ProspectMutations.swift */,
 				9AEB2402FA7C0F3A4A82D9F0 /* ProspectRowFactory.swift */,
@@ -2003,6 +2006,7 @@
 				48B098CAC4B814F245E3ADB4 /* MenuBarStatus.swift in Sources */,
 				BEF0FF762EA5424CFBFF5281 /* NaturalKeyVenueMigration.swift in Sources */,
 				5D2AAF47BCB3D0A92E1E58D2 /* NotificationService.swift in Sources */,
+				3FE299F95CB2F2BB587C3B77 /* OVCapsuleButton.swift in Sources */,
 				A2D28CF1179A7796EED54940 /* OmniFocusAutomationPermission.swift in Sources */,
 				CB5A089F01B10360E03F9392 /* OmniFocusSync.swift in Sources */,
 				7E7B8A744D25F28D54DFFDB2 /* OmniFocusSyncRunner.swift in Sources */,

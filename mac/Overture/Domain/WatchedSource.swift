@@ -134,6 +134,13 @@ final class WatchedSource {
     var lastPlacedCount: Int = 0
     var hadPlacedBeforeLastRun: Bool = false
 
+    // #1175: the venue's real location, supplied by Dan, for a single-venue feed source whose synthesized
+    // document carries no city (VenueTix reports only an opaque venue id). When set, it is stamped into
+    // every event's place line so the extractor reads a real address and the geography gate places the
+    // shows in-region instead of `.unknown`. nil for the ordinary source, whose events carry their own
+    // location (a national calendar, a fetched page), so this changes nothing for them.
+    var venueLocation: String? = nil
+
     var pageCount: Int
     var addedAt: Date
     // #875: the last run's own account of this source, verbatim, as it wrote it. Kept whole (sentence

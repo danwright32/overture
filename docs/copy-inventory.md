@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **660 sentences**, from 222 source files.
+Every sentence Overture can say to Dan: **664 sentences**, from 223 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -245,10 +245,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Add a lead..."
     `App/RootView.swift`
+"Add address"
+    `UI/SourcesView.swift`
 "Add another"
     `UI/AddLeadSheet.swift`
 "Add contact"
     `UI/DraftReviewView.swift`
+"Add this venue's address so its shows count as in your area."
+    `UI/SourcesView.swift`
 "Added \(Plural.count(count, "show")), ranked into your queue with everything else."
     `UI/LeadIntakeModel.swift`
 "Added \(who). \(totalCount) recipient\(totalCount == 1 ? "" : "s") on \(org) now."
@@ -944,6 +948,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;"
     `App/StoreSchemaGuard.swift`
+"Saved \(org)'s address. Its shows are placed on the next read."
+    `UI/SourcesView.swift`
 "Scout & Prep"
     `App/RootView.swift`
 "Scout progress"
@@ -1054,6 +1060,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
     `App/ActionFeedback.swift`
+"Street, city, state"
+    `UI/SourcesView.swift`
 "Sync now"
     `App/RootView.swift`
 "Thalia Spanish Theatre"

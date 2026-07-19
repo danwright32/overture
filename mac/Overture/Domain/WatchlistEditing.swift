@@ -169,6 +169,18 @@ enum WatchlistEditing {
         return .saved(sourceId: source.sourceId)
     }
 
+    // #1175: Dan supplies the real location for a single-venue feed source whose synthesized document
+    // carries no city. Unlike editURL this does NOT reset feed history: the SET of shows is unchanged,
+    // only their place annotation, so the source keeps the baseline it earned. It IS marked for a fresh
+    // read so the correction reaches the store on the next scout instead of waiting for the calendar to
+    // change on its own. An empty string clears the location back to nil.
+    static func setVenueLocation(_ source: WatchedSource, to newLocation: String, in context: ModelContext) {
+        let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        source.venueLocation = trimmed.isEmpty ? nil : trimmed
+        source.hasUnreadChanges = true
+        try? context.save()
+    }
+
     // #1027: Dan confirms a no_dated_content page is the right calendar, just quiet right now.
     //
     // Anchors the confirmation to the exact bytes just read (pendingContentHash), and stamps that hash as

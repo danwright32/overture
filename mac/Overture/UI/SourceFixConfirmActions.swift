@@ -75,15 +75,7 @@ struct SourceFixConfirmActions: View {
     }
 
     private func capsule(_ label: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(tint)
-                .padding(.horizontal, OVSpacing.sm)
-                .padding(.vertical, 4)
-                .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
+        OVCapsuleButton(label: label, tint: tint, action: action)
     }
 
     private func saveURL() {

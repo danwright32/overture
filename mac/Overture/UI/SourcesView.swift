@@ -34,6 +34,10 @@ struct SourcesView: View {
     // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
     @State private var topSection: SourceGrade?
 
+    // #1175: which single-venue-feed source's location Dan is editing (its sourceId), and the draft text.
+    @State private var editingLocationFor: String?
+    @State private var locationDraft = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -195,6 +199,64 @@ struct SourcesView: View {
         }
     }
 
+    // #1175: true only for a single-venue feed whose own data carries no city (VenueTix). A thin predicate
+    // delegating to the adapter's already-tested host check, so the view keeps no routing rule of its own.
+    private func isSingleVenueFeed(_ source: WatchedSource) -> Bool {
+        guard let s = source.listingsURL, let url = URL(string: s) else { return false }
+        return VenueTixCalendar.handles(url)
+    }
+
+    // #1175: where Dan supplies a single-venue feed's address. Three states: editing (a field + Save), a
+    // saved address (shown, with Edit), or none yet (a prompt that says why it matters, with Add).
+    @ViewBuilder
+    private func venueLocationControl(_ source: WatchedSource) -> some View {
+        if editingLocationFor == source.sourceId {
+            VStack(alignment: .leading, spacing: OVSpacing.xxs) {
+                TextField(VenueLocationCopy.placeholder, text: $locationDraft)
+                    .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    .onSubmit { saveLocation(source) }
+                HStack(spacing: OVSpacing.xs) {
+                    Spacer()
+                    OVCapsuleButton(label: VenueLocationCopy.cancel, tint: OVColor.inkSoft) {
+                        editingLocationFor = nil
+                    }
+                    OVCapsuleButton(label: VenueLocationCopy.save, tint: OVColor.forest) {
+                        saveLocation(source)
+                    }
+                }
+            }
+        } else if let location = source.venueLocation {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                Text(location).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                OVCapsuleButton(label: VenueLocationCopy.edit, tint: OVColor.inkSoft) {
+                    beginEditingLocation(source)
+                }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                Text(VenueLocationCopy.prompt).font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                OVCapsuleButton(label: VenueLocationCopy.add, tint: OVColor.forest) {
+                    beginEditingLocation(source)
+                }
+            }
+        }
+    }
+
+    private func beginEditingLocation(_ source: WatchedSource) {
+        locationDraft = source.venueLocation ?? ""
+        editingLocationFor = source.sourceId
+    }
+
+    private func saveLocation(_ source: WatchedSource) {
+        WatchlistEditing.setVenueLocation(source, to: locationDraft, in: context)
+        editingLocationFor = nil
+        feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName))
+    }
+
     private func row(_ source: WatchedSource) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
@@ -205,6 +267,14 @@ struct SourcesView: View {
 
             if let url = source.listingsURL {
                 Text(url).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
+            }
+
+            // #1175: a single-venue feed (VenueTix) carries no city in its own data, so its shows resolve
+            // as location-unknown rather than the local venue they are. This is where Dan supplies the
+            // address once; it is then stamped into the synthesized listing so the geography gate places
+            // the shows. Shown only on those rows, since every other source's shows carry their own place.
+            if isSingleVenueFeed(source) {
+                venueLocationControl(source)
             }
 
             // #803: CHECKED and READ are different things, and the sheet could not tell them apart. The
@@ -375,5 +445,20 @@ struct SourcesView: View {
     // like a rendering bug.
     private func lastChecked(_ source: WatchedSource) -> String {
         SourceReadState.lastCheckedLine(at: source.lastCheckedAt, now: Date())   // #885
+    }
+}
+
+// #1175: the venue-location control's own words, kept out of the view body so the copy inventory reads
+// them and a test can pin them (#863/#885).
+enum VenueLocationCopy {
+    static let placeholder = "Street, city, state"
+    static let prompt = "Add this venue's address so its shows count as in your area."
+    static let add = "Add address"
+    static let edit = "Edit"
+    static let save = "Save"
+    static let cancel = "Cancel"
+
+    static func savedAck(org: String) -> String {
+        "Saved \(org)'s address. Its shows are placed on the next read."
     }
 }

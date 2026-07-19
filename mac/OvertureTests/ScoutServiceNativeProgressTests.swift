@@ -32,8 +32,8 @@ struct ScoutServiceNativeProgressTests {
     private let noEvents = StubSourceExtractor(listing: ExtractedListing(events: [],
                                                                          verdict: .upcomingListings))
 
-    private func page(_ hash: String) -> (URL, String?) async throws -> FetchedPage {
-        { url, _ in FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString, contentHash: hash) }
+    private func page(_ hash: String) -> (URL, String?, String?) async throws -> FetchedPage {
+        { url, _, _ in FetchedPage(normalizedHTML: "<p>shows</p>", finalURL: url.absoluteString, contentHash: hash) }
     }
 
     @Test func reportsEachFetchedSourceByNameAndPosition() async throws {
