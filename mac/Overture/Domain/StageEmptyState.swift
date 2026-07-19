@@ -55,12 +55,17 @@ enum StageEmptyState {
     }
 
     // Shown only when there is no work anywhere to point at, so it explains what the stage is for.
+    // #1195/#843: the send focuses (the default arm) have no single purpose to explain (each names a
+    // different problem: an unconfirmed send, a failed one, one that cannot be watched, a held contact,
+    // an approved email waiting on a click), so there is nothing a resting line could add that the title
+    // "Nothing here right now" does not already say. It returns empty, and the view shows the title alone
+    // rather than restating it with a generic "Nothing waiting on you here."
     private static func restingDetail(for stage: StageFocus) -> String {
         switch stage {
         case .scout: return "New finds land here to keep or dismiss."
         case .prep: return "Keep a show from Scout and it lands here to prep."
         case .review: return "Prepped drafts land here to read and approve."
-        default: return "Nothing waiting on you here."
+        default: return ""
         }
     }
 }
