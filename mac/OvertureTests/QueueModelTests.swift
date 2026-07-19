@@ -30,6 +30,29 @@ private func item(
     return q
 }
 
+// #1220: every stage view groups its rows by date under "FRI Jul 17 2026" headers. The grouping is
+// QueueModel.groupByDate; the view just renders it. Lock the grouping contract the view now depends on:
+// date-ordered sections in first-seen order, rows sharing a date collected together, the undated bucket
+// last and naming itself rather than showing a blank header.
+@Suite("Date grouping (#1220)")
+struct DateGroupingTests {
+    @Test func rowsGroupByDateWithUndatedLast() {
+        let items = [
+            item(performanceDate: "2026-07-17", key: "a"),
+            item(performanceDate: "2026-07-19", key: "b"),
+            item(performanceDate: "2026-07-17", key: "c"),
+            item(performanceDate: nil, key: "d"),
+        ]
+        let groups = QueueModel.groupByDate(items)
+        #expect(groups.map(\.id) == ["2026-07-17", "2026-07-19", "tbd"])
+        #expect(groups[0].items.map(\.id) == ["a", "c"])   // both Jul 17 rows in one group
+        #expect(groups[0].monthDay == "Jul 17")
+        #expect(groups[0].year == "2026")
+        #expect(groups[0].weekday.isEmpty == false)         // "FRI"-style weekday present for a real date
+        #expect(groups.last?.monthDay == "Date to be confirmed")  // undated names itself, no blank header
+    }
+}
+
 @Suite("Date group unavailability (#901)")
 struct DateGroupUnavailableTests {
     private func conflicted(_ key: String) -> QueueItem {
