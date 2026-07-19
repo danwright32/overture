@@ -135,6 +135,20 @@ struct OperaAmericaCalendarTests {
         #expect(body.contains("\"pageSize\":100"))
     }
 
+    // #1170: the feed defaults to the national calendar (350+ upcoming), a large document the extractor
+    // reads every time it changes. The feed accepts a `states` filter (verified live: state CODES, not
+    // full names), so we request exactly the geography gate's in-range set up front. It must match that set
+    // (EventPlace.inRangeStates = ny/nj/ct) so it can never narrow harder than the gate and drop a
+    // NYC-metro show sitting in NJ or CT.
+    @Test func theFilteredRequestNarrowsToTheInRangeStates() throws {
+        let from = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 7, day: 18))!
+        let to = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 11, day: 18))!
+        let req = OperaAmericaCalendar.filteredRequest(host: "www.operaamerica.org", from: from, to: to,
+                                                       page: 1, pageSize: 100)
+        let body = req.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        #expect(body.contains("\"states\":[\"NY\",\"NJ\",\"CT\"]"))
+    }
+
     @Test func sourceFetcherRoutesOperaUrlsToTheAdapter() async throws {
         let opera = URL(string: "https://www.operaamerica.org/calendar/")!
         let stub = FetchedPage(normalizedHTML: "OPERA-STUB", finalURL: opera.absoluteString, contentHash: "h")

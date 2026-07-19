@@ -80,7 +80,11 @@ enum EventPlace {
         "new york", "manhattan", "brooklyn", "queens", "the bronx", "bronx", "staten island",
     ]
 
-    private static let inRangeStates: Set<String> = ["ny", "nj", "ct"]
+    // The in-range states, as lowercase codes. Ordered so callers that need a stable list (e.g. #1170's
+    // OPERA America feed filter, which pre-narrows the national calendar to exactly this set) get a
+    // deterministic order; the gate itself only needs membership, so it derives its Set from this.
+    static let inRangeStateCodes: [String] = ["ny", "nj", "ct"]
+    private static let inRangeStates: Set<String> = Set(inRangeStateCodes)
 
     private static let stateNames: [String: String] = [
         "new york": "ny", "new jersey": "nj", "connecticut": "ct",
