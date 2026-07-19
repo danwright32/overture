@@ -35,6 +35,10 @@ final class GmailAuthManager {
     private var pendingPKCE: PKCE?
     private var codeContinuation: CheckedContinuation<String, Error>?
     private var timeoutTask: Task<Void, Never>?
+    // #1167: re-probes the listener partway through the wait. The pre-browser probe cannot catch a listener
+    // that only dies AFTER the app backgrounds during consent, so this catches that residual case and fails
+    // fast instead of waiting out the whole give-up window. Cancelled wherever timeoutTask is.
+    private var heartbeatTask: Task<Void, Never>?
     // The re-entrancy latch. A live connect binds a loopback listener on a throwaway port; a SECOND
     // connect() cancelling the first's listener on the very port Google is about to redirect to is what
     // produced "Safari can't connect to 127.0.0.1" (a single Connect tap can fire the SwiftUI toolbar
@@ -80,8 +84,9 @@ final class GmailAuthManager {
     func connect(
         clientURL: URL = GmailCredentials.clientConfigURL,
         openBrowser: (URL) -> Void = { NSWorkspace.shared.open($0) },
-        probe: (UInt16) async -> Bool = { await GmailAuthManager.probeListenerReachable(port: $0) },
-        hardTimeout: TimeInterval = 90
+        probe: @escaping (UInt16) async -> Bool = { await GmailAuthManager.probeListenerReachable(port: $0) },
+        hardTimeout: TimeInterval = 90,
+        heartbeatInterval: TimeInterval = 15
     ) async throws {
         // Refuse a second attempt while one is in flight: the old code cancelled the prior attempt's
         // listener at the top of every connect(), and a double-fired Connect tap then killed the live
@@ -149,10 +154,28 @@ final class GmailAuthManager {
             await MainActor.run { self?.failTimeout() }
         }
 
+        // #1167: heartbeat. Re-probe the listener every `heartbeatInterval` while waiting for the redirect.
+        // If it has gone unreachable and no redirect has arrived yet (codeContinuation still pending), fail
+        // fast with the same actionable, retryable error rather than waiting out `hardTimeout`. The probe's
+        // own throwaway connection carries no code or state, so handleRedirect drops it (#1163/#1168) and it
+        // cannot corrupt the waiter. Cancelled the moment the redirect resolves the wait, below.
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(heartbeatInterval * 1_000_000_000))
+                guard let self, !Task.isCancelled, self.codeContinuation != nil else { return }
+                if await probe(UInt16(port)) { continue }
+                guard self.codeContinuation != nil else { return }   // a redirect may have landed mid-probe
+                self.failListenerDied()
+                return
+            }
+        }
+
         let code = try await withCheckedThrowingContinuation { (c: CheckedContinuation<String, Error>) in
             codeContinuation = c
         }
         timeoutTask?.cancel()
+        heartbeatTask?.cancel()
         stopListener()
 
         let tokens = try await exchange(config: config, code: code, pkce: pkce)
@@ -289,9 +312,6 @@ final class GmailAuthManager {
     }
 
     private func handleRedirect(request: String, conn: NWConnection) {
-        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
-        Self.connectDebugLog("redirect received by the listener")
-        // copy-inventory:ignore-end
         // First line: "GET /?code=...&state=... HTTP/1.1"
         let firstLine = request.split(separator: "\r\n").first.map(String.init) ?? ""
         let path = firstLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
@@ -304,7 +324,18 @@ final class GmailAuthManager {
         // browser prefetch. Resolving the waiter from one of those (a real Google redirect always carries
         // state) would fail a healthy connect with a bogus state mismatch, which is exactly how the probe
         // could corrupt the flow. Drop it without touching codeContinuation.
-        guard code != nil || state != nil else { conn.cancel(); return }
+        // #1168: log the drop distinctly, and log "redirect received" only BELOW this guard, so the diagnostic
+        // file no longer records "redirect received" for the probe, a port scan, or a prefetch (which was
+        // exactly misleading in the area hardest to debug).
+        guard code != nil || state != nil else {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+            Self.connectDebugLog("ignored a non-redirect connection (no code or state)")
+            // copy-inventory:ignore-end
+            conn.cancel(); return
+        }
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("redirect received by the listener")
+        // copy-inventory:ignore-end
 
         let body = "<html><body style='font-family:-apple-system;padding:40px'>Overture is connected to Gmail. You can close this tab.</body></html>"
         let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
@@ -327,6 +358,7 @@ final class GmailAuthManager {
         }
         // copy-inventory:ignore-end
         timeoutTask?.cancel(); timeoutTask = nil
+        heartbeatTask?.cancel(); heartbeatTask = nil
         stopListener()
         let cont = codeContinuation
         codeContinuation = nil
@@ -340,12 +372,32 @@ final class GmailAuthManager {
         // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
         Self.connectDebugLog("timed out waiting for the redirect (120s)")
         // copy-inventory:ignore-end
+        timeoutTask?.cancel(); timeoutTask = nil
+        heartbeatTask?.cancel(); heartbeatTask = nil
         stopListener()
         let cont = codeContinuation
         codeContinuation = nil
         pendingState = nil
         pendingPKCE = nil
         cont?.resume(throwing: AuthError.exchangeFailed("Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."))
+    }
+
+    // #1167: the mid-wait heartbeat found the listener unreachable while no redirect had arrived. Fail with
+    // the same actionable, retryable error the pre-browser probe uses, rather than waiting out the clock.
+    // Guarded on a pending continuation so it never double-resolves against a redirect or the timeout.
+    private func failListenerDied() {
+        guard codeContinuation != nil else { return }
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+        Self.connectDebugLog("listener went unreachable mid-wait; failing fast before the give-up window")
+        // copy-inventory:ignore-end
+        timeoutTask?.cancel(); timeoutTask = nil
+        heartbeatTask?.cancel(); heartbeatTask = nil
+        stopListener()
+        let cont = codeContinuation
+        codeContinuation = nil
+        pendingState = nil
+        pendingPKCE = nil
+        cont?.resume(throwing: AuthError.listenerUnreachable)
     }
 
     // MARK: - randomness
