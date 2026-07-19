@@ -216,9 +216,50 @@ struct QueueView: View {
                         stageEmptyState(for: focusedStage ?? StageNavigation.openingStage, data: data)
                     }
                 } else {
-                    ForEach(rows) { item in prospectRow(item) }
+                    // #1220: group the stage's rows by date under "FRI Jul 17 2026" headers, the same on
+                    // every stage. #976: the date groups are the scroll targets, so scrollTargetLayout lets
+                    // scrollPosition($topGroup) pin the top visible one across a @Query rebuild.
+                    LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
+                        ForEach(QueueModel.groupByDate(rows)) { group in dateSection(group) }
+                    }
+                    .scrollTargetLayout()
                 }
             }
+        }
+    }
+
+    // #1220: every stage view groups its rows by date, reusing the pre-#1134 date-group header (weekday,
+    // month/day, year) and the #1193/#901 "Unavailable" marker up by the date. The grouping
+    // (QueueModel.groupByDate) and the unavailability rule (QueueModel.groupIsUnavailable) are tested
+    // model helpers; this only renders them.
+    private func dateSection(_ group: QueueModel.DateGroup) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
+                if !group.weekday.isEmpty {
+                    Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
+                        .tracking(1.4).foregroundStyle(OVColor.inkFaint)
+                }
+                Text(group.monthDay).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                if !group.year.isEmpty {
+                    Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                }
+                // #901 (Dan's walk, 2026-07-14): "up by the date". When any show on this date is a day he
+                // can't work, the header itself says so, so a blocked day reads at a glance.
+                if QueueModel.groupIsUnavailable(group.items) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text("Unavailable")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.onRust)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                    .background(Capsule().fill(OVColor.rust))
+                }
+            }
+            .padding(.bottom, OVSpacing.xxs)
+            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+
+            ForEach(group.items) { item in prospectRow(item) }
         }
     }
 
