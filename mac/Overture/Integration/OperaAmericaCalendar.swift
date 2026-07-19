@@ -129,8 +129,14 @@ enum OperaAmericaCalendar {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+        // #1170: pre-narrow the national calendar (350+ upcoming) to exactly the geography gate's in-range
+        // states, cutting the synthesized document (and per-scout AI read cost) roughly threefold. The feed
+        // accepts state CODES (verified live 2026-07-18: "NY" filters, "New York" returns nothing), and is
+        // case-insensitive. Deriving from EventPlace.inRangeStateCodes guarantees it can never narrow harder
+        // than the gate and drop a NYC-metro show sitting in NJ or CT.
+        let states = EventPlace.inRangeStateCodes.map { $0.uppercased() }
         let body: [String: Any] = [
-            "q": "", "coq": "", "types": [], "zip": "", "states": [],
+            "q": "", "coq": "", "types": [], "zip": "", "states": states,
             "from": dayFormatter.string(from: from), "to": dayFormatter.string(from: to),
             "companyId": 0, "page": page, "pageSize": pageSize, "companies": []
         ]
