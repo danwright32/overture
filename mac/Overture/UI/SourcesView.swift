@@ -207,9 +207,15 @@ struct SourcesView: View {
     }
 
     // #1175: where Dan supplies a single-venue feed's address. Three states: editing (a field + Save), a
-    // saved address (shown, with Edit), or none yet (a prompt that says why it matters, with Add).
+    // saved address (shown, with Edit), or none yet (a prompt, with Add).
+    //
+    // #1185: when none is set, the prompt varies by whether the source has actually surfaced shows. Before
+    // any have, it is the neutral setup prompt (there is nothing unplaced yet, only a thing worth doing);
+    // once shows exist, they are actively resolving as location-unknown, so it states that consequence and
+    // nudges him to fix it. One line that varies, decided in VenueLocationCopy, so the row never says the
+    // missing address twice (#843).
     @ViewBuilder
-    private func venueLocationControl(_ source: WatchedSource) -> some View {
+    private func venueLocationControl(_ source: WatchedSource, hasSurfacedShows: Bool) -> some View {
         if editingLocationFor == source.sourceId {
             VStack(alignment: .leading, spacing: OVSpacing.xxs) {
                 TextField(VenueLocationCopy.placeholder, text: $locationDraft)
@@ -236,7 +242,8 @@ struct SourcesView: View {
             }
         } else {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
-                Text(VenueLocationCopy.prompt).font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                Text(VenueLocationCopy.promptWhenUnset(hasSurfacedShows: hasSurfacedShows))
+                    .font(.system(size: 11)).foregroundStyle(OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 OVCapsuleButton(label: VenueLocationCopy.add, tint: OVColor.forest) {
@@ -258,7 +265,11 @@ struct SourcesView: View {
     }
 
     private func row(_ source: WatchedSource) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        // #794/#978/#1185: the lifetime tally, computed once and reused, both for the yield line below and
+        // for whether a single-venue feed has actually surfaced shows yet (which decides its address nudge).
+        // The counting still lives in SourceYield, a tested pure function; this only reads it.
+        let tally = SourceYield.tally(sourceId: source.sourceId, in: prospects)
+        return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
                 Text(source.orgName).font(.system(size: 13, weight: .medium)).foregroundStyle(OVColor.ink)
                 Spacer()
@@ -274,7 +285,7 @@ struct SourcesView: View {
             // address once; it is then stamped into the synthesized listing so the geography gate places
             // the shows. Shown only on those rows, since every other source's shows carry their own place.
             if isSingleVenueFeed(source) {
-                venueLocationControl(source)
+                venueLocationControl(source, hasSurfacedShows: tally.found > 0)
             }
 
             // #803: CHECKED and READ are different things, and the sheet could not tell them apart. The
@@ -307,10 +318,10 @@ struct SourcesView: View {
             // #978: the read count is handed in so the same line can cover the case #794 alone cannot: a
             // source read many times that has NEVER once surfaced a pitchable show (found is still zero).
             // A brand-new or off-season source read only once or twice stays silent; past the threshold it
-            // reads "Read N times, never turned up a show to pitch." The decision lives in SourceYield, so
-            // this view still has no counting of its own.
-            if let yield = SourceYield.line(SourceYield.tally(sourceId: source.sourceId, in: prospects),
-                                            reads: source.successfulCheckCount) {
+            // reads that it has never turned up a show and may be pointed at the wrong page (#1178), which
+            // pairs with the Fix control now on this row (#1177). The decision lives in SourceYield, so this
+            // view still has no counting of its own.
+            if let yield = SourceYield.line(tally, reads: source.successfulCheckCount) {
                 Text(yield).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -320,12 +331,18 @@ struct SourcesView: View {
             if let failure = source.lastFailure {
                 Text(failure.message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
-                // #1027: the SAME fix/confirm controls the end-of-scout popup offers, here on the durable
-                // sheet Dan returns to after dismissing that popup. Only on an editable page he still
-                // watches (Carnegie's native feed has no URL to correct).
-                if source.isActive, source.kind != .algolia {
-                    SourceFixConfirmActions(source: source, failure: failure)
-                }
+            }
+
+            // #1027/#1177: the SAME fix/confirm controls the end-of-scout popup offers, on the durable
+            // sheet. Moved OUT of the failure block (#1177) so an editable source that reads fine but is
+            // empty can be re-pointed too: The Cell read as perfectly healthy while pointed at the wrong,
+            // empty page (#1127), and until now "Fix the address" only ever appeared on a source that had
+            // failed. The optional failure lets one component serve both: Fix is always offered here (a
+            // wrong address is plausible on any editable source), Confirm only when there is an empty-page
+            // failure to confirm. Carnegie's native feed has no URL to correct (algolia is excluded), and a
+            // source Dan stopped is not shown these at all.
+            if source.isActive, source.kind != .algolia {
+                SourceFixConfirmActions(source: source, failure: source.lastFailure)
             }
 
             // #891: shows on this calendar whose own page Overture could not open. A source quietly
@@ -452,7 +469,18 @@ struct SourcesView: View {
 // them and a test can pin them (#863/#885).
 enum VenueLocationCopy {
     static let placeholder = "Street, city, state"
-    static let prompt = "Add this venue's address so its shows count as in your area."
+
+    // #1175/#1185: the prompt shown while a single-venue feed has no address, worded by whether it has
+    // actually surfaced shows yet. Two complete literals (not a composed one) so each lands in the copy
+    // inventory as a whole sentence for the cold read. Before any shows exist it is a neutral setup prompt;
+    // once shows exist they are actively resolving as location-unknown, so it states that consequence and
+    // nudges Dan to supply the address (the Add control sits right beside it).
+    static func promptWhenUnset(hasSurfacedShows: Bool) -> String {
+        hasSurfacedShows
+            ? "No address yet, so its shows are not placed in your area."
+            : "Add this venue's address so its shows count as in your area."
+    }
+
     static let add = "Add address"
     static let edit = "Edit"
     static let save = "Save"
