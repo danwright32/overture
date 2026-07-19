@@ -13,6 +13,14 @@ enum GmailMessage {
             .replacingOccurrences(of: "=", with: "")
     }
 
+    // #1157: the plain-text body with the sign-off appended: the exact text the recipient's text/plain
+    // part carries. The draft-review card previews THIS, so what Dan approves is what goes out. It is the
+    // single definition of how the sign-off is appended, shared by the send path (rfc822) and the preview,
+    // so the two can never drift. No literal copy of its own (the words come from OutboundSignature).
+    static func previewBody(body: String, signature: OutboundSignature) -> String {
+        signature.plainText.isEmpty ? body : body + "\n\n" + signature.plainText
+    }
+
     // copy-inventory:ignore-start  RFC822 headers: a mail server reads these, not Dan (#915)
 
     // An RFC 2822 message. From is the authorized sender; the subject is RFC 2047 encoded only when it
@@ -37,7 +45,7 @@ enum GmailMessage {
             headers.append("In-Reply-To: \(inReplyTo)")
             headers.append("References: \(inReplyTo)")
         }
-        let plainBody = signature.plainText.isEmpty ? body : body + "\n\n" + signature.plainText
+        let plainBody = previewBody(body: body, signature: signature)
         if let html = signature.html, !html.isEmpty {
             let b = boundary ?? freshBoundary()
             headers += [
