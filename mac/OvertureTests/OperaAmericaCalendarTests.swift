@@ -139,6 +139,16 @@ struct OperaAmericaCalendarTests {
         }
     }
 
+    // #1183: the OPERA feed window must be the SHARED calendar horizon, not a private copy of "4 months",
+    // so if the horizon ever changes the feed cannot silently keep requesting four months and drift from
+    // the rest of the scout.
+    @Test func theFeedWindowIsTheSharedCalendarHorizon() {
+        let now = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 7, day: 18))!
+        let end = OperaAmericaCalendar.windowEnd(from: now)
+        let months = Calendar.current.dateComponents([.month], from: now, to: end).month
+        #expect(months == CalendarMonthIndex.defaultHorizon)
+    }
+
     @Test func handlesOperaAmericaHostsOnly() {
         #expect(OperaAmericaCalendar.handles(URL(string: "https://www.operaamerica.org/calendar/")!))
         #expect(OperaAmericaCalendar.handles(URL(string: "https://operaamerica.org/")!))
