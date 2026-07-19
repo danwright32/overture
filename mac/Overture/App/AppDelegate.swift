@@ -15,6 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // main), so the unchecked isolation is safe.
     nonisolated(unsafe) static var sharedContainer: ModelContainer?
 
+    // #1160: set by OvertureApp.init. When this launch is a duplicate (another live copy holds the
+    // store's single-writer lock), applicationDidFinishLaunching terminates this process so it defers
+    // to the resident copy instead of lingering on the degraded screen as a second instance.
+    // Written once on the main thread during launch and read in applicationDidFinishLaunching (also
+    // main), so the unchecked isolation is safe.
+    nonisolated(unsafe) static var launchOutcome: StoreLaunchOutcome = .ready
+
     // Reachable from the menu-bar scene (#266) so "Run reconcile now" can trigger the scheduler.
     static weak var shared: AppDelegate?
     private var scheduler: ReconcileScheduler?
@@ -26,6 +33,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // #1160: a duplicate launch (another live copy holds the store's single-writer lock) defers to
+        // the resident copy and quits immediately, before touching any services or showing a window, so
+        // two live instances can never coexist however a duplicate got spawned (the `overture` launch
+        // race, or a manual double-launch). The resident copy is surfaced by build-install.sh, which
+        // waits for it to register with LaunchServices before opening overture://show.
+        if AppDelegate.launchOutcome == .duplicateInstance {
+            NSApp.terminate(nil)
+            return
+        }
         guard AppEnvironment.shouldStartBackgroundServices else { return }
         // #301: become the notification delegate so a tapped alert is actionable instead of a dead end,
         // and register the action buttons (the OmniFocus-permission alert's Open Settings).

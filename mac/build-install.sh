@@ -11,6 +11,8 @@ cd "$(dirname "$0")"
 
 # shellcheck source=scripts/lib/install-dedupe.sh
 source "$(pwd)/scripts/lib/install-dedupe.sh"
+# shellcheck source=scripts/lib/await-registered.sh
+source "$(pwd)/scripts/lib/await-registered.sh"
 
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
@@ -101,6 +103,14 @@ if [[ "${1:-}" == "--launch" ]]; then
   # not associate the agent-spawned process, so `open` launches a SECOND copy that the store lock
   # then refuses (the #282 degraded-window clash). Instead surface the running copy via its URL
   # scheme, which routes to the already-running instance.
+  #
+  # #1160: but only AFTER the agent-started resident copy has registered with LaunchServices. Opening
+  # the URL immediately after bootstrap raced that registration, so LaunchServices launched a SECOND
+  # copy instead of routing to the first (LSMultipleInstancesProhibited only routes to an
+  # already-registered instance). Wait for registration first; best-effort, and the in-app duplicate
+  # guard (StoreLaunchOutcome) terminates any duplicate that still slips through.
   echo "==> Surfacing the resident Overture window"
+  overture_await_bundle_registered "com.danwright.overture" \
+    || echo "    (resident copy didn't confirm registration in time; surfacing anyway)"
   open "overture://show" 2>/dev/null || true
 fi
