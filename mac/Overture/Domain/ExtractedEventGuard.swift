@@ -77,7 +77,28 @@ enum ExtractedEventGuard {
         "unknown", "n/a", "na", "null", "nil", "none", "tbd", "tba", "tbc", "-", "--", "?"
     ]
 
-    static func rejection(for event: ExtractedEvent) -> Rejection? {
+    // #1214: promote a specific NAMED outdoor space from `location` into an empty `venue`. The model
+    // sometimes nulls the venue for an outdoor concert and leaves the place only in `location` (the 3a
+    // runbook rule says a named outdoor space IS the venue, but a prompt is a request, not a guarantee).
+    // When the venue is blank AND the location names an outdoor place (park/plaza/pier/...), that
+    // location IS the venue, so carry it across rather than dropping a real, pitchable show. A bare city
+    // never carries an outdoor marker word, so this can never promote "Baltimore, Maryland" into the
+    // venue: the #995 city-in-the-venue bug stays fixed. Idempotent, and the single point of promotion,
+    // so every consumer of `rejection` (the Sources counts, the #887 cancellation gate, `isUsable`) and
+    // the events that flow on to become prospects all agree on the placed venue.
+    static func placed(_ event: ExtractedEvent) -> ExtractedEvent {
+        let venue = (event.venue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard venue.isEmpty else { return event }
+        let location = (event.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !location.isEmpty, namesAnOutdoorPlace(location) else { return event }
+        var promoted = event
+        promoted.venue = location
+        return promoted
+    }
+
+    static func rejection(for rawEvent: ExtractedEvent) -> Rejection? {
+        // #1214: judge the PLACED event, so a rescued outdoor show is not counted as venueless anywhere.
+        let event = placed(rawEvent)
         // #1087: drop for a missing NAME, not for a missing title STRING. A genuine performance can come
         // back with an empty `title` but a real `presenter` (the act itself) and venue: a touring artist
         // page lists dates under one performer and names no per-show title at all. That show has a
