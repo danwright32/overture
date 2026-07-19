@@ -160,10 +160,16 @@ struct SourceYieldTests {
     // its own that has still never once surfaced a pitchable show (found == 0) is dead weight: an org
     // homepage watched in place of a calendar, a season page that renders empty, a site gone dormant. Read
     // often enough, past the threshold, it says so.
+    // #1178: now that Dan can re-point a source's URL from the row itself (#1177), the never-yielded line
+    // stops being a bare fact and becomes an actionable nudge: a page that reads fine yet has surfaced
+    // nothing over many reads is most likely aimed at the wrong page (The Cell's empty box office), so the
+    // line says so and points at the Fix control now on the same row.
     @Test func aSourceReadOftenThatNeverYieldedSaysSo() {
         let t = SourceYield.Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
-        #expect(SourceYield.line(t, reads: 3) == "Read 3 times, never turned up a show to pitch.")
-        #expect(SourceYield.line(t, reads: 5) == "Read 5 times, never turned up a show to pitch.")
+        #expect(SourceYield.line(t, reads: 3)
+                == "Read 3 times but never turned up a show. It may be pointed at the wrong page.")
+        #expect(SourceYield.line(t, reads: 5)
+                == "Read 5 times but never turned up a show. It may be pointed at the wrong page.")
     }
 
     // #978: below the threshold the source is still warming up, not dead weight. A brand-new or off-season
@@ -198,7 +204,7 @@ struct SourceYieldTests {
     // rendered result, not the function restating its own definition (#996).
     @Test func namedRowsRenderNeverYieldedWhenReadOftenWithNothingFound() {
         #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: []), reads: 4)
-                == "Read 4 times, never turned up a show to pitch.")
+                == "Read 4 times but never turned up a show. It may be pointed at the wrong page.")
 
         let oneShow = [show("a", sources: ["s"], status: .new)]
         #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: oneShow), reads: 4)

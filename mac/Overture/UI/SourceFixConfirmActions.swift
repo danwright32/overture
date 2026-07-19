@@ -18,9 +18,25 @@ import SwiftData
 // until the page is read again. The popup path is always fresh, so the hint never appears there.
 struct SourceFixConfirmActions: View {
     let source: WatchedSource
-    let failure: SourceFailure
+    // #1177: optional, because the editor is now offered on EVERY active, editable source row, not only a
+    // failed one. The Cell reads fine but is empty (no failure), and its real shows are on another host: a
+    // wrong address is exactly what it might have, so a healthy row must still be re-pointable. When there
+    // is no failure, Fix is offered (a wrong address is plausible) and Confirm is not (there is no
+    // empty-page failure to confirm). The two existing callers pass a non-nil failure, so they are
+    // unchanged.
+    let failure: SourceFailure?
     // Called with the source id when Dan saves a corrected URL, so the popup can read the ones he fixed.
     var onFixed: (String) -> Void = { _ in }
+
+    // #1177: whether each control is offered, decided here (not in the body) so a test can pin the default
+    // for a healthy row. Fix defaults on (a wrong address is plausible on any editable source); Confirm
+    // defaults off (nothing to confirm without an empty-page failure). With a failure, its own predicates
+    // win, so the failing-source behaviour is exactly as before.
+    static func offersFix(_ failure: SourceFailure?) -> Bool { failure?.offersFix ?? true }
+    static func offersConfirm(_ failure: SourceFailure?) -> Bool { failure?.offersConfirm ?? false }
+
+    private var offersFix: Bool { Self.offersFix(failure) }
+    private var offersConfirm: Bool { Self.offersConfirm(failure) }
 
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -44,18 +60,18 @@ struct SourceFixConfirmActions: View {
             // failure. Only when confirm is even on offer and the source's read is stale; the popup path
             // is always fresh, so this never appears there. Whether the read is stale is decided in
             // WatchedSource.confirmReadIsStale, never here (#863).
-            if failure.offersConfirm, !editing, source.confirmReadIsStale {
+            if offersConfirm, !editing, source.confirmReadIsStale {
                 Text(SourceFixConfirmCopy.confirmStaleHint)
                     .font(.system(size: 11)).foregroundStyle(OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: OVSpacing.xs) {
                 Spacer()
-                if failure.offersConfirm, !editing {
+                if offersConfirm, !editing {
                     capsule(SourceFixConfirmCopy.confirmTitle, tint: OVColor.forest, action: confirm)
                         .help(SourceFixConfirmCopy.confirmHelp)
                 }
-                if failure.offersFix {
+                if offersFix {
                     if editing {
                         capsule(SourceFixConfirmCopy.cancelTitle, tint: OVColor.inkSoft) {
                             editing = false; message = nil

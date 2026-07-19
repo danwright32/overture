@@ -664,6 +664,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadState.swift`
 "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
     `Domain/DownbeatExport.swift`
+"No address yet, so its shows are not placed in your area."
+    `UI/SourcesView.swift`
 "No contact found"
     `UI/DraftReviewView.swift`
 "No contacts yet."
@@ -895,7 +897,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Read \(n) shows before you cancelled."
     `Domain/CancelledReadDisposition.swift`
-"Read \(reads) times, never turned up a show to pitch."
+"Read \(reads) times but never turned up a show. It may be pointed at the wrong page."
     `Domain/SourceYield.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
