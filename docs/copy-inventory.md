@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **679 sentences**, from 227 source files.
+Every sentence Overture can say to Dan: **680 sentences**, from 227 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -228,6 +228,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "A Prep run is already in progress. Wait for it to finish."
     `Integration/PrepQueueService.swift`
+"A Prep run is already in progress. \(org) is queued to re-prep on the next run"
+    `App/ActionFeedback.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
@@ -869,12 +871,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
     `App/ActionFeedback.swift`
-"Queued \(org) to find new contacts"
-    `App/ActionFeedback.swift`
-"Queued \(org) to redraft"
-    `App/ActionFeedback.swift`
-"Queued \(org) to redraft and find new contacts"
-    `App/ActionFeedback.swift`
 "Queued \(total) \(prospectWord) to find new contacts"
     `App/ActionFeedback.swift`
 "Queued \(total) \(prospectWord) to redraft"
@@ -885,6 +881,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Re-prep queued"
     `UI/DraftReviewView.swift`
+"Re-prepping \(org) to find new contacts"
+    `App/ActionFeedback.swift`
+"Re-prepping \(org) to redraft"
+    `App/ActionFeedback.swift`
+"Re-prepping \(org) to redraft and find new contacts"
+    `App/ActionFeedback.swift`
 "Reach out now"
     `Domain/ReachedOutQueue.swift`
 "Reached out"
@@ -1422,9 +1424,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "\(org) can be drafted despite the clash"
     `App/ActionFeedback.swift`
-"\(org) has already been sent to, so nothing was queued"
+"\(org) has already been sent to, so there's nothing to redraft"
     `App/ActionFeedback.swift`
-"\(org) has already been sent to; queued to find new contacts only"
+"\(org) has already been sent to; re-prepping to find new contacts only"
     `App/ActionFeedback.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     `Domain/WatchlistEditing.swift`
