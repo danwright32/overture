@@ -90,9 +90,23 @@ assert_equals "a killed run is reported as crashed, not failed" \
 assert_equals "a genuine test failure is still a failure" \
   "failed" "$(run_outcome "${REAL_FAILURE_OUTPUT}" 65)"
 
-# A pass is a pass. Exit code 0 wins outright; nothing else is even inspected.
+# A pass is a pass: exit 0 AND the "** TEST SUCCEEDED **" banner xcodebuild prints on every real pass.
 assert_equals "a passing run reports nothing" \
   "" "$(run_outcome "${PASSING_OUTPUT}" 0)"
+
+# #1252: the test HOST failing to LAUNCH (e.g. a running Debug app holds the single-instance lock) makes
+# xcodebuild print "Could not launch" / "** TEST FAILED **" but EXIT 0. The old "exit 0 wins outright" rule
+# waved that dead run through as a pass, so test-all.sh printed "all suites passed" having run zero tests. A
+# real pass ALWAYS carries "** TEST SUCCEEDED **"; its absence at exit 0 means the run never passed.
+LAUNCH_FAILURE_OUTPUT="Testing failed:
+	Could not launch \"OvertureTests\"
+** TEST FAILED **"
+assert_equals "a test-host launch failure at exit 0 is crashed, not a silent pass" \
+  "crashed" "$(run_outcome "${LAUNCH_FAILURE_OUTPUT}" 0)"
+
+# And exit 0 with no verdict of any kind (no success banner, no failure) is likewise not a pass.
+assert_equals "exit 0 with no success banner is crashed, not a pass" \
+  "crashed" "$(run_outcome "some truncated output that never reached a verdict" 0)"
 
 # Defence in depth: a non-zero exit with no xcodebuild verdict at all (an infra failure before
 # the suite ran) is not a test failure either, and must not be reported as one.
