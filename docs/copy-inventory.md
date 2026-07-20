@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **692 sentences**, from 229 source files.
+Every sentence Overture can say to Dan: **695 sentences**, from 229 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -287,6 +287,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Already booked"
     `Domain/ReviewStatus.swift`
+"Already emailed a pitch on this date"
+    `UI/QueueView+Model.swift`
 "Already watching \(orgName)'s calendar, so their shows turn up on their own."
     `UI/LeadIntakeModel.swift`
 "Already watching \(orgName)'s calendar."
@@ -459,6 +461,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReviewStatus.swift`
 "Draft a reply"
     `UI/DraftReviewView.swift`
+"Draft pitch already on this date"
+    `UI/QueueView+Model.swift`
 "Drafted by \(name)"
     `Domain/DraftTrace.swift`
 "Drafting a reply"
@@ -1366,6 +1370,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
+"You have already emailed a pitch for another show on this date."
+    `UI/SendConfirmSheet.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."

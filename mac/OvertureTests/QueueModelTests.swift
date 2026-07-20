@@ -16,10 +16,11 @@ private func item(
     possibleMatchName: String? = nil,
     partOfRelatedRun: Bool = false,
     status: ReviewStatus = .new,
-    key: String = "k"
+    key: String = "k",
+    groupName: String = "Test Group"
 ) -> QueueItem {
     var q = QueueItem(
-        id: key, groupName: "Test Group", discipline: discipline, venue: venue,
+        id: key, groupName: groupName, discipline: discipline, venue: venue,
         performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
         priorRelationship: priorRelationship, production: production, profile: "neutral",
         coverage: coverage, fitScore: fitScore, tier: tier, fitReason: "reason",
@@ -816,5 +817,71 @@ struct FocusedLeadsScrollTargetTests {
     @Test func returnsNilWhenNoneOfTheKeysAreVisible() {
         let visible = [item(key: "c")]
         #expect(QueueModel.firstVisibleKey(["a", "b"], among: visible) == nil)
+    }
+}
+
+// #1219: self double-booking. The detection lives at the QueueModel layer (testable, the #863 lesson),
+// mapping queue rows to SelfBookingConflict and answering per-row and per-date. Emailed on the date is
+// the strong case that blocks; drafted-only is the soft case (a note). Same groupName is one production.
+@Suite("Self double-booking wiring (#1219)")
+struct SelfBookingWiringTests {
+    @Test func anEmailedDifferentShowOnTheDateIsAStrongConflict() {
+        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); a.sentAt = Date()
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == .emailed)
+    }
+
+    @Test func aDraftedOnlyDifferentShowOnTheDateIsASoftConflict() {
+        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); a.draftBody = "Hi"
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == .drafted)
+    }
+
+    @Test func aDifferentDateDoesNotConflict() {
+        var a = item(performanceDate: "2026-08-02", key: "a", groupName: "Org A"); a.sentAt = Date()
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == nil)
+    }
+
+    // Two rows sharing a groupName are one production (a run), never a self double-booking.
+    @Test func theSameProductionOnTheDateDoesNotConflict() {
+        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "The Run"); a.sentAt = Date()
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "The Run")
+        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == nil)
+    }
+
+    // Only the strong (emailed) conflict blocks prep and send; the soft (drafted) one does not.
+    @Test func onlyTheEmailedConflictBlocks() {
+        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
+        var drafted = item(performanceDate: "2026-08-01", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
+        let target = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.sendBlockedBySelfBooking(for: target, among: [emailed, target]))
+        #expect(!QueueModel.sendBlockedBySelfBooking(for: target, among: [drafted, target]))
+    }
+
+    // The date-header note reflects the strongest conflict present in that date's rows.
+    @Test func theDateGroupStrengthIsTheStrongestPresent() {
+        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.groupSelfBookingStrength([emailed, b]) == .emailed)
+
+        var drafted = item(performanceDate: "2026-08-02", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
+        let d = item(performanceDate: "2026-08-02", key: "d", groupName: "Org D")
+        #expect(QueueModel.groupSelfBookingStrength([drafted, d]) == .drafted)
+
+        #expect(QueueModel.groupSelfBookingStrength([item(key: "solo")]) == nil)
+    }
+
+    // The date-header note names the collision so Dan sees it while scanning; nil on a clear date.
+    @Test func theDateHeaderNoteReflectsTheConflict() {
+        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
+        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.selfBookingNote([emailed, b]) == "Already emailed a pitch on this date")
+
+        var drafted = item(performanceDate: "2026-08-02", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
+        let d = item(performanceDate: "2026-08-02", key: "d", groupName: "Org D")
+        #expect(QueueModel.selfBookingNote([drafted, d]) == "Draft pitch already on this date")
+
+        #expect(QueueModel.selfBookingNote([item(key: "solo")]) == nil)
     }
 }

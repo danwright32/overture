@@ -260,6 +260,19 @@ struct QueueView: View {
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
                     .background(Capsule().fill(OVColor.rust))
                 }
+                // #1219: a self double-booking note, up by the date so Dan sees it while scanning: this
+                // date already holds another show he has pitched (emailed = strong/gold, drafted = soft).
+                if let note = QueueModel.selfBookingNote(group.items) {
+                    let strong = QueueModel.groupSelfBookingStrength(group.items) == .emailed
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text(note)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(strong ? OVColor.gold : OVColor.inkSoft)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                    .background(Capsule().fill(OVColor.surfaceSunk))
+                }
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -616,7 +629,11 @@ struct QueueView: View {
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let confirmation = SendConfirmation(prospect: model) else { return }
+              var confirmation = SendConfirmation(prospect: model) else { return }
+        // #1219: warn at the committing moment when a different show is already emailed on this date.
+        if QueueModel.sendBlockedBySelfBooking(for: item, among: items) {
+            confirmation.selfBookingWarning = SendConfirmCopy.selfBookingWarning
+        }
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

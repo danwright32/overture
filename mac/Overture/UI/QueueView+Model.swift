@@ -805,6 +805,48 @@ enum QueueModel {
         items.contains { $0.hasUnclearedConflict && $0.conflictBlockedDate == $0.performanceDate }
     }
 
+    // #1219: self double-booking. One mapping from a queue row to SelfBookingConflict.Show, consumed by
+    // the date-header note and the prep/send blocks so they can never disagree (the #863 lesson: the
+    // logic is here and unit-tested, the views just render it). groupName is the production key: two
+    // different orgs always differ, so a real cross-show same-date collision always surfaces, while a run
+    // or the same show (shared groupName) is correctly NOT flagged as a double-booking.
+    private static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
+        SelfBookingConflict.Show(
+            key: i.id, date: i.performanceDate,
+            emailed: i.sentAt != nil,
+            drafted: i.sentAt == nil && (i.draftBody?.isEmpty == false),
+            engagementKey: i.groupName)
+    }
+
+    // The strongest same-date conflict this row faces from a DIFFERENT already-pitched show, or nil.
+    static func selfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> SelfBookingConflict.Strength? {
+        SelfBookingConflict.conflict(for: selfBookingShow(item), among: items.map(selfBookingShow))
+    }
+
+    // Prep and Send BLOCK (require a deliberate override) only for the STRONG case: a different show was
+    // already EMAILED on this date. A drafted-only collision is a soft note that never blocks (#1219 §1/2).
+    static func sendBlockedBySelfBooking(for item: QueueItem, among items: [QueueItem]) -> Bool {
+        selfBookingConflict(for: item, among: items) == .emailed
+    }
+
+    // The strongest self-booking conflict present among a date group's rows, for the date-header note.
+    static func groupSelfBookingStrength(_ items: [QueueItem]) -> SelfBookingConflict.Strength? {
+        let strengths = items.map { selfBookingConflict(for: $0, among: items) }
+        if strengths.contains(.emailed) { return .emailed }
+        if strengths.contains(.drafted) { return .drafted }
+        return nil
+    }
+
+    // The note shown on a date header when this date already holds another pitched show, so Dan sees the
+    // possible double-booking while scanning, before opening a row (#1219). nil when the date is clear.
+    static func selfBookingNote(_ items: [QueueItem]) -> String? {
+        switch groupSelfBookingStrength(items) {
+        case .emailed: return "Already emailed a pitch on this date"
+        case .drafted: return "Draft pitch already on this date"
+        case nil: return nil
+        }
+    }
+
     static func relatedRunNote(_ item: QueueItem) -> String? {
         item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
     }
