@@ -851,6 +851,17 @@ struct SelfBookingWiringTests {
         #expect(!QueueModel.selfBookingIsCommitment(item(status: .new, key: "e")))           // scout
     }
 
+    // #1248: a pitch that was emailed and then marked LOST frees that date again, so it no longer counts as
+    // a same-date commitment (a second show on the date must not be warned or blocked by a pitch that went
+    // nowhere). A booked outcome still stays a commitment, because booked is decided first and wins.
+    @Test func aSentButLostPitchIsNotACommitment() {
+        var lostSoft = emailed("a", "2026-08-01", "Org A"); lostSoft.outcome = .lostSoft
+        var lostHard = emailed("b", "2026-08-01", "Org B"); lostHard.outcome = .lostHard
+        #expect(!QueueModel.selfBookingIsCommitment(lostSoft))
+        #expect(!QueueModel.selfBookingIsCommitment(lostHard))
+        #expect(QueueModel.selfBookingIsCommitment(booked("c", "2026-08-01", "Org C")))  // booked still wins
+    }
+
     // A dead-dismissed show does NOT count (even if it still carries an old draft body) - the latent bug in
     // the first cut; but a show dismissed BECAUSE it was booked elsewhere still counts (red-team FLAW 2).
     @Test func dismissedIsExcludedUnlessBooked() {
