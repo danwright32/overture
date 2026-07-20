@@ -568,11 +568,45 @@ struct QueueView: View {
             .padding(.horizontal, OVSpacing.xl)
         } else {
             let now = Date()
-            VStack(alignment: .leading, spacing: OVSpacing.sm) {
-                ForEach(dated, id: \.recipient.id) { pair in
-                    reachedOutRow(pair, now: now)
-                    Divider()
+            let groups = QueueModel.reachOutDateGroups(dated, reachDate: { $0.next })
+            let note = ReachedOutQueue.contactsAcrossShowsNote(
+                contactCount: dated.count,
+                showCount: Set(dated.map(\.prospect.naturalKey)).count)
+            VStack(alignment: .leading, spacing: OVSpacing.md) {
+                // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
+                // rather than let them read like the performance-date headers on every other stage.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Grouped by when to reach out next")
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    if let note {
+                        Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                    }
                 }
+                ForEach(groups) { group in
+                    VStack(alignment: .leading, spacing: OVSpacing.sm) {
+                        reachOutDateHeader(group)
+                        ForEach(group.rows, id: \.recipient.id) { pair in
+                            reachedOutRow(pair, now: now)
+                            Divider()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // #1233: the reach-out-date header for a Reached-out group. Same weekday/month-day/year styling as the
+    // performance-date headers on the other stages; the caption above disambiguates that this date is WHEN
+    // to reach out, not the show date.
+    private func reachOutDateHeader<Row>(_ group: QueueModel.ReachOutDateGroup<Row>) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
+            if !group.weekday.isEmpty {
+                Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4).foregroundStyle(OVColor.inkFaint)
+            }
+            Text(group.monthDay).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            if !group.year.isEmpty {
+                Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
             }
         }
     }

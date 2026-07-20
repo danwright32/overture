@@ -707,6 +707,41 @@ enum QueueModel {
         return visible.filter { departing[$0.id] == nil } + Array(departing.values)
     }
 
+    // #1233: the Reached-out stage groups its rows under headers keyed on the REACH-OUT date (when Dan
+    // should next contact them), not the performance date every other stage groups by, while keeping the
+    // soonest-first order. Generic over the row so the day-bucketing and header formatting are tested
+    // without SwiftData; the view passes its (prospect, recipient, next) tuples and `reachDate` reads next.
+    struct ReachOutDateGroup<Row>: Identifiable {
+        let id: String
+        let weekday: String
+        let monthDay: String
+        let year: String
+        let rows: [Row]
+    }
+
+    static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
+        let cal = easternCalendar
+        var order: [String] = []
+        var buckets: [String: [Row]] = [:]
+        var headers: [String: (String, String, String)] = [:]
+        for row in rows {
+            let c = cal.dateComponents([.year, .month, .day, .weekday], from: reachDate(row))
+            let key = String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+            if buckets[key] == nil {
+                order.append(key)
+                buckets[key] = []
+                headers[key] = (shortWeekday(c.weekday ?? 1),
+                                "\(shortMonth(c.month ?? 1)) \(c.day ?? 0)",
+                                String(c.year ?? 0))
+            }
+            buckets[key]?.append(row)
+        }
+        return order.map { key in
+            let h = headers[key]!
+            return ReachOutDateGroup(id: key, weekday: h.0, monthDay: h.1, year: h.2, rows: buckets[key]!)
+        }
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]

@@ -943,3 +943,28 @@ struct SelfBookingWiringTests {
         #expect(QueueModel.selfBookingClash(for: clear, among: [committed, clear]) == nil)
     }
 }
+
+// #1233: the Reached-out stage groups its rows under headers keyed on the REACH-OUT date (when to act),
+// not the performance date, keeping the soonest-first order. Generic over the row so the keying and order
+// logic is tested without SwiftData; the view passes its (prospect, recipient, next) tuples.
+@Suite("Reach-out date grouping (#1233)")
+struct ReachOutDateGroupingTests {
+    private func at(_ iso: String) -> Date { EasternDate.date(from: iso)! }
+
+    @Test func bucketsByEasternDayPreservingSoonestFirstOrder() {
+        let groups = QueueModel.reachOutDateGroups(
+            [at("2026-07-24"), at("2026-07-24"), at("2026-07-27")], reachDate: { $0 })
+        #expect(groups.count == 2)
+        #expect(groups[0].id == "2026-07-24")
+        #expect(groups[0].rows.count == 2)          // two contacts due the same reach-out day
+        #expect(groups[0].weekday == "Fri")
+        #expect(groups[0].monthDay == "Jul 24")
+        #expect(groups[0].year == "2026")
+        #expect(groups[1].id == "2026-07-27")       // later day comes after: order preserved
+        #expect(groups[1].rows.count == 1)
+    }
+
+    @Test func emptyInputYieldsNoGroups() {
+        #expect(QueueModel.reachOutDateGroups([Date](), reachDate: { $0 }).isEmpty)
+    }
+}
