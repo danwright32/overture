@@ -813,6 +813,7 @@ enum QueueModel {
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
         if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
         if i.dismissReason == .alreadyBooked { return true }  // dismissed BECAUSE booked elsewhere: still committed
+        if i.isLost { return false }                          // #1248: a pitch marked lost frees the date, even if it was sent
         if i.status == .dismissed { return false }            // any other dismissed show is dead; ignore it
         if i.sentAt != nil { return true }                    // a live pitch is already out
         return (i.status == .drafted || i.status == .approved) && i.hasDraft  // an in-progress draft
