@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **692 sentences**, from 228 source files.
+Every sentence Overture can say to Dan: **692 sentences**, from 229 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -23,6 +23,7 @@ What is not, and why:
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
+- `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
