@@ -99,6 +99,38 @@ run_drift "${RUNBOOK_WRAPPED}" "${FULL}"
 assert_empty "wrapped: a line-wrapped anchor does not read as drift" "${OUT}"
 assert_eq "wrapped: return code is 0" "0" "${RC}"
 
+# --- intra-skill contradiction (#1227) ---------------------------------------------------
+# The skill states guidance twice (SKILL.md summary + references/*). A superseded phrase may appear
+# ONLY as a negative instruction; an un-negated occurrence is one file endorsing what another rejects,
+# the exact #1215 miss (SKILL.md preferred "let me know how that lands" while its own references rejected
+# it, and the presence-only drift check passed anyway).
+run_contradiction() {
+  OUT="$(intra_skill_contradiction "$1" "$2")"
+  RC=$?
+}
+
+REJECTED='let me know how that lands'
+
+# a. Contradiction: SKILL.md ENDORSES the rejected phrase (no negation) while references reject it.
+run_contradiction "Prefer a close like \"${REJECTED}\" here." "Never \"${REJECTED}\"; Dan rejected it."
+assert_contains "intra-skill: an un-negated rejected phrase is reported" "${OUT}" "${REJECTED}"
+assert_contains "intra-skill: names SKILL.md as the offending side" "${OUT}" "SKILL.md"
+if [[ "${RC}" -ne 0 ]]; then
+  echo "ok - intra-skill: nonzero return on contradiction (${RC})"
+else
+  echo "FAIL - intra-skill: expected nonzero return code, got 0"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# b. Clean: both files NEGATE the rejected phrase, so there is no contradiction.
+run_contradiction "Prefer \"Happy to answer any questions.\" Never \"${REJECTED}.\"" "Never \"${REJECTED}\", it reads poorly."
+assert_empty "intra-skill: both sides negating the phrase is not a contradiction" "${OUT}"
+assert_eq "intra-skill: return code 0 when consistent" "0" "${RC}"
+
+# c. Clean: neither file mentions the phrase at all.
+run_contradiction "Prefer a soft close." "Hold boundaries positively."
+assert_empty "intra-skill: absence of the phrase is not a contradiction" "${OUT}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "check-brand-voice-drift.test.sh: all assertions passed"

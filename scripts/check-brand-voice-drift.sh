@@ -36,6 +36,15 @@ BRAND_VOICE_ANCHORS=(
   "credential-first"
   "observation-first"
   "direct-intent"
+  "Happy to answer any questions"
+)
+
+# #1227: phrases Dan has SUPERSEDED. Unlike an anchor (a fact that must appear on both sides), a rejected
+# phrase must appear in the skill ONLY as a negative instruction. "let me know how that lands" was the old
+# soft close, replaced by "Happy to answer any questions" (Dan flagged the old one as reading douchey,
+# 2026-07-18). It stays on this list, not the anchor list: the anchor is now the REPLACEMENT, and this
+# guards against the rejected one being re-endorsed anywhere inside the skill.
+BRAND_VOICE_REJECTED=(
   "let me know how that lands"
 )
 
@@ -67,6 +76,44 @@ brand_voice_drift() {
   return "${drift}"
 }
 
+# A line that mentions a superseded phrase must carry a negation near it. The line is passed already
+# lowercased. Deliberately a handful of plain tokens, not a clever parser: the skill's instructions phrase
+# a rejection as "never X" / "not X" / "avoid X" / "don't X" / "no longer X".
+_line_negates() {
+  local line="$1"
+  [[ "${line}" == *never* || "${line}" == *"not "* || "${line}" == *avoid* \
+     || "${line}" == *"don't"* || "${line}" == *"no longer"* ]]
+}
+
+# #1227: catch a contradiction WITHIN the skill, not just runbook-vs-skill drift. The skill states its
+# guidance in two places, SKILL.md's quick reference and references/*.md, and during #1215 SKILL.md still
+# ENDORSED the "let me know how that lands" soft close that its own references (and the runbook, and Dan)
+# had already rejected. The presence-only drift check passed because the phrase was present on both sides;
+# it could not tell an endorsement from a rejection. Here a superseded phrase (BRAND_VOICE_REJECTED) may
+# appear in either skill file ONLY on a line that also negates it; an un-negated occurrence is one file
+# endorsing what the other rejects. Pure: takes the two files' text, so the test drives it directly.
+intra_skill_contradiction() {
+  local -a labels=("SKILL.md" "references")
+  local -a texts=("$1" "$2")
+  local phrase phrase_norm i text label line line_norm contradiction=0
+  for phrase in "${BRAND_VOICE_REJECTED[@]}"; do
+    phrase_norm="$(_normalize_text "${phrase}")"
+    for i in 0 1; do
+      text="${texts[$i]}"
+      label="${labels[$i]}"
+      while IFS= read -r line; do
+        line_norm="$(_normalize_text "${line}")"
+        [[ "${line_norm}" == *"${phrase_norm}"* ]] || continue
+        if ! _line_negates "${line_norm}"; then
+          echo "CONTRADICTION: superseded phrase \"${phrase}\" is endorsed (not negated) in the skill's ${label}"
+          contradiction=$((contradiction + 1))
+        fi
+      done <<< "${text}"
+    done
+  done
+  return "${contradiction}"
+}
+
 main() {
   local runbook="${1:-${REPO_ROOT}/docs/prep-runbook.md}"
   local skill_dir="${2:-${HOME}/.claude/skills/dan-wright-brand-voice}"
@@ -85,24 +132,33 @@ main() {
     exit 0
   fi
 
-  local runbook_text skill_text drift_lines status
+  local runbook_text skill_md_text skill_email_text skill_text
+  local drift_lines drift_status contradiction_lines contradiction_status
   runbook_text="$(cat "${runbook}")"
-  skill_text="$(cat "${skill_md}" "${skill_email}")"
+  skill_md_text="$(cat "${skill_md}")"
+  skill_email_text="$(cat "${skill_email}")"
+  skill_text="${skill_md_text}"$'\n'"${skill_email_text}"
 
   set +e
   drift_lines="$(brand_voice_drift "${runbook_text}" "${skill_text}")"
-  status=$?
+  drift_status=$?
+  # #1227: SKILL.md and references compared SEPARATELY here (not the combined blob the drift check uses),
+  # so an endorsement in one and a rejection in the other is visible.
+  contradiction_lines="$(intra_skill_contradiction "${skill_md_text}" "${skill_email_text}")"
+  contradiction_status=$?
   set -e
 
-  if [[ "${status}" -eq 0 ]]; then
-    echo "OK: docs/prep-runbook.md and the dan-wright-brand-voice skill agree on all ${#BRAND_VOICE_ANCHORS[@]} anchor facts."
+  if [[ "${drift_status}" -eq 0 && "${contradiction_status}" -eq 0 ]]; then
+    echo "OK: docs/prep-runbook.md and the dan-wright-brand-voice skill agree on all ${#BRAND_VOICE_ANCHORS[@]} anchor facts, and the skill is internally consistent."
     exit 0
   fi
 
-  echo "${drift_lines}"
+  [[ -n "${drift_lines}" ]] && echo "${drift_lines}"
+  [[ -n "${contradiction_lines}" ]] && echo "${contradiction_lines}"
   echo
-  echo "The runbook and the brand-voice skill have drifted. Update both so the fact matches; the"
-  echo "skill is the authoritative source (docs/prep-runbook.md §2 says the skill always wins)."
+  echo "The brand-voice sources are out of sync. Update them so the fact matches; the skill is the"
+  echo "authoritative source (docs/prep-runbook.md §2 says the skill always wins), and its own SKILL.md"
+  echo "summary must never endorse a phrase its references reject."
   exit 1
 }
 
