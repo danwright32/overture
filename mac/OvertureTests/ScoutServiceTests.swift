@@ -463,6 +463,53 @@ struct ScoutServiceTests {
         #expect(all.first?.groupName == "Acme Festival Chorus — Summer Concert") // refreshed to new title
     }
 
+    // #1228: #1217 forces a manual scout to RE-READ a degraded source even when its page is byte-for-byte
+    // unchanged, which re-runs AI extraction on identical bytes. Extraction is not perfectly deterministic,
+    // so the same page can come back with a subtly different title, which shifts the natural key and could
+    // split the prospect into a duplicate while the original is marked gone. This proves the whole path is
+    // safe: the forced re-read fires (the #1217 decision), and when it returns a slightly different title on
+    // the same source listing + date, the re-key guards reconcile it to the SAME row rather than duplicating.
+    @Test func aForcedRereadWithASubtlyDifferentTitleReKeysRatherThanDuplicates() throws {
+        // The #1217 trigger: a degraded source (its last read dropped events) whose page is unchanged is
+        // still re-read on Dan's manual scout, so the extractor runs again on identical bytes.
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let source = WatchedSource(sourceId: "dciny", orgName: "DCINY",
+                                   listingsURL: "https://dciny.org/opportunities/", kind: .html)
+        source.lastContentHash = "unchanged-bytes"
+        source.lastUnreadableCount = 1
+        let page = FetchedPage(normalizedHTML: "<p>listings</p>", finalURL: "https://dciny.org/opportunities/",
+                               contentHash: "unchanged-bytes")
+        #expect(SourceCheck.decide(source: source, result: .success(page), depth: .readChanged, now: now)
+                == .read(page))   // re-read despite the unchanged hash: this is the path that re-extracts
+
+        // First scout: the prospect lands and Dan queues it.
+        let ctx = ModelContext(try container())
+        let url = "https://dciny.org/opportunities/#carnegie-nov16"
+        let first = ExtractedEvent(title: "The Four Freedoms", presenter: "DCINY",
+                                   venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-11-16",
+                                   sourceUrl: url)
+        _ = ScoutService.apply(events: [first], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first
+        p?.status = .queued
+        try ctx.save()
+
+        // The forced re-read of the SAME bytes returns a subtly different title (extraction non-determinism),
+        // same source listing URL + date + venue. It must re-key the existing row, not orphan a duplicate.
+        let reread = ExtractedEvent(title: "The Four Freedoms.", presenter: "DCINY",
+                                    venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-11-16",
+                                    sourceUrl: url)
+        let outcome = ScoutService.apply(events: [reread], clients: [], history: [], blocked: .empty,
+                                         today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        #expect(outcome.inserted == 0)   // no orphaned duplicate from the re-extracted title
+        #expect(outcome.updated == 1)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(all.count == 1)                          // still one record, reconciled
+        #expect(all.first?.status == .queued)            // Dan's decision survives the forced re-read
+        #expect(all.first?.groupName == "The Four Freedoms.")  // refreshed to the re-extracted title
+    }
+
     // #617: a real save() failure (not just the source-scan guard in ScoutServiceSaveGuardTests),
     // via ImmutableStoreFixture.
     @Test func applyReportsSaveFailedOnAGenuineSaveFailure() async throws {
