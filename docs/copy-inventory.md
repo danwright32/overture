@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **700 sentences**, from 229 source files.
+Every sentence Overture can say to Dan: **701 sentences**, from 229 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -874,6 +874,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Possible match to \(where_): \(name)?"
     `UI/QueueView+Model.swift`
 "Prep a show on a date you're already pitching?"
+    `Domain/SelfBookingConflict.swift`
+"Prep anyway"
     `Domain/SelfBookingConflict.swift`
 "Prep kept"
     `App/RootView.swift`

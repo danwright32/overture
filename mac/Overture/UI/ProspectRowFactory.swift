@@ -13,6 +13,10 @@ enum ProspectRowFactory {
                     highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
+                    // #1219: Re-prep launches a Prep run directly, so when the caller needs a screen-local
+                    // self-booking confirm before it runs (like onSend), it supplies onReprep here. Omitted
+                    // (ArchiveView), it falls back to the direct ProspectMutations.reprep call.
+                    onReprep: ((ReprepMode) -> Void)? = nil,
                     onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
                     allowedSeedTowns: Set<String> = []) -> AnyView {
@@ -25,7 +29,7 @@ enum ProspectRowFactory {
             onApprove: { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
-            onReprep: { mode in ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback) },
+            onReprep: onReprep ?? { mode in ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback) },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,

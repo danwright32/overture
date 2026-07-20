@@ -54,6 +54,7 @@ enum SelfBookingCopy {
     // The prep-launch confirm: shown before a Prep run when one or more of the shows being prepped sit on a
     // date that already holds a committed pitch, so Dan confirms past a possible double-booking deliberately.
     static let prepConfirmTitle = "Prep a show on a date you're already pitching?"
+    static let prepConfirmProceed = "Prep anyway"
     static func prepConfirmMessage(_ clashes: [SelfBookingPrepClash]) -> String? {
         guard !clashes.isEmpty else { return nil }
         let lines = clashes.map { clash -> String in

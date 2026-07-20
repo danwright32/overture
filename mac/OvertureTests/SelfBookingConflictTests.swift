@@ -107,4 +107,9 @@ struct SelfBookingCopyTests {
         #expect(SelfBookingCopy.prepConfirmMessage(many)
                 == "Choir P is on a date you already have a pitch in progress for Orchestra A and 1 other.")
     }
+
+    @Test func prepConfirmProceedLabelIsStable() {
+        #expect(SelfBookingCopy.prepConfirmTitle == "Prep a show on a date you're already pitching?")
+        #expect(SelfBookingCopy.prepConfirmProceed == "Prep anyway")
+    }
 }
