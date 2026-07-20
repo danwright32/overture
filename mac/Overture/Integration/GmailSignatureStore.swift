@@ -8,8 +8,11 @@ enum GmailSignatureStore {
     static let key = "gmailSignatureHTML"
 
     static func currentHTML(defaults: UserDefaults = .standard) -> String? {
-        let v = defaults.string(forKey: key)
-        return (v?.isEmpty == false) ? v : nil
+        guard let v = defaults.string(forKey: key), !v.isEmpty else { return nil }
+        // #1253: never hand out an obviously-corrupt cached signature (one cached before the store guard,
+        // say). Treated as absent so the send path falls back to plain text rather than shipping garbage.
+        if GmailSignatureHealth.corruptionReason(v) != nil { return nil }
+        return v
     }
 
     // Stores a non-empty signature; a nil/empty value is IGNORED (never clears a previously good one), so
@@ -17,7 +20,24 @@ enum GmailSignatureStore {
     // separate (clear()).
     static func store(_ html: String?, defaults: UserDefaults = .standard) {
         guard let html, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // #1253: fail loud, not silent. An obviously-corrupt fetch (Gmail's sendAs returned a signature
+        // with literal \240 octal escapes on 2026-07-20) is REFUSED, not cached, so it can never ship on a
+        // real pitch; any prior good signature is left intact.
+        if let reason = GmailSignatureHealth.corruptionReason(html) {
+            // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+            NSLog("[Overture] Refusing to cache an obviously-corrupt Gmail signature (%@); keeping any stored one.", reason)
+            // copy-inventory:ignore-end
+            return
+        }
         defaults.set(html, forKey: key)
+    }
+
+    // #1253: the reason the currently cached signature looks corrupt, or nil when it looks fine. For a
+    // warning surface (relates to #1242), so a corrupt cache is a visible, actionable fact rather than a
+    // silent bad send. Reads the RAW stored value (not currentHTML, which hides a corrupt one).
+    static func currentSignatureIssue(defaults: UserDefaults = .standard) -> String? {
+        guard let v = defaults.string(forKey: key), !v.isEmpty else { return nil }
+        return GmailSignatureHealth.corruptionReason(v)
     }
 
     static func clear(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
