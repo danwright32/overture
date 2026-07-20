@@ -33,6 +33,21 @@ stale_debug_test_host_pids() {
   echo "${ps_output}" | grep -F '/DerivedData/' | grep -F '/Build/Products/Debug/Overture.app/Contents/MacOS/Overture' | awk '{print $1}'
 }
 
+# #1257: the PIDs of any running Debug Overture that is NOT the runner's own test host, i.e. the instance
+# run-debug.sh launches from mac/build. It holds the single-instance lock (LSMultipleInstancesProhibited),
+# so the test host cannot launch and the run dies after a full build (#1252 detects that; this lets main
+# stop before building). Deliberately the complement of stale_debug_test_host_pids: same Debug-app anchor,
+# but EXCLUDING /DerivedData/, because a DerivedData host is the runner's own spawn (safe to kill) while
+# this instance is Dan's (which must never be auto-killed, so main asks him to quit it instead). The
+# Release app (/Applications/Overture.app) lacks the Debug-products anchor and never matches.
+blocking_debug_app_pids() {
+  local ps_output="$1"
+  echo "${ps_output}" \
+    | grep -F '/Build/Products/Debug/Overture.app/Contents/MacOS/Overture' \
+    | grep -Fv '/DerivedData/' \
+    | awk '{print $1}' || true
+}
+
 # run_outcome <xcodebuild output> <exit code>. "crashed", "failed", or "" for a pass.
 #
 # #1006: a killed run and a failing run must never look alike. On 2026-07-16 this printed
@@ -74,6 +89,26 @@ main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
   cd "${MAC_DIR}"
+
+  # #1257: prevent, don't just detect (#1252). A Debug Overture run-debug.sh launched from mac/build holds
+  # the single-instance lock, so the test host cannot launch and the whole run dies AFTER a full build. Stop
+  # here, before building, with the one instruction that fixes it. A stale DerivedData test host from a prior
+  # aborted run would block the same way, but it is the runner's OWN spawn and safe to clear, so clear it
+  # rather than nag; the mac/build instance is Dan's and is never auto-killed.
+  local stale_pid
+  for stale_pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
+    kill "${stale_pid}" 2>/dev/null || true
+  done
+  local blockers blocker_pids
+  blockers="$(blocking_debug_app_pids "$(ps -eo pid=,command=)")"
+  if [[ -n "${blockers}" ]]; then
+    blocker_pids="$(echo "${blockers}" | paste -sd ',' -)"
+    echo "run-tests-locked.sh: a Debug Overture is running (PID ${blocker_pids}) and holds the single-instance" >&2
+    echo "lock, so the test host cannot launch and the run would die after a full build." >&2
+    echo "Quit the Debug app (Cmd+Q only backgrounds it; quit it from the menu bar) and rerun. See #1257." >&2
+    exit 1
+  fi
+
   local test_exit_code=0
   local output_file
   output_file="$(mktemp)"
