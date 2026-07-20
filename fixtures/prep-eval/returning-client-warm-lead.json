@@ -1,0 +1,53 @@
+{
+  "name": "returning-client-warm-lead",
+  "rule": "A warm lead (priorRelationship 'warm') is a connection Dan has NOT shot for yet: drop the cold self-introduction and write warmer, but keep ONE light credential and the portfolio link as soft proof, since they have not seen his work for them (#1215).",
+  "input": {
+    "naturalKey": "boreal-quartet|2026-07-12|metro-concert-hall",
+    "groupName": "Boreal Quartet",
+    "venue": "Metro Concert Hall",
+    "performanceDate": "2026-07-12",
+    "discipline": "music",
+    "websiteURL": "https://borealquartet.example",
+    "sourceListingURL": "https://metroconcerthall.example/events/boreal-july",
+    "priorRelationship": "warm",
+    "production": "self"
+  },
+  "sources": [
+    {
+      "label": "Boreal Quartet own contact page",
+      "url": "https://borealquartet.example/contact",
+      "content": "Boreal Quartet. Marcus Lee, Manager: marcus@borealquartet.example."
+    }
+  ],
+  "expected": {
+    "description": "A warm lead drops the cold self-introduction but keeps one light credential and the portfolio/gallery link as soft proof.",
+    "requireSomeContact": true,
+    "forbidColdSelfIntro": true,
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-20T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "boreal-quartet|2026-07-12|metro-concert-hall",
+        "contacts": [
+          {
+            "name": "Marcus Lee",
+            "role": "Manager",
+            "email": "marcus@borealquartet.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://borealquartet.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing the Boreal Quartet at Metro Concert Hall.",
+          "body": "It was good connecting about the Boreal Quartet at Metro Concert Hall on July 12, and I'd love to photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and recent work is at danwrightphotography.com/music. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Happy to answer any questions.",
+          "variant": "warm_lead"
+        }
+      }
+    ]
+  }
+}
