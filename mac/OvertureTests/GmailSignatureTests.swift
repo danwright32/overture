@@ -41,6 +41,43 @@ struct GmailSignatureTests {
         #expect(sig.plainText == OutboundSignature.plainFallback.plainText)
     }
 
+    // MARK: - Corruption (#1253): fail loud, never silently attach a broken signature to a real send.
+
+    // The concrete corruption that shipped 2026-07-20: a stale signature carrying literal octal escapes
+    // like \240 (a broken non-breaking space) that Gmail's sendAs returned. Valid signature HTML never
+    // carries a literal backslash-octal run.
+    private let corruptSignature = "<div>Dan Wright\\240he/they\\240\\240</div>"
+
+    @Test func corruptionReasonFlagsLiteralOctalEscapes() {
+        #expect(GmailSignatureHealth.corruptionReason(corruptSignature) != nil)
+    }
+
+    @Test func corruptionReasonPassesACleanStyledSignature() {
+        let clean = "<div style=\"color:#0aa\">Dan Wright</div><div>he/they</div>" +
+                    "<a href=\"https://danwrightphotography.com\">Portfolio</a>&nbsp;"
+        #expect(GmailSignatureHealth.corruptionReason(clean) == nil)
+    }
+
+    // Fail loud on STORE: an obviously-corrupt fetch is refused, not silently cached, and a prior good
+    // signature is left intact.
+    @Test func storeRefusesAnObviouslyCorruptSignature() {
+        let d = freshDefaults()
+        GmailSignatureStore.store("<div>good</div>", defaults: d)
+        GmailSignatureStore.store(corruptSignature, defaults: d)
+        #expect(GmailSignatureStore.currentHTML(defaults: d) == "<div>good</div>")
+    }
+
+    // Fail loud on READ: even if a corrupt signature already sits in the cache (cached before this guard),
+    // it is treated as absent so a real send falls back to plain text rather than shipping the garbage, and
+    // the corruption is a surfaceable fact rather than a silent bad send.
+    @Test func aCorruptCachedSignatureNeverShipsAndFallsBackToPlain() {
+        let d = freshDefaults()
+        d.set(corruptSignature, forKey: GmailSignatureStore.key)   // simulate a pre-guard corrupt cache
+        #expect(GmailSignatureStore.currentHTML(defaults: d) == nil)
+        #expect(GmailSignatureStore.currentSignature(defaults: d) == OutboundSignature.plainFallback)
+        #expect(GmailSignatureStore.currentSignatureIssue(defaults: d) != nil)
+    }
+
     // MARK: - Parsing
 
     @Test func primarySignaturePicksThePrimarySendAs() {
