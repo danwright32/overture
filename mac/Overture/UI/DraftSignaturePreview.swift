@@ -15,7 +15,7 @@ struct DraftSignaturePreview: View {
 
     var body: some View {
         // copy-inventory:ignore-start  renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
-        if let html = GmailMessage.previewHTML(body: draftBody, signature: signature), !didFail {
+        if let html = GmailMessage.previewCardHTML(body: draftBody, signature: signature), !didFail {
             ZStack(alignment: .topLeading) {
                 SignatureWebView(html: html, height: $height, didFail: $didFail)
                     .frame(height: max(height, 1))
@@ -47,7 +47,7 @@ private struct SignatureWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         web.navigationDelegate = context.coordinator
-        web.setValue(false, forKey: "drawsBackground")   // blend into the card rather than paint white
+        web.setValue(false, forKey: "drawsBackground")   // #1203: transparent, so the light email CARD (previewCardHTML) floats on Overture's dark chrome rather than a full white slab
         context.coordinator.loadedHTML = html
         web.loadHTMLString(html, baseURL: nil)
         return web

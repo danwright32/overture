@@ -39,6 +39,7 @@ What is not, and why:
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
+- `Integration/GmailMessage.swift`: a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
