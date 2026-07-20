@@ -155,4 +155,32 @@ struct GmailMessageTests {
             #expect(msg.contains(preview))   // the card's preview IS the plain part inside the sent message
         }
     }
+
+    // MARK: - #1203: the preview renders the STYLED signature, not the plain-text fallback
+
+    // When the signature carries HTML, previewHTML returns the exact text/html document the send path
+    // embeds, so the draft-review card can render what a rich mail client shows the recipient. It is the
+    // single html composition shared by BOTH the card and the send path, so the two can never drift.
+    @Test func previewHTMLIsTheHtmlPartTheSendComposes() {
+        let sig = OutboundSignature(
+            html: "<div><b style=\"color:teal\">Dan Wright</b> <span>he/they</span></div>",
+            plainText: "Best,\nDan Wright")
+        let preview = GmailMessage.previewHTML(body: "Hi Emma,\n\nText.", signature: sig)
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+                                      subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig, boundary: "B")
+        #expect(preview != nil)
+        #expect(preview!.contains("<b style=\"color:teal\">Dan Wright</b>"))  // styled signature markup
+        #expect(preview!.contains("Hi Emma,"))                               // the drafted body
+        #expect(msg.contains(preview!))   // the card's html preview IS the html part inside the sent message
+    }
+
+    // With no HTML signature, previewHTML is nil, so the card falls back to the plain-text previewBody
+    // rather than inventing an empty styled block.
+    @Test func previewHTMLIsNilWithoutAnHtmlSignature() {
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,", signature: .none) == nil)
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,",
+                                         signature: OutboundSignature(html: nil, plainText: "Best")) == nil)
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,",
+                                         signature: OutboundSignature(html: "", plainText: "Best")) == nil)
+    }
 }

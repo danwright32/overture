@@ -21,6 +21,15 @@ enum GmailMessage {
         signature.plainText.isEmpty ? body : body + "\n\n" + signature.plainText
     }
 
+    // #1203: the text/html document the send path embeds, exposed so the draft-review card can render the
+    // STYLED signature a rich mail client shows, not the plain-text fallback. nil when there is no HTML
+    // signature, so the card falls back to previewBody. The single html composition, shared by BOTH the
+    // card and the send path (rfc822), so the styled preview can never drift from the wire message.
+    static func previewHTML(body: String, signature: OutboundSignature) -> String? {
+        guard let html = signature.html, !html.isEmpty else { return nil }
+        return htmlDocument(body: body, signatureHTML: html)
+    }
+
     // copy-inventory:ignore-start  RFC822 headers: a mail server reads these, not Dan (#915)
 
     // An RFC 2822 message. From is the authorized sender; the subject is RFC 2047 encoded only when it
@@ -46,7 +55,7 @@ enum GmailMessage {
             headers.append("References: \(inReplyTo)")
         }
         let plainBody = previewBody(body: body, signature: signature)
-        if let html = signature.html, !html.isEmpty {
+        if let htmlPart = previewHTML(body: body, signature: signature) {
             let b = boundary ?? freshBoundary()
             headers += [
                 "MIME-Version: 1.0",
@@ -61,7 +70,7 @@ enum GmailMessage {
                 "Content-Type: text/html; charset=UTF-8",
                 "Content-Transfer-Encoding: 8bit",
                 "",
-                htmlDocument(body: body, signatureHTML: html),
+                htmlPart,
                 "--\(b)--",
             ]
         } else {
