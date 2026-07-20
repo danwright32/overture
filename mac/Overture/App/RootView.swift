@@ -642,7 +642,7 @@ struct RootView: View {
             // #953: pick which kept shows this Prep run covers. Defaults by performance date; the run
             // fires with exactly the rows Dan leaves checked.
             .sheet(isPresented: $showPrepSelection) {
-                PrepSelectionSheet(prospects: toPrep) { includedKeys in startPrep(includedKeys: includedKeys) }
+                PrepSelectionSheet(prospects: toPrep, allItems: allProspects.map(QueueItem.init)) { includedKeys in startPrep(includedKeys: includedKeys) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a

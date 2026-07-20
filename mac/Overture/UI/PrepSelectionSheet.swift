@@ -20,12 +20,19 @@ struct PrepSelectionSheet: View {
 
     let rows: [Row]
     let onRun: (Set<String>) -> Void
+    // #1219: the whole queue as QueueItems, so the Run button can detect a self-booking clash between a
+    // selected show and a committed show in ANY stage before launching (the batch half of the prep gate).
+    let allItems: [QueueItem]
 
     // The checked rows. Seeded from the date default in init; every change after that is Dan's own toggle.
     @State private var selected: Set<String>
+    @State private var pendingClashConfirm = false
+    @State private var clashMessage = ""
 
-    init(prospects: [Prospect], now: Date = Date(), onRun: @escaping (Set<String>) -> Void) {
+    init(prospects: [Prospect], allItems: [QueueItem] = [], now: Date = Date(),
+         onRun: @escaping (Set<String>) -> Void) {
         self.onRun = onRun
+        self.allItems = allItems
         self.rows = prospects.map { p in
             Row(id: p.naturalKey, groupName: p.groupName,
                 detail: PrepSelectionCopy.rowDetail(venue: p.venue, performanceDate: p.performanceDate))
@@ -60,14 +67,28 @@ struct PrepSelectionSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(PrepSelectionCopy.runButton(selected.count)) {
-                    onRun(selected)
-                    dismiss()
+                    // #1219: if any selected show sits on a date that already holds a committed pitch,
+                    // confirm past the possible double-booking before launching; otherwise run straight away.
+                    if let message = SelfBookingCopy.prepConfirmMessage(
+                        QueueModel.selfBookingPrepClashes(forKeys: selected, among: allItems)) {
+                        clashMessage = message
+                        pendingClashConfirm = true
+                    } else {
+                        onRun(selected)
+                        dismiss()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(selected.isEmpty)
             }
         }
         .padding(OVSpacing.lg)
+        .confirmationDialog(SelfBookingCopy.prepConfirmTitle, isPresented: $pendingClashConfirm) {
+            Button(SelfBookingCopy.prepConfirmProceed) { onRun(selected); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(clashMessage)
+        }
         .frame(width: 460)
         .background(OVColor.canvas)
     }

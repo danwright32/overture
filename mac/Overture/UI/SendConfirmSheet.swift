@@ -5,6 +5,8 @@ import SwiftUI
 // green suite (a lesson from earlier view-embedded logic). SendConfirmSheetTests locks these.
 enum SendConfirmCopy {
     static let title = "Send this email now?"
+    // #1219: the self double-booking warning shown in the send sheet is now dynamic (it names the clashing
+    // show), so it lives in SelfBookingCopy.confirmWarning, set on SendConfirmation.selfBookingWarning.
     static let reassurance = "This sends one email right now, to this recipient only. Nothing else goes out."
     // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
     // differ from the draft's (and a closing note names the second thing it does), and they live here
@@ -73,6 +75,20 @@ struct SendConfirmSheet: View {
                     .background(OVColor.surfaceSunk)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(OVColor.line))
+                }
+
+                // #1219: a self double-booking warning, shown at the committing moment so Dan confirms
+                // past it deliberately rather than forgetting he already pitched this date.
+                if let warning = confirmation.selfBookingWarning {
+                    HStack(alignment: .top, spacing: OVSpacing.xs) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(OVColor.rust)
+                            .padding(.top, 1)
+                        Text(warning)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(OVColor.rust)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 HStack(alignment: .top, spacing: OVSpacing.xs) {

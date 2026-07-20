@@ -805,6 +805,67 @@ enum QueueModel {
         items.contains { $0.hasUnclearedConflict && $0.conflictBlockedDate == $0.performanceDate }
     }
 
+    // #1219: self double-booking. The detection lives here (testable, the #863 lesson); the views just
+    // render it. A row counts as a same-date COMMITMENT on PERSISTENT facts (a confirmed booking, a pitch
+    // already sent, or a live draft), never on a mutable stage, so the signal cannot vanish when a show
+    // moves stage (#1246). groupName is both the production key (a run or the same show, shared groupName,
+    // is not a double-booking) and the display name a warning uses to say WHICH other show clashes.
+    static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
+        if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
+        if i.dismissReason == .alreadyBooked { return true }  // dismissed BECAUSE booked elsewhere: still committed
+        if i.status == .dismissed { return false }            // any other dismissed show is dead; ignore it
+        if i.sentAt != nil { return true }                    // a live pitch is already out
+        return (i.status == .drafted || i.status == .approved) && i.hasDraft  // an in-progress draft
+    }
+
+    private static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
+        SelfBookingConflict.Show(key: i.id, date: i.performanceDate,
+                                 isCommitment: selfBookingIsCommitment(i),
+                                 engagementKey: i.groupName, name: i.groupName)
+    }
+
+    // The OTHER committed shows clashing with `item` on its date, across the WHOLE queue (never scoped to
+    // one stage, so the warning never vanishes when a show changes stage, #1246). Empty = the date is clear.
+    static func selfBookingConflicts(for item: QueueItem, among items: [QueueItem]) -> [QueueItem] {
+        let shows = items.map(selfBookingShow)
+        let keys = Set(SelfBookingConflict.conflicts(for: selfBookingShow(item), among: shows).map(\.key))
+        return items.filter { keys.contains($0.id) }
+    }
+
+    static func hasSelfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> Bool {
+        !selfBookingConflicts(for: item, among: items).isEmpty
+    }
+
+    // The names of the OTHER committed shows on this row's date, so a warning can name them. NOTE (#901/
+    // #863): this must never be wired into needsPrep or a stage-pill count; it is confirm-to-proceed, not
+    // a hard gate, so the counts stay honest.
+    static func selfBookingConflictNames(for item: QueueItem, among items: [QueueItem]) -> [String] {
+        selfBookingConflicts(for: item, among: items).map(\.groupName)
+    }
+
+    // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
+    // against the WHOLE queue, so it stays visible even after the other show has moved to another stage.
+    static func selfBookingNote(_ group: [QueueItem], among all: [QueueItem]) -> String? {
+        group.contains { hasSelfBookingConflict(for: $0, among: all) } ? SelfBookingCopy.dateHeaderNote : nil
+    }
+
+    // #1219: which of the shows ABOUT TO BE PREPPED (by key) sit on a date that already holds a committed
+    // OTHER show, and the names of those clashes, so a prep-launch confirm can name them. Shared by BOTH
+    // prep entry points, the "Prep these N" sheet AND the per-row Re-prep (red-team FLAW 1: Re-prep
+    // launches a run directly, so gating only the sheet leaves a hole). Empty = no clash, run freely.
+    static func selfBookingPrepClashes(forKeys keys: Set<String>, among items: [QueueItem]) -> [SelfBookingPrepClash] {
+        items
+            .filter { keys.contains($0.id) }
+            .compactMap { selfBookingClash(for: $0, among: items) }
+    }
+
+    // The single-row clash (this show + the committed OTHER shows on its date), or nil when the date is
+    // clear. Used by the Approve and per-row Re-prep confirms, where one specific row is being committed.
+    static func selfBookingClash(for item: QueueItem, among items: [QueueItem]) -> SelfBookingPrepClash? {
+        let names = selfBookingConflictNames(for: item, among: items)
+        return names.isEmpty ? nil : SelfBookingPrepClash(groupName: item.groupName, conflictNames: names)
+    }
+
     static func relatedRunNote(_ item: QueueItem) -> String? {
         item.partOfRelatedRun ? "This group also performs at this venue on other dates" : nil
     }
