@@ -21,6 +21,37 @@ enum GmailMessage {
         signature.plainText.isEmpty ? body : body + "\n\n" + signature.plainText
     }
 
+    // #1203: the text/html document the send path embeds, exposed so the draft-review card can render the
+    // STYLED signature a rich mail client shows, not the plain-text fallback. nil when there is no HTML
+    // signature, so the card falls back to previewBody. The single html composition, shared by BOTH the
+    // card and the send path (rfc822), so the styled preview can never drift from the wire message.
+    static func previewHTML(body: String, signature: OutboundSignature) -> String? {
+        guard let html = signature.html, !html.isEmpty else { return nil }
+        return htmlDocument(body: body, signatureHTML: html)
+    }
+
+    // #1203 (Dan's visual check, 2026-07-20): the draft-review card previews the email as a recipient's
+    // inbox shows it, on a WHITE background. A Gmail signature is authored for a white email body (dark
+    // text, dark icons), so rendered on Overture's dark card its text is unreadable (Dan saw the teal name
+    // and dark lines vanish). This wraps the SAME previewHTML content on white, for the card ONLY. It is
+    // never the wire html part: a real email must not carry its own page background, so rfc822 keeps using
+    // previewHTML and this wrapper never reaches the recipient. nil (like previewHTML) when there is no HTML
+    // signature, so the card falls back to previewBody.
+    // copy-inventory:ignore-start  a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
+    static func previewCardHTML(body: String, signature: OutboundSignature) -> String? {
+        guard let inner = previewHTML(body: body, signature: signature) else { return nil }
+        // A contained, rounded WHITE CARD floating on the (transparent) dark chrome, framed so it reads as a
+        // real inbox preview rather than the edge-to-edge white slab Dan found jarring (2026-07-20). The
+        // surface is true white on purpose: a Gmail signature's own divider rules are authored white (#fff)
+        // to vanish on a white email body, so an off-white card wrongly reveals them as grey lines. White
+        // also makes the fixed-width (often 600px) signature's overflow invisible, so overflow:hidden clips
+        // it cleanly to the card's rounded bounds with nothing bleeding off the right edge.
+        return "<style>html,body{background:transparent;margin:0;padding:8px}</style>"
+            + "<div style=\"background:#ffffff;color:#111111;padding:16px;border-radius:10px;overflow:hidden;"
+            + "border:1px solid rgba(0,0,0,0.12);box-shadow:0 1px 4px rgba(0,0,0,0.25)\">\(inner)</div>"
+    }
+    // copy-inventory:ignore-end
+
     // copy-inventory:ignore-start  RFC822 headers: a mail server reads these, not Dan (#915)
 
     // An RFC 2822 message. From is the authorized sender; the subject is RFC 2047 encoded only when it
@@ -46,7 +77,7 @@ enum GmailMessage {
             headers.append("References: \(inReplyTo)")
         }
         let plainBody = previewBody(body: body, signature: signature)
-        if let html = signature.html, !html.isEmpty {
+        if let htmlPart = previewHTML(body: body, signature: signature) {
             let b = boundary ?? freshBoundary()
             headers += [
                 "MIME-Version: 1.0",
@@ -61,7 +92,7 @@ enum GmailMessage {
                 "Content-Type: text/html; charset=UTF-8",
                 "Content-Transfer-Encoding: 8bit",
                 "",
-                htmlDocument(body: body, signatureHTML: html),
+                htmlPart,
                 "--\(b)--",
             ]
         } else {

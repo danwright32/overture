@@ -155,4 +155,65 @@ struct GmailMessageTests {
             #expect(msg.contains(preview))   // the card's preview IS the plain part inside the sent message
         }
     }
+
+    // MARK: - #1203: the preview renders the STYLED signature, not the plain-text fallback
+
+    // When the signature carries HTML, previewHTML returns the exact text/html document the send path
+    // embeds, so the draft-review card can render what a rich mail client shows the recipient. It is the
+    // single html composition shared by BOTH the card and the send path, so the two can never drift.
+    @Test func previewHTMLIsTheHtmlPartTheSendComposes() {
+        let sig = OutboundSignature(
+            html: "<div><b style=\"color:teal\">Dan Wright</b> <span>he/they</span></div>",
+            plainText: "Best,\nDan Wright")
+        let preview = GmailMessage.previewHTML(body: "Hi Emma,\n\nText.", signature: sig)
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+                                      subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig, boundary: "B")
+        #expect(preview != nil)
+        #expect(preview!.contains("<b style=\"color:teal\">Dan Wright</b>"))  // styled signature markup
+        #expect(preview!.contains("Hi Emma,"))                               // the drafted body
+        #expect(msg.contains(preview!))   // the card's html preview IS the html part inside the sent message
+    }
+
+    // With no HTML signature, previewHTML is nil, so the card falls back to the plain-text previewBody
+    // rather than inventing an empty styled block.
+    @Test func previewHTMLIsNilWithoutAnHtmlSignature() {
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,", signature: .none) == nil)
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,",
+                                         signature: OutboundSignature(html: nil, plainText: "Best")) == nil)
+        #expect(GmailMessage.previewHTML(body: "Hi Emma,",
+                                         signature: OutboundSignature(html: "", plainText: "Best")) == nil)
+    }
+
+    // #1203 (Dan's visual check, 2026-07-20): the draft-review card previews the email as a recipient's
+    // inbox shows it. Rendered on Overture's dark card, a Gmail signature's dark text (authored for a light
+    // email body) is unreadable, but a full white slab reads as jarring, so previewCardHTML wraps the SAME
+    // previewHTML content in a contained, rounded, light-surfaced CARD: legible AND framed.
+    @Test func previewCardHTMLWrapsTheContentInALightCard() {
+        let sig = OutboundSignature(
+            html: "<div style=\"color:#111\">Dan Wright</div>",
+            plainText: "Best,\nDan Wright")
+        let card = GmailMessage.previewCardHTML(body: "Hi Emma,", signature: sig)
+        #expect(card != nil)
+        #expect(card!.contains("#ffffff"))       // a true-white inbox surface: the signature's white dividers vanish, dark text stays legible
+        #expect(card!.contains("border-radius")) // a contained, framed card, not an edge-to-edge slab
+        #expect(card!.contains("overflow:hidden")) // clips a fixed-width (600px) signature so it can't bleed past the card
+        #expect(card!.contains("Dan Wright"))    // still carries the styled signature
+        #expect(card!.contains("Hi Emma,"))      // still carries the drafted body
+    }
+
+    // The card treatment is PREVIEW-ONLY. A real email must not force its own page framing, so the wire
+    // html part (rfc822) keeps using previewHTML and never carries the card wrapper.
+    @Test func previewCardHTMLNeverReachesTheSentMessage() {
+        let sig = OutboundSignature(
+            html: "<div style=\"color:#111\">Dan Wright</div>", plainText: "Best,\nDan Wright")
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+                                      subject: "Hi", body: "Hi Emma,", signature: sig, boundary: "B")
+        #expect(!msg.contains("border-radius"))   // the recipient's html part is not the framed preview card
+    }
+
+    // With no HTML signature, previewCardHTML is nil too, so the card falls back to plain text rather than
+    // painting an empty card.
+    @Test func previewCardHTMLIsNilWithoutAnHtmlSignature() {
+        #expect(GmailMessage.previewCardHTML(body: "Hi Emma,", signature: .none) == nil)
+    }
 }

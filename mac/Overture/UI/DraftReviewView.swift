@@ -221,12 +221,12 @@ struct DraftReviewView: View {
                     Text(subject).font(.system(size: 13, weight: .semibold)).foregroundStyle(OVColor.ink)
                 }
                 if let body = item.draftBody {
-                    // #1157: show the body WITH the sign-off the send path appends, so Dan approves the
-                    // real outgoing message. previewBody is the exact text/plain composition GmailMessage
-                    // sends, so the card can't drift from the wire.
-                    Text(GmailMessage.previewBody(body: body, signature: outboundSignature))
-                        .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // #1157/#1203: show the body WITH the sign-off the send path appends, so Dan approves
+                    // the real outgoing message. DraftSignaturePreview renders the styled text/html a rich
+                    // mail client shows (via GmailMessage.previewHTML, the SAME composition the send path
+                    // embeds, so the card can't drift from the wire), falling back to the plain-text
+                    // previewBody when there is no HTML signature or the render fails.
+                    DraftSignaturePreview(draftBody: body, signature: outboundSignature)
                 }
                 // #846: Dan's call (2026-07-13) that these stay SEPARATE tags. Both facts are true at
                 // once on a draft he edited: he edited it, AND a model wrote the text he edited (which

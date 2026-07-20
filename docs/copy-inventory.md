@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **703 sentences**, from 230 source files.
+Every sentence Overture can say to Dan: **703 sentences**, from 231 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -39,6 +39,7 @@ What is not, and why:
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
+- `Integration/GmailMessage.swift`: a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -50,6 +51,7 @@ What is not, and why:
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/VenueTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
+- `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
 ## The same sentence, said in more than one place (41)
 
