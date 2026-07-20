@@ -167,17 +167,13 @@ struct QueueView: View {
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
             .background(OVColor.canvas)
-            // #1219: confirm an Approve or a per-row Re-prep that lands on a date already holding a pitch.
-            .confirmationDialog(
-                pendingSelfBookingGuard?.title ?? "",
-                isPresented: Binding(get: { pendingSelfBookingGuard != nil },
-                                     set: { if !$0 { pendingSelfBookingGuard = nil } }),
-                presenting: pendingSelfBookingGuard
-            ) { pending in
-                Button(pending.proceedLabel) { pending.proceed(); pendingSelfBookingGuard = nil }
-                Button("Cancel", role: .cancel) { pendingSelfBookingGuard = nil }
-            } message: { pending in
-                Text(pending.message)
+            // #1219/#1249: confirm an Approve or a per-row Re-prep that lands on a date already holding a
+            // pitch. First-party branded sheet (SelfBookingConfirmSheet), not a stock system dialog.
+            .sheet(item: $pendingSelfBookingGuard) { pending in
+                SelfBookingConfirmSheet(
+                    title: pending.title, message: pending.message, proceedLabel: pending.proceedLabel,
+                    onProceed: { pending.proceed(); pendingSelfBookingGuard = nil },
+                    onCancel: { pendingSelfBookingGuard = nil })
             }
     }
 
