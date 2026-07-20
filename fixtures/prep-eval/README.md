@@ -41,3 +41,5 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `stale-site-misnamed-co-performer`: a stale site's misnamed co-performer is flagged (kept low), not dropped.
 - `presenter-not-venue`: the act's own form outranks a venue inbox; a real presenter is additive, never the venue.
 - `already-covered-photographer`: an explicit "we have a photographer" statement sets the fit-risk note (#611).
+- `returning-client-booked`: a booked returning client opens warm, with no cold self-introduction and no portfolio/gallery scaffolding (#1215).
+- `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).

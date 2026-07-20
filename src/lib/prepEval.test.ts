@@ -303,6 +303,58 @@ describe("evaluatePrepResult - discipline gallery link (#365)", () => {
   });
 });
 
+describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", () => {
+  // booked = fully warm: skip the cold self-introduction AND the credential + portfolio scaffolding.
+  const BOOKED_BODY =
+    "It's good to see the Aurora Strings back at Carnegie Hall on March 10. I'd love to photograph the " +
+    "night for you. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within " +
+    "two weeks. Happy to answer any questions.";
+  // warm lead = drop the cold self-introduction, keep ONE light credential and the portfolio link.
+  const WARM_LEAD_BODY =
+    "It was good connecting about the Aurora Strings at Carnegie Hall on March 10, and I'd love to " +
+    "photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and " +
+    "recent work is at danwrightphotography.com/music. My rate is $250 an hour plus tax, one-hour minimum, " +
+    "with the gallery delivered within two weeks. Happy to answer any questions.";
+
+  it("passes a booked draft that opens warm and drops the cold intro and portfolio scaffolding", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, BOOKED_BODY),
+      { description: "booked", forbidColdSelfIntro: true, forbidGalleryLink: true });
+    expect(r.failures).toEqual([]);
+    expect(r.pass).toBe(true);
+  });
+
+  it("flags a booked draft that reintroduces Dan cold (CANONICAL_BODY is the cold opener)", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, CANONICAL_BODY),
+      { description: "booked", forbidColdSelfIntro: true, forbidGalleryLink: true });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/cold self-introduction/i);
+  });
+
+  it("flags a booked draft that keeps the portfolio link (a returning client needs no proof)", () => {
+    const withLink = BOOKED_BODY.replace("Happy to answer any questions.",
+      "Recent work is at danwrightphotography.com/music. Happy to answer any questions.");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, withLink),
+      { description: "booked", forbidColdSelfIntro: true, forbidGalleryLink: true });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/portfolio|gallery link/i);
+  });
+
+  it("passes a warm-lead draft that drops the intro but keeps one credential and the portfolio link", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, WARM_LEAD_BODY),
+      { description: "warm", forbidColdSelfIntro: true, expectedGalleryLink: "danwrightphotography.com/music" });
+    expect(r.failures).toEqual([]);
+    expect(r.pass).toBe(true);
+  });
+
+  it("flags a warm-lead draft that drops the portfolio link (a warm lead has not seen his work)", () => {
+    const noLink = WARM_LEAD_BODY.replace("danwrightphotography.com/music", "my site");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, noLink),
+      { description: "warm", forbidColdSelfIntro: true, expectedGalleryLink: "danwrightphotography.com/music" });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/gallery link/i);
+  });
+});
+
 describe("extractPrepResultsJson - the real-AI harness reads the model's raw output", () => {
   const obj = { version: 6, results: [] };
 
@@ -348,6 +400,8 @@ describe("prep-eval fixtures", () => {
       "carnegie-citywide-press-inbox",
       "host-venue-not-target",
       "presenter-not-venue",
+      "returning-client-booked",
+      "returning-client-warm-lead",
       "self-produced-duo-both-performers",
       "stale-site-misnamed-co-performer",
     ]);

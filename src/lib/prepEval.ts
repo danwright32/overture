@@ -41,6 +41,10 @@ export interface PrepEvalExpectation {
   performerOverrideBodyRequired?: boolean;
   /** Every drafted body present must contain this discipline gallery link substring (#365). */
   expectedGalleryLink?: string;
+  /** #1215: no body may reintroduce Dan cold (booked AND warm both drop the cold self-introduction). */
+  forbidColdSelfIntro?: boolean;
+  /** #1215: no body may carry the portfolio/gallery link (a booked returning client needs no proof). */
+  forbidGalleryLink?: boolean;
   /** These performer contacts must be PRESENT but held below "high" confidence (uncorroborated). */
   lowConfidencePerformers?: string[];
 }
@@ -84,6 +88,12 @@ const PRESS_LOCALPART = /^(press|media|publicrelations|pressoffice|press-office|
 const CONCESSION = /\b(discount|flexible|free|complimentary)\b/i;
 const DASH = /[\u2014\u2013]/; // em dash / en dash, written as escapes so the source holds no literal dash
 const GREETING = /^\s*(hi|hello|hey|dear|greetings)\b/i;
+// #1215: the ways a draft reintroduces Dan as if unknown (a cold self-introduction), which a booked or
+// warm returning client must NOT get. Anchored on the naming and the "I am a photographer" credential
+// self-description; a warm lead's light STYLE credential ("I shoot unobtrusive documentary coverage")
+// is deliberately not one of these, since the warm register keeps it.
+const COLD_SELF_INTRO = /\bmy name is\b|\bi photograph performing arts\b|\bi'?m an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b|\bi am an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b/i;
+const PORTFOLIO_LINK = /danwrightphotography\.com/i;
 const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\]/;
 const DOMAIN_TOKEN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s)]*)?/gi;
 const ALLOWED_LINK_HOSTS = new Set(["danwrightphotography.com", "www.danwrightphotography.com"]);
@@ -214,6 +224,22 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
     for (const { label, body } of collectBodies([entry])) {
       if (!body.includes(exp.expectedGalleryLink)) {
         failures.push(`${label}: expected the ${exp.expectedGalleryLink} gallery link for this discipline (#365)`);
+      }
+    }
+  }
+
+  if (exp.forbidColdSelfIntro) {
+    for (const { label, body } of collectBodies([entry])) {
+      if (COLD_SELF_INTRO.test(body)) {
+        failures.push(`${label}: reintroduces Dan with a cold self-introduction; a booked/warm returning client already knows his work (#1215)`);
+      }
+    }
+  }
+
+  if (exp.forbidGalleryLink) {
+    for (const { label, body } of collectBodies([entry])) {
+      if (PORTFOLIO_LINK.test(body)) {
+        failures.push(`${label}: carries the portfolio/gallery link; a booked returning client needs no credential scaffolding (#1215)`);
       }
     }
   }

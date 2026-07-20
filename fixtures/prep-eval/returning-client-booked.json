@@ -1,0 +1,53 @@
+{
+  "name": "returning-client-booked",
+  "rule": "A booked returning client (priorRelationship 'booked') already knows Dan's work: skip the cold self-introduction AND the credential + portfolio scaffolding, open warm, reference the upcoming show, go straight to the offer (#1215).",
+  "input": {
+    "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
+    "groupName": "Aurora Strings",
+    "venue": "Metro Concert Hall",
+    "performanceDate": "2026-06-04",
+    "discipline": "music",
+    "websiteURL": "https://aurorastrings.example",
+    "sourceListingURL": "https://metroconcerthall.example/events/aurora-june",
+    "priorRelationship": "booked",
+    "production": "self"
+  },
+  "sources": [
+    {
+      "label": "Aurora Strings own contact page",
+      "url": "https://aurorastrings.example/contact",
+      "content": "Aurora Strings. Emma Robinson, Marketing Director: emma@aurorastrings.example."
+    }
+  ],
+  "expected": {
+    "description": "A booked returning client opens warm, with no cold self-introduction and no portfolio/gallery link (they need neither).",
+    "requireSomeContact": true,
+    "forbidColdSelfIntro": true,
+    "forbidGalleryLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-20T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
+        "contacts": [
+          {
+            "name": "Emma Robinson",
+            "role": "Marketing Director",
+            "email": "emma@aurorastrings.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://aurorastrings.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
+          "body": "It's good to see the Aurora Strings back at Metro Concert Hall on June 4. I'd love to photograph the night for you. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Happy to answer any questions.",
+          "variant": "returning_client_warm"
+        }
+      }
+    ]
+  }
+}
