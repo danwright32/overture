@@ -844,6 +844,14 @@ enum QueueModel {
         selfBookingConflicts(for: item, among: items).map(\.groupName)
     }
 
+    // #1244: the self-booking warning shown at the send-confirm moment, as one shared helper so BOTH send
+    // paths (the main queue's requestSend and Archive's) surface a same-date clash identically and can never
+    // drift on when or how it is named. nil when the date is clear. The comparison set is the WHOLE queue,
+    // so a clash with a show in any stage still counts.
+    static func sendSelfBookingWarning(for item: QueueItem, among items: [QueueItem]) -> String? {
+        SelfBookingCopy.confirmWarning(selfBookingConflictNames(for: item, among: items))
+    }
+
     // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
     // against the WHOLE queue, so it stays visible even after the other show has moved to another stage.
     static func selfBookingNote(_ group: [QueueItem], among all: [QueueItem]) -> String? {
