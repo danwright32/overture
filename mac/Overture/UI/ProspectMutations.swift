@@ -502,6 +502,9 @@ enum ProspectMutations {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         markSending(naturalKey)
         Task {
+            // #1208: pull the current Gmail signature right before composing, so an email Dan sends after
+            // editing his signature carries the new one (self-throttled, never blocks the send).
+            await GmailSignatureService.refreshBeforeSend()
             let sent = await SendService.sendOne(model, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
@@ -518,6 +521,7 @@ enum ProspectMutations {
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         markSending(recipientId)
         Task {
+            await GmailSignatureService.refreshBeforeSend()   // #1208
             let sent = await SendService.sendReplyDraft(recipient, of: model, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: item.groupName, feedback: feedback)
             clearSending(recipientId)
@@ -537,6 +541,7 @@ enum ProspectMutations {
         let org = model.groupName
         markSending(recipientId)
         Task {
+            await GmailSignatureService.refreshBeforeSend()   // #1208
             let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
@@ -557,6 +562,7 @@ enum ProspectMutations {
         let kind: ConversationReminder.Kind = isClosing ? .closing : .active(recipient.conversationState ?? .wantsToBook)
         markSending(recipientId)
         Task {
+            await GmailSignatureService.refreshBeforeSend()   // #1208
             let sent = await SendService.sendConversationNudge(recipient, of: model, kind: kind, now: Date(), sender: sender)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)

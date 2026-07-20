@@ -19,6 +19,10 @@ struct SendConfirmation: Equatable {
     let body: String
     let title: String
     let reassurance: String
+    // #1219: set when a DIFFERENT show has already been emailed on this performance's date, so the send
+    // sheet warns of a self double-booking at the committing moment and Dan confirms past it deliberately
+    // (a blank warning means no collision). Set by the caller, which has the whole queue to compare.
+    var selfBookingWarning: String? = nil
 
     // The main draft send: the show's next pending recipient over the shared draft body.
     @MainActor

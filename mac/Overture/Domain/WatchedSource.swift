@@ -201,6 +201,10 @@ final class WatchedSource {
     // has no fetched page to hash), so its caller promotes the hash itself after this returns.
     func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0, placed: Int,
                               feedHealth: FeedReconcile.FeedHealthState, now: Date) {
+        // #1114: record this scout's movement (current vs the previous scout's count, and the baseline)
+        // BEFORE the fields below overwrite them, so #913 has real per-source movement to retune against.
+        FeedMovementLog.record(for: self, current: events, now: now)
+
         lastReadableCount = events
         lastUnreadableCount = unreadable
         lastUnreadableTitleCount = titleUnreadable

@@ -29,6 +29,9 @@ struct QueueView: View {
     private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
 
     @State private var pendingConfirm: PendingSend?
+    // #1219: a committing action (Approve or per-row Re-prep) waiting on the self-booking confirm (nil =
+    // none pending). One guard for both, since they share the dialog and differ only in verb and action.
+    @State private var pendingSelfBookingGuard: SelfBookingGuard?
     @State private var showReconnect = false
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
@@ -150,9 +153,32 @@ struct QueueView: View {
             )
     }
 
+    // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
+    // and the action to run stay out of the button wiring and the confirm reads from one place.
+    private struct SelfBookingGuard: Identifiable {
+        let key: String
+        let title: String
+        let proceedLabel: String
+        let message: String
+        let proceed: () -> Void
+        var id: String { key }
+    }
+
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
             .background(OVColor.canvas)
+            // #1219: confirm an Approve or a per-row Re-prep that lands on a date already holding a pitch.
+            .confirmationDialog(
+                pendingSelfBookingGuard?.title ?? "",
+                isPresented: Binding(get: { pendingSelfBookingGuard != nil },
+                                     set: { if !$0 { pendingSelfBookingGuard = nil } }),
+                presenting: pendingSelfBookingGuard
+            ) { pending in
+                Button(pending.proceedLabel) { pending.proceed(); pendingSelfBookingGuard = nil }
+                Button("Cancel", role: .cancel) { pendingSelfBookingGuard = nil }
+            } message: { pending in
+                Text(pending.message)
+            }
     }
 
     private func queueScroll(_ data: RenderData) -> some View {
@@ -259,6 +285,21 @@ struct QueueView: View {
                     .foregroundStyle(OVColor.onRust)
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
                     .background(Capsule().fill(OVColor.rust))
+                }
+                // #1219/#1246: a self double-booking note, up by the date so Dan sees it while scanning.
+                // Computed queue-wide (against all items, not just this stage's rows) so it stays visible
+                // even after the other show moves to another stage. Single tier: any real commitment on the
+                // date shows it. The per-row marker names the specific clashing show; this is the date flag.
+                // Not shown in Scout (untriaged candidates are not commitments Dan is protecting yet).
+                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, among: items) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text(note)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.gold)
+                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                    .background(Capsule().fill(OVColor.surfaceSunk))
                 }
             }
             .padding(.bottom, OVSpacing.xxs)
@@ -602,21 +643,73 @@ struct QueueView: View {
                     insertion: .identity,
                     removal: reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)))
         } else {
-            ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
-                                  dayOffOffer: dayOffOffer,
-                                  highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
-                                  replySendSince: { rid in replySending[rid] },
-                                  onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
-                                  showingTooFar: false,
-                                  userExcludedTowns: userExcludedTowns,
-                                  allowedSeedTowns: allowedSeedTowns)
+            // #1219/#1246: the persistent self double-booking marker, on the row itself so it travels with
+            // the show and never vanishes when the OTHER show changes stage. Names the clashing show(s).
+            // Not in Scout (untriaged candidates are not commitments Dan is protecting yet).
+            let selfBookingMarker = focusedStage != .scout
+                ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: items))
+                : nil
+            VStack(alignment: .leading, spacing: 4) {
+                if let marker = selfBookingMarker {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text(marker)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.gold)
+                }
+                ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                                      dayOffOffer: dayOffOffer,
+                                      highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                                      replySendSince: { rid in replySending[rid] },
+                                      onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
+                                      onReprep: { mode in requestReprep(item, mode) },
+                                      onApprove: { requestApprove(item) },
+                                      showingTooFar: false,
+                                      userExcludedTowns: userExcludedTowns,
+                                      allowedSeedTowns: allowedSeedTowns)
+            }
+        }
+    }
+
+    // #1219: Approve and per-row Re-prep are committing moments Dan gated. Both launch straight from the
+    // row (Re-prep starts a Prep run, Approve advances toward send), so each is routed through this check:
+    // if the show sits on a date that already holds a committed pitch, confirm past it deliberately;
+    // otherwise act straight away. One guard, differing only in verb and the action it runs on confirm.
+    private func requestReprep(_ item: QueueItem, _ mode: ReprepMode) {
+        guardSelfBooking(item, title: SelfBookingCopy.prepConfirmTitle,
+                         proceedLabel: SelfBookingCopy.prepConfirmProceed) {
+            ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback)
+        }
+    }
+
+    private func requestApprove(_ item: QueueItem) {
+        guardSelfBooking(item, title: SelfBookingCopy.approveConfirmTitle,
+                         proceedLabel: SelfBookingCopy.approveConfirmProceed) {
+            ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
+        }
+    }
+
+    private func guardSelfBooking(_ item: QueueItem, title: String, proceedLabel: String,
+                                  proceed: @escaping () -> Void) {
+        if let clash = QueueModel.selfBookingClash(for: item, among: items),
+           let message = SelfBookingCopy.prepConfirmMessage([clash]) {
+            pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
+                                                       proceedLabel: proceedLabel, message: message, proceed: proceed)
+        } else {
+            proceed()
         }
     }
 
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let confirmation = SendConfirmation(prospect: model) else { return }
+              var confirmation = SendConfirmation(prospect: model) else { return }
+        // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
+        // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
+        // already-emailed one, and compares against the whole queue so a show in any stage still counts.
+        confirmation.selfBookingWarning = SelfBookingCopy.confirmWarning(
+            QueueModel.selfBookingConflictNames(for: item, among: items))
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

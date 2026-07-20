@@ -229,4 +229,52 @@ struct GmailSignatureTests {
         #expect(!box.called)
         #expect(box.recordedAt == nil)
     }
+
+    // MARK: - #1208: refresh right before a send, closing the 24h window for the case that matters most
+
+    // The signature is most important to be current at the moment an email goes out. refreshBeforeSend
+    // refreshes even when the daily refreshIfDue would skip: here the last attempt was 5 minutes ago (well
+    // within the 24h opportunistic interval, so refreshIfDue(24h) would NOT fetch), yet the send path
+    // still fetches, so a signature Dan edited since the daily tick is current on the outgoing email.
+    @MainActor
+    @Test func refreshBeforeSendRefreshesEvenWhenTheDailyRefreshWouldSkip() async {
+        let box = RanBox()
+        let now = Date()
+        await GmailSignatureService.refreshBeforeSend(
+            now: now,
+            isConnected: { true },
+            lastAttemptAt: { now.addingTimeInterval(-5 * 60) },   // 5 min ago: within 24h, outside the send window
+            recordAttemptAt: { _ in },
+            performRefresh: { box.called = true })
+        #expect(box.called)
+    }
+
+    // Within a single send burst (a multi-recipient show sent in quick succession) it self-throttles, so
+    // it does not fetch once per email: a send moments after the last attempt does not re-fetch.
+    @MainActor
+    @Test func refreshBeforeSendSelfThrottlesWithinABurst() async {
+        let box = RanBox()
+        let now = Date()
+        await GmailSignatureService.refreshBeforeSend(
+            now: now,
+            isConnected: { true },
+            lastAttemptAt: { now.addingTimeInterval(-5) },   // 5s ago: inside the send window
+            recordAttemptAt: { _ in },
+            performRefresh: { box.called = true })
+        #expect(!box.called)
+    }
+
+    // And, like every other refresh path, it no-ops when Gmail isn't connected, so it can never block or
+    // delay a send that has no signature to fetch.
+    @MainActor
+    @Test func refreshBeforeSendNoOpsWhenNotConnected() async {
+        let box = RanBox()
+        await GmailSignatureService.refreshBeforeSend(
+            now: Date(),
+            isConnected: { false },
+            lastAttemptAt: { nil },
+            recordAttemptAt: { _ in },
+            performRefresh: { box.called = true })
+        #expect(!box.called)
+    }
 }
