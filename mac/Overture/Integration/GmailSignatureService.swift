@@ -82,4 +82,26 @@ enum GmailSignatureService {
         recordAttemptAt(now)
         await performRefresh()
     }
+
+    // #1208: the signature matters most at the exact moment an email goes out. The daily refreshIfDue can
+    // leave the cached signature up to 24h stale, so Dan editing his Gmail signature and sending right
+    // after would carry the old one. Called at the start of a send, this reuses refreshIfDue with a SHORT
+    // window instead of the 24h one, so a send refreshes even when the daily tick fetched hours ago, while
+    // still self-throttling across a quick multi-recipient burst (it does not fetch once per email) and
+    // inheriting refresh()'s don't-clobber-on-failure guarantee. It never blocks the send: a failed or
+    // disconnected refresh just leaves the stored signature as-is.
+    static let sendRefreshInterval: TimeInterval = 60
+
+    @MainActor
+    static func refreshBeforeSend(
+        now: Date = Date(),
+        isConnected: () -> Bool = { GmailAuthManager.shared.isConnected },
+        lastAttemptAt: () -> Date? = { GmailSignatureStore.lastRefreshAttemptAt() },
+        recordAttemptAt: (Date) -> Void = { GmailSignatureStore.setLastRefreshAttemptAt($0) },
+        performRefresh: () async -> Void = { await GmailSignatureService.refresh() }
+    ) async {
+        await refreshIfDue(minimumInterval: sendRefreshInterval, now: now,
+                           isConnected: isConnected, lastAttemptAt: lastAttemptAt,
+                           recordAttemptAt: recordAttemptAt, performRefresh: performRefresh)
+    }
 }
