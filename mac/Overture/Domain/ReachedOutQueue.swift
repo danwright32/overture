@@ -65,6 +65,15 @@ enum ReachedOutQueue {
                             reminderConfig: reminderConfig).map { $0.prospect.naturalKey }).count
     }
 
+    // #1232: the reached-out list shows one row per contacted RECIPIENT, but its stage pill counts distinct
+    // SHOWS (#1194), so a show pitched to two contacts makes the pill read one lower than the visible rows.
+    // This quiet note reconciles the two, and appears ONLY when there are genuinely more contacts than
+    // shows (equal counts need no note). Pure on the two counts, so it is tested without SwiftData.
+    static func contactsAcrossShowsNote(contactCount: Int, showCount: Int) -> String? {
+        guard contactCount > showCount else { return nil }
+        return "\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
+    }
+
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
     // now or overdue reads "Reach out now"; future dates read "in N day(s)" (whole days, rounded up).
     static func timingLabel(next: Date, now: Date) -> String {

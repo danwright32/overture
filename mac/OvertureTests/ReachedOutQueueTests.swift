@@ -185,3 +185,15 @@ struct ReachedOutQueueTests {
         #expect(ReachedOutQueue.showCount(from: [a, b], now: now) == 2)      // but two shows
     }
 }
+
+// #1232: the Reached-out pill counts distinct SHOWS while the list shows one row per contacted recipient,
+// so a show pitched to two contacts makes the pill read lower than the visible rows. A quiet note
+// reconciles the two; it appears only when there are genuinely more contacts than shows.
+extension ReachedOutQueueTests {
+    @Test func contactsAcrossShowsNoteOnlyWhenContactsExceedShows() {
+        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 3, showCount: 2) == "3 contacts across 2 shows")
+        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 3, showCount: 1) == "3 contacts across 1 show")
+        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 2, showCount: 2) == nil)
+        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 0, showCount: 0) == nil)
+    }
+}
