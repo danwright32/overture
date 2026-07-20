@@ -208,7 +208,10 @@ struct ArchiveView: View {
 
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let confirmation = SendConfirmation(prospect: model) else { return }
+              var confirmation = SendConfirmation(prospect: model) else { return }
+        // #1244: the Archive send path warns on a same-date self double-booking too, using the SAME shared
+        // helper as the main queue's requestSend, so the guard doesn't depend on which screen Dan sends from.
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, among: items)
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

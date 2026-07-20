@@ -862,6 +862,20 @@ struct SelfBookingWiringTests {
         #expect(QueueModel.selfBookingIsCommitment(booked("c", "2026-08-01", "Org C")))  // booked still wins
     }
 
+    // #1244: the send-confirm self-booking warning is one shared helper, so the main queue's send path and
+    // the Archive send path surface a same-date clash identically and can't drift. It names the clashing show
+    // when the date already holds a committed OTHER show, and is nil when the date is clear.
+    @Test func sendSelfBookingWarningNamesAClashAndIsNilWhenClear() {
+        let a = emailed("a", "2026-08-01", "Org A")     // already committed on this date
+        let b = drafted("b", "2026-08-01", "Org B")     // a different show on the SAME date
+        let clear = drafted("c", "2026-09-09", "Org C") // alone on its own date
+        let all = [a, b, clear]
+        let warning = QueueModel.sendSelfBookingWarning(for: b, among: all)
+        #expect(warning != nil)
+        #expect(warning?.contains("Org A") == true)     // names the clashing show
+        #expect(QueueModel.sendSelfBookingWarning(for: clear, among: all) == nil)  // clear date, no warning
+    }
+
     // A dead-dismissed show does NOT count (even if it still carries an old draft body) - the latent bug in
     // the first cut; but a show dismissed BECAUSE it was booked elsewhere still counts (red-team FLAW 2).
     @Test func dismissedIsExcludedUnlessBooked() {

@@ -708,8 +708,7 @@ struct QueueView: View {
         // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
         // already-emailed one, and compares against the whole queue so a show in any stage still counts.
-        confirmation.selfBookingWarning = SelfBookingCopy.confirmWarning(
-            QueueModel.selfBookingConflictNames(for: item, among: items))
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, among: items)
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 
