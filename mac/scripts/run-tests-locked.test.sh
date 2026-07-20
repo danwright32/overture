@@ -47,6 +47,33 @@ assert_equals "multiple stale Debug hosts (e.g. an older DerivedData build) are 
 2222" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}")"
 
 echo
+# --- pre-flight blocker detection (#1257) ------------------------------------------------
+#
+# A running Debug Overture that run-debug.sh launched from mac/build holds the single-instance lock
+# (LSMultipleInstancesProhibited), so the test host cannot launch and the run dies AFTER a full build
+# (#1252 detects that; #1257 prevents it). blocking_debug_app_pids finds exactly that instance so main
+# can stop before building. Deliberately NARROWER than stale_debug_test_host_pids in one direction and
+# WIDER in another: it must NOT flag the DerivedData test host (the runner's OWN spawn, safe to kill,
+# handled separately), and it MUST flag the mac/build instance (Dan's, which must never be auto-killed).
+
+BUILD_DEBUG_OUTPUT="  501 /sbin/launchd
+ 3333 /Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/build/Build/Products/Debug/Overture.app/Contents/MacOS/Overture
+ 5678 /Applications/Overture.app/Contents/MacOS/Overture"
+assert_equals "a mac/build Debug instance (run-debug.sh) is flagged as a blocker" \
+  "3333" "$(blocking_debug_app_pids "${BUILD_DEBUG_OUTPUT}")"
+
+DERIVED_ONLY_OUTPUT="  501 /sbin/launchd
+ 1234 /Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-aocrzmchreuxrpgeehcermgyhegg/Build/Products/Debug/Overture.app/Contents/MacOS/Overture"
+assert_equals "the DerivedData test host is the runner's own and is NOT a pre-flight blocker" \
+  "" "$(blocking_debug_app_pids "${DERIVED_ONLY_OUTPUT}")"
+
+assert_equals "the installed Release app never blocks a test run" \
+  "" "$(blocking_debug_app_pids "  5678 /Applications/Overture.app/Contents/MacOS/Overture")"
+
+assert_equals "nothing running Debug means no blocker" \
+  "" "$(blocking_debug_app_pids "  501 /sbin/launchd")"
+
+echo
 # --- crashed run vs failed run (#1006) ---------------------------------------------------
 #
 # On 2026-07-16 swift-tests on main printed `Test run with 1574 tests in 229 suites passed`
