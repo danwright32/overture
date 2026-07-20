@@ -805,46 +805,61 @@ enum QueueModel {
         items.contains { $0.hasUnclearedConflict && $0.conflictBlockedDate == $0.performanceDate }
     }
 
-    // #1219: self double-booking. One mapping from a queue row to SelfBookingConflict.Show, consumed by
-    // the date-header note and the prep/send blocks so they can never disagree (the #863 lesson: the
-    // logic is here and unit-tested, the views just render it). groupName is the production key: two
-    // different orgs always differ, so a real cross-show same-date collision always surfaces, while a run
-    // or the same show (shared groupName) is correctly NOT flagged as a double-booking.
+    // #1219: self double-booking. The detection lives here (testable, the #863 lesson); the views just
+    // render it. A row counts as a same-date COMMITMENT on PERSISTENT facts (a confirmed booking, a pitch
+    // already sent, or a live draft), never on a mutable stage, so the signal cannot vanish when a show
+    // moves stage (#1246). groupName is both the production key (a run or the same show, shared groupName,
+    // is not a double-booking) and the display name a warning uses to say WHICH other show clashes.
+    static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
+        if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
+        if i.dismissReason == .alreadyBooked { return true }  // dismissed BECAUSE booked elsewhere: still committed
+        if i.status == .dismissed { return false }            // any other dismissed show is dead; ignore it
+        if i.sentAt != nil { return true }                    // a live pitch is already out
+        return (i.status == .drafted || i.status == .approved) && i.hasDraft  // an in-progress draft
+    }
+
     private static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(
-            key: i.id, date: i.performanceDate,
-            emailed: i.sentAt != nil,
-            drafted: i.sentAt == nil && (i.draftBody?.isEmpty == false),
-            engagementKey: i.groupName)
+        SelfBookingConflict.Show(key: i.id, date: i.performanceDate,
+                                 isCommitment: selfBookingIsCommitment(i),
+                                 engagementKey: i.groupName, name: i.groupName)
     }
 
-    // The strongest same-date conflict this row faces from a DIFFERENT already-pitched show, or nil.
-    static func selfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> SelfBookingConflict.Strength? {
-        SelfBookingConflict.conflict(for: selfBookingShow(item), among: items.map(selfBookingShow))
+    // The OTHER committed shows clashing with `item` on its date, across the WHOLE queue (never scoped to
+    // one stage, so the warning never vanishes when a show changes stage, #1246). Empty = the date is clear.
+    static func selfBookingConflicts(for item: QueueItem, among items: [QueueItem]) -> [QueueItem] {
+        let shows = items.map(selfBookingShow)
+        let keys = Set(SelfBookingConflict.conflicts(for: selfBookingShow(item), among: shows).map(\.key))
+        return items.filter { keys.contains($0.id) }
     }
 
-    // Prep and Send BLOCK (require a deliberate override) only for the STRONG case: a different show was
-    // already EMAILED on this date. A drafted-only collision is a soft note that never blocks (#1219 §1/2).
-    static func sendBlockedBySelfBooking(for item: QueueItem, among items: [QueueItem]) -> Bool {
-        selfBookingConflict(for: item, among: items) == .emailed
+    static func hasSelfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> Bool {
+        !selfBookingConflicts(for: item, among: items).isEmpty
     }
 
-    // The strongest self-booking conflict present among a date group's rows, for the date-header note.
-    static func groupSelfBookingStrength(_ items: [QueueItem]) -> SelfBookingConflict.Strength? {
-        let strengths = items.map { selfBookingConflict(for: $0, among: items) }
-        if strengths.contains(.emailed) { return .emailed }
-        if strengths.contains(.drafted) { return .drafted }
-        return nil
+    // The names of the OTHER committed shows on this row's date, so a warning can name them. NOTE (#901/
+    // #863): this must never be wired into needsPrep or a stage-pill count; it is confirm-to-proceed, not
+    // a hard gate, so the counts stay honest.
+    static func selfBookingConflictNames(for item: QueueItem, among items: [QueueItem]) -> [String] {
+        selfBookingConflicts(for: item, among: items).map(\.groupName)
     }
 
-    // The note shown on a date header when this date already holds another pitched show, so Dan sees the
-    // possible double-booking while scanning, before opening a row (#1219). nil when the date is clear.
-    static func selfBookingNote(_ items: [QueueItem]) -> String? {
-        switch groupSelfBookingStrength(items) {
-        case .emailed: return "Already emailed a pitch on this date"
-        case .drafted: return "Draft pitch already on this date"
-        case nil: return nil
-        }
+    // The queue-wide date-header note: shown when any row in this date group faces a self-booking conflict
+    // against the WHOLE queue, so it stays visible even after the other show has moved to another stage.
+    static func selfBookingNote(_ group: [QueueItem], among all: [QueueItem]) -> String? {
+        group.contains { hasSelfBookingConflict(for: $0, among: all) } ? SelfBookingCopy.dateHeaderNote : nil
+    }
+
+    // #1219: which of the shows ABOUT TO BE PREPPED (by key) sit on a date that already holds a committed
+    // OTHER show, and the names of those clashes, so a prep-launch confirm can name them. Shared by BOTH
+    // prep entry points, the "Prep these N" sheet AND the per-row Re-prep (red-team FLAW 1: Re-prep
+    // launches a run directly, so gating only the sheet leaves a hole). Empty = no clash, run freely.
+    static func selfBookingPrepClashes(forKeys keys: Set<String>, among items: [QueueItem]) -> [SelfBookingPrepClash] {
+        items
+            .filter { keys.contains($0.id) }
+            .compactMap { target in
+                let names = selfBookingConflictNames(for: target, among: items)
+                return names.isEmpty ? nil : SelfBookingPrepClash(groupName: target.groupName, conflictNames: names)
+            }
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {

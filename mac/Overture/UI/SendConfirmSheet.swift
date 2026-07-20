@@ -5,8 +5,8 @@ import SwiftUI
 // green suite (a lesson from earlier view-embedded logic). SendConfirmSheetTests locks these.
 enum SendConfirmCopy {
     static let title = "Send this email now?"
-    // #1219: shown in the send sheet when a different show has already been emailed on this date.
-    static let selfBookingWarning = "You have already emailed a pitch for another show on this date."
+    // #1219: the self double-booking warning shown in the send sheet is now dynamic (it names the clashing
+    // show), so it lives in SelfBookingCopy.confirmWarning, set on SendConfirmation.selfBookingWarning.
     static let reassurance = "This sends one email right now, to this recipient only. Nothing else goes out."
     // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
     // differ from the draft's (and a closing note names the second thing it does), and they live here

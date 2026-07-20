@@ -260,16 +260,18 @@ struct QueueView: View {
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
                     .background(Capsule().fill(OVColor.rust))
                 }
-                // #1219: a self double-booking note, up by the date so Dan sees it while scanning: this
-                // date already holds another show he has pitched (emailed = strong/gold, drafted = soft).
-                if let note = QueueModel.selfBookingNote(group.items) {
-                    let strong = QueueModel.groupSelfBookingStrength(group.items) == .emailed
+                // #1219/#1246: a self double-booking note, up by the date so Dan sees it while scanning.
+                // Computed queue-wide (against all items, not just this stage's rows) so it stays visible
+                // even after the other show moves to another stage. Single tier: any real commitment on the
+                // date shows it. The per-row marker names the specific clashing show; this is the date flag.
+                // Not shown in Scout (untriaged candidates are not commitments Dan is protecting yet).
+                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, among: items) {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
                         Text(note)
                     }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(strong ? OVColor.gold : OVColor.inkSoft)
+                    .foregroundStyle(OVColor.gold)
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
                     .background(Capsule().fill(OVColor.surfaceSunk))
                 }
@@ -615,14 +617,30 @@ struct QueueView: View {
                     insertion: .identity,
                     removal: reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)))
         } else {
-            ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
-                                  dayOffOffer: dayOffOffer,
-                                  highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
-                                  replySendSince: { rid in replySending[rid] },
-                                  onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
-                                  showingTooFar: false,
-                                  userExcludedTowns: userExcludedTowns,
-                                  allowedSeedTowns: allowedSeedTowns)
+            // #1219/#1246: the persistent self double-booking marker, on the row itself so it travels with
+            // the show and never vanishes when the OTHER show changes stage. Names the clashing show(s).
+            // Not in Scout (untriaged candidates are not commitments Dan is protecting yet).
+            let selfBookingMarker = focusedStage != .scout
+                ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: items))
+                : nil
+            VStack(alignment: .leading, spacing: 4) {
+                if let marker = selfBookingMarker {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                        Text(marker)
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.gold)
+                }
+                ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                                      dayOffOffer: dayOffOffer,
+                                      highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
+                                      replySendSince: { rid in replySending[rid] },
+                                      onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
+                                      showingTooFar: false,
+                                      userExcludedTowns: userExcludedTowns,
+                                      allowedSeedTowns: allowedSeedTowns)
+            }
         }
     }
 
@@ -630,10 +648,11 @@ struct QueueView: View {
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
               var confirmation = SendConfirmation(prospect: model) else { return }
-        // #1219: warn at the committing moment when a different show is already emailed on this date.
-        if QueueModel.sendBlockedBySelfBooking(for: item, among: items) {
-            confirmation.selfBookingWarning = SendConfirmCopy.selfBookingWarning
-        }
+        // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
+        // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
+        // already-emailed one, and compares against the whole queue so a show in any stage still counts.
+        confirmation.selfBookingWarning = SelfBookingCopy.confirmWarning(
+            QueueModel.selfBookingConflictNames(for: item, among: items))
         pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
     }
 

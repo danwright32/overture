@@ -820,68 +820,90 @@ struct FocusedLeadsScrollTargetTests {
     }
 }
 
-// #1219: self double-booking. The detection lives at the QueueModel layer (testable, the #863 lesson),
-// mapping queue rows to SelfBookingConflict and answering per-row and per-date. Emailed on the date is
-// the strong case that blocks; drafted-only is the soft case (a note). Same groupName is one production.
+// #1219/#1246: self double-booking. The detection lives at the QueueModel layer (testable, the #863
+// lesson); the views just render it. A commitment is keyed on PERSISTENT facts (booked / emailed / live
+// draft), never a mutable stage, and the conflict is computed QUEUE-WIDE so the signal never vanishes when
+// a show changes stage. Same groupName is one production. Single tier: any commitment intervenes the same.
 @Suite("Self double-booking wiring (#1219)")
 struct SelfBookingWiringTests {
-    @Test func anEmailedDifferentShowOnTheDateIsAStrongConflict() {
-        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); a.sentAt = Date()
-        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == .emailed)
+    private func booked(_ key: String, _ date: String, _ name: String) -> QueueItem {
+        var q = item(performanceDate: date, key: key, groupName: name); q.outcome = .booked; return q
+    }
+    private func emailed(_ key: String, _ date: String, _ name: String) -> QueueItem {
+        var q = item(performanceDate: date, status: .contacted, key: key, groupName: name); q.sentAt = Date(); return q
+    }
+    private func drafted(_ key: String, _ date: String, _ name: String) -> QueueItem {
+        var q = item(performanceDate: date, status: .drafted, key: key, groupName: name); q.draftBody = "Hi"; return q
     }
 
-    @Test func aDraftedOnlyDifferentShowOnTheDateIsASoftConflict() {
-        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); a.draftBody = "Hi"
-        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == .drafted)
+    // A confirmed booking is a commitment even though confirmBooking sets outcome, not status (red-team FLAW 2).
+    @Test func aBookedShowIsACommitment() {
+        #expect(QueueModel.selfBookingIsCommitment(booked("a", "2026-08-01", "Org A")))
     }
 
-    @Test func aDifferentDateDoesNotConflict() {
-        var a = item(performanceDate: "2026-08-02", key: "a", groupName: "Org A"); a.sentAt = Date()
-        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == nil)
+    // A sent pitch and a live draft/approved are commitments; a kept-but-undrafted or scout candidate is not.
+    @Test func sentAndDraftedAreCommitmentsKeptAndScoutAreNot() {
+        #expect(QueueModel.selfBookingIsCommitment(emailed("a", "2026-08-01", "Org A")))
+        #expect(QueueModel.selfBookingIsCommitment(drafted("b", "2026-08-01", "Org B")))
+        var approved = item(status: .approved, key: "c"); approved.draftBody = "Hi"
+        #expect(QueueModel.selfBookingIsCommitment(approved))
+        #expect(!QueueModel.selfBookingIsCommitment(item(status: .queued, key: "d")))        // kept, no draft
+        #expect(!QueueModel.selfBookingIsCommitment(item(status: .new, key: "e")))           // scout
+    }
+
+    // A dead-dismissed show does NOT count (even if it still carries an old draft body) - the latent bug in
+    // the first cut; but a show dismissed BECAUSE it was booked elsewhere still counts (red-team FLAW 2).
+    @Test func dismissedIsExcludedUnlessBooked() {
+        var dead = item(status: .dismissed, key: "a"); dead.draftBody = "Hi"; dead.dismissReason = .notInterested
+        #expect(!QueueModel.selfBookingIsCommitment(dead))
+        var bookedElsewhere = item(status: .dismissed, key: "b"); bookedElsewhere.dismissReason = .alreadyBooked
+        #expect(QueueModel.selfBookingIsCommitment(bookedElsewhere))
+    }
+
+    // A committed different show on the same date is a conflict; a non-committed one (kept, no draft) is not.
+    @Test func aCommittedOtherShowConflictsANonCommittedDoesNot() {
+        let target = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
+        #expect(QueueModel.hasSelfBookingConflict(for: target, among: [emailed("a", "2026-08-01", "Org A"), target]))
+        let kept = item(performanceDate: "2026-08-01", status: .queued, key: "c", groupName: "Org C")
+        #expect(!QueueModel.hasSelfBookingConflict(for: target, among: [kept, target]))
     }
 
     // Two rows sharing a groupName are one production (a run), never a self double-booking.
     @Test func theSameProductionOnTheDateDoesNotConflict() {
-        var a = item(performanceDate: "2026-08-01", key: "a", groupName: "The Run"); a.sentAt = Date()
+        let a = emailed("a", "2026-08-01", "The Run")
         let b = item(performanceDate: "2026-08-01", key: "b", groupName: "The Run")
-        #expect(QueueModel.selfBookingConflict(for: b, among: [a, b]) == nil)
+        #expect(!QueueModel.hasSelfBookingConflict(for: b, among: [a, b]))
     }
 
-    // Only the strong (emailed) conflict blocks prep and send; the soft (drafted) one does not.
-    @Test func onlyTheEmailedConflictBlocks() {
-        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
-        var drafted = item(performanceDate: "2026-08-01", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
-        let target = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.sendBlockedBySelfBooking(for: target, among: [emailed, target]))
-        #expect(!QueueModel.sendBlockedBySelfBooking(for: target, among: [drafted, target]))
+    // The names of the clashing shows are returned so the warning can say WHICH ones (one or many).
+    @Test func conflictNamesListEveryClashingShow() {
+        let target = item(performanceDate: "2026-08-01", key: "t", groupName: "Target")
+        let all = [emailed("a", "2026-08-01", "Orchestra A"), drafted("b", "2026-08-01", "Choir B"), target]
+        #expect(Set(QueueModel.selfBookingConflictNames(for: target, among: all)) == ["Orchestra A", "Choir B"])
     }
 
-    // The date-header note reflects the strongest conflict present in that date's rows.
-    @Test func theDateGroupStrengthIsTheStrongestPresent() {
-        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
-        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.groupSelfBookingStrength([emailed, b]) == .emailed)
-
-        var drafted = item(performanceDate: "2026-08-02", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
-        let d = item(performanceDate: "2026-08-02", key: "d", groupName: "Org D")
-        #expect(QueueModel.groupSelfBookingStrength([drafted, d]) == .drafted)
-
-        #expect(QueueModel.groupSelfBookingStrength([item(key: "solo")]) == nil)
+    // #1246 (the whole point): the note is QUEUE-WIDE. The other committed show is NOT in this stage's date
+    // group but IS elsewhere in the queue, and the note still fires - it does not vanish when a show moves.
+    @Test func theHeaderNoteIsQueueWideNotStageScoped() {
+        let inGroup = item(performanceDate: "2026-08-01", status: .queued, key: "b", groupName: "Org B")
+        let elsewhere = emailed("a", "2026-08-01", "Org A")   // committed, but in another stage/group
+        #expect(QueueModel.selfBookingNote([inGroup], among: [inGroup, elsewhere])
+                == "Another pitch is already in progress on this date")
+        // A clear date (no other commitment anywhere) shows nothing.
+        #expect(QueueModel.selfBookingNote([inGroup], among: [inGroup]) == nil)
     }
 
-    // The date-header note names the collision so Dan sees it while scanning; nil on a clear date.
-    @Test func theDateHeaderNoteReflectsTheConflict() {
-        var emailed = item(performanceDate: "2026-08-01", key: "a", groupName: "Org A"); emailed.sentAt = Date()
-        let b = item(performanceDate: "2026-08-01", key: "b", groupName: "Org B")
-        #expect(QueueModel.selfBookingNote([emailed, b]) == "Already emailed a pitch on this date")
-
-        var drafted = item(performanceDate: "2026-08-02", key: "c", groupName: "Org C"); drafted.draftBody = "Hi"
-        let d = item(performanceDate: "2026-08-02", key: "d", groupName: "Org D")
-        #expect(QueueModel.selfBookingNote([drafted, d]) == "Draft pitch already on this date")
-
-        #expect(QueueModel.selfBookingNote([item(key: "solo")]) == nil)
+    // The prep-launch clash check finds every prepping (kept) show that sits on a committed date, naming
+    // the clash. Shared by BOTH the batch "Prep these N" sheet and the per-row Re-prep, so neither bypasses
+    // the confirm (red-team FLAW 1). A prepping show on a clear date is not listed.
+    @Test func prepClashesFindPreppingShowsOnCommittedDates() {
+        let committed = emailed("a", "2026-08-01", "Orchestra A")
+        let prepping = item(performanceDate: "2026-08-01", status: .queued, key: "p", groupName: "Choir P")
+        let clear = item(performanceDate: "2026-08-02", status: .queued, key: "c", groupName: "Solo C")
+        let all = [committed, prepping, clear]
+        #expect(QueueModel.selfBookingPrepClashes(forKeys: ["p", "c"], among: all)
+                == [SelfBookingPrepClash(groupName: "Choir P", conflictNames: ["Orchestra A"])])
+        // No selected key clashes -> nothing to confirm.
+        #expect(QueueModel.selfBookingPrepClashes(forKeys: ["c"], among: all).isEmpty)
     }
 }
