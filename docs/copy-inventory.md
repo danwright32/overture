@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **692 sentences**, from 228 source files.
+Every sentence Overture can say to Dan: **703 sentences**, from 229 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -50,7 +50,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 
-## The same sentence, said in more than one place (40)
+## The same sentence, said in more than one place (41)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -184,6 +184,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "\n\nLast lines of the run log:\n\(tail)"
   - `Domain/DetachedRunOutcome.swift`
   - `UI/LeadIntakeModel.swift`
+- "another show"
+  - `Domain/SelfBookingConflict.swift`
+  - `Domain/SelfBookingConflict.swift`
 - "no contact"
   - `Domain/FollowUp.swift`
   - `UI/FollowUpsView.swift`
@@ -291,6 +294,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Already watching \(orgName)'s calendar."
     `Domain/WatchlistEditing.swift`
+"Also pitching \($0) on this date"
+    `Domain/SelfBookingConflict.swift`
 "Always skipped"
     `UI/ExcludedTownsView.swift`
 "An established calendar came back empty this run."
@@ -299,6 +304,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
     `App/OvertureApp.swift`
+"Another pitch is already in progress on this date"
+    `Domain/SelfBookingConflict.swift`
+"Approve a show on a date you're already pitching?"
+    `Domain/SelfBookingConflict.swift`
+"Approve anyway"
+    `Domain/SelfBookingConflict.swift`
 "Asking macOS for OmniFocus permission…"
     `UI/OnboardingView.swift`
 "Asks for the date or venue Overture already knows"
@@ -866,6 +877,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Possible match to \(where_): \(name)?"
     `UI/QueueView+Model.swift`
+"Prep a show on a date you're already pitching?"
+    `Domain/SelfBookingConflict.swift`
+"Prep anyway"
+    `Domain/SelfBookingConflict.swift`
 "Prep kept"
     `App/RootView.swift`
 "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
@@ -1254,6 +1269,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "This should be their events or season page, not one show. A single show's page never changes again, so watching it would watch nothing."
     `UI/AddLeadSheet.swift`
+"This show"
+    `Domain/SelfBookingConflict.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."
     `UI/ProspectRowView.swift`
 "This town is on the skip list."
@@ -1350,6 +1367,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Wrong match"
     `UI/ProspectRowView.swift`
+"You already have a pitch in progress for \($0) on this date."
+    `Domain/SelfBookingConflict.swift`
 "You already watch \(org) at that address."
     `UI/SourceFixConfirmActions.swift`
 "You blocked \(day) (\(name))."
@@ -1410,6 +1429,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
     `Integration/ScoutService.swift`
+"\(first) and \(rest) other\(rest == 1 ? "" : "s")"
+    `Domain/SelfBookingConflict.swift`
 "\(i.keptToPrep) ready to prep"
     `Domain/AgentRoster.swift`
 "\(i.readyToSend) approved, connect Gmail to send"
@@ -1474,6 +1495,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
+"\(show) is on a date you already have a pitch in progress for \(others)."
+    `Domain/SelfBookingConflict.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
 "\(subject) you to stop still \(verb) on calendars you watch: \(who). "
@@ -1513,6 +1536,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceGuidanceGuard.swift`
 "a past client"
     `UI/QueueView+Model.swift`
+"another show"
+    `Domain/SelfBookingConflict.swift`
 "at \(venue) on \(dateLabel)"
     `UI/QueueView+Model.swift`
 "book now"
