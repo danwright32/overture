@@ -55,6 +55,10 @@ enum SelfBookingCopy {
     // date that already holds a committed pitch, so Dan confirms past a possible double-booking deliberately.
     static let prepConfirmTitle = "Prep a show on a date you're already pitching?"
     static let prepConfirmProceed = "Prep anyway"
+    // #1219: Approve is a third committing moment Dan gated (like Prep-launch and Send). Same dialog, its
+    // own verb.
+    static let approveConfirmTitle = "Approve a show on a date you're already pitching?"
+    static let approveConfirmProceed = "Approve anyway"
     static func prepConfirmMessage(_ clashes: [SelfBookingPrepClash]) -> String? {
         guard !clashes.isEmpty else { return nil }
         let lines = clashes.map { clash -> String in

@@ -906,4 +906,15 @@ struct SelfBookingWiringTests {
         // No selected key clashes -> nothing to confirm.
         #expect(QueueModel.selfBookingPrepClashes(forKeys: ["c"], among: all).isEmpty)
     }
+
+    // The single-row clash powers the Approve and per-row Re-prep confirms: it names the row's committed
+    // date-mates, or is nil when the date is clear.
+    @Test func selfBookingClashNamesOneRowsConflict() {
+        let committed = emailed("a", "2026-08-01", "Orchestra A")
+        let target = item(performanceDate: "2026-08-01", key: "t", groupName: "Target")
+        #expect(QueueModel.selfBookingClash(for: target, among: [committed, target])
+                == SelfBookingPrepClash(groupName: "Target", conflictNames: ["Orchestra A"]))
+        let clear = item(performanceDate: "2026-08-02", key: "c", groupName: "Solo")
+        #expect(QueueModel.selfBookingClash(for: clear, among: [committed, clear]) == nil)
+    }
 }

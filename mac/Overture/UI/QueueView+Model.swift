@@ -856,10 +856,14 @@ enum QueueModel {
     static func selfBookingPrepClashes(forKeys keys: Set<String>, among items: [QueueItem]) -> [SelfBookingPrepClash] {
         items
             .filter { keys.contains($0.id) }
-            .compactMap { target in
-                let names = selfBookingConflictNames(for: target, among: items)
-                return names.isEmpty ? nil : SelfBookingPrepClash(groupName: target.groupName, conflictNames: names)
-            }
+            .compactMap { selfBookingClash(for: $0, among: items) }
+    }
+
+    // The single-row clash (this show + the committed OTHER shows on its date), or nil when the date is
+    // clear. Used by the Approve and per-row Re-prep confirms, where one specific row is being committed.
+    static func selfBookingClash(for item: QueueItem, among items: [QueueItem]) -> SelfBookingPrepClash? {
+        let names = selfBookingConflictNames(for: item, among: items)
+        return names.isEmpty ? nil : SelfBookingPrepClash(groupName: item.groupName, conflictNames: names)
     }
 
     static func relatedRunNote(_ item: QueueItem) -> String? {

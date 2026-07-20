@@ -29,8 +29,9 @@ struct QueueView: View {
     private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
 
     @State private var pendingConfirm: PendingSend?
-    // #1219: a pending per-row Re-prep waiting on the self-booking confirm (nil = none pending).
-    @State private var pendingReprepConfirm: PendingReprep?
+    // #1219: a committing action (Approve or per-row Re-prep) waiting on the self-booking confirm (nil =
+    // none pending). One guard for both, since they share the dialog and differ only in verb and action.
+    @State private var pendingSelfBookingGuard: SelfBookingGuard?
     @State private var showReconnect = false
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
@@ -152,31 +153,29 @@ struct QueueView: View {
             )
     }
 
-    // #1219: a per-row Re-prep waiting on the self-booking confirm, so the naming stays out of the button
-    // wiring and the confirm reads from one place.
-    private struct PendingReprep: Identifiable {
-        let item: QueueItem
-        let mode: ReprepMode
+    // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
+    // and the action to run stay out of the button wiring and the confirm reads from one place.
+    private struct SelfBookingGuard: Identifiable {
+        let key: String
+        let title: String
+        let proceedLabel: String
         let message: String
-        var id: String { item.id }
+        let proceed: () -> Void
+        var id: String { key }
     }
 
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
             .background(OVColor.canvas)
-            // #1219: confirm a per-row Re-prep that lands on a date already holding a committed pitch.
+            // #1219: confirm an Approve or a per-row Re-prep that lands on a date already holding a pitch.
             .confirmationDialog(
-                SelfBookingCopy.prepConfirmTitle,
-                isPresented: Binding(get: { pendingReprepConfirm != nil },
-                                     set: { if !$0 { pendingReprepConfirm = nil } }),
-                presenting: pendingReprepConfirm
+                pendingSelfBookingGuard?.title ?? "",
+                isPresented: Binding(get: { pendingSelfBookingGuard != nil },
+                                     set: { if !$0 { pendingSelfBookingGuard = nil } }),
+                presenting: pendingSelfBookingGuard
             ) { pending in
-                Button(SelfBookingCopy.prepConfirmProceed) {
-                    ProspectMutations.reprep(pending.item, mode: pending.mode,
-                                             prospects: prospects, context: context, feedback: feedback)
-                    pendingReprepConfirm = nil
-                }
-                Button("Cancel", role: .cancel) { pendingReprepConfirm = nil }
+                Button(pending.proceedLabel) { pending.proceed(); pendingSelfBookingGuard = nil }
+                Button("Cancel", role: .cancel) { pendingSelfBookingGuard = nil }
             } message: { pending in
                 Text(pending.message)
             }
@@ -665,6 +664,7 @@ struct QueueView: View {
                                       replySendSince: { rid in replySending[rid] },
                                       onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                                       onReprep: { mode in requestReprep(item, mode) },
+                                      onApprove: { requestApprove(item) },
                                       showingTooFar: false,
                                       userExcludedTowns: userExcludedTowns,
                                       allowedSeedTowns: allowedSeedTowns)
@@ -672,15 +672,32 @@ struct QueueView: View {
         }
     }
 
-    // #1219: a per-row Re-prep launches a Prep run directly (the bypass the batch sheet's confirm would
-    // otherwise miss). Gate it through the same self-booking check: if the show sits on a date that already
-    // holds a committed pitch, confirm past it deliberately; otherwise re-prep straight away.
+    // #1219: Approve and per-row Re-prep are committing moments Dan gated. Both launch straight from the
+    // row (Re-prep starts a Prep run, Approve advances toward send), so each is routed through this check:
+    // if the show sits on a date that already holds a committed pitch, confirm past it deliberately;
+    // otherwise act straight away. One guard, differing only in verb and the action it runs on confirm.
     private func requestReprep(_ item: QueueItem, _ mode: ReprepMode) {
-        let clashes = QueueModel.selfBookingPrepClashes(forKeys: [item.id], among: items)
-        if let message = SelfBookingCopy.prepConfirmMessage(clashes) {
-            pendingReprepConfirm = PendingReprep(item: item, mode: mode, message: message)
-        } else {
+        guardSelfBooking(item, title: SelfBookingCopy.prepConfirmTitle,
+                         proceedLabel: SelfBookingCopy.prepConfirmProceed) {
             ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback)
+        }
+    }
+
+    private func requestApprove(_ item: QueueItem) {
+        guardSelfBooking(item, title: SelfBookingCopy.approveConfirmTitle,
+                         proceedLabel: SelfBookingCopy.approveConfirmProceed) {
+            ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
+        }
+    }
+
+    private func guardSelfBooking(_ item: QueueItem, title: String, proceedLabel: String,
+                                  proceed: @escaping () -> Void) {
+        if let clash = QueueModel.selfBookingClash(for: item, among: items),
+           let message = SelfBookingCopy.prepConfirmMessage([clash]) {
+            pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
+                                                       proceedLabel: proceedLabel, message: message, proceed: proceed)
+        } else {
+            proceed()
         }
     }
 

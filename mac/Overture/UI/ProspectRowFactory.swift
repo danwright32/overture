@@ -13,10 +13,11 @@ enum ProspectRowFactory {
                     highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
-                    // #1219: Re-prep launches a Prep run directly, so when the caller needs a screen-local
-                    // self-booking confirm before it runs (like onSend), it supplies onReprep here. Omitted
-                    // (ArchiveView), it falls back to the direct ProspectMutations.reprep call.
+                    // #1219: Re-prep and Approve are committing moments that may need a screen-local
+                    // self-booking confirm before they run (like onSend), so the caller can supply them here.
+                    // Omitted (ArchiveView), each falls back to the direct ProspectMutations call.
                     onReprep: ((ReprepMode) -> Void)? = nil,
+                    onApprove: (() -> Void)? = nil,
                     onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
                     allowedSeedTowns: Set<String> = []) -> AnyView {
@@ -26,7 +27,7 @@ enum ProspectRowFactory {
             today: today,
             onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback) },
             onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects, context: context, feedback: feedback, offer: dayOffOffer) },
-            onApprove: { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
+            onApprove: onApprove ?? { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
             onReprep: onReprep ?? { mode in ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback) },
