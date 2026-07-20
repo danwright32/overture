@@ -156,6 +156,13 @@ final class WatchedSource {
     // location (a national calendar, a fetched page), so this changes nothing for them.
     var venueLocation: String? = nil
 
+    // #1236: some sources list one concert as several rows, one per conductor (DCINY). When set, the scout
+    // merges every same-date, same-venue listing from this source into one prospect (via a synthetic
+    // seriesId stamped at ingest, see SameDateVenueMerge), keeping every conductor name. Defaulted false so
+    // the SwiftData migration is lightweight and every ordinary source is unaffected: a normal presenter's
+    // matinee and evening on one date must stay two concerts, so this is never global.
+    var mergeSameDateVenue: Bool = false
+
     var pageCount: Int
     var addedAt: Date
     // #875: the last run's own account of this source, verbatim, as it wrote it. Kept whole (sentence

@@ -770,6 +770,19 @@ enum ScoutService {
             enriched.partOfRelatedRun = gr.partOfRelatedRun
             enriched.runSourceURLs = gr.runSourceURLs
 
+            // #1236: a synthetic same-date+venue merge (DCINY) collapsed several per-conductor rows into
+            // this one. RunGrouping keeps only the representative row's title, so rebuild the name from
+            // EVERY member title (the conductor list is the name), and drop the span: it is one date, not a
+            // multi-night run. Keyed off the synthetic id, so an ordinary run (a real feed id, or none) is
+            // untouched and keeps its representative title. Set before the natural key is computed below.
+            if SameDateVenueMerge.isMerged(p.seriesId) {
+                let memberTitles = gr.memberIds.compactMap {
+                    prospects.indices.contains($0) ? prospects[$0].groupName : nil
+                }
+                enriched.groupName = SameDateVenueMerge.combinedName(from: memberTitles)
+                if enriched.runEndDate == enriched.performanceDate { enriched.runEndDate = nil }
+            }
+
             // #901: the date conflict, and it lives HERE, at the run, for the same reason the guard above
             // does. `runEndDate` does not exist until the nights have been grouped, so a check on the
             // event (where the old blocked-date drop lived) can only ever see opening night: a four-night

@@ -102,7 +102,12 @@ enum ScoutExtractIngest {
             // We read the page. It may have had nothing upcoming on it, which is the NORMAL state (5 of
             // the 7 sites in the #770 spike, in July) and is not a failure: we know what that page says,
             // and re-reading it daily until the season starts would be paying to be told so again.
-            let events = results.events(for: result.sourceId, today: today)
+            // #1236: for a source flagged to merge its per-conductor listings (DCINY), stamp a synthetic
+            // same-date+venue seriesId here, where the WatchedSource is in hand, so the existing RunGrouping
+            // collapse in ScoutService fuses the rows into one prospect. Kept in Swift, not the untrusted
+            // shell runner. Inert (no-op) for every ordinary source, whose flag is false.
+            let rawEvents = results.events(for: result.sourceId, today: today)
+            let events = source.mergeSameDateVenue ? SameDateVenueMerge.stamped(rawEvents) : rawEvents
             // #1032: the drops this run threw away, split by family (venue vs title), computed once and
             // used for BOTH the #887 tolerance gate (its total) and the Sources note (its title share).
             let rejection = results.rejectionCounts(for: result.sourceId)
