@@ -83,11 +83,14 @@ struct PrepSelectionSheet: View {
             }
         }
         .padding(OVSpacing.lg)
-        .confirmationDialog(SelfBookingCopy.prepConfirmTitle, isPresented: $pendingClashConfirm) {
-            Button(SelfBookingCopy.prepConfirmProceed) { onRun(selected); dismiss() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text(clashMessage)
+        // #1249: first-party branded confirm (SelfBookingConfirmSheet), not a stock system dialog.
+        .sheet(isPresented: $pendingClashConfirm) {
+            SelfBookingConfirmSheet(
+                title: SelfBookingCopy.prepConfirmTitle,
+                message: clashMessage,
+                proceedLabel: SelfBookingCopy.prepConfirmProceed,
+                onProceed: { pendingClashConfirm = false; onRun(selected); dismiss() },
+                onCancel: { pendingClashConfirm = false })
         }
         .frame(width: 460)
         .background(OVColor.canvas)
