@@ -49,7 +49,16 @@ stale_debug_test_host_pids() {
 # guard people stop reading.
 run_outcome() {
   local output="$1" code="$2"
-  [[ "${code}" -eq 0 ]] && return
+  # #1252: a real pass ALWAYS prints "** TEST SUCCEEDED **". At exit 0 WITHOUT that banner the run did not
+  # pass: most often the test HOST failed to LAUNCH (a running Debug app holds the single-instance lock),
+  # which xcodebuild reports with EXIT 0 plus "Could not launch" / "** TEST FAILED **" and zero tests run.
+  # Trusting the exit code alone read that dead run as a pass, so test-all.sh printed "all suites passed"
+  # having run nothing. Require the positive banner, don't merely trust exit 0.
+  if [[ "${code}" -eq 0 ]]; then
+    grep -q '\*\* TEST SUCCEEDED \*\*' <<< "${output}" && return
+    echo "crashed"
+    return
+  fi
 
   # Every line xcodebuild lists between "Failing tests:" and its verdict is a named failure.
   local named
@@ -82,15 +91,23 @@ main() {
   # #1006: say WHICH kind of red this is, in the words a person needs. "** TEST FAILED **" with
   # nothing named means the process died, not that a test failed, and reading it as a test
   # failure sends whoever sees it hunting for a bug that does not exist.
-  if [[ "$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")" == "crashed" ]]; then
+  local outcome
+  outcome="$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")"
+  if [[ "${outcome}" == "crashed" ]]; then
     echo >&2
-    echo "run-tests-locked.sh: the test run CRASHED. It did not fail." >&2
-    echo "xcodebuild reported failure and named no failing test, so no test failed: the test host died mid-run." >&2
-    echo "Any count printed above (\"Test run with N tests ... passed\") counts only what ran BEFORE it died, and is not a pass." >&2
-    echo "Usual cause is something killing the host, e.g. an overlapping run on this Mac. Rerun it; if it passes, the code was never the problem. See #1006." >&2
+    echo "run-tests-locked.sh: the test run CRASHED. It did not pass and it did not fail: the run died." >&2
+    echo "Usual causes: the test host could not launch (a running Debug app holding the single-instance lock)," >&2
+    echo "or something killed the host mid-run (an overlapping run on this Mac). Any count printed above is not a pass." >&2
+    echo "Quit any running Debug Overture, then rerun it; if it passes, the code was never the problem. See #1006/#1252." >&2
   fi
   rm -f "${output_file}"
 
+  # #1252: a test-host launch failure exits xcodebuild 0, so `test_exit_code` alone would let a dead run
+  # escape as a pass (test-all.sh's `set -e` would sail past). A non-empty outcome is a crash or a real
+  # failure; never propagate a 0 for it.
+  if [[ -n "${outcome}" && "${test_exit_code}" -eq 0 ]]; then
+    exit 1
+  fi
   exit "${test_exit_code}"
 }
 
