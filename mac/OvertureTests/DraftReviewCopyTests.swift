@@ -25,6 +25,31 @@ struct DraftReviewCopyTests {
         #expect(DraftCheck.blockMessage(blockers: []) == "This draft won't send: a blocking issue.")
     }
 
+    // MARK: - "Approved, but no email to send to" (#1311)
+    //
+    // SendService hard-blocks a send to a blank address, so an approved show with no emailable contact can
+    // never go out. The greyed Send button never said why; this note explains the stall so Dan can act.
+    // ONLY when there is genuinely no address: an email merely held by a review guard is a different,
+    // already-explained case, and saying "no email" there would be untrue.
+    @Test func anApprovedShowWithNoEmailAtAllExplainsWhyItCannotSend() {
+        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: false,
+                                                 hasAnyEmailContact: false)
+                    == "Approved, but no email to send to. Add a contact by hand.")
+    }
+
+    @Test func anApprovedShowWhoseEmailIsMerelyHeldSaysNothing() {
+        // An address exists (held by a guard), so "no email to send to" would be untrue.
+        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: false,
+                                                 hasAnyEmailContact: true) == nil)
+    }
+
+    @Test func aSendableOrUnapprovedShowSaysNothing() {
+        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: true,
+                                                 hasAnyEmailContact: true) == nil)   // can send
+        #expect(DraftReviewNotes.noSendableEmail(isApproved: false, hasPendingRecipient: false,
+                                                 hasAnyEmailContact: false) == nil)  // not approved yet
+    }
+
     // MARK: - Sending despite a warning
     //
     // #789's deliberate audit trail: an overridden warning TONES DOWN rather than disappearing, so there

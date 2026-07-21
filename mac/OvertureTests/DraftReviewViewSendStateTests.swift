@@ -35,6 +35,34 @@ struct DraftReviewViewSendStateTests {
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }
+
+    // #1311: an approved show with no emailable contact can never send (SendService hard-blocks a blank
+    // address). The greyed Send button never said why; this note explains the stall on the Send surface.
+    private func approvedItemWithNoEmail() -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .approved, draftSubject: "S", draftBody: "Hi",
+                 hasPendingRecipient: false, hasAnyEmailContact: false)
+    }
+
+    @Test func anApprovedShowWithNoEmailExplainsWhyItCannotSend() throws {
+        let view = DraftReviewView(item: approvedItemWithNoEmail(), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("no email to send to") })
+    }
+
+    @Test func aSendableApprovedShowShowsNoSuchNote() throws {
+        let view = DraftReviewView(item: approvedItem(), onApprove: {}, onUnapprove: {},
+                                   onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("no email to send to") })
+    }
 }
 
 // #407: a draft still carrying an old, un-strippable inline greeting shows Dan a plain warning

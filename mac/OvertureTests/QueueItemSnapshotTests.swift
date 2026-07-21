@@ -100,6 +100,32 @@ struct QueueItemSnapshotTests {
             now: probedAt.addingTimeInterval(Reachability.probeFreshness + 1)) == .staleProbe)
     }
 
+    // #1311: the queue item exposes whether ANY recipient carries a real address, so the Send surface can
+    // tell "no way to email at all" apart from "an email exists but is held by a guard".
+    @Test func queueItemTracksWhetherAnyContactHasAnEmailAtAll() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        p.draftSubject = "S"; p.draftBody = "Hi"
+        ctx.insert(p)
+
+        // A form-only contact (no email) is not an email to send to.
+        let formOnly = Recipient(id: "form:https://x", email: nil, name: "C", provenance: .act,
+                                 contactFormURL: "https://x")
+        p.setRecipients([formOnly])
+        #expect(QueueItem(p).hasAnyEmailContact == false)
+
+        // A real address (even one held by the venue guard) counts as an email that exists.
+        let venue = Recipient(id: "info@hall.example", email: "info@hall.example", name: "Desk", provenance: .act)
+        venue.looksLikeVenue = true
+        p.setRecipients([venue])
+        #expect(QueueItem(p).hasAnyEmailContact == true)
+    }
+
     // #367: the re-prep flags and eligibility carry through to the view-model so the UI can show a
     // "Re-prep queued" badge and gate the action to non-terminal statuses.
     @Test func queueItemCarriesReprepFlagsAndEligibility() throws {

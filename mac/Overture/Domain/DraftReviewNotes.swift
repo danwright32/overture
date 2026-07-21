@@ -40,6 +40,16 @@ enum DraftReviewNotes {
         !(isApproved && lintBlocked)
     }
 
+    // #1311: an approved show with NO emailable contact at all can never send (SendService hard-blocks a
+    // blank address), and the greyed Send button never said why. This explains the stall so Dan can act,
+    // rather than leaving him staring at a disabled button. Only when there is genuinely no address: an
+    // email held by a review guard is a different, already-explained case, and saying "no email to send
+    // to" there would be untrue.
+    static func noSendableEmail(isApproved: Bool, hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
+        guard isApproved, !hasPendingRecipient, !hasAnyEmailContact else { return nil }
+        return "Approved, but no email to send to. Add a contact by hand."
+    }
+
     // #792: "Sent" was once the whole story, and a contact held back by a review guard is not sendable,
     // so a show read as fully done while a real person never received anything. This count is what says
     // otherwise, and a count is a promise about rows (#863).
