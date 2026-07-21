@@ -100,6 +100,9 @@ struct QueueView: View {
 
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
     @State private var pendingProbe: ProbeConfirm?
+    // #1336: dates whose proactive reachability callout Dan has waved off this session (the X). Session
+    // scoped by design: a relaunch offers it again, and a date resolving out of contention hides it anyway.
+    @State private var dismissedProbeDates: Set<String> = []
     private struct ProbeConfirm: Identifiable {
         let id = UUID()
         let keys: [String]
@@ -323,6 +326,8 @@ struct QueueView: View {
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay, isScout: focusedStage == .scout,
                     isRunning: prepRunning,
+                    isDismissed: dismissedProbeDates.contains(group.monthDay),
+                    onDismiss: { dismissedProbeDates.insert(group.monthDay) },
                     onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
@@ -797,37 +802,59 @@ struct QueueView: View {
     }
 }
 
-// #1308 Layer 2: the date-header "Check reachability" control. A standalone view so its visibility rule and
-// tap payload are testable directly (the enclosing QueueView reads @Query/@State that a unit test can't
-// inject). Shown only off the Scout stage and only when 2+ still-open candidates share the date; a tap
-// reports the candidate keys up so QueueView opens the confirm sheet.
+// #1308 Layer 2 / #1336: the proactive "Check reachability" callout. A standalone view so its visibility
+// rule and tap payload are testable directly (the enclosing QueueView reads @Query/@State a unit test
+// can't inject). Shown off the Scout stage when 2+ still-open candidates share the date (reusing the
+// existing candidate logic, so it auto-hides once they are checked or the date narrows below 2). A
+// first-party inline callout, not a passive button Dan must remember: it names how many shows compete and
+// carries the Check action and a session dismiss (the X). A tap reports the candidate keys up so QueueView
+// opens the confirm sheet; it never runs on its own.
 struct ReachabilityProbeControl: View {
     let items: [QueueItem]
     let dateLabel: String
     let isScout: Bool
-    // #1323: a probe and a normal Prep share the single detached-run slot, so the control greys out while
-    // any run is already in flight rather than failing after the tap with PrepLaunchError.alreadyRunning.
+    // #1323: a probe and a normal Prep share the single detached-run slot, so the Check action greys out
+    // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
+    // #1336: Dan has waved this date's callout off for the session (the X), so it stays hidden until the
+    // date resolves or the app relaunches.
+    var isDismissed: Bool = false
+    var onDismiss: () -> Void = {}
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
     var body: some View {
-        if !isScout && QueueModel.showsReachabilityProbeControl(items) {
-            Button {
-                guard !isRunning else { return }
-                onTap(QueueModel.reachabilityProbeCandidateKeys(items), dateLabel)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "envelope.badge")
+        if !isScout && !isDismissed && QueueModel.showsReachabilityProbeControl(items) {
+            let count = QueueModel.reachabilityProbeCandidateKeys(items).count
+            HStack(spacing: OVSpacing.sm) {
+                Image(systemName: "envelope.badge").foregroundStyle(OVColor.forest)
+                Text(ReachabilityProbeCopy.calloutHeadline(count: count))
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(OVColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: OVSpacing.sm)
+                Button {
+                    guard !isRunning else { return }
+                    onTap(QueueModel.reachabilityProbeCandidateKeys(items), dateLabel)
+                } label: {
                     Text(ReachabilityProbeCopy.controlLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isRunning ? OVColor.onForest.opacity(0.5) : OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                        .background(Capsule().fill(OVColor.forest.opacity(isRunning ? 0.4 : 1)))
                 }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isRunning ? OVColor.forest.opacity(0.4) : OVColor.forest)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                .background(Capsule().fill(OVColor.forest.opacity(isRunning ? 0.05 : 0.10)))
+                .buttonStyle(.plain)
+                .disabled(isRunning)
+                .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
+                Button { onDismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(OVColor.inkSoft)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("dismiss-reachability-callout")
+                .accessibilityLabel("Dismiss this date's reachability nudge")
             }
-            .buttonStyle(.plain)
-            .disabled(isRunning)
-            .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : ReachabilityProbeCopy.controlHelp)
+            .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.xs)
+            .background(RoundedRectangle(cornerRadius: 8).fill(OVColor.forest.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(OVColor.forest.opacity(0.2), lineWidth: 1))
         }
     }
 }

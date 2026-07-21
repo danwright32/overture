@@ -108,8 +108,12 @@ enum ReachabilityCopy {
 // copy-inventory shows the whole sentence Dan reads.
 enum ReachabilityProbeCopy {
     static let controlLabel = "Check reachability"
-    static let controlHelp =
-        "Check which of this date's still-open shows are actually emailable, before you keep one and dismiss the rest."
+    // #1336: the callout's visible headline, so the reachability check surfaces itself when several shows
+    // compete for a date instead of waiting on Dan to remember a passive button. Names the count so the
+    // stakes are concrete. Replaces the old hover-only controlHelp, now that the ask is always visible.
+    static func calloutHeadline(count: Int) -> String {
+        "\(count) shows compete for this date. See which you can actually email before you keep one."
+    }
     // #1323: shown while a Prep or another probe already holds the single run slot, so the greyed-out
     // control explains itself instead of failing after the tap.
     static let controlBusyHelp =
