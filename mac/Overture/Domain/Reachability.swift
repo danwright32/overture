@@ -19,11 +19,28 @@ enum Reachability {
     // #1324: `weakContactOnly` is a probed show whose only found address is a venue front desk or a press
     // inbox (held by the venue/press guard, so not sendable). An email exists, so "No email found" would
     // be untrue; this names the weak result honestly without pretending it is sendable.
-    enum Badge: Equatable { case none, hardToReach, noEmailFound, weakContactOnly, emailFound }
+    // #1325: `staleProbe` is a probe whose result is older than the freshness window. The org may have
+    // moved since, so the firm answer becomes a distinct "worth re-checking" state instead of a stale
+    // firm claim.
+    enum Badge: Equatable { case none, hardToReach, noEmailFound, weakContactOnly, staleProbe, emailFound }
+
+    // #1325: how long a probe result is trusted before it reads as possibly out of date (~90 days,
+    // roughly the pitch horizon). Past this the badge asks Dan to re-check rather than trusting the old
+    // answer.
+    static let probeFreshness: TimeInterval = 90 * 24 * 60 * 60
+
+    // A probe result older than the freshness window. Never-probed (nil) is not stale.
+    static func probeIsStale(probedAt: Date?, now: Date) -> Bool {
+        guard let probedAt else { return false }
+        return now.timeIntervalSince(probedAt) > probeFreshness
+    }
 
     static func badge(probed: Bool, hasSendableEmail: Bool, hasWeakContactEmail: Bool = false,
+                      probeIsStale: Bool = false,
                       presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
         if probed {
+            // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
+            if probeIsStale { return .staleProbe }
             if hasSendableEmail { return .emailFound }
             return hasWeakContactEmail ? .weakContactOnly : .noEmailFound
         }
@@ -80,6 +97,11 @@ enum ReachabilityCopy {
     static let weakContactOnlyBadge = "Weak contact only"
     static let weakContactOnlyHelp =
         "A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
+
+    // #1325: the earlier probe result has aged past the freshness window, so it may no longer be true.
+    static let staleProbeBadge = "Reachability may be out of date"
+    static let staleProbeHelp =
+        "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the

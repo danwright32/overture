@@ -161,10 +161,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // heuristic (only the hard case surfaces); after a probe it is the firm email-found/not-found answer.
     // A Review-time decision aid, so it only shows while the show is still a candidate (not yet pitched,
     // not booked); a sent or booked show was clearly reachable.
-    var reachabilityBadge: Reachability.Badge {
+    // #1325: a method (not a property) so staleness is decided against an injectable `now`, keeping the
+    // freshness logic testable rather than reading the wall clock from inside the view (the #863 lesson).
+    // The view calls it with the default; tests pass a fixed `now`.
+    func reachabilityBadge(now: Date = Date()) -> Reachability.Badge {
         guard sentAt == nil && !isBooked else { return .none }
         return Reachability.badge(probed: reachabilityProbedAt != nil, hasSendableEmail: hasPendingRecipient,
                                   hasWeakContactEmail: hasWeakContactEmail,
+                                  probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
                                   presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
 

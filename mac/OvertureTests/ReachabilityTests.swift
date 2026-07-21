@@ -84,6 +84,30 @@ struct ReachabilityTests {
                                    websiteURL: nil) == .noEmailFound)  // nothing at all
     }
 
+    // #1325: a probe result is trusted only for a window (reachabilityProbedAt within probeFreshness).
+    // Past it the org may have moved, so the firm answer (found OR not found) becomes a distinct "worth
+    // re-checking" badge rather than a stale firm claim that could mislead a keep/dismiss.
+    @Test func aStaleProbeResultRevertsToAWorthRecheckingBadge() {
+        #expect(Reachability.badge(probed: true, hasSendableEmail: true, probeIsStale: true,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .staleProbe)
+        #expect(Reachability.badge(probed: true, hasSendableEmail: false, probeIsStale: true,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .staleProbe)   // a stale "not found" is re-check too
+        #expect(Reachability.badge(probed: true, hasSendableEmail: true, probeIsStale: false,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .emailFound)   // fresh: still the firm result
+    }
+
+    @Test func probeStalenessRespectsTheFreshnessWindow() {
+        let probedAt = Date(timeIntervalSince1970: 1_000_000)
+        #expect(Reachability.probeIsStale(probedAt: nil, now: probedAt) == false)   // never probed
+        #expect(Reachability.probeIsStale(probedAt: probedAt,
+                                          now: probedAt.addingTimeInterval(Reachability.probeFreshness - 1)) == false)
+        #expect(Reachability.probeIsStale(probedAt: probedAt,
+                                          now: probedAt.addingTimeInterval(Reachability.probeFreshness + 1)) == true)
+    }
+
     @Test func anUnprobedShowFallsBackToTheHeuristic() {
         #expect(Reachability.badge(probed: false, hasSendableEmail: false,
                                    presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x",
