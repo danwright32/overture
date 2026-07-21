@@ -1,0 +1,192 @@
+import Foundation
+
+// #1280: the parser over a TicketTailor box-office widget (The Cell, and any all-tickets-calendar embed).
+// The server-rendered widget (reached via TicketTailor.fetchWidget, #1127) embeds its events as a JS
+// assignment `var selectableDates = {...};` (a map keyed by yyyy-MM-dd); each date's `event_series`
+// listing the shows available that day. This parses that embedded JSON into structured events, exactly as
+// VenueTixCalendar does for its JSON feed, so a TicketTailor venue ingests for FREE instead of a paid AI
+// read. Unlike the host-routed OPERA/VenueTix feeds, a TicketTailor source is discovered mid-fetch (not by
+// host), so this parser is handed HTML that already went through the widget hop; the read-path wiring that
+// routes a detected widget here instead of to the paid read is #1295 (Phase 3).
+//
+// Two shapes matter, both verified against real captured bytes (2026-07-21):
+//   - POPULATED: `var selectableDates = {"2026-07-21":{...,"event_series":[{"series_id":429862,
+//     "name":"Beach visits","venue":"...","event_page_url":"/events/.../429862"}]}, ...};`. A recurring
+//     show (one series_id) repeats under EVERY date it plays, so one row per (date, series) is correct and
+//     the shared series_id is exactly RunGrouping's multi-night-run signal (Dan's decision: one card).
+//   - EMPTY: `var selectableDates = [];` (an empty ARRAY, not the object map). This is The Cell's normal
+//     no-events state and MUST read as a quiet empty calendar, never a shape-change failure.
+enum TicketTailorCalendar {
+    struct TTEvent: Equatable, Sendable {
+        var name: String
+        var venue: String?      // the feed's own venue text; may be absent or blank
+        var date: Date
+        var seriesId: String?   // TicketTailor's series_id, shared across every date a recurring show plays
+        var eventURL: String?   // the event page a person would open (event_page_url, made absolute on map)
+    }
+
+    // series_id is a NUMBER in the live feed, but tolerate a string or null too so a single field's type
+    // can never fail the whole parse. Mirrors VenueTixCalendar.SeriesID.
+    private struct FlexID: Decodable {
+        let value: String?
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { value = nil }
+            else if let s = try? c.decode(String.self) { value = s.isEmpty ? nil : s }
+            else if let i = try? c.decode(Int.self) { value = String(i) }
+            else if let d = try? c.decode(Double.self) { value = String(Int(d)) }
+            else { value = nil }
+        }
+    }
+
+    private struct Series: Decodable {
+        let series_id: FlexID?
+        let name: String?
+        let venue: String?
+        let event_page_url: String?
+    }
+
+    private struct DateEntry: Decodable {
+        let event_series: [Series]?
+    }
+
+    // Parse the widget HTML's embedded `var selectableDates = ...;` assignment into events.
+    static func parseWidget(_ html: String) throws -> [TTEvent] {
+        // No assignment at all (a non-widget page, or a shape we don't recognize) reads as empty, never an
+        // error: the read-path only routes a CONFIRMED TicketTailor widget here, and a hard failure belongs
+        // to the extractor's "the embed vanished" case (#1294), not to a benign parse miss.
+        guard let literal = selectableDatesLiteral(in: html) else { return [] }
+        let trimmed = literal.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The empty state is `[]` (an empty array); an empty object `{}` reads the same way. Quiet, NOT
+        // drift: decoding `[]` as the event map would otherwise throw and falsely mark the venue broken.
+        if trimmed.isEmpty || trimmed == "[]" || trimmed == "{}" { return [] }
+        guard trimmed.hasPrefix("{"), let data = trimmed.data(using: .utf8) else { return [] }
+
+        let map: [String: DateEntry]
+        do {
+            map = try JSONDecoder().decode([String: DateEntry].self, from: data)
+        } catch {
+            // A NON-EMPTY object we could not decode is a format change (a renamed structural field), the
+            // same "fail loud" the OPERA/VenueTix guards use rather than a silent empty list.
+            throw SourceFetchError.feedShapeChanged
+        }
+
+        var events: [TTEvent] = []
+        var sawAnySeries = false
+        for (dateKey, entry) in map {
+            guard let day = dayFormatter.date(from: dateKey) else { continue }   // a key that isn't a day
+            for series in entry.event_series ?? [] {
+                sawAnySeries = true
+                let name = series.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !name.isEmpty, let sid = series.series_id?.value else { continue }
+                let venue = series.venue?.trimmingCharacters(in: .whitespacesAndNewlines)
+                events.append(TTEvent(name: name,
+                                      venue: (venue?.isEmpty == false) ? venue : nil,
+                                      date: day, seriesId: sid, eventURL: series.event_page_url))
+            }
+        }
+        // Nesting-aware drift: series objects were PRESENT but not one parsed (name/series_id renamed) is a
+        // shape change. "date keys present but no series anywhere" (sawAnySeries == false) is genuine
+        // emptiness (a date with nothing on), which passes through as [].
+        if sawAnySeries && events.isEmpty { throw SourceFetchError.feedShapeChanged }
+        // Deterministic order (date, then series id) so downstream and the content hash never churn.
+        return events.sorted {
+            ($0.date, $0.seriesId ?? "", $0.name) < ($1.date, $1.seriesId ?? "", $1.name)
+        }
+    }
+
+    // Keep shows on today or later. Day-based (the widget dates carry no time), so a show TODAY is kept
+    // rather than dropped for being "before now". Filtering a COMPLETE feed to a stable rule keeps the
+    // reconcile honest: a show leaves the set only once it is genuinely past.
+    static func upcoming(_ events: [TTEvent], now: Date) -> [TTEvent] {
+        let today = Calendar.current.startOfDay(for: now)
+        return events.filter { Calendar.current.startOfDay(for: $0.date) >= today }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    // The events mapped to ExtractedEvent. Dan's decisions (2026-07-21): the pitch venue is the feed's own
+    // `venue` text when present, else the venue name he configured on the source; a recurring show (one
+    // series_id across many dates) collapses to one card, so only a multi-date series carries its shared
+    // seriesId onward (a single-date show gets nil so it is never falsely run-collapsed). The event page
+    // URL is carried as the listing link a person would open.
+    static func extractedEvents(from events: [TTEvent], venueName: String,
+                                location: String?) -> [ExtractedEvent] {
+        let multiDate = Set(seriesTags(events).keys)
+        return events.map { e in
+            ExtractedEvent(title: e.name,
+                           presenter: venueName,
+                           venue: (e.venue?.isEmpty == false) ? e.venue! : venueName,
+                           performanceDate: dayFormatter.string(from: e.date),
+                           sourceUrl: e.eventURL.flatMap(absoluteEventURL),
+                           location: location,
+                           seriesId: e.seriesId.flatMap { multiDate.contains($0) ? $0 : nil })
+        }
+    }
+
+    // The series ids that appear on MORE THAN ONE date, i.e. the recurring shows that collapse to one run.
+    // Mirrors VenueTixCalendar.seriesTags' multi-night set (only the key set is used here).
+    static func seriesTags(_ events: [TTEvent]) -> [String: String] {
+        var counts: [String: Int] = [:]
+        for e in events { if let s = e.seriesId, !s.isEmpty { counts[s, default: 0] += 1 } }
+        var tags: [String: String] = [:]
+        for e in events {
+            guard let s = e.seriesId, !s.isEmpty, (counts[s] ?? 0) > 1, tags[s] == nil else { continue }
+            tags[s] = "run-\(tags.count + 1)"
+        }
+        return tags
+    }
+
+    // Resolve the feed's relative event_page_url ("/events/<slug>/<id>") to an absolute tickettailor.com
+    // URL a person can open; an already-absolute URL is passed through, a blank one drops out.
+    private static func absoluteEventURL(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") { return trimmed }
+        return "https://www.tickettailor.com" + (trimmed.hasPrefix("/") ? trimmed : "/" + trimmed)
+    }
+
+    // Extract the value of `var selectableDates = <value>;` from the widget HTML by balancing braces and
+    // brackets (respecting string literals), NOT by reading to the first `;` (a venue or title string can
+    // legitimately contain `;`, `{`, or `}`, which a naive scan would truncate on).
+    private static func selectableDatesLiteral(in html: String) -> String? {
+        // copy-inventory:ignore-start  a search marker for the widget's JS assignment, not the app's voice (#915)
+        guard let marker = html.range(of: "var selectableDates = ") else { return nil }
+        // copy-inventory:ignore-end
+        return balancedLiteral(html[marker.upperBound...])
+    }
+
+    private static func balancedLiteral<S: StringProtocol>(_ s: S) -> String? {
+        var depth = 0, started = false, inString = false, escaped = false
+        var result = ""
+        for ch in s {
+            if !started {
+                if ch == "{" || ch == "[" { started = true }
+                else if ch == " " || ch == "\t" || ch == "\n" || ch == "\r" { continue }
+                else { return nil }   // not a JSON value after the marker
+            }
+            result.append(ch)
+            if inString {
+                if escaped { escaped = false }
+                else if ch == "\\" { escaped = true }
+                else if ch == "\"" { inString = false }
+                continue
+            }
+            switch ch {
+            case "\"": inString = true
+            case "{", "[": depth += 1
+            case "}", "]":
+                depth -= 1
+                if depth == 0 { return result }
+            default: break
+            }
+        }
+        return started ? result : nil   // unterminated: hand back what we have (decode fails -> handled)
+    }
+}
