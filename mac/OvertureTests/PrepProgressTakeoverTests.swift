@@ -69,7 +69,8 @@ struct PrepTakeoverWiringGuardTests {
         // The takeover sheet is bound to the prep-running flag and renders the shared progress view in the
         // prepping phase.
         #expect(rootView.contains(".sheet(isPresented: $prepSheetShown)"))
-        #expect(rootView.contains("phase: .prepping"))
+        // #1322: the phase is prepping for a Prep, probing for a reachability probe (its marker present).
+        #expect(rootView.contains("PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping"))
         #expect(rootView.contains("Snapshot.livePrepping()"))
     }
 }

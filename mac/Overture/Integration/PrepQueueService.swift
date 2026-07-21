@@ -223,6 +223,16 @@ enum PrepQueueService {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
+    // #1322: whether the in-flight detached run is a reachability probe (its marker is present) rather than
+    // a normal Prep. A probe and a prep share the single run lock, so isRunning alone can't tell them
+    // apart; the probe-run marker, written on launch and cleared on settle, is what distinguishes them.
+    // Requires the run to actually be live (a stale lock past a crash is not a running probe).
+    static func isProbeRunning(probeRunURL: URL = defaultProbeRunURL,
+                               markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
+        guard isRunning(markerURL: markerURL, now: now) else { return false }
+        return ((try? ReachabilityProbeMarker.read(from: probeRunURL)) ?? nil) != nil
+    }
+
     // Writes the work-list and launches the detached run. Returns the count queued.
     // URLs are injectable for testing; production uses the default locations.
     @discardableResult

@@ -168,6 +168,32 @@ struct PrepQueueTests {
         }
     }
 
+    // #1322: a probe and a normal Prep share the single run lock, so isRunning alone can't tell them
+    // apart. The probe-run marker's presence during a live run is what identifies the in-flight run as a
+    // probe, so the takeover and toolbar can label it "Checking reachability" instead of "Prepping".
+    @Test func isProbeRunningIsTrueOnlyWhenARunIsLiveAndTheProbeMarkerIsPresent() throws {
+        let runLock = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prep-lock-\(UUID().uuidString)")
+        let probeMarker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("probe-run-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: runLock); try? FileManager.default.removeItem(at: probeMarker) }
+
+        // No run at all.
+        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == false)
+
+        // A live run with no probe marker: a normal Prep, not a probe.
+        try Data().write(to: runLock)
+        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == false)
+
+        // A live run WITH the probe marker: a probe.
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: ["a", "b"], startedAt: "x"), to: probeMarker)
+        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == true)
+
+        // Marker present but the run lock has gone stale (crashed): no longer a live probe.
+        let stale = Date().addingTimeInterval(PrepQueueService.markerStaleAfter + 60)
+        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: stale) == false)
+    }
+
     @Test func isRunningReflectsAFreshMarkerButIgnoresAStaleOne() throws {
         let marker = FileManager.default.temporaryDirectory
             .appendingPathComponent("prep-running-\(UUID().uuidString)")
