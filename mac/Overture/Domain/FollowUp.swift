@@ -73,11 +73,15 @@ enum FollowUp {
     // (primitives in, strings out): no model access, no actor, testable on its own.
     struct NudgeContent: Equatable, Sendable { let subject: String; let body: String }
 
-    static func nudgeContent(originalSubject: String?, groupName: String,
+    static func nudgeContent(originalSubject: String?, groupName: String, isMerged: Bool = false,
                              contactName: String?, venue: String?, followUpCount: Int) -> NudgeContent {
-        NudgeContent(
-            subject: replySubject(originalSubject: originalSubject, groupName: groupName),
-            body: nudgeBody(contactName: contactName, groupName: groupName,
+        // #1276: sanitize ONCE here, the single chokepoint both SendService and the confirm sheet call,
+        // then hand the safe name to the leaves. Keeps every subject/body path covered without each leaf
+        // re-deciding.
+        let name = safeDisplayName(groupName, isMerged: isMerged)
+        return NudgeContent(
+            subject: replySubject(originalSubject: originalSubject, groupName: name),
+            body: nudgeBody(contactName: contactName, groupName: name,
                             venue: venue, attempt: attempt(after: followUpCount)))
     }
 
@@ -87,22 +91,21 @@ enum FollowUp {
     // out of the copy inventory, which is a list of the app's own voice. What goes to a stranger has its
     // own guard: the draft lint (#789), which reads it before it can leave.
 
-    // #1260 Phase 1: a merged same-date+venue prospect (SameDateVenueMerge, #1236) carries a
+    // #1260 Phase 1 / #1276: a merged same-date+venue prospect (SameDateVenueMerge, #1236) carries a
     // conductor-LIST groupName ("We Sing Noel; Craig Courtney; The Four Freedoms"). Right on screen,
-    // wrong in an outbound email under Dan's name. The nudge/reminder paths below interpolate groupName
-    // verbatim with NO edit surface (unlike the AI-drafted pitch, which Dan reviews). So substitute a
-    // neutral brand-voice phrase whenever the name is a merged list. Detection is the "; " separator that
-    // SameDateVenueMerge.combinedName is the sole producer of; a single real title never carries it.
-    // (Phase 2 persists seriesId; a later tightening could gate on isMerged for exactness.) ConversationReminder
-    // routes through this same helper, so the two send paths can never disagree on the substitution.
+    // wrong in an outbound email under Dan's name. The nudge/reminder paths interpolate the name verbatim
+    // with NO edit surface (unlike the AI-drafted pitch, which Dan reviews). So substitute a neutral
+    // brand-voice phrase for a merged name. #1276: keyed on the PERSISTED merge fact (isMerged), not a
+    // "; " sniff, because a legitimate single title (Carnegie's "Symphony of Psalms & Les Noces
+    // (Stravinsky); No Time for Idle Tears") also carries that separator and must keep its real name.
     static let mergedNameSubstitute = "your upcoming performance"
 
-    static func safeDisplayName(_ groupName: String) -> String {
-        groupName.contains("; ") ? mergedNameSubstitute : groupName
+    static func safeDisplayName(_ groupName: String, isMerged: Bool) -> String {
+        isMerged ? mergedNameSubstitute : groupName
     }
 
     static func nudgeSubject(groupName: String) -> String {
-        "Following up: photographs for \(safeDisplayName(groupName))"
+        "Following up: photographs for \(groupName)"
     }
 
     // A follow-up replies on the original thread, so its subject is the original with a single
@@ -122,13 +125,12 @@ enum FollowUp {
     static func nudgeBody(contactName: String?, groupName: String, venue: String?, attempt: Int = 1) -> String {
         let venueClause = (venue?.isEmpty == false) ? " at \(venue!)" : ""
         let greeting = Salutation.greeting(for: contactName)
-        let name = safeDisplayName(groupName)
         if attempt >= FollowUpConfig().maxFollowUps {
-            return greeting + "\n\nOne last note on photographing \(name)\(venueClause). "
+            return greeting + "\n\nOne last note on photographing \(groupName)\(venueClause). "
                 + "If it would be useful down the line I'm glad to help, and if not, no need to reply. "
                 + "I'll leave it here either way."
         }
-        return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(name)\(venueClause). "
+        return greeting + "\n\nI wanted to follow up on my earlier note about photographing \(groupName)\(venueClause). "
             + "If a few sample frames from similar performances would be useful, I'm glad to send some over.\n\n"
             + "No problem if the timing isn't right."
     }

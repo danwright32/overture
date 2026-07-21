@@ -1,57 +1,83 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
-// #1260 Phase 1: a merged same-date+venue prospect (SameDateVenueMerge, #1236/#1259) carries a
-// conductor-LIST groupName ("We Sing Noel; Craig Courtney; The Four Freedoms"). That is right on
-// screen but wrong in an outbound email under Dan's name, and the follow-up / reminder nudge paths
-// interpolate groupName verbatim with NO edit surface (unlike the AI-drafted pitch). These assert the
-// merged list never reaches a recipient: every nudge substitutes a neutral phrase, while an ordinary
-// single-title name is untouched. If either goes red, an ugly conductor list is going out to a stranger.
-@Suite("Merged-name outbound sanitizer (#1260 Phase 1)")
+// #1260 Phase 1 / #1276: a merged same-date+venue prospect (SameDateVenueMerge, #1236) carries a
+// conductor-LIST groupName ("We Sing Noel; Craig Courtney; The Four Freedoms"), fine on screen but wrong
+// in an outbound follow-up/reminder email under Dan's name (those paths have NO edit surface). The name is
+// substituted with a neutral phrase, keyed on the PERSISTED merge fact, NOT a "; " sniff: a real single
+// title that happens to contain "; " (Carnegie's "Symphony of Psalms & Les Noces (Stravinsky); No Time for
+// Idle Tears") must keep its real name. These pin both halves, including the wire from prospect.seriesId.
+@Suite("Merged-name outbound sanitizer (#1260 / #1276)")
 struct MergedNameOutboundSanitizerTests {
-    // The exact shape SameDateVenueMerge.combinedName produces (joined with "; ").
-    private let merged = SameDateVenueMerge.combinedName(
-        from: ["We Sing Noel", "Craig Courtney", "The Four Freedoms"])
-    private let single = "Aurora Strings"
+    private let mergedName = "We Sing Noel; Craig Courtney; The Four Freedoms"
+    private let legitSemicolonTitle = "Symphony of Psalms & Les Noces (Stravinsky); No Time for Idle Tears"
 
-    @Test func sanitizerReplacesAMergedListButLeavesASingleTitleAlone() {
-        #expect(FollowUp.safeDisplayName(merged) == FollowUp.mergedNameSubstitute)
-        #expect(FollowUp.safeDisplayName(single) == single)
+    @Test func substitutesOnlyForAGenuineMergeNotForASemicolonTitle() {
+        #expect(FollowUp.safeDisplayName(mergedName, isMerged: true) == FollowUp.mergedNameSubstitute)
+        // #1276: a real single title with a semicolon keeps its true name.
+        #expect(FollowUp.safeDisplayName(legitSemicolonTitle, isMerged: false) == legitSemicolonTitle)
+        #expect(FollowUp.safeDisplayName("Aurora Strings", isMerged: false) == "Aurora Strings")
     }
 
-    @Test func followUpSubjectNeverCarriesTheConductorList() {
-        let s = FollowUp.nudgeSubject(groupName: merged)
-        #expect(!s.contains(merged))
-        #expect(s.contains(FollowUp.mergedNameSubstitute))
-        // A normal name still rides through unchanged.
-        #expect(FollowUp.nudgeSubject(groupName: single).contains(single))
+    @Test func followUpNudgeSubstitutesOnlyWhenMerged() {
+        let merged = FollowUp.nudgeContent(originalSubject: nil, groupName: mergedName, isMerged: true,
+                                           contactName: "Sam", venue: "Carnegie Hall", followUpCount: 0)
+        #expect(!merged.subject.contains(mergedName))
+        #expect(!merged.body.contains(mergedName))
+        #expect(merged.body.contains(FollowUp.mergedNameSubstitute))
+
+        let legit = FollowUp.nudgeContent(originalSubject: nil, groupName: legitSemicolonTitle, isMerged: false,
+                                          contactName: "Sam", venue: "Carnegie Hall", followUpCount: 0)
+        #expect(legit.body.contains(legitSemicolonTitle))   // the #1276 fix: real name kept
     }
 
-    @Test func followUpBodyNeverCarriesTheConductorList() {
-        for attempt in [1, FollowUpConfig().maxFollowUps] {
-            let b = FollowUp.nudgeBody(contactName: "Sam", groupName: merged,
-                                       venue: "Carnegie Hall", attempt: attempt)
-            #expect(!b.contains(merged))
-            #expect(b.contains(FollowUp.mergedNameSubstitute))
+    @Test func conversationReminderSubstitutesOnlyWhenMerged() {
+        func body(_ name: String, isMerged: Bool) -> String {
+            ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: nil,
+                                              groupName: name, isMerged: isMerged,
+                                              contactName: "Sam", venue: "Carnegie Hall")?.body ?? ""
         }
-        #expect(FollowUp.nudgeBody(contactName: "Sam", groupName: single,
-                                   venue: "Carnegie Hall", attempt: 1).contains(single))
+        #expect(!body(mergedName, isMerged: true).contains(mergedName))
+        #expect(body(mergedName, isMerged: true).contains(FollowUp.mergedNameSubstitute))
+        #expect(body(legitSemicolonTitle, isMerged: false).contains(legitSemicolonTitle))
     }
 
-    @Test func conversationReminderBodiesNeverCarryTheConductorList() {
-        for state in [ConversationState.interested, .wantsToBook, .hasQuestion] {
-            let b = ConversationReminder.nudgeBody(for: state, contactName: "Sam",
-                                                   groupName: merged, venue: "Carnegie Hall")
-            #expect(!b.contains(merged))
-            #expect(b.contains(FollowUp.mergedNameSubstitute))
+    // The WIRING: the flag must actually flow from a stored Prospect's persisted seriesId through the
+    // confirmation/send builder, not just exist as a parameter. A merged prospect substitutes; a
+    // semicolon-titled single prospect (no seriesId) keeps its real name.
+    @MainActor
+    @Test func theConfirmationBuilderReadsTheProspectsPersistedMergeFlag() throws {
+        let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let ctx = ModelContext(container)
+
+        func confirmBody(groupName: String, seriesId: String?) throws -> String {
+            let key = Prospect.makeNaturalKey(groupName: groupName, performanceDate: "2026-11-16", venue: "Stern")
+            let p = Prospect(naturalKey: key, groupName: groupName, discipline: "choral", venue: "Stern",
+                             performanceDate: "2026-11-16", sourceListingURL: nil, websiteURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .approved, ingestedAt: Date())
+            p.seriesId = seriesId
+            ctx.insert(p)
+            let r = Recipient(id: "to@org.org", email: "to@org.org", name: "Sam", provenance: .act)
+            r.sentAt = Date()   // a follow-up goes to an already-contacted recipient
+            r.sendState = .sent
+            p.setRecipients([r])
+            try ctx.save()
+            let c = try #require(SendConfirmation(followUpFor: r, of: p))
+            return c.body
         }
-        let closing = ConversationReminder.closingNudgeBody(contactName: "Sam",
-                                                            groupName: merged, venue: "Carnegie Hall")
-        #expect(!closing.contains(merged))
-        #expect(closing.contains(FollowUp.mergedNameSubstitute))
-        // A normal name is untouched on the reminder path too.
-        #expect(ConversationReminder.nudgeBody(for: .interested, contactName: "Sam",
-                                               groupName: single, venue: "Carnegie Hall").contains(single))
+
+        let mergedBody = try confirmBody(groupName: mergedName,
+                                         seriesId: SameDateVenueMerge.syntheticSeriesId(date: "2026-11-16", venue: "Stern"))
+        #expect(!mergedBody.contains(mergedName))
+        #expect(mergedBody.contains(FollowUp.mergedNameSubstitute))
+
+        let legitBody = try confirmBody(groupName: legitSemicolonTitle, seriesId: nil)
+        #expect(legitBody.contains(legitSemicolonTitle))   // not merged -> real name survives to the recipient
     }
 }

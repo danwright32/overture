@@ -185,6 +185,16 @@ For each item in the work-list:
    collapse them into a single run for Dan; a wrong or guessed id would wrongly merge two different shows,
    so report only what the page literally marks.
 
+3c. **Report `sourceUrl`: the page a person would open to read about the concert, never a registration or
+   sign-up form** (#1276). It becomes the show's stored listing link, which Dan clicks to look the concert
+   up, so it must point at a concert page or the listings page it came from. Some rows link only to a
+   performer signup or ticket-registration form (a `getfeedback.com` link, a Google Form, an "apply to
+   sing" page). That is not the concert; a link like that sends Dan to a form to join the choir, not to the
+   show he is deciding whether to photograph. If a row's only link is such a form, record the concert page
+   if the row names one, otherwise record the listings page URL you read, and never the form. DCINY's
+   `/opportunities/` rows are the concrete case: each links to a `getfeedback.com` recruiting form, while
+   the real concert lives at a `dciny.org/events/<slug>/` page.
+
 4. **Judge the page and report one verdict.** This is the part that matters most, because an empty
    event list is ambiguous and all three readings occur in the wild:
 

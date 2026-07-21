@@ -353,6 +353,12 @@ final class Prospect {
     // post-deploy re-scout (forward-only, matching #980).
     var seriesId: String? = nil
 
+    // #1276: is this a merged same-date+venue concert (so its groupName is a conductor LIST, not a real
+    // title)? The one true test, so the outbound-email guard keys on the persisted merge fact rather than
+    // sniffing for a "; " that a legitimate single title (Carnegie's "Symphony of Psalms & Les Noces
+    // (Stravinsky); No Time for Idle Tears") also carries.
+    var isMergedConcert: Bool { SameDateVenueMerge.isMerged(seriesId) }
+
     init(
         naturalKey: String,
         groupName: String,
