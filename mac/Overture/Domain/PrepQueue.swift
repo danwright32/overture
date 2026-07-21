@@ -151,6 +151,19 @@ enum PrepQueueBuilder {
         }
     }
 
+    // #1308 Layer 2 Phase 4: which half of a prep to run for this item. An explicit Dan re-prep wins (that
+    // is a deliberate request). Otherwise, a first prep of a show whose contact a reachability probe already
+    // found skips the hunt (draft_only) and only drafts, so the expensive contact research is paid once, at
+    // the probe. A never-probed show, or one the probe found no contact for, still does the full prep (nil).
+    static func prepMode(hasDraft: Bool, reprepDraftRequested: Bool, reprepContactsRequested: Bool,
+                         probedWithContact: Bool) -> String? {
+        if reprepDraftRequested || reprepContactsRequested {
+            return reprepModeString(draftRequested: reprepDraftRequested, contactsRequested: reprepContactsRequested)
+        }
+        if !hasDraft && probedWithContact { return "draft_only" }
+        return nil
+    }
+
     static func build(from prospects: [PrepQueueItem], generatedAt: String) -> PrepQueue {
         PrepQueue(version: version, generatedAt: generatedAt, items: prospects)
     }

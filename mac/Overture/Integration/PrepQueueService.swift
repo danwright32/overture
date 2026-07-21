@@ -40,9 +40,14 @@ enum PrepQueueService {
                     // the only writer of this field, so this is the only place the gate belongs.
                     priorRelationship: p.priorRelationshipForDrafting,
                     production: p.production,
-                    reprepMode: PrepQueueBuilder.reprepModeString(
-                        draftRequested: p.reprepDraftRequested,
-                        contactsRequested: p.reprepContactsRequested),
+                    // #1308 Phase 4: draft_only when a probe already found this show's contact, so a first
+                    // prep skips the expensive hunt. An explicit re-prep still wins (inside prepMode).
+                    reprepMode: PrepQueueBuilder.prepMode(
+                        hasDraft: p.hasDraft,
+                        reprepDraftRequested: p.reprepDraftRequested,
+                        reprepContactsRequested: p.reprepContactsRequested,
+                        probedWithContact: p.reachabilityProbedAt != nil
+                            && p.recipients.contains(where: { !($0.email ?? "").isEmpty })),
                     // #1122: set only when the opening night has passed while later dates remain, so the
                     // drafter pitches only the remaining dates and never names the gone opening. Absent
                     // otherwise (single-night, or a run not yet started), so the common case is unchanged.
