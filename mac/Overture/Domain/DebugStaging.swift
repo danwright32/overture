@@ -147,6 +147,72 @@ enum DebugStaging {
         return "\(local)+\(tag)\(domain)"
     }
 
+    // #1245: seed the exact states two shipped-but-hard-to-see features need, so Dan can actually LOOK at
+    // them in a near-empty Debug store. #1203's styled signature preview needs a draft in Review with a
+    // stored Gmail signature; #1219's self double-booking surfaces need two DIFFERENT shows on one date with
+    // one already emailed. One action stages all of it and returns the drafted show Dan reviews.
+    //
+    // The signature is stored into the Debug build's own defaults domain (never Release), and is left in
+    // place by clearDebugLeads (harmless in a dev build, and a real Gmail connect overwrites it). Both
+    // prospects are keyed under the shared "debug-of-" prefix so clearDebugLeads removes them.
+    @discardableResult
+    static func stageVisualQAScenario(in context: ModelContext, now: Date,
+                                      defaults: UserDefaults = .standard) -> Prospect {
+        // A clean HTML signature so #1203's styled preview renders (not the plain-text fallback). Plain
+        // ASCII, so it passes GmailSignatureHealth and is actually cached.
+        GmailSignatureStore.store(demoSignatureHTML, defaults: defaults)
+
+        let stamp = Int(now.timeIntervalSince1970)
+        let date = EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400))
+
+        // The show Dan reviews: a real draft + a reachable recipient, left .drafted so it sits in Review
+        // where the signature preview is shown.
+        let draftKey = "debug-of-qa-draft-\(stamp)"
+        let drafted = Prospect(naturalKey: draftKey, groupName: "Meridian Chorale (debug)",
+                               discipline: "choral", venue: "Weill Recital Hall", performanceDate: date,
+                               sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                               production: "self", profile: "strong", coverage: "likely_uncovered",
+                               fitScore: 7, tier: "high", fitReason: "debug visual-QA draft",
+                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                               status: .drafted)
+        drafted.draftSubject = "Photographs of your Weill Recital Hall concert"
+        drafted.draftBody = "Hi Jordan,\n\nI photograph performances around New York and would love to "
+            + "document your upcoming concert. If a few sample frames from similar performances would be "
+            + "useful, I'm glad to send some over.\n\nNo problem if the timing isn't right."
+        let draftEmail = defaultSelfSendAddress
+        let recipient = Recipient(id: Recipient.makeId(email: draftEmail, formURL: nil) ?? draftEmail,
+                                  email: draftEmail, name: "Jordan Ellis (debug)", provenance: .presenter)
+        drafted.setRecipients([recipient])
+        context.insert(drafted)
+
+        // A DIFFERENT show at a DIFFERENT venue on the SAME date, already emailed, so the drafted one reads
+        // as a self double-booking (#1219). Distinct groupName so it is a genuinely different production.
+        let collisionKey = "debug-of-qa-collision-\(stamp)"
+        let collision = Prospect(naturalKey: collisionKey, groupName: "Aurora Winds (debug)",
+                                 discipline: "music", venue: "Merkin Concert Hall", performanceDate: date,
+                                 sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                                 production: "self", profile: "strong", coverage: "likely_uncovered",
+                                 fitScore: 7, tier: "high", fitReason: "debug visual-QA collision",
+                                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                 status: .drafted)
+        let collisionEmail = plusTaggedAddress(defaultSelfSendAddress, tag: "collision")
+        let collisionRecipient = Recipient(
+            id: Recipient.makeId(email: collisionEmail, formURL: nil) ?? collisionEmail,
+            email: collisionEmail, name: "Aurora Winds (debug)", provenance: .act)
+        collision.setRecipients([collisionRecipient])
+        context.insert(collision)
+        stageAsSent(collision, now: now)   // mark it emailed, so its date now holds a committed pitch
+
+        return drafted
+    }
+
+    // A plain-ASCII HTML signature in Dan's brand colors, clean enough to pass GmailSignatureHealth so it
+    // is actually cached and the #1203 styled preview has something to render.
+    static let demoSignatureHTML =
+        "<div style=\"font-family:Georgia,serif;color:#2f4f2f\">"
+        + "<strong>Dan Wright</strong><br>Documentary Performing Arts Photography<br>"
+        + "<a href=\"https://danwrightphotography.com\">danwrightphotography.com</a></div>"
+
     // Remove every debug-staged lead (naturalKey prefix "debug-of-"). After this, a sync completes
     // their now-orphaned OmniFocus tasks (they leave the desired set). Cleans up after testing.
     static func clearDebugLeads(in context: ModelContext) {

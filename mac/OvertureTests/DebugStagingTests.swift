@@ -277,5 +277,89 @@ struct DebugStagingTests {
 
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
+
+    // MARK: - #1245: the one-action visual-QA seed (draft + signature + same-date double-booking).
+
+    private func qaDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "DebugStagingVisualQATests-\(UUID().uuidString)")!
+    }
+
+    @Test @MainActor func visualQAScenarioSeedsADraftInReviewWithAReachableRecipient() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let drafted = DebugStaging.stageVisualQAScenario(in: ctx, now: now, defaults: qaDefaults())
+        try ctx.save()
+
+        // The show Dan reviews: a real draft, not yet sent, with an emailable recipient (the #1203 preview
+        // only appears for a draft that has a body and a place to send).
+        #expect(drafted.status == .drafted)
+        #expect(drafted.sentAt == nil)
+        #expect(drafted.draftSubject?.isEmpty == false)
+        #expect(drafted.draftBody?.isEmpty == false)
+        #expect(drafted.recipients.count == 1)
+        #expect(drafted.recipients.first?.email == DebugStaging.defaultSelfSendAddress)
+    }
+
+    @Test @MainActor func visualQAScenarioStoresARenderableGmailSignature() throws {
+        let ctx = try makeInMemoryContext()
+        let defaults = qaDefaults()
+
+        _ = DebugStaging.stageVisualQAScenario(in: ctx, now: Date(), defaults: defaults)
+
+        // Stored AND healthy: currentHTML hides a corrupt signature, so a non-nil return proves #1203's
+        // styled preview has something real to render rather than falling back to plain text.
+        #expect(GmailSignatureStore.currentHTML(defaults: defaults) != nil)
+        #expect(GmailSignatureStore.currentSignatureIssue(defaults: defaults) == nil)
+    }
+
+    @Test @MainActor func visualQAScenarioSeedsASecondSameDateShowThatIsAlreadyEmailed() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let drafted = DebugStaging.stageVisualQAScenario(in: ctx, now: now, defaults: qaDefaults())
+        try ctx.save()
+
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(all.count == 2)
+        let other = try #require(all.first { $0.naturalKey != drafted.naturalKey })
+
+        // A DIFFERENT show (distinct name/venue) on the SAME date, already emailed: exactly the shape #1219
+        // flags as a self double-booking.
+        #expect(other.performanceDate == drafted.performanceDate)
+        #expect(other.groupName != drafted.groupName)
+        #expect(other.venue != drafted.venue)
+        #expect(other.wasProvablyContacted)   // sentAt + a gmailMessageId: an actually-emailed commitment
+    }
+
+    // The seed must actually TRIGGER the surface it exists to demo, not merely look plausible: the real
+    // #1219 detector must report the two seeded shows as a same-date clash.
+    @Test @MainActor func theSeededShowsGenuinelyCollideUnderTheSelfBookingDetector() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let drafted = DebugStaging.stageVisualQAScenario(in: ctx, now: now, defaults: qaDefaults())
+        try ctx.save()
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        // Build the detector's Show for each seeded prospect the way QueueModel does (a live draft and an
+        // emailed pitch are both commitments; engagementKey is the groupName, which differs between them).
+        let shows = all.map {
+            SelfBookingConflict.Show(key: $0.naturalKey, date: $0.performanceDate, isCommitment: true,
+                                     engagementKey: $0.groupName, name: $0.groupName)
+        }
+        let target = try #require(shows.first { $0.key == drafted.naturalKey })
+        #expect(SelfBookingConflict.conflicts(for: target, among: shows).count == 1)
+    }
+
+    @Test @MainActor func clearDebugLeadsRemovesBothVisualQAShows() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageVisualQAScenario(in: ctx, now: Date(), defaults: qaDefaults())
+        try ctx.save()
+
+        DebugStaging.clearDebugLeads(in: ctx)
+
+        #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
+    }
 }
 #endif

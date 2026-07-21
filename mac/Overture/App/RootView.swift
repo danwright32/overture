@@ -520,6 +520,7 @@ struct RootView: View {
                         Button("Stage reminder-due lead") { debugStageReminderLead() }
                         Button("Stage self-send test lead") { debugStageSelfSendLead() }
                         Button("Stage multi-recipient self-send lead") { debugStageMultiRecipientSelfSendLead() }
+                        Button("Stage visual-QA scenario (draft + signature + double-booking)") { debugStageVisualQAScenario() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
                     } label: {
                         Label("DEBUG", systemImage: "ladybug")
@@ -776,6 +777,20 @@ struct RootView: View {
         do {
             try context.save()
             status.set("DEBUG: staged multi-recipient self-send lead (\(p.recipients.count) recipients). Approve it, then Send twice")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
+    // DEBUG ONLY (#1245): seed the states two shipped-but-hard-to-see features need in a near-empty dev
+    // store: a draft in Review with a stored Gmail signature (#1203's styled preview) and a second show on
+    // the same date already emailed (#1219's self double-booking note/warning). Open the drafted show in
+    // Review to see the signature render, and note the double-booking flag on its date.
+    private func debugStageVisualQAScenario() {
+        let p = DebugStaging.stageVisualQAScenario(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged visual-QA scenario. Open '\(p.groupName)' in Review for the signature preview and the double-booking flag")
         } catch {
             status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
