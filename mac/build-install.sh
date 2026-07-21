@@ -13,6 +13,8 @@ cd "$(dirname "$0")"
 source "$(pwd)/scripts/lib/install-dedupe.sh"
 # shellcheck source=scripts/lib/await-registered.sh
 source "$(pwd)/scripts/lib/await-registered.sh"
+# shellcheck source=scripts/lib/launch-surface.sh
+source "$(pwd)/scripts/lib/launch-surface.sh"
 
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
@@ -112,5 +114,10 @@ if [[ "${1:-}" == "--launch" ]]; then
   echo "==> Surfacing the resident Overture window"
   overture_await_bundle_registered "com.danwright.overture" \
     || echo "    (resident copy didn't confirm registration in time; surfacing anyway)"
-  open "overture://show" 2>/dev/null || true
+  # #1120: pin the URL to the installed bundle by path (open -a "${DEST}"), never a bare
+  # `open overture://show`, so LaunchServices cannot route the scheme to a stray Release copy and spawn a
+  # duplicate. Args come one-per-line from the tested helper, read into an array so a spaced path is safe.
+  OPEN_ARGS=()
+  while IFS= read -r _arg; do OPEN_ARGS+=("${_arg}"); done < <(overture_launch_open_args "${DEST}")
+  open "${OPEN_ARGS[@]}" 2>/dev/null || true
 fi
