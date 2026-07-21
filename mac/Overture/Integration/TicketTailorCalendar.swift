@@ -152,6 +152,50 @@ enum TicketTailorCalendar {
         return "https://www.tickettailor.com" + (trimmed.hasPrefix("/") ? trimmed : "/" + trimmed)
     }
 
+    // The two-hop live read, over RAW bytes: hop 1 fetches the venue page to discover the widget embed,
+    // hop 2 fetches the server-rendered widget whose <script> carries the selectableDates JSON. Both hops
+    // read RAW because PageNormalizer strips <script> blocks (where the JSON lives), so the paid path's
+    // normalized FetchedPage cannot be reused here. `get` is injected so the network is testable.
+    //
+    // If the venue page loads but no longer carries an all-tickets-calendar embed (a redesign, or it was
+    // never a TicketTailor venue), that THROWS feedShapeChanged, never returns []: an empty list from a
+    // source that had a baseline would read to the reconcile as every stored show cancelled (#887/#897).
+    static func liveEvents(pageURL: URL, now: Date,
+                           get: (URLRequest) async throws -> Data) async throws -> [TTEvent] {
+        let pageHTML = decode(try await get(pageRequest(pageURL)))
+        guard let widget = TicketTailor.widgetURL(inPage: pageHTML) else {
+            throw SourceFetchError.feedShapeChanged
+        }
+        let widgetHTML = decode(try await get(TicketTailor.widgetRequest(widget)))
+        return upcoming(try parseWidget(widgetHTML), now: now)
+    }
+
+    // The real network variant. A non-2xx on either hop THROWS (never an empty list), for the same
+    // reconcile-safety reason.
+    static func liveEvents(pageURL: URL, now: Date = Date(),
+                           session: URLSession = .shared) async throws -> [TTEvent] {
+        try await liveEvents(pageURL: pageURL, now: now, get: { req in
+            let (data, response) = try await session.data(for: req)
+            guard let http = response as? HTTPURLResponse else { throw SourceFetchError.unreachable }
+            guard (200..<300).contains(http.statusCode) else { throw SourceFetchError.http(http.statusCode) }
+            return data
+        })
+    }
+
+    // copy-inventory:ignore-start  an outbound fetch's headers for the venue page hop, not the app's voice (#915)
+    private static func pageRequest(_ url: URL) -> URLRequest {
+        var req = URLRequest(url: url)
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36",
+                     forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 30
+        return req
+    }
+    // copy-inventory:ignore-end
+
+    private static func decode(_ data: Data) -> String {
+        String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
+    }
+
     // Extract the value of `var selectableDates = <value>;` from the widget HTML by balancing braces and
     // brackets (respecting string literals), NOT by reading to the first `;` (a venue or title string can
     // legitimately contain `;`, `{`, or `}`, which a naive scan would truncate on).
