@@ -47,12 +47,18 @@ enum TicketTailor {
         guard (200..<300).contains(http.statusCode) else { throw SourceFetchError.http(http.statusCode) }
         let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
         let normalized = PageNormalizer.normalize(html)
+        // #1301: hash the DATE DATA, not the script-stripped normalized HTML. selectableDates lives in a
+        // <script> the normalizer drops; the normalized bytes keep only the events-filter <option> list, so
+        // a recurring show that gains a new performance leaves them (and the old hash) unchanged and the
+        // re-read is gated out. The raw selectableDates literal moves on any date OR event change. Fall back
+        // to the normalized hash when the widget carries no such literal (a shell, an unrecognized shape).
+        let hashBasis = TicketTailorCalendar.selectableDatesSignal(in: html) ?? normalized
         return FetchedPage(normalizedHTML: normalized,
                            finalURL: url.absoluteString,
-                           contentHash: PageNormalizer.contentHash(normalized),
+                           contentHash: PageNormalizer.contentHash(hashBasis),
                            // #1295: carry the RAW widget bytes so the scout can parse the embedded
                            // selectableDates JSON natively (free), which the normalized HTML cannot (its
-                           // <script> is stripped). The content hash stays on the normalized bytes.
+                           // <script> is stripped).
                            ticketTailorWidgetHTML: html)
     }
 }

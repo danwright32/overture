@@ -47,6 +47,60 @@ struct TicketTailorTests {
         #expect(!page.contentHash.isEmpty)
     }
 
+    // #1301: a recurring show that gains a NEW DATE (no new events-filter <option>) must move the content
+    // hash, or SourceSchedule.decide gates the re-read out (page.contentHash == lastContentHash) and the new
+    // performance never surfaces. That change lives ONLY inside the <script> selectableDates, which
+    // PageNormalizer strips, so a hash over the normalized bytes is blind to it; the widget's hash must
+    // derive from the date data.
+    static func widgetPage(dates: String) -> String {
+        // Identical page markup and identical events-filter option list across calls: only `dates` varies.
+        #"""
+        <select class="tt-filter"><option value="429862">Beach visits</option></select>
+        <script>var selectableDates = \#(dates);</script>
+        """#
+    }
+
+    private func fetchedHash(_ html: String) async throws -> String {
+        let widget = URL(string: "https://www.tickettailor.com/all-tickets-calendar/thecelltheatre/")!
+        return try await TicketTailor.fetchWidget(widget) { _ in
+            (Data(html.utf8), HTTPURLResponse(url: widget, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }.contentHash
+    }
+
+    @Test func fetchWidgetHashMovesWhenARecurringShowGainsADate() async throws {
+        // The same series (429862 "Beach visits") gains 2026-08-02; the option list is unchanged.
+        let oneDate = Self.widgetPage(dates: #"{"2026-08-01":{"event_series":[{"series_id":429862,"name":"Beach visits"}]}}"#)
+        let twoDates = Self.widgetPage(dates: #"{"2026-08-01":{"event_series":[{"series_id":429862,"name":"Beach visits"}]},"2026-08-02":{"event_series":[{"series_id":429862,"name":"Beach visits"}]}}"#)
+
+        // Premise guard: the two pages normalize identically (the <script> is stripped), so a
+        // normalized-HTML hash is blind to the new date. The fix must still tell them apart.
+        #expect(PageNormalizer.normalize(oneDate) == PageNormalizer.normalize(twoDates))
+        let h1 = try await fetchedHash(oneDate)
+        let h2 = try await fetchedHash(twoDates)
+        #expect(h1 != h2)
+    }
+
+    // Unchanged widget bytes hash the same, so a recurring show whose dates did not move is not needlessly
+    // re-read (the hash still abstains when nothing changed).
+    @Test func fetchWidgetHashIsStableWhenTheDatesAreUnchanged() async throws {
+        let page = Self.widgetPage(dates: #"{"2026-08-01":{"event_series":[{"series_id":429862,"name":"Beach visits"}]}}"#)
+        let h1 = try await fetchedHash(page)
+        let h2 = try await fetchedHash(page)
+        #expect(h1 == h2)
+        #expect(!h1.isEmpty)
+    }
+
+    // An empty widget (`var selectableDates = [];`) still yields a stable, non-empty hash: the date-data
+    // signal degrades gracefully to the empty literal rather than throwing or producing a blank hash.
+    @Test func fetchWidgetHashIsStableForAnEmptyWidget() async throws {
+        let empty = Self.widgetPage(dates: "[]")
+        let h = try await fetchedHash(empty)
+        #expect(!h.isEmpty)
+        // Empty and populated must not collide, or a venue going from "shows" to "none" would look unchanged.
+        let populated = Self.widgetPage(dates: #"{"2026-08-01":{"event_series":[{"series_id":429862,"name":"Beach visits"}]}}"#)
+        #expect(h != (try await fetchedHash(populated)))
+    }
+
     // A non-200 (e.g. the Cloudflare 403) must throw, never return an empty page that reads as "no shows".
     @Test func fetchWidgetThrowsOnANon200() async throws {
         let widget = URL(string: "https://www.tickettailor.com/all-tickets-calendar/thecelltheatre/")!
