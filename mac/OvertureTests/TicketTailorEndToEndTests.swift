@@ -7,16 +7,30 @@ import SwiftData
 // live all-tickets-calendar embeds) go through the scout read path all the way to a STORED prospect, for
 // free, with no paid read launched.
 //
-// The date is deliberately in the future of the app's REAL Eastern 'today': the native ingest's
-// upcoming-only guard (#798, applySweep) uses the real day, not the scout's injected now, so a past-dated
-// fixture would be (correctly) dropped as already gone. The location is an in-borough NYC one so the
-// geography gate places the MUSIC show in range (music "stays in the boroughs", #970).
+// The date must be in the future of the app's REAL Eastern 'today': the native ingest's upcoming-only
+// guard (#798, applySweep) uses the real day, not the scout's injected now (#1302), so a past-dated
+// fixture would be (correctly) dropped as already gone. It is computed RELATIVE to today, not hardcoded,
+// so this test can never silently expire once the real date passes a fixed one. The location is an
+// in-borough NYC one so the geography gate places the MUSIC show in range (music "stays in the boroughs",
+// #970).
 @MainActor
 @Suite("TicketTailor end to end to a prospect (#1296)")
 struct TicketTailorEndToEndTests {
-    private static let widget = #"""
-    <html><body><script>var selectableDates = {"2026-09-15":{"available":true,"sold_out":false,"formatted_date":"Tue 15 Sep 2026","event_series":[{"series_id":701,"name":"Autumn Chamber Concert","venue":"The Cell Theatre","event_page_url":"/events/thecell/701"}]}};</script></body></html>
-    """#
+    // A yyyy-MM-dd well into the future, in the same zone the parser reads keys with, so it round-trips to
+    // the same string on the prospect and stays ahead of both the real clock and easternToday.
+    private static func futureDateString(daysFromNow days: Int = 120) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date().addingTimeInterval(TimeInterval(days) * 86_400))
+    }
+
+    private static func widget(date: String) -> String {
+        #"""
+        <html><body><script>var selectableDates = {"\#(date)":{"available":true,"sold_out":false,"event_series":[{"series_id":701,"name":"Autumn Chamber Concert","venue":"The Cell Theatre","event_page_url":"/events/thecell/701"}]}};</script></body></html>
+        """#
+    }
 
     private final class LaunchBox { var launched = false }
 
@@ -28,13 +42,14 @@ struct TicketTailorEndToEndTests {
         source.venueLocation = "New York, NY"   // Manhattan: in-borough for the geography gate
         ctx.insert(source)
         let box = LaunchBox()
+        let date = Self.futureDateString()
 
         _ = try await ScoutService.runScout(
             into: ctx,
             fetch: { url, _, _ in
                 FetchedPage(normalizedHTML: "<html><body>widget shell</body></html>",
                             finalURL: url.absoluteString, contentHash: "e2e-hash-1",
-                            ticketTailorWidgetHTML: Self.widget)
+                            ticketTailorWidgetHTML: Self.widget(date: date))
             },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
@@ -45,7 +60,7 @@ struct TicketTailorEndToEndTests {
                              "stored=\(stored.map(\.groupName))")
         #expect(box.launched == false)                  // ingested natively, no paid read
         #expect(p.venue == "The Cell Theatre")          // the feed's own venue field
-        #expect(p.performanceDate == "2026-09-15")
+        #expect(p.performanceDate == date)
         #expect(p.sourceListingURL == "https://www.tickettailor.com/events/thecell/701")
         #expect(source.lastContentHash == "e2e-hash-1") // marked ingested; next unchanged run skips it
     }
