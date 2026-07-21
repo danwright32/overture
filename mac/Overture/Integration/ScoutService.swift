@@ -1061,7 +1061,15 @@ enum ScoutService {
 
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
     private static func apply(_ p: AssembledProspect, to existing: Prospect) {
-        existing.groupName = p.groupName
+        // #1274: track the latest scout-emitted name always, so a "reset to scout name" restores the
+        // real current name even for a show Dan renamed several scouts ago. But only write it to the
+        // DISPLAY groupName when Dan has not overridden it; once he renames a show, his name stands and
+        // the scout stops clobbering it. naturalKey is left as-is by the rename, so this row still
+        // matched by exact key above (no duplicate).
+        existing.scoutGroupName = p.groupName
+        if !existing.groupNameOverriddenByDan {
+            existing.groupName = p.groupName
+        }
         existing.presenter = p.presenter
         existing.location = p.location
         existing.venue = p.venue

@@ -56,6 +56,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var classificationConfidence: String = Confidence.confident.rawValue
     var confidenceReviewedByDan: Bool = false
     var classificationOverriddenByDan: Bool = false
+    // #1274: true once Dan has manually renamed this show, so the row can offer "reset to scout name".
+    var groupNameOverriddenByDan: Bool = false
     var bookingSuggested: Bool = false
     // #611: a fit-risk Prep's own research found (the org's site names its own photographer),
     // dismissible without changing fitScore/tier or the whole prospect's status.
@@ -1004,6 +1006,7 @@ extension QueueItem {
             classificationConfidence: p.classificationConfidence,
             confidenceReviewedByDan: p.confidenceReviewedByDan,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
+            groupNameOverriddenByDan: p.groupNameOverriddenByDan,
             bookingSuggested: p.bookingSuggested,
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,

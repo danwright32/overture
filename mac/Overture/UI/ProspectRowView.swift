@@ -6,6 +6,9 @@ struct ProspectRowView: View {
     // #348: pulled forward right after Keep on a still-unconfirmed prospect, instead of leaving
     // an unresolved guess to carry silently forward.
     @State private var showConfirmClassification = false
+    // #1274: the manual-rename sheet and its in-progress text.
+    @State private var showingRename = false
+    @State private var renameDraft = ""
 
     let item: QueueItem
     let today: String
@@ -39,6 +42,8 @@ struct ProspectRowView: View {
     var onCancelReplyDraft: () -> Void = {}   // #1038: stop the detached reply-classify + drafter run
     var onMarkConfidenceReviewed: () -> Void = {}
     var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
+    var onRename: (String) -> Void = { _ in }   // #1274: Dan renames a scout-generated name
+    var onResetGroupName: () -> Void = {}        // #1274: hand the name back to the scout
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
@@ -153,6 +158,49 @@ struct ProspectRowView: View {
                         : OVColor.line,
                     lineWidth: item.bookingSuggested || item.isBooked ? 2 : 1)
         )
+        .sheet(isPresented: $showingRename) { renameSheet }
+    }
+
+    // #1274: the manual-rename sheet. Save commits Dan's name (empty input is ignored by the mutation);
+    // "Reset to scout name" only appears once he has actually renamed it, so the scout owns the name again.
+    private var renameSheet: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.md) {
+            Text("Rename show")
+                .font(OVType.groupName)
+                .foregroundStyle(OVColor.ink)
+            Text("Replaces the scout's name on this row. Your name stays put across future scouts.")
+                .font(OVType.body)
+                .foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("Show name", text: $renameDraft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(commitRename)
+            HStack {
+                if item.groupNameOverriddenByDan {
+                    Button("Reset to scout name") {
+                        onResetGroupName()
+                        showingRename = false
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(OVColor.inkSoft)
+                }
+                Spacer()
+                Button("Cancel") { showingRename = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: commitRename)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(OVSpacing.lg)
+        .frame(width: 380)
+    }
+
+    private func commitRename() {
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onRename(trimmed)
+        showingRename = false
     }
 
     private var fitSeal: some View {
@@ -191,10 +239,24 @@ struct ProspectRowView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(1.0)
                 .foregroundStyle(OVColor.gold)
-            Text(item.groupName)
-                .font(OVType.groupName)
-                .foregroundStyle(item.disappearedFromFeed ? OVColor.inkFaint : OVColor.ink)
-                .strikethrough(item.disappearedFromFeed, color: OVColor.rust)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(item.groupName)
+                    .font(OVType.groupName)
+                    .foregroundStyle(item.disappearedFromFeed ? OVColor.inkFaint : OVColor.ink)
+                    .strikethrough(item.disappearedFromFeed, color: OVColor.rust)
+                // #1274: a subtle pencil to rename an awkward scout-generated name. Opens a sheet
+                // prefilled with the current name; Dan's edit then survives every future scout.
+                Button {
+                    renameDraft = item.groupName
+                    showingRename = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(OVColor.inkFaint)
+                }
+                .buttonStyle(.plain)
+                .help("Rename this show")
+            }
             // #340: give the metadata a calmer hierarchy instead of cramming venue, timing and date
             // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
             // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing

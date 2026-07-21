@@ -43,6 +43,50 @@ struct ProspectMutationsTests {
         #expect(p.dismissReasonRaw == DismissReason.notInterested.rawValue)
     }
 
+    // #1274: Dan renames a scout-generated name. The display name changes and the override is set so
+    // the scout stops clobbering it, the current scout name is captured for a later reset, and the
+    // natural key is deliberately untouched so the next scout's exact-key match still finds this row.
+    @Test func renameGroupSetsNameFlagAndCapturesScoutNameWithoutRekeying() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx, key: "k-fixed")
+        let feedback = ActionFeedback()
+
+        ProspectMutations.renameGroup(QueueItem(p), to: "  Aurora String Quartet  ",
+                                      prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.groupName == "Aurora String Quartet")          // trimmed
+        #expect(p.groupNameOverriddenByDan == true)
+        #expect(p.scoutGroupName == "Aurora Strings")            // original scout name captured
+        #expect(p.naturalKey == "k-fixed")                       // key untouched: no duplicate next scout
+    }
+
+    // #1274: a blank or whitespace-only rename is a no-op; it must never wipe the show's name.
+    @Test func renameGroupIgnoresEmptyInput() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let feedback = ActionFeedback()
+
+        ProspectMutations.renameGroup(QueueItem(p), to: "   ", prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.groupName == "Aurora Strings")
+        #expect(p.groupNameOverriddenByDan == false)
+    }
+
+    // #1274: "reset to scout name" restores the captured scout name and clears the override so the
+    // scout owns the name again.
+    @Test func resetGroupNameRestoresScoutNameAndClearsOverride() throws {
+        let ctx = ModelContext(try container())
+        let p = makeProspect(ctx)
+        let feedback = ActionFeedback()
+        ProspectMutations.renameGroup(QueueItem(p), to: "Aurora String Quartet",
+                                      prospects: [p], context: ctx, feedback: feedback)
+
+        ProspectMutations.resetGroupName(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+
+        #expect(p.groupName == "Aurora Strings")
+        #expect(p.groupNameOverriddenByDan == false)
+    }
+
     @Test func markContactSetsResolutionAndResumesPausedRecipients() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)

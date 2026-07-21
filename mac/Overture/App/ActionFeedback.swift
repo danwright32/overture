@@ -136,6 +136,16 @@ enum ActionAck {
         "Updated \(org)'s classification"
     }
 
+    // #1274: Dan renamed a scout-generated show name. The scout will no longer overwrite it.
+    static func groupRenamed(to name: String) -> String {
+        "Renamed to \(name)"
+    }
+
+    // #1274: Dan reset a renamed show back to the scout's own name.
+    static func groupNameReset(to name: String) -> String {
+        "Restored the scout's name: \(name)"
+    }
+
     // #367/#1143: the per-prospect re-prep confirmation. Re-prep now LAUNCHES a run for just this show,
     // so it says the run is under way, not merely "queued". draftGranted false for the `both` mode means
     // the show had already been sent to, so only the contacts half runs; Dan needs to see that narrowing.

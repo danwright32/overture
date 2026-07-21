@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **712 sentences**, from 241 source files.
+Every sentence Overture can say to Dan: **719 sentences**, from 241 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -990,15 +990,27 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Removed \(who) from \(org)."
     `App/ActionFeedback.swift`
+"Rename show"
+    `UI/ProspectRowView.swift`
+"Rename this show"
+    `UI/ProspectRowView.swift`
+"Renamed to \(name)"
+    `App/ActionFeedback.swift`
+"Replaces the scout's name on this row. Your name stays put across future scouts."
+    `UI/ProspectRowView.swift`
 "Replied, needs a state"
     `Domain/ConversationReminder.swift`
 "Reply-classify results couldn't save. Try again."
     `App/RootView.swift`
 "Requesting notification permission…"
     `UI/OnboardingView.swift`
+"Reset to scout name"
+    `UI/ProspectRowView.swift`
 "Resnick Education Wing"
     `Domain/VenueParser.swift`
 "Restored \(org) to the queue"
+    `App/ActionFeedback.swift`
+"Restored the scout's name: \(name)"
     `App/ActionFeedback.swift`
 "Resumed pursuing \(who) on \(org)."
     `App/ActionFeedback.swift`
@@ -1084,6 +1096,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarContent.swift`
 "Show in Finder"
     `App/StoreUnavailableView.swift`
+"Show name"
+    `UI/ProspectRowView.swift`
 "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
     `UI/QueueView+Model.swift`
 "Show only the shows that are too far away to shoot"

@@ -333,6 +333,35 @@ enum ProspectMutations {
         }
     }
 
+    // #1274: Dan renames an ugly scout-generated name. Set the display name and the override so the
+    // scout stops clobbering it, and capture the scout's current name once (if not already tracked) so
+    // "reset to scout name" has something to restore even before the next scout re-runs. The natural key
+    // is deliberately left alone: it stays scout-name-derived, so the next scout's exact-key match still
+    // finds this row and never inserts a duplicate.
+    static func renameGroup(_ item: QueueItem, to newName: String,
+                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if model.scoutGroupName == nil { model.scoutGroupName = model.groupName }
+        model.groupName = trimmed
+        model.groupNameOverriddenByDan = true
+        if context.saveOrWarn(org: trimmed, feedback: feedback) {
+            feedback.acknowledge(ActionAck.groupRenamed(to: trimmed))
+        }
+    }
+
+    // #1274: hand the name back to the scout. Restore the latest tracked scout name (kept current by
+    // ScoutService.apply) and clear the override so future scouts own the name again.
+    static func resetGroupName(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        if let scoutName = model.scoutGroupName { model.groupName = scoutName }
+        model.groupNameOverriddenByDan = false
+        if context.saveOrWarn(org: model.groupName, feedback: feedback) {
+            feedback.acknowledge(ActionAck.groupNameReset(to: model.groupName))
+        }
+    }
+
     // #652: Dan sets ONE contact's conversation state by hand from the per-contact review controls.
     // Mirrors markContact's exact pattern: setting a state is Dan actively engaging with this contact,
     // the same signal that already resumes any sibling recipient a reply had auto-paused.

@@ -71,6 +71,8 @@ enum ProspectRowFactory {
             onCorrectClassification: { d, p in
                 ProspectMutations.correctClassification(item, discipline: d, production: p, prospects: prospects, context: context, feedback: feedback)
             },
+            onRename: { name in ProspectMutations.renameGroup(item, to: name, prospects: prospects, context: context, feedback: feedback) },
+            onResetGroupName: { ProspectMutations.resetGroupName(item, prospects: prospects, context: context, feedback: feedback) },
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },

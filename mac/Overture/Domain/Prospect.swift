@@ -72,6 +72,15 @@ final class Prospect {
     // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.
     var classificationOverriddenByDan: Bool = false
 
+    // #1274: Dan-owned display-name override. groupName is normally scout-owned and rewritten every
+    // re-ingest (ScoutService.apply). Once Dan renames a show, this flag makes apply() leave his name
+    // alone. The rename deliberately does NOT touch naturalKey (still scout-name-derived), so the
+    // scout's exact-key match keeps firing and no duplicate row is inserted. `scoutGroupName` mirrors
+    // the LATEST scout-emitted name (kept current by apply even while overridden) so a "reset to scout
+    // name" restores the real, current name instantly. Both defaulted so existing records migrate cleanly.
+    var groupNameOverriddenByDan: Bool = false
+    var scoutGroupName: String? = nil
+
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftVariant: String? = nil
