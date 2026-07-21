@@ -55,6 +55,7 @@
 		144B07382B95B409D874AA0C /* ReconcileNoSpendGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F30C9F74ED7F27D07D77D61 /* ReconcileNoSpendGuardTests.swift */; };
 		1543D07DA599629491CAF3FF /* GmailSignatureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B6482BB9FE1CEA69A3391F /* GmailSignatureStore.swift */; };
 		15A7A60CCA0F4B04509F85BD /* VenueDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28247DC7A15C79A3B675E23 /* VenueDisplay.swift */; };
+		15D53FD0ACFF3225006BE187 /* TicketTailorCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30020AB881BE973CC440C5D3 /* TicketTailorCalendar.swift */; };
 		1622F4C853E61EB11D1DA49F /* AgentLogLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */; };
 		1635E412C8EB2D67F6FF4701 /* ScoutResultAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CF637553CB10A5029D06811 /* ScoutResultAuditTests.swift */; };
 		1694B85DAD9F436E1844C9C0 /* AgentRoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222C952AB1A28F9E5785EFA9 /* AgentRoster.swift */; };
@@ -568,6 +569,7 @@
 		EA1D13344A7C220C5A1F4B4E /* DisciplineSignalGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7A77E39B5E546E30919BC2 /* DisciplineSignalGuardTests.swift */; };
 		EAC2553E7EBE5ECE02E367FD /* MatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50569449C10E9C4F6B69BD48 /* MatchingTests.swift */; };
 		EB779592D1375B1D254EDDF8 /* ScoutExtractIngestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE262C20F3A2B520E86B7263 /* ScoutExtractIngestTests.swift */; };
+		EB782C7C22B6632F4884862D /* TicketTailorCalendarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E50E1CCE6D16F3DC96EB91 /* TicketTailorCalendarTests.swift */; };
 		EC080F32703E24DB1A478221 /* FeedReconcileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 441DBB83424EC6B0C89F99C2 /* FeedReconcileTests.swift */; };
 		EED6075168C136DC9C20BC30 /* StopWatchingIsReversibleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E399315C8DBD538F7ECF9219 /* StopWatchingIsReversibleTests.swift */; };
 		EEE094F2F6A96DF7F981E8C5 /* DownbeatExportWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE4D1EEE03D1F3B43473EBE /* DownbeatExportWatcher.swift */; };
@@ -727,6 +729,7 @@
 		2F6556AF12C03406F0E47CD6 /* DismissReasonMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissReasonMigrationTests.swift; sourceTree = "<group>"; };
 		2F71D1818DF0A4CE05CCAEF8 /* BounceServiceHardBounceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BounceServiceHardBounceTests.swift; sourceTree = "<group>"; };
 		2F7977BAEB60289A4C6914DB /* AddLeadPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddLeadPresenter.swift; sourceTree = "<group>"; };
+		30020AB881BE973CC440C5D3 /* TicketTailorCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketTailorCalendar.swift; sourceTree = "<group>"; };
 		302A7E1717BA015F33EA5A04 /* VenueNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueNormalizationTests.swift; sourceTree = "<group>"; };
 		30B3BC6B27FBA8EF8D0061B2 /* SendDelightTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendDelightTimingTests.swift; sourceTree = "<group>"; };
 		30EE55852F8B20129156B608 /* RunVanishedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunVanishedTests.swift; sourceTree = "<group>"; };
@@ -1200,6 +1203,7 @@
 		F71E842020A75AAB31ED0420 /* BlockedCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedCalendar.swift; sourceTree = "<group>"; };
 		F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealStoreTestLockTests.swift; sourceTree = "<group>"; };
 		F7C0F936EA18B5C7307A439E /* SourceNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceNote.swift; sourceTree = "<group>"; };
+		F8E50E1CCE6D16F3DC96EB91 /* TicketTailorCalendarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketTailorCalendarTests.swift; sourceTree = "<group>"; };
 		F908765C098BDDF1F2382335 /* DayOff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayOff.swift; sourceTree = "<group>"; };
 		FA4855E0A391F15D086981B8 /* QueueCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueCopyTests.swift; sourceTree = "<group>"; };
 		FA5ED46F02B196ABCAE4E24D /* ExtractedEventGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEventGuard.swift; sourceTree = "<group>"; };
@@ -1614,6 +1618,7 @@
 				48F0E816E7C256AE68641FB8 /* SweepCoverageTests.swift */,
 				45627AD994F92590ACE3A053 /* TestsNeverTouchTheRealStoreTests.swift */,
 				D4EDC2D420E6745C4CAC2AB5 /* TicketLinkTests.swift */,
+				F8E50E1CCE6D16F3DC96EB91 /* TicketTailorCalendarTests.swift */,
 				8A1E00DB2FE38A00D904C212 /* TicketTailorTests.swift */,
 				03F78419A9875BDFF7B38D2C /* ToolbarConsolidationGuardTests.swift */,
 				3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */,
@@ -1702,6 +1707,7 @@
 				2D1D81C89C71CEC2884EDD4C /* SourceExtractorRegistry.swift */,
 				77EB99B0DABB30BA99AE149F /* SourceFetcher.swift */,
 				FE3ACFFFA31FDCB29B005897 /* TicketTailor.swift */,
+				30020AB881BE973CC440C5D3 /* TicketTailorCalendar.swift */,
 				3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */,
 				ADB71F56DF74479701BC1F89 /* VenueTixExtractor.swift */,
 				29B1B340C5C9A1E6B98D0D4C /* VoiceFeedbackService.swift */,
@@ -2249,6 +2255,7 @@
 				4C708610892D5A92B9F27DEF /* SweepCoverage.swift in Sources */,
 				DF9F919C6E72FBB40D329E66 /* TicketLink.swift in Sources */,
 				38896B67B21D10085DAD50E7 /* TicketTailor.swift in Sources */,
+				15D53FD0ACFF3225006BE187 /* TicketTailorCalendar.swift in Sources */,
 				76F9973271C5034D209D14BF /* ToolbarHoverLabel.swift in Sources */,
 				A94E926C164498E82612A6AF /* Typography.swift in Sources */,
 				11EBFE99854450DE4CDE614E /* VenueContactGuard.swift in Sources */,
@@ -2610,6 +2617,7 @@
 				551570914659B883B977A175 /* SwiftSource.swift in Sources */,
 				5A37DA62AC233D7E0B2C34EB /* TestsNeverTouchTheRealStoreTests.swift in Sources */,
 				47A485A0E9A049C85B39F1EF /* TicketLinkTests.swift in Sources */,
+				EB782C7C22B6632F4884862D /* TicketTailorCalendarTests.swift in Sources */,
 				8C8DAEA061F5480844E566CE /* TicketTailorTests.swift in Sources */,
 				A02D498BAE774D252215C746 /* TooSoonDismissReasonTests.swift in Sources */,
 				81795147A6E8C5854E031D72 /* ToolbarConsolidationGuardTests.swift in Sources */,
