@@ -60,8 +60,13 @@ enum PrepImporter {
     @discardableResult
     // clients/history feed the performer-name warm-lead matcher (#751). They default to empty, which
     // simply means no performer matching runs; the real entry point (ingestFile) always supplies them.
+    // #1308 Layer 2: `isProbe` is passed by the CALLER, which knows whether the completed run was a
+    // reachability probe from the app's own run-type state (the probe marker), rather than from a field in
+    // the results file. This keeps the cross-language results contract unchanged while still giving ingest
+    // the code-enforced probe safety below.
     static func ingest(_ results: PrepResults, into context: ModelContext, now: Date = Date(),
-                       clients: [DownbeatClient] = [], history: [HistoryRecord] = []) -> Outcome {
+                       clients: [DownbeatClient] = [], history: [HistoryRecord] = [],
+                       isProbe: Bool = false) -> Outcome {
         var outcome = Outcome()
         for r in results.results {
             let key = r.naturalKey
@@ -71,6 +76,22 @@ enum PrepImporter {
                 continue
             }
             outcome.matched += 1
+
+            // #1308 Layer 2: a reachability PROBE result. The safety here is a CODE gate, not a trust in
+            // the model: whatever the run emitted, a probe NEVER applies a draft and NEVER changes status,
+            // so a Review-stage show Dan hasn't kept can't be silently flipped to .drafted. It DOES store
+            // a found contact (so a later prep can skip the hunt, #1308 Phase 4) and it ALWAYS stamps
+            // reachabilityProbedAt, found or not, so the badge resolves to "email found"/"no email found"
+            // instead of sticking on the free heuristic. Handled here and short-circuited so none of the
+            // draft/status/reprep logic below can touch a probe row.
+            if isProbe {
+                p.reachabilityProbedAt = now
+                if let contacts = r.contacts, !contacts.isEmpty, !p.recipientsEditedByDan {
+                    ingestContacts(contacts, into: p, context: context)
+                    applyPerformerMatch(contacts, to: p, clients: clients, history: history)
+                }
+                continue
+            }
 
             // #367: what Dan actually asked for this cycle, so a result that carries the other
             // half anyway (the run misreading reprepMode, or a stale/mismatched item) gets ignored

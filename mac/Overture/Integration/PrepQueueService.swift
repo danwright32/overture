@@ -54,6 +54,36 @@ enum PrepQueueService {
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
     }
 
+    // #1308 Layer 2: build a reachability PROBE work-list DIRECTLY from Dan's hand-picked keys, bypassing
+    // `needsPrepEligible` entirely. That gate never admits a Review-stage `.new` show (PrepQueue.needsPrep),
+    // but a probe's whole point is to research contacts BEFORE keep/dismiss, so the keys Dan chose ARE the
+    // authority here. Every item is contacts-only, which is what tells the runner not to draft (no new wire
+    // field needed); the app tracks "this run is a probe" in its own run-type state, not in the queue JSON.
+    // `needsPrep`/the prep pill are left completely untouched.
+    static func buildProbeQueue(from context: ModelContext, generatedAt: String, keys: Set<String>) -> PrepQueue {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let items: [PrepQueueItem] = all
+            .filter { keys.contains($0.naturalKey) }
+            .map { p in
+                PrepQueueItem(
+                    naturalKey: p.naturalKey,
+                    groupName: p.groupName,
+                    venue: p.venue,
+                    performanceDate: p.performanceDate,
+                    runEndDate: p.runEndDate,
+                    discipline: p.discipline,
+                    websiteURL: p.websiteURL,
+                    sourceListingURL: p.sourceListingURL,
+                    possibleMatchName: p.possibleMatchName,
+                    priorRelationship: p.priorRelationshipForDrafting,
+                    production: p.production,
+                    // Contacts-only: find the contact, never draft. The importer's code gate enforces the
+                    // no-draft rule regardless, but the runner should not spend on drafting either.
+                    reprepMode: "contacts_only")
+            }
+        return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
+    }
+
     enum PrepLaunchError: LocalizedError {
         case nothingToPrep
         case runnerUnavailable
