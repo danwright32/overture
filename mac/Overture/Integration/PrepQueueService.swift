@@ -146,6 +146,25 @@ enum PrepQueueService {
         try? context.save()
     }
 
+    // #1308 Layer 2: settle a finished detached run. A probe and a real Prep share the runner and results
+    // file, so the probe-run marker is what tells them apart. Returns true when the finished run was a
+    // probe (and was settled): every probed show is marked probed (found or not), the results are ingested
+    // probe-safely (never a draft), and the marker is cleared. Returns false when no probe marker is
+    // present, so the caller ingests the run as a normal prep. Called on both producedResults and
+    // finishedEmpty: a probe that found nothing is a valid "no email found" result, not a failure.
+    @discardableResult
+    static func settleReachabilityProbe(markerURL: URL = defaultProbeRunURL,
+                                        resultsURL: URL = PrepImporter.defaultURL,
+                                        into context: ModelContext, now: Date,
+                                        defaults: UserDefaults = .standard) -> Bool {
+        guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return false }
+        markProbed(keys: marker.keys, in: context, now: now)
+        _ = PrepImporter.consumeIfNew(at: resultsURL, into: context, defaults: defaults,
+                                      ingest: { try PrepImporter.ingestFile(at: $0, into: $1, isProbe: true, now: now) })
+        ReachabilityProbeMarker.clear(at: markerURL)
+        return true
+    }
+
     enum PrepLaunchError: LocalizedError {
         case nothingToPrep
         case runnerUnavailable

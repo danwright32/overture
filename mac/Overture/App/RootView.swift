@@ -868,12 +868,19 @@ struct RootView: View {
         let started = PrepQueueService.lastRunStartedAt
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        // #1308 Layer 2: a probe and a real Prep share this one runner and results file, so route by the
+        // probe-run marker first. settleReachabilityProbe returns true only when the finished run was a
+        // probe (marking every probed show, ingesting probe-safely, clearing the marker); a probe that
+        // found nothing is a valid "no email found" result, so on finishedEmpty it still settles rather
+        // than nagging. A normal prep run has no marker, so it falls through to the usual handling.
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
-            ingestPrep()
+            if !PrepQueueService.settleReachabilityProbe(into: context, now: Date()) { ingestPrep() }
         case .finishedEmpty:
-            errorMessage = DetachedRunOutcome.finishedEmptyMessage(
-                .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
+            if !PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+                errorMessage = DetachedRunOutcome.finishedEmptyMessage(
+                    .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
+            }
         case .idle:
             break
         }
