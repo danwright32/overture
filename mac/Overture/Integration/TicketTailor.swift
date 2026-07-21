@@ -49,6 +49,10 @@ enum TicketTailor {
         let normalized = PageNormalizer.normalize(html)
         return FetchedPage(normalizedHTML: normalized,
                            finalURL: url.absoluteString,
-                           contentHash: PageNormalizer.contentHash(normalized))
+                           contentHash: PageNormalizer.contentHash(normalized),
+                           // #1295: carry the RAW widget bytes so the scout can parse the embedded
+                           // selectableDates JSON natively (free), which the normalized HTML cannot (its
+                           // <script> is stripped). The content hash stays on the normalized bytes.
+                           ticketTailorWidgetHTML: html)
     }
 }

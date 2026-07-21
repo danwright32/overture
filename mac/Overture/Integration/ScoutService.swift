@@ -309,8 +309,37 @@ enum ScoutService {
             // regardless of the daily run re-stamping lastCheckedAt every morning. A source not reached
             // this run (deferred, or past a cancel) is never advanced, which is exactly what keeps it next.
             if depth == .readChanged { source.lastManualReadAt = now }
-            outcome.sources.append(result)
-            if let page { toRead.append((source, page)) }
+            if let page, let widgetHTML = page.ticketTailorWidgetHTML {
+                // #1295: the fetched page is a TicketTailor widget, so parse its embedded selectableDates
+                // JSON NATIVELY (free) here instead of handing the widget HTML to the paid detached read.
+                // runNative gives it the SAME usable-event guard and #887 cancellation tolerance every
+                // native feed gets, so this can never falsely mark shows gone.
+                //
+                // The pending hash/months belong to the detached ingest, which a native parse never runs,
+                // so clear them either way, or the reattach path would believe a read is still owed. Mark
+                // the bytes INGESTED (lastContentHash) only on a successful parse, the same state the
+                // detached ingest sets on success, so the next run skips an unchanged widget; a drift/parse
+                // failure leaves lastContentHash on the old bytes so the next run re-reads and it stays
+                // visibly failing until fixed.
+                source.pendingContentHash = nil
+                source.pendingPageMonths = []
+                let extractor = TicketTailorExtractor(
+                    fetchEvents: {
+                        try TicketTailorCalendar.upcoming(
+                            TicketTailorCalendar.parseWidget(widgetHTML), now: now)
+                    },
+                    venueName: source.orgName, location: source.venueLocation)
+                let native = await runNative(source, extractor: extractor, clients: loaded.clients,
+                                             history: history, blocked: blocked, now: now, into: context)
+                if let s = native.sources.first, case .ingested = s.state {
+                    source.lastContentHash = page.contentHash
+                    source.hasUnreadChanges = false
+                }
+                outcome.merge(native)
+            } else {
+                outcome.sources.append(result)
+                if let page { toRead.append((source, page)) }
+            }
             // #1034: the native-phase heartbeat. Fired for every fetched source, changed or not, so the
             // takeover modal's count advances through the whole sweep rather than stalling on the ones
             // that happened not to be re-read.

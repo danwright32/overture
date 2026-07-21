@@ -50,6 +50,13 @@ struct FetchedPage: Equatable, Sendable {
     // Center's, and silently swapping the page under him would be exactly the kind of quiet cleverness
     // that makes a tool untrustworthy.
     var followedTicketLinkFrom: String? = nil
+    // #1295: the RAW (un-normalized) TicketTailor widget HTML, set only when the ticket-link hop landed on
+    // a tickettailor all-tickets-calendar widget. It carries the `selectableDates` JSON the native parser
+    // reads, which `normalizedHTML` cannot: PageNormalizer strips <script> blocks. Its presence is the
+    // signal the scout uses to parse this page natively (free) instead of sending it to the paid read.
+    // Deliberately NOT part of the content hash (that stays on `normalizedHTML`, whose event-filter options
+    // change when the event set changes, so the "skip unchanged" gate still fires when events appear/go).
+    var ticketTailorWidgetHTML: String? = nil
     // #1056: set when the watched page itself came back unreadable (a JavaScript shell that even a full
     // browser render could not read) and the listings were found on a sibling calendar path of the SAME
     // site instead (the watched page rendered empty, but /events/ is plain HTML). Holds the watched URL
