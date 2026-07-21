@@ -48,3 +48,19 @@ enum ReachabilityCopy {
     static let hardToReachHelp =
         "Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
 }
+
+// #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the
+// copy-inventory shows the whole sentence Dan reads.
+enum ReachabilityProbeCopy {
+    static let controlLabel = "Check reachability"
+    static let controlHelp =
+        "Check which of this date's still-open shows are actually emailable, before you keep one and dismiss the rest."
+
+    static func confirmTitle(count: Int) -> String {
+        "Check reachability for these \(count) shows?"
+    }
+    static func confirmMessage(dateLabel: String) -> String {
+        "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
+    }
+    static let confirmProceed = "Check"
+}

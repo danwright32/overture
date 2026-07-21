@@ -96,6 +96,15 @@ struct QueueView: View {
     // so a first-time user need not know the Cmd+P shortcut or the toolbar menu. Declared last so the
     // RootView call site can keep onOpenInArchive near the top for ReachedOutRowArchiveJumpGuardTests.
     var onStartPrep: () -> Void = {}
+    var onProbeReachability: (Set<String>) -> Void = { _ in }   // #1308 Layer 2
+
+    // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
+    @State private var pendingProbe: ProbeConfirm?
+    private struct ProbeConfirm: Identifiable {
+        let id = UUID()
+        let keys: [String]
+        let dateLabel: String
+    }
 
     private var items: [QueueItem] { QueueModel.items(from: prospects) }
 
@@ -174,6 +183,16 @@ struct QueueView: View {
                     title: pending.title, message: pending.message, proceedLabel: pending.proceedLabel,
                     onProceed: { pending.proceed(); pendingSelfBookingGuard = nil },
                     onCancel: { pendingSelfBookingGuard = nil })
+            }
+            // #1308 Layer 2: confirm an opt-in reachability probe before it spends. Reuses the same
+            // first-party branded sheet; the copy states the honest cost (free for shows Dan keeps).
+            .sheet(item: $pendingProbe) { pending in
+                SelfBookingConfirmSheet(
+                    title: ReachabilityProbeCopy.confirmTitle(count: pending.keys.count),
+                    message: ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel),
+                    proceedLabel: ReachabilityProbeCopy.confirmProceed,
+                    onProceed: { onProbeReachability(Set(pending.keys)); pendingProbe = nil },
+                    onCancel: { pendingProbe = nil })
             }
     }
 
@@ -297,6 +316,13 @@ struct QueueView: View {
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
                     .background(Capsule().fill(OVColor.surfaceSunk))
                 }
+                // #1308 Layer 2: an opt-in reachability check for a date holding several still-open
+                // candidates, so Dan can see which are emailable before he keeps one and dismisses the rest.
+                // A standalone view (testable, #863) that reports the candidate keys up so the confirm sheet
+                // opens at the QueueView level.
+                ReachabilityProbeControl(
+                    items: group.items, dateLabel: group.monthDay, isScout: focusedStage == .scout,
+                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -767,5 +793,35 @@ struct QueueView: View {
                                     markSending: { replySending[$0] = Date() },
                                     clearSending: { replySending[$0] = nil },
                                     onNeedsReconnect: { showReconnect = true })
+    }
+}
+
+// #1308 Layer 2: the date-header "Check reachability" control. A standalone view so its visibility rule and
+// tap payload are testable directly (the enclosing QueueView reads @Query/@State that a unit test can't
+// inject). Shown only off the Scout stage and only when 2+ still-open candidates share the date; a tap
+// reports the candidate keys up so QueueView opens the confirm sheet.
+struct ReachabilityProbeControl: View {
+    let items: [QueueItem]
+    let dateLabel: String
+    let isScout: Bool
+    let onTap: (_ keys: [String], _ dateLabel: String) -> Void
+
+    var body: some View {
+        if !isScout && QueueModel.showsReachabilityProbeControl(items) {
+            Button {
+                onTap(QueueModel.reachabilityProbeCandidateKeys(items), dateLabel)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "envelope.badge")
+                    Text(ReachabilityProbeCopy.controlLabel)
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(OVColor.forest)
+                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                .background(Capsule().fill(OVColor.forest.opacity(0.10)))
+            }
+            .buttonStyle(.plain)
+            .help(ReachabilityProbeCopy.controlHelp)
+        }
     }
 }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **721 sentences**, from 243 source files.
+Every sentence Overture can say to Dan: **725 sentences**, from 243 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -369,6 +369,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Carnegie Hall is added the first time Overture opens your store."
     `UI/SourcesView.swift`
+"Check reachability"
+    `Domain/Reachability.swift`
+"Check reachability for these \(count) shows?"
+    `Domain/Reachability.swift`
+"Check which of this date's still-open shows are actually emailable, before you keep one and dismiss the rest."
+    `Domain/Reachability.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
     `UI/SourceFixConfirmActions.swift`
 "Closed (not interested)"
@@ -1284,6 +1290,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "This looks right"
     `UI/ProspectRowView.swift`
+"This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
+    `Domain/Reachability.swift`
 "This old draft may still have a name in the greeting Overture couldn't safely remove; "
     `Domain/DraftReviewNotes.swift`
 "This org asked not to be contacted, so none of their shows will be scouted or emailed. Tap to allow contact again."
