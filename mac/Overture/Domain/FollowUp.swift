@@ -82,7 +82,7 @@ enum FollowUp {
         return NudgeContent(
             subject: replySubject(originalSubject: originalSubject, groupName: name),
             body: nudgeBody(contactName: contactName, groupName: name,
-                            venue: venue, attempt: attempt(after: followUpCount)))
+                            venue: safeVenue(venue), attempt: attempt(after: followUpCount)))   // #1273
     }
 
     // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)
@@ -102,6 +102,25 @@ enum FollowUp {
 
     static func safeDisplayName(_ groupName: String, isMerged: Bool) -> String {
         isMerged ? mergedNameSubstitute : groupName
+    }
+
+    // #1273: the venue's counterpart to safeDisplayName. The nudge/reminder bodies interpolate the venue
+    // verbatim ("photographing X at <venue>") with NO edit surface. A stored venue has already cleared the
+    // ingest guard (ExtractedEventGuard rejects a missing/placeholder/numeric-id venue), so the residual
+    // risk is a value that is present but not presentable in a sentence to a stranger: a line break or
+    // control character from a bad scrape, which that ingest guard never checks for ("Carnegie Hall\n881
+    // 7th Ave" is a storable venue that would inject a newline mid-sentence). Returns a clean venue to
+    // interpolate, or nil to DROP the " at <venue>" clause entirely (a placeless nudge still reads fine),
+    // never an ugly one. Applied once at each nudgeContent chokepoint, like safeDisplayName, so both send
+    // paths and their confirmation sheets agree.
+    static func safeVenue(_ venue: String?) -> String? {
+        guard let raw = venue?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        // A line break or control character in a venue name is a scrape artifact, not a real room; drop the
+        // whole clause rather than send a broken sentence under Dan's name.
+        let unsafe = CharacterSet.controlCharacters.union(.newlines)
+        if raw.unicodeScalars.contains(where: { unsafe.contains($0) }) { return nil }
+        // Collapse any internal run of whitespace to a single space (a flattened multi-space scrape).
+        return raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     static func nudgeSubject(groupName: String) -> String {

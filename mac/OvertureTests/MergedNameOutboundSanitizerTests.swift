@@ -81,3 +81,63 @@ struct MergedNameOutboundSanitizerTests {
         #expect(legitBody.contains(legitSemicolonTitle))   // not merged -> real name survives to the recipient
     }
 }
+
+// #1273: the audit of #1260 Phase 1 found the NAME was guarded but the VENUE was not. The same no-edit
+// nudge/reminder bodies interpolate the venue verbatim ("photographing X at <venue>"). A stored venue has
+// already cleared the ingest guard (ExtractedEventGuard rejects a missing/placeholder/numeric-id venue),
+// but that guard never checks for scrape artifacts, so "Carnegie Hall\n881 7th Ave" is a perfectly storable
+// venue that would inject a line break mid-sentence into an email sent under Dan's name with no review.
+// safeVenue is the venue's counterpart to safeDisplayName: a clean venue to interpolate, or nil to drop the
+// " at <venue>" clause, never an ugly one. (Audit of the other interpolated fields: groupName is guarded by
+// safeDisplayName; contactName is normalized by Salutation.greeting/firstName; originalSubject is
+// prospect.draftSubject, which Dan reviewed before the first send. Venue was the one gap.)
+@Suite("Outbound nudge venue is guarded (#1273)")
+struct SafeVenueGuardTests {
+    @Test func aCleanVenueSurvivesUnchanged() {
+        #expect(FollowUp.safeVenue("Carnegie Hall") == "Carnegie Hall")
+        #expect(FollowUp.safeVenue("Merkin Concert Hall, Kaufman Music Center")
+                == "Merkin Concert Hall, Kaufman Music Center")
+    }
+
+    @Test func aVenueWithAnEmbeddedLineBreakIsDropped() {
+        #expect(FollowUp.safeVenue("Carnegie Hall\n881 7th Ave") == nil)
+        #expect(FollowUp.safeVenue("Carnegie Hall\r\nNew York, NY") == nil)
+    }
+
+    @Test func aVenueWithAControlCharacterIsDropped() {
+        #expect(FollowUp.safeVenue("Zankel\tHall") == nil)
+    }
+
+    @Test func aBlankOrMissingVenueIsNil() {
+        #expect(FollowUp.safeVenue(nil) == nil)
+        #expect(FollowUp.safeVenue("   ") == nil)
+    }
+
+    @Test func surroundingWhitespaceIsTrimmedAndInternalRunsCollapsed() {
+        #expect(FollowUp.safeVenue("  Carnegie Hall  ") == "Carnegie Hall")
+        #expect(FollowUp.safeVenue("Carnegie   Hall") == "Carnegie Hall")
+    }
+
+    // The WIRING: the guard must actually reach the no-edit send bodies, not just exist as a helper.
+    @Test func aFollowUpNudgeDropsTheClauseForAMessyVenueButKeepsACleanOne() {
+        let messy = FollowUp.nudgeContent(originalSubject: nil, groupName: "Aurora Strings",
+                                          contactName: "Dana", venue: "Carnegie Hall\n881 7th Ave",
+                                          followUpCount: 0)
+        #expect(!messy.body.contains("881 7th Ave"))
+        #expect(messy.body.contains("photographing Aurora Strings."))   // clean, no broken " at <junk>"
+
+        let clean = FollowUp.nudgeContent(originalSubject: nil, groupName: "Aurora Strings",
+                                          contactName: "Dana", venue: "Merkin Hall", followUpCount: 0)
+        #expect(clean.body.contains("photographing Aurora Strings at Merkin Hall."))
+    }
+
+    @Test func aConversationReminderDropsTheClauseForAMessyVenueButKeepsACleanOne() {
+        func body(venue: String?) -> String {
+            ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: nil,
+                                              groupName: "Aurora Strings", contactName: "Dana",
+                                              venue: venue)?.body ?? ""
+        }
+        #expect(!body(venue: "Carnegie Hall\n881 7th Ave").contains("881 7th Ave"))
+        #expect(body(venue: "Merkin Hall").contains("Aurora Strings at Merkin Hall"))
+    }
+}
