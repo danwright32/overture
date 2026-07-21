@@ -57,10 +57,12 @@ enum LeadIntake {
     // came for is the lead. (When Dan pastes a venue's calendar DELIBERATELY, there is no constraint and
     // every show counts: he is watching the hall, not one act.)
     static func outcome(from results: ScoutExtractResults, sourceId: String,
-                        onlyForOrg: String? = nil) -> Outcome {
+                        onlyForOrg: String? = nil, listingsURL: String? = nil) -> Outcome {
         guard let verdict = results.verdict(for: sourceId) else { return .nothingCameBack }
 
-        let all = results.events(for: sourceId)
+        // #1291: the page Dan pasted (the listings page that was read) is the fallback when the boundary
+        // strips a show's only link because it is a signup form, so a lead prospect is never left linkless.
+        let all = results.events(for: sourceId, listingsURL: listingsURL)
         let usable = onlyForOrg.map { org in all.filter { belongsTo(org, $0) } } ?? all
         let rejected = results.rejectedEvents(for: sourceId)
         let note = results.results.first { $0.sourceId == sourceId }?.note

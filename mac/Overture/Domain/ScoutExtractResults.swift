@@ -34,10 +34,16 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     // its next occurrence, or omits the date when no weekday is determinable, so nothing downstream ever
     // sees the placeholder. `today` defaults to the Eastern day so a lead paste needs no clock passed;
     // ScoutExtractIngest passes its own run day so the whole ingest reckons one consistent "today".
-    func events(for sourceId: String, today: String = EasternDate.today()) -> [ExtractedEvent] {
+    // #1291: `listingsURL` is the source's own listings-page URL. When #1278's guard strips a show's only
+    // link because it is a signup form, the show falls back to this instead of being left linkless, so Dan
+    // still has a page to open. nil (a caller that has no listings URL to offer) keeps the old drop-to-nil
+    // behavior exactly.
+    func events(for sourceId: String, today: String = EasternDate.today(),
+                listingsURL: String? = nil) -> [ExtractedEvent] {
         rawEvents(for: sourceId)
             .map(ExtractedEventGuard.placed)              // #1214: carry a rescued outdoor venue to the prospect
-            .map(ExtractedEventGuard.sanitizedSourceURL)  // #1278: drop a signup-form listing link, keep the show
+            // #1278/#1291: drop a signup-form listing link (keep the show), falling back to the listings page.
+            .map { ExtractedEventGuard.sanitizedSourceURL($0, listingsURL: listingsURL) }
             .filter(ExtractedEventGuard.isUsable)
             .map { RecurringEventDate.normalized($0, today: today) }
     }
