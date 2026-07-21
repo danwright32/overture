@@ -68,4 +68,45 @@ struct ReachabilityProbeControlTests {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }
     }
+
+    // #1336: the control is a proactive first-party CALLOUT, not a passive button Dan must remember. It
+    // names how many shows compete for the date so he checks which are emailable before he keeps one.
+    @Test func theCalloutHeadlineNamesTheCountAndTheAsk() {
+        let headline = ReachabilityProbeCopy.calloutHeadline(count: 3)
+        #expect(headline.contains("3"))
+        #expect(headline.lowercased().contains("email"))
+    }
+
+    @Test func showsAProactiveCalloutNamingTheCompetingCount() throws {
+        let view = ReachabilityProbeControl(
+            items: [item("a"), item("b"), item("c")],   // 3 still-open candidates
+            dateLabel: "Sep 12", isScout: false, isRunning: false, onTap: { _, _ in })
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("3 shows") })
+        _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)   // Check button present
+    }
+
+    // #1336: a session dismiss (the X) waves the callout off for that date without checking.
+    @Test func aDismissedDateHidesTheCallout() throws {
+        let view = ReachabilityProbeControl(
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            isDismissed: true, onDismiss: {}, onTap: { _, _ in })
+        #expect(throws: (any Error).self) {
+            try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
+        }
+    }
+
+    @Test func tappingDismissReportsUp() throws {
+        var dismissed = false
+        let view = ReachabilityProbeControl(
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            isDismissed: false, onDismiss: { dismissed = true }, onTap: { _, _ in })
+
+        let x = try view.inspect().find(ViewType.Button.self, where: {
+            (try? $0.accessibilityIdentifier()) == "dismiss-reachability-callout"
+        })
+        try x.tap()
+        #expect(dismissed == true)
+    }
 }
