@@ -465,6 +465,11 @@ enum ScoutService {
                             // count over lets #887's tolerance gate forbid this run from concluding that
                             // anything is gone. It may still add and update.
                             rejectedCount: rejectedCount),
+            // #1302: derive applySweep's upcoming-only 'today' from THIS run's now, not the wall clock.
+            // Without it a scout given an injected now (a test, or any non-real clock) had its events pass
+            // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
+            // against the real day, so a native-feed run was never fully time-controllable.
+            today: QueueModel.easternToday(now),
             sourceIds: [sourceId], into: context)
 
         // Fold this run into the source's own feed-health state: a full feed re-baselines immediately,

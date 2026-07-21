@@ -64,4 +64,41 @@ struct TicketTailorEndToEndTests {
         #expect(p.sourceListingURL == "https://www.tickettailor.com/events/thecell/701")
         #expect(source.lastContentHash == "e2e-hash-1") // marked ingested; next unchanged run skips it
     }
+
+    // #1302: the native ingest's upcoming-only guard (applySweep) must honor the scout's INJECTED now, not
+    // the real wall clock. A show dated in the future of the injected now but the PAST of the real clock
+    // must still ingest. Before the fix applySweep read the real 'today' (runNative never threaded its now
+    // through), so it silently dropped the show (found>0, inserted=0), indistinguishable from a
+    // geography/classifier rejection and forcing every native e2e test to be real-clock-dependent. All dates
+    // are relative to Date(), so this can never expire.
+    @Test func aScoutWithAnInjectedNowIngestsAShowUpcomingRelativeToThatNow() async throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, WatchedSource.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let source = WatchedSource(sourceId: "cell", orgName: "The Cell Theatre",
+                                   listingsURL: "https://thecelltheatre.org/box-office", kind: .html)
+        source.venueLocation = "New York, NY"   // Manhattan: in-borough for the geography gate
+        ctx.insert(source)
+
+        // A 'now' well over a year in the past, and a show ~200 days after it: comfortably UPCOMING for the
+        // injected now, comfortably PAST for the real clock, so a real-today guard would (wrongly) drop it.
+        let injectedNow = Date().addingTimeInterval(-400 * 86_400)
+        let date = Self.futureDateString(daysFromNow: -200)
+
+        _ = try await ScoutService.runScout(
+            into: ctx,
+            fetch: { url, _, _ in
+                FetchedPage(normalizedHTML: "<html><body>widget shell</body></html>",
+                            finalURL: url.absoluteString, contentHash: "e2e-hash-1302",
+                            ticketTailorWidgetHTML: Self.widget(date: date))
+            },
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
+            launch: { _ in },
+            now: injectedNow,
+            defaults: UserDefaults(suiteName: "tt-e2e-1302-\(UUID().uuidString)")!)
+
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let p = try #require(stored.first { $0.groupName == "Autumn Chamber Concert" },
+                             "a show upcoming for the injected now was dropped; stored=\(stored.map(\.groupName))")
+        #expect(p.performanceDate == date)
+    }
 }
