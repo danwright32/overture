@@ -369,15 +369,16 @@ enum PrepImporter {
     static func ingestFile(at url: URL, into context: ModelContext,
                            downbeatURL: URL = DownbeatBridge.defaultURL,
                            historyURL: URL = LocalHistory.importedURL,
-                           queueURL: URL = PrepQueueBuilder.defaultURL) throws -> Outcome {
+                           queueURL: URL = PrepQueueBuilder.defaultURL,
+                           isProbe: Bool = false, now: Date = Date()) throws -> Outcome {
         let data = try Data(contentsOf: url)
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let loaded = DownbeatBridge.loadWithHealth(from: downbeatURL, now: Date())
+        let loaded = DownbeatBridge.loadWithHealth(from: downbeatURL, now: now)
         let history = LocalHistory.forMatchingWithHealth(existing: existing, importedFrom: historyURL)
 
         let results = try PrepResultsDecoder.decode(data)
-        var outcome = ingest(results, into: context,
-                             clients: loaded.clients, history: history.records)
+        var outcome = ingest(results, into: context, now: now,
+                             clients: loaded.clients, history: history.records, isProbe: isProbe)
         // #754: the health verdict used to be computed here and then thrown away, so a missing or
         // corrupt client export meant every performer match silently found nothing and a real past
         // client read as a cold lead, with no symptom Dan could ever have noticed.
