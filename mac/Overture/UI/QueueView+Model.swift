@@ -14,6 +14,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let performanceDate: String?
     let sourceListingURL: String?
     let websiteURL: String?
+    // #1145: the presenting org, read by the free reachability heuristic at Review (no presenter => nothing
+    // to email). Defaulted so existing memberwise-init call sites are unaffected.
+    var presenter: String? = nil
     // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
     // this and the discipline, never stored, so a rule change re-decides every row at once.
     var location: String? = nil
@@ -146,6 +149,16 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
+
+    // #1145 Layer 1: the free reachability signal, and whether the "Hard to reach" badge shows. The badge
+    // is a Review-time decision aid, so it only appears while the show is still a candidate (not yet
+    // pitched, not booked); a sent or booked show was clearly reachable.
+    var reachability: Reachability.Signal {
+        Reachability.assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
+    }
+    var showsHardToReachBadge: Bool {
+        reachability == .hardToReach && sentAt == nil && !isBooked
+    }
 
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
     // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
@@ -979,6 +992,7 @@ extension QueueItem {
             performanceDate: p.performanceDate,
             sourceListingURL: p.sourceListingURL,
             websiteURL: p.websiteURL,
+            presenter: p.presenter,
             location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,
