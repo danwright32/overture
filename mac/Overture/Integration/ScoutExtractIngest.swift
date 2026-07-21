@@ -106,7 +106,10 @@ enum ScoutExtractIngest {
             // same-date+venue seriesId here, where the WatchedSource is in hand, so the existing RunGrouping
             // collapse in ScoutService fuses the rows into one prospect. Kept in Swift, not the untrusted
             // shell runner. Inert (no-op) for every ordinary source, whose flag is false.
-            let rawEvents = results.events(for: result.sourceId, today: today)
+            // #1291: hand the source's own listings URL to the boundary so a stripped signup-form link
+            // (DCINY's /opportunities/ getfeedback rows) falls back to the listings page, not to no link.
+            let rawEvents = results.events(for: result.sourceId, today: today,
+                                           listingsURL: source.listingsURL)
             let events = source.mergeSameDateVenue ? SameDateVenueMerge.stamped(rawEvents) : rawEvents
             // #1032: the drops this run threw away, split by family (venue vs title), computed once and
             // used for BOTH the #887 tolerance gate (its total) and the Sources note (its title share).

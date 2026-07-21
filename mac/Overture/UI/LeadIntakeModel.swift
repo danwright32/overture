@@ -302,7 +302,8 @@ final class LeadIntakeModel {
             // is fixing.
             if let results = readResults(sourceId), let verdict = results.verdict(for: sourceId) {
                 readVerdict = verdict
-                apply(LeadIntake.outcome(from: results, sourceId: sourceId, onlyForOrg: onlyForOrg))
+                apply(LeadIntake.outcome(from: results, sourceId: sourceId, onlyForOrg: onlyForOrg,
+                                         listingsURL: readPageURL))   // #1291: fallback for a stripped form link
                 return
             }
 

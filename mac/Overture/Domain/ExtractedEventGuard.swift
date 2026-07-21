@@ -107,14 +107,25 @@ enum ExtractedEventGuard {
         "surveymonkey.com", "typeform.com", "jotform.com", "wufoo.com", "cognitoforms.com", "formstack.com"
     ]
 
-    // A signup-form listing link, drained to nil while the show itself is left intact. Idempotent, and the
-    // single point of stripping, so `events(for:)` and any other consumer agree on which links are dropped.
-    static func sanitizedSourceURL(_ event: ExtractedEvent) -> ExtractedEvent {
+    // A signup-form listing link, replaced with something Dan can open. Idempotent, and the single point of
+    // stripping, so `events(for:)` and any other consumer agree on which links are dropped.
+    //
+    // #1291: when a stripped form is the row's only link, fall back to the LISTINGS PAGE the row was read
+    // from (runbook rule 3c), not nil, so the kept show still has a link Dan can click to look it up. The
+    // "concert page if the row names one" half of 3c is the run's own job (the concert URL is not separately
+    // available at this seam); this recovers the other half. The fallback must itself be a real, non-form
+    // URL, or a form is only ever replaced by another dead end.
+    static func sanitizedSourceURL(_ event: ExtractedEvent, listingsURL: String? = nil) -> ExtractedEvent {
         guard let raw = event.sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
               isRegistrationForm(raw)
         else { return event }
         var cleaned = event
-        cleaned.sourceUrl = nil
+        if let fallback = listingsURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallback.isEmpty, !isRegistrationForm(fallback) {
+            cleaned.sourceUrl = fallback
+        } else {
+            cleaned.sourceUrl = nil
+        }
         return cleaned
     }
 

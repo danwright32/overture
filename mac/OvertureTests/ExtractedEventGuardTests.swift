@@ -263,6 +263,16 @@ struct ScoutExtractResultsGuardTests {
         #expect(r.events(for: "s").first?.sourceUrl == good)
     }
 
+    // #1291: when the boundary strips a form link, a listings-page URL threaded in from the source falls
+    // through to the kept show, so a DCINY /opportunities/ prospect is not left with nothing to open.
+    @Test func aStrippedFormFallsBackToTheSourceListingsPageAtTheBoundary() {
+        let r = results([event("Faith and Freedom", venue: "Carnegie Hall",
+                               sourceUrl: "https://dciny.getfeedback.com/r/abc123")])
+        let usable = r.events(for: "s", listingsURL: "https://www.dciny.org/opportunities/")
+        #expect(usable.count == 1)
+        #expect(usable.first?.sourceUrl == "https://www.dciny.org/opportunities/")
+    }
+
     @Test func onlyUsableEventsComeOutOfTheResults() {
         let r = results([event("Good Show", venue: "Merkin Hall"),
                          event("No Venue", venue: nil),
@@ -417,5 +427,34 @@ struct SignupFormSourceURLGuardTests {
         let once = ExtractedEventGuard.sanitizedSourceURL(
             event(sourceUrl: "https://getfeedback.com/r/abc"))
         #expect(ExtractedEventGuard.sanitizedSourceURL(once).sourceUrl == nil)
+    }
+
+    // #1291: a stripped form link falls back to the LISTINGS PAGE the row was read from (runbook 3c), so a
+    // kept DCINY /opportunities/ show still has something Dan can open, instead of no link at all.
+    @Test func aStrippedFormFallsBackToTheListingsPage() {
+        let cleaned = ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: "https://dciny.getfeedback.com/r/abc"),
+            listingsURL: "https://www.dciny.org/opportunities/")
+        #expect(cleaned.sourceUrl == "https://www.dciny.org/opportunities/")
+        #expect(ExtractedEventGuard.isUsable(cleaned))
+    }
+
+    // A real concert link is never displaced by the fallback: the fallback only rescues a STRIPPED form.
+    @Test func aRealLinkIsNotReplacedByTheListingsFallback() {
+        let good = "https://dciny.org/events/faith-and-freedom/"
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: good), listingsURL: "https://www.dciny.org/opportunities/").sourceUrl == good)
+    }
+
+    // Defensive: a listings URL is never itself a form, but if a form (or a blank) were handed in as the
+    // fallback it must not replace one bad link with another; it drains to nil, exactly as before #1291.
+    @Test func aFormOrBlankFallbackStillDrainsToNil() {
+        let form = "https://getfeedback.com/r/abc"
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: form), listingsURL: "https://forms.gle/xyz").sourceUrl == nil)
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: form), listingsURL: "   ").sourceUrl == nil)
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: form), listingsURL: nil).sourceUrl == nil)
     }
 }
