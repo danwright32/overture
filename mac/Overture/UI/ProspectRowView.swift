@@ -418,6 +418,11 @@ struct ProspectRowView: View {
         case .noEmailFound:
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.noEmailFoundBadge,
                              tint: OVColor.rust, fill: OVColor.rust.opacity(0.12), help: ReachabilityCopy.noEmailFoundHelp)
+        case .weakContactOnly:
+            // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
+            // but only a weak (venue/press) one.
+            reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
+                             tint: OVColor.gold, fill: OVColor.gold.opacity(0.15), help: ReachabilityCopy.weakContactOnlyHelp)
         case .emailFound:
             reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
                              tint: OVColor.forest, fill: OVColor.forest.opacity(0.12), help: ReachabilityCopy.emailFoundHelp)

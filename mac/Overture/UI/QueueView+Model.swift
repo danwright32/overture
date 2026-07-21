@@ -53,6 +53,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
     // the button must persist until the LAST recipient goes, so it gates on this, not on `isSent`.
     var hasPendingRecipient: Bool = false
+    // #1324: a real email exists but only as a venue front desk or press inbox (held by the venue/press
+    // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
+    // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
+    var hasWeakContactEmail: Bool = false
     // #792: contacts on this show held back by a review guard, each waiting on one glance from Dan. A
     // show can be genuinely Sent AND still have somebody waiting; the bug was that the row said only the
     // first, so the person waiting vanished with the show.
@@ -160,6 +164,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var reachabilityBadge: Reachability.Badge {
         guard sentAt == nil && !isBooked else { return .none }
         return Reachability.badge(probed: reachabilityProbedAt != nil, hasSendableEmail: hasPendingRecipient,
+                                  hasWeakContactEmail: hasWeakContactEmail,
                                   presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
 
@@ -1035,6 +1040,13 @@ extension QueueItem {
             performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
+            // #1324: a real address held only by the venue/press guard (a weak contact), so the badge can
+            // say "Weak contact only" rather than "No email found" when that is all a probe found.
+            hasWeakContactEmail: p.recipients.contains { r in
+                r.email?.isEmpty == false
+                    && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
+                        || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
+            },
             blockedContactCount: p.blockedContactCount,
             sendError: p.sendError,
             lostReason: p.lostReason,
