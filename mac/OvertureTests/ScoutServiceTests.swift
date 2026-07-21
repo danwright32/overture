@@ -180,6 +180,61 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationOverriddenByDan == true)
     }
 
+    // #1274: Dan renames an ugly scout-generated groupName. The rename must survive the next scout
+    // (the guard in apply()), and the anti-duplicate crux: it must NOT change the naturalKey, so the
+    // scout's exact-key match keeps firing and no second row is inserted. scoutGroupName is kept
+    // current so a later "reset to scout name" restores the real, latest scout name.
+    @Test func reScoutPreservesDansManualRenameWithoutDuplicating() throws {
+        let ctx = ModelContext(try container())
+        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
+                                          performanceDate: "2026-06-24",
+                                          venue: "Stern Auditorium / Perelman Stage")
+        let choir = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        // Dan renames it, exactly as the rename mutation does: change the display name, set the
+        // override, leave the natural key alone.
+        choir?.groupName = "Indy Kids Choir at Carnegie"
+        choir?.scoutGroupName = "Indianapolis Children's Choir"
+        choir?.groupNameOverriddenByDan = true
+        try ctx.save()
+
+        // The scout re-runs, still emitting its own original name for this show.
+        let outcome = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        #expect(outcome.inserted == 0)   // no duplicate row spawned by the rename
+        #expect(outcome.updated == 2)
+
+        let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
+        #expect(refreshed?.groupName == "Indy Kids Choir at Carnegie")        // Dan's name survived
+        #expect(refreshed?.groupNameOverriddenByDan == true)                   // flag untouched
+        #expect(refreshed?.scoutGroupName == "Indianapolis Children's Choir")  // scout name kept fresh for reset
+
+        // Exactly one row for this show still exists.
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(all.filter { $0.venue == "Stern Auditorium / Perelman Stage" }.count == 1)
+    }
+
+    // #1274: the override is a real gate, not a permanent freeze. When Dan has NOT renamed a show, the
+    // scout still owns its groupName and a venue re-title flows through as before.
+    @Test func reScoutRefreshesGroupNameWhenNotOverridden() throws {
+        let ctx = ModelContext(try container())
+        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        // The venue re-titles the show between runs; same source listing, date and venue, so the
+        // stable-source arm re-keys it in place (#29).
+        let reTitled = ExtractedEvent(title: "Indianapolis Children's Choir (Holiday Concert)",
+                                      presenter: "Indianapolis Children's Choir",
+                                      venue: "Stern Auditorium / Perelman Stage",
+                                      performanceDate: "2026-06-24",
+                                      sourceUrl: "https://example.com/b")
+        _ = ScoutService.apply(events: [reTitled], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let choir = stored.first { $0.venue == "Stern Auditorium / Perelman Stage" }
+        #expect(choir?.groupName == "Indianapolis Children's Choir (Holiday Concert)")  // scout still owns it
+        #expect(choir?.groupNameOverriddenByDan == false)
+    }
+
     // The performer-match guard (#750, plan #748, issue #585). Fixtures below share one event, so a
     // re-scout of it produces the natural key these prospects are stored under.
     private let choirEvent = ExtractedEvent(title: "Indianapolis Children's Choir",
