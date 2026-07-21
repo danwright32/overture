@@ -340,6 +340,19 @@ final class Prospect {
     // prospect it ever surfaced, cascading into Recipient, including sent emails and live reply threads.
     var sourceIds: [String] = []
 
+    // #1260 Phase 2: the merged-concert identity, persisted so a merged prospect survives a re-scout
+    // WITHOUT depending on emit order. It is the synthetic id SameDateVenueMerge stamps
+    // ("samedatevenue:DATE|VENUE"), already carried transiently on AssembledProspect but never stored
+    // until now. Set only for a merged DCINY cluster; nil for every ordinary show. Its purpose: the
+    // merged prospect's natural key rides on the emit-order-dependent combinedName and its URL-based
+    // re-key fallbacks ride on the representative row's URL (which shifts when the scout re-lists the
+    // rows in a new order or with refreshed links), so a re-scout could otherwise miss all three match
+    // arms and silently INSERT A DUPLICATE, stranding Dan's keep/dismiss. Matching on this stable id
+    // closes that. Defaulted optional, so existing rows decode with nil (same additive-migration
+    // precedent as runSourceURLs/sourceIds above); a stored merged prospect gains its id on its first
+    // post-deploy re-scout (forward-only, matching #980).
+    var seriesId: String? = nil
+
     init(
         naturalKey: String,
         groupName: String,

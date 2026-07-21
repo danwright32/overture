@@ -801,6 +801,17 @@ enum ScoutService {
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing)
                 updated += 1
+            } else if let byConcert = matchByConcertIdentity(enriched.seriesId, venue: enriched.venue, in: context) {
+                // #1260 Phase 2: no exact key match, but a stored merged prospect carries the SAME synthetic
+                // concert id (samedatevenue:DATE|VENUE). The name and the representative URL both shifted
+                // because the scout re-listed the per-conductor rows in a new order or with refreshed links,
+                // so the two URL-based arms below would miss and INSERT A DUPLICATE, stranding Dan's
+                // keep/dismiss. Re-key to the new name and update in place. Gated on isMerged, and the
+                // synthetic id is minted only for a mergeSameDateVenue source, so this can NEVER fuse two
+                // genuinely different shows (a normal matinee/evening never gets an id to match on).
+                byConcert.naturalKey = key
+                apply(enriched, to: byConcert)
+                updated += 1
             } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
                                                       venue: enriched.venue, in: context) {
                 // No exact key match, but a stored record shares one of this run's member
@@ -922,6 +933,18 @@ enum ScoutService {
         return canon(a) == canon(b)
     }
 
+    // #1260 Phase 2: a merged prospect identified by its persisted synthetic concert id, so a re-scout
+    // recognizes the SAME merged concert even when its name and every recruiting URL changed (a reorder or
+    // refreshed links). Only ever fires for a merged cluster (isMerged gate), and the id already encodes
+    // date+venue, so `sameVenue` is belt-and-braces against a hash-collision, never load-bearing. Fetch-all
+    // + filter, like matchByStableSource; the store is small.
+    private static func matchByConcertIdentity(_ seriesId: String?, venue: String?,
+                                               in context: ModelContext) -> Prospect? {
+        guard SameDateVenueMerge.isMerged(seriesId) else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all.first { $0.seriesId == seriesId && sameVenue($0.venue, venue) }
+    }
+
     // A prospect identified by its stable source listing (URL + date), used to recognize
     // the same event when its display title has drifted (#29). Fetch-all + filter is fine
     // for the local store's size and avoids optional-predicate gymnastics.
@@ -954,6 +977,7 @@ enum ScoutService {
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
         prospect.sourceIds = p.sourceIds        // #771
+        prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
     }
@@ -975,6 +999,7 @@ enum ScoutService {
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL
+        existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
         existing.profile = p.profile
         existing.coverage = p.coverage
         existing.fitReason = p.fitReason
