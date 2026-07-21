@@ -196,6 +196,17 @@ enum TicketTailorCalendar {
         String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
     }
 
+    // #1301: the raw `var selectableDates = ...;` literal, used as the change signal for the widget's
+    // content hash. The normalized HTML the fetcher would otherwise hash drops the <script> this lives in,
+    // keeping only the events-filter <option> list (one per distinct show), so a normalized hash moves when
+    // the SET of shows changes but NOT when an already-listed recurring show merely gains a new date. This
+    // literal moves on either. Returns nil when the marker is absent (a shell, an unrecognized shape), so
+    // the caller can fall back to the normalized hash. Over-reading on cosmetic JSON churn is acceptable:
+    // a TicketTailor re-read parses natively for free (#1295), whereas missing new dates is a real miss.
+    static func selectableDatesSignal(in html: String) -> String? {
+        selectableDatesLiteral(in: html)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // Extract the value of `var selectableDates = <value>;` from the widget HTML by balancing braces and
     // brackets (respecting string literals), NOT by reading to the first `;` (a venue or title string can
     // legitimately contain `;`, `{`, or `}`, which a naive scan would truncate on).
