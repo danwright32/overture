@@ -27,6 +27,14 @@ struct RunProgressViewStateTests {
         #expect(RunProgressCopy.title(.reading) == "Reading calendars")
     }
 
+    // #1322: a reachability probe reuses the shared prep runner and takeover, but the takeover is worded
+    // for a Prep ("Prepping"). A probe gets its own honest label so the in-progress state names what is
+    // actually running, per the app's progress principle.
+    @Test func theProbingPhaseNamesItselfDistinctlyFromPrepping() {
+        #expect(RunProgressCopy.title(.probing) == "Checking reachability")
+        #expect(RunProgressCopy.title(.probing) != RunProgressCopy.title(.prepping))
+    }
+
     // #1124: the name (the source being read RIGHT NOW) and the count (how many are DONE) are two
     // uncoordinated facts, so they must never be glued into "name · N of M", which read as if the number
     // indexed the named source (and was off by one). The current source is its own line, just the name,

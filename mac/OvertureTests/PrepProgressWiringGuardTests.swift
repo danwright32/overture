@@ -20,11 +20,19 @@ struct PrepProgressWiringGuardTests {
     @Test func prepLiveRunLabelReadsTheProgressFile() {
         let rootView = source("Overture/App/RootView.swift")
         #expect(!rootView.isEmpty)
-        guard let prepLabelRange = rootView.range(of: "LiveRunLabel(base: \"Prepping\"") else {
-            Issue.record("Prep LiveRunLabel not found")
+        // #1322: the prep/probe toolbar label reads the run's progress file. Anchor on that (unique to
+        // this label, unlike the shared RunProgressCopy.title base), then look back at the base that feeds
+        // it: now RunProgressCopy.title of the prepping-or-probing phase, so a probe reusing this run slot
+        // reads "Checking reachability" instead of "Prepping".
+        guard let detailRange = rootView.range(
+            of: "progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) }") else {
+            Issue.record("Prep LiveRunLabel progressDetail not found")
             return
         }
-        let nearby = rootView[prepLabelRange.lowerBound...].prefix(600)
-        #expect(nearby.contains("progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) }"))
+        let windowStart = rootView.index(detailRange.lowerBound, offsetBy: -600,
+                                         limitedBy: rootView.startIndex) ?? rootView.startIndex
+        let nearby = rootView[windowStart..<detailRange.lowerBound]
+        #expect(nearby.contains("LiveRunLabel(base: RunProgressCopy.title("))
+        #expect(nearby.contains("PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping"))
     }
 }

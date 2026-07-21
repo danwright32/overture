@@ -19,7 +19,9 @@ import SwiftUI
 struct RunProgressView: View {
     // #1130: `prepping` is the detached Prep run (contact-finding + drafting per prospect), which takes
     // minutes and so needs the same visible working/stalled state as the scout rather than a bare label.
-    enum Phase: Equatable { case scouting, reading, prepping }
+    // #1322: `probing` is a reachability probe. It reuses the same detached prep runner (so it shares the
+    // prep timeout), but the takeover and toolbar label it honestly instead of "Prepping".
+    enum Phase: Equatable { case scouting, reading, prepping, probing }
 
     // What the modal shows RIGHT NOW, re-read each tick inside the TimelineView. The caller wires this
     // to the native progress callback's captured values (scouting) or to the queue/results diff plus the
@@ -54,7 +56,7 @@ struct RunProgressView: View {
         switch phase {
         case .scouting: return RunTimeouts.scout
         case .reading:  return RunTimeouts.scoutExtract
-        case .prepping: return RunTimeouts.prep
+        case .prepping, .probing: return RunTimeouts.prep
         }
     }
 
@@ -171,6 +173,7 @@ enum RunProgressCopy {
         case .scouting: return "Scouting"
         case .reading:  return "Reading calendars"
         case .prepping: return "Prepping"
+        case .probing:  return "Checking reachability"
         }
     }
 

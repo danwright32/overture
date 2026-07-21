@@ -306,8 +306,11 @@ struct RootView: View {
                                          timeout: RunTimeouts.scout, compact: true)
                         } else if PrepQueueService.isRunning(now: Date()) {
                             // #354: real "N of M" progress from the run's own progress file,
-                            // instead of a bare indefinite spinner.
-                            LiveRunLabel(base: "Prepping", since: PrepQueueService.lastRunStartedAt,
+                            // instead of a bare indefinite spinner. #1322: a probe reuses this same run
+                            // slot, so the compact label names it "Checking reachability" not "Prepping".
+                            LiveRunLabel(base: RunProgressCopy.title(
+                                            PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping),
+                                         since: PrepQueueService.lastRunStartedAt,
                                          timeout: RunTimeouts.prep,
                                          // #1003: a closure so the count is re-read every tick, not
                                          // captured whenever RootView last happened to re-render.
@@ -1324,7 +1327,9 @@ struct RootView: View {
         VStack {
             Spacer(minLength: 0)
             RunProgressView(
-                phase: .prepping,
+                // #1322: a probe reuses this same takeover, so it labels itself "Checking reachability"
+                // instead of "Prepping" when the in-flight run is a probe (its marker is present).
+                phase: PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping,
                 since: PrepQueueService.lastRunStartedAt,
                 snapshot: { RunProgressView.Snapshot.livePrepping() },
                 runAlive: { PrepQueueService.isRunning(now: Date()) },
