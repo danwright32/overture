@@ -219,13 +219,14 @@ enum ConversationReminder {
         // name to the bodies and the reply subject, so a conductor list never reaches a recipient and a
         // legitimate semicolon title keeps its real name.
         let name = FollowUp.safeDisplayName(groupName, isMerged: isMerged)
+        let cleanVenue = FollowUp.safeVenue(venue)   // #1273: guard the venue too, at the shared chokepoint
         let body: String
         var closing = false
         switch kind {
         case .active(let state):
-            body = nudgeBody(for: state, contactName: contactName, groupName: name, venue: venue)
+            body = nudgeBody(for: state, contactName: contactName, groupName: name, venue: cleanVenue)
         case .closing:
-            body = closingNudgeBody(contactName: contactName, groupName: name, venue: venue)
+            body = closingNudgeBody(contactName: contactName, groupName: name, venue: cleanVenue)
             closing = true
         case .needsState, .suggested:
             return nil   // a prompt to categorize/confirm, not a sendable email
