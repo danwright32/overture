@@ -8,7 +8,7 @@ import Foundation
 // reconcile. The venue NAME is not in the feed or the static page (the page title is set by JavaScript),
 // so it is threaded in from the WatchedSource's orgName.
 enum VenueTixCalendar {
-    struct VTEvent: Equatable {
+    struct VTEvent: Equatable, Sendable {
         var title: String
         var superTitle: String?
         var subTitle: String?
@@ -150,29 +150,69 @@ enum VenueTixCalendar {
     }
     // copy-inventory:ignore-end
 
-    // Reads the venue's complete upcoming list in ONE request, filters to now-or-later, and synthesizes one
-    // document. `get` is injected so the network is testable. A failed fetch THROWS (never an empty
-    // document): an empty list would read to the reconcile as "every show was cancelled".
-    static func fetch(url: URL, venueName: String, location: String? = nil, now: Date,
-                      get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
+    // Reads the venue's complete upcoming list in ONE request and filters to now-or-later. `get` is
+    // injected so the network is testable. A failed fetch THROWS (never an empty list): an empty list would
+    // read to the reconcile as "every show was cancelled". Shared by the html and native paths below.
+    static func fetchEvents(url: URL, now: Date,
+                            get: (URLRequest) async throws -> Data) async throws -> [VTEvent] {
         let host = url.host ?? ""
         let data = try await get(feedRequest(forVenueHost: host))
-        let events = upcoming(try parseEvents(data), now: now)
+        return upcoming(try parseEvents(data), now: now)
+    }
+
+    // Synthesizes one document from the events (the html path, still used for a one-off lead pointed at a
+    // venuetix host). A failed fetch THROWS, never an empty document, for the same reconcile-safety reason.
+    static func fetch(url: URL, venueName: String, location: String? = nil, now: Date,
+                      get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
+        let events = try await fetchEvents(url: url, now: now, get: get)
         let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName, location: location))
         return FetchedPage(normalizedHTML: html,
                            finalURL: url.absoluteString,
                            contentHash: PageNormalizer.contentHash(html))
     }
 
-    // The real network fetch, used by the router.
-    static func liveFetch(url: URL, venueName: String, location: String? = nil, now: Date = Date(),
-                          session: URLSession = .shared) async throws -> FetchedPage {
-        try await fetch(url: url, venueName: venueName, location: location, now: now) { req in
+    // #1237: the events mapped straight to ExtractedEvent for the native extractor. Every show is attributed
+    // to the venue by NAME (threaded from the source, since the feed carries only an opaque venue id) and
+    // carries Dan's supplied location (#1175). The marketing super/sub titles are not org or place data, so
+    // they are deliberately dropped rather than allowed to pollute the pitchable identity.
+    // #1174: only a production spanning MORE THAN ONE night here gets a shared seriesId, so those nights
+    // collapse into one run downstream; a single-night show keeps a nil id so it still merges by the
+    // gap-and-title walk if a sibling appears. `seriesTags` computes exactly that multi-night set, the same
+    // rule the synthesized-HTML path used before the extractor echoed it back.
+    static func extractedEvents(from events: [VTEvent], venueName: String,
+                                location: String?) -> [ExtractedEvent] {
+        let multiNight = Set(seriesTags(events).keys)
+        return events.map { e in
+            ExtractedEvent(title: e.title,
+                           presenter: venueName,
+                           venue: venueName,
+                           performanceDate: dayFormatter.string(from: e.date),
+                           sourceUrl: nil,
+                           location: location,
+                           seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil })
+        }
+    }
+
+    // The real network GET, shared by the html and native live readers so the status handling lives once.
+    private static func liveGet(_ session: URLSession) -> (URLRequest) async throws -> Data {
+        { req in
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw SourceFetchError.unreachable
             }
             return data
         }
+    }
+
+    // The real network fetch as a synthesized page (the html path, used by the router).
+    static func liveFetch(url: URL, venueName: String, location: String? = nil, now: Date = Date(),
+                          session: URLSession = .shared) async throws -> FetchedPage {
+        try await fetch(url: url, venueName: venueName, location: location, now: now, get: liveGet(session))
+    }
+
+    // #1237: the real network fetch as STRUCTURED events, for the native extractor.
+    static func liveEvents(url: URL, now: Date = Date(),
+                           session: URLSession = .shared) async throws -> [VTEvent] {
+        try await fetchEvents(url: url, now: now, get: liveGet(session))
     }
 }

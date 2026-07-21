@@ -74,8 +74,10 @@ enum WatchlistEditing {
             return .resumed
         }
 
+        // #1237: a URL on one of the two host-routed feed adapters (OPERA, VenueTix) is watched natively
+        // (free, structured ingest on every run); everything else is html, read by the paid extract run.
         context.insert(WatchedSource(sourceId: WatchedSource.newSourceId(for: url), orgName: name,
-                                     listingsURL: url, kind: .html))
+                                     listingsURL: url, kind: SourceKind.forListingURL(URL(string: url))))
         try? context.save()
         return .added
     }
