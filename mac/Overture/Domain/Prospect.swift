@@ -81,6 +81,12 @@ final class Prospect {
     var groupNameOverriddenByDan: Bool = false
     var scoutGroupName: String? = nil
 
+    // #1308 Layer 2: when a reachability probe last researched this show's contacts (nil = never probed).
+    // Set unconditionally by the probe import whether or not an email was found, so the Review badge can
+    // say "email found"/"no email found" firmly instead of falling back to the free heuristic forever.
+    // Defaulted so existing records migrate cleanly.
+    var reachabilityProbedAt: Date? = nil
+
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftVariant: String? = nil
