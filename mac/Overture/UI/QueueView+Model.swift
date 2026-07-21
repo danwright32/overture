@@ -57,6 +57,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
     var hasWeakContactEmail: Bool = false
+    // #1311: any recipient carries a real address (sendable, or held by a guard). Distinguishes a show
+    // with NO way to email at all from one whose only email is held for a review, so the Send surface can
+    // say "no email to send to" only when that is actually true.
+    var hasAnyEmailContact: Bool = false
     // #792: contacts on this show held back by a review guard, each waiting on one glance from Dan. A
     // show can be genuinely Sent AND still have somebody waiting; the bug was that the row said only the
     // first, so the person waiting vanished with the show.
@@ -1051,6 +1055,9 @@ extension QueueItem {
                     && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
                         || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
             },
+            // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
+            // send to" apart from "an email exists but is held for a review".
+            hasAnyEmailContact: p.recipients.contains { $0.email?.isEmpty == false },
             blockedContactCount: p.blockedContactCount,
             sendError: p.sendError,
             lostReason: p.lostReason,

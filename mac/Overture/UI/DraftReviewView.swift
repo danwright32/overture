@@ -348,6 +348,15 @@ struct DraftReviewView: View {
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     if item.isReprepEligible { reprepMenu }
+                    // #1311: an approved show with no emailable contact can never send, and the greyed
+                    // Send button never said why. This explains the stall so Dan can add a contact. The
+                    // wording is DraftReviewNotes' (#885); the view only decides where it sits.
+                    if let note = DraftReviewNotes.noSendableEmail(isApproved: isApproved,
+                                                                   hasPendingRecipient: item.hasPendingRecipient,
+                                                                   hasAnyEmailContact: item.hasAnyEmailContact) {
+                        Text(note)
+                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+                    }
                     // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as
                     // wrong. It's a fact about the stored text, and clears itself once the draft is
                     // fixed. #718: he CAN override the block itself via a deliberate two-step confirm
