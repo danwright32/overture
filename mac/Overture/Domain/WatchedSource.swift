@@ -156,6 +156,14 @@ final class WatchedSource {
     // location (a national calendar, a fetched page), so this changes nothing for them.
     var venueLocation: String? = nil
 
+    // #1209: Dan's manual override of whether this source is a known client's (see ClientHorizon). nil (the
+    // default) means "decide automatically", by matching the org name against the Downbeat client list, so
+    // a client added or removed in Downbeat arms or disarms the year-ahead read on its own with no stale
+    // flag. true force-ARMS a source the name-match cannot catch (a client performing at a shared venue,
+    // whose source org name is the venue, not the client); false force-DISARMS a coincidental name match.
+    // Defaulted nil so the SwiftData migration is lightweight and every ordinary source is unaffected.
+    var clientTagOverride: Bool? = nil
+
     // #1236: some sources list one concert as several rows, one per conductor (DCINY). When set, the scout
     // merges every same-date, same-venue listing from this source into one prospect (via a synthetic
     // seriesId stamped at ingest, see SameDateVenueMerge), keeping every conductor name. Defaulted false so

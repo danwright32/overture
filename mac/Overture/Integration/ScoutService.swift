@@ -252,14 +252,6 @@ enum ScoutService {
                          // NO detached read is launched. Default never-cancelled, so every existing
                          // caller sweeps and hands off exactly as before.
                          isCancelled: () -> Bool = { false }) async throws -> Outcome {
-        // #1210: the real paginating fetch, unless a test injected its own. Kept here rather than as a
-        // default argument because a default cannot reference the `session`, `now`, and horizon it needs.
-        let fetch = fetchOverride ?? { url, name, location in
-            try await SourceFetcher.fetch(url, session: session,
-                                          monthHorizon: CalendarMonthIndex.defaultHorizon,
-                                          now: now, sourceName: name, sourceLocation: location)
-        }
-
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
@@ -269,6 +261,20 @@ enum ScoutService {
 
         let watchlist = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
         let plan = SourceSchedule.plan(sources: watchlist, depth: depth, only: only, budget: budget, now: now)
+
+        // The real paginating fetch, built PER SOURCE, unless a test injected its own. A known client's own
+        // calendar (or a source Dan tagged as a client's) is read a full year forward to catch a returning
+        // client's far-future dates (#1209); every other source keeps the shared four-month horizon
+        // (#1210). Built here, not as a default argument, because a default cannot reference the `session`,
+        // `now`, clients, and per-source horizon it needs. An injected fetch bypasses all of this.
+        func fetchFor(_ source: WatchedSource) -> (URL, String?, String?) async throws -> FetchedPage {
+            if let fetchOverride { return fetchOverride }
+            let horizon = ClientHorizon.months(for: source, clients: loaded.clients)
+            return { url, name, location in
+                try await SourceFetcher.fetch(url, session: session, monthHorizon: horizon,
+                                              now: now, sourceName: name, sourceLocation: location)
+            }
+        }
 
         var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
 
@@ -295,7 +301,7 @@ enum ScoutService {
             // fetch (an await cannot be interrupted anyway), and the launch guard below then hands off no
             // read, so a cancelled run leaves nothing behind for a detached process to finish.
             if isCancelled() { break }
-            let (result, page) = await check(source, fetch: fetch, depth: depth, now: now)
+            let (result, page) = await check(source, fetch: fetchFor(source), depth: depth, now: now)
             // #1189: advance the manual scout's OWN fairness clock, but ONLY on a run Dan started and only
             // for the sources it actually checked. The free daily watch-only run leaves it untouched (it
             // advances only the shared lastCheckedAt, inside SourceCheck.decide), so a source this run

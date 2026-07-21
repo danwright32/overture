@@ -108,6 +108,20 @@ enum PrepQueueBuilder {
         return showDay <= boundary
     }
 
+    // #1209: which kept prospects a Prep run defaults to covering, held out of the SwiftUI view init so the
+    // rule is testable (#863). Each prospect is measured against its OWN window: a known client's show (its
+    // source is a client's, or it itself matched a client) gets the twelve-month client window, everyone
+    // else the ordinary four, so a returning client's far-future date is not silently defaulted out of the
+    // run the same way it is now surfaced a year ahead by the scout. Returns the naturalKeys to pre-check.
+    static func prepDefaultSelection(prospects: [Prospect], sources: [WatchedSource],
+                                     clients: [DownbeatClient], now: Date) -> Set<String> {
+        Set(prospects.filter { p in
+            defaultsIncludedInPrepRun(
+                performanceDate: p.performanceDate, now: now,
+                monthsAhead: ClientHorizon.prepMonths(for: p, sources: sources, clients: clients))
+        }.map(\.naturalKey))
+    }
+
     // The #Predicate mirror of needsPrep above, for the one call site (RootView's toPrep @Query)
     // that needs a compiled SwiftData predicate rather than a plain Swift function. Kept as a
     // single named, shared value so there is exactly one place this expression lives, not one

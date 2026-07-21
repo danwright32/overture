@@ -109,4 +109,32 @@ struct ScoutPaginationTests {
         #expect(kaufman.pendingPageMonths == ["2026-07", "2026-08", "2026-09"])
         #expect(!(kaufman.pendingPageMonths).contains("2026-10"))
     }
+
+    // #1209: a source treated as a returning client's calendar reads a FULL YEAR forward, not four months,
+    // so a client's far-future date is surfaced early. Same Kaufman fixture, but the source is tagged a
+    // client's: now November (past the four-month horizon that stopped the first test at October) is read.
+    @Test func aClientTaggedSourceReadsPastTheFourMonthHorizon() async throws {
+        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, WatchedSource.self]),
+                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let kaufman = WatchedSource(sourceId: "kaufman", orgName: "Kaufman Music Center",
+                                    listingsURL: base, kind: .html)
+        kaufman.lastContentHash = "old"
+        kaufman.successfulCheckCount = WatchedSource.warmupRuns
+        kaufman.clientTagOverride = true                 // Dan tagged this a returning client's calendar
+        ctx.insert(kaufman)
+        serveKaufman()
+
+        _ = try await ScoutService.runScout(
+            into: ctx,
+            extractor: StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings)),
+            session: stubSession(),
+            pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
+            now: july2026(),
+            defaults: UserDefaults(suiteName: "scout-pag-\(UUID().uuidString)")!)
+
+        // November is now within the (twelve-month) client horizon and gets read, where the default
+        // four-month source stopped at October.
+        #expect(kaufman.pendingPageMonths.contains("2026-11"))
+        #expect(kaufman.pendingPageMonths == ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11"])
+    }
 }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **705 sentences**, from 237 source files.
+Every sentence Overture can say to Dan: **712 sentences**, from 239 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -301,6 +301,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "Also pitching \($0) on this date"
     `Domain/SelfBookingConflict.swift`
+"Always a returning client"
+    `Domain/ClientTagCopy.swift`
 "Always skipped"
     `UI/ExcludedTownsView.swift`
 "An established calendar came back empty this run."
@@ -329,6 +331,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Auto-sync to OmniFocus"
     `App/RootView.swift`
+"Automatic (match Downbeat)"
+    `Domain/ClientTagCopy.swift`
 "Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus."
     `App/RootView.swift`
 "Awaiting reply"
@@ -675,10 +679,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HistoryMatch.swift`
 "Matched performer '\(performerName)' to a past booking-history record."
     `Domain/HistoryMatch.swift`
+"Matches a Downbeat client: shows surface up to a year ahead."
+    `Domain/ClientTagCopy.swift`
 "Music only travels to the five boroughs. As theater this would stay."
     `UI/QueueView+Model.swift`
 "Name (optional)"
     `UI/DraftReviewView.swift`
+"Never a returning client"
+    `Domain/ClientTagCopy.swift`
 "Never checked"
     `Domain/SourceReadState.swift`
 "Never contact \(groupName) again"
@@ -763,6 +771,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Not the venue"
     `UI/DraftReviewView.swift`
+"Not treated as a returning client."
+    `Domain/ClientTagCopy.swift`
 "Not yet synced"
     `Domain/OmniFocusSyncStatus.swift`
 "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
@@ -992,6 +1002,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Retry sync"
     `Integration/NotificationService.swift`
+"Returning client"
+    `Domain/ClientTagCopy.swift`
 "Review and send"
     `UI/FollowUpsView.swift`
 "Run reconcile now"
@@ -1131,6 +1143,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Sync now"
     `App/RootView.swift`
+"Tagged a returning client: shows surface up to a year ahead."
+    `Domain/ClientTagCopy.swift`
 "Thalia Spanish Theatre"
     `Domain/VenueParser.swift`
 "That calendar has more months on it (\(list(unreachable.map(name)))), but it "
