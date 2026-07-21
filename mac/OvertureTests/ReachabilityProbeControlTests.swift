@@ -22,7 +22,7 @@ struct ReachabilityProbeControlTests {
         var tapped: (keys: [String], label: String)?
         let view = ReachabilityProbeControl(
             items: [item("a"), item("b"), item("c", status: .drafted)],   // c is past keep/dismiss
-            dateLabel: "Sep 12", isScout: false,
+            dateLabel: "Sep 12", isScout: false, isRunning: false,
             onTap: { keys, label in tapped = (keys, label) })
 
         let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
@@ -32,9 +32,30 @@ struct ReachabilityProbeControlTests {
         #expect(tapped?.label == "Sep 12")
     }
 
+    // #1323: a probe and a normal Prep share the single detached-run slot, so tapping "Check
+    // reachability" while a run is already in flight only fails after the fact. The control greys out
+    // up front with a reason instead, the way other run-gated controls behave.
+    @Test func disabledWhileARunIsInProgress() throws {
+        let view = ReachabilityProbeControl(
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: true,
+            onTap: { _, _ in })
+
+        let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
+        #expect(try button.isDisabled() == true)
+    }
+
+    @Test func enabledWhenNoRunIsInProgress() throws {
+        let view = ReachabilityProbeControl(
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            onTap: { _, _ in })
+
+        let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
+        #expect(try button.isDisabled() == false)
+    }
+
     @Test func hiddenOnTheScoutStage() throws {
         let view = ReachabilityProbeControl(items: [item("a"), item("b")], dateLabel: "Sep 12",
-                                            isScout: true, onTap: { _, _ in })
+                                            isScout: true, isRunning: false, onTap: { _, _ in })
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }
@@ -42,7 +63,7 @@ struct ReachabilityProbeControlTests {
 
     @Test func hiddenWithFewerThanTwoCandidates() throws {
         let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
-                                            isScout: false, onTap: { _, _ in })
+                                            isScout: false, isRunning: false, onTap: { _, _ in })
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }

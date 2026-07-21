@@ -76,6 +76,10 @@ enum ReachabilityProbeCopy {
     static let controlLabel = "Check reachability"
     static let controlHelp =
         "Check which of this date's still-open shows are actually emailable, before you keep one and dismiss the rest."
+    // #1323: shown while a Prep or another probe already holds the single run slot, so the greyed-out
+    // control explains itself instead of failing after the tap.
+    static let controlBusyHelp =
+        "A run is already in progress. This will be available once it finishes."
 
     static func confirmTitle(count: Int) -> String {
         "Check reachability for these \(count) shows?"

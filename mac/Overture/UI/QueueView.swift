@@ -322,6 +322,7 @@ struct QueueView: View {
                 // opens at the QueueView level.
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay, isScout: focusedStage == .scout,
+                    isRunning: prepRunning,
                     onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
@@ -804,11 +805,15 @@ struct ReachabilityProbeControl: View {
     let items: [QueueItem]
     let dateLabel: String
     let isScout: Bool
+    // #1323: a probe and a normal Prep share the single detached-run slot, so the control greys out while
+    // any run is already in flight rather than failing after the tap with PrepLaunchError.alreadyRunning.
+    let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
     var body: some View {
         if !isScout && QueueModel.showsReachabilityProbeControl(items) {
             Button {
+                guard !isRunning else { return }
                 onTap(QueueModel.reachabilityProbeCandidateKeys(items), dateLabel)
             } label: {
                 HStack(spacing: 4) {
@@ -816,12 +821,13 @@ struct ReachabilityProbeControl: View {
                     Text(ReachabilityProbeCopy.controlLabel)
                 }
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(OVColor.forest)
+                .foregroundStyle(isRunning ? OVColor.forest.opacity(0.4) : OVColor.forest)
                 .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                .background(Capsule().fill(OVColor.forest.opacity(0.10)))
+                .background(Capsule().fill(OVColor.forest.opacity(isRunning ? 0.05 : 0.10)))
             }
             .buttonStyle(.plain)
-            .help(ReachabilityProbeCopy.controlHelp)
+            .disabled(isRunning)
+            .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : ReachabilityProbeCopy.controlHelp)
         }
     }
 }
