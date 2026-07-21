@@ -79,19 +79,22 @@ enum SourceFetcher {
     // `render` is injected so the fallback is a real unit test with no WebKit. It defaults to the real
     // hidden browser (RenderedPage).
     //
-    // `monthHorizon` is #858, and its DEFAULT OF 1 (no pagination) is a safety property, not an
-    // oversight. Reading four months of a calendar is only safe on a path that cannot cancel anything.
+    // `monthHorizon` is #858, and its DEFAULT OF 1 (no pagination) is what a caller gets when it names no
+    // horizon. Both real callers now name one: the paste-a-lead path and, as of #1210, the reconciling
+    // scout (which passes `CalendarMonthIndex.defaultHorizon`, four months).
     //
-    // The watchlist can: it feeds `FeedReconcile`, where a source's SILENCE about a show marks that show
-    // gone (`goneThreshold = 2`), and a red-team pass found the stitched page opens a hole none of those
-    // gates can see. If the AI reads three of four stitched months, it simply returns fewer shows;
-    // nothing failed, nothing was rejected, so `rejectedIsWithinTolerance` is happy, and 16 of 30 events
-    // still clears `feedIsTrustworthy`'s 50% bar. Two runs of that and fourteen live October concerts are
-    // struck from Dan's queue with no error anywhere. Verifying that the RUN read every month it was
-    // handed needs a per-page verdict in the handoff contract, which does not exist yet.
-    //
-    // So pagination is opt-in, and today only the paste-a-lead path opts in. That path never reconciles
-    // and never cancels (`LeadIntakeModel` applies with no `feed:`), so the hole cannot open there.
+    // Paging forward on the scout was once unsafe, and the reason is worth keeping. The watchlist feeds
+    // `FeedReconcile`, where a source's SILENCE about a show marks that show gone (`goneThreshold = 2`),
+    // and a red-team pass found the stitched page opens a hole none of those gates can see: if the AI
+    // reads three of four stitched months it simply returns fewer shows; nothing failed, nothing was
+    // rejected, so `rejectedIsWithinTolerance` is happy and 16 of 30 events still clears
+    // `feedIsTrustworthy`'s 50% bar, and two such runs strike fourteen live October concerts with no error
+    // anywhere. What closed the hole (#897) is a per-page completeness verdict in the handoff contract:
+    // the run echoes which stitched months it actually covered (`monthsCovered`), `SweepCoverage.isComplete`
+    // compares that against the months the pin stitched, and a short read is DOWNGRADED to
+    // `incompleteExtraction`, which can add and update but can cancel nothing (a missing/absent
+    // `monthsCovered` fails safe as incomplete). That guard is wired end to end and proven in
+    // `StitchedSweepIngestWiringTests`, which is why #1210 could turn scout pagination on.
     // #972: Overture ships with no App Transport Security exception, so macOS refuses a cleartext http
     // request before it leaves the process, and the source lands on `unreachable`. That sentence is a lie
     // in the case that actually happens: the site is up, it simply got stored with an http address. Two of

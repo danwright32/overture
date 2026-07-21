@@ -219,7 +219,18 @@ enum ScoutService {
                          // learn the venue name from the feed itself (VenueTix) can attribute the shows.
                          // #1175: the source's venueLocation rides along (3rd arg) so a single-venue feed with
                          // no city in its own data still places in-region.
-                         fetch: (URL, String?, String?) async throws -> FetchedPage = { try await SourceFetcher.fetch($0, sourceName: $1, sourceLocation: $2) },
+                         // #1210: unless a test injects its own, the fetch pages FORWARD on a site's own
+                         // month links, reading the shared four-month horizon instead of the one month it
+                         // used to (CalendarMonthIndex.defaultHorizon). A month-paginated calendar (Kaufman)
+                         // now surfaces its later, more pitchable months; a non-paginated page is still
+                         // fetched exactly once. Safe on this reconciling path because a short stitched read
+                         // downgrades to incompleteExtraction and can mark nothing gone (SweepCoverage #897,
+                         // wired end to end in StitchedSweepIngestWiringTests). Built in the body (below),
+                         // not as a default here, because a default argument cannot reference the `session`
+                         // and horizon it needs; `session` is injected so a test can drive the real
+                         // paginating fetch against a stub without the network.
+                         fetch fetchOverride: ((URL, String?, String?) async throws -> FetchedPage)? = nil,
+                         session: URLSession = .shared,
                          // Injected for the same reason the fetch is: pinning writes a file to the
                          // handoff directory and launching starts a real Claude run, so a test that used
                          // the real ones would litter Dan's store and spend his tokens.
@@ -241,6 +252,14 @@ enum ScoutService {
                          // NO detached read is launched. Default never-cancelled, so every existing
                          // caller sweeps and hands off exactly as before.
                          isCancelled: () -> Bool = { false }) async throws -> Outcome {
+        // #1210: the real paginating fetch, unless a test injected its own. Kept here rather than as a
+        // default argument because a default cannot reference the `session`, `now`, and horizon it needs.
+        let fetch = fetchOverride ?? { url, name, location in
+            try await SourceFetcher.fetch(url, session: session,
+                                          monthHorizon: CalendarMonthIndex.defaultHorizon,
+                                          now: now, sourceName: name, sourceLocation: location)
+        }
+
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).

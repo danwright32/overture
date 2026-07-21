@@ -58,17 +58,18 @@ struct SourceFetcherPaginationTests {
         return Calendar(identifier: .gregorian).date(from: c)!
     }
 
-    // THE SAFETY PROPERTY, and the reason this ships to the lead path first.
+    // Pagination is OFF unless asked for: `SourceFetcher.fetch` with no horizon reads exactly one page.
     //
-    // Pagination is OFF unless asked for. The watchlist's fetch must behave exactly as it did, because
-    // the watchlist feeds the reconcile that can mark Dan's shows CANCELLED, and a red-team pass found
-    // three separate ways a four-month sweep can silently shrink a feed there (an AI that reads three of
-    // four stitched months returns fewer shows, and every cancellation gate still passes). None of that
-    // can fire on a path that never paginates.
+    // #1210 note: the scout now DOES ask for four months (it passes CalendarMonthIndex.defaultHorizon),
+    // and the watchlist reconcile is protected on that paginating path by the wired sweep-coverage guard
+    // (a short stitched read downgrades to incompleteExtraction and can cancel nothing, proven end to end
+    // in StitchedSweepIngestWiringTests), NOT by refusing to paginate. So this test no longer asserts
+    // anything about the watchlist; it pins the raw one-page default that a caller gets when it names no
+    // horizon.
     //
     // Asserted on the REQUESTS, not the result: a document-shaped assertion would pass happily while
     // three extra fetches went out behind it.
-    @Test func theWatchlistPathStillFetchesExactlyOnePage() async throws {
+    @Test func fetchWithNoHorizonReadsExactlyOnePage() async throws {
         serveKaufman()
 
         _ = try await SourceFetcher.fetch(URL(string: base)!, session: stubSession())
