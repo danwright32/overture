@@ -13,6 +13,20 @@ import Foundation
 enum Reachability {
     enum Signal: Equatable { case likelyReachable, unclear, hardToReach }
 
+    // #1308 Layer 2 Phase 2: what the Review row actually shows. Before a probe it is the free heuristic,
+    // and only the hard case surfaces (a named presenter with no proven site stays silent, `.none`, so the
+    // badge never over-promises). Once a probe has run it is the FIRM answer.
+    enum Badge: Equatable { case none, hardToReach, noEmailFound, emailFound }
+
+    static func badge(probed: Bool, hasSendableEmail: Bool,
+                      presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
+        if probed { return hasSendableEmail ? .emailFound : .noEmailFound }
+        switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
+        case .hardToReach: return .hardToReach
+        case .likelyReachable, .unclear: return .none
+        }
+    }
+
     static func assess(presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Signal {
         // Positive evidence first: a confirmed real (non-social) website means outreach has a live target,
         // even if the listing itself was a social page.
@@ -47,6 +61,13 @@ enum ReachabilityCopy {
     static let hardToReachBadge = "Hard to reach"
     static let hardToReachHelp =
         "Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
+
+    // #1308 Layer 2 Phase 2: the firm result once a probe has run.
+    static let emailFoundBadge = "Email found"
+    static let emailFoundHelp = "A reachability check found a contact you can email for this show."
+    static let noEmailFoundBadge = "No email found"
+    static let noEmailFoundHelp =
+        "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the

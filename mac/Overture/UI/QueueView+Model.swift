@@ -153,14 +153,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
 
-    // #1145 Layer 1: the free reachability signal, and whether the "Hard to reach" badge shows. The badge
-    // is a Review-time decision aid, so it only appears while the show is still a candidate (not yet
-    // pitched, not booked); a sent or booked show was clearly reachable.
-    var reachability: Reachability.Signal {
-        Reachability.assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
-    }
-    var showsHardToReachBadge: Bool {
-        reachability == .hardToReach && sentAt == nil && !isBooked
+    // #1145/#1308: the reachability badge shown on a Review row. Before a probe it is the free Layer 1
+    // heuristic (only the hard case surfaces); after a probe it is the firm email-found/not-found answer.
+    // A Review-time decision aid, so it only shows while the show is still a candidate (not yet pitched,
+    // not booked); a sent or booked show was clearly reachable.
+    var reachabilityBadge: Reachability.Badge {
+        guard sentAt == nil && !isBooked else { return .none }
+        return Reachability.badge(probed: reachabilityProbedAt != nil, hasSendableEmail: hasPendingRecipient,
+                                  presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
 
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
