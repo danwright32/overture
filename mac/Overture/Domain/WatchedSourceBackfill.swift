@@ -21,6 +21,25 @@ enum WatchedSourceBackfill {
     static func run(in context: ModelContext, defaults: UserDefaults = .standard) {
         seedCarnegieRow(in: context, defaults: defaults)
         stampCarnegieProspects(in: context)
+        migrateFeedAdapterKinds(in: context)
+    }
+
+    // #1237: an OPERA America or VenueTix source Dan already watches was added before those adapters could
+    // ingest natively, so it still carries .html and keeps going to the paid AI read. Flip it onto its
+    // native kind (SourceKind.forListingURL, the SAME rule the add path uses) so it ingests for free on
+    // every run, expanding free daily coverage on venues he already watches with no new scraping.
+    //
+    // Idempotent and forward-only: it moves a matching .html row to its native kind and nothing else, so a
+    // second launch, or a row already native, is a no-op. It touches ONLY the routing kind, leaving the
+    // row's feed history, health, and id untouched, so the source keeps everything it earned.
+    private static func migrateFeedAdapterKinds(in context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        for source in all where source.kind == .html {
+            guard let s = source.listingsURL, let url = URL(string: s) else { continue }
+            let native = SourceKind.forListingURL(url)
+            if native != .html { source.kind = native }
+        }
+        try? context.save()
     }
 
     // Idempotent on "is there a Carnegie row yet". Deliberately NOT on "is it active": a source Dan

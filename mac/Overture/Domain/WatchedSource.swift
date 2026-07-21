@@ -336,13 +336,39 @@ final class WatchedSource {
     // (CarnegieExtractor.swift). SourceFetcher's GET cannot retrieve it, hash it or diff it, so the
     // whole html path (fetch, hash, budget, pin, extract queue) must skip this row and run
     // CarnegieExtractor natively instead.
-    var usesNativeExtractor: Bool { kind == .algolia }
+    var usesNativeExtractor: Bool { kind.usesNativeExtractor }
     var isGenericallyFetchable: Bool { !usesNativeExtractor }
 }
 
 enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     case algolia        // a structured JSON feed we query directly (Carnegie, and only Carnegie)
     case html           // an org's rendered events page, read by the extract run
+    // #1237: two host-routed feed adapters that already parse their venue's shows into clean structured
+    // events. They ingest natively for FREE (no paid AI read), exactly as Carnegie's Algolia feed does.
+    case operaAmericaFeed = "opera_america_feed"   // OPERA America's national opera calendar (Umbraco feed)
+    case venueTixFeed = "venue_tix_feed"           // any *.venuetix.com single-venue feed (Green Room 42, ...)
+
+    // The dispatch rule, in one place so nothing can disagree about which sources cost a paid read. A
+    // native source ingests structured events synchronously and free on every run (including the automatic
+    // daily one); an html source is fetched, hashed, and read by the paid extract run only when it changes.
+    var usesNativeExtractor: Bool {
+        switch self {
+        case .algolia, .operaAmericaFeed, .venueTixFeed: return true
+        case .html: return false
+        }
+    }
+
+    // The kind a newly watched (or launch-migrated) listings URL should carry. #1237: the two host-routed
+    // feed adapters ingest natively for free; everything else is read as html. Carnegie's .algolia is
+    // seeded by hand (its listings URL is a display-only placeholder over a POST search API), never here.
+    // One rule, shared by the add path and the migration, so a source can never be watched html on one
+    // path and native on the other.
+    static func forListingURL(_ url: URL?) -> SourceKind {
+        guard let url else { return .html }
+        if OperaAmericaCalendar.handles(url) { return .operaAmericaFeed }
+        if VenueTixCalendar.handles(url) { return .venueTixFeed }
+        return .html
+    }
 }
 
 // Scout-owned. Never means "stopped": see SourceInactiveReason for that.

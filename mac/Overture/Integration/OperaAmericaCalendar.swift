@@ -6,7 +6,7 @@ import Foundation
 // returning a paginated JSON list. This adapter reads that feed directly, which is deterministic and
 // hashable (unlike a browser render), so it is safe for the content hash and the reconcile.
 enum OperaAmericaCalendar {
-    struct OAEvent: Equatable {
+    struct OAEvent: Equatable, Sendable {
         var title: String
         var company: String
         var date: Date
@@ -117,7 +117,7 @@ enum OperaAmericaCalendar {
     // raw JSON (injected so pagination is testable without the network). CRITICAL: if any page fails, the
     // whole fetch throws. It must never return the pages it did get as a "complete" list, because a short
     // list reads to the reconcile as "the rest were cancelled" and would strike real shows (#1127).
-    static func fetch(url: URL, post: (Int) async throws -> Data) async throws -> FetchedPage {
+    static func fetchEvents(post: (Int) async throws -> Data) async throws -> [OAEvent] {
         let first = try await parsePage(try await post(1))
         var events = first.events
         if first.totalPages > 1 {
@@ -126,10 +126,31 @@ enum OperaAmericaCalendar {
                 events.append(contentsOf: next.events)
             }
         }
-        let html = PageNormalizer.normalize(listingHTML(events))
+        return events
+    }
+
+    static func fetch(url: URL, post: (Int) async throws -> Data) async throws -> FetchedPage {
+        let html = PageNormalizer.normalize(listingHTML(try await fetchEvents(post: post)))
         return FetchedPage(normalizedHTML: html,
                            finalURL: url.absoluteString,
                            contentHash: PageNormalizer.contentHash(html))
+    }
+
+    // #1237: the events the synthesized HTML fed the paid extractor, mapped straight to ExtractedEvent so
+    // the native path ingests them for free. The producing COMPANY is the presenter to pitch (the feed even
+    // omits the venue for some items); city/state become the verbatim location (#970); the date is an
+    // explicit ISO day (dayFormatter), never implied. An empty company or place is nil, not "".
+    static func extractedEvents(from events: [OAEvent]) -> [ExtractedEvent] {
+        events.map { e in
+            let place = [e.city, e.state].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+            return ExtractedEvent(title: e.title,
+                                  presenter: e.company.isEmpty ? nil : e.company,
+                                  venue: e.venue,
+                                  performanceDate: dayFormatter.string(from: e.date),
+                                  sourceUrl: e.eventLink,
+                                  location: place.isEmpty ? nil : place,
+                                  seriesId: nil)
+        }
     }
 
     // True for OPERA America's own host only. Exact-host match so a look-alike like
@@ -169,13 +190,13 @@ enum OperaAmericaCalendar {
         Calendar.current.date(byAdding: .month, value: CalendarMonthIndex.defaultHorizon, to: now) ?? now
     }
 
-    // The real network fetch: reads every page from the live feed over a horizon window. `from`..`to`
-    // default to now through the shared calendar horizon (#1183), matching the rest of the scout.
-    static func liveFetch(url: URL, now: Date = Date(), pageSize: Int = 100,
-                          session: URLSession = .shared) async throws -> FetchedPage {
+    // The real network POST for one feed page, over a horizon window. Shared by both live readers below so
+    // the endpoint, headers, window, and status handling live in exactly one place.
+    private static func livePost(url: URL, now: Date, pageSize: Int,
+                                 session: URLSession) -> (Int) async throws -> Data {
         let host = url.host ?? "www.operaamerica.org"
         let to = windowEnd(from: now)
-        return try await fetch(url: url) { page in
+        return { page in
             let req = filteredRequest(host: host, from: now, to: to, page: page, pageSize: pageSize)
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -183,5 +204,20 @@ enum OperaAmericaCalendar {
             }
             return data
         }
+    }
+
+    // The real network fetch as a synthesized page (the html path, still used for a one-off lead pointed at
+    // this host). `from`..`to` default to now through the shared calendar horizon (#1183).
+    static func liveFetch(url: URL, now: Date = Date(), pageSize: Int = 100,
+                          session: URLSession = .shared) async throws -> FetchedPage {
+        try await fetch(url: url, post: livePost(url: url, now: now, pageSize: pageSize, session: session))
+    }
+
+    // #1237: the real network fetch as STRUCTURED events, for the native extractor. Reads every page over
+    // the same horizon window; a page that fails throws (never a short "complete" list, which the reconcile
+    // would read as cancellations), exactly as the html path does.
+    static func liveEvents(url: URL, now: Date = Date(), pageSize: Int = 100,
+                           session: URLSession = .shared) async throws -> [OAEvent] {
+        try await fetchEvents(post: livePost(url: url, now: now, pageSize: pageSize, session: session))
     }
 }

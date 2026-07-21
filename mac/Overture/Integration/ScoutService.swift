@@ -209,6 +209,12 @@ enum ScoutService {
                          // Dan pointed at one source and asked for it. Absent means the ordinary run.
                          only: Set<String>? = nil,
                          extractor: any SourceExtractor = CarnegieExtractor(),
+                         // #1237: which native extractor reads each source. The default registry owns the
+                         // two host-routed feed adapters (OPERA, VenueTix) and returns nil for everything
+                         // else, so the loop below falls back to the injected `extractor` (Carnegie, or a
+                         // test stub) exactly as before for Carnegie and any non-native row. Injected so a
+                         // dispatch test can hand each source a no-network stub.
+                         extractorRegistry: (WatchedSource?) -> (any SourceExtractor)? = SourceExtractorRegistry.extractor(for:),
                          // #1127: the source's orgName rides along (2nd arg) so a feed adapter that cannot
                          // learn the venue name from the feed itself (VenueTix) can attribute the shows.
                          // #1175: the source's venueLocation rides along (3rd arg) so a single-venue feed with
@@ -255,7 +261,10 @@ enum ScoutService {
         // launch migration.
         let nativeSources: [WatchedSource?] = plan.native.isEmpty && watchlist.isEmpty ? [nil] : plan.native
         for source in nativeSources {
-            outcome.merge(await runNative(source, extractor: extractor, clients: loaded.clients,
+            // #1237: each native source reads through its own extractor (OPERA/VenueTix via the registry),
+            // falling back to the injected one for Carnegie and any row the registry does not own.
+            let resolved = extractorRegistry(source) ?? extractor
+            outcome.merge(await runNative(source, extractor: resolved, clients: loaded.clients,
                                           history: history, blocked: blocked, now: now, into: context))
         }
 
