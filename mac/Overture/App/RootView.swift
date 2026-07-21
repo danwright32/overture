@@ -211,7 +211,10 @@ struct RootView: View {
                   },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
-                  onStartPrep: { showPrepSelection = true })
+                  onStartPrep: { showPrepSelection = true },
+                  // #1308 Layer 2: the date-header "Check reachability" control launches an opt-in probe
+                  // over that date's still-open candidates.
+                  onProbeReachability: { keys in startReachabilityProbe(keys: keys) })
             .onOpenURL { url in
                 // #282: `overture://show` (used by the build script) just surfaces the main window;
                 // delivering the URL already reopens the resident copy's window, openWindow makes it
@@ -831,6 +834,18 @@ struct RootView: View {
 
     // #953: `includedKeys` is the per-run subset Dan chose in the Prep selection sheet. It is always an
     // explicit set (possibly empty), never nil, so this run covers exactly the rows he left checked.
+    // #1308 Layer 2: launch an opt-in reachability probe over a date's still-open candidates. Mirrors
+    // startPrep (same single-slot lock, same takeover for working/still-alive/stalled), but researches
+    // contacts only. watchPrepRuns follows it to completion and settleReachabilityProbe settles it.
+    private func startReachabilityProbe(keys: Set<String>) {
+        do {
+            _ = try PrepQueueService.startReachabilityProbe(keys: keys, from: context, now: Date())
+            prepSheetShown = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func startPrep(includedKeys: Set<String>) {
         do {
             // #353: no separate "started" message. The button's own "Prepping…" state and

@@ -17,6 +17,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1145: the presenting org, read by the free reachability heuristic at Review (no presenter => nothing
     // to email). Defaulted so existing memberwise-init call sites are unaffected.
     var presenter: String? = nil
+    // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
+    // show is still a probe candidate and, later, the firm email-found/not-found badge.
+    var reachabilityProbedAt: Date? = nil
     // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
     // this and the discipline, never stored, so a rule change re-decides every row at once.
     var location: String? = nil
@@ -860,6 +863,23 @@ enum QueueModel {
     // already sent, or a live draft), never on a mutable stage, so the signal cannot vanish when a show
     // moves stage (#1246). groupName is both the production key (a run or the same show, shared groupName,
     // is not a double-booking) and the display name a warning uses to say WHICH other show clashes.
+    // #1308 Layer 2: the shows on a date worth an opt-in reachability check. Only still-open
+    // pre-commitment candidates count: a booked, already-sent, or drafted/approved show is past the
+    // keep/dismiss moment, and an already-probed show already has its answer. Pure and tested; the view
+    // renders it.
+    static func reachabilityProbeCandidateKeys(_ items: [QueueItem]) -> [String] {
+        items.filter { i in
+            !i.isBooked && i.sentAt == nil && i.reachabilityProbedAt == nil
+                && (i.status == .new || i.status == .queued)
+        }.map(\.id)
+    }
+
+    // The date-header "Check reachability" control appears only when two or more candidates share the
+    // date: the whole value of a probe is comparing several shows before Dan commits to one.
+    static func showsReachabilityProbeControl(_ items: [QueueItem]) -> Bool {
+        reachabilityProbeCandidateKeys(items).count >= 2
+    }
+
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
         if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
         if i.dismissReason == .alreadyBooked { return true }  // dismissed BECAUSE booked elsewhere: still committed
@@ -993,6 +1013,7 @@ extension QueueItem {
             sourceListingURL: p.sourceListingURL,
             websiteURL: p.websiteURL,
             presenter: p.presenter,
+            reachabilityProbedAt: p.reachabilityProbedAt,
             location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,
