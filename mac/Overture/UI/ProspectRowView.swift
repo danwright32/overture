@@ -98,6 +98,7 @@ struct ProspectRowView: View {
                     relatedRunNote
                     linkedEngagementNote
                     confidenceFlag
+                    reachabilityFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -399,6 +400,26 @@ struct ProspectRowView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type.")
+            .padding(.top, 2)
+        }
+    }
+
+    // #1145 Layer 1: a free, advisory "hard to reach" note read at Review, so Dan doesn't dismiss a
+    // reachable show in favour of one he can't actually email. Non-interactive and calm (a muted note, not
+    // a rust alarm): it's a decision aid, never a gate. The decision lives in the model
+    // (item.showsHardToReachBadge), tested; this only renders it.
+    @ViewBuilder private var reachabilityFlag: some View {
+        if item.showsHardToReachBadge {
+            HStack(spacing: 5) {
+                Image(systemName: "envelope")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(ReachabilityCopy.hardToReachBadge)
+            }
+            .font(OVType.tag)
+            .foregroundStyle(OVColor.inkSoft)
+            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+            .background(Capsule().fill(OVColor.surfaceSunk))
+            .help(ReachabilityCopy.hardToReachHelp)
             .padding(.top, 2)
         }
     }

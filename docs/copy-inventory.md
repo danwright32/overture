@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **719 sentences**, from 241 source files.
+Every sentence Overture can say to Dan: **721 sentences**, from 242 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -559,6 +559,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "HIGH FIT"
     `UI/QueueView+Model.swift`
+"Hard to reach"
+    `Domain/Reachability.swift`
 "Has a question"
     `Domain/ReviewStatus.swift`
 "Heads up: looks like the venue's own domain."
@@ -855,6 +857,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
     `UI/DraftReviewView.swift`
+"Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
+    `Domain/Reachability.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
