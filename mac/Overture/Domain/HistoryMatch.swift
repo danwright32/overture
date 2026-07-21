@@ -65,7 +65,9 @@ struct PerformerMatchVerdict: Equatable, Sendable {
 }
 
 enum HistoryMatch {
-    private static func clientNames(_ c: DownbeatClient) -> [String] {
+    // #1209: internal (not private) so ClientHorizon matches a source's org against the SAME client names
+    // this uses, rather than inventing a second, divergent notion of a client's identity.
+    static func clientNames(_ c: DownbeatClient) -> [String] {
         if let short = c.shortName { return [c.displayName, short] }
         return [c.displayName]
     }

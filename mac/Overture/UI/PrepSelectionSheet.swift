@@ -29,7 +29,8 @@ struct PrepSelectionSheet: View {
     @State private var pendingClashConfirm = false
     @State private var clashMessage = ""
 
-    init(prospects: [Prospect], allItems: [QueueItem] = [], now: Date = Date(),
+    init(prospects: [Prospect], sources: [WatchedSource] = [], clients: [DownbeatClient] = [],
+         allItems: [QueueItem] = [], now: Date = Date(),
          onRun: @escaping (Set<String>) -> Void) {
         self.onRun = onRun
         self.allItems = allItems
@@ -37,10 +38,10 @@ struct PrepSelectionSheet: View {
             Row(id: p.naturalKey, groupName: p.groupName,
                 detail: PrepSelectionCopy.rowDetail(venue: p.venue, performanceDate: p.performanceDate))
         }
-        let defaults = prospects
-            .filter { PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: $0.performanceDate, now: now) }
-            .map(\.naturalKey)
-        _selected = State(initialValue: Set(defaults))
+        // #1209: a known client's far-future show defaults IN under the twelve-month client window; every
+        // other row keeps the four-month default. Decided in PrepQueueBuilder so this view holds no rule.
+        _selected = State(initialValue: PrepQueueBuilder.prepDefaultSelection(
+            prospects: prospects, sources: sources, clients: clients, now: now))
     }
 
     var body: some View {

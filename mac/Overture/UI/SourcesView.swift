@@ -29,6 +29,10 @@ struct SourcesView: View {
     @State private var newOrgName = ""
     @State private var newURL = ""
     @State private var addMessage: String?
+    // #1209: the Downbeat client list, loaded once when the sheet opens, to show whether a source matches a
+    // known client (and so gets the returning-client year-ahead read). Read-only; only the manual tag on
+    // the source is written.
+    @State private var clients: [DownbeatClient] = []
 
     // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
     // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
@@ -76,6 +80,9 @@ struct SourcesView: View {
         // #845: its own banner. A sheet is a separate window on macOS, so the one on the main view cannot
         // cover it, and the Undo this sheet offers would have been drawn behind it (#285).
         .actionFeedbackBanner()
+        // #1209: the Downbeat client list, read once when the sheet opens, so each row can show whether it
+        // matches a known client. Read-only; nothing here writes it.
+        .task { clients = DownbeatBridge.loadWithHealth(now: Date()).clients }
     }
 
     private var header: some View {
@@ -264,6 +271,28 @@ struct SourcesView: View {
         feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName))
     }
 
+    // #1209: the returning-client state line plus a menu to override the automatic Downbeat match. The
+    // effective state and all wording live in ClientHorizon / ClientTagCopy, so this view holds no rule.
+    @ViewBuilder
+    private func clientTagControl(_ source: WatchedSource) -> some View {
+        let isClient = ClientHorizon.isClient(source, clients: clients)
+        if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride) {
+            Text(label).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        Menu(ClientTagCopy.menuTitle) {
+            Button(ClientTagCopy.optionAutomatic) { setClientTag(source, nil) }
+            Button(ClientTagCopy.optionAlways) { setClientTag(source, true) }
+            Button(ClientTagCopy.optionNever) { setClientTag(source, false) }
+        }
+        .font(.system(size: 11)).menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private func setClientTag(_ source: WatchedSource, _ value: Bool?) {
+        source.clientTagOverride = value
+        try? context.save()
+    }
+
     private func row(_ source: WatchedSource) -> some View {
         // #794/#978/#1185: the lifetime tally, computed once and reused, both for the yield line below and
         // for whether a single-venue feed has actually surfaced shows yet (which decides its address nudge).
@@ -286,6 +315,14 @@ struct SourcesView: View {
             // the shows. Shown only on those rows, since every other source's shows carry their own place.
             if isSingleVenueFeed(source) {
                 venueLocationControl(source, hasSurfacedShows: tally.found > 0)
+            }
+
+            // #1209: whether this source is treated as a returning client, so its calendar is read a year
+            // ahead and its far-future shows are not defaulted out of a Prep run. Automatic by a Downbeat
+            // name match, with a menu to force it on (a client at a shared venue the match misses) or off.
+            // Not shown on Carnegie's native feed, which reads its own fixed window.
+            if source.kind != .algolia {
+                clientTagControl(source)
             }
 
             // #803: CHECKED and READ are different things, and the sheet could not tell them apart. The
