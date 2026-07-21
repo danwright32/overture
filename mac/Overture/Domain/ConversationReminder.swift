@@ -213,20 +213,24 @@ enum ConversationReminder {
     // is carried out so the sheet's reassurance can name the SECOND thing a closing note does. Pure.
     struct NudgeContent: Equatable, Sendable { let subject: String; let body: String; let isClosing: Bool }
 
-    static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String,
+    static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String, isMerged: Bool = false,
                              contactName: String?, venue: String?) -> NudgeContent? {
+        // #1276: sanitize the merged-concert name ONCE here (shared with FollowUp), then hand the safe
+        // name to the bodies and the reply subject, so a conductor list never reaches a recipient and a
+        // legitimate semicolon title keeps its real name.
+        let name = FollowUp.safeDisplayName(groupName, isMerged: isMerged)
         let body: String
         var closing = false
         switch kind {
         case .active(let state):
-            body = nudgeBody(for: state, contactName: contactName, groupName: groupName, venue: venue)
+            body = nudgeBody(for: state, contactName: contactName, groupName: name, venue: venue)
         case .closing:
-            body = closingNudgeBody(contactName: contactName, groupName: groupName, venue: venue)
+            body = closingNudgeBody(contactName: contactName, groupName: name, venue: venue)
             closing = true
         case .needsState, .suggested:
             return nil   // a prompt to categorize/confirm, not a sendable email
         }
-        return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: groupName),
+        return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: name),
                             body: body, isClosing: closing)
     }
 
@@ -241,9 +245,8 @@ enum ConversationReminder {
     // dan-wright-brand-voice skill. Mirrors FollowUp.nudgeBody.
     static func nudgeBody(for state: ConversationState, contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        // #1260 Phase 1: same guard as FollowUp's, one shared helper, so a merged conductor-list name
-        // never reaches a recipient on the reminder path either.
-        let g = FollowUp.safeDisplayName(groupName) + venueClause(venue)
+        // #1276: the name arrives already sanitized from nudgeContent (the shared chokepoint).
+        let g = groupName + venueClause(venue)
         let middle: String
         switch state {
         case .interested:
@@ -267,8 +270,8 @@ enum ConversationReminder {
     // for a future season. Sending it resolves the lead to lost-soft.
     static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        // #1260 Phase 1: merged-name guard, shared with FollowUp.
-        let g = FollowUp.safeDisplayName(groupName) + venueClause(venue)
+        // #1276: name arrives already sanitized from nudgeContent.
+        let g = groupName + venueClause(venue)
         // #1144: signature appended at the send layer; this ends at its last sentence.
         return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
             + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "

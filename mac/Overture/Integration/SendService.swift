@@ -135,6 +135,7 @@ enum SendService {
         // #948: subject and body come from the one shared helper the confirmation sheet also reads, so
         // what Dan confirmed is exactly what sends.
         let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
+                                            isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
         let mail = OutgoingMail(
@@ -176,6 +177,7 @@ enum SendService {
         // nil for a kind that is a prompt, not a sendable email, exactly the .needsState/.suggested case.
         guard let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
                                                               groupName: prospect.groupName,
+                                                              isMerged: prospect.isMergedConcert,
                                                               contactName: recipient.name, venue: prospect.venue) else {
             recipient.nudgeSendClaimedAt = nil   // never actually sent, don't leave the claim held
             return false
@@ -217,7 +219,8 @@ enum SendService {
         // be due for a conversation nudge at the same time.
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         let subject = recipient.replyDraftSubject
-            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject, groupName: prospect.groupName)
+            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
+                                     groupName: FollowUp.safeDisplayName(prospect.groupName, isMerged: prospect.isMergedConcert))
         let mail = OutgoingMail(to: email, subject: subject, body: body,
                                 inReplyTo: recipient.gmailMessageId, threadId: recipient.gmailThreadId)
         do {

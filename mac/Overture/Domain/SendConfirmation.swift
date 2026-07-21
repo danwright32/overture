@@ -45,6 +45,7 @@ struct SendConfirmation: Equatable {
     init?(followUpFor recipient: Recipient, of prospect: Prospect) {
         guard let email = recipient.email, !email.isEmpty else { return nil }
         let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
+                                            isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
         from = .danWright
@@ -63,6 +64,7 @@ struct SendConfirmation: Equatable {
         guard let email = recipient.email, !email.isEmpty,
               let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
                                                               groupName: prospect.groupName,
+                                                              isMerged: prospect.isMergedConcert,
                                                               contactName: recipient.name, venue: prospect.venue)
         else { return nil }
         from = .danWright
