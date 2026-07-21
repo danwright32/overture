@@ -12,7 +12,8 @@ import ViewInspector
 @Suite("ProspectRowView reachability badge (#1145)")
 struct ProspectRowViewReachabilityTests {
     private func item(presenter: String?, sourceListingURL: String?, websiteURL: String? = nil,
-                      status: ReviewStatus = .new, sentAt: Date? = nil) -> QueueItem {
+                      status: ReviewStatus = .new, sentAt: Date? = nil,
+                      probed: Bool = false, hasEmail: Bool = false) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
                           performanceDate: "2026-09-12", sourceListingURL: sourceListingURL, websiteURL: websiteURL,
                           priorRelationship: "none", production: "self", profile: "strong",
@@ -20,6 +21,8 @@ struct ProspectRowViewReachabilityTests {
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
         i.presenter = presenter
         i.sentAt = sentAt
+        if probed { i.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000) }
+        i.hasPendingRecipient = hasEmail
         return i
     }
 
@@ -47,6 +50,20 @@ struct ProspectRowViewReachabilityTests {
         let t = try texts(item(presenter: nil, sourceListingURL: "https://instagram.com/x",
                                websiteURL: "https://aurorastrings.org"))
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
+    }
+
+    // #1308 Layer 2 Phase 2: once a probe has run, the row shows the firm answer.
+    @Test func aProbedShowWithAnEmailShowsEmailFound() throws {
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
+                               probed: true, hasEmail: true))
+        #expect(t.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
+        #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
+    }
+
+    @Test func aProbedShowWithNoEmailShowsNoEmailFound() throws {
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
+                               probed: true, hasEmail: false))
+        #expect(t.contains { $0.contains(ReachabilityCopy.noEmailFoundBadge) })
     }
 
     // Once the pitch has gone out, the show was clearly reachable; the badge must not linger on it.

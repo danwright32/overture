@@ -55,4 +55,25 @@ struct ReachabilityTests {
                                     sourceListingURL: "https://www.instagram.com/aurorastrings/",
                                     websiteURL: "https://www.facebook.com/aurorastrings") == .hardToReach)
     }
+
+    // #1308 Layer 2 Phase 2: once a probe has run, the badge shows the FIRM answer (email found / not
+    // found) instead of the free heuristic. Before a probe, it falls back to the heuristic (only the hard
+    // cases surface; a named presenter with no proven site stays silent, over-promising nothing).
+    @Test func aProbedShowShowsTheFirmResult() {
+        #expect(Reachability.badge(probed: true, hasSendableEmail: true,
+                                   presenter: nil, sourceListingURL: "https://instagram.com/x",
+                                   websiteURL: nil) == .emailFound)
+        #expect(Reachability.badge(probed: true, hasSendableEmail: false,
+                                   presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
+                                   websiteURL: nil) == .noEmailFound)
+    }
+
+    @Test func anUnprobedShowFallsBackToTheHeuristic() {
+        #expect(Reachability.badge(probed: false, hasSendableEmail: false,
+                                   presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x",
+                                   websiteURL: nil) == .hardToReach)
+        #expect(Reachability.badge(probed: false, hasSendableEmail: false,
+                                   presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
+                                   websiteURL: nil) == Reachability.Badge.none)   // named presenter, no proof: silent
+    }
 }

@@ -404,24 +404,37 @@ struct ProspectRowView: View {
         }
     }
 
-    // #1145 Layer 1: a free, advisory "hard to reach" note read at Review, so Dan doesn't dismiss a
-    // reachable show in favour of one he can't actually email. Non-interactive and calm (a muted note, not
-    // a rust alarm): it's a decision aid, never a gate. The decision lives in the model
-    // (item.showsHardToReachBadge), tested; this only renders it.
+    // #1145/#1308: the reachability note read at Review, so Dan doesn't dismiss a reachable show in favour
+    // of one he can't email. Before a probe it is the calm, advisory Layer 1 "Hard to reach" heuristic;
+    // after a probe it is the firm "Email found" (forest) or "No email found" (rust). A decision aid, never
+    // a gate. The decision lives in the model (item.reachabilityBadge), tested; this only renders it.
     @ViewBuilder private var reachabilityFlag: some View {
-        if item.showsHardToReachBadge {
-            HStack(spacing: 5) {
-                Image(systemName: "envelope")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(ReachabilityCopy.hardToReachBadge)
-            }
-            .font(OVType.tag)
-            .foregroundStyle(OVColor.inkSoft)
-            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-            .background(Capsule().fill(OVColor.surfaceSunk))
-            .help(ReachabilityCopy.hardToReachHelp)
-            .padding(.top, 2)
+        switch item.reachabilityBadge {
+        case .none:
+            EmptyView()
+        case .hardToReach:
+            reachabilityNote(icon: "envelope", text: ReachabilityCopy.hardToReachBadge,
+                             tint: OVColor.inkSoft, fill: OVColor.surfaceSunk, help: ReachabilityCopy.hardToReachHelp)
+        case .noEmailFound:
+            reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.noEmailFoundBadge,
+                             tint: OVColor.rust, fill: OVColor.rust.opacity(0.12), help: ReachabilityCopy.noEmailFoundHelp)
+        case .emailFound:
+            reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
+                             tint: OVColor.forest, fill: OVColor.forest.opacity(0.12), help: ReachabilityCopy.emailFoundHelp)
         }
+    }
+
+    private func reachabilityNote(icon: String, text: String, tint: Color, fill: Color, help: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold))
+            Text(text)
+        }
+        .font(OVType.tag)
+        .foregroundStyle(tint)
+        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
+        .background(Capsule().fill(fill))
+        .help(help)
+        .padding(.top, 2)
     }
 
     // A possible booking that needs Dan's explicit sign-off before it locks (#114).
