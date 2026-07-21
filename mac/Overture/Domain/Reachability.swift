@@ -16,11 +16,17 @@ enum Reachability {
     // #1308 Layer 2 Phase 2: what the Review row actually shows. Before a probe it is the free heuristic,
     // and only the hard case surfaces (a named presenter with no proven site stays silent, `.none`, so the
     // badge never over-promises). Once a probe has run it is the FIRM answer.
-    enum Badge: Equatable { case none, hardToReach, noEmailFound, emailFound }
+    // #1324: `weakContactOnly` is a probed show whose only found address is a venue front desk or a press
+    // inbox (held by the venue/press guard, so not sendable). An email exists, so "No email found" would
+    // be untrue; this names the weak result honestly without pretending it is sendable.
+    enum Badge: Equatable { case none, hardToReach, noEmailFound, weakContactOnly, emailFound }
 
-    static func badge(probed: Bool, hasSendableEmail: Bool,
+    static func badge(probed: Bool, hasSendableEmail: Bool, hasWeakContactEmail: Bool = false,
                       presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
-        if probed { return hasSendableEmail ? .emailFound : .noEmailFound }
+        if probed {
+            if hasSendableEmail { return .emailFound }
+            return hasWeakContactEmail ? .weakContactOnly : .noEmailFound
+        }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
         case .hardToReach: return .hardToReach
         case .likelyReachable, .unclear: return .none
@@ -68,6 +74,12 @@ enum ReachabilityCopy {
     static let noEmailFoundBadge = "No email found"
     static let noEmailFoundHelp =
         "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
+
+    // #1324: a probe found an address, but only the venue's front desk or a press inbox, not the
+    // presenter's own. Real, but weak: worth naming honestly rather than calling it no email at all.
+    static let weakContactOnlyBadge = "Weak contact only"
+    static let weakContactOnlyHelp =
+        "A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the

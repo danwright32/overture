@@ -49,6 +49,34 @@ struct QueueItemSnapshotTests {
         #expect(QueueItem(p).hasPendingRecipient == false)
     }
 
+    // #1324: a probe that found only a venue/press address flags that recipient (looksLikeVenue), which
+    // makes it not sendable-pending, so the row would read "No email found" though an email exists. The
+    // queue item exposes hasWeakContactEmail so the badge can say "Weak contact only" instead.
+    @Test func aProbedShowWhoseOnlyContactLooksLikeAVenueReadsAsWeakContactOnly() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .new)
+        p.reachabilityProbedAt = Date()
+        ctx.insert(p)
+        let venue = Recipient(id: "info@hall.example", email: "info@hall.example", name: "Front desk",
+                              provenance: .act)
+        venue.looksLikeVenue = true          // held by the venue guard: not sendable, but a real address
+        p.setRecipients([venue])
+
+        #expect(QueueItem(p).hasPendingRecipient == false)          // the venue contact is not sendable
+        #expect(QueueItem(p).hasWeakContactEmail == true)           // but a weak email does exist
+        #expect(QueueItem(p).reachabilityBadge == .weakContactOnly) // so the badge is honest about it
+
+        // Dismissing the venue guess makes the same address sendable, so the badge firms up.
+        venue.looksLikeVenueDismissed = true
+        #expect(QueueItem(p).hasPendingRecipient == true)
+        #expect(QueueItem(p).reachabilityBadge == .emailFound)
+    }
+
     // #367: the re-prep flags and eligibility carry through to the view-model so the UI can show a
     // "Re-prep queued" badge and gate the action to non-terminal statuses.
     @Test func queueItemCarriesReprepFlagsAndEligibility() throws {

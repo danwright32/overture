@@ -68,6 +68,22 @@ struct ReachabilityTests {
                                    websiteURL: nil) == .noEmailFound)
     }
 
+    // #1324: a probe can find only a WEAK contact (a venue front desk or a press inbox). That address is
+    // real but held back by the venue/press guard, so it is not sendable-pending. Reporting "No email
+    // found" is misleading (an email exists); the badge says "Weak contact only" instead. A sendable
+    // contact still wins, and a probe that found nothing at all still says "No email found".
+    @Test func aProbedShowWithOnlyAWeakContactSaysWeakContactOnly() {
+        #expect(Reachability.badge(probed: true, hasSendableEmail: false, hasWeakContactEmail: true,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .weakContactOnly)
+        #expect(Reachability.badge(probed: true, hasSendableEmail: true, hasWeakContactEmail: true,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .emailFound)   // a sendable contact wins
+        #expect(Reachability.badge(probed: true, hasSendableEmail: false, hasWeakContactEmail: false,
+                                   presenter: "Aurora Strings", sourceListingURL: nil,
+                                   websiteURL: nil) == .noEmailFound)  // nothing at all
+    }
+
     @Test func anUnprobedShowFallsBackToTheHeuristic() {
         #expect(Reachability.badge(probed: false, hasSendableEmail: false,
                                    presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x",

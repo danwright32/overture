@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **731 sentences**, from 243 source files.
+Every sentence Overture can say to Dan: **733 sentences**, from 243 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -252,6 +252,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
     `Domain/Reachability.swift`
 "A reachability check found a contact you can email for this show."
+    `Domain/Reachability.swift`
+"A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
     `Domain/Reachability.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`
@@ -1401,6 +1403,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "Wave Hill"
     `Domain/VenueParser.swift`
+"Weak contact only"
+    `Domain/Reachability.swift`
 "Weill Recital Hall"
     `Domain/VenueParser.swift`
 "Went by"
