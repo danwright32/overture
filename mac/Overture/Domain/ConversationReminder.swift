@@ -241,7 +241,9 @@ enum ConversationReminder {
     // dan-wright-brand-voice skill. Mirrors FollowUp.nudgeBody.
     static func nudgeBody(for state: ConversationState, contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        let g = groupName + venueClause(venue)
+        // #1260 Phase 1: same guard as FollowUp's, one shared helper, so a merged conductor-list name
+        // never reaches a recipient on the reminder path either.
+        let g = FollowUp.safeDisplayName(groupName) + venueClause(venue)
         let middle: String
         switch state {
         case .interested:
@@ -265,7 +267,8 @@ enum ConversationReminder {
     // for a future season. Sending it resolves the lead to lost-soft.
     static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        let g = groupName + venueClause(venue)
+        // #1260 Phase 1: merged-name guard, shared with FollowUp.
+        let g = FollowUp.safeDisplayName(groupName) + venueClause(venue)
         // #1144: signature appended at the send layer; this ends at its last sentence.
         return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
             + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
