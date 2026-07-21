@@ -880,17 +880,22 @@ enum QueueModel {
     // pre-commitment candidates count: a booked, already-sent, or drafted/approved show is past the
     // keep/dismiss moment, and an already-probed show already has its answer. Pure and tested; the view
     // renders it.
-    static func reachabilityProbeCandidateKeys(_ items: [QueueItem]) -> [String] {
+    // #1332: an unprobed show OR one whose probe has gone STALE (#1325) is a candidate. Without the stale
+    // arm the "Reachability may be out of date" badge would tell Dan to re-check a show the control never
+    // includes. `now` decides staleness; the view passes the wall clock, tests inject it.
+    static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date()) -> [String] {
         items.filter { i in
-            !i.isBooked && i.sentAt == nil && i.reachabilityProbedAt == nil
+            !i.isBooked && i.sentAt == nil
                 && (i.status == .new || i.status == .queued)
+                && (i.reachabilityProbedAt == nil
+                    || Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now))
         }.map(\.id)
     }
 
     // The date-header "Check reachability" control appears only when two or more candidates share the
     // date: the whole value of a probe is comparing several shows before Dan commits to one.
-    static func showsReachabilityProbeControl(_ items: [QueueItem]) -> Bool {
-        reachabilityProbeCandidateKeys(items).count >= 2
+    static func showsReachabilityProbeControl(_ items: [QueueItem], now: Date = Date()) -> Bool {
+        reachabilityProbeCandidateKeys(items, now: now).count >= 2
     }
 
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {

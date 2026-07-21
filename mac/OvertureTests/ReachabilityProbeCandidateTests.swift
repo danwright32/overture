@@ -29,9 +29,26 @@ struct ReachabilityProbeCandidateTests {
             item("c", status: .drafted),            // already being pursued -> no
             item("d", sent: true),                  // already pitched -> no
             item("e", booked: true),                // booked -> no
-            item("f", probed: true),                // already has its answer -> no
+            item("f", probed: true),                // freshly probed: has its answer -> no
         ]
-        #expect(QueueModel.reachabilityProbeCandidateKeys(items) == ["a", "b"])
+        // `now` just after f's probe, so f is still fresh (not stale) and stays excluded.
+        let now = Date(timeIntervalSince1970: 1_780_000_100)
+        #expect(QueueModel.reachabilityProbeCandidateKeys(items, now: now) == ["a", "b"])
+    }
+
+    // #1332: a probe result that has aged past the freshness window shows Dan a "worth re-checking" badge
+    // (#1325) telling him to run Check reachability again, so that stale show must become a candidate
+    // AGAIN, or the advice points at a control that never includes it. A freshly probed show stays out.
+    @Test func aStaleProbedShowBecomesACandidateAgainSoItCanBeRechecked() {
+        let probedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        var stale = item("s"); stale.reachabilityProbedAt = probedAt
+        var fresh = item("t"); fresh.reachabilityProbedAt = probedAt
+
+        let afterWindow = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
+        #expect(QueueModel.reachabilityProbeCandidateKeys([stale], now: afterWindow) == ["s"])
+
+        let withinWindow = probedAt.addingTimeInterval(1)
+        #expect(QueueModel.reachabilityProbeCandidateKeys([fresh], now: withinWindow) == [])
     }
 
     @Test func theControlNeedsAtLeastTwoCandidates() {
