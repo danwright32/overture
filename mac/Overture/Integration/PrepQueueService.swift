@@ -84,6 +84,68 @@ enum PrepQueueService {
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
     }
 
+    // #1308 Layer 2: the probe-run side marker (which shows a live probe is researching). Lives beside the
+    // shared prep marker; its presence is how the completion path tells a probe from a normal prep run.
+    static var defaultProbeRunURL: URL {
+        StoreLocation.handoffDirectory.appendingPathComponent("reachability-probe-run.json")
+    }
+
+    // Launch a reachability probe over Dan's hand-picked keys. Mirrors startPrep's lock dance exactly
+    // (atomic marker acquire, so a probe and a prep can never both hold the single runner slot), but builds
+    // a contacts-only probe queue and records the probed keys in the probe-run marker for the completion
+    // path. A probe never drafts, so it skips the voice/openers handoffs startPrep refreshes.
+    @discardableResult
+    static func startReachabilityProbe(keys: Set<String>, from context: ModelContext, now: Date,
+                                       queueURL: URL = PrepQueueBuilder.defaultURL,
+                                       markerURL: URL = defaultMarkerURL,
+                                       probeRunURL: URL = defaultProbeRunURL,
+                                       cancelURL: URL = defaultCancelURL,
+                                       launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+        guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
+
+        let stamp = ISO8601DateFormatter().string(from: now)
+        let queue = buildProbeQueue(from: context, generatedAt: stamp, keys: keys)
+        guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
+
+        // Atomic lock acquire, identical to startPrep (#480): clear a stale marker, then exclusive-create.
+        try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: markerURL)
+        do {
+            try Data().write(to: markerURL, options: .withoutOverwriting)
+        } catch {
+            throw PrepLaunchError.alreadyRunning
+        }
+        try? FileManager.default.removeItem(at: cancelURL)
+
+        do {
+            let data = try PrepQueueBuilder.encode(queue)
+            try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: queueURL, options: .atomic)
+            // Record which shows this probe covers, so completion can mark them probed even on an empty run.
+            try ReachabilityProbeMarker.write(
+                ReachabilityProbeMarker(keys: Set(queue.items.map(\.naturalKey)), startedAt: stamp),
+                to: probeRunURL)
+            try launch()
+            UserDefaults.standard.set(now, forKey: lastRunKey)
+        } catch {
+            try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
+            ReachabilityProbeMarker.clear(at: probeRunURL)
+            throw error
+        }
+        return queue.items.count
+    }
+
+    // #1308 Layer 2: mark every probed show probed on completion, whether or not the run found a contact,
+    // so the Review badge resolves to email-found/not-found instead of sticking on the free heuristic. Runs
+    // BEFORE the probe-safe ingest overlays any found contacts.
+    static func markProbed(keys: Set<String>, in context: ModelContext, now: Date) {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        for p in all where keys.contains(p.naturalKey) {
+            p.reachabilityProbedAt = now
+        }
+        try? context.save()
+    }
+
     enum PrepLaunchError: LocalizedError {
         case nothingToPrep
         case runnerUnavailable
