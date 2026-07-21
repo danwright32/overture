@@ -409,7 +409,7 @@ struct ProspectRowView: View {
     // after a probe it is the firm "Email found" (forest) or "No email found" (rust). A decision aid, never
     // a gate. The decision lives in the model (item.reachabilityBadge), tested; this only renders it.
     @ViewBuilder private var reachabilityFlag: some View {
-        switch item.reachabilityBadge {
+        switch item.reachabilityBadge() {
         case .none:
             EmptyView()
         case .hardToReach:
@@ -423,6 +423,11 @@ struct ProspectRowView: View {
             // but only a weak (venue/press) one.
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
                              tint: OVColor.gold, fill: OVColor.gold.opacity(0.15), help: ReachabilityCopy.weakContactOnlyHelp)
+        case .staleProbe:
+            // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
+            // has aged out, so it asks for a re-check rather than asserting reachable or not.
+            reachabilityNote(icon: "clock.arrow.circlepath", text: ReachabilityCopy.staleProbeBadge,
+                             tint: OVColor.inkSoft, fill: OVColor.surfaceSunk, help: ReachabilityCopy.staleProbeHelp)
         case .emailFound:
             reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
                              tint: OVColor.forest, fill: OVColor.forest.opacity(0.12), help: ReachabilityCopy.emailFoundHelp)

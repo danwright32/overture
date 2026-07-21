@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **733 sentences**, from 243 source files.
+Every sentence Overture can say to Dan: **735 sentences**, from 243 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -962,6 +962,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Reach out now"
     `Domain/ReachedOutQueue.swift`
+"Reachability may be out of date"
+    `Domain/Reachability.swift`
 "Reached out"
     `Domain/AgentRoster.swift`
 "Read 1 show before you cancelled."
@@ -1334,6 +1336,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "This show"
     `Domain/SelfBookingConflict.swift`
+"This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
+    `Domain/Reachability.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."
     `UI/ProspectRowView.swift`
 "This town is on the skip list."

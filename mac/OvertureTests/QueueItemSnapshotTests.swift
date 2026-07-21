@@ -67,14 +67,37 @@ struct QueueItemSnapshotTests {
         venue.looksLikeVenue = true          // held by the venue guard: not sendable, but a real address
         p.setRecipients([venue])
 
-        #expect(QueueItem(p).hasPendingRecipient == false)          // the venue contact is not sendable
-        #expect(QueueItem(p).hasWeakContactEmail == true)           // but a weak email does exist
-        #expect(QueueItem(p).reachabilityBadge == .weakContactOnly) // so the badge is honest about it
+        #expect(QueueItem(p).hasPendingRecipient == false)            // the venue contact is not sendable
+        #expect(QueueItem(p).hasWeakContactEmail == true)             // but a weak email does exist
+        #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // so the badge is honest about it
 
         // Dismissing the venue guess makes the same address sendable, so the badge firms up.
         venue.looksLikeVenueDismissed = true
         #expect(QueueItem(p).hasPendingRecipient == true)
-        #expect(QueueItem(p).reachabilityBadge == .emailFound)
+        #expect(QueueItem(p).reachabilityBadge() == .emailFound)
+    }
+
+    // #1325: a probe result is fresh only within Reachability.probeFreshness. Past that window the firm
+    // badge becomes the "worth re-checking" state so a stale answer never misleads a keep/dismiss.
+    @Test func aProbeResultGoesStaleAfterTheFreshnessWindow() throws {
+        let ctx = ModelContext(try makeContainer())
+        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .new)
+        let probedAt = Date(timeIntervalSince1970: 1_000_000)
+        p.reachabilityProbedAt = probedAt
+        ctx.insert(p)
+        let act = Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)
+        p.setRecipients([act])
+
+        // Fresh: the firm result.
+        #expect(QueueItem(p).reachabilityBadge(now: probedAt.addingTimeInterval(1)) == .emailFound)
+        // Stale: worth re-checking.
+        #expect(QueueItem(p).reachabilityBadge(
+            now: probedAt.addingTimeInterval(Reachability.probeFreshness + 1)) == .staleProbe)
     }
 
     // #367: the re-prep flags and eligibility carry through to the view-model so the UI can show a
