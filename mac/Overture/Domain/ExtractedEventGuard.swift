@@ -96,6 +96,40 @@ enum ExtractedEventGuard {
         return promoted
     }
 
+    // #1278: registration/signup-form hosts that must never stand in for a show's listing link. DCINY's
+    // /opportunities/ recruiting rows link to a getfeedback.com "apply to sing" form; `sourceUrl` is the
+    // link Dan clicks to look a concert up, so a form sends him to join the choir, not to the show he is
+    // deciding whether to photograph. Runbook rule 3c already forbids recording one, but a prompt is a
+    // request, not a guarantee, so the boundary drains a form link to nil (keep the real, pitchable show,
+    // drop only the bad link). This is "fail loud, not silent" from the link's side of the guard.
+    private static let registrationFormHosts: Set<String> = [
+        "getfeedback.com", "forms.gle", "forms.google.com", "forms.office.com", "forms.microsoft.com",
+        "surveymonkey.com", "typeform.com", "jotform.com", "wufoo.com", "cognitoforms.com", "formstack.com"
+    ]
+
+    // A signup-form listing link, drained to nil while the show itself is left intact. Idempotent, and the
+    // single point of stripping, so `events(for:)` and any other consumer agree on which links are dropped.
+    static func sanitizedSourceURL(_ event: ExtractedEvent) -> ExtractedEvent {
+        guard let raw = event.sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              isRegistrationForm(raw)
+        else { return event }
+        var cleaned = event
+        cleaned.sourceUrl = nil
+        return cleaned
+    }
+
+    private static func isRegistrationForm(_ urlString: String) -> Bool {
+        guard let url = URL(string: urlString), let host = url.host?.lowercased() else { return false }
+        // Match the host itself or any subdomain of it ("dciny.getfeedback.com" -> "getfeedback.com").
+        if registrationFormHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) { return true }
+        // Google Docs is a form only on its /forms path; a plain docs.google.com link is never a concert
+        // listing either, but scope the match to the form path to stay narrow and predictable.
+        if host == "docs.google.com" || host.hasSuffix(".docs.google.com") {
+            return url.path.lowercased().hasPrefix("/forms")
+        }
+        return false
+    }
+
     static func rejection(for rawEvent: ExtractedEvent) -> Rejection? {
         // #1214: judge the PLACED event, so a rescued outdoor show is not counted as venueless anywhere.
         let event = placed(rawEvent)
