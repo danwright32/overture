@@ -893,6 +893,19 @@ struct SelfBookingWiringTests {
         #expect(!QueueModel.hasSelfBookingConflict(for: target, among: [kept, target]))
     }
 
+    // #1246: the date-header NOTE (not just the underlying conflict) must fire cross-stage. A drafted show
+    // scanned in the Review stage's date group, whose only same-date clash is an EMAILED show living in
+    // another stage (Reached-out/Follow-ups), still shows the note, because the note is computed against the
+    // WHOLE queue, not just the current stage's group. This is the exact collision #1246 worried had no
+    // header note; the guard goes red if the note is ever rescoped back to the stage group.
+    @Test func theDateHeaderNoteFiresWhenTheClashingShowIsInAnotherStage() {
+        let reviewGroup = [drafted("b", "2026-08-01", "Org B")]                 // Review's Aug 1 date group
+        let wholeQueue = [emailed("a", "2026-08-01", "Org A")] + reviewGroup    // the clash sits elsewhere
+        #expect(QueueModel.selfBookingNote(reviewGroup, among: wholeQueue) != nil)
+        // With no other same-date commitment anywhere in the queue, no note.
+        #expect(QueueModel.selfBookingNote(reviewGroup, among: reviewGroup) == nil)
+    }
+
     // Two rows sharing a groupName are one production (a run), never a self double-booking.
     @Test func theSameProductionOnTheDateDoesNotConflict() {
         let a = emailed("a", "2026-08-01", "The Run")
