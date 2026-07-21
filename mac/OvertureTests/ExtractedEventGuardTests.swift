@@ -236,10 +236,31 @@ struct ScoutExtractResultsGuardTests {
                                                          events: events, note: nil)])
     }
 
-    private func event(_ title: String, venue: String?, location: String? = nil) -> ScoutExtractEvent {
+    private func event(_ title: String, venue: String?, location: String? = nil,
+                       sourceUrl: String? = nil) -> ScoutExtractEvent {
         ScoutExtractEvent(title: title, presenter: title, venue: venue,
-                          performanceDate: "2026-09-19", sourceUrl: "https://org.example/\(title)",
+                          performanceDate: "2026-09-19",
+                          sourceUrl: sourceUrl ?? "https://org.example/\(title)",
                           location: location)
+    }
+
+    // #1278: a registration/signup-form listing link is stripped at the boundary while the show survives.
+    // DCINY's /opportunities/ rows link to a getfeedback.com "apply to sing" form; the runbook forbids
+    // recording one (rule 3c), but a prompt is a request, not a guarantee, so the boundary enforces it.
+    @Test func aSignupFormListingLinkIsStrippedAtTheBoundaryButTheShowSurvives() {
+        let r = results([event("Faith and Freedom", venue: "Carnegie Hall",
+                               sourceUrl: "https://dciny.getfeedback.com/r/abc123")])
+        let usable = r.events(for: "s")
+        #expect(usable.count == 1)                  // the real Carnegie concert is kept...
+        #expect(usable.first?.title == "Faith and Freedom")
+        #expect(usable.first?.sourceUrl == nil)     // ...with only the bad link drained off
+        #expect(r.rejectedEvents(for: "s").isEmpty) // a stripped link is not a rejected show
+    }
+
+    @Test func aRealConcertListingLinkSurvivesTheBoundaryUntouched() {
+        let good = "https://dciny.org/events/faith-and-freedom/"
+        let r = results([event("Faith and Freedom", venue: "Carnegie Hall", sourceUrl: good)])
+        #expect(r.events(for: "s").first?.sourceUrl == good)
     }
 
     @Test func onlyUsableEventsComeOutOfTheResults() {
@@ -336,5 +357,65 @@ struct ScoutExtractResultsGuardTests {
         ])
         #expect(counts == RejectionCounts(venueRelated: 0, titleRelated: 0))
         #expect(counts.total == 0)
+    }
+}
+
+// #1278: the listing link (`sourceUrl`) is what Dan clicks to look a concert up. Some rows link only to a
+// performer signup/registration form (DCINY's /opportunities/ rows link to getfeedback.com "apply to sing"
+// pages), which sends Dan to join the choir, not to the show he is deciding whether to photograph. Runbook
+// rule 3c forbids recording one, but a prompt is a request, not a guarantee: the guard nulls a known
+// registration-form host so a bad link can never reach the store, while keeping the real, pitchable show.
+@Suite("Signup-form listing links are stripped (#1278)")
+struct SignupFormSourceURLGuardTests {
+    private func event(sourceUrl: String?) -> ExtractedEvent {
+        ExtractedEvent(title: "We Sing Noel", presenter: "Joel Raney", venue: "Carnegie Hall",
+                       performanceDate: "2026-11-16", sourceUrl: sourceUrl, location: nil)
+    }
+
+    @Test func aGetFeedbackFormLinkIsNulled() {
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: "https://dciny.getfeedback.com/r/abc123")).sourceUrl == nil)
+        #expect(ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: "https://getfeedback.com/r/abc123")).sourceUrl == nil)
+    }
+
+    @Test func googleMicrosoftAndSurveyFormsAreNulled() {
+        for form in ["https://docs.google.com/forms/d/e/xyz/viewform",
+                     "https://forms.gle/abc123",
+                     "https://forms.office.com/r/abc",
+                     "https://mychoir.typeform.com/to/xyz",
+                     "https://www.surveymonkey.com/r/abc",
+                     "https://form.jotform.com/12345"] {
+            #expect(ExtractedEventGuard.sanitizedSourceURL(event(sourceUrl: form)).sourceUrl == nil,
+                    "\(form) is a registration form, not a concert page")
+        }
+    }
+
+    @Test func aRealConcertOrListingsLinkIsKept() {
+        for good in ["https://dciny.org/events/faith-and-freedom/",
+                     "https://www.carnegiehall.org/Calendar/2026/11/16/We-Sing-Noel",
+                     "https://www.google.com/search?q=concert"] {   // a plain Google host is not a form
+            #expect(ExtractedEventGuard.sanitizedSourceURL(event(sourceUrl: good)).sourceUrl == good,
+                    "\(good) is a real link and must survive")
+        }
+    }
+
+    @Test func theShowSurvivesEvenWhenItsLinkIsStripped() {
+        let cleaned = ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: "https://getfeedback.com/r/abc"))
+        #expect(cleaned.title == "We Sing Noel")
+        #expect(cleaned.venue == "Carnegie Hall")
+        #expect(ExtractedEventGuard.isUsable(cleaned))   // still a usable, pitchable prospect
+    }
+
+    @Test func aBlankOrMissingLinkIsLeftAlone() {
+        #expect(ExtractedEventGuard.sanitizedSourceURL(event(sourceUrl: nil)).sourceUrl == nil)
+        #expect(ExtractedEventGuard.sanitizedSourceURL(event(sourceUrl: "")).sourceUrl == "")
+    }
+
+    @Test func sanitizingIsIdempotent() {
+        let once = ExtractedEventGuard.sanitizedSourceURL(
+            event(sourceUrl: "https://getfeedback.com/r/abc"))
+        #expect(ExtractedEventGuard.sanitizedSourceURL(once).sourceUrl == nil)
     }
 }

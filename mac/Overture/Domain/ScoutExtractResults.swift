@@ -36,7 +36,8 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
     // ScoutExtractIngest passes its own run day so the whole ingest reckons one consistent "today".
     func events(for sourceId: String, today: String = EasternDate.today()) -> [ExtractedEvent] {
         rawEvents(for: sourceId)
-            .map(ExtractedEventGuard.placed)   // #1214: carry a rescued outdoor venue on to the prospect
+            .map(ExtractedEventGuard.placed)              // #1214: carry a rescued outdoor venue to the prospect
+            .map(ExtractedEventGuard.sanitizedSourceURL)  // #1278: drop a signup-form listing link, keep the show
             .filter(ExtractedEventGuard.isUsable)
             .map { RecurringEventDate.normalized($0, today: today) }
     }
