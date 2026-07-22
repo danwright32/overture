@@ -15,6 +15,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
+# The "does this branch touch the Mac project?" predicate, shared with the post-merge hook (#1251 Phase 3).
+source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
 
 POLL_INTERVAL_SECONDS=15
 DEFAULT_MAX_WAIT_SECONDS=900
@@ -73,18 +75,8 @@ base_branch_stop_reason() {
   esac
 }
 
-# pbxproj_check_needed <newline-separated changed paths>. Prints "yes" when the branch touches anything
-# that feeds xcodegen's generated project.pbxproj, meaning merge-when-green must verify freshness before
-# merging (Decision 2 of #1368); prints nothing otherwise. Any path under mac/ counts EXCEPT mac/scripts/
-# and mac/build/, which never affect the generated project (a new .swift under mac/Overture does, with no
-# project.yml edit, since xcodegen globs the source tree). Pure over the file list, so it is testable
-# without gh. Kept apart from the fetch/xcodegen work below so the DECISION stays cheap and reviewable.
-pbxproj_check_needed() {
-  local paths="$1"
-  if grep -vE '^mac/(scripts|build)/' <<< "${paths}" | grep -qE '^mac/'; then
-    echo "yes"
-  fi
-}
+# Whether this branch touches the Mac project is decided by paths_touch_mac_project, sourced above from
+# scripts/lib/mac-project-paths.sh and shared with the post-merge hook (#1251 Phase 3).
 
 # Fetches the PR branch into a throwaway worktree and runs check-pbxproj-fresh.sh against it, returning
 # that gate's verdict (0 fresh, non-zero stale or unverifiable). A real side-effecting helper (git fetch +
@@ -155,7 +147,7 @@ main() {
       # freshness in a throwaway worktree and BLOCK a stale one, the same gate verify-and-merge enforces. A
       # branch that touches nothing under mac/ cannot have changed the generated project, so it skips this.
       CHANGED_PATHS="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null || echo "")"
-      if [[ -n "$(pbxproj_check_needed "${CHANGED_PATHS}")" ]]; then
+      if [[ -n "$(paths_touch_mac_project "${CHANGED_PATHS}")" ]]; then
         echo
         echo "Branch touches the Mac app; verifying ${PBXPROJ_REL} is fresh before merging..."
         if ! verify_branch_pbxproj_fresh "${PR_NUMBER}"; then
