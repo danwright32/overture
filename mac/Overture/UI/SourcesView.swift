@@ -273,19 +273,31 @@ struct SourcesView: View {
 
     // #1209: the returning-client state line plus a menu to override the automatic Downbeat match. The
     // effective state and all wording live in ClientHorizon / ClientTagCopy, so this view holds no rule.
+    // #1286: most of the ~37 non-Carnegie rows are neither a client nor tagged, so the override menu is
+    // tucked behind a compact overflow icon (labelled by the same "Returning client" text for the
+    // accessibility name and a hover tooltip) instead of a full-width menu button on every row. The state
+    // line already appears ONLY where there is something to say (ClientTagCopy.stateLabel returns nil for an
+    // untagged non-client, tested), so a plain venue row shows just the icon, and a client row shows its
+    // state line beside it.
     @ViewBuilder
     private func clientTagControl(_ source: WatchedSource) -> some View {
         let isClient = ClientHorizon.isClient(source, clients: clients)
-        if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride) {
-            Text(label).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: OVSpacing.xs) {
+            if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride) {
+                Text(label).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Menu {
+                Button(ClientTagCopy.optionAutomatic) { setClientTag(source, nil) }
+                Button(ClientTagCopy.optionAlways) { setClientTag(source, true) }
+                Button(ClientTagCopy.optionNever) { setClientTag(source, false) }
+            } label: {
+                Label(ClientTagCopy.menuTitle, systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help(ClientTagCopy.menuTitle)
         }
-        Menu(ClientTagCopy.menuTitle) {
-            Button(ClientTagCopy.optionAutomatic) { setClientTag(source, nil) }
-            Button(ClientTagCopy.optionAlways) { setClientTag(source, true) }
-            Button(ClientTagCopy.optionNever) { setClientTag(source, false) }
-        }
-        .font(.system(size: 11)).menuStyle(.borderlessButton).fixedSize()
     }
 
     private func setClientTag(_ source: WatchedSource, _ value: Bool?) {
