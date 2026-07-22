@@ -92,6 +92,17 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // #5 (opener A/B testing), Phase 1: the experiment stamp. All defaulted so existing records migrate
+    // cleanly (lightweight additive, like #132). `assignedArm` is the APP-ASSIGNED archetype token and is
+    // the source of truth for the tally, deliberately distinct from `draftVariant` (the drafter's echo of
+    // what it actually produced). `experimentID` ties this stamp to the Experiment that assigned it, so a
+    // past experiment's outcomes stay attributable after the next one goes active. Assignment is sticky:
+    // once `assignedArm` is set it is never re-rolled. `experimentOpenerEdited` is set at send time
+    // (Phase 3) when Dan materially rewrote the assigned opener, which excludes that send from the tally.
+    var experimentID: String? = nil
+    var assignedArm: String? = nil
+    var experimentOpenerEdited: Bool = false
+
     // Phase 2.5 (#393): set when the salutation normalizer found a greeting-shaped opener it could
     // not confidently strip, so the stored body may still carry an inline greeting. Such a draft is
     // treated as act-only (it can't be reused for a differently-named recipient) until a Prep re-run
