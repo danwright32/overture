@@ -100,6 +100,52 @@ struct QueueItemSnapshotTests {
             now: probedAt.addingTimeInterval(Reachability.probeFreshness + 1)) == .staleProbe)
     }
 
+    // #1338: after a probe, a still-open show that found a SENDABLE contact is a "best reachable contact"
+    // worth Dan's eye among the competing shows. It is exactly the emailFound badge, so a weak (venue/press)
+    // address, no email, a stale result, and a never-probed show are NOT crowned. It flags EVERY sendable
+    // winner, never picking one; the choice of which to pursue stays Dan's.
+    @Test func aProbedSendableShowIsABestReachableContact() throws {
+        let ctx = ModelContext(try makeContainer())
+        let probedAt = Date(timeIntervalSince1970: 1_000_000)
+        let fresh = probedAt.addingTimeInterval(1)
+        let stale = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
+
+        func makeProspect() -> Prospect {
+            let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "Weill Recital Hall",
+                             performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .new)
+            ctx.insert(p)
+            return p
+        }
+
+        // Probed, fresh, sendable email: a best reachable contact.
+        let sendable = makeProspect()
+        sendable.reachabilityProbedAt = probedAt
+        sendable.setRecipients([Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)])
+        #expect(QueueItem(sendable).reachabilityBadge(now: fresh) == .emailFound)
+        #expect(QueueItem(sendable).isBestReachableContact(now: fresh) == true)
+        // Stale: the earlier answer may have moved, so it is not crowned.
+        #expect(QueueItem(sendable).isBestReachableContact(now: stale) == false)
+
+        // Probed, but only a weak venue/press address: real but not sendable, so not a best contact.
+        let weak = makeProspect()
+        weak.reachabilityProbedAt = probedAt
+        let venue = Recipient(id: "info@hall.example", email: "info@hall.example", name: "Front desk",
+                              provenance: .act)
+        venue.looksLikeVenue = true
+        weak.setRecipients([venue])
+        #expect(QueueItem(weak).reachabilityBadge(now: fresh) == .weakContactOnly)
+        #expect(QueueItem(weak).isBestReachableContact(now: fresh) == false)
+
+        // A sendable email but NEVER probed: the free heuristic never crowns a best contact.
+        let unprobed = makeProspect()
+        unprobed.setRecipients([Recipient(id: "b@x.example", email: "b@x.example", name: "B", provenance: .act)])
+        #expect(QueueItem(unprobed).isBestReachableContact(now: fresh) == false)
+    }
+
     // #1311: the queue item exposes whether ANY recipient carries a real address, so the Send surface can
     // tell "no way to email at all" apart from "an email exists but is held by a guard".
     @Test func queueItemTracksWhetherAnyContactHasAnEmailAtAll() throws {

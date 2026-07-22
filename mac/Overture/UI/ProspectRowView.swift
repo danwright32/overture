@@ -79,6 +79,21 @@ struct ProspectRowView: View {
                                  today: today, isBooked: item.isBooked)
     }
 
+    // A booking (confirmed or suggested) owns the forest FILL + border, so the best-contact highlight below
+    // defers to it rather than competing on the same colour.
+    private var isBookingHighlighted: Bool { item.bookingSuggested || item.isBooked }
+
+    // #1338: a still-open show that found a sendable contact gets a whole-row forest highlight (a leading
+    // accent bar + faint tint), so the emailable shows stand out among a date's competing rows. Deferred when
+    // a booking already owns the row's colour. The decision is the model's (isBestReachableContact, tested).
+    private var showsBestContactAccent: Bool { item.isBestReachableContact() && !isBookingHighlighted }
+
+    private var rowFill: Color {
+        if isBookingHighlighted { return OVColor.forest.opacity(0.12) }
+        if showsBestContactAccent { return OVColor.forest.opacity(0.06) }
+        return OVColor.surface
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .top, spacing: OVSpacing.md) {
@@ -148,8 +163,16 @@ struct ProspectRowView: View {
         }
         .padding(OVSpacing.md)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(item.bookingSuggested || item.isBooked ? OVColor.forest.opacity(0.12) : OVColor.surface)
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(rowFill)
+                // #1338: the leading forest accent bar for a best (sendable) reachable contact. Clipped to
+                // the card's rounded shape so its top and bottom corners follow the row.
+                if showsBestContactAccent {
+                    Rectangle().fill(OVColor.forest).frame(width: 4)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
