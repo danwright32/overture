@@ -147,6 +147,98 @@ struct ClientCoverageTests {
         let clients = [client("Zed Ensemble"), client("Alpha Choir"), client("Mecca Winds")]
         #expect(unarmedNames([source("Carnegie Hall")], clients) == ["Alpha Choir", "Mecca Winds", "Zed Ensemble"])
     }
+
+    // MARK: memoization signature (perf)
+
+    // The Sources sheet used to recompute this O(clients x sources) match INLINE in its SwiftUI body, so it
+    // re-ran on every keystroke and every scroll tick, not only when the data changed. That main-thread lag
+    // let a click go unregistered and queue, so one "Not one I scout" tap dismissed several clients in a row.
+    // The fix lets the view CACHE the result keyed on `signature`, recomputing only when an input the match
+    // actually reads changes. These tests pin what the signature must and must not react to: a missed
+    // dependency would leave a STALE gap list on screen, which is worse than the slowness it replaces.
+
+    @Test func signatureIsStableAcrossIdenticalInputs() {
+        let clients = [client("UCRI", id: "ucri")]
+        let sources = [source("Carnegie Hall")]
+        let a = ClientCoverage.signature(sources: sources, clients: clients, dismissedIds: [])
+        let b = ClientCoverage.signature(sources: sources, clients: clients, dismissedIds: [])
+        #expect(a == b)
+    }
+
+    // The load-bearing correctness test: touching a source field the coverage match never reads
+    // (lastCheckedAt, hasUnreadChanges, isActive) must NOT invalidate the cache, or every scout tick would
+    // needlessly re-run the whole match, which is the lag we are removing.
+    @Test func signatureIgnoresSourceFieldsTheMatchDoesNotRead() {
+        let clients = [client("UCRI", id: "ucri")]
+        let s = source("Carnegie Hall")
+        let before = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        s.lastCheckedAt = Date(timeIntervalSince1970: 1)
+        s.hasUnreadChanges = true
+        s.isActive = false
+        let after = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        #expect(before == after)
+    }
+
+    @Test func signatureChangesWhenASourceOrgNameChanges() {
+        let clients = [client("Brooklyn Youth Chorus", id: "byc")]
+        let s = source("Carnegie Hall")
+        let before = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        s.orgName = "Brooklyn Youth Chorus"
+        let after = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        #expect(before != after)
+    }
+
+    @Test func signatureChangesWhenAClientTagChanges() {
+        let clients = [client("Brooklyn Youth Chorus", id: "byc")]
+        let s = source("Merkin Concert Hall")
+        let before = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        s.clientTagOverride = true
+        s.clientTagClientId = "byc"
+        let after = ClientCoverage.signature(sources: [s], clients: clients, dismissedIds: [])
+        #expect(before != after)
+    }
+
+    @Test func signatureChangesWhenTheDismissedSetChanges() {
+        let clients = [client("UCRI", id: "ucri")]
+        let sources = [source("Carnegie Hall")]
+        let before = ClientCoverage.signature(sources: sources, clients: clients, dismissedIds: [])
+        let after = ClientCoverage.signature(sources: sources, clients: clients, dismissedIds: ["ucri"])
+        #expect(before != after)
+    }
+
+    @Test func signatureChangesWhenAClientNameChanges() {
+        let sources = [source("Carnegie Hall")]
+        let before = ClientCoverage.signature(sources: sources, clients: [client("UCRI", id: "ucri")], dismissedIds: [])
+        let after = ClientCoverage.signature(sources: sources, clients: [client("UCRI Chamber", id: "ucri")], dismissedIds: [])
+        #expect(before != after)
+    }
+
+    @Test func signatureChangesWhenAClientIsAddedOrRemoved() {
+        let sources = [source("Carnegie Hall")]
+        let one = ClientCoverage.signature(sources: sources, clients: [client("UCRI", id: "ucri")], dismissedIds: [])
+        let two = ClientCoverage.signature(sources: sources,
+                                           clients: [client("UCRI", id: "ucri"), client("Opera Praktikos", id: "op")],
+                                           dismissedIds: [])
+        #expect(one != two)
+    }
+
+    // Source order must not matter: the @Query feeding this is sorted, but a reorder that leaves every
+    // field identical should not thrash the cache (the output does not depend on order either).
+    @Test func signatureIsIndependentOfSourceOrder() {
+        let clients = [client("UCRI", id: "ucri")]
+        let a = source("Alpha Hall"); let b = source("Beta Hall")
+        #expect(ClientCoverage.signature(sources: [a, b], clients: clients, dismissedIds: [])
+                == ClientCoverage.signature(sources: [b, a], clients: clients, dismissedIds: []))
+    }
+
+    // Caching must change performance, not output: the cached result equals computing the two lists directly.
+    @Test func resultMatchesUnarmedAndIgnoredComposed() {
+        let clients = [client("UCRI", id: "ucri"), client("Opera Praktikos", id: "op")]
+        let sources = [source("Carnegie Hall")]
+        let r = ClientCoverage.result(sources: sources, clients: clients, dismissedIds: ["op"])
+        #expect(r.gaps == ClientCoverage.unarmed(sources: sources, clients: clients, dismissedIds: ["op"]))
+        #expect(r.ignored == ClientCoverage.ignored(sources: sources, clients: clients, dismissedIds: ["op"]))
+    }
 }
 
 // #1356: dismiss/restore persistence, mirroring ExcludedTownEditing. In-app only, keyed by the stable

@@ -40,6 +40,12 @@ struct SourcesView: View {
     // #1356: clients Dan has marked "not one I scout", so the coverage gap list converges to real gaps.
     @Query private var dismissedCoverage: [DismissedCoverageClient]
     @State private var showIgnoredClients = false
+    // The coverage gap list, CACHED. Computing it (an O(clients x sources) fuzzy match, ClientCoverage) is
+    // expensive, and the body re-evaluates on every keystroke and scroll tick, so computing it inline made
+    // typing lag, froze a long scroll, and let a "Not one I scout" tap queue into a multi-dismiss cascade.
+    // It is recomputed by the .onChange below ONLY when ClientCoverage.signature changes (a source name /
+    // tag, the client list, or the dismissed set), never on an unrelated redraw.
+    @State private var coverageResult = ClientCoverage.Result.empty
 
     // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
     // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
@@ -98,6 +104,15 @@ struct SourcesView: View {
             clients = loaded.clients
             clientsHealth = loaded.health
         }
+        // Recompute the cached coverage result ONLY when its real inputs change. The signature is cheap to
+        // evaluate every redraw; the O(clients x sources) match behind it runs only when the signature
+        // differs, so a keystroke or scroll no longer drags the whole diagnostic through the main thread.
+        .onChange(of: ClientCoverage.signature(sources: sources, clients: clients,
+                                               dismissedIds: Set(dismissedCoverage.map(\.clientId))),
+                  initial: true) {
+            coverageResult = ClientCoverage.result(sources: sources, clients: clients,
+                                                   dismissedIds: Set(dismissedCoverage.map(\.clientId)))
+        }
     }
 
     // #1356: Downbeat clients no watched source arms as returning, so their next season would not surface
@@ -113,9 +128,8 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            let dismissedIds = Set(dismissedCoverage.map(\.clientId))
-            let gaps = ClientCoverage.unarmed(sources: sources, clients: clients, dismissedIds: dismissedIds)
-            let ignoredClients = ClientCoverage.ignored(sources: sources, clients: clients, dismissedIds: dismissedIds)
+            let gaps = coverageResult.gaps
+            let ignoredClients = coverageResult.ignored
             if !gaps.isEmpty || !ignoredClients.isEmpty {
                 coverageBox {
                     if !gaps.isEmpty {
