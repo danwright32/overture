@@ -31,7 +31,7 @@ struct OvertureApp: App {
         // against a clone of the live store before it shipped rather than trusted.
         // #901: DayOff joins it on the same terms (a new entity, plus two defaulted String? columns on
         // Prospect for the conflict it now carries instead of dropping).
-        let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self, ExcludedTown.self, AllowedSeedTown.self])
+        let schema = Schema([Prospect.self, Recipient.self, WatchedSource.self, DayOff.self, ExcludedTown.self, AllowedSeedTown.self, DismissedCoverageClient.self])
         var container: ModelContainer? = nil
         var lock: StoreLock? = nil
         var reason: String? = nil
