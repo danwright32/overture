@@ -46,10 +46,17 @@ struct ProspectRowViewReachabilityTests {
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 
-    @Test func aRealWebsiteShowsNoBadge() throws {
-        let t = try texts(item(presenter: nil, sourceListingURL: "https://instagram.com/x",
+    @Test func aRealWebsiteWithAPresenterShowsNoBadge() throws {
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/calendar/x",
                                websiteURL: "https://aurorastrings.org"))
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
+    }
+
+    // #1335: a website with no presenter (venue-ish) or on a social listing must not swallow the warning.
+    @Test func aWebsiteWithNoPresenterStillWarns() throws {
+        let t = try texts(item(presenter: nil, sourceListingURL: "https://instagram.com/x",
+                               websiteURL: "https://aurorastrings.org"))
+        #expect(t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 
     // #1308 Layer 2 Phase 2: once a probe has run, the row shows the firm answer.

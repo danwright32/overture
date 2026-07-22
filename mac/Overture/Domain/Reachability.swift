@@ -51,14 +51,16 @@ enum Reachability {
     }
 
     static func assess(presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Signal {
-        // Positive evidence first: a confirmed real (non-social) website means outreach has a live target,
-        // even if the listing itself was a social page.
-        if let site = websiteURL, isRealWebsite(site) { return .likelyReachable }
+        // Dead ends FIRST, so a website can never swallow them (#1335). A website is positive evidence only
+        // ALONGSIDE a presenter on a non-social listing, never a standalone override of these known-dead cases.
         // A social-only source is a verified dead end: a raw fetch of these returns a login wall, and lead
-        // intake already refuses them. Hard to reach whatever else is known.
+        // intake already refuses them. Hard to reach whatever else is known, website or not.
         if let listing = sourceListingURL, isSocialOnly(listing) { return .hardToReach }
-        // No presenting org identified, just a venue and a title: there is nothing to email.
+        // No presenting org identified, just a venue and a title: there is nothing to email, website or not.
         if (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .hardToReach }
+        // With a presenter in hand and a non-social listing, a confirmed real (non-social) website is
+        // positive evidence: outreach has a live target.
+        if let site = websiteURL, isRealWebsite(site) { return .likelyReachable }
         // A named presenter on a normal listing, but no proven website: Overture cannot cheaply confirm
         // reachability here, so it stays silent rather than over-promising.
         return .unclear
