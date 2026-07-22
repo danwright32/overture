@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **740 sentences**, from 243 source files.
+Every sentence Overture can say to Dan: **740 sentences**, from 245 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -51,6 +51,9 @@ What is not, and why:
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
+- `Integration/OvationTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
+- `Integration/OvationTixCalendar.swift`: an outbound API request scoped by a header, not the app's voice (#915)
+- `Integration/SourceFetcher.swift`: a fallback venue label in synthesized source HTML, not app voice (#915)
 - `Integration/SourceFetcher.swift`: a fallback venue label in synthesized source HTML, not app voice (#915)
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: an outbound fetch's headers for the venue page hop, not the app's voice (#915)

@@ -130,7 +130,8 @@ enum SourceFetcher {
                       sourceName: String? = nil,
                       sourceLocation: String? = nil,
                       operaFeed: ((URL) async throws -> FetchedPage)? = nil,
-                      venuetixFeed: ((URL, String, String?) async throws -> FetchedPage)? = nil) async throws -> FetchedPage {
+                      venuetixFeed: ((URL, String, String?) async throws -> FetchedPage)? = nil,
+                      ovationtixFeed: ((URL, String, String?) async throws -> FetchedPage)? = nil) async throws -> FetchedPage {
         // #1127: some watched calendars are JS apps a plain fetch cannot read; route each to the adapter
         // that reads its public event feed directly (deterministic, hashable, safe for the reconcile).
         let target = secured(url)
@@ -148,6 +149,18 @@ enum SourceFetcher {
             // feed with no city in its own data still places in-region.
             let feed = venuetixFeed ?? { u, n, loc in
                 try await VenueTixCalendar.liveFetch(url: u, venueName: n, location: loc, now: now)
+            }
+            return try await feed(target, name, sourceLocation)
+        }
+        if OvationTixCalendar.handles(target) {
+            // Same as VenueTix: the feed carries no venue name, so it is threaded from the source's orgName
+            // (falling back to the host only if a caller had none), and Dan's supplied location rides along so
+            // a single-venue feed with no city in its own data still places in-region.
+            // copy-inventory:ignore-start  a fallback venue label in synthesized source HTML, not app voice (#915)
+            let name = sourceName ?? target.host ?? "the venue"
+            // copy-inventory:ignore-end
+            let feed = ovationtixFeed ?? { u, n, loc in
+                try await OvationTixCalendar.liveFetch(url: u, venueName: n, location: loc, now: now)
             }
             return try await feed(target, name, sourceLocation)
         }

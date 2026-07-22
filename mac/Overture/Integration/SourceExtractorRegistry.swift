@@ -33,6 +33,16 @@ enum SourceExtractorRegistry {
                     return try await VenueTixCalendar.liveEvents(url: url)
                 },
                 venueName: venueName, location: location)
+        case .ovationTixFeed:
+            let url = source.listingsURL.flatMap { URL(string: $0) }
+            let venueName = source.orgName
+            let location = source.venueLocation
+            return OvationTixExtractor(
+                fetchEvents: {
+                    guard let url else { throw SourceFetchError.unreachable }
+                    return try await OvationTixCalendar.liveEvents(url: url)
+                },
+                venueName: venueName, location: location)
         }
     }
 }
