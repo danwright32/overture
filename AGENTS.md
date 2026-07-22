@@ -26,9 +26,11 @@ already drifting from the Swift version it mirrored.
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
   from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
-  command (#595): the repo's two independent CI jobs (`typecheck-and-test`, `swift-tests`)
-  make it easy to run only the Mac app's tests locally, see them pass, and push, only
-  learning the TypeScript side would have failed once CI reports it minutes later.
+  command (#595). This matters even more since #1347: CI no longer runs the Swift tests at
+  all (only `typecheck-and-test`, on GitHub-hosted ubuntu-latest), so a local run is the ONLY
+  thing that verifies the Mac app before it reaches main. The mandatory local pre-push gate
+  already runs the full Mac suite, but `test-all.sh` also catches a TypeScript-side failure
+  that CI would otherwise only surface minutes later.
 - Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). The scout itself is entirely native; see
   `docs/scout-runbook.md`.
@@ -88,8 +90,9 @@ already drifting from the Swift version it mirrored.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed
-  path outside any checkout, so every worktree (and CI) contends for the same lock
-  instead of each locking its own copy. The current verification model is a hybrid:
+  path outside any checkout, so every worktree contends for the same lock instead of
+  each locking its own copy (since #1347 there is no longer a CI run contending for it;
+  the Swift tests run only locally). The current verification model is a hybrid:
   each agent builds and tests its own worktree under that shared lock and stops after
   opening a PR (it never merges and never launches the live app); the coordinating
   session then independently re-runs the full suite on every branch under the same
@@ -132,12 +135,19 @@ even notice.
 
 ## CI status before merging
 
-A pending check and a stuck one look identical in GitHub's PR view. Do not merge a PR on
-the strength of "the check hasn't failed yet"; the `swift-tests` check needs to have
-actually shown a pass, not just an absence of failure so far. Before merging, run
-`scripts/check-pr-ci.sh <pr-number>`. It reports every check's real state and, for
-`swift-tests` specifically, tells a check that is genuinely still working apart from one
-that is stalled because the self-hosted runner is unreachable or has stopped picking up
-jobs. `scripts/merge-when-green.sh <pr-number>` wraps that same check in a poll loop and
-only merges once it reports a genuine pass; it stops without merging on a real failure, a
-stalled check, or its own timeout.
+Since #1347 the ONLY CI check is `typecheck-and-test` (the TypeScript importer, on
+GitHub-hosted ubuntu-latest). The Swift tests no longer run in CI: they were on a
+self-hosted runner on Dan's Mac that kept going offline mid-job and stalling every merge,
+so they were retired in favour of the mandatory local pre-push gate (which runs the full
+Mac suite before any push). This means a merge's Swift verification comes from having run
+`mac/scripts/run-tests-locked.sh` (or `scripts/test-all.sh`) locally and SEEN it pass, not
+from CI. Do not merge a Swift change without that local pass in hand.
+
+For the one remaining check, a pending run and a stuck one still look identical in GitHub's
+PR view, so do not merge on "it hasn't failed yet". `scripts/check-pr-ci.sh <pr-number>`
+reports every check's real state, and `scripts/merge-when-green.sh <pr-number>` polls and
+merges only once it reports a genuine pass (stopping on a real failure or its own timeout).
+Both still work; their self-hosted-runner stall detection is now dormant (no job runs on
+that runner anymore) but harmless. The `overture-mac` self-hosted runner itself is left
+registered-but-idle; unloading its launchd agent
+(`com.danwright.overture.ci-runner`) on Dan's Mac is a separate manual cleanup.
