@@ -114,6 +114,10 @@ enum DismissReason: String, CaseIterable, Sendable {
     // A missed opportunity, never a bad-fit signal, so it must never be folded into `notInterested`.
     case tooSoon = "too_soon"
     case wentBy = "went_by"
+    // #1238: Dan blocked the town this show is in ("Never show me shows in <town>"). Like `wentBy`, this
+    // is Overture's OWN automatic cut, never a choice in the menu, and it must never teach LocalHistory a
+    // thing about the org, since Overture watches out-of-town orgs for their occasional NYC dates (#970).
+    case tooFar = "too_far"
 
     var label: String {
         switch self {
@@ -124,12 +128,14 @@ enum DismissReason: String, CaseIterable, Sendable {
         case .duplicate: return "Duplicate"
         case .tooSoon: return "Too soon"
         case .wentBy: return "Went by"
+        case .tooFar: return "Too far"
         }
     }
 
-    // The reasons Dan can pick himself. `wentBy` is Overture's own, never offered as a choice: he cannot
-    // decide that a date has passed.
-    static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy } }
+    // The reasons Dan can pick himself. `wentBy` and `tooFar` are Overture's own, never offered as a
+    // choice: he cannot decide that a date has passed, and blocking a town is a separate action, not a
+    // per-show dismiss reason.
+    static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy && $0 != .tooFar } }
 }
 
 // #885: the conversation menu's summary line. It lowercases a domain label to sit inside a sentence,

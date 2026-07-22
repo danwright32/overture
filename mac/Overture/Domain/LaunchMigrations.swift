@@ -41,6 +41,9 @@ enum LaunchMigrations {
         // goes by every day. Idempotent for the same reason they are (a retired show is no longer `new`,
         // so a second pass cannot see it). It returns how many it touched, for a caller that wants to say.
         WentByRetirement.run(in: context)
+        // #1238: retire shows in a town Dan has blocked (or a built-in seed far-town), so a blocked town's
+        // shows stay gone across launches. Mirrors WentByRetirement: Overture's own cut, its own reason.
+        ExcludedTownRetirement.run(in: context)
         do {
             try context.save()
             return true
