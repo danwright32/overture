@@ -140,6 +140,28 @@ assert_equals "exit 0 with no success banner is crashed, not a pass" \
 assert_equals "a run that never reached the suite is crashed, not failed" \
   "crashed" "$(run_outcome "xcodebuild: error: Could not resolve package dependencies" 70)"
 
+echo
+# --- retry a flaky host crash once (#1331) ------------------------------------------------
+#
+# The self-hosted swift-tests runner intermittently crashes the test HOST mid-run ("Restarting
+# after unexpected exit" / the host could not launch). On a merge commit's push-CI this reds main
+# even though the PR passed and the suite passes locally, and merge-when-green then refuses the next
+# PR until someone reruns by hand. A host crash (run_outcome == "crashed": the run died, no NAMED
+# test failure) is retried ONCE. A genuine failure (named tests) is NEVER retried, or the guard would
+# paper over real reds. A pass is never retried either.
+
+assert_equals "a first host crash is retried" \
+  "retry" "$(should_retry "crashed" 1 2)"
+
+assert_equals "a second host crash is NOT retried (one retry only)" \
+  "" "$(should_retry "crashed" 2 2)"
+
+assert_equals "a genuine test failure is never retried" \
+  "" "$(should_retry "failed" 1 2)"
+
+assert_equals "a pass is never retried" \
+  "" "$(should_retry "" 1 2)"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0

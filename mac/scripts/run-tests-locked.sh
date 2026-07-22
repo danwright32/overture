@@ -85,6 +85,21 @@ run_outcome() {
   fi
 }
 
+# should_retry <outcome> <attempt> <max_attempts>. Prints "retry" when another attempt should run.
+#
+# #1331: the self-hosted swift-tests runner intermittently crashes the test HOST mid-run ("Restarting
+# after unexpected exit" / the host could not launch). On a merge commit's push-CI that reds main even
+# though the PR passed and the suite passes locally, and merge-when-green then refuses the next PR until
+# someone reruns by hand. A "crashed" outcome (run_outcome above: the run DIED, with no NAMED test
+# failure) is a known flake, so retry it ONCE. A genuine "failed" (named tests) is NEVER retried, or the
+# guard would paper over a real red; a pass ("") is never retried either. The crash/failure distinction
+# is exactly run_outcome's, so this can never retry a real failure.
+should_retry() {
+  local outcome="$1" attempt="$2" max_attempts="$3"
+  [[ "${outcome}" == "crashed" && "${attempt}" -lt "${max_attempts}" ]] && echo "retry"
+  return 0
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
@@ -109,25 +124,35 @@ main() {
     exit 1
   fi
 
-  local test_exit_code=0
-  local output_file
-  output_file="$(mktemp)"
-  # tee, so the run still streams live: a suite that only prints at the end looks hung (#1006's
-  # investigation was slow enough without waiting blind).
-  flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test \
-    2>&1 | tee "${output_file}" || true
-  test_exit_code="${PIPESTATUS[0]}"
+  # #1331: run the suite, and if the HOST crashes (the run died with no named test failure, a known
+  # self-hosted flake) retry once. A genuine failure or a pass is never retried (see should_retry).
+  local test_exit_code=0 outcome="" attempt=1 max_attempts=2 output_file pid
+  while true; do
+    test_exit_code=0
+    output_file="$(mktemp)"
+    # tee, so the run still streams live: a suite that only prints at the end looks hung (#1006's
+    # investigation was slow enough without waiting blind).
+    flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test \
+      2>&1 | tee "${output_file}" || true
+    test_exit_code="${PIPESTATUS[0]}"
 
-  local pid
-  for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
-    kill "${pid}" 2>/dev/null || true
+    for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
+      kill "${pid}" 2>/dev/null || true
+    done
+
+    # #1006: say WHICH kind of red this is. "** TEST FAILED **" with nothing named means the process
+    # died, not that a test failed, and reading it as a test failure sends whoever sees it hunting for
+    # a bug that does not exist.
+    outcome="$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")"
+    rm -f "${output_file}"
+
+    [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}")" ]] && break
+    echo >&2
+    echo "run-tests-locked.sh: the test host crashed with no named test failure (a known self-hosted" >&2
+    echo "flake, #1331). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
+    attempt=$((attempt + 1))
   done
 
-  # #1006: say WHICH kind of red this is, in the words a person needs. "** TEST FAILED **" with
-  # nothing named means the process died, not that a test failed, and reading it as a test
-  # failure sends whoever sees it hunting for a bug that does not exist.
-  local outcome
-  outcome="$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")"
   if [[ "${outcome}" == "crashed" ]]; then
     echo >&2
     echo "run-tests-locked.sh: the test run CRASHED. It did not pass and it did not fail: the run died." >&2
@@ -135,7 +160,6 @@ main() {
     echo "or something killed the host mid-run (an overlapping run on this Mac). Any count printed above is not a pass." >&2
     echo "Quit any running Debug Overture, then rerun it; if it passes, the code was never the problem. See #1006/#1252." >&2
   fi
-  rm -f "${output_file}"
 
   # #1252: a test-host launch failure exits xcodebuild 0, so `test_exit_code` alone would let a dead run
   # escape as a pass (test-all.sh's `set -e` would sail past). A non-empty outcome is a crash or a real
