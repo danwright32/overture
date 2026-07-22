@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **752 sentences**, from 247 source files.
+Every sentence Overture can say to Dan: **752 sentences**, from 248 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -62,7 +62,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (41)
+## The same sentence, said in more than one place (39)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -131,9 +131,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Owes a reply"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
-- "Production type"
-  - `UI/ProspectRowView.swift`
-  - `UI/ProspectRowView.swift`
 - "Reached out"
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
@@ -173,9 +170,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
-- "This looks right"
-  - `UI/ProspectRowView.swift`
-  - `UI/ProspectRowView.swift`
 - "Verbal yes, not booked"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
@@ -814,6 +808,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStatus.swift`
 "Not sent yet"
     `UI/QueueView+Model.swift`
+"Not sure"
+    `UI/ProspectRowView.swift`
+"Not sure of the genre or type, tap to confirm or fix"
+    `UI/ProspectRowView.swift`
 "Not the venue"
     `UI/DraftReviewView.swift`
 "Not treated as a returning client."
@@ -1312,7 +1310,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
-"The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type."
+"The scout's rules weren't sure how to classify this one. Set the genre and production type, then confirm."
     `UI/ProspectRowView.swift`
 "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
     `Integration/ScoutExtractService.swift`
@@ -1333,8 +1331,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
-"This looks right"
-    `UI/ProspectRowView.swift`
 "This looks up a real contact for the still-open show on \(dateLabel), so you can tell whether it's still emailable before you keep it. It spends a little on that lookup, only for the show you check here."
     `Domain/Reachability.swift`
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
@@ -1407,8 +1403,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
-"Unsure call, tap to confirm or fix"
-    `UI/ProspectRowView.swift`
 "Updated \(org)'s address."
     `UI/SourceFixConfirmActions.swift`
 "Updated \(org)'s classification"

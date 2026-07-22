@@ -386,44 +386,32 @@ struct ProspectRowView: View {
         .padding(.top, 2)
     }
 
-    // A rules-guessed classification Dan hasn't reviewed: a menu so he can confirm it
-    // looks right or correct the discipline/production (#60). Clears automatically once
-    // he picks an action (confidenceReviewedByDan or classificationOverriddenByDan).
+    // A rules-guessed classification Dan hasn't reviewed (#60). Tapping opens the confirm editor
+    // (#1363): both the genre and the production type at once, pre-filled with the scout's guess, so
+    // he can correct either or both in one pass. It clears once he confirms (confidenceReviewedByDan
+    // or classificationOverriddenByDan). The SAME editor is auto-opened right after Keep (#348), which
+    // is why the popover is anchored here on the badge, the one element present in both cases.
     @ViewBuilder private var confidenceFlag: some View {
         if item.isClassificationUncertain {
-            Menu {
-                Button("This looks right") { onMarkConfidenceReviewed() }
-                Divider()
-                // #349: genre and production type are independent classifications (a show has
-                // both; they're never alternatives), so each gets its own labeled submenu
-                // instead of sitting in one flat single-select list.
-                Menu("Genre") {
-                    ForEach(Discipline.allCases, id: \.self) { discipline in
-                        Button(QueueModel.disciplineLabel(discipline.rawValue)) {
-                            onCorrectClassification(discipline, nil)
-                        }
-                    }
-                }
-                Menu("Production type") {
-                    Button("Self-produced") { onCorrectClassification(nil, .selfProduced) }
-                    Button("Agency/presented") { onCorrectClassification(nil, .agency) }
-                }
+            Button {
+                showConfirmClassification = true
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "questionmark.circle.fill")
                         .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 13, weight: .semibold))
-                    Text("Unsure call, tap to confirm or fix")
+                    Text("Not sure of the genre or type, tap to confirm or fix")
                 }
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.rust)
                 .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
                 .background(Capsule().fill(OVColor.rust.opacity(0.12)))
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
             .fixedSize()
-            .help("The scout's rules weren't sure how to classify this one. Confirm it looks right or pick the correct discipline or production type.")
+            .help("The scout's rules weren't sure how to classify this one. Set the genre and production type, then confirm.")
             .padding(.top, 2)
+            .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
         }
     }
 
@@ -700,6 +688,9 @@ struct ProspectRowView: View {
                     Button {
                         let wasUncertain = item.isClassificationUncertain
                         onKeep()
+                        // #348: surface the confirm editor right after Keep. The popover is anchored on
+                        // the still-visible uncertainty badge (confidenceFlag), not here: this Keep button
+                        // is replaced by the "Kept" pill the instant the keep lands, so it can't host it.
                         if wasUncertain { showConfirmClassification = true }
                     } label: {
                         Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
@@ -707,7 +698,6 @@ struct ProspectRowView: View {
                             .background(Capsule().fill(OVColor.forest))
                     }
                     .buttonStyle(.plain)
-                    .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
                 }
                 // #499 regression check (caught in Task 1 review, 2026-07-07): the Dismiss menu must stay a
                 // sibling of Kept/Keep, exactly as it was before this task, not nested only inside a branch
@@ -738,37 +728,80 @@ struct ProspectRowView: View {
         }
     }
 
-    // #348: the same three resolutions the manual "Unsure call" menu offers (This looks right,
-    // pick a genre, pick a production type), reusing the same closures, surfaced automatically
-    // right after Keep instead of requiring Dan to notice and click the badge himself.
+    // #1363/#348: one editor, both dimensions at once. Opened by tapping the badge or automatically
+    // right after Keep on an unconfirmed prospect. Genre and production are independent (#349), so both
+    // pickers show together, pre-filled with the scout's guess; a single Confirm resolves everything in
+    // one pass. Confirming an unchanged guess accepts it (marks reviewed, no override); changing either
+    // dimension corrects only what changed. The resolve decision lives in ClassificationResolution so it
+    // stays testable outside the view (#863).
     private var confirmClassificationPopover: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.sm) {
+        ClassificationConfirmEditor(
+            currentDiscipline: item.discipline,
+            currentProduction: item.production,
+            onMarkReviewed: onMarkConfidenceReviewed,
+            onCorrect: onCorrectClassification,
+            onClose: { showConfirmClassification = false }
+        )
+    }
+}
+
+// The confirm/fix editor for an unconfirmed classification (#1363). Both the genre and production
+// pickers, pre-filled with the scout's guess, and one Confirm button. A separate view so each open
+// starts its picker state fresh from the current guess.
+private struct ClassificationConfirmEditor: View {
+    let currentDiscipline: String
+    let currentProduction: String
+    let onMarkReviewed: () -> Void
+    let onCorrect: (Discipline?, Production?) -> Void
+    let onClose: () -> Void
+
+    @State private var selectedDiscipline: Discipline
+    @State private var selectedProduction: Production
+
+    init(currentDiscipline: String, currentProduction: String,
+         onMarkReviewed: @escaping () -> Void,
+         onCorrect: @escaping (Discipline?, Production?) -> Void,
+         onClose: @escaping () -> Void) {
+        self.currentDiscipline = currentDiscipline
+        self.currentProduction = currentProduction
+        self.onMarkReviewed = onMarkReviewed
+        self.onCorrect = onCorrect
+        self.onClose = onClose
+        _selectedDiscipline = State(initialValue: Discipline(rawValue: currentDiscipline) ?? .other)
+        _selectedProduction = State(initialValue: Production(rawValue: currentProduction) ?? .unknown)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.md) {
             Text("Confirm classification").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Button("This looks right") {
-                onMarkConfidenceReviewed()
-                showConfirmClassification = false
-            }
-            Divider()
-            Text("Genre").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-            ForEach(Discipline.allCases, id: \.self) { discipline in
-                Button(QueueModel.disciplineLabel(discipline.rawValue)) {
-                    onCorrectClassification(discipline, nil)
-                    showConfirmClassification = false
+            Picker("Genre", selection: $selectedDiscipline) {
+                ForEach(Discipline.allCases, id: \.self) { discipline in
+                    Text(QueueModel.disciplineLabel(discipline.rawValue)).tag(discipline)
                 }
             }
-            Divider()
-            Text("Production type").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-            Button("Self-produced") {
-                onCorrectClassification(nil, .selfProduced)
-                showConfirmClassification = false
+            Picker("Production type", selection: $selectedProduction) {
+                Text("Self-produced").tag(Production.selfProduced)
+                Text("Agency/presented").tag(Production.agency)
+                Text("Not sure").tag(Production.unknown)
             }
-            Button("Agency/presented") {
-                onCorrectClassification(nil, .agency)
-                showConfirmClassification = false
+            HStack {
+                Spacer()
+                Button("Confirm") {
+                    switch ClassificationResolution.resolve(
+                        currentDiscipline: currentDiscipline, currentProduction: currentProduction,
+                        selectedDiscipline: selectedDiscipline, selectedProduction: selectedProduction) {
+                    case .acceptAsIs:
+                        onMarkReviewed()
+                    case let .correct(discipline, production):
+                        onCorrect(discipline, production)
+                    }
+                    onClose()
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(OVSpacing.lg)
-        .frame(width: 260)
+        .frame(width: 280)
     }
 }
 
