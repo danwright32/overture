@@ -294,18 +294,21 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   No greeting token in any shape ("I hope this finds you well" and "Hi Emma," are
   both wrong), and never fabricate a detail to fill a shape, if the listing doesn't
   supply what an archetype needs for this prospect, use a different one.
+  Record which archetype you actually used in the `variant` field, as exactly one of
+  these four tokens: `reason-first`, `credential-first`, `observation-first`,
+  `direct-intent`. Record the shape you WROTE (the produced opener), never a shape you
+  meant to use but didn't; Overture reads this echo only to see which openers land.
 - **Body, 2-4 sentences:** unobtrusive no-flash documentary coverage; why it fits this
   performance; a discipline-matched gallery link (below). Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
 - **Offer:** held positively, and ALWAYS state the rate plainly ($250 an hour plus tax,
-  one-hour minimum, gallery within two weeks). Record `rate_stated` in `variant`.
+  one-hour minimum, gallery within two weeks).
   **Never link to a contract, pricing, or rates page: the site does not have one** (#612).
   The original plan called for A/B testing "state the rate" against "link the contract
   page", but that second arm was never real, and the only way to write it is to invent a
   URL that 404s in an email Dan actually sends. There is nothing to choose between here.
-  (The `variant` field itself is still live and still used, for the opener archetypes of
-  #362; this drops only the offer half of the test.)
+  (The `variant` field records the opener archetype above, not this retired offer test.)
 - **CTA:** soft. "Happy to answer any questions." Never "let me know how that lands,"
   Dan flagged it as sounding douchey.
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials

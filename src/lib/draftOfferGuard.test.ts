@@ -46,7 +46,17 @@ describe("the runbook never tells the drafter to link a contract or pricing page
 
   it("the runbook still tells the drafter to state the rate plainly", () => {
     expect(runbook).toMatch(/state the rate plainly/i);
-    expect(runbook).toMatch(/rate_stated/);
+  });
+
+  // #5 Phase 0: the `variant` field no longer records the retired constant "rate_stated" (a leftover
+  // from the killed rate-vs-contract A/B, which the offer bullet above still explains was never real).
+  // It now records the opener archetype the drafter actually PRODUCED (one of the four #362 shapes), so
+  // Overture can eventually see which openers land. Guard both halves: the dead constant is gone, and
+  // the live instruction to echo the produced archetype into `variant` is positively present.
+  it("the runbook records the produced opener archetype in `variant`, not the retired constant", () => {
+    expect(runbook).not.toMatch(/rate_stated/);
+    expect(runbook).toMatch(/record which archetype/i);
+    expect(runbook).toMatch(/in the `?variant`? field/i);
   });
 
   // Proves the check can actually fail, rather than passing because the patterns match nothing at
