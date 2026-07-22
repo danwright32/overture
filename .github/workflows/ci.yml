@@ -6,54 +6,16 @@ on:
       - main
   pull_request:
 
+# #1347: the Swift (Mac) tests no longer run in CI. They ran on a self-hosted runner on Dan's Mac
+# (the `swift-tests` job on a `[self-hosted, macOS, overture-mac]` label), which repeatedly went
+# offline mid-job (GitHub-side connection instability with no clean fix on our end), stalling every
+# merge and forcing admin-merges. Overture was the only project carrying a self-hosted runner.
+#
+# The Swift suite is now verified by the MANDATORY local pre-push test gate (the same
+# `mac/scripts/run-tests-locked.sh` this job used to run), exactly as the sibling projects rely on
+# their local gate. A push cannot happen without the full Mac suite passing locally first, so CI
+# here covers only the TypeScript importer, which GitHub-hosted ubuntu-latest runs reliably.
 jobs:
-  # #761: does this change actually need the Mac tests? Two reasons this exists.
-  #
-  # 1. Dependabot's npm PRs sat unmergeable forever. GitHub will not schedule a job from a
-  #    Dependabot-authored PR onto the self-hosted runner, so swift-tests stayed queued
-  #    indefinitely (verified: runner online, idle, labels matching, no conditional on the job).
-  #    The choice was an honest, visible skip or an indefinite hang.
-  # 2. Swift cannot consume an npm package, so a TypeScript-only change proves nothing by
-  #    rebuilding the Mac app anyway.
-  #
-  # A push to main ALWAYS runs the Mac tests, which is the safety net: anything that slips through
-  # a skipped PR check surfaces on merge, on main, immediately and revertibly.
-  changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      swift: ${{ steps.filter.outputs.swift }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: filter
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Not a pull request, so the Mac tests always run."
-            echo "swift=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "${{ github.actor }}" = "dependabot[bot]" ] && \
-             ! git diff --name-only "${{ github.event.pull_request.base.sha }}" \
-                                    "${{ github.event.pull_request.head.sha }}" \
-               | grep -qE '^(mac/|fixtures/|scripts/)'; then
-            echo "Dependabot PR touching no Swift, fixture or CI-script file. Skipping the Mac tests."
-            echo "swift=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" \
-                                  "${{ github.event.pull_request.head.sha }}" \
-             | grep -qE '^(mac/|fixtures/|scripts/|\.github/workflows/)'; then
-            echo "Swift-relevant files changed. Running the Mac tests."
-            echo "swift=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No Swift, fixture, CI-script or workflow file changed. Skipping the Mac tests."
-            echo "swift=false" >> "$GITHUB_OUTPUT"
-          fi
-
   typecheck-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -75,16 +37,3 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
-
-  swift-tests:
-    needs: changes
-    if: needs.changes.outputs.swift == 'true'
-    runs-on: [self-hosted, macOS, overture-mac]
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - run: cd "${{ github.workspace }}/mac" && xcodegen generate
-
-      - run: "${{ github.workspace }}/mac/scripts/run-tests-locked.sh"
