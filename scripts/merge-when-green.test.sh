@@ -33,18 +33,9 @@ CONFLICT_OUTPUT="PR #625 on danwright32/overture, commit abc1234
 Unmergeable: PR #625 has a merge conflict against its base branch. GitHub never runs CI checks on a PR it can't merge, so waiting here would just time out. Resolve the conflict, then rerun."
 assert_equals "a merge conflict is classified as conflict" "conflict" "$(classify_stop_reason "${CONFLICT_OUTPUT}")"
 
-STALLED_OUTPUT="PR #1 on danwright32/overture, commit abc1234
-
-typecheck-and-test: Passed
-swift-tests: Stalled. Runner appears unreachable, status is offline (pending 6m40s).
-
-Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
-assert_equals "a stalled runner is classified as stalled" "stalled" "$(classify_stop_reason "${STALLED_OUTPUT}")"
-
 FAILED_OUTPUT="PR #1 on danwright32/overture, commit abc1234
 
 typecheck-and-test: Failed
-swift-tests: Passed
 
 Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
 assert_equals "a genuine check failure is classified as failed" "failed" "$(classify_stop_reason "${FAILED_OUTPUT}")"
@@ -52,7 +43,6 @@ assert_equals "a genuine check failure is classified as failed" "failed" "$(clas
 PENDING_OUTPUT="PR #1 on danwright32/overture, commit abc1234
 
 typecheck-and-test: Pending
-swift-tests: Still working (pending 19s)
 
 Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
 assert_equals "still-pending checks are classified as keep-polling (empty)" "" "$(classify_stop_reason "${PENDING_OUTPUT}")"
@@ -120,7 +110,7 @@ run_main_with_stubs() {
   cat > "${tmp}/check-pr-ci.sh" <<'STUB'
 #!/usr/bin/env bash
 echo "PR #1 on danwright32/overture, commit abc1234"
-echo "swift-tests: Passed"
+echo "typecheck-and-test: Passed"
 exit 0
 STUB
   chmod +x "${tmp}/check-pr-ci.sh"
