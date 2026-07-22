@@ -88,6 +88,67 @@ enum ClientCoverage {
             .filter { dismissedIds.contains($0.id) && !isArmed($0, sources: sources) }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
+
+    // MARK: memoization (perf)
+    //
+    // The Sources sheet used to call `unarmed` + `ignored` INLINE in its SwiftUI body, so this
+    // O(clients x sources) fuzzy match ran twice on the main thread on EVERY body render: every keystroke
+    // in the add fields, every scroll tick (the sheet binds its scroll position to state). That per-frame
+    // work made typing lag, froze the sheet on a long scroll, and let a "Not one I scout" tap go
+    // unregistered long enough to queue, so a single click dismissed several clients in a row. The compute
+    // stays here (pure, tested); the view now CACHES `result` keyed on `signature` and recomputes only when
+    // an input the match reads actually changes.
+
+    struct Result: Equatable, Sendable {
+        let gaps: [UnarmedClient]
+        let ignored: [DownbeatClient]
+        static let empty = Result(gaps: [], ignored: [])
+    }
+
+    static func result(sources: [WatchedSource], clients: [DownbeatClient],
+                       dismissedIds: Set<String>) -> Result {
+        Result(gaps: unarmed(sources: sources, clients: clients, dismissedIds: dismissedIds),
+               ignored: ignored(sources: sources, clients: clients, dismissedIds: dismissedIds))
+    }
+
+    // A value snapshot of EXACTLY the fields the match reads: per source its org name and the two
+    // client-tag fields (all `armsByName` / `armsByTag` / `nearMissSource` look at), per client its id and
+    // the names `HistoryMatch.clientNames` derives (displayName + shortName), and the dismissed set.
+    // Equatable by those values (not SwiftData model identity) and order-independent, so it changes iff the
+    // gap list could change and stays equal across a keystroke or scroll that touched none of them. Missing
+    // a field here would leave a STALE gap list on screen; an unused one would only cost a needless recompute.
+    struct Signature: Equatable, Sendable {
+        struct SourceFacet: Equatable, Sendable, Comparable {
+            let id: String
+            let orgName: String
+            let clientTag: Bool?
+            let clientTagClientId: String?
+            static func < (l: SourceFacet, r: SourceFacet) -> Bool { l.id < r.id }
+        }
+        struct ClientFacet: Equatable, Sendable, Comparable {
+            let id: String
+            let displayName: String
+            let shortName: String?
+            static func < (l: ClientFacet, r: ClientFacet) -> Bool { l.id < r.id }
+        }
+        let sources: [SourceFacet]
+        let clients: [ClientFacet]
+        let dismissed: [String]
+    }
+
+    static func signature(sources: [WatchedSource], clients: [DownbeatClient],
+                          dismissedIds: Set<String>) -> Signature {
+        Signature(
+            sources: sources.map {
+                Signature.SourceFacet(id: $0.sourceId, orgName: $0.orgName,
+                                      clientTag: $0.clientTagOverride, clientTagClientId: $0.clientTagClientId)
+            }.sorted(),
+            clients: clients.map {
+                Signature.ClientFacet(id: $0.id, displayName: $0.displayName, shortName: $0.shortName)
+            }.sorted(),
+            dismissed: dismissedIds.sorted()
+        )
+    }
 }
 
 // #1356: a client Dan has marked "not one I scout", so the gap list converges to real gaps instead of
