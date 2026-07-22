@@ -16,13 +16,20 @@ enum PrepQueueService {
     // chosen", so every eligible prospect runs, exactly as before this change (every existing call site
     // relies on that). A non-nil set narrows the eligible prospects to only those keys; an empty set
     // therefore yields an empty queue, which startPrep reports as nothing to prep.
+    // The kept-undrafted prospects a Prep run would actually draft: needs-prep-eligible, narrowed to the
+    // per-run subset Dan chose. Shared by buildQueue (what to encode) and startPrep (what to stamp an
+    // experiment arm onto), so the assigned set and the queued set can never disagree.
+    static func eligibleProspects(from context: ModelContext, includedKeys: Set<String>?) -> [Prospect] {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return all
+            .filter(PrepQueueBuilder.needsPrepEligible)
+            .filter { includedKeys?.contains($0.naturalKey) ?? true }
+    }
+
     static func buildQueue(from context: ModelContext, generatedAt: String,
                            includedKeys: Set<String>? = nil,
                            today: String = EasternDate.today()) -> PrepQueue {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let items: [PrepQueueItem] = all
-            .filter(PrepQueueBuilder.needsPrepEligible)
-            .filter { includedKeys?.contains($0.naturalKey) ?? true }
+        let items: [PrepQueueItem] = eligibleProspects(from: context, includedKeys: includedKeys)
             .map { p in
                 PrepQueueItem(
                     naturalKey: p.naturalKey,
@@ -247,6 +254,14 @@ enum PrepQueueService {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
         let stamp = ISO8601DateFormatter().string(from: now)
+        // #5 Phase 1: stamp an A/B arm onto each eligible prospect under the active experiment (sticky,
+        // forward-only), and PERSIST it here, BEFORE the queue is built and encoded, so a later phase's
+        // drafter instruction can never name an arm the store didn't record. No active experiment is a
+        // no-op, so this changes nothing until Dan starts an experiment. Fail-loud: a save failure throws.
+        // Assigned over the SAME eligible set buildQueue encodes (shared eligibleProspects), never the
+        // probe path (buildProbeQueue), which must never consume an assignment.
+        try ExperimentAssignment.assignArms(
+            to: eligibleProspects(from: context, includedKeys: includedKeys), in: context)
         // #953: only the rows Dan checked in the Prep sheet. nil (the default) keeps every eligible
         // prospect, so nothing but the sheet ever narrows the run.
         let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: includedKeys)
