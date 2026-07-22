@@ -247,8 +247,10 @@ struct HistoryFlagTests {
         #expect(QueueModel.historyFlag(item(priorRelationship: "contacted")) == "Cold-contacted before, no booking")
     }
 
-    @Test func declinedByYouNoted() {
-        #expect(QueueModel.historyFlag(item(priorRelationship: "declined_by_you")) == "You declined before (usually a date conflict)")
+    // #1361: a past decline is irrelevant to a future pitch (usually just an old date conflict), so it
+    // gets no card badge at all, unlike every other prior-relationship signal.
+    @Test func declinedByYouShowsNoBadge() {
+        #expect(QueueModel.historyFlag(item(priorRelationship: "declined_by_you")) == nil)
     }
 
     @Test func warmNoted() {

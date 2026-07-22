@@ -585,9 +585,8 @@ enum QueueModel {
             }
             return "Worked together before"
         }
-        if item.priorRelationship == "declined_by_you" {
-            return "You declined before (usually a date conflict)"
-        }
+        // #1361: no badge for a past decline. Whether Dan declined a group before (usually just an old
+        // date conflict) is irrelevant to a future pitch, so it is deliberately absent here, not forgotten.
         if item.priorRelationship == "warm" {
             return "Warm lead from a prior relationship"
         }
