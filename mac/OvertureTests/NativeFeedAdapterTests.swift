@@ -18,6 +18,7 @@ struct NativeFeedAdapterTests {
     @Test func theTwoFeedHostsRouteToNativeKindsAndEverythingElseToHtml() {
         #expect(SourceKind.forListingURL(URL(string: "https://www.operaamerica.org/calendar")) == .operaAmericaFeed)
         #expect(SourceKind.forListingURL(URL(string: "https://thegreenroom42.venuetix.com/")) == .venueTixFeed)
+        #expect(SourceKind.forListingURL(URL(string: "https://ci.ovationtix.com/35583")) == .ovationTixFeed)  // #1344
         #expect(SourceKind.forListingURL(URL(string: "https://some-org.example/events")) == .html)
         #expect(SourceKind.forListingURL(nil) == .html)
     }
@@ -25,6 +26,7 @@ struct NativeFeedAdapterTests {
     @Test func theNativeFeedKindsIngestForFreeLikeAlgolia() {
         #expect(SourceKind.operaAmericaFeed.usesNativeExtractor)
         #expect(SourceKind.venueTixFeed.usesNativeExtractor)
+        #expect(SourceKind.ovationTixFeed.usesNativeExtractor)                                              // #1344
         #expect(SourceKind.algolia.usesNativeExtractor)
         #expect(SourceKind.html.usesNativeExtractor == false)
     }
@@ -98,11 +100,14 @@ struct NativeFeedAdapterTests {
                                   listingsURL: "https://www.operaamerica.org/calendar", kind: .operaAmericaFeed)
         let venue = WatchedSource(sourceId: "greenroom", orgName: "The Green Room 42",
                                   listingsURL: "https://thegreenroom42.venuetix.com/", kind: .venueTixFeed)
+        let ovation = WatchedSource(sourceId: "sohoplayhouse", orgName: "SoHo Playhouse",
+                                    listingsURL: "https://ci.ovationtix.com/35583", kind: .ovationTixFeed)
         let html = WatchedSource(sourceId: "org", orgName: "Org",
                                  listingsURL: "https://org.example/e", kind: .html)
 
         #expect(SourceExtractorRegistry.extractor(for: opera) is OperaAmericaExtractor)
         #expect(SourceExtractorRegistry.extractor(for: venue) is VenueTixExtractor)
+        #expect(SourceExtractorRegistry.extractor(for: ovation) is OvationTixExtractor)   // #1344
         // Carnegie (nil source) and a plain html source both fall through to the injected fallback extractor.
         #expect(SourceExtractorRegistry.extractor(for: nil) == nil)
         #expect(SourceExtractorRegistry.extractor(for: html) == nil)
@@ -147,14 +152,18 @@ struct NativeFeedAdapterTests {
                                   listingsURL: "https://www.operaamerica.org/calendar", kind: .html)
         let venue = WatchedSource(sourceId: "greenroom", orgName: "The Green Room 42",
                                   listingsURL: "https://thegreenroom42.venuetix.com/", kind: .html)
+        // #1344: the real SoHo Playhouse row, watched as .html before this adapter existed, flips for free.
+        let ovation = WatchedSource(sourceId: "sohoplayhouse", orgName: "SoHo Playhouse",
+                                    listingsURL: "https://ci.ovationtix.com/35583", kind: .html)
         let plain = WatchedSource(sourceId: "org", orgName: "Org",
                                   listingsURL: "https://org.example/events", kind: .html)
-        ctx.insert(opera); ctx.insert(venue); ctx.insert(plain)
+        ctx.insert(opera); ctx.insert(venue); ctx.insert(ovation); ctx.insert(plain)
 
         WatchedSourceBackfill.run(in: ctx, defaults: UserDefaults(suiteName: "nfa-\(UUID())")!)
 
         #expect(opera.kind == .operaAmericaFeed)
         #expect(venue.kind == .venueTixFeed)
+        #expect(ovation.kind == .ovationTixFeed)                     // #1344: SoHo Playhouse auto-flipped
         #expect(plain.kind == .html)                                 // an ordinary source is untouched
     }
 

@@ -355,13 +355,14 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     // events. They ingest natively for FREE (no paid AI read), exactly as Carnegie's Algolia feed does.
     case operaAmericaFeed = "opera_america_feed"   // OPERA America's national opera calendar (Umbraco feed)
     case venueTixFeed = "venue_tix_feed"           // any *.venuetix.com single-venue feed (Green Room 42, ...)
+    case ovationTixFeed = "ovation_tix_feed"       // any *.ovationtix.com single-venue feed (SoHo Playhouse, ...)
 
     // The dispatch rule, in one place so nothing can disagree about which sources cost a paid read. A
     // native source ingests structured events synchronously and free on every run (including the automatic
     // daily one); an html source is fetched, hashed, and read by the paid extract run only when it changes.
     var usesNativeExtractor: Bool {
         switch self {
-        case .algolia, .operaAmericaFeed, .venueTixFeed: return true
+        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
         case .html: return false
         }
     }
@@ -375,6 +376,7 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
         guard let url else { return .html }
         if OperaAmericaCalendar.handles(url) { return .operaAmericaFeed }
         if VenueTixCalendar.handles(url) { return .venueTixFeed }
+        if OvationTixCalendar.handles(url) { return .ovationTixFeed }
         return .html
     }
 }
