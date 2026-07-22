@@ -147,6 +147,75 @@ assert_equals "an override lets the fix for a red main land" \
 assert_equals "an unknown base still merges, on the PR's own checks" \
   "merged" "$(run_main_with_stubs "")"
 
+echo
+# --- pbxproj freshness gate (#1368, Decision 2) -----------------------------------------
+#
+# merge-when-green trusts remote CI, but since #1347 remote CI no longer runs the Swift/pbxproj side at
+# all, so a STALE committed project.pbxproj could ride in here unseen. Decision 2: verify freshness, but
+# only when the branch actually touches the Mac app (a branch that changed nothing under mac/ cannot have
+# changed the generated project). pbxproj_check_needed is that pure decision over the branch's file list.
+
+assert_equals "a new Mac source file needs the freshness check" \
+  "yes" "$(pbxproj_check_needed "mac/Overture/UI/NewView.swift")"
+assert_equals "a project.yml change needs the freshness check" \
+  "yes" "$(pbxproj_check_needed "mac/project.yml")"
+# A mixed diff: any single mac/ app path is enough.
+assert_equals "a mixed diff touching the Mac app needs the check" \
+  "yes" "$(pbxproj_check_needed "docs/contracts.md
+mac/OvertureTests/FooTests.swift")"
+# Nothing under mac/: cannot have changed the generated project.
+assert_equals "a TypeScript-only diff needs no check" \
+  "" "$(pbxproj_check_needed "src/lib/importHistory.ts
+docs/contracts.md")"
+assert_equals "a repo-scripts-only diff needs no check" \
+  "" "$(pbxproj_check_needed "scripts/check-pbxproj-fresh.sh")"
+# mac/scripts and mac/build never feed xcodegen's project generation, so they don't trigger it.
+assert_equals "a mac/scripts-only diff needs no check" \
+  "" "$(pbxproj_check_needed "mac/scripts/run-tests-locked.sh")"
+assert_equals "a mac/build-only diff needs no check" \
+  "" "$(pbxproj_check_needed "mac/build/Build/Products/Release/Overture.app/x")"
+
+echo
+# --- the WIRE from main() into the pbxproj gate ------------------------------------------
+#
+# The decision above is pure. Whether main() actually BLOCKS a stale-pbxproj Mac-touching branch is the
+# separate, load-bearing claim (the #887 lesson: a guard with its wire cut sat green for 1,829 tests).
+# Drive the real main() with a Mac-touching file list and a stubbed freshness verdict, asserting on the
+# only thing that matters: did a merge happen. Cut the `exit 1` and "stale is NOT merged" flips to merged.
+run_main_with_pbxproj() {
+  local fresh_result="$1"   # "fresh" or "stale"
+  local tmp
+  tmp="$(mktemp -d)"
+  cat > "${tmp}/check-pr-ci.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "PR #1 on danwright32/overture, commit abc1234"
+echo "typecheck-and-test: Passed"
+exit 0
+STUB
+  chmod +x "${tmp}/check-pr-ci.sh"
+  (
+    SCRIPT_DIR="${tmp}"
+    gh_as_danwright32() {
+      case "$*" in
+        *"--json files"*) echo "mac/Overture/UI/NewView.swift" ;;
+        *"pr view"*)      echo "main" ;;
+        *"run list"*)     echo "success" ;;
+        *"pr merge"*)     touch "${tmp}/MERGED" ;;
+      esac
+    }
+    # Stub the real fetch+worktree+xcodegen helper: the wire under test is whether main() heeds its verdict.
+    verify_branch_pbxproj_fresh() { [[ "${fresh_result}" == "fresh" ]]; }
+    main 1 900 >/dev/null 2>&1
+  )
+  if [[ -f "${tmp}/MERGED" ]]; then echo "merged"; else echo "not-merged"; fi
+  rm -rf "${tmp}"
+}
+
+assert_equals "a Mac-touching branch with a fresh pbxproj merges" \
+  "merged" "$(run_main_with_pbxproj "fresh")"
+assert_equals "a Mac-touching branch with a STALE pbxproj is not merged" \
+  "not-merged" "$(run_main_with_pbxproj "stale")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All merge-when-green.sh classification fixtures passed."
   exit 0

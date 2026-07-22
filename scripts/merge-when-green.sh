@@ -13,10 +13,12 @@ set -euo pipefail
 # Usage: scripts/merge-when-green.sh <pr-number> [max-wait-seconds] [allow-red-base]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 
 POLL_INTERVAL_SECONDS=15
 DEFAULT_MAX_WAIT_SECONDS=900
+PBXPROJ_REL="mac/Overture.xcodeproj/project.pbxproj"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number> [max-wait-seconds] [allow-red-base]" >&2
@@ -71,6 +73,36 @@ base_branch_stop_reason() {
   esac
 }
 
+# pbxproj_check_needed <newline-separated changed paths>. Prints "yes" when the branch touches anything
+# that feeds xcodegen's generated project.pbxproj, meaning merge-when-green must verify freshness before
+# merging (Decision 2 of #1368); prints nothing otherwise. Any path under mac/ counts EXCEPT mac/scripts/
+# and mac/build/, which never affect the generated project (a new .swift under mac/Overture does, with no
+# project.yml edit, since xcodegen globs the source tree). Pure over the file list, so it is testable
+# without gh. Kept apart from the fetch/xcodegen work below so the DECISION stays cheap and reviewable.
+pbxproj_check_needed() {
+  local paths="$1"
+  if grep -vE '^mac/(scripts|build)/' <<< "${paths}" | grep -qE '^mac/'; then
+    echo "yes"
+  fi
+}
+
+# Fetches the PR branch into a throwaway worktree and runs check-pbxproj-fresh.sh against it, returning
+# that gate's verdict (0 fresh, non-zero stale or unverifiable). A real side-effecting helper (git fetch +
+# worktree + xcodegen), named and extracted so a fixture can stub it and drive the merge DECISION without
+# touching git. Mirrors verify-and-merge-branch.sh's setup/cleanup worktree pair (a candidate for a shared
+# helper if a third caller appears).
+verify_branch_pbxproj_fresh() {
+  local pr_number="$1"
+  local branch worktree rc=0
+  branch="$(gh_as_danwright32 pr view "${pr_number}" -R "${REPO}" --json headRefName --jq .headRefName)"
+  worktree="$(mktemp -d "${TMPDIR:-/tmp}/overture-pbxproj-${branch//\//-}.XXXXXX")"
+  git -C "${REPO_ROOT}" fetch -q origin "${branch}"
+  git -C "${REPO_ROOT}" worktree add -q --detach "${worktree}" "origin/${branch}"
+  "${SCRIPT_DIR}/check-pbxproj-fresh.sh" "${worktree}" || rc=$?
+  git -C "${REPO_ROOT}" worktree remove --force "${worktree}" 2>/dev/null || true
+  return "${rc}"
+}
+
 # The base branch's latest completed run conclusion, or "" when it cannot be known (API outage,
 # no runs yet, still going). Split from the decision above so the decision stays pure/testable.
 base_branch_conclusion() {
@@ -117,6 +149,22 @@ main() {
           echo "Warning: could not determine whether ${BASE_BRANCH:-main} is green (its last run reported: '${BASE_CONCLUSION}'). Merging on the strength of this PR's own checks." >&2
           ;;
       esac
+
+      # Decision 2 (#1368): remote CI no longer covers the Mac project since #1347, so a stale committed
+      # project.pbxproj could ride in unseen. When (and only when) this branch touches the Mac app, verify
+      # freshness in a throwaway worktree and BLOCK a stale one, the same gate verify-and-merge enforces. A
+      # branch that touches nothing under mac/ cannot have changed the generated project, so it skips this.
+      CHANGED_PATHS="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null || echo "")"
+      if [[ -n "$(pbxproj_check_needed "${CHANGED_PATHS}")" ]]; then
+        echo
+        echo "Branch touches the Mac app; verifying ${PBXPROJ_REL} is fresh before merging..."
+        if ! verify_branch_pbxproj_fresh "${PR_NUMBER}"; then
+          echo
+          echo "Stopped: ${PBXPROJ_REL} is stale or could not be verified on this branch, so this merge would land a project file that does not match mac/project.yml. Not merging." >&2
+          echo "Regenerate it (cd mac && xcodegen generate), commit the result, and rerun this script." >&2
+          exit 1
+        fi
+      fi
 
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
