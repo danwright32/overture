@@ -173,6 +173,11 @@ struct PrepResultsContractTests {
         // A medium-confidence contact carries no source citation.
         #expect(multi.contacts?[1].confidence == "medium")
         #expect(multi.contacts?[1].sourceUrl == nil)
+        // #5 Phase 0: `variant` now carries the opener archetype the drafter actually produced (one of
+        // the four #362 shapes), not the retired constant "rate_stated". This fixture's body is a
+        // reason-first opener ("I photograph performing arts in New York and saw ..."), so its echo is
+        // that token. (The frozen v1-v5 fixtures keep their historical "rate_stated" and are untouched.)
+        #expect(multi.draft?.variant == "reason-first")
     }
 
     // MARK: - Negative paths (#747)
