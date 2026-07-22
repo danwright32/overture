@@ -56,6 +56,12 @@ echo "==> scripts/check-detached-runner-scope.sh"
 echo "==> scripts/check-live-store-claims.sh"
 "${REPO_ROOT}/scripts/check-live-store-claims.sh"
 
+# Blocks a STALE committed mac/Overture.xcodeproj/project.pbxproj from reaching main (#1368). Compares it
+# against a fresh xcodegen generate and BLOCKS on any difference; a xcodegen version mismatch says "cannot
+# verify" rather than a false "stale". Local-only like the Swift suite below (CI has no xcodegen/Xcode).
+echo "==> scripts/check-pbxproj-fresh.sh"
+"${REPO_ROOT}/scripts/check-pbxproj-fresh.sh"
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 

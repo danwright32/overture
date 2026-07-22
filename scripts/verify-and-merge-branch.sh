@@ -41,13 +41,16 @@ setup_worktree() {
   git -C "${REPO_ROOT}" worktree add --detach "${WORKTREE_DIR}" "origin/${branch}"
 }
 
-# Runs the full local suite in the given worktree. Regenerates the Xcode project first, mirroring
-# CI's own swift-tests job, since an older branch's checked-in .pbxproj could be stale relative to
-# its own Swift files. Named and extracted so a test can stub it to simulate a clean or failing
-# run without spending minutes on a real xcodebuild invocation.
+# Runs the full local suite in the given worktree. #1368: it used to run `xcodegen generate` FIRST, which
+# silently rewrote a STALE committed .pbxproj in this throwaway worktree so the staleness passed here and
+# then landed on main anyway. Instead, check freshness BEFORE anything regenerates the project:
+# check-pbxproj-fresh.sh does its own regen-and-restore and BLOCKS on a stale committed file (comparing a
+# file to a fresh regen, not to itself). It runs again inside test-all.sh, so this is the belt for the
+# merge path's suspenders. Named and extracted so a test can stub it to simulate a clean or failing run
+# without spending minutes on a real xcodebuild invocation.
 run_full_suite() {
   local dir="$1"
-  ( cd "${dir}/mac" && xcodegen generate )
+  "${dir}/scripts/check-pbxproj-fresh.sh" "${dir}"
   "${dir}/scripts/test-all.sh"
 }
 
