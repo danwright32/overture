@@ -527,6 +527,9 @@ struct RootView: View {
                         Button("Stage self-send test lead") { debugStageSelfSendLead() }
                         Button("Stage multi-recipient self-send lead") { debugStageMultiRecipientSelfSendLead() }
                         Button("Stage visual-QA scenario (draft + signature + double-booking)") { debugStageVisualQAScenario() }
+                        Button("Stage warm-register returning-client draft") { debugStageWarmRegisterDraft() }
+                        Button("Stage re-prep-queued draft") { debugStageReprepQueuedDraft() }
+                        Button("Stage reachability competition (best-contact highlight)") { debugStageReachabilityCompetition() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
                     } label: {
                         Label("DEBUG", systemImage: "ladybug")
@@ -797,6 +800,36 @@ struct RootView: View {
         do {
             try context.save()
             status.set("DEBUG: staged visual-QA scenario. Open '\(p.groupName)' in Review for the signature preview and the double-booking flag")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func debugStageWarmRegisterDraft() {
+        let p = DebugStaging.stageWarmRegisterDraft(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged warm-register returning-client draft. Open '\(p.groupName)' in Review")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func debugStageReprepQueuedDraft() {
+        let p = DebugStaging.stageReprepQueuedDraft(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged re-prep-queued draft. Open '\(p.groupName)' in Review for the 'Re-prep queued' badge")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func debugStageReachabilityCompetition() {
+        let shows = DebugStaging.stageReachabilityCompetition(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged \(shows.count) shows competing on one date. The emailable one carries the best-contact highlight")
         } catch {
             status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
