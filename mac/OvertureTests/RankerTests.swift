@@ -23,11 +23,12 @@ struct RankerTests {
         #expect(r.tier == .high)
     }
 
-    @Test func declinedByYouIsNearlyAsHotAsBooked() {
-        // Dan turned them down, almost always a date conflict: a strong shot next time.
+    @Test func declinedByYouIsNeutralLikeAColdLead() {
+        // #1362: a past decline (usually just an old date conflict) is irrelevant to a future pitch, so
+        // it neither boosts nor penalizes, scoring 0 like a cold lead rather than nearly as hot as booked.
         let r = Ranker.scoreFit(candidate(prior: .declinedByYou))
-        #expect(r.score == 18)
-        #expect(r.tier == .high)
+        #expect(r.score == 0)
+        #expect(r.tier == .longshot)
     }
 
     @Test func warmIsAStrongBoost() {

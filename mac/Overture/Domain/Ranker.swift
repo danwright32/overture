@@ -73,7 +73,10 @@ enum Ranker {
     static func priorPoints(_ r: PriorRelationship) -> Int {
         switch r {
         case .booked: return 20
-        case .declinedByYou: return 18
+        // #1362: a past decline is usually just an old date conflict, irrelevant to a future pitch.
+        // Kept as a distinct status (it still exists in booking history) but weighted neutral, like a
+        // cold lead, so it neither floats a declined show to the top nor auto-corrects a warm lead.
+        case .declinedByYou: return 0
         case .warm: return 10
         case .lostSoft: return 3
         case .contacted: return 0   // #70: a bare send that got silence is not warm

@@ -7,11 +7,11 @@
     "expectedTier": "high"
   },
   {
-    "description": "declined_by_you is nearly as hot as booked",
+    "description": "declined_by_you is neutral, not a boost (#1362)",
     "candidate": { "reachable": true, "priorRelationship": "declined_by_you", "production": "unknown", "profile": "neutral", "coverage": "unknown", "discipline": "other" },
     "expectedExcluded": false,
-    "expectedScore": 18,
-    "expectedTier": "high"
+    "expectedScore": 0,
+    "expectedTier": "longshot"
   },
   {
     "description": "warm is a strong boost",
