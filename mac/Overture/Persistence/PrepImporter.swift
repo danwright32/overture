@@ -330,10 +330,10 @@ enum PrepImporter {
             // resolves declined/lost statuses perfectly well. Without this comparison, a merely-warm
             // performer match on an already-booked prospect would CUT its score.
             //
-            // Compared on Ranker.priorPoints, the app's single definition of a better lead (Dan's call,
-            // 2026-07-11). That ranks declined_by_you (18) above warm (10), so a performer Dan turned
-            // down does count as an upgrade over an untested warm name: they know him and they wanted
-            // him. Deliberate, and locked by a test.
+            // Compared on Ranker.priorPoints, the app's single definition of a better lead. Since #1362
+            // a past decline is neutral (0), not above warm (10), so a declined performer match no longer
+            // overwrites a warm prospect: whether Dan declined a group before is irrelevant to a future
+            // pitch. Reading the ranker's own weights keeps this honest if they are ever retuned again.
             guard Ranker.priorPoints(verdict.relationship) > Ranker.priorPoints(current) else { continue }
 
             // Snapshot BEFORE mutating, so a dismissal restores exactly what the scout had rather than

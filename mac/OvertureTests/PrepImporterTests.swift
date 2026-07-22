@@ -963,7 +963,7 @@ struct PrepImporterTests {
     // MARK: - Performer-name warm-lead detection (#751, plan #748, issue #585)
 
     // Scores below are all: music 1 + self 2 + strong 2 + likely_uncovered 2 = 7, plus the prior.
-    // So none = 7, warm = 17, declined_by_you = 25, booked = 27.
+    // So none = 7, declined_by_you = 7 (#1362: neutral), warm = 17, booked = 27.
     private func performerProspect(_ ctx: ModelContext, prior: String = "none",
                                    production: String = "self") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Emerging Artists Series",
@@ -1080,12 +1080,11 @@ struct PrepImporterTests {
         #expect(!p.relationshipCorrectedByPerformerMatch)
     }
 
-    // Dan's call, 2026-07-11: trust the ranker's one definition of a better lead. It scores
-    // declined_by_you (18) ABOVE warm (10), because someone who approached you and got turned down
-    // knows you and wanted you, which beats an untested warm name. So this counts as an upgrade and
-    // applies, even though "declined" sounds like a downgrade in plain English. Locked here so the
-    // behavior is visible rather than surprising.
-    @Test func aDeclinedPerformerOutranksAMerelyWarmProspectAndStillApplies() throws {
+    // #1362 (revised from #751's 2026-07-11 call): a past decline is now neutral (0), below warm (10),
+    // so a declined performer match is not "worth correcting" (isWorthCorrecting reads the ranker's own
+    // floor) and must NOT overwrite a genuinely warm prospect. Whether Dan declined a group before is
+    // irrelevant to a future pitch, so the warm lead stands, unchanged.
+    @Test func aDeclinedPerformerMatchDoesNotDowngradeAWarmProspect() throws {
         let ctx = ModelContext(try container())
         let p = performerProspect(ctx, prior: "warm")
         #expect(p.fitScore == 17)
@@ -1093,9 +1092,9 @@ struct PrepImporterTests {
         _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx, clients: [],
                                 history: [HistoryRecord(groupName: "Marisol Vega", status: "declined")])
 
-        #expect(p.priorRelationship == "declined_by_you")
-        #expect(p.fitScore == 25)
-        #expect(p.relationshipCorrectedByPerformerMatch)
+        #expect(p.priorRelationship == "warm")
+        #expect(p.fitScore == 17)
+        #expect(!p.relationshipCorrectedByPerformerMatch)
     }
 
     @Test func anAgencyProducedProspectIsNeverPerformerMatched() throws {
