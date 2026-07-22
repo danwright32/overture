@@ -24,10 +24,11 @@ struct ProspectRowGuardTests {
     }
 }
 
-// #349: genre and production type are two independent classifications (a show has both, they
-// are never alternatives), so the confirm/fix menu must present them as two distinct labeled
-// sections instead of one flat single-select list with a bare divider.
-@Suite("Unsure-call menu separates genre from production type")
+// #349/#1363: genre and production type are two independent classifications (a show has both, they
+// are never alternatives). The confirm editor must present BOTH at once, as two separate pickers, so
+// Dan can set either or both in one pass. #1363 replaced the old one-dimension-at-a-time menu, which
+// dismissed itself on the first pick and locked him out of the second dimension.
+@Suite("Confirm editor presents genre and production type together")
 struct UnsureCallMenuGuardTests {
     private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
         SourceGuardHelper.source(relativeFromMac, file: file)
@@ -35,26 +36,26 @@ struct UnsureCallMenuGuardTests {
 
     private var prospectRow: String { source("Overture/UI/ProspectRowView.swift") }
 
-    @Test func genreAndProductionAreSeparatelyLabeledSubmenus() {
+    @Test func genreAndProductionAreSeparatePickers() {
         #expect(!prospectRow.isEmpty)
-        #expect(prospectRow.contains("Menu(\"Genre\")"))
-        #expect(prospectRow.contains("Menu(\"Production type\")"))
+        #expect(prospectRow.contains("Picker(\"Genre\""))
+        #expect(prospectRow.contains("Picker(\"Production type\""))
     }
 
-    // The discipline choices belong inside the Genre submenu, the production choices inside the
-    // Production type submenu, not sitting flat in the outer menu alongside them.
-    @Test func disciplineChoicesAreNestedInsideTheGenreSubmenu() {
-        guard let genreRange = prospectRow.range(of: "Menu(\"Genre\")") else {
-            Issue.record("Genre submenu not found")
+    // The discipline choices belong inside the Genre picker, the production choices inside the
+    // Production type picker.
+    @Test func disciplineChoicesAreInsideTheGenrePicker() {
+        guard let genreRange = prospectRow.range(of: "Picker(\"Genre\"") else {
+            Issue.record("Genre picker not found")
             return
         }
         let after = prospectRow[genreRange.upperBound...].prefix(300)
         #expect(after.contains("Discipline.allCases"))
     }
 
-    @Test func productionChoicesAreNestedInsideTheProductionSubmenu() {
-        guard let productionRange = prospectRow.range(of: "Menu(\"Production type\")") else {
-            Issue.record("Production type submenu not found")
+    @Test func productionChoicesAreInsideTheProductionPicker() {
+        guard let productionRange = prospectRow.range(of: "Picker(\"Production type\"") else {
+            Issue.record("Production type picker not found")
             return
         }
         let after = prospectRow[productionRange.upperBound...].prefix(300)
@@ -84,19 +85,18 @@ struct AutoConfirmClassificationGuardTests {
         #expect(prospectRow.contains(".popover(isPresented: $showConfirmClassification)"))
     }
 
-    @Test func thePopoverOffersTheSameThreeResolutions() {
-        guard let popoverRange = prospectRow.range(of: ".popover(isPresented: $showConfirmClassification)") else {
-            Issue.record("Confirm popover not wired")
-            return
-        }
-        // The popover's content view is defined nearby; search the whole file for the three
-        // resolution actions it must offer (reusing the same closures as the manual menu).
-        let content = prospectRow[popoverRange.lowerBound...]
-        #expect(content.contains("This looks right"))
-        #expect(content.contains("onMarkConfidenceReviewed"))
-        #expect(content.contains("Self-produced"))
-        #expect(content.contains("Agency/presented"))
-        #expect(content.contains("Discipline.allCases"))
+    // #1363: the editor resolves one Confirm through ClassificationResolution: an unchanged guess
+    // accepts it (onMarkReviewed, no override), a change corrects only what changed (onCorrect). Both
+    // paths must be wired, or the editor could silently drop one. The resolve LOGIC itself is proven
+    // behaviorally in ClassificationResolutionTests; this only pins that the view calls it and routes
+    // both outcomes.
+    @Test func theEditorRoutesBothAcceptAndCorrectThroughTheResolver() {
+        #expect(prospectRow.contains("ClassificationResolution.resolve"))
+        #expect(prospectRow.contains("case .acceptAsIs"))
+        #expect(prospectRow.contains("onMarkReviewed()"))
+        #expect(prospectRow.contains("case let .correct("))
+        #expect(prospectRow.contains("onCorrect("))
+        #expect(prospectRow.contains("Button(\"Confirm\")"))
     }
 }
 

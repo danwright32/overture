@@ -47,4 +47,17 @@ struct ClassificationOverrideTests {
         #expect(p.production == "agency")
         #expect(p.classificationOverriddenByDan == true)
     }
+
+    // #1363: the confirm editor sends both genre and production in one call. A single correction must
+    // write both and mark the uncertainty reviewed, so the badge clears in one pass instead of vanishing
+    // after the first of two picks (the bug).
+    @Test func correctingBothDimensionsInOneCallWritesBothAndMarksReviewed() {
+        let p = prospect(discipline: "music", production: "self")
+        p.confidenceReviewedByDan = false
+        ClassificationOverride.correct(p, discipline: .opera, production: .agency, now: Date())
+        #expect(p.discipline == "opera")
+        #expect(p.production == "agency")
+        #expect(p.classificationOverriddenByDan == true)
+        #expect(p.confidenceReviewedByDan == true)
+    }
 }
