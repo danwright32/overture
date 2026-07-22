@@ -174,9 +174,18 @@ enum ProspectMutations {
         guard let town = item.excludableTown else { return }
         switch ExcludedTownEditing.exclude(town: town, into: context) {
         case .added:
+            // #1238: blocking a town now REMOVES its shows, not just future ones. The refusal alone was a
+            // view-time filter the stage views never applied (#1134), so the show stayed on screen. Dismiss
+            // the matching shows (the base query hides dismissed everywhere) and persist. Undo reverses both
+            // halves: un-block the town AND bring its shows back, or Undo would leave them stuck dismissed.
+            ExcludedTownRetirement.run(in: context)
+            context.saveOrWarn(org: town, feedback: feedback)
+            let normalized = ExcludedTownEditing.normalize(town)
             feedback.acknowledge(ActionAck.townExcluded(town: town),
                                  action: .init(label: "Undo") {
                                      ExcludedTownEditing.remove(town: town, in: context)
+                                     ExcludedTownRetirement.restore(town: normalized, in: context)
+                                     context.saveOrWarn(org: town, feedback: feedback)
                                  })
         case .alreadyExcluded:
             feedback.acknowledge(ActionAck.townAlreadyExcluded(town: town))

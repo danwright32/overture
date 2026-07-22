@@ -389,6 +389,16 @@ enum ScoutService {
                 outcome.saveFailed = true
             }
         }
+        // #1238: retire any show a blocked town this run may have (re-)surfaced, so blocking a town keeps
+        // future scouts out too, not just the shows present when Dan blocked it. Idempotent; only saves if
+        // it changed something.
+        if ExcludedTownRetirement.run(in: context) > 0 {
+            do {
+                try context.save()
+            } catch {
+                outcome.saveFailed = true
+            }
+        }
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date(), in: defaults)
         return outcome
