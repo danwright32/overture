@@ -192,7 +192,8 @@ struct QueueView: View {
             .sheet(item: $pendingProbe) { pending in
                 SelfBookingConfirmSheet(
                     title: ReachabilityProbeCopy.confirmTitle(count: pending.keys.count),
-                    message: ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel),
+                    message: ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel,
+                                                                  count: pending.keys.count),
                     proceedLabel: ReachabilityProbeCopy.confirmProceed,
                     onProceed: { onProbeReachability(Set(pending.keys)); pendingProbe = nil },
                     onCancel: { pendingProbe = nil })
@@ -825,9 +826,12 @@ struct ReachabilityProbeControl: View {
     var body: some View {
         if !isScout && !isDismissed && QueueModel.showsReachabilityProbeControl(items) {
             let count = QueueModel.reachabilityProbeCandidateKeys(items).count
+            // #1334: a lone stale show gets the re-check headline; two or more get the comparison framing.
+            let isLoneRecheck = QueueModel.isLoneStaleRecheck(items)
             HStack(spacing: OVSpacing.sm) {
                 Image(systemName: "envelope.badge").foregroundStyle(OVColor.forest)
-                Text(ReachabilityProbeCopy.calloutHeadline(count: count))
+                Text(isLoneRecheck ? ReachabilityProbeCopy.staleRecheckHeadline
+                                   : ReachabilityProbeCopy.calloutHeadline(count: count))
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(OVColor.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: OVSpacing.sm)

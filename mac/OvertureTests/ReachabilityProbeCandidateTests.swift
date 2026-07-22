@@ -56,4 +56,39 @@ struct ReachabilityProbeCandidateTests {
         #expect(QueueModel.showsReachabilityProbeControl([item("a"), item("b")]) == true) // two
         #expect(QueueModel.showsReachabilityProbeControl([item("a", status: .drafted)]) == false)
     }
+
+    // #1334: a single show whose earlier probe has gone STALE still needs a re-check affordance, even with no
+    // sibling to compare, because its "Reachability may be out of date" badge tells Dan to run the check
+    // again. So the control shows for a lone stale show. A lone NEVER-probed show still shows nothing (the
+    // value of a FIRST probe is comparing several; Overture does not spend on one in isolation), and a lone
+    // FRESHLY probed show is not a candidate at all.
+    @Test func aLoneStaleShowSurfacesTheRecheckControl() {
+        let probedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let afterWindow = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
+        let withinWindow = probedAt.addingTimeInterval(1)
+        var stale = item("s"); stale.reachabilityProbedAt = probedAt
+
+        #expect(QueueModel.isLoneStaleRecheck([stale], now: afterWindow) == true)
+        #expect(QueueModel.showsReachabilityProbeControl([stale], now: afterWindow) == true)
+
+        // A lone never-probed show stays silent: no first probe in isolation.
+        #expect(QueueModel.isLoneStaleRecheck([item("a")], now: afterWindow) == false)
+        #expect(QueueModel.showsReachabilityProbeControl([item("a")], now: afterWindow) == false)
+
+        // A lone freshly probed show is not a candidate, so there is nothing to re-check yet.
+        #expect(QueueModel.isLoneStaleRecheck([stale], now: withinWindow) == false)
+        #expect(QueueModel.showsReachabilityProbeControl([stale], now: withinWindow) == false)
+
+        // Two open candidates is the comparison case, not a lone re-check.
+        #expect(QueueModel.isLoneStaleRecheck([item("a"), item("b")], now: afterWindow) == false)
+        #expect(QueueModel.showsReachabilityProbeControl([item("a"), item("b")], now: afterWindow) == true)
+
+        // A booked sibling on the same date is not a candidate, so a lone stale show beside it still counts
+        // as a lone re-check, not a comparison.
+        var staleBesideBooked = item("s2"); staleBesideBooked.reachabilityProbedAt = probedAt
+        #expect(QueueModel.showsReachabilityProbeControl([staleBesideBooked, item("x", booked: true)],
+                                                         now: afterWindow) == true)
+        #expect(QueueModel.isLoneStaleRecheck([staleBesideBooked, item("x", booked: true)],
+                                              now: afterWindow) == true)
+    }
 }

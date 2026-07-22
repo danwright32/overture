@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **737 sentences**, from 243 source files.
+Every sentence Overture can say to Dan: **740 sentences**, from 243 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -382,6 +382,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Check reachability"
     `Domain/Reachability.swift`
 "Check reachability for these \(count) shows?"
+    `Domain/Reachability.swift`
+"Check reachability for this show?"
     `Domain/Reachability.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
@@ -952,6 +954,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Quit Overture"
     `App/MenuBarContent.swift`
+"Re-check this show's reachability before you decide."
+    `Domain/Reachability.swift`
 "Re-prep kept"
     `App/RootView.swift`
 "Re-prep queued"
@@ -1308,6 +1312,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "This looks right"
     `UI/ProspectRowView.swift`
+"This looks up a real contact for the still-open show on \(dateLabel), so you can tell whether it's still emailable before you keep it. It spends a little on that lookup, only for the show you check here."
+    `Domain/Reachability.swift`
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     `Domain/Reachability.swift`
 "This old draft may still have a name in the greeting Overture couldn't safely remove; "

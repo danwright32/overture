@@ -69,6 +69,30 @@ struct ReachabilityProbeControlTests {
         }
     }
 
+    // #1334: a single show whose earlier probe has gone stale still renders the callout, but with the
+    // re-check headline (not the "N shows compete" comparison framing), and the Check button to run it.
+    // The probe date is long past, so it is stale against the wall clock the view reads whenever this runs.
+    @Test func aLoneStaleShowRendersTheRecheckCallout() throws {
+        var stale = item("s"); stale.reachabilityProbedAt = Date(timeIntervalSince1970: 1_000_000)
+        let view = ReachabilityProbeControl(items: [stale], dateLabel: "Sep 12",
+                                            isScout: false, isRunning: false, onTap: { _, _ in })
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.lowercased().contains("re-check") })      // action-framed re-check headline
+        #expect(!texts.contains { $0.contains("compete") })                   // not the comparison headline
+        _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)   // Check button present
+    }
+
+    // #1334: the lone re-check copy leads with the action (the row's own badge already states the stale
+    // condition, #843) and reads for ONE show (not "these 1 shows"); the comparison copy for two or more is
+    // unchanged.
+    @Test func theLoneRecheckCopyReadsForOneShow() {
+        #expect(ReachabilityProbeCopy.staleRecheckHeadline.lowercased().contains("re-check"))
+        #expect(!ReachabilityProbeCopy.staleRecheckHeadline.lowercased().contains("out of date"))
+        #expect(ReachabilityProbeCopy.confirmTitle(count: 1) == "Check reachability for this show?")
+        #expect(ReachabilityProbeCopy.confirmTitle(count: 3) == "Check reachability for these 3 shows?")
+    }
+
     // #1336: the control is a proactive first-party CALLOUT, not a passive button Dan must remember. It
     // names how many shows compete for the date so he checks which are emailable before he keeps one.
     @Test func theCalloutHeadlineNamesTheCountAndTheAsk() {
