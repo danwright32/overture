@@ -78,11 +78,30 @@ enum GroupNameMatch {
     // unrelated larger one ("New York Theatre Ballet").
     private static let minContainmentFraction = 0.6
 
+    // A single-token acronym is a confident match for a multi-token name when its letters ARE that
+    // name's word-initials, one letter per word, in order (#1351). "nyys" <-> New York Youth Symphony.
+    // Kept deliberately tight so it can never loosen the >= 2 token guard below into a false client
+    // match, the risk #1351 flagged:
+    //   - the acronym's length must EQUAL the word count, so a stray short token can't match a longer
+    //     name on a prefix of its initials ("nyc" is not "New York City Ballet"), and
+    //   - it must be >= 2 letters, since a single letter would collide with almost anything.
+    // A leading-word abbreviation (TENET for "TENET Vocal Artists") is NOT an acronym of the name and
+    // is intentionally excluded: its length (5) never equals the word count (3).
+    private static func isAcronymMatch(_ a: [String], _ b: [String]) -> Bool {
+        let (short, long) = a.count <= b.count ? (a, b) : (b, a)
+        guard short.count == 1, long.count >= 2 else { return false }
+        let acronym = short[0]
+        guard acronym.count >= 2, acronym.count == long.count else { return false }
+        let initials = String(long.compactMap { $0.first })
+        return acronym == initials
+    }
+
     static func isConfident(_ a: String, _ b: String) -> Bool {
         let ta = tokens(a)
         let tb = tokens(b)
         if ta.isEmpty || tb.isEmpty { return false }
         if ta.joined(separator: " ") == tb.joined(separator: " ") { return true }
+        if isAcronymMatch(ta, tb) { return true }
 
         let (short, long) = ta.count <= tb.count ? (ta, tb) : (tb, ta)
         if short.count < 2 { return false }
