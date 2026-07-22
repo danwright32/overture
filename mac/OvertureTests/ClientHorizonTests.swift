@@ -131,5 +131,13 @@ struct ClientHorizonTests {
         #expect(ClientTagCopy.stateLabel(isClient: true, override: nil)?.contains("Downbeat") == true)
         // The overwhelmingly common case: an untagged source no client matches says nothing at all.
         #expect(ClientTagCopy.stateLabel(isClient: false, override: nil) == nil)
+        // #1358: when the "always" tag names a specific Downbeat client, the line names it, and still
+        // states the year-ahead horizon. A bare "always" (no named client) keeps the unnamed wording.
+        #expect(ClientTagCopy.stateLabel(isClient: true, override: true, namedClient: "Brooklyn Youth Chorus")?
+            .contains("Brooklyn Youth Chorus") == true)
+        #expect(ClientTagCopy.stateLabel(isClient: true, override: true, namedClient: "Brooklyn Youth Chorus")?
+            .contains("year") == true)
+        #expect(ClientTagCopy.stateLabel(isClient: true, override: true, namedClient: nil)?
+            .contains("Brooklyn") == false)
     }
 }

@@ -164,6 +164,14 @@ final class WatchedSource {
     // Defaulted nil so the SwiftData migration is lightweight and every ordinary source is unaffected.
     var clientTagOverride: Bool? = nil
 
+    // #1358: which Downbeat client a `clientTagOverride == true` tag NAMES (the client's stable Downbeat
+    // id), for the shared-venue case where the source org name is the venue, not the client, so the
+    // automatic name-match can never recognize the client. Only meaningful when clientTagOverride == true;
+    // nil means a bare "always" tag that arms the year-ahead horizon (ClientHorizon) but names no specific
+    // client. When set, ClientCoverage.isArmed counts that client as covered for real, instead of leaving it
+    // a standing gap Dan can only silence by hiding it. Defaulted nil for a lightweight SwiftData migration.
+    var clientTagClientId: String? = nil
+
     // #1236: some sources list one concert as several rows, one per conductor (DCINY). When set, the scout
     // merges every same-date, same-venue listing from this source into one prospect (via a synthetic
     // seriesId stamped at ingest, see SameDateVenueMerge), keeping every conductor name. Defaulted false so

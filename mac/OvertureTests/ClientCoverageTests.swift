@@ -15,9 +15,10 @@ struct ClientCoverageTests {
                        notes: nil, hostingSite: "")
     }
 
-    private func source(_ org: String, tag: Bool? = nil) -> WatchedSource {
+    private func source(_ org: String, tag: Bool? = nil, clientId: String? = nil) -> WatchedSource {
         let s = WatchedSource(sourceId: org, orgName: org, listingsURL: "https://\(org).example/e", kind: .html)
         s.clientTagOverride = tag
+        s.clientTagClientId = clientId
         return s
     }
 
@@ -55,6 +56,37 @@ struct ClientCoverageTests {
     @Test func aSourceTaggedAlwaysStillArmsAMatchingClient() {
         let clients = [client("Brooklyn Youth Chorus")]
         #expect(unarmedNames([source("Brooklyn Youth Chorus", tag: true)], clients).isEmpty)
+    }
+
+    // MARK: arming by a tag that NAMES a client (#1358)
+
+    // The shared-venue case this feature exists for: the source is a venue whose name does not match the
+    // client at all (Merkin Concert Hall vs Brooklyn Youth Chorus), but Dan tagged it "always" and named
+    // WHICH Downbeat client performs there. That client is armed for real, not merely silenceable by hiding.
+    @Test func aTagThatNamesAClientArmsItWithoutANameMatch() {
+        let clients = [client("Brooklyn Youth Chorus", id: "byc-id")]
+        let sources = [source("Merkin Concert Hall", tag: true, clientId: "byc-id")]
+        #expect(unarmedNames(sources, clients).isEmpty)
+    }
+
+    // A bare "always" tag (no named client) does NOT arm an unmatched client: naming is what arms a
+    // specific client in the diagnostic, so the bare tag keeps its old name-only behavior and the gap
+    // stays visible.
+    @Test func aBareAlwaysTagDoesNotArmAnUnmatchedClient() {
+        let clients = [client("Brooklyn Youth Chorus", id: "byc-id")]
+        let sources = [source("Merkin Concert Hall", tag: true)]
+        #expect(unarmedNames(sources, clients) == ["Brooklyn Youth Chorus"])
+    }
+
+    // A source that names a specific client is not offered as a near-miss for a DIFFERENT unarmed client,
+    // even when their names fuzzily overlap: Dan already told Overture who that source is.
+    @Test func aSourceThatNamesAClientIsNotANearMissForAnother() {
+        let clients = [client("Manhattan Chamber Players", id: "mcp-id"),
+                       client("Some Other Client", id: "other-id")]
+        let sources = [source("Manhattan Chamber Orchestra", tag: true, clientId: "other-id")]
+        let result = ClientCoverage.unarmed(sources: sources, clients: clients, dismissedIds: [])
+        #expect(result.map(\.client.displayName) == ["Manhattan Chamber Players"])
+        #expect(result.first?.nearMissSourceName == nil)
     }
 
     // MARK: near-miss hint (the precise word-containment rule, not fuzzy Jaccard)

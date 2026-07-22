@@ -30,8 +30,16 @@ enum ClientCoverage {
         return HistoryMatch.clientNames(client).contains { GroupNameMatch.isConfident(source.orgName, $0) }
     }
 
+    // #1358: a source arms a client BY TAG when Dan tagged it "always" AND named THIS client on the tag
+    // (WatchedSource.clientTagClientId). This is the shared-venue case the name match can never catch: the
+    // source org name is the venue, not the client, so armsByName is structurally false, yet Dan knows the
+    // client performs there. A bare "always" tag (no named client) does not arm any specific client here.
+    static func armsByTag(_ source: WatchedSource, _ client: DownbeatClient) -> Bool {
+        source.clientTagOverride == true && source.clientTagClientId == client.id
+    }
+
     static func isArmed(_ client: DownbeatClient, sources: [WatchedSource]) -> Bool {
-        sources.contains { armsByName($0, client) }
+        sources.contains { armsByName($0, client) || armsByTag($0, client) }
     }
 
     // A source that is PROBABLY this client but does not confidently match: not tagged "Never", not
@@ -44,7 +52,11 @@ enum ClientCoverage {
     // A >= 3 letter floor keeps a stray two-letter token from matching noise.
     static func nearMissSource(for client: DownbeatClient, sources: [WatchedSource]) -> WatchedSource? {
         sources.first { source in
-            guard source.clientTagOverride != false, !armsByName(source, client) else { return false }
+            // #1358: a source that names a SPECIFIC client on its tag is never a mystery, so it is not
+            // offered as a near-miss for any client (Dan already told Overture who it is). A bare "always"
+            // tag (clientTagClientId nil) stays eligible, as does an ordinary untagged source.
+            guard source.clientTagOverride != false, source.clientTagClientId == nil,
+                  !armsByName(source, client) else { return false }
             let sourceTokens = Set(GroupNameMatch.tokens(source.orgName))
             return HistoryMatch.clientNames(client).contains { name in
                 let nameTokens = GroupNameMatch.tokens(name)

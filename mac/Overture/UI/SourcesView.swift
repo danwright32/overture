@@ -398,14 +398,26 @@ struct SourcesView: View {
     private func clientTagControl(_ source: WatchedSource) -> some View {
         let isClient = ClientHorizon.isClient(source, clients: clients)
         HStack(spacing: OVSpacing.xs) {
-            if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride) {
+            if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride,
+                                                    namedClient: namedClientName(source)) {
                 Text(label).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Menu {
-                Button(ClientTagCopy.optionAutomatic) { setClientTag(source, nil) }
-                Button(ClientTagCopy.optionAlways) { setClientTag(source, true) }
-                Button(ClientTagCopy.optionNever) { setClientTag(source, false) }
+                Button(ClientTagCopy.optionAutomatic) { setClientTag(source, nil, clientId: nil) }
+                // #1358: "Always" opens a submenu to optionally name WHICH Downbeat client performs at this
+                // source (the shared-venue case, where the org name is the venue, not the client), so the
+                // coverage diagnostic can count that client as covered instead of leaving it a hidden gap.
+                Menu(ClientTagCopy.optionAlways) {
+                    clientTagAlwaysButton(source, label: ClientTagCopy.optionAlwaysNoClient, clientId: nil)
+                    if !sortedClients.isEmpty {
+                        Divider()
+                        ForEach(sortedClients, id: \.id) { c in
+                            clientTagAlwaysButton(source, label: c.displayName, clientId: c.id)
+                        }
+                    }
+                }
+                Button(ClientTagCopy.optionNever) { setClientTag(source, false, clientId: nil) }
             } label: {
                 Label(ClientTagCopy.menuTitle, systemImage: "ellipsis.circle").labelStyle(.iconOnly)
                     .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
@@ -415,8 +427,36 @@ struct SourcesView: View {
         }
     }
 
-    private func setClientTag(_ source: WatchedSource, _ value: Bool?) {
+    // One row in the "Always" submenu: tags the source "always" naming `clientId` (nil = bare always), with a
+    // checkmark on the source's current selection so Dan sees what he picked without having to guess.
+    @ViewBuilder
+    private func clientTagAlwaysButton(_ source: WatchedSource, label: String, clientId: String?) -> some View {
+        let selected = source.clientTagOverride == true && source.clientTagClientId == clientId
+        Button {
+            setClientTag(source, true, clientId: clientId)
+        } label: {
+            if selected {
+                Label(label, systemImage: "checkmark")
+            } else {
+                Text(label)
+            }
+        }
+    }
+
+    private var sortedClients: [DownbeatClient] {
+        clients.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    // The display name of the Downbeat client a source's "always" tag names, or nil for a bare tag. Only a
+    // lookup, no rule: the arming/coverage rules stay in ClientCoverage (#863).
+    private func namedClientName(_ source: WatchedSource) -> String? {
+        guard let id = source.clientTagClientId else { return nil }
+        return clients.first { $0.id == id }?.displayName
+    }
+
+    private func setClientTag(_ source: WatchedSource, _ value: Bool?, clientId: String?) {
         source.clientTagOverride = value
+        source.clientTagClientId = clientId
         try? context.save()
     }
 
