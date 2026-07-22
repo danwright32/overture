@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion4() {
+    @Test func theBuilderNowStampsVersion5() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
-        #expect(q.version == 4)
+        #expect(q.version == 5)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -125,6 +125,17 @@ struct PrepQueueContractTests {
         // The second item is single-night with no passed opening: both fields absent.
         #expect(decoded.items[1].runEndDate == nil)
         #expect(decoded.items[1].openingNightPassed == nil)
+    }
+
+    // v5 (#5): the queue item gains an optional `experimentArmInstruction`, the opener archetype an A/B
+    // experiment item must use (one of the four OpenerArchetype tokens), copied from the app-assigned
+    // Prospect.assignedArm. Additive, so v1-v4 fixtures still decode with it absent (nil).
+    @Test func theV5FixtureCarriesTheExperimentArmInstruction() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v5.json"))
+        #expect(decoded.version == 5)
+        #expect(decoded.items[0].experimentArmInstruction == "credential-first")
+        // The second item is not under an experiment: the field is absent.
+        #expect(decoded.items[1].experimentArmInstruction == nil)
     }
 
     // MARK: - Negative paths (#747)

@@ -32,7 +32,7 @@ describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
   it("covers exactly the known prep-queue files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"]);
   });
 
   for (const file of files) {
@@ -44,6 +44,20 @@ describe("prep-queue fixture shapes", () => {
 
   // #1122: the run fields are v4 additions, so the guard must reject them appearing in an older
   // fixture, the same way the prep-results guard rejects a too-new field below.
+  // #5: experimentArmInstruction is a v5 addition, so the guard must reject it on an older version.
+  it("rejects a v5 experiment field appearing in a v4 fixture", () => {
+    const mutated = readJson("prep-queue", "v4.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].experimentArmInstruction = "credential-first";
+    expect(() => assertPrepQueueShape(mutated, "v4.json", 4)).toThrow(/experimentArmInstruction.*before version 5/);
+  });
+
+  // #5: the archetype must be one of the four known tokens, not free text.
+  it("rejects an unknown experiment archetype token in a v5 fixture", () => {
+    const mutated = readJson("prep-queue", "v5.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].experimentArmInstruction = "made-up-shape";
+    expect(() => assertPrepQueueShape(mutated, "v5.json", 5)).toThrow(/experimentArmInstruction/);
+  });
+
   it("rejects a v4 run field appearing in a v3 fixture", () => {
     const mutated = readJson("prep-queue", "v3.json") as { items: Array<Record<string, unknown>> };
     mutated.items[0].runEndDate = "2026-03-14";

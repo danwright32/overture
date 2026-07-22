@@ -26,7 +26,7 @@ the workflow's runbook is its spec.
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
@@ -168,6 +168,15 @@ Queue version 3 (#367) adds an optional `reprepMode` (`draft_only` / `contacts_o
 both) to each item, set only when Dan asked to re-prep a prospect that already has a draft, so the
 run knows to skip the corresponding half instead of redoing everything. Additive; `v1.json`/
 `v2.json` stay byte-identical and still decode with it absent (nil).
+
+Queue version 5 (#5) adds an optional `experimentArmInstruction` to each item: the opener archetype
+this item MUST use (one of `reason-first` / `credential-first` / `observation-first` /
+`direct-intent`), copied from the app-assigned `Prospect.assignedArm` when the prospect belongs to an
+active A/B experiment. Absent (the common case, no active experiment) means the drafter uses the
+normal #362 opener rotation. The runbook (`docs/prep-runbook.md` §2) gives this field PRECEDENCE over
+that rotation, so an experiment item genuinely randomizes what is produced. Additive; `v1.json`
+through `v4.json` stay byte-identical and still decode with it absent (nil). (Version 4, #1122, added
+`runEndDate` + `openingNightPassed`; it had no paragraph here before this one.)
 
 Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
 the run found for the performance: the act plus at most one real presenting org, each labelled with a

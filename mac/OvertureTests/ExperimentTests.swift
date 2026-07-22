@@ -149,6 +149,33 @@ struct ExperimentTests {
         #expect(toPrep.experimentID == exp.experimentId)
     }
 
+    // #5 Phase 2: the assigned arm reaches the drafter over the queue. A prospect carrying an assignedArm
+    // produces a queue item whose experimentArmInstruction is that arm; an unassigned one carries nil.
+    @Test func buildQueueCarriesTheAssignedArmAsTheItemInstruction() throws {
+        let ctx = ModelContext(try container())
+        let assigned = Prospect(naturalKey: "assigned", groupName: "G", discipline: "music", venue: "V",
+                                performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                                priorRelationship: "none", production: "self", profile: "strong",
+                                coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                                matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                                status: .queued)
+        assigned.assignedArm = "credential-first"
+        let plain = Prospect(naturalKey: "plain", groupName: "G2", discipline: "music", venue: "V",
+                             performanceDate: "2026-08-02", sourceListingURL: nil, websiteURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .queued)
+        ctx.insert(assigned)
+        ctx.insert(plain)
+        try ctx.save()
+
+        let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "2026-06-25T00:00:00.000Z")
+        let byKey = Dictionary(uniqueKeysWithValues: queue.items.map { ($0.naturalKey, $0) })
+        #expect(byKey["assigned"]?.experimentArmInstruction == "credential-first")
+        #expect(byKey["plain"]?.experimentArmInstruction == nil)
+    }
+
     @Test func assignmentPersistsSoAReFetchSeesTheStampedArm() throws {
         let ctx = ModelContext(try container())
         let exp = Experiment(dimension: .openerShape, variantA: .reasonFirst, variantB: .credentialFirst, isActive: true)

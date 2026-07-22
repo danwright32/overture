@@ -294,6 +294,14 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   No greeting token in any shape ("I hope this finds you well" and "Hi Emma," are
   both wrong), and never fabricate a detail to fill a shape, if the listing doesn't
   supply what an archetype needs for this prospect, use a different one.
+  If this queue item carries an `experimentArmInstruction` (an A/B experiment assignment,
+  one of the four archetype tokens), use THAT archetype for this draft, even when it
+  repeats the shape of the draft just before it: the assigned archetype OVERRIDES the
+  rotate and don't repeat rule above, so the experiment genuinely randomizes what gets
+  produced. The rotation governs only items with NO `experimentArmInstruction`. The one
+  thing it does not override is "never fabricate": if the assigned archetype truly cannot
+  be written truthfully for this listing, write the closest honest shape instead (you
+  record the shape you actually wrote below, so an unavoidable mismatch stays visible).
   Record which archetype you actually used in the `variant` field, as exactly one of
   these four tokens: `reason-first`, `credential-first`, `observation-first`,
   `direct-intent`. Record the shape you WROTE (the produced opener), never a shape you

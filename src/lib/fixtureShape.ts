@@ -53,20 +53,25 @@ function requireNonNegativeInt(v: unknown, file: string, path: string): number {
 
 const PRODUCTION = ["self", "agency", "unknown"] as const;
 const REPREP_MODE = ["draft_only", "contacts_only"] as const;
+// #5 v5: the four opener archetypes an A/B experiment item can be told to use.
+const OPENER_ARCHETYPE = ["reason-first", "credential-first", "observation-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-4, additive: production at v2+ #586, reprepMode at v3+ #367,
-// runEndDate + openingNightPassed at v4+ #1122)
+// overture-prep-queue.json (versions 1-5, additive: production at v2+ #586, reprepMode at v3+ #367,
+// runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const items = requireArray(root.items, file, "items");
   // v4 (#1122): the run's closing night and a passed-opening flag, so the drafter can pitch the whole
   // run and never name a gone opening night.
   const runFieldsAllowed = version >= 4;
+  // #5 v5: the opener archetype an A/B experiment item must use (one of OPENER_ARCHETYPE), forbidden on
+  // older versions so an accidental stamp on a v1-v4 queue is caught rather than silently ignored.
+  const experimentFieldAllowed = version >= 5;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -90,6 +95,13 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       if (o.openingNightPassed !== undefined) {
         fail(file, `items[${i}].openingNightPassed must not be present before version 4`);
       }
+    }
+    if (experimentFieldAllowed) {
+      if (o.experimentArmInstruction !== undefined) {
+        requireEnum(o.experimentArmInstruction, file, `items[${i}].experimentArmInstruction`, OPENER_ARCHETYPE);
+      }
+    } else if (o.experimentArmInstruction !== undefined) {
+      fail(file, `items[${i}].experimentArmInstruction must not be present before version 5`);
     }
   });
 }

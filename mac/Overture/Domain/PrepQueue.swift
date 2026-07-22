@@ -34,10 +34,16 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // passed opening to work around". Derived with Swift date math (openingNightPassed below), never left
     // to the drafter to infer, so a draft never pitches or names the gone opening night.
     var openingNightPassed: Bool? = nil
+    // v5 (#5): the opener archetype this item MUST use, when it belongs to an active A/B experiment. One
+    // of the four OpenerArchetype tokens (reason-first / credential-first / observation-first /
+    // direct-intent), copied from the app-assigned Prospect.assignedArm. Absent (the common case: no
+    // active experiment) means the drafter uses the normal #362 rotation. The runbook gives this field
+    // PRECEDENCE over the rotation, so an experiment item genuinely randomizes what is produced.
+    var experimentArmInstruction: String? = nil
 }
 
 enum PrepQueueBuilder {
-    static let version = 4
+    static let version = 5
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
