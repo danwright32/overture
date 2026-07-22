@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **752 sentences**, from 248 source files.
+Every sentence Overture can say to Dan: **751 sentences**, from 248 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1474,8 +1474,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "You blocked \(day)."
     `Domain/BlockedCalendar.swift`
 "You confirmed this performer is a past client, so the fit score counts it and a draft can write to them as a returning client."
-    `UI/QueueView+Model.swift`
-"You declined before (usually a date conflict)"
     `UI/QueueView+Model.swift`
 "You dismissed \(org) because the dates don't work. Block the days you can't shoot, and Overture will stop pitching you for them."
     `Domain/DayOffOffer.swift`
