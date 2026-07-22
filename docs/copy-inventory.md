@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **740 sentences**, from 245 source files.
+Every sentence Overture can say to Dan: **749 sentences**, from 246 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -236,6 +236,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
+"1 ignored client"
+    `Domain/ClientCoverage.swift`
 "1 new show waiting for you"
     `Domain/SourceYield.swift`
 "1 source needs"
@@ -266,6 +268,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
+"A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
+    `Domain/ClientCoverage.swift`
 "A source couldn't be checked. Open Sources to fix or confirm it."
     `Domain/ScoutWarnings.swift`
 "A test tried to launch a real Claude run. Inject the launch seam instead."
@@ -474,6 +478,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Couldn't start the reader: \(error.localizedDescription)"
     `UI/LeadIntakeModel.swift`
+"Coverage cannot be checked right now: the Downbeat client export is missing or could not be read. Refresh it from Downbeat."
+    `Domain/ClientCoverage.swift`
 "Dan Wright"
     `Integration/GmailSender.swift`
 "Date TBD"
@@ -504,6 +510,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowFactory.swift`
 "Don't want to shoot this"
     `Domain/ReviewStatus.swift`
+"Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+    `Domain/ClientCoverage.swift`
 "Draft a reply"
     `UI/DraftReviewView.swift`
 "Drafted by \(name)"
@@ -620,6 +628,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
     `UI/DraftReviewView.swift`
+"Ignored \(name). It will not show as a coverage gap."
+    `Domain/ClientCoverage.swift`
 "In \(days) day\(days == 1 ? "" : "s"), likely too close to book"
     `UI/QueueView+Model.swift`
 "In \(days) days, good to send"
@@ -792,6 +802,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Not now"
     `UI/BlockDaysSheet.swift`
+"Not one I scout"
+    `Domain/ClientCoverage.swift`
 "Not press/media"
     `UI/DraftReviewView.swift`
 "Not read yet"
@@ -1055,6 +1067,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/NotificationService.swift`
 "Returning client"
     `Domain/ClientTagCopy.swift`
+"Returning clients not covered"
+    `Domain/ClientCoverage.swift`
 "Review and send"
     `UI/FollowUpsView.swift`
 "Run reconcile now"
@@ -1184,6 +1198,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OnboardingState.swift`
 "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
     `Domain/SourceGrade.swift`
+"Stop ignoring this"
+    `Domain/ClientCoverage.swift`
 "Stop the reply drafting run"
     `UI/DraftReviewView.swift`
 "Stop watching"
@@ -1501,6 +1517,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
+"\(count) ignored clients"
+    `Domain/ClientCoverage.swift`
 "\(count) shows compete for this date. See which you can actually email before you keep one."
     `Domain/Reachability.swift`
 "\(count) sources couldn't be checked."

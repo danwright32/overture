@@ -33,6 +33,13 @@ struct SourcesView: View {
     // known client (and so gets the returning-client year-ahead read). Read-only; only the manual tag on
     // the source is written.
     @State private var clients: [DownbeatClient] = []
+    // #1356: the export's health, kept alongside the clients it loaded. An empty client list from a
+    // MISSING or unreadable export would make the coverage diagnostic below render nothing, which reads
+    // exactly like "every client is covered". Holding the health lets that case fail loud instead.
+    @State private var clientsHealth: DownbeatBridge.Health = .ok
+    // #1356: clients Dan has marked "not one I scout", so the coverage gap list converges to real gaps.
+    @Query private var dismissedCoverage: [DismissedCoverageClient]
+    @State private var showIgnoredClients = false
 
     // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
     // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
@@ -54,6 +61,10 @@ struct SourcesView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: OVSpacing.lg) {
+                        // #1356: the coverage gap list sits above the sources, because it is where Dan acts
+                        // on a gap (add a source, or tag one below). It renders nothing when every client is
+                        // covered, which is the common case once the non-targets are dismissed once.
+                        coverageSection
                         // Sectioning, ordering and the omit-empty rule all come from the tested domain
                         // function, so this view has no judgement of its own to get wrong.
                         ForEach(SourceGrade.sections(sources), id: \.grade) { section($0.grade, $0.sources) }
@@ -82,7 +93,111 @@ struct SourcesView: View {
         .actionFeedbackBanner()
         // #1209: the Downbeat client list, read once when the sheet opens, so each row can show whether it
         // matches a known client. Read-only; nothing here writes it.
-        .task { clients = DownbeatBridge.loadWithHealth(now: Date()).clients }
+        .task {
+            let loaded = DownbeatBridge.loadWithHealth(now: Date())
+            clients = loaded.clients
+            clientsHealth = loaded.health
+        }
+    }
+
+    // #1356: Downbeat clients no watched source arms as returning, so their next season would not surface
+    // a year ahead. All the deciding (armed / near-miss / dismissed) lives in ClientCoverage, a tested pure
+    // type; this view only renders what it returns. Fails loud when the export is unavailable rather than
+    // showing an empty list that reads as "all covered".
+    @ViewBuilder
+    private var coverageSection: some View {
+        if clientsHealth != .ok {
+            coverageBox {
+                Text(CoverageCopy.coverageUnavailable)
+                    .font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            let dismissedIds = Set(dismissedCoverage.map(\.clientId))
+            let gaps = ClientCoverage.unarmed(sources: sources, clients: clients, dismissedIds: dismissedIds)
+            let ignoredClients = ClientCoverage.ignored(sources: sources, clients: clients, dismissedIds: dismissedIds)
+            if !gaps.isEmpty || !ignoredClients.isEmpty {
+                coverageBox {
+                    if !gaps.isEmpty {
+                        Text(CoverageCopy.sectionExplanation)
+                            .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(spacing: 0) {
+                            ForEach(gaps, id: \.client.id) { gap in
+                                coverageRow(gap)
+                                if gap.client.id != gaps.last?.client.id { Divider().overlay(OVColor.line) }
+                            }
+                        }
+                        .background(OVColor.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
+                    }
+                    if !ignoredClients.isEmpty {
+                        ignoredClientsDisclosure(ignoredClients)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func coverageBox<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            HStack(spacing: OVSpacing.xxs) {
+                Image(systemName: "person.crop.circle.badge.questionmark").font(.system(size: 11))
+                Text(CoverageCopy.sectionTitle).font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(OVColor.ink)
+            content()
+        }
+    }
+
+    private func coverageRow(_ gap: UnarmedClient) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(gap.client.displayName).font(.system(size: 12)).foregroundStyle(OVColor.ink)
+                if let near = gap.nearMissSourceName {
+                    Text(CoverageCopy.nearMiss(sourceName: near))
+                        .font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            Button(CoverageCopy.dismissLabel) { dismissCoverageClient(gap.client) }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+        }
+        .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.sm)
+    }
+
+    @ViewBuilder
+    private func ignoredClientsDisclosure(_ ignored: [DownbeatClient]) -> some View {
+        DisclosureGroup(isExpanded: $showIgnoredClients) {
+            VStack(spacing: 0) {
+                ForEach(ignored, id: \.id) { client in
+                    HStack {
+                        Text(client.displayName).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                        Spacer()
+                        Button(CoverageCopy.restoreLabel) { restoreCoverageClient(client.id) }
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                    }
+                    .padding(.vertical, OVSpacing.xxs)
+                }
+            }
+        } label: {
+            Text(CoverageCopy.ignoredDisclosure(count: ignored.count))
+                .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+        }
+    }
+
+    private func dismissCoverageClient(_ client: DownbeatClient) {
+        CoverageDismissEditing.dismiss(clientId: client.id, into: context)
+        feedback.acknowledge(CoverageCopy.dismissedAck(name: client.displayName),
+                             action: .init(label: "Undo") { restoreCoverageClient(client.id) })
+    }
+
+    private func restoreCoverageClient(_ clientId: String) {
+        CoverageDismissEditing.restore(clientId: clientId, in: context)
     }
 
     private var header: some View {
