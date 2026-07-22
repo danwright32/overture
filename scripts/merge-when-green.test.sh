@@ -153,27 +153,27 @@ echo
 # merge-when-green trusts remote CI, but since #1347 remote CI no longer runs the Swift/pbxproj side at
 # all, so a STALE committed project.pbxproj could ride in here unseen. Decision 2: verify freshness, but
 # only when the branch actually touches the Mac app (a branch that changed nothing under mac/ cannot have
-# changed the generated project). pbxproj_check_needed is that pure decision over the branch's file list.
+# changed the generated project). paths_touch_mac_project is that pure decision over the branch's file list.
 
 assert_equals "a new Mac source file needs the freshness check" \
-  "yes" "$(pbxproj_check_needed "mac/Overture/UI/NewView.swift")"
+  "yes" "$(paths_touch_mac_project "mac/Overture/UI/NewView.swift")"
 assert_equals "a project.yml change needs the freshness check" \
-  "yes" "$(pbxproj_check_needed "mac/project.yml")"
+  "yes" "$(paths_touch_mac_project "mac/project.yml")"
 # A mixed diff: any single mac/ app path is enough.
 assert_equals "a mixed diff touching the Mac app needs the check" \
-  "yes" "$(pbxproj_check_needed "docs/contracts.md
+  "yes" "$(paths_touch_mac_project "docs/contracts.md
 mac/OvertureTests/FooTests.swift")"
 # Nothing under mac/: cannot have changed the generated project.
 assert_equals "a TypeScript-only diff needs no check" \
-  "" "$(pbxproj_check_needed "src/lib/importHistory.ts
+  "" "$(paths_touch_mac_project "src/lib/importHistory.ts
 docs/contracts.md")"
 assert_equals "a repo-scripts-only diff needs no check" \
-  "" "$(pbxproj_check_needed "scripts/check-pbxproj-fresh.sh")"
+  "" "$(paths_touch_mac_project "scripts/check-pbxproj-fresh.sh")"
 # mac/scripts and mac/build never feed xcodegen's project generation, so they don't trigger it.
 assert_equals "a mac/scripts-only diff needs no check" \
-  "" "$(pbxproj_check_needed "mac/scripts/run-tests-locked.sh")"
+  "" "$(paths_touch_mac_project "mac/scripts/run-tests-locked.sh")"
 assert_equals "a mac/build-only diff needs no check" \
-  "" "$(pbxproj_check_needed "mac/build/Build/Products/Release/Overture.app/x")"
+  "" "$(paths_touch_mac_project "mac/build/Build/Products/Release/Overture.app/x")"
 
 echo
 # --- the WIRE from main() into the pbxproj gate ------------------------------------------

@@ -29,8 +29,14 @@ already drifting from the Swift version it mirrored.
   command (#595). This matters even more since #1347: CI no longer runs the Swift tests at
   all (only `typecheck-and-test`, on GitHub-hosted ubuntu-latest), so a local run is the ONLY
   thing that verifies the Mac app before it reaches main. The mandatory local pre-push gate
-  already runs the full Mac suite, but `test-all.sh` also catches a TypeScript-side failure
-  that CI would otherwise only surface minutes later.
+  judges that each change carries a test (and enforces the style rules); it does NOT itself run
+  the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
+  that CI would otherwise only surface minutes later. Run it before every push.
+- One-time per clone: run `scripts/install-git-hooks.sh` once in each clone/worktree (#1251
+  Phase 3). It points git at `scripts/hooks`, whose `post-merge` hook regenerates a stale
+  `mac/Overture.xcodeproj/project.pbxproj` after a merge that combined Mac source changes and
+  stages it for you to commit. It is only a convenience (it cannot fire after a conflicted merge
+  finished by a manual commit); `scripts/check-pbxproj-fresh.sh` remains the real gate.
 - Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). The scout itself is entirely native; see
   `docs/scout-runbook.md`.
