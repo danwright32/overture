@@ -21,6 +21,8 @@ What is not, and why:
 ## Excluded at the source
 
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
+- `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
+- `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan

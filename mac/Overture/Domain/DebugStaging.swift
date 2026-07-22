@@ -206,6 +206,97 @@ enum DebugStaging {
         return drafted
     }
 
+    // #1292: a returning-client "warm register" draft sitting in Review, so the #1215 warm tone keyed off a
+    // prior relationship can be SEEN in the near-empty dev store. priorRelationship = warm with a named prior
+    // client is what unlocks the warm drafting tone (priorRelationshipForDrafting), and a hand-written warm
+    // body stands in for the AI draft this seeder cannot run.
+    static func stageWarmRegisterDraft(in context: ModelContext, now: Date) -> Prospect {
+        let key = "debug-of-warmregister-\(Int(now.timeIntervalSince1970))"
+        let p = Prospect(naturalKey: key, groupName: "Aurora Strings (debug)", discipline: "music",
+                         venue: "Weill Recital Hall",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: PriorRelationship.warm.rawValue,
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 8, tier: "high", fitReason: "debug warm-register returning client",
+                         matchedClientName: "Aurora Strings", possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted)
+        // copy-inventory:ignore-start  a debug-only stand-in draft body (contact-facing email copy, not app voice)
+        p.draftSubject = "Lovely to work together again"
+        p.draftBody = "Hi Jordan,\n\nIt was such a pleasure photographing your ensemble last season. I would "
+            + "love to be there again for your upcoming concert if the timing works.\n\nHappy to answer any questions."
+        // copy-inventory:ignore-end
+        let email = "warm@debug.example"
+        let recipient = Recipient(id: Recipient.makeId(email: email, formURL: nil) ?? email, email: email,
+                                  name: "Jordan Ellis (debug)", provenance: .presenter)
+        p.setRecipients([recipient])
+        context.insert(p)
+        return p
+    }
+
+    // #1292: a re-prep-queued draft, so the gold "Re-prep queued" badge (#1143) on the review card can be
+    // seen. reprepDraftRequested is the flag isReprepQueued reads; the show stays .drafted in Review.
+    static func stageReprepQueuedDraft(in context: ModelContext, now: Date) -> Prospect {
+        let key = "debug-of-reprep-\(Int(now.timeIntervalSince1970))"
+        let p = Prospect(naturalKey: key, groupName: "Meridian Chorale (debug)", discipline: "choral",
+                         venue: "Merkin Concert Hall",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "debug re-prep queued", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
+        // copy-inventory:ignore-start  a debug-only stand-in draft body (contact-facing email copy, not app voice)
+        p.draftSubject = "Photographs of your Merkin Concert Hall performance"
+        p.draftBody = "Hi Alex,\n\nI photograph performances around New York and would love to document your "
+            + "upcoming concert.\n\nHappy to answer any questions."
+        // copy-inventory:ignore-end
+        p.reprepDraftRequested = true   // -> isReprepQueued, the "Re-prep queued" badge
+        let email = "reprep@debug.example"
+        let recipient = Recipient(id: Recipient.makeId(email: email, formURL: nil) ?? email, email: email,
+                                  name: "Alex Rivera (debug)", provenance: .presenter)
+        p.setRecipients([recipient])
+        context.insert(p)
+        return p
+    }
+
+    // #1292: two still-open shows on ONE date after a reachability probe, so the #1338 "best contact"
+    // highlight can be seen picking out the emailable one. Show A has a sendable contact (emailFound ->
+    // highlighted); show B has only a venue front-desk address (weakContactOnly -> not highlighted). Both are
+    // probed at `now`, so their firm badges show rather than the pre-probe heuristic.
+    static func stageReachabilityCompetition(in context: ModelContext, now: Date) -> [Prospect] {
+        let stamp = Int(now.timeIntervalSince1970)
+        let date = EasternDate.dayString(from: now.addingTimeInterval(20 * 86_400))
+
+        func makeShow(keyTag: String, group: String, venue: String) -> Prospect {
+            let p = Prospect(naturalKey: "debug-of-reach-\(keyTag)-\(stamp)", groupName: group,
+                             discipline: "music", venue: venue, performanceDate: date,
+                             sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                             production: "self", profile: "strong", coverage: "likely_uncovered",
+                             fitScore: 7, tier: "high", fitReason: "debug reachability competition",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .new)
+            p.reachabilityProbedAt = now
+            context.insert(p)
+            return p
+        }
+
+        // A: a sendable presenter contact -> emailFound -> the #1338 highlight.
+        let a = makeShow(keyTag: "a", group: "Aurora Strings (debug)", venue: "Weill Recital Hall")
+        let aEmail = "reach-a@debug.example"
+        a.setRecipients([Recipient(id: Recipient.makeId(email: aEmail, formURL: nil) ?? aEmail, email: aEmail,
+                                   name: "Jordan Ellis (debug)", provenance: .presenter)])
+
+        // B: only a venue front-desk address -> weakContactOnly -> NOT highlighted.
+        let b = makeShow(keyTag: "b", group: "Merkin Winds (debug)", venue: "Merkin Concert Hall")
+        let bEmail = "frontdesk@debug.example"
+        let venueContact = Recipient(id: Recipient.makeId(email: bEmail, formURL: nil) ?? bEmail, email: bEmail,
+                                     name: "Box office (debug)", provenance: .act)
+        venueContact.looksLikeVenue = true
+        b.setRecipients([venueContact])
+
+        return [a, b]
+    }
+
     // A plain-ASCII HTML signature in Dan's brand colors, clean enough to pass GmailSignatureHealth so it
     // is actually cached and the #1203 styled preview has something to render.
     static let demoSignatureHTML =

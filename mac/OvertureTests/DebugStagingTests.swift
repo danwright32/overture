@@ -85,6 +85,56 @@ struct DebugStagingTests {
         #expect(p.naturalKey.hasPrefix("debug-of-"))
     }
 
+    // #1292: a returning-client "warm register" draft in Review, so the #1215 keyed-off-prior-relationship
+    // surface can be SEEN in the near-empty dev store instead of shipping green-but-unseen.
+    @Test func stagesAWarmRegisterReturningClientDraft() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let p = DebugStaging.stageWarmRegisterDraft(in: ctx, now: now)
+
+        #expect(p.priorRelationship == "warm")                 // the returning-client tone
+        #expect(p.priorRelationshipForDrafting == "warm")      // and the drafter is allowed to see it
+        #expect(p.matchedClientName != nil)                    // a named prior client
+        #expect(p.status == .drafted)                          // sits in Review
+        #expect(p.draftBody != nil)
+        #expect(p.naturalKey.hasPrefix("debug-of-"))
+    }
+
+    // #1292: a re-prep-queued draft, so the gold "Re-prep queued" badge (#1143) can be seen on the review card.
+    @Test @MainActor func stagesAReprepQueuedDraft() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let p = DebugStaging.stageReprepQueuedDraft(in: ctx, now: now)
+
+        // reprepDraftRequested is what QueueItem.isReprepQueued reads to show the "Re-prep queued" badge.
+        #expect(p.reprepDraftRequested == true)
+        #expect(QueueItem(p).isReprepQueued == true)
+        #expect(p.status == .drafted)
+        #expect(p.draftBody != nil)
+        #expect(p.naturalKey.hasPrefix("debug-of-"))
+    }
+
+    // #1292: two still-open shows on ONE date after a reachability probe, one with a sendable contact and one
+    // without, so the #1338 "best contact" highlight (the forest row emphasis on the emailable one) can be
+    // seen against a competitor that is not highlighted.
+    @Test @MainActor func stagesAReachabilityEmailFoundCompetition() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let shows = DebugStaging.stageReachabilityCompetition(in: ctx, now: now)
+
+        #expect(shows.count == 2)
+        #expect(shows[0].performanceDate == shows[1].performanceDate)   // same date: a genuine competition
+        #expect(shows.allSatisfy { $0.status == .new })                 // both still open
+        // One is a best (sendable) reachable contact, highlighted; the other is not.
+        let flags = shows.map { QueueItem($0).isBestReachableContact(now: now.addingTimeInterval(60)) }
+        #expect(flags.contains(true))
+        #expect(flags.contains(false))
+        #expect(shows.allSatisfy { $0.naturalKey.hasPrefix("debug-of-") })
+    }
+
     @Test @MainActor func selfSendLeadEntersTheSendQueueOnceApproved() throws {
         let ctx = try makeInMemoryContext()
         let p = DebugStaging.stageSelfSendLead(in: ctx, now: Date(), address: "self@example.com")
