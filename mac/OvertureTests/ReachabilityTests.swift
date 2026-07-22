@@ -30,14 +30,29 @@ struct ReachabilityTests {
                                     websiteURL: nil) == .hardToReach)
     }
 
-    // A confirmed real (non-social) website, which Prep may have set, is positive evidence: likely reachable.
-    @Test func aRealWebsiteIsLikelyReachable() {
+    // A confirmed real (non-social) website, which Prep may have set, is positive evidence, but only
+    // ALONGSIDE a presenter on a non-social listing (#1335): here a named presenter on a normal listing.
+    @Test func aRealWebsiteWithAPresenterIsLikelyReachable() {
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://www.instagram.com/aurorastrings/",
+                                    sourceListingURL: "https://carnegiehall.org/calendar/x",
                                     websiteURL: "https://aurorastrings.org") == .likelyReachable)
-        #expect(Reachability.assess(presenter: nil,
+        #expect(Reachability.assess(presenter: "Aurora Strings",
                                     sourceListingURL: nil,
                                     websiteURL: "https://aurorastrings.org/contact") == .likelyReachable)
+    }
+
+    // #1335: a website is positive evidence only alongside a presenter and must never SWALLOW the
+    // social-only / no-presenter dead ends. A venue-ish (no presenter) or social listing that happens to
+    // carry a real website still warns, rather than being silently marked reachable off the site alone.
+    @Test func aWebsiteNeverSwallowsTheDeadEnds() {
+        // No presenting org (venue-ish), even with a real website: nothing to email, still hard to reach.
+        #expect(Reachability.assess(presenter: nil,
+                                    sourceListingURL: nil,
+                                    websiteURL: "https://aurorastrings.org/contact") == .hardToReach)
+        // Social-only listing, even with a real website: still a verified dead end.
+        #expect(Reachability.assess(presenter: "Aurora Strings",
+                                    sourceListingURL: "https://www.instagram.com/aurorastrings/",
+                                    websiteURL: "https://aurorastrings.org") == .hardToReach)
     }
 
     // The common Review case: a named presenter reached via a normal listing, but no confirmed website yet.
