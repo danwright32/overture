@@ -2,91 +2,31 @@
 set -euo pipefail
 
 # Reports the real state of every check on a PR, one line per check run. Part of #478
-# (milestone 12), Phase 4 (#506). GitHub's Checks API has no concept of "stalled" distinct
-# from "queued": a job assigned to a dead self-hosted runner just sits pending forever with
-# no differentiation from one that is seconds from finishing. This script builds that
-# differentiation for the swift-tests check, the only job that runs on the self-hosted
-# runner (typecheck-and-test runs on GitHub-hosted ubuntu-latest, which GitHub itself
-# guarantees availability for, so a bare "Pending" is good enough for it).
+# (milestone 12), Phase 4 (#506).
+#
+# This script once built a "stalled" vs "queued" distinction for the swift-tests check, the
+# only job that ran on a self-hosted runner (which could leave a job pending forever with no
+# signal that its runner had died). #1347 retired that runner and #1352 removed the stall
+# machinery. The only check left is typecheck-and-test on GitHub-hosted ubuntu-latest, whose
+# availability GitHub itself guarantees, so a bare "Pending" (which blocks the merge) is the
+# honest report: there is no longer any runner that could silently swallow a job forever.
 #
 # Usage: scripts/check-pr-ci.sh <pr-number>
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 
-SWIFT_CHECK_NAME="swift-tests"
-SWIFT_RUNNER_LABEL="overture-mac"
-
-# swift-tests completed in 31s and 23s on its first two real invocations (Phase 3, #513).
-# 300s is generous relative to that, roughly 10x the slower run, while staying in the low
-# single-digit minutes the plan called for, so a normal run, or a slow but real ephemeral
-# runner re-registration cycle, is never mistaken for a stall.
-STALL_THRESHOLD_SECONDS=300
-
 usage() {
   echo "Usage: $(basename "$0") <pr-number>" >&2
   exit 1
-}
-
-format_duration() {
-  local total=$1
-  local m=$((total / 60))
-  local s=$((total % 60))
-  if [[ ${m} -gt 0 ]]; then
-    printf '%dm%ds' "${m}" "${s}"
-  else
-    printf '%ds' "${s}"
-  fi
-}
-
-to_epoch() {
-  date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s
-}
-
-RUNNER_STATUS=""
-RUNNER_BUSY=""
-RUNNER_CHECKED=0
-fetch_runner_info() {
-  [[ "${RUNNER_CHECKED}" -eq 1 ]] && return
-  RUNNER_CHECKED=1
-  local line
-  FULL_OUTPUT="$(SWIFT_RUNNER_LABEL="${SWIFT_RUNNER_LABEL}" GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh api "repos/${REPO}/actions/runners" \
-    --jq '.runners[] | select(.labels[].name == env.SWIFT_RUNNER_LABEL) | [.status, .busy] | @tsv')"
-  line="$(head -n1 <<< "${FULL_OUTPUT}")"
-  if [[ -n "${line}" ]]; then
-    IFS=$'\t' read -r RUNNER_STATUS RUNNER_BUSY <<< "${line}"
-  fi
-}
-
-# A check run's own started_at is pickup time, populated only once a runner claims the
-# job; it stays null the whole time a job sits queued, which is exactly the stalled case
-# this script exists to catch. The job's created_at, one level down at
-# actions/runs/{run_id}/jobs, is the true queue time. check_suite.id on the check run row
-# is the correlation key back to the workflow run (workflow_runs[].check_suite_id), needed
-# because a same repo PR fires both a push and a pull_request run for the same commit, so
-# check_suite_id disambiguates which of the two the row actually belongs to.
-resolve_queue_created_at() {
-  local check_suite_id="$1"
-  local run_lookup run_id
-  run_lookup="$(CHECK_SUITE_ID="${check_suite_id}" GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh api "repos/${REPO}/actions/runs?head_sha=${SHA}" \
-    --jq '.workflow_runs[] | select(.check_suite_id == (env.CHECK_SUITE_ID | tonumber)) | .id')"
-  run_id="$(head -n1 <<< "${run_lookup}")"
-  if [[ -z "${run_id}" ]]; then
-    return
-  fi
-
-  local job_lookup
-  job_lookup="$(SWIFT_CHECK_NAME="${SWIFT_CHECK_NAME}" GH_TOKEN="$(gh auth token -u "${GH_IDENTITY}")" gh api "repos/${REPO}/actions/runs/${run_id}/jobs" \
-    --jq '.jobs[] | select(.name == env.SWIFT_CHECK_NAME) | .created_at')"
-  head -n1 <<< "${job_lookup}"
 }
 
 # Classifies one check-run row (the tab-separated fields produced by the check-runs
 # query in main) and prints its status line. Mutates the caller's EXIT_CODE, same as
 # when this was the inline body of the loop below.
 classify_check_run() {
-  local name="$1" status="$2" check_suite_id="$3" conclusion="$4"
-  local label PENDING_SINCE ELAPSED DURATION
+  local name="$1" status="$2" conclusion="$3"
+  local label
 
   if [[ "${status}" == "completed" ]]; then
     case "${conclusion}" in
@@ -98,19 +38,12 @@ classify_check_run() {
         EXIT_CODE=1
         ;;
       skipped)
-        # #761: swift-tests is path-filtered in ci.yml, so it legitimately does not run on a change
-        # that touches no Swift, fixture or CI-script file (an npm dependency bump, say). That is an
-        # INTENTIONAL decision, not an absent result, so it must not block the merge.
-        #
-        # Reported as "Skipped", never folded into "Passed": this whole script exists so Dan can tell
-        # a check that actually ran and went green apart from one that never ran at all. Any OTHER
-        # check skipping is unexpected and still blocks, because nothing is supposed to skip it.
-        if [[ "${name}" == "${SWIFT_CHECK_NAME}" ]]; then
-          label="Skipped (nothing Swift-related changed, so the Mac tests were not needed)"
-        else
-          label="Skipped unexpectedly (nothing should skip this check)"
-          EXIT_CODE=1
-        fi
+        # typecheck-and-test runs unconditionally (no path filter in ci.yml), so nothing is
+        # supposed to skip it. A skip is therefore unexpected and blocks the merge. Reported as
+        # "Skipped", never folded into "Passed": this whole script exists so Dan can tell a check
+        # that actually ran and went green apart from one that never ran at all.
+        label="Skipped unexpectedly (nothing should skip this check)"
+        EXIT_CODE=1
         ;;
       *)
         label="${conclusion}"
@@ -121,43 +54,12 @@ classify_check_run() {
     return
   fi
 
-  if [[ "${name}" != "${SWIFT_CHECK_NAME}" ]]; then
-    echo "${name}: Pending"
-    EXIT_CODE=1
-    return
-  fi
-
+  # Not completed: still pending. The only check runs on GitHub-hosted ubuntu-latest, whose
+  # availability GitHub guarantees, so a bare "Pending" (which blocks the merge) is the honest
+  # report. There is no longer a self-hosted runner that could silently swallow a job forever,
+  # so there is no "stalled" distinction left to draw.
+  echo "${name}: Pending"
   EXIT_CODE=1
-  PENDING_SINCE=""
-  if [[ -n "${check_suite_id}" ]]; then
-    PENDING_SINCE="$(resolve_queue_created_at "${check_suite_id}")"
-  fi
-
-  if [[ -z "${PENDING_SINCE}" ]]; then
-    echo "${name}: Stalled. Could not determine how long this has been queued."
-    return
-  fi
-
-  ELAPSED=$(( NOW - $(to_epoch "${PENDING_SINCE}") ))
-  [[ ${ELAPSED} -lt 0 ]] && ELAPSED=0
-  DURATION="$(format_duration "${ELAPSED}")"
-
-  if [[ ${ELAPSED} -lt ${STALL_THRESHOLD_SECONDS} ]]; then
-    echo "${name}: Still working (pending ${DURATION})"
-    return
-  fi
-
-  fetch_runner_info
-
-  if [[ -z "${RUNNER_STATUS}" ]]; then
-    echo "${name}: Stalled. No self-hosted runner is currently registered (pending ${DURATION})."
-  elif [[ "${RUNNER_STATUS}" != "online" ]]; then
-    echo "${name}: Stalled. Runner appears unreachable, status is ${RUNNER_STATUS} (pending ${DURATION})."
-  elif [[ "${RUNNER_BUSY}" != "true" ]]; then
-    echo "${name}: Stalled. Runner is online but idle and has not picked up the job (pending ${DURATION})."
-  else
-    echo "${name}: Still working, longer than usual, but the runner is online and busy (pending ${DURATION})."
-  fi
 }
 
 # check_mergeable <mergeable-value>. #625: GitHub never runs CI checks on a PR it can't merge,
@@ -196,21 +98,20 @@ main() {
   check_mergeable "${MERGEABLE}" || exit 1
 
   # conclusion is last because it is null (empty after //) until a check completes, and
-  # bash's `read` with a tab IFS collapses an empty middle field, shifting check_suite_id
-  # into conclusion's slot. An empty trailing field does not have that problem.
+  # bash's `read` with a tab IFS collapses an empty middle field, shifting a later field
+  # into the wrong slot. An empty trailing field does not have that problem.
   CHECK_RUNS="$(gh_as_danwright32 api "repos/${REPO}/commits/${SHA}/check-runs" \
-    --jq '.check_runs[] | [.name, .status, .check_suite.id // "", .conclusion // ""] | @tsv')"
+    --jq '.check_runs[] | [.name, .status, .conclusion // ""] | @tsv')"
 
   if [[ -z "${CHECK_RUNS}" ]]; then
     echo "No checks found yet for this commit." >&2
     exit 1
   fi
 
-  NOW="$(date -u +%s)"
   EXIT_CODE=0
 
-  while IFS=$'\t' read -r name status check_suite_id conclusion; do
-    classify_check_run "${name}" "${status}" "${check_suite_id}" "${conclusion}"
+  while IFS=$'\t' read -r name status conclusion; do
+    classify_check_run "${name}" "${status}" "${conclusion}"
   done <<< "${CHECK_RUNS}"
 
   echo

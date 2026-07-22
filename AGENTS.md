@@ -147,7 +147,11 @@ For the one remaining check, a pending run and a stuck one still look identical 
 PR view, so do not merge on "it hasn't failed yet". `scripts/check-pr-ci.sh <pr-number>`
 reports every check's real state, and `scripts/merge-when-green.sh <pr-number>` polls and
 merges only once it reports a genuine pass (stopping on a real failure or its own timeout).
-Both still work; their self-hosted-runner stall detection is now dormant (no job runs on
-that runner anymore) but harmless. The `overture-mac` self-hosted runner itself is left
-registered-but-idle; unloading its launchd agent
-(`com.danwright.overture.ci-runner`) on Dan's Mac is a separate manual cleanup.
+Both still work. #1352 removed their self-hosted-runner stall detection (dead since #1347
+retired the runner) along with the runner scripts, launchd plist, and setup doc; a pending
+GitHub-hosted check now just reads as "Pending", which blocks the merge, and there is no
+runner left that could silently swallow a job forever. The `overture-mac` self-hosted runner
+itself may still be left registered-but-idle on GitHub, and unloading its launchd agent
+(`com.danwright.overture.ci-runner`) on Dan's Mac is a separate manual cleanup (the plist is
+gone from the repo, so the tear-down is `launchctl bootout gui/$(id -u)/com.danwright.overture.ci-runner`
+plus removing `~/Library/LaunchAgents/com.danwright.overture.ci-runner.plist` if present).

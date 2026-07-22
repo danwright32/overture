@@ -3,8 +3,7 @@ set -euo pipefail
 
 # Waits for a PR's CI to actually pass, via check-pr-ci.sh, then merges it. Never merges on
 # the strength of "hasn't failed yet": only a genuine pass from check-pr-ci.sh triggers the
-# merge. Stops, without merging, on a genuine failure, a stalled check, an unmergeable PR, or
-# a timeout.
+# merge. Stops, without merging, on a genuine failure, an unmergeable PR, or a timeout.
 #
 # #1006: also refuses to land on a RED base branch. A PR passing on its own branch says nothing
 # about the branch it is about to join, and merging a second change onto a broken main makes it
@@ -35,10 +34,6 @@ classify_stop_reason() {
   local output="$1"
   if grep -q "^Unmergeable:" <<< "${output}"; then
     echo "conflict"
-    return
-  fi
-  if grep -q "Stalled" <<< "${output}"; then
-    echo "stalled"
     return
   fi
   if grep -qE ": Failed" <<< "${output}"; then
@@ -133,11 +128,6 @@ main() {
       conflict)
         echo
         echo "Stopped: PR #${PR_NUMBER} has a merge conflict, so CI checks will never appear. Not merging. Resolve the conflict, then rerun this script." >&2
-        exit 1
-        ;;
-      stalled)
-        echo
-        echo "Stopped: a check is stalled. Not merging. Fix the runner, then rerun this script." >&2
         exit 1
         ;;
       failed)
