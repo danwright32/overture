@@ -54,6 +54,43 @@ struct GroupNameMatchTests {
         #expect(GroupNameMatch.isPossible("Manhattan Chamber Players", "Manhattan Chamber Orchestra") == true)
         #expect(GroupNameMatch.isPossible("Brooklyn Youth Chorus", "Vienna Boys Choir") == false)
     }
+
+    // #1351: a single-token acronym confidently matches a multi-token name when its letters ARE that
+    // name's word-initials, one letter per word, in order. A Downbeat client filed as "NYYS" must
+    // recognise its watched source "New York Youth Symphony" so it auto-arms the client horizon.
+    @Test func acronymConfidentlyMatchesItsSpelledOutName() {
+        #expect(GroupNameMatch.isConfident("New York Youth Symphony", "NYYS") == true)
+        #expect(GroupNameMatch.isConfident("Distinguished Concerts International New York", "DCINY") == true)
+    }
+
+    // The rule is symmetric: which side is the acronym is decided by token count, not argument order.
+    @Test func acronymMatchIsOrderIndependent() {
+        #expect(GroupNameMatch.isConfident("NYYS", "New York Youth Symphony") == true)
+    }
+
+    // Precision guard: the acronym must equal EVERY initial. One wrong letter (Orchestra vs Symphony)
+    // is not a match, so a near-miss acronym never warms an unrelated org.
+    @Test func acronymWithAWrongLetterDoesNotMatch() {
+        #expect(GroupNameMatch.isConfident("New York Youth Orchestra", "NYYS") == false)
+    }
+
+    // Precision guard: the acronym length must equal the word count. "NYC" (3) must NOT match the
+    // 4-word "New York City Ballet" on a prefix of its initials; this is the key false-positive lever.
+    @Test func acronymShorterThanWordCountDoesNotMatch() {
+        #expect(GroupNameMatch.isConfident("New York City Ballet", "NYC") == false)
+    }
+
+    // A single letter is not an acronym; it would collide with far too much.
+    @Test func aSingleLetterIsNotAnAcronymMatch() {
+        #expect(GroupNameMatch.isConfident("New York", "N") == false)
+    }
+
+    // #1351: TENET is the FIRST WORD of "TENET Vocal Artists", not its initials, so it is deliberately
+    // NOT caught by the acronym rule (5 letters vs 3 words). This documents why TENET is fixed in the
+    // Downbeat data (full displayName) rather than by loosening the matcher into risky leading-word land.
+    @Test func aLeadingWordAbbreviationIsNotAnAcronymMatch() {
+        #expect(GroupNameMatch.isConfident("TENET Vocal Artists", "TENET") == false)
+    }
 }
 
 @Suite("Repeat-client match verdict")

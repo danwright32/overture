@@ -151,6 +151,48 @@
       "b": "Riverside Chamber Players Youth",
       "confident": true,
       "possible": false
+    },
+    {
+      "a": "New York Youth Symphony",
+      "b": "NYYS",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "Distinguished Concerts International New York",
+      "b": "DCINY",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "NYYS",
+      "b": "New York Youth Symphony",
+      "confident": true,
+      "possible": false
+    },
+    {
+      "a": "New York Youth Orchestra",
+      "b": "NYYS",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "New York City Ballet",
+      "b": "NYC",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "New York",
+      "b": "N",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "TENET Vocal Artists",
+      "b": "TENET",
+      "confident": false,
+      "possible": false
     }
   ]
 }

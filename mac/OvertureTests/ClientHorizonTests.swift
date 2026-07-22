@@ -55,6 +55,15 @@ struct ClientHorizonTests {
         #expect(ClientHorizon.months(for: notReally, clients: clients) == CalendarMonthIndex.defaultHorizon)
     }
 
+    // #1351: a client filed under a single-token acronym ("NYYS") auto-arms from its spelled-out watched
+    // source ("New York Youth Symphony"), through the SAME matcher, with no manual tag needed.
+    @Test func anAcronymClientArmsFromItsSpelledOutSource() {
+        let acronymClients = [client("NYYS")]
+        #expect(ClientHorizon.matchesClientName("New York Youth Symphony", clients: acronymClients))
+        #expect(ClientHorizon.isClient(source("New York Youth Symphony"), clients: acronymClients))
+        #expect(ClientHorizon.months(for: source("New York Youth Symphony"), clients: acronymClients) == ClientHorizon.clientMonths)
+    }
+
     // The org-name arming is DERIVED, never stored, so it self-disarms the moment the org stops matching
     // (a client removed from Downbeat): no stale forever-flag.
     @Test func nameMatchArmingDisarmsWhenTheClientIsGone() {
