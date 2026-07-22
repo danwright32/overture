@@ -902,10 +902,23 @@ enum QueueModel {
         }.map(\.id)
     }
 
-    // The date-header "Check reachability" control appears only when two or more candidates share the
-    // date: the whole value of a probe is comparing several shows before Dan commits to one.
+    // The date-header "Check reachability" control appears when two or more candidates share the date (the
+    // whole value of a FIRST probe is comparing several shows before Dan commits to one), OR when a single
+    // already-probed show has gone stale and asks to be re-checked (#1334): its "Reachability may be out of
+    // date" badge tells Dan to run the check again, so the control has to include it even with no sibling to
+    // compare. A lone NEVER-probed show still shows nothing.
     static func showsReachabilityProbeControl(_ items: [QueueItem], now: Date = Date()) -> Bool {
-        reachabilityProbeCandidateKeys(items, now: now).count >= 2
+        reachabilityProbeCandidateKeys(items, now: now).count >= 2 || isLoneStaleRecheck(items, now: now)
+    }
+
+    // #1334: exactly one candidate on the date, and it is a STALE re-check (already probed, then aged past
+    // the freshness window) rather than a never-probed show. Because a candidate is only ever unprobed or
+    // stale, the single candidate is stale exactly when it carries a probe date.
+    static func isLoneStaleRecheck(_ items: [QueueItem], now: Date = Date()) -> Bool {
+        let candidates = reachabilityProbeCandidateKeys(items, now: now)
+        guard candidates.count == 1, let key = candidates.first,
+              let candidate = items.first(where: { $0.id == key }) else { return false }
+        return candidate.reachabilityProbedAt != nil
     }
 
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {

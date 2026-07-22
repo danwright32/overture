@@ -116,16 +116,26 @@ enum ReachabilityProbeCopy {
     static func calloutHeadline(count: Int) -> String {
         "\(count) shows compete for this date. See which you can actually email before you keep one."
     }
+    // #1334: the callout headline when a single show's earlier reachability check has gone stale and there is
+    // no sibling to compare, only a re-check to offer. Leads with the ACTION (the button the callout uniquely
+    // makes visible), because the row's own "Reachability may be out of date" badge already states the stale
+    // condition beside it (#843: two surfaces on one screen must not restate each other). Distinct from the
+    // "N shows compete" comparison framing.
+    static let staleRecheckHeadline =
+        "Re-check this show's reachability before you decide."
     // #1323: shown while a Prep or another probe already holds the single run slot, so the greyed-out
     // control explains itself instead of failing after the tap.
     static let controlBusyHelp =
         "A run is already in progress. This will be available once it finishes."
 
+    // #1334: reads for a single show (a lone stale re-check) as well as several, rather than "these 1 shows".
     static func confirmTitle(count: Int) -> String {
-        "Check reachability for these \(count) shows?"
+        count == 1 ? "Check reachability for this show?" : "Check reachability for these \(count) shows?"
     }
-    static func confirmMessage(dateLabel: String) -> String {
-        "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
+    static func confirmMessage(dateLabel: String, count: Int) -> String {
+        count == 1
+            ? "This looks up a real contact for the still-open show on \(dateLabel), so you can tell whether it's still emailable before you keep it. It spends a little on that lookup, only for the show you check here."
+            : "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     }
     static let confirmProceed = "Check"
 }
