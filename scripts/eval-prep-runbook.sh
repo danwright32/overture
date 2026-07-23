@@ -23,6 +23,7 @@ set -euo pipefail
 #   scripts/eval-prep-runbook.sh --self-check    # score each fixture's own compliant sample; spends nothing
 #   scripts/eval-prep-runbook.sh --dry-run NAME  # print the prompt for one fixture; spends nothing
 #   scripts/eval-prep-runbook.sh --yes           # RUN THE REAL EVAL against every fixture; SPENDS TOKENS
+#   scripts/eval-prep-runbook.sh --yes NAME      # RUN THE REAL EVAL against ONE fixture; SPENDS TOKENS
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -123,7 +124,30 @@ for_each_fixture() {
   done 3< <(list_fixtures)
 }
 
+# Dispatch <callback> over either ALL fixtures (no name) or exactly ONE named fixture (#1397). Validation
+# only when a name is given: an unknown name is a usage error (exit 2, listing what IS available), never a
+# silent no-op and never a silent fall-through to running everything. Token-free by itself: it only picks
+# which fixtures to hand the callback, which is score_one_fixture in the real run (that one spends) and a
+# recorder in the test (which does not), so the selection logic is testable without a real claude call.
+select_and_run() {
+  local fn="$1" only="${2:-}"
+  if [ -z "${only}" ]; then
+    for_each_fixture "${fn}"
+    return
+  fi
+  local fixture
+  fixture="$(fixture_path_for "${only}")"
+  if [ ! -f "${fixture}" ]; then
+    echo "eval-prep-runbook: no such fixture '${only}'. Available:" >&2
+    list_fixtures | sed 's/^/  /' >&2
+    return 2
+  fi
+  "${fn}" "${only}" "${fixture}"
+}
+
+# $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck).
 real_run() {
+  local only="${1:-}"
   cost_warning
   command -v jq >/dev/null 2>&1 || { echo "eval-prep-runbook: jq is required" >&2; exit 1; }
   command -v tsx >/dev/null 2>&1 || command -v pnpm >/dev/null 2>&1 || { echo "eval-prep-runbook: tsx (or pnpm) is required to score output" >&2; exit 1; }
@@ -148,7 +172,7 @@ real_run() {
 
   _eval_failures=0
   _eval_total=0
-  for_each_fixture score_one_fixture
+  select_and_run score_one_fixture "${only}" || return $?
 
   echo
   echo "eval complete: $(( _eval_total - _eval_failures ))/${_eval_total} fixtures passed"
@@ -182,7 +206,7 @@ main() {
       build_prompt "$(fixture_path_for "$2")"
       ;;
     --yes)
-      real_run
+      real_run "${2:-}"
       ;;
     *)
       echo "eval-prep-runbook: unknown option '$1'" >&2

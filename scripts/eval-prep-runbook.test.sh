@@ -73,6 +73,29 @@ n_fixtures="$(list_fixtures | wc -l | tr -d ' ')"
 check "for_each_fixture visits every fixture despite a stdin-consuming callback" \
   '[[ "${n_visited}" == "${n_fixtures}" && "${n_visited}" -gt 1 ]]'
 
+# #1397: --yes accepts an optional single fixture name so a targeted recheck after a focused runbook edit
+# is one claude call, not eight. The SELECTION is token-free and testable: drive select_and_run with a
+# recorder callback (never claude) and assert it dispatches to exactly the right fixtures. A bad name must
+# be a usage error, never a silent no-op and never a silent full real run.
+selected=""
+record_selected() { selected="${selected}${1} "; }
+
+selected=""
+select_and_run record_selected stale-site-misnamed-co-performer </dev/null
+check "--yes NAME runs exactly the one named fixture" \
+  '[[ "${selected}" == "stale-site-misnamed-co-performer " ]]'
+
+selected=""
+rc=0; select_and_run record_selected no-such-fixture </dev/null 2>/dev/null || rc=$?
+check "--yes with an unknown fixture is a usage error (exit 2)" '[[ "${rc}" -eq 2 ]]'
+check "--yes with an unknown fixture runs nothing" '[[ -z "${selected}" ]]'
+
+selected=""
+select_and_run record_selected </dev/null
+n_all="$(printf '%s' "${selected}" | wc -w | tr -d ' ')"
+check "--yes with no name still runs every fixture" \
+  '[[ "${n_all}" == "${n_fixtures}" && "${n_all}" -gt 1 ]]'
+
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
   exit 0
