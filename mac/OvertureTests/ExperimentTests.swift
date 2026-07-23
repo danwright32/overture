@@ -176,6 +176,135 @@ struct ExperimentTests {
         #expect(byKey["plain"]?.experimentArmInstruction == nil)
     }
 
+    // MARK: - Phase 4: experiment management (create / end)
+
+    @Test func startCreatesAndActivatesAnExperimentFromTwoDistinctArms() throws {
+        let ctx = ModelContext(try container())
+        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                              startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        #expect(exp != nil)
+        let all = try ctx.fetch(FetchDescriptor<Experiment>())
+        #expect(all.count == 1)
+        #expect(all.first?.isActive == true)
+        #expect(all.first?.variantA == "reason-first")
+        #expect(all.first?.variantB == "credential-first")
+    }
+
+    @Test func startRefusesTwoIdenticalArms() throws {
+        let ctx = ModelContext(try container())
+        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .reasonFirst,
+                                              startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        #expect(exp == nil)
+        #expect(try ctx.fetch(FetchDescriptor<Experiment>()).isEmpty)   // nothing created
+    }
+
+    @Test func startingANewExperimentRetiresThePreviousActiveOne() throws {
+        let ctx = ModelContext(try container())
+        _ = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                        startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        _ = try ExperimentEditing.start(variantA: .observationFirst, variantB: .directIntent,
+                                        startedAt: Date(timeIntervalSince1970: 10), in: ctx)
+        let active = try ctx.fetch(FetchDescriptor<Experiment>()).filter(\.isActive)
+        #expect(active.count == 1)
+        #expect(active.first?.variantA == "observation-first")
+    }
+
+    @Test func endingAnExperimentDeactivatesItButKeepsItAsHistory() throws {
+        let ctx = ModelContext(try container())
+        let exp = try #require(try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                                           startedAt: Date(timeIntervalSince1970: 0), in: ctx))
+        try ExperimentEditing.end(exp, at: Date(timeIntervalSince1970: 100), in: ctx)
+        let all = try ctx.fetch(FetchDescriptor<Experiment>())
+        #expect(all.count == 1)                         // NOT deleted: history retained
+        #expect(all.first?.isActive == false)
+        #expect(all.first?.endedAt == Date(timeIntervalSince1970: 100))
+    }
+
+    // MARK: - Phase 4: the reporting logic (ExperimentReport)
+
+    // A prospect that was SENT under an experiment arm, with a given outcome and drafter echo.
+    private func sentProspect(_ key: String, experimentId: String, arm: String, outcome: Outcome,
+                              draftVariant: String, edited: Bool = false) -> Prospect {
+        let p = makeProspect(key)
+        p.experimentID = experimentId
+        p.assignedArm = arm
+        p.gmailMessageId = "msg-\(key)"           // wasProvablyContacted == gmailMessageId != nil
+        p.outcomeRaw = outcome.rawValue
+        p.draftVariant = draftVariant
+        p.experimentOpenerEdited = edited
+        return p
+    }
+
+    @Test func armReportCountsOnlySentNonEditedIntoTheRateAndSeparatesEdited() {
+        let e = "exp1"
+        let prospects = [
+            sentProspect("a", experimentId: e, arm: "reason-first", outcome: .replied, draftVariant: "reason-first"),
+            sentProspect("b", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "reason-first"),
+            sentProspect("c", experimentId: e, arm: "reason-first", outcome: .replied, draftVariant: "reason-first", edited: true),
+        ]
+        let arm = ExperimentReport.armReport(arm: "reason-first", in: prospects)
+        #expect(arm.tally.contacted == 2)                 // the edited one is excluded from the rate
+        #expect(arm.tally.replied == 1)
+        #expect(arm.editedExcluded == 1)                  // but still counted, visibly
+    }
+
+    @Test func armReportComplianceCountsEchoMatchesAgainstTheAssignedArm() {
+        let e = "exp1"
+        let prospects = [
+            sentProspect("a", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "reason-first"),
+            // Drifted: the drafter produced a different shape than assigned.
+            sentProspect("b", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "credential-first"),
+        ]
+        let arm = ExperimentReport.armReport(arm: "reason-first", in: prospects)
+        #expect(arm.complianceMatched == 1)
+        #expect(arm.complianceTotal == 2)
+        #expect(arm.complianceRate == 0.5)
+    }
+
+    @Test func reportScopesToTheExperimentAndBuildsAnArmPerVariant() {
+        let exp = Experiment(experimentId: "exp1", dimension: .openerShape,
+                             variantA: .reasonFirst, variantB: .credentialFirst, isActive: true)
+        let prospects = [
+            sentProspect("a", experimentId: "exp1", arm: "reason-first", outcome: .replied, draftVariant: "reason-first"),
+            sentProspect("b", experimentId: "exp1", arm: "credential-first", outcome: .noResponse, draftVariant: "credential-first"),
+            // A prospect in a DIFFERENT experiment must not leak in.
+            sentProspect("c", experimentId: "other", arm: "reason-first", outcome: .booked, draftVariant: "reason-first"),
+        ]
+        let report = ExperimentReport.report(for: exp, allProspects: prospects)
+        #expect(report.arms.map(\.arm) == ["reason-first", "credential-first"])
+        #expect(report.arms[0].tally.contacted == 1)      // only the exp1 reason-first prospect, not "c"
+        #expect(report.arms[1].tally.contacted == 1)
+    }
+
+    @Test func bothArmsMustClearTheHighBarBeforeItIsNotTooFewToTell() {
+        func armAt(_ contacted: Int) -> ExperimentReport.ArmReport {
+            var t = OutcomeTally(); t.contacted = contacted
+            return ExperimentReport.ArmReport(arm: "x", tally: t, editedExcluded: 0, complianceMatched: contacted, complianceTotal: contacted)
+        }
+        let bar = ExperimentReport.experimentCallThreshold
+        let bothClear = ExperimentReport.Report(experimentId: "e", arms: [armAt(bar), armAt(bar)])
+        #expect(bothClear.tooFewToTell == false)
+        // One arm one short: still too few to tell (never ride one thin arm on the other's volume).
+        let oneShort = ExperimentReport.Report(experimentId: "e", arms: [armAt(bar), armAt(bar - 1)])
+        #expect(oneShort.tooFewToTell == true)
+    }
+
+    @Test func displayLinesHidePercentBelowTheBarAndSuppressEmptyCounts() {
+        var t = OutcomeTally(); t.contacted = 2; t.replied = 1
+        let arm = ExperimentReport.ArmReport(arm: "reason-first", tally: t, editedExcluded: 0,
+                                             complianceMatched: 0, complianceTotal: 0)
+        // Below the bar: the reply line names the count but NOT a percentage.
+        #expect(ExperimentReport.replyLine(arm, tooFewToTell: true) == "1 replied of 2")
+        // No edited sends and no counted sends: neither line appears.
+        #expect(ExperimentReport.editedExcludedLine(arm) == nil)
+        #expect(ExperimentReport.complianceLine(arm) == nil)
+    }
+
+    @Test func tooFewToTellLineNamesTheSampleBar() {
+        // The honest banner must state the actual bar, so a future threshold change updates the words too.
+        #expect(ExperimentReport.tooFewToTellLine().contains("\(ExperimentReport.experimentCallThreshold)"))
+    }
+
     // MARK: - Phase 3: send-time opener-edit detection
 
     @Test func openerEditIsFalseWhenDanNeverEdited() {

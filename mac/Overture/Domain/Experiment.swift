@@ -28,6 +28,11 @@ enum OpenerArchetype: String, CaseIterable, Codable, Sendable {
     case credentialFirst = "credential-first"
     case observationFirst = "observation-first"
     case directIntent = "direct-intent"
+
+    // "reason-first" -> "Reason first", for the picker and the report rows.
+    var label: String {
+        rawValue.replacingOccurrences(of: "-", with: " ").capitalized
+    }
 }
 
 // The dimension an experiment tests. Only openerShape ships now; subjectStyle is reserved and documented,
@@ -93,6 +98,32 @@ enum ExperimentLifecycle {
             other.isActive = false
         }
         experiment.isActive = true
+        try context.save()
+    }
+}
+
+// Create / end an experiment, kept OUT of the view (a rule in a SwiftUI body is a rule no test can reach,
+// #863), so the "two distinct arms" and "ending retains history" rules are testable.
+@MainActor
+enum ExperimentEditing {
+    // Start a new opener-shape experiment from two DISTINCT preset archetypes and make it the sole active
+    // one. Returns nil (no experiment) if the two arms are the same: an A/B needs two different shapes.
+    @discardableResult
+    static func start(variantA: OpenerArchetype, variantB: OpenerArchetype, label: String? = nil,
+                      startedAt: Date, in context: ModelContext) throws -> Experiment? {
+        guard variantA != variantB else { return nil }
+        let exp = Experiment(dimension: .openerShape, variantA: variantA, variantB: variantB,
+                             label: label, startedAt: startedAt)
+        context.insert(exp)
+        try ExperimentLifecycle.activate(exp, in: context)   // retires any other active row, saves
+        return exp
+    }
+
+    // End an experiment: stamp endedAt and deactivate. NEVER deleted, so its outcomes stay attributable
+    // (each prospect keeps its stamp) and the report can still show it as history.
+    static func end(_ experiment: Experiment, at now: Date, in context: ModelContext) throws {
+        experiment.isActive = false
+        experiment.endedAt = now
         try context.save()
     }
 }
