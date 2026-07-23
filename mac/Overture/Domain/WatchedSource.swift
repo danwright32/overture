@@ -202,6 +202,15 @@ final class WatchedSource {
                                titleRejected: lastUnreadableTitleCount, baseline: baselineFeedCount)
     }
 
+    // #1428: whether `readabilityNote` is the self-healing shrunken-feed hold (a smaller feed, read cleanly)
+    // rather than an actionable forfeit. The Sources sheet colors that line as plain text, not the amber an
+    // actionable problem gets. Derived from the same rule, so the flag and the sentence can never disagree.
+    var readabilityNoteIsSelfHealing: Bool {
+        SourceReadability.noteIsSelfHealingHold(readable: lastReadableCount,
+                                                unreadable: lastUnreadableCount,
+                                                baseline: baselineFeedCount)
+    }
+
     // #986: has this source EVER said where one of its shows is? A high-water mark, derived rather than
     // stored, so it cannot disagree with the two facts it is made of. Never goes back to false: a source that
     // could once place and now cannot has drifted, and one that forgot would quietly rejoin the venue

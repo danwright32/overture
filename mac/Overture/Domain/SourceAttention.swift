@@ -24,12 +24,18 @@ enum SourceAttention {
     static func needsALook(_ source: WatchedSource) -> Bool {
         guard source.isActive else { return false }
         if SourceGrade(source) == .failing { return true }
-        // The silent half: it ran, it looks fine, and it has quietly forfeited the right to say a show is
-        // gone. Asked of FeedReconcile, which is the one place that line is drawn, so this can never come
-        // to a different answer than the reconcile that acted on it or the sentence Dan reads in the sheet.
-        return FeedReconcile.hasForfeitedAbsence(readable: source.lastReadableCount,
-                                                 unreadable: source.lastUnreadableCount,
-                                                 baseline: source.baselineFeedCount)
+        // The silent half worth Dan's eyes: it ran and looks fine, but too many of its event pages came back
+        // unreadable, so it has forfeited the right to say a show is gone and its scraper may be genuinely
+        // broken. Asked of FeedReconcile, the one place that line is drawn, so this can never disagree with
+        // the reconcile that acted on it or the sentence Dan reads in the sheet.
+        //
+        // #1428: deliberately NOT hasForfeitedAbsence, which also ORs in shrunkenFeedForfeitsAbsence. A feed
+        // that simply came back smaller (every show read cleanly) is a SELF-HEALING hold: Overture pauses
+        // marking its shows gone until the size holds, then re-baselines on its own after three stable reads
+        // with no input from Dan. Counting that as "needs a look" makes the badge cry wolf (#805/#863/#885);
+        // seen on 54 Below. The hold is still disclosed on the row, just not as work.
+        return FeedReconcile.unreadPagesForfeitAbsence(readable: source.lastReadableCount,
+                                                       unreadable: source.lastUnreadableCount)
     }
 
     static func count(_ sources: [WatchedSource]) -> Int {

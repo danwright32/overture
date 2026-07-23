@@ -601,7 +601,11 @@ struct SourcesView: View {
             // Gold, not rust: this is a source degrading, not a source that failed. The wording is decided
             // in SourceReadability, never here (#863/#885).
             if let readability = source.readabilityNote {
-                Text(readability).font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                // #1428: the self-healing shrunken-feed hold reads as plain text, not the gold signal colour.
+                // It is a pause that clears itself and needs nothing from Dan, so it is disclosed without
+                // being dressed as an alarm; an actionable forfeit (unreadable pages) keeps the gold.
+                Text(readability).font(.system(size: 11))
+                    .foregroundStyle(source.readabilityNoteIsSelfHealing ? OVColor.ink : OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

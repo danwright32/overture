@@ -282,4 +282,33 @@ struct SourceReadabilityPersistenceTests {
         #expect(s.lastUnreadableCount == 0)
         #expect(s.readabilityNote == nil)
     }
+
+    // #1428: which note is the self-healing shrunken-feed hold. The Sources sheet renders that one as plain
+    // text rather than the amber an actionable forfeit gets, because the hold needs no input and clears
+    // itself. It mirrors `note`'s own precedence (a pages-unreadable forfeit wins over the shrink), so the
+    // flag can never disagree with the sentence it colors.
+
+    // A feed that came back smaller but read every show cleanly: this IS the self-healing hold.
+    @Test func aShrunkenButCleanlyReadFeedIsTheSelfHealingHold() {
+        #expect(SourceReadability.noteIsSelfHealingHold(readable: 16, unreadable: 0, baseline: 30))
+        // And that is indeed the sentence it produces.
+        #expect(SourceReadability.note(readable: 16, unreadable: 0, baseline: 30)?
+            .contains("until the smaller calendar holds") == true)
+    }
+
+    // A source that ALSO lost pages is a forfeit, not a self-healing hold, even though its feed shrank too:
+    // the forfeit line wins, and it stays actionable (amber), so this is false.
+    @Test func aForfeitLineIsNotTheSelfHealingHoldEvenWhenTheFeedAlsoShrank() {
+        #expect(FeedReconcile.unreadPagesForfeitAbsence(readable: 20, unreadable: 10))   // it is a forfeit
+        #expect(FeedReconcile.shrunkenFeedForfeitsAbsence(readable: 20, baseline: 30))   // and it shrank
+        #expect(SourceReadability.noteIsSelfHealingHold(readable: 20, unreadable: 10, baseline: 30) == false)
+    }
+
+    // No note at all (healthy, at size) is not a self-healing hold; nor is a within-tolerance stray drop,
+    // which shows a sentence but carries no cancellation consequence.
+    @Test func noNoteAndAWithinToleranceDropAreNotTheSelfHealingHold() {
+        #expect(SourceReadability.noteIsSelfHealingHold(readable: 30, unreadable: 0, baseline: 30) == false)
+        #expect(SourceReadability.note(readable: 39, unreadable: 1, baseline: 40) != nil)               // has a line
+        #expect(SourceReadability.noteIsSelfHealingHold(readable: 39, unreadable: 1, baseline: 40) == false)
+    }
 }

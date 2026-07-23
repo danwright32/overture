@@ -43,11 +43,24 @@ struct SourceAttentionTests {
         #expect(SourceAttention.needsALook(source(health: .failing)))
     }
 
-    // THE case this issue is about. Nothing failed. The page was read, the verdict was healthy, and it
-    // returned 16 of the 30 shows this source usually lists. Overture will not mark anything from it as
-    // gone until that holds (#897), and Dan is now told without having to go looking.
-    @Test func aSourceThatQuietlyCameBackHalfSizeNeedsALook() {
-        #expect(SourceAttention.needsALook(source(readable: 16, baseline: 30)))
+    // #1428: a source that came back half size but read every show it found cleanly is in a SELF-HEALING
+    // hold, not a fault. Overture pauses marking its shows gone until the smaller size holds (#897), then
+    // re-baselines on its own after three stable reads with no input from Dan. So it must NOT count toward
+    // the attention badge: folding a self-healing safety pause into "sources that need your eyes" is exactly
+    // the cry-wolf failure #805/#863/#885 exist to prevent (seen on 54 Below). The pause is still DISCLOSED
+    // in the card (below); it just is not work.
+    @Test func aSourceInASelfHealingShrunkenHoldDoesNotNeedALook() {
+        #expect(SourceAttention.needsALook(source(readable: 16, baseline: 30)) == false)
+    }
+
+    // #1428: not counting it must not mean hiding it. The shrunken-feed hold stays disclosed on the row
+    // (honest-disclosure, #887/#888: a capability that switched itself off is never silent), and it is
+    // marked self-healing so the sheet can render it as plain information rather than an alarm.
+    @Test func aSelfHealingShrunkenHoldIsStillDisclosedJustNotCounted() {
+        let s = source(readable: 16, baseline: 30)
+        #expect(SourceAttention.needsALook(s) == false)
+        #expect(s.readabilityNote?.contains("won't mark anything") == true)   // still said out loud
+        #expect(s.readabilityNoteIsSelfHealing == true)                       // but marked not-an-alarm
     }
 
     // The other way a source forfeits its cancelling (#887): it read the page fine and could not reach
@@ -95,12 +108,13 @@ struct SourceAttentionTests {
     }
 
     // The pill's number is a promise about rows (#863). It counts sources, and only the ones that need
-    // Dan.
+    // Dan. #1428: the half-size source here is a self-healing hold and no longer counts, so of these four
+    // only the failing one does.
     @Test func theCountIsExactlyTheSourcesThatNeedHim() {
         let sources = [source(), source(health: .failing), source(readable: 16, baseline: 30),
                        source(isActive: false, reason: .orgRefusal)]
 
-        #expect(SourceAttention.count(sources) == 2)
+        #expect(SourceAttention.count(sources) == 1)
     }
 
     // A zero never sits on the masthead pretending to be work (#885's rule for the Due pill, and the same
@@ -124,9 +138,11 @@ struct SourceAttentionTests {
     }
 
     // THE invariant, and the reason this rule is not written twice. The badge counts a source exactly when
-    // the sheet Dan lands on shows him something is wrong with it: it is failing, or it says out loud that
-    // it cannot mark shows gone. If these two ever drift, the toolbar sends him to a sheet where he can see
-    // nothing wrong, or (far worse) stays quiet about a source that has silently stopped working.
+    // the sheet Dan lands on shows him something to ACT on: it is failing, or it says out loud that it
+    // cannot mark shows gone AND that is not the self-healing shrunken hold. If these ever drift, the
+    // toolbar sends him to a sheet where he can see nothing to do, or (far worse) stays quiet about a source
+    // that has silently stopped working. #1428: the self-healing hold is disclosed on the row but is not
+    // work, so it is the one "won't mark anything" line the badge deliberately does not count.
     @Test func theBadgeAndTheSheetNeverDisagree() {
         let cases = [source(), source(health: .failing), source(readable: 16, baseline: 30),
                      source(readable: 20, unreadable: 10, baseline: 30), source(readable: 29, baseline: 30),
@@ -134,11 +150,12 @@ struct SourceAttentionTests {
                      source(health: .failing, isActive: false, reason: .orgRefusal)]
 
         for s in cases {
-            let sheetShowsAProblem = SourceGrade(s) == .failing
-                || (s.readabilityNote?.contains("won't mark anything") ?? false)
+            let showsAForfeitLine = (s.readabilityNote?.contains("won't mark anything") ?? false)
+                && !s.readabilityNoteIsSelfHealing
+            let sheetShowsAnActionableProblem = SourceGrade(s) == .failing || showsAForfeitLine
             // A source Dan is not watching is not in the sheet's working sections at all, and its scraper's
             // opinion is not work he owes anyone.
-            let visibleProblem = sheetShowsAProblem && s.isActive
+            let visibleProblem = sheetShowsAnActionableProblem && s.isActive
 
             #expect(SourceAttention.needsALook(s) == visibleProblem,
                     "read \(s.lastReadableCount) of usual \(s.baselineFeedCount), \(s.lastUnreadableCount) unread, active \(s.isActive), health \(s.health): the badge and the sheet disagree")
