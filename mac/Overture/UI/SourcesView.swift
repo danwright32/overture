@@ -47,6 +47,20 @@ struct SourcesView: View {
     // tag, the client list, or the dismissed set), never on an unrelated redraw.
     @State private var coverageResult = ClientCoverage.Result.empty
 
+    // #1429: every source's lifetime tally, computed in ONE pass over prospects and CACHED, the same
+    // signature-then-recompute pattern #1356/#1374 used for the coverage list on this very sheet. The old
+    // code ran SourceYield.tally (an O(all prospects) scan) once PER source row inside row(_:), and the
+    // scroll-position binding re-evaluated the whole list body on every scroll tick, so one top-to-bottom
+    // scroll multiplied (row count x every prospect) across many redraws on the main thread and froze the
+    // app. Each row now reads its tally from this map in O(1); the map recomputes only when a prospect a
+    // tally actually counts changes (SourceYield.signature).
+    @State private var tallies: [String: SourceYield.Tally] = [:]
+    // #1429: the returning-client verdict per source, CACHED for the same reason. The old code called
+    // ClientHorizon.isClient inline once per row on every redraw, each a token-set fuzzy match against the
+    // whole Downbeat client list. It recomputes alongside the coverage result (same inputs: a source's
+    // name, its tag, and the client list), so a row reads its flag in O(1).
+    @State private var clientFlags: [String: Bool] = [:]
+
     // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
     // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
     @State private var topSection: SourceGrade?
@@ -101,17 +115,30 @@ struct SourcesView: View {
         // matches a known client. Read-only; nothing here writes it.
         .task {
             let loaded = DownbeatBridge.loadWithHealth(now: Date())
-            clients = loaded.clients
+            // #1429: sort the roster ONCE here, so the "Always" override submenu can iterate it in order
+            // without re-sorting every time a row's menu is built. Order is irrelevant to every other reader
+            // of `clients` (the coverage match and the client-flag match are order-independent).
+            clients = DownbeatClient.sortedByName(loaded.clients)
             clientsHealth = loaded.health
         }
-        // Recompute the cached coverage result ONLY when its real inputs change. The signature is cheap to
-        // evaluate every redraw; the O(clients x sources) match behind it runs only when the signature
-        // differs, so a keystroke or scroll no longer drags the whole diagnostic through the main thread.
+        // #1429: recompute the cached tallies ONLY when a prospect a tally counts actually changes. The
+        // signature is O(prospects) to evaluate each redraw (cheap next to the old O(rows x prospects) per
+        // redraw), and the single-pass recompute behind it runs only when it differs, so a scroll no longer
+        // drags the whole store through the main thread.
+        .onChange(of: SourceYield.signature(prospects), initial: true) {
+            tallies = SourceYield.tallies(in: prospects)
+        }
+        // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
+        // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)
+        // matches behind it run only when the signature differs, so a keystroke or scroll no longer drags
+        // either through the main thread. The flags depend on the same inputs the signature captures (each
+        // source's name and tag, and the client list), so they ride the same gate.
         .onChange(of: ClientCoverage.signature(sources: sources, clients: clients,
                                                dismissedIds: Set(dismissedCoverage.map(\.clientId))),
                   initial: true) {
             coverageResult = ClientCoverage.result(sources: sources, clients: clients,
                                                    dismissedIds: Set(dismissedCoverage.map(\.clientId)))
+            clientFlags = ClientHorizon.clientFlags(sources: sources, clients: clients)
         }
     }
 
@@ -410,7 +437,10 @@ struct SourcesView: View {
     // state line beside it.
     @ViewBuilder
     private func clientTagControl(_ source: WatchedSource) -> some View {
-        let isClient = ClientHorizon.isClient(source, clients: clients)
+        // #1429: read the cached flag instead of running ClientHorizon.isClient (a whole-roster fuzzy match)
+        // inline on every redraw. Absent from the map means not-a-client, the same default the map holds
+        // until the client list has loaded.
+        let isClient = clientFlags[source.sourceId] ?? false
         HStack(spacing: OVSpacing.xs) {
             if let label = ClientTagCopy.stateLabel(isClient: isClient, override: source.clientTagOverride,
                                                     namedClient: namedClientName(source)) {
@@ -424,9 +454,11 @@ struct SourcesView: View {
                 // coverage diagnostic can count that client as covered instead of leaving it a hidden gap.
                 Menu(ClientTagCopy.optionAlways) {
                     clientTagAlwaysButton(source, label: ClientTagCopy.optionAlwaysNoClient, clientId: nil)
-                    if !sortedClients.isEmpty {
+                    // #1429: `clients` is already sorted for display (sorted once when loaded above), so the
+                    // submenu iterates it directly rather than re-sorting on every menu build.
+                    if !clients.isEmpty {
                         Divider()
-                        ForEach(sortedClients, id: \.id) { c in
+                        ForEach(clients, id: \.id) { c in
                             clientTagAlwaysButton(source, label: c.displayName, clientId: c.id)
                         }
                     }
@@ -457,10 +489,6 @@ struct SourcesView: View {
         }
     }
 
-    private var sortedClients: [DownbeatClient] {
-        clients.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-    }
-
     // The display name of the Downbeat client a source's "always" tag names, or nil for a bare tag. Only a
     // lookup, no rule: the arming/coverage rules stay in ClientCoverage (#863).
     private func namedClientName(_ source: WatchedSource) -> String? {
@@ -475,10 +503,12 @@ struct SourcesView: View {
     }
 
     private func row(_ source: WatchedSource) -> some View {
-        // #794/#978/#1185: the lifetime tally, computed once and reused, both for the yield line below and
-        // for whether a single-venue feed has actually surfaced shows yet (which decides its address nudge).
-        // The counting still lives in SourceYield, a tested pure function; this only reads it.
-        let tally = SourceYield.tally(sourceId: source.sourceId, in: prospects)
+        // #794/#978/#1185: the lifetime tally, reused for the yield line below and for whether a single-venue
+        // feed has actually surfaced shows yet (which decides its address nudge). The counting lives in
+        // SourceYield, a tested pure function; #1429 moved it out of the per-row path into the cached
+        // `tallies` map (computed once for the whole store), so this reads its own in O(1). A source absent
+        // from the map surfaced nothing and reads as the zero tally, which is what the scan returned too.
+        let tally = tallies[source.sourceId] ?? .zero
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
                 Text(source.orgName).font(.system(size: 13, weight: .medium)).foregroundStyle(OVColor.ink)

@@ -72,6 +72,27 @@ struct ClientHorizonTests {
         #expect(!ClientHorizon.isClient(s, clients: []))            // client no longer on the list
     }
 
+    // #1429: the Sources sheet used to call `isClient` once per row on EVERY redraw, and each call runs a
+    // token-set fuzzy match against the whole Downbeat client list, so a long scroll (with the sheet's
+    // scroll-hold re-running the list on every tick) added up on the main thread. `clientFlags` decides it
+    // for every source in one pass so the sheet can cache the map and read each row's flag in O(1). It must
+    // agree with `isClient` source-for-source, tag overrides in both directions included, or a row would
+    // show the wrong returning-client state and horizon.
+    @Test func clientFlagsAgreesWithIsClientForEverySource() {
+        let nameMatch = source("Brooklyn Youth Chorus")          // auto-arms on name
+        let noMatch = source("Some Random Venue")                 // no client matches
+        let forcedOn = source("The Shared Venue", tag: true)      // tagged on with no name match
+        let forcedOff = WatchedSource(sourceId: "byc-off", orgName: "Brooklyn Youth Chorus",
+                                      listingsURL: "https://byc-off.example/e", kind: .html)
+        forcedOff.clientTagOverride = false                       // tagged off despite a name match
+        let sources = [nameMatch, noMatch, forcedOn, forcedOff]
+
+        let flags = ClientHorizon.clientFlags(sources: sources, clients: clients)
+        for s in sources {
+            #expect(flags[s.sourceId] == ClientHorizon.isClient(s, clients: clients))
+        }
+    }
+
     // MARK: The Prep-run default window uses the same authority
 
     private func prospect(_ key: String, date: String, sourceIds: [String] = [],
@@ -139,5 +160,22 @@ struct ClientHorizonTests {
             .contains("year") == true)
         #expect(ClientTagCopy.stateLabel(isClient: true, override: true, namedClient: nil)?
             .contains("Brooklyn") == false)
+    }
+}
+
+// #1429: the "Always" override submenu on the Sources sheet listed the whole client roster sorted by name,
+// and re-sorted it every time a row's menu was built. Sorting is done once, through this pure helper, so it
+// can be tested and so the sheet sorts the roster a single time at load instead of per menu per redraw.
+@Suite("Downbeat client display sort (#1429)")
+struct DownbeatClientSortTests {
+    private func client(_ name: String) -> DownbeatClient {
+        DownbeatClient(id: name, displayName: name, shortName: nil, email: "", contractEmail: "",
+                       phoneNumber: nil, isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
+                       notes: nil, hostingSite: "")
+    }
+
+    @Test func sortsByDisplayNameCaseInsensitivelyAscending() {
+        let sorted = DownbeatClient.sortedByName([client("Zeta"), client("alpha"), client("Beta")])
+        #expect(sorted.map(\.displayName) == ["alpha", "Beta", "Zeta"])
     }
 }

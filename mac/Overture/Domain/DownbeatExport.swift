@@ -16,6 +16,13 @@ struct DownbeatClient: Codable, Equatable, Sendable {
     var specialBehaviors: [String]
     var notes: String?
     var hostingSite: String
+
+    // Clients ordered for display, case-insensitively by name (#1429). The Sources sheet's "Always" submenu
+    // shows the whole roster this way; sorting is done once through this helper at load rather than rebuilt
+    // every time a row's menu is drawn.
+    static func sortedByName(_ clients: [DownbeatClient]) -> [DownbeatClient] {
+        clients.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
 }
 
 struct DownbeatVenue: Codable, Equatable, Sendable {
