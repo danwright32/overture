@@ -126,42 +126,70 @@ score_one_fixture() {
   fi
 }
 
-# Visit every committed fixture in sorted order, calling `${1} <name> <fixture-path>` for each. Reads the
-# fixture list from FD 3, NOT stdin, so an inner command that consumes stdin (claude -p and tsx both do)
-# can no longer swallow the remaining names and truncate the loop after the first fixture (#1387).
-for_each_fixture() {
-  local fn="$1" name fixture
+# Dispatch <callback> over a newline-separated list of fixture NAMES, calling `<fn> <name> <path>` for each.
+# Reads the list from FD 3, NOT stdin, so an inner command that consumes stdin (claude -p and tsx both do)
+# can no longer swallow the remaining names and truncate the loop after the first fixture (#1387). Token-free
+# by itself; the callback is score_one_fixture in a real run (that one spends) and a recorder in the test.
+for_each_in_list() {
+  local fn="$1" names="$2" name
   while IFS= read -r name <&3; do
-    fixture="$(fixture_path_for "${name}")"
-    "${fn}" "${name}" "${fixture}"
-  done 3< <(list_fixtures)
+    [ -n "${name}" ] || continue
+    "${fn}" "${name}" "$(fixture_path_for "${name}")"
+  done 3< <(printf '%s\n' "${names}")
 }
 
-# Dispatch <callback> over either ALL fixtures (no name) or exactly ONE named fixture (#1397). Validation
-# only when a name is given: an unknown name is a usage error (exit 2, listing what IS available), never a
-# silent no-op and never a silent fall-through to running everything. Token-free by itself: it only picks
-# which fixtures to hand the callback, which is score_one_fixture in the real run (that one spends) and a
-# recorder in the test (which does not), so the selection logic is testable without a real claude call.
-select_and_run() {
-  local fn="$1" only="${2:-}"
-  if [ -z "${only}" ]; then
-    for_each_fixture "${fn}"
-    return
-  fi
-  local fixture
-  fixture="$(fixture_path_for "${only}")"
-  if [ ! -f "${fixture}" ]; then
-    echo "eval-prep-runbook: no such fixture '${only}'. Available:" >&2
-    list_fixtures | sed 's/^/  /' >&2
-    return 2
-  fi
-  "${fn}" "${only}" "${fixture}"
+# Visit every committed fixture in sorted order.
+for_each_fixture() {
+  for_each_in_list "$1" "$(list_fixtures)"
 }
 
 # The fixture names the LAST real run left failing, one per line (empty if none / no run yet).
 read_failures() {
   [ -f "${FAILURES_FILE}" ] || return 0
   grep -v '^$' -- "${FAILURES_FILE}" 2>/dev/null || true
+}
+
+# Resolve WHICH fixtures a real run would score, as a newline list on stdout, WITHOUT running or spending
+# anything. `real_run` calls this FIRST, so a no-op selection returns 2 (with a message on stderr) and the
+# caller bails as a free usage error BEFORE the SPENDS-TOKENS warning and any setup, meaning that warning is
+# only ever printed when a real run is actually about to happen. Single source of the selection rules across
+# the full run, a single named fixture (#1397), and --failed (#1400); never a silent fall-through to all.
+run_plan() {
+  local only="${1:-}" names kept="" n
+  case "${only}" in
+    "")
+      list_fixtures
+      ;;
+    --failed)
+      names="$(read_failures)"
+      if [ -z "${names}" ]; then
+        echo "eval-prep-runbook: no recorded failures from a previous --yes run to recheck." >&2
+        return 2
+      fi
+      while IFS= read -r n; do
+        [ -n "${n}" ] || continue
+        if [ -f "$(fixture_path_for "${n}")" ]; then
+          kept="${kept}${n}"$'\n'
+        else
+          echo "eval-prep-runbook: recorded failure '${n}' is no longer a fixture, skipping." >&2
+        fi
+      done <<< "${names}"
+      if [ -z "${kept}" ]; then
+        echo "eval-prep-runbook: no recorded failures still exist as fixtures to recheck." >&2
+        return 2
+      fi
+      printf '%s' "${kept}"
+      ;;
+    *)
+      if [ -f "$(fixture_path_for "${only}")" ]; then
+        echo "${only}"
+      else
+        echo "eval-prep-runbook: no such fixture '${only}'. Available:" >&2
+        list_fixtures | sed 's/^/  /' >&2
+        return 2
+      fi
+      ;;
+  esac
 }
 
 # Rewrite FAILURES_FILE to the post-run failing set so `--yes --failed` CONVERGES (#1400): keep prior
@@ -179,41 +207,19 @@ update_failures_file() {
   done <<< "${prior}"
   # `grep -v '^$'` exits 1 on empty input, which under `set -e`/`pipefail` would abort a fully-passing run
   # (kept and failures both empty) right before the summary; `|| true` tolerates it. sort -u newline-
-  # terminates every line so run_failed_fixtures' `read` loop never drops the last one.
+  # terminates every line so a later run_plan/for_each_in_list `read` loop never drops the last one.
   { printf '%s%s' "${kept}" "${_eval_failed_names}" | grep -v '^$' || true; } | sort -u > "${FAILURES_FILE}"
-}
-
-# Run <callback> over ONLY the fixtures the last real run left failing (#1400). No recorded failures (or
-# none still exist) is a usage error, exit 2, never a silent no-op and never a silent full run. Reads the
-# name list from FD 3, NOT stdin, for the same reason for_each_fixture does: score_one_fixture's inner
-# claude/tsx calls consume stdin and would otherwise truncate the loop after the first fixture (#1387).
-run_failed_fixtures() {
-  local fn="$1" n fixture ran=0 names
-  names="$(read_failures)"
-  if [ -z "${names}" ]; then
-    echo "eval-prep-runbook: no recorded failures from a previous --yes run to recheck." >&2
-    return 2
-  fi
-  while IFS= read -r n <&3; do
-    [ -n "${n}" ] || continue
-    fixture="$(fixture_path_for "${n}")"
-    if [ ! -f "${fixture}" ]; then
-      echo "eval-prep-runbook: recorded failure '${n}' is no longer a fixture, skipping." >&2
-      continue
-    fi
-    "${fn}" "${n}" "${fixture}"
-    ran=1
-  done 3< <(printf '%s\n' "${names}")
-  if [ "${ran}" -eq 0 ]; then
-    echo "eval-prep-runbook: no recorded failures still exist as fixtures to recheck." >&2
-    return 2
-  fi
 }
 
 # $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck), or the
 # literal "--failed" to recheck only the fixtures the previous real run left failing (#1400).
 real_run() {
-  local only="${1:-}"
+  local only="${1:-}" plan
+  # Resolve the run set FIRST. A no-op selection (unknown name, or --failed with nothing left to recheck)
+  # bails here as a free usage error BEFORE the SPENDS-TOKENS warning and any dependency setup, so the
+  # warning only ever appears when a real run is actually about to spend (#1400 follow-up).
+  plan="$(run_plan "${only}")" || return $?
+
   cost_warning
   command -v jq >/dev/null 2>&1 || { echo "eval-prep-runbook: jq is required" >&2; exit 1; }
   command -v tsx >/dev/null 2>&1 || command -v pnpm >/dev/null 2>&1 || { echo "eval-prep-runbook: tsx (or pnpm) is required to score output" >&2; exit 1; }
@@ -240,11 +246,7 @@ real_run() {
   _eval_total=0
   _eval_ran_names=""
   _eval_failed_names=""
-  if [ "${only}" = "--failed" ]; then
-    run_failed_fixtures score_one_fixture || return $?
-  else
-    select_and_run score_one_fixture "${only}" || return $?
-  fi
+  for_each_in_list score_one_fixture "${plan}"
 
   # Record which fixtures this run left failing so a later `--yes --failed` can recheck just those.
   update_failures_file
