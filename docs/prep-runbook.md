@@ -12,16 +12,18 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `4`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  (`PrepQueue` version `5`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
   night (absent for a single-night show); `openingNightPassed` is `true` only for a run whose
   opening night has already passed while later dates remain (absent otherwise). See "Run dates"
-  under the show-date rule below.
+  under the show-date rule below. `experimentArmInstruction` (v5, #5) is the opener archetype this
+  item MUST use when it belongs to an active A/B experiment; absent (the normal case, no active
+  experiment) means use the normal #362 rotation. See "Opener archetype" in §2 for its precedence.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
   optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
