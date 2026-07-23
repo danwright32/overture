@@ -150,15 +150,26 @@ item's `production` field first:
     `provenance: "performer"` and `name` set to that person. Never emit `act` for this
     show. Each performer entry ALSO gets its own `overrideBody` (see §2's "Drafting for a
     performer contact directly"), since you are emailing them directly, not describing
-    them to a third party.
+    them to a third party. A performer NAMED on the authoritative listing is ALWAYS
+    surfaced as her own `provenance: "performer"` entry, even when you cannot corroborate
+    her against this performance or find a contact for her: in that case still emit a FULL
+    contact for her, `provenance: "performer"`, her `name`, `confidence: "low"`, and a
+    `method` (the waterfall method for however she can be reached, e.g. `form_or_dm`),
+    leaving `email` and `sourceUrl` absent when you have not verified one. A name-only
+    entry still needs its `method`; never omit a required contact field. Dropping a named
+    performer is the failure; a stale or misnaming secondary source is exactly the case the
+    `low` flag exists for, so hold her at low confidence rather than over-trusting the site
+    OR omitting her.
   - If the show is a bigger ensemble/group with no clear individual lead (3+ named
     members, or no performer names available at all), fall through to the standard
     single-act waterfall below with `provenance: "act"`, exactly as for a non-self-produced
     show. This is a judgment call from what the listing actually shows, not a hardcoded
     headcount. When genuinely unsure, prefer the act waterfall.
-  - Partial results are fine: emit whichever performers you actually found (0, 1, or 2);
-    never block trying to find every one. Dan reviews every draft and can hand-add anyone
-    missed via the manual-recipient path.
+  - Partial results are fine on the CONTACT DETAILS (an email or a corroboration you could
+    or could not find), but a performer NAMED on the listing is still surfaced at low
+    confidence per above, never dropped for a weak contact; never block trying to find
+    every one. Dan reviews every draft and can hand-add anyone genuinely absent from the
+    listing via the manual-recipient path.
 - **`production != "self"`** (agency-produced or unknown): the waterfall below runs
   exactly as it does today, targeting the act with `provenance: "act"`. Nothing changes.
 

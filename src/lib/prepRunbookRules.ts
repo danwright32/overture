@@ -23,6 +23,7 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   { name: "carnegie-citywide-press-example", pattern: /publicrelations@carnegiehall\.org/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },
+  { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },
   { name: "high-confidence-only-when-read", pattern: /allowed ONLY for an\s+address actually READ from a real page/i },
   { name: "no-pattern-guessed-high", pattern: /NEVER emit a pattern-guessed address/i },
   { name: "partial-performer-results-ok", pattern: /Partial results are fine/i },
