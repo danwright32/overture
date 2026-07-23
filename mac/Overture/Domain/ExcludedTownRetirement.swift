@@ -48,8 +48,7 @@ enum ExcludedTownRetirement {
                          userExcludedTowns: userExcluded, allowedSeedTowns: allowedSeed)
         }
         for p in retire {
-            p.status = .dismissed
-            p.dismissReason = .tooFar
+            p.markDismissed(reason: .tooFar)
         }
         return retire.count
     }
@@ -63,8 +62,7 @@ enum ExcludedTownRetirement {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where p.status == .dismissed && p.dismissReason == .tooFar {
             guard let t = EventPlace.excludableTown(from: p.location)?.lowercased(), t == town else { continue }
-            p.status = .new
-            p.dismissReason = nil
+            p.clearDismissal()
         }
     }
 }

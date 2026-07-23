@@ -62,8 +62,7 @@ enum OrgDoNotContact {
             // suppressUntriedRecipients above and `isClosed` (which now reads this flag) together
             // guarantee: no fresh send, no follow-up, no reminder.
             if p.sentAt == nil && p.status != .dismissed {
-                p.status = .dismissed
-                p.dismissReasonRaw = DismissReason.notInterested.rawValue
+                p.markDismissed(reason: .notInterested)
             }
         }
     }

@@ -10,9 +10,9 @@ enum DismissedProspects {
            .sorted { $0.ingestedAt > $1.ingestedAt }
     }
 
-    // Undo a dismiss: back to an undecided candidate in the queue, reason cleared.
+    // Undo a dismiss: back to an undecided candidate in the queue, reason cleared, and (#16) the exit
+    // date cleared with it, since the show never actually left.
     static func restore(_ prospect: Prospect) {
-        prospect.status = .new
-        prospect.dismissReasonRaw = nil
+        prospect.clearDismissal()
     }
 }

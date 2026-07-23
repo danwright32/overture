@@ -197,8 +197,13 @@ enum ProspectMutations {
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.status = status
-        model.dismissReasonRaw = reason?.rawValue
+        // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
+        // any move back into the queue, rather than depending on every caller of this setter to remember.
+        if status == .dismissed {
+            model.markDismissed(reason: reason)
+        } else {
+            model.clearDismissal(to: status)
+        }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
