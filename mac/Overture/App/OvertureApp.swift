@@ -9,6 +9,8 @@ struct OvertureApp: App {
     let modelContainer: ModelContainer?
     private let storeLock: StoreLock?      // held for the process lifetime to keep the single-writer lock
     private let degradedReason: String?
+    // #1409: set when the store opened with far fewer shows than its last backup holds.
+    private let shrinkWarning: StoreShrinkCheck.Finding?
     // #1160: whether this launch is healthy, a duplicate (defer to the resident and quit), or a broken
     // store (show the degraded screen). Distinguishes the last two, which both leave modelContainer nil.
     private let launchOutcome: StoreLaunchOutcome
@@ -35,6 +37,7 @@ struct OvertureApp: App {
         var container: ModelContainer? = nil
         var lock: StoreLock? = nil
         var reason: String? = nil
+        var shrinkWarning: StoreShrinkCheck.Finding? = nil
 
         if AppEnvironment.isRunningUnderTests {
             // Tests build their own in-memory stores; the host never touches the real store or its lock.
@@ -80,6 +83,13 @@ struct OvertureApp: App {
                 // never days.
                 HandoffCleanup.sweep(handoffDirectory: StoreLocation.handoffDirectory, now: Date())
 
+                // #1409: counted HERE, before the backup below runs, or the freshly taken backup would
+                // be the thing it compares against and the two counts would always agree. Read-only,
+                // and nothing acts on it: the store still opens normally, and Dan is shown the finding
+                // once. The #663 guard above catches a foreign file; this catches Overture's own store
+                // having quietly lost most of its rows, which opens perfectly cleanly and looks fine.
+                shrinkWarning = StoreShrinkCheck.check(dataDirectory: StoreLocation.dataDirectory)
+
                 container = StoreBackup.performLaunchBackup(
                     dataDirectory: StoreLocation.dataDirectory, now: Date(), keep: 10
                 ) {
@@ -100,6 +110,7 @@ struct OvertureApp: App {
         self.modelContainer = container
         self.storeLock = lock
         self.degradedReason = reason
+        self.shrinkWarning = shrinkWarning
         // #1160: classify the launch so a duplicate (another live copy holds the single-writer lock)
         // defers to the resident and quits, instead of lingering on the degraded screen as a second
         // instance. A store that opened badly still shows StoreUnavailableView (see classify's edge).
@@ -123,6 +134,9 @@ struct OvertureApp: App {
         Window("Overture", id: "main") {
             if let modelContainer {
                 RootView().modelContainer(modelContainer).environment(addLead)
+                    .storeShrinkNotice(shrinkWarning,
+                                       backupsPath: StoreShrinkCheck.backupsPath(
+                                           dataDirectory: StoreLocation.dataDirectory))
             } else if launchOutcome == .duplicateInstance {
                 // #1160: this process is a redundant duplicate; AppDelegate terminates it at launch and
                 // it defers to the resident copy. Show nothing (no degraded screen) so a duplicate that

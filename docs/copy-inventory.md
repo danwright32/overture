@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **768 sentences**, from 259 source files.
+Every sentence Overture can say to Dan: **778 sentences**, from 261 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -21,6 +21,7 @@ What is not, and why:
 ## Excluded at the source
 
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
+- `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
@@ -433,6 +434,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Contains an unfilled placeholder like [VENUE]"
     `Domain/DraftCheck.swift`
+"Continue anyway"
+    `UI/StoreShrinkNoticeSheet.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/DraftReviewView.swift`
 "Correct this source's web address, then read it to check"
@@ -645,6 +648,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReminderSettingsView.swift`
 "It fetches the page, then follows each show's own link to get the venue and date."
     `UI/AddLeadSheet.swift`
+"Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
+    `App/StoreShrinkCheck.swift`
 "Just this show"
     `UI/DraftReviewView.swift`
 "Keep 1 show"
@@ -901,6 +906,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
     `UI/QueueView+Model.swift`
+"Overture cannot tell whether anything is missing"
+    `App/StoreShrinkCheck.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
 "Overture couldn't move its data to \(newStoreURL.path): "
@@ -923,6 +930,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
+    `App/StoreShrinkCheck.swift`
 "Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
     `UI/ProspectRowView.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
@@ -1160,6 +1169,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarContent.swift`
 "Show in Finder"
     `App/StoreUnavailableView.swift`
+"Show me the backups"
+    `UI/StoreShrinkNoticeSheet.swift`
 "Show name"
     `UI/ProspectRowView.swift`
 "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
@@ -1193,6 +1204,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
+"Some of your shows may be missing"
+    `App/StoreShrinkCheck.swift`
 "Some results came back under an unknown source and were ignored this run."
     `Domain/ScoutWarnings.swift`
 "Something went wrong"
@@ -1620,6 +1633,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(previous). Nothing has been changed. If that drop is a surprise, quit Overture and "
+    `App/StoreShrinkCheck.swift`
 "\(range) is no longer blocked"
     `App/ActionFeedback.swift`
 "\(range) is now blocked"
@@ -1675,6 +1690,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "at \(venue) on \(dateLabel)"
     `UI/QueueView+Model.swift`
+"backup before working."
+    `App/StoreShrinkCheck.swift`
 "book now"
     `Domain/TicketLink.swift`
 "brooklyn society for ethical culture"
@@ -1735,6 +1752,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "redraft and find new contacts"
     `App/ActionFeedback.swift`
+"restore a backup before working: every launch takes another backup, and only the last "
+    `App/StoreShrinkCheck.swift`
 "restored your guidance notes"
     `Domain/PrepRunSummary.swift`
 "send failed"
@@ -1743,6 +1762,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "stern auditorium / perelman stage"
     `Domain/VenueDisplay.swift`
+"ten are kept."
+    `App/StoreShrinkCheck.swift`
 "the Downbeat client export couldn't be read"
     `Persistence/PrepImporter.swift`
 "the Downbeat client export is \(days) days old"
