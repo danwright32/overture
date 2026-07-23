@@ -64,6 +64,26 @@ describe("evaluatePrepResult - structural validity", () => {
     expect(r.pass).toBe(true);
     expect(r.failures).toEqual([]);
   });
+
+  // #1389: the real-AI eval scores the drafter's JUDGMENT (contacts, draft, provenance), not run-level
+  // metadata. A single-item eval output legitimately omits `generatedAt` (that wrapper field belongs to
+  // the real Prep run writing the whole file), so it must be scored on content, never rejected on the
+  // missing timestamp. Before this, every real drafting output failed structurally on generatedAt.
+  it("scores a content-valid output that omits the run-level generatedAt (#1389)", () => {
+    const produced = results([NAMED_ACT]) as Record<string, unknown>;
+    delete produced.generatedAt;
+    const r = evaluatePrepResult(produced, { description: "no generatedAt" });
+    expect(r.failures.join(" ")).not.toMatch(/generatedAt/);
+    expect(r.pass).toBe(true);
+  });
+
+  it("also tolerates an empty generatedAt string (#1389)", () => {
+    const produced = results([NAMED_ACT]) as Record<string, unknown>;
+    produced.generatedAt = "";
+    const r = evaluatePrepResult(produced, { description: "empty generatedAt" });
+    expect(r.failures.join(" ")).not.toMatch(/generatedAt/);
+    expect(r.pass).toBe(true);
+  });
 });
 
 describe("evaluatePrepResult - universal invariants (always-true runbook rules)", () => {
