@@ -94,30 +94,24 @@ struct SourceFixConfirmActions: View {
         OVCapsuleButton(label: label, tint: tint, action: action)
     }
 
+    // #1417: the edit itself, its wording, and the "only claim success once it saved" rule all live in
+    // WatchlistMutations now. What stays here is this editor's own state: which is why .notSaved leaves
+    // the field OPEN holding what Dan typed, instead of closing over a correction that never landed.
     private func saveURL() {
-        switch WatchlistEditing.editURL(source, to: draftURL, in: context) {
+        switch WatchlistMutations.fixURL(source, to: draftURL, context: context, feedback: feedback) {
         case .saved(let id):
             editing = false
             message = nil
-            feedback.acknowledge(SourceFixConfirmCopy.fixedAck(org: source.orgName))
             onFixed(id)
-        case .invalidURL:
-            message = WatchlistEditing.invalidURLMessage
-        case .conflict(let org):
-            message = SourceFixConfirmCopy.conflictMessage(org: org)
-        case .refused(let org):
-            message = WatchlistEditing.resumeRefusedMessage(orgName: org)
+        case .message(let text):
+            message = text
+        case .notSaved:
+            break
         }
     }
 
     private func confirm() {
-        switch WatchlistEditing.confirmEmpty(source, in: context) {
-        case .confirmed:
-            feedback.acknowledge(SourceFixConfirmCopy.confirmedAck(org: source.orgName))
-        case .noHash:
-            feedback.acknowledge(SourceFixConfirmCopy.confirmedNoHashAck(org: source.orgName),
-                                 tone: .warning)
-        }
+        WatchlistMutations.confirmEmpty(source, context: context, feedback: feedback)
     }
 }
 

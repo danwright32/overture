@@ -179,7 +179,10 @@ enum ProspectMutations {
             // the matching shows (the base query hides dismissed everywhere) and persist. Undo reverses both
             // halves: un-block the town AND bring its shows back, or Undo would leave them stuck dismissed.
             ExcludedTownRetirement.run(in: context)
-            context.saveOrWarn(org: town, feedback: feedback)
+            // #1417: the one site the issue named. The warning from a failed save was posted and then
+            // wiped by the success line below microseconds later, so a refusal that never reached disk
+            // read as "Won't show you shows in Newark again" and came back on the next launch.
+            guard context.saveOrWarn(org: town, feedback: feedback) else { return }
             let normalized = ExcludedTownEditing.normalize(town)
             feedback.acknowledge(ActionAck.townExcluded(town: town),
                                  action: .init(label: "Undo") {
@@ -245,6 +248,10 @@ enum ProspectMutations {
             feedback.acknowledge(DayOffEditing.message(for: result) ?? "Couldn't block \(range)", tone: .warning)
             return false
         }
+        // #1417: DayOffEditing.add persists with a bare `try? context.save()`, so a failed write reached
+        // Dan as "Jul 3 to Jul 5 is now blocked" while every show those nights stayed draftable and
+        // sendable. Confirm it landed before saying so, and before offering an Undo for it.
+        guard context.saveOrWarn(org: range, feedback: feedback) else { return false }
         // The Undo must reverse the whole action, not just the row: DayOffEditing.remove re-runs the same
         // sweep, so every show this block flagged is un-flagged and draftable again. A show left flagged
         // against a day that is no longer blocked would be held back from drafting and sending, silently.

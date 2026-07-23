@@ -137,37 +137,18 @@ struct ExcludedTownsView: View {
         }
     }
 
-    // #1221: un-skip a built-in seed town, reversible from the banner it happened in (#845). The Undo
-    // re-skips exactly what was allowed, reusing the same wording as taking back one of his own refusals.
+    // #1417: all three live in ExcludedTownMutations now, so their wording, their Undos, and the rule
+    // that none of them claims success before the change is saved are stated once and are testable (#863).
     private func allow(_ town: String) {
-        let shown = ExcludedTownEditing.displayName(town)
-        ExcludedTownEditing.allowSeedTown(town, into: context)
-        feedback.acknowledge(ActionAck.townUnexcluded(town: shown),
-                             action: .init(label: "Undo") {
-                                 ExcludedTownEditing.reskipSeedTown(town, in: context)
-                             })
+        ExcludedTownMutations.allow(town, context: context, feedback: feedback)
     }
 
-    // The way back the other direction: re-skip a built-in town, Undo re-allows it.
     private func reskip(_ town: String) {
-        let shown = ExcludedTownEditing.displayName(town)
-        ExcludedTownEditing.reskipSeedTown(town, in: context)
-        feedback.acknowledge(ActionAck.townExcluded(town: shown),
-                             action: .init(label: "Undo") {
-                                 ExcludedTownEditing.allowSeedTown(town, into: context)
-                             })
+        ExcludedTownMutations.reskip(town, context: context, feedback: feedback)
     }
 
-    // Reversible from the banner it happened in (#845): a mis-clicked Remove otherwise means retyping the
-    // town, and the row Dan just deleted is the one place he could have read it off. The Undo re-excludes
-    // exactly what was removed.
     private func remove(_ town: String) {
-        let shown = ExcludedTownEditing.displayName(town)
-        ExcludedTownEditing.remove(town: town, in: context)
-        feedback.acknowledge(ActionAck.townUnexcluded(town: shown),
-                             action: .init(label: "Undo") {
-                                 ExcludedTownEditing.exclude(town: town, into: context)
-                             })
+        ExcludedTownMutations.remove(town, context: context, feedback: feedback)
     }
 
     private func sectionHeading(_ title: String, systemImage: String, count: Int) -> some View {
