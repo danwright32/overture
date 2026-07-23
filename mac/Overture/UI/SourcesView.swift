@@ -61,10 +61,6 @@ struct SourcesView: View {
     // name, its tag, and the client list), so a row reads its flag in O(1).
     @State private var clientFlags: [String: Bool] = [:]
 
-    // #974: the section currently at the top of the scroll. Bound so the list HOLDS ITS PLACE while the
-    // rows underneath it change. See the ScrollView below for why that is load-bearing rather than polish.
-    @State private var topSection: SourceGrade?
-
     // #1175: which single-venue-feed source's location Dan is editing (its sourceId), and the draft text.
     @State private var editingLocationFor: String?
     @State private var locationDraft = ""
@@ -79,30 +75,35 @@ struct SourcesView: View {
             if sources.isEmpty {
                 empty
             } else {
+                // #1440: a plain scroll view, deliberately. Holding Dan's place across a scout rebuild (#974)
+                // was done first by a `.scrollPosition` PIN and then by per-section geometry tracking, and
+                // BOTH drove a SwiftUI layout feedback loop that froze the sheet on a fast flick right after it
+                // opened (proven by a main-thread sample of the live hang: the loop ran through the per-section
+                // GeometryReader preference). A dumb scroll has no such loop, so it neither jumps nor freezes.
+                // The cost is #974: if a scout refreshes the list WHILE the sheet is open it may snap to the
+                // top, a minor annoyance worth trading for a sheet that never hangs. Revisit place-holding only
+                // with an approach that cannot re-enter layout.
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: OVSpacing.lg) {
-                        // #1356: the coverage gap list sits above the sources, because it is where Dan acts
-                        // on a gap (add a source, or tag one below). It renders nothing when every client is
-                        // covered, which is the common case once the non-targets are dismissed once.
+                    // #1440: a plain VStack, NOT a LazyVStack. A lazy list does not build off-screen rows, so
+                    // it only ESTIMATES the height of the big "watching" section (~35 rows as one child); a
+                    // fast flick into it realizes the real, much larger height, the content size snaps, and the
+                    // scroll lurches to the bottom (the "jumps to the bottom after about halfway" bug). For a
+                    // watchlist of a few dozen rows in a 460pt sheet, building it all up front is cheap and
+                    // gives the scroll a stable, correct height from the first frame, so there is nothing to
+                    // lurch to. (The separate freeze was a scroll-position-tracking layout loop, removed above.)
+                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                        // #1356: the coverage gap list sits above the sources, because it is where Dan acts on
+                        // a gap (add a source, or tag one below). It renders nothing when every client is
+                        // covered, the common case once the non-targets are dismissed once.
                         coverageSection
                         // Sectioning, ordering and the omit-empty rule all come from the tested domain
                         // function, so this view has no judgement of its own to get wrong.
                         ForEach(SourceGrade.sections(sources), id: \.grade) { section($0.grade, $0.sources) }
                     }
-                    .scrollTargetLayout()
                     .padding(OVSpacing.lg)
                 }
-                // #974: hold the scroll where Dan put it. `sources` is a @Query, so ANY change to ANY
-                // source rebuilds this content, and a scout pass changes many at once: each source it
-                // checks gains a "new listings" line (#803) and can move to a different grade section.
-                // A plain ScrollView drops its offset to the top on every one of those, so during a run
-                // the sheet cannot be scrolled at all: it snaps back before he can read a row. Binding the
-                // position to the top-visible section pins it across the rebuild. Only visible with a
-                // watchlist long enough to scroll, which is why it surfaced when #359 took it from 3 to 38.
-                .scrollPosition(id: $topSection, anchor: .top)
-                // Sizes to its content rather than to a fixed height, so today's one-source watchlist
-                // does not open as a mostly empty box, and a long one still scrolls instead of running
-                // off the screen.
+                // Sizes to its content rather than to a fixed height, so today's one-source watchlist does not
+                // open as a mostly empty box, and a long one still scrolls instead of running off the screen.
                 .frame(maxHeight: 460)
             }
         }
