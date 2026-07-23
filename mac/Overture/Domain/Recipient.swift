@@ -268,6 +268,29 @@ final class Recipient {
         set { conversationStateRaw = newValue?.rawValue }
     }
 
+    // #16: every stage this conversation has DEMONSTRABLY reached, in the order it first reached each.
+    // `conversationStateRaw` holds only where the conversation IS, so a contact who asked a question and
+    // then decided to book stopped recording that a question was ever asked, and nothing could recover
+    // it afterwards. The funnel's middle band counts conversations that PASSED THROUGH a stage, which
+    // the single current value cannot answer.
+    //
+    // A list rather than one Bool per stage: the stages are an enum that may grow, and four parallel
+    // flags would need a fifth adding by hand in every place that reads them (the #1030-class defect
+    // where one concept lives in several switches). Appended to, never removed: this is a record of
+    // where a conversation has been, so changing or clearing the current stage leaves it untouched.
+    //
+    // Written ONLY by Dan's own assertion, setConversationState and confirmConversationState. NOT by
+    // the shared setter above, which the AI's suggestion path also passes through: an automatic guess he
+    // never confirmed (or overrode) must leave no trace, or a wrong AI read would be baked into the
+    // permanent record with no way to tell it from his own call (Dan's decision, 2026-07-23).
+    var conversationStagesReached: [String] = []
+
+    // Idempotent by construction, so a stage set twice counts one conversation rather than two clicks.
+    private func markStageReached(_ state: ConversationState) {
+        guard !conversationStagesReached.contains(state.rawValue) else { return }
+        conversationStagesReached.append(state.rawValue)
+    }
+
     var conversationStateSource: OutcomeSource? {
         get { conversationStateSourceRaw.flatMap(OutcomeSource.init) }
         set { conversationStateSourceRaw = newValue?.rawValue }
@@ -405,6 +428,7 @@ final class Recipient {
     // domain method never reaches into the Prospect or its other recipients.
     func setConversationState(_ state: ConversationState, now: Date) {
         conversationState = state
+        markStageReached(state)   // #16: Dan's own call, so it is recorded
         conversationStateSetAt = now
         conversationStateSource = .manual
         outcomeSource = .manual
@@ -431,7 +455,8 @@ final class Recipient {
     // Dan accepts a suggestion for this recipient: it becomes his (manual) and the timed reminder
     // clock restarts from now.
     func confirmConversationState(now: Date) {
-        guard conversationState != nil else { return }
+        guard let state = conversationState else { return }
+        markStageReached(state)   // #16: accepting the suggestion makes it his assertion too
         conversationStateSource = .manual
         conversationStateSetAt = now
         conversationRemindedAt = nil

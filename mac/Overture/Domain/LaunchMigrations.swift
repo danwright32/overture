@@ -31,6 +31,10 @@ enum LaunchMigrations {
         // usual: it runs every launch while `ingestedAt` keeps moving, so a re-stamp would walk the first
         // sighting forward launch by launch. Guarded by "firstSeenAt is still nil".
         FirstSeenBackfill.run(in: context)
+        // #16: record the one conversation stage each existing contact can be proven to have reached
+        // (the one it is sitting at, and only where Dan set it himself). Idempotent; earlier stages were
+        // never recorded and are not guessed at.
+        ConversationStagesSeed.run(in: context)
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)
