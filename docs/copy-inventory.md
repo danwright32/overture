@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **763 sentences**, from 253 source files.
+Every sentence Overture can say to Dan: **765 sentences**, from 254 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -898,6 +898,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture couldn't move its data to \(newStoreURL.path): "
+    `App/StoreRelocation.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
     `UI/DraftReviewView.swift`
 "Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
@@ -1545,6 +1547,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
+"\(error.localizedDescription). Your data is safe and unchanged at "
+    `App/StoreRelocation.swift`
 "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
     `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
@@ -1686,7 +1690,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/TicketLink.swift`
 "has a question"
     `UI/QueueView+Model.swift`
-"have written to \(storeURL.path). Nothing has been opened or changed. Check that "
+"have written to \(path). Nothing has been opened or changed. Check that "
     `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`

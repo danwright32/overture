@@ -12,7 +12,12 @@ enum StoreBackup {
 
     // The store filename plus its WAL-mode sidecars; not every one is always present (e.g. a
     // cleanly-checkpointed store has no -shm), so each is copied only when it actually exists.
-    private static let storeFilenames = ["default.store", "default.store-wal", "default.store-shm"]
+    // Derived from StoreLocation rather than spelled out, so the store's name lives in one place:
+    // backups taken before the #663-follow-up rename hold `default.store` instead, and restoring one
+    // of those means renaming it on the way in (see AGENTS.md).
+    private static var storeFilenames: [String] {
+        [StoreLocation.storeFilename, StoreLocation.storeFilename + "-wal", StoreLocation.storeFilename + "-shm"]
+    }
 
     private static let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -24,7 +29,7 @@ enum StoreBackup {
     // Returns nil when there's nothing to back up yet (a fresh install with no store).
     @discardableResult
     static func makeBackup(dataDirectory: URL, now: Date, fileManager: FileManager = .default) -> URL? {
-        let storeURL = dataDirectory.appendingPathComponent("default.store")
+        let storeURL = dataDirectory.appendingPathComponent(StoreLocation.storeFilename)
         guard fileManager.fileExists(atPath: storeURL.path) else { return nil }
 
         let destination = backupsDirectory(dataDirectory: dataDirectory)

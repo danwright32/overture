@@ -39,7 +39,7 @@ struct StoreBackupTests {
     }
 
     private func seedStore(_ dataDirectory: URL) throws {
-        try Data("store".utf8).write(to: dataDirectory.appendingPathComponent("default.store"))
+        try Data("store".utf8).write(to: dataDirectory.appendingPathComponent("Overture.store"))
     }
 
     @Test func anOversizeBackupLogIsRotatedAndTheLiveFileStaysBounded() throws {
@@ -103,9 +103,9 @@ struct StoreBackupTests {
     @Test func makeBackupCopiesTheStoreAndItsSidecarsIntoADatedFolder() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }
-        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                 atomically: true, encoding: .utf8)
-        try "wal-bytes".write(to: dataDirectory.appendingPathComponent("default.store-wal"),
+        try "wal-bytes".write(to: dataDirectory.appendingPathComponent("Overture.store-wal"),
                               atomically: true, encoding: .utf8)
         // No -shm file this time: a real store doesn't always have one (e.g. after a clean
         // checkpoint), so the copy must not require it.
@@ -113,12 +113,12 @@ struct StoreBackupTests {
 
         let result = try #require(StoreBackup.makeBackup(dataDirectory: dataDirectory, now: now))
 
-        #expect(FileManager.default.fileExists(atPath: result.appendingPathComponent("default.store").path))
-        #expect(try String(contentsOf: result.appendingPathComponent("default.store"), encoding: .utf8)
+        #expect(FileManager.default.fileExists(atPath: result.appendingPathComponent("Overture.store").path))
+        #expect(try String(contentsOf: result.appendingPathComponent("Overture.store"), encoding: .utf8)
                 == "store-bytes")
-        #expect(try String(contentsOf: result.appendingPathComponent("default.store-wal"), encoding: .utf8)
+        #expect(try String(contentsOf: result.appendingPathComponent("Overture.store-wal"), encoding: .utf8)
                 == "wal-bytes")
-        #expect(!FileManager.default.fileExists(atPath: result.appendingPathComponent("default.store-shm").path))
+        #expect(!FileManager.default.fileExists(atPath: result.appendingPathComponent("Overture.store-shm").path))
         #expect(result.deletingLastPathComponent()
                 == StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
     }
@@ -129,19 +129,19 @@ struct StoreBackupTests {
     @Test func makeBackupTreatsASameSecondCollisionAsAlreadyDone() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }
-        try "first-version".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "first-version".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                   atomically: true, encoding: .utf8)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let first = try #require(StoreBackup.makeBackup(dataDirectory: dataDirectory, now: now))
         // The live store changes between the two calls (simulating a second launch moments
         // later); the second call must NOT overwrite the first snapshot it already took.
-        try "second-version".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "second-version".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                    atomically: true, encoding: .utf8)
 
         let second = StoreBackup.makeBackup(dataDirectory: dataDirectory, now: now)
 
         #expect(second == first)
-        #expect(try String(contentsOf: first.appendingPathComponent("default.store"), encoding: .utf8)
+        #expect(try String(contentsOf: first.appendingPathComponent("Overture.store"), encoding: .utf8)
                 == "first-version")
     }
 
@@ -151,7 +151,7 @@ struct StoreBackupTests {
     @Test func makeBackupAppendsASuccessLineToItsOwnLog() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }
-        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                 atomically: true, encoding: .utf8)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -202,7 +202,7 @@ struct StoreBackupTests {
     @Test func performLaunchBackupPrunesOldBackupsWhenOpenSucceeds() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }
-        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                 atomically: true, encoding: .utf8)
         try makeDatedBackupFolders(["20200101-090000", "20200102-090000"],
                                    in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))
@@ -224,7 +224,7 @@ struct StoreBackupTests {
     @Test func performLaunchBackupSkipsPruningWhenOpenFails() throws {
         let dataDirectory = try makeSandboxDataDirectory()
         defer { try? FileManager.default.removeItem(at: dataDirectory) }
-        try "store-bytes".write(to: dataDirectory.appendingPathComponent("default.store"),
+        try "store-bytes".write(to: dataDirectory.appendingPathComponent("Overture.store"),
                                 atomically: true, encoding: .utf8)
         try makeDatedBackupFolders(["20260101-090000", "20260102-090000"],
                                    in: StoreBackup.backupsDirectory(dataDirectory: dataDirectory))

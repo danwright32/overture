@@ -36,8 +36,15 @@ enum StoreSchemaGuard {
         _ = StoreBackup.performLaunchBackup(
             dataDirectory: dataDirectory, now: now, keep: 10, fileManager: fileManager
         ) { () -> Bool? in nil }
-        return "Overture's data file doesn't look like Overture's own database. Another app may "
-            + "have written to \(storeURL.path). Nothing has been opened or changed. Check that "
+        return foreignFileReason(path: storeURL.path)
+    }
+
+    // The one sentence for "the file at this path isn't Overture's database". Shared with
+    // StoreRelocation, which reaches the same conclusion about the pre-move path, so the two cannot
+    // drift into two nearly-identical sentences saying the same thing (#843).
+    static func foreignFileReason(path: String) -> String {
+        "Overture's data file doesn't look like Overture's own database. Another app may "
+            + "have written to \(path). Nothing has been opened or changed. Check that "
             + "file before reopening Overture."
     }
 

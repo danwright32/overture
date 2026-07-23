@@ -30,7 +30,7 @@ set -euo pipefail
 # in CI can re-run a query against a file that lives on Dan's Mac and nowhere else.
 #
 # THIS SCRIPT IS CI-SAFE BY CONSTRUCTION: it never opens, requires, or references the live store itself
-# (~/Library/Application Support/default.store). It only reads tracked repository files. Advisory
+# (~/Library/Application Support/Overture/Overture.store). It only reads tracked repository files. Advisory
 # findings (a tag whose verified date has gone stale, an obviously-measured claim with no tag nearby) are
 # reported but never fail the build, because staleness is expected to accumulate between someone
 # actually re-checking the number against Dan's Mac; only a genuinely broken tag (malformed) or a

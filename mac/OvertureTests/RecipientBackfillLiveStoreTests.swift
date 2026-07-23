@@ -4,16 +4,15 @@ import SwiftData
 @testable import Overture
 
 // #418 A0, "right over fast": prove the thread-down repair against a COPY of Dan's real, irreplaceable
-// live store (~/Library/Application Support/default.store, ZPROSPECT), not just an in-memory fixture.
-// Gated on the live store existing, so it reports as a SKIP (not a silent pass) on CI and other
-// machines (#416).
+// live store (~/Library/Application Support/Overture/Overture.store, ZPROSPECT), not just an
+// in-memory fixture. Gated on the live store existing, so it reports as a SKIP (not a silent pass) on
+// CI and other machines (#416).
 @Suite("Recipient backfill — live store")
 struct RecipientBackfillLiveStoreTests {
-    // The Release data directory explicitly (isDebugBuild: false): the test bundle is always a Debug
-    // build, but we want the resident copy's store, not the isolated Overture-Debug one.
+    // The Release store explicitly (isDebugBuild: false): the test bundle is always a Debug build,
+    // but we want the resident copy's store, not the isolated Overture-Debug one.
     private static var liveStoreURL: URL {
-        StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
-            .appendingPathComponent("default.store")
+        StoreLocation.storeURL(appSupport: StoreLocation.appSupport, isDebugBuild: false)
     }
 
     // SUP-042: both tests below are gated on the live store existing, so a run on a machine without

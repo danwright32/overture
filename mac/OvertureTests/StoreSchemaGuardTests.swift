@@ -145,7 +145,7 @@ struct StoreSchemaGuardTests {
         do {
             let dir = try makeSandboxDirectory()
             defer { try? FileManager.default.removeItem(at: dir) }
-            let storeURL = dir.appendingPathComponent("default.store")
+            let storeURL = dir.appendingPathComponent(StoreLocation.storeFilename)
             var db: OpaquePointer?
             #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
             #expect(sqlite3_exec(db, "CREATE TABLE ZCLIENT (Z_PK INTEGER PRIMARY KEY);", nil, nil, nil) == SQLITE_OK)
@@ -156,7 +156,8 @@ struct StoreSchemaGuardTests {
 
             #expect(reason.contains(storeURL.path))
             let backupsDirectory = StoreBackup.backupsDirectory(dataDirectory: dir)
-            let backedUpStore = backupsDirectory.appendingPathComponent("20231114-171320/default.store")
+            let backedUpStore = backupsDirectory
+                .appendingPathComponent("20231114-171320/\(StoreLocation.storeFilename)")
             #expect(FileManager.default.fileExists(atPath: backedUpStore.path))
             await RealStoreTestLock.shared.release()
         } catch {
