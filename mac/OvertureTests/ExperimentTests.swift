@@ -176,6 +176,86 @@ struct ExperimentTests {
         #expect(byKey["plain"]?.experimentArmInstruction == nil)
     }
 
+    // MARK: - Phase 4: the reporting logic (ExperimentReport)
+
+    // A prospect that was SENT under an experiment arm, with a given outcome and drafter echo.
+    private func sentProspect(_ key: String, experimentId: String, arm: String, outcome: Outcome,
+                              draftVariant: String, edited: Bool = false) -> Prospect {
+        let p = makeProspect(key)
+        p.experimentID = experimentId
+        p.assignedArm = arm
+        p.gmailMessageId = "msg-\(key)"           // wasProvablyContacted == gmailMessageId != nil
+        p.outcomeRaw = outcome.rawValue
+        p.draftVariant = draftVariant
+        p.experimentOpenerEdited = edited
+        return p
+    }
+
+    @Test func armReportCountsOnlySentNonEditedIntoTheRateAndSeparatesEdited() {
+        let e = "exp1"
+        let prospects = [
+            sentProspect("a", experimentId: e, arm: "reason-first", outcome: .replied, draftVariant: "reason-first"),
+            sentProspect("b", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "reason-first"),
+            sentProspect("c", experimentId: e, arm: "reason-first", outcome: .replied, draftVariant: "reason-first", edited: true),
+        ]
+        let arm = ExperimentReport.armReport(arm: "reason-first", in: prospects)
+        #expect(arm.tally.contacted == 2)                 // the edited one is excluded from the rate
+        #expect(arm.tally.replied == 1)
+        #expect(arm.editedExcluded == 1)                  // but still counted, visibly
+    }
+
+    @Test func armReportComplianceCountsEchoMatchesAgainstTheAssignedArm() {
+        let e = "exp1"
+        let prospects = [
+            sentProspect("a", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "reason-first"),
+            // Drifted: the drafter produced a different shape than assigned.
+            sentProspect("b", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "credential-first"),
+        ]
+        let arm = ExperimentReport.armReport(arm: "reason-first", in: prospects)
+        #expect(arm.complianceMatched == 1)
+        #expect(arm.complianceTotal == 2)
+        #expect(arm.complianceRate == 0.5)
+    }
+
+    @Test func reportScopesToTheExperimentAndBuildsAnArmPerVariant() {
+        let exp = Experiment(experimentId: "exp1", dimension: .openerShape,
+                             variantA: .reasonFirst, variantB: .credentialFirst, isActive: true)
+        let prospects = [
+            sentProspect("a", experimentId: "exp1", arm: "reason-first", outcome: .replied, draftVariant: "reason-first"),
+            sentProspect("b", experimentId: "exp1", arm: "credential-first", outcome: .noResponse, draftVariant: "credential-first"),
+            // A prospect in a DIFFERENT experiment must not leak in.
+            sentProspect("c", experimentId: "other", arm: "reason-first", outcome: .booked, draftVariant: "reason-first"),
+        ]
+        let report = ExperimentReport.report(for: exp, allProspects: prospects)
+        #expect(report.arms.map(\.arm) == ["reason-first", "credential-first"])
+        #expect(report.arms[0].tally.contacted == 1)      // only the exp1 reason-first prospect, not "c"
+        #expect(report.arms[1].tally.contacted == 1)
+    }
+
+    @Test func bothArmsMustClearTheHighBarBeforeItIsNotTooFewToTell() {
+        func armAt(_ contacted: Int) -> ExperimentReport.ArmReport {
+            var t = OutcomeTally(); t.contacted = contacted
+            return ExperimentReport.ArmReport(arm: "x", tally: t, editedExcluded: 0, complianceMatched: contacted, complianceTotal: contacted)
+        }
+        let bar = ExperimentReport.experimentCallThreshold
+        let bothClear = ExperimentReport.Report(experimentId: "e", arms: [armAt(bar), armAt(bar)])
+        #expect(bothClear.tooFewToTell == false)
+        // One arm one short: still too few to tell (never ride one thin arm on the other's volume).
+        let oneShort = ExperimentReport.Report(experimentId: "e", arms: [armAt(bar), armAt(bar - 1)])
+        #expect(oneShort.tooFewToTell == true)
+    }
+
+    @Test func displayLinesHidePercentBelowTheBarAndSuppressEmptyCounts() {
+        var t = OutcomeTally(); t.contacted = 2; t.replied = 1
+        let arm = ExperimentReport.ArmReport(arm: "reason-first", tally: t, editedExcluded: 0,
+                                             complianceMatched: 0, complianceTotal: 0)
+        // Below the bar: the reply line names the count but NOT a percentage.
+        #expect(ExperimentReport.replyLine(arm, tooFewToTell: true) == "1 replied of 2")
+        // No edited sends and no counted sends: neither line appears.
+        #expect(ExperimentReport.editedExcludedLine(arm) == nil)
+        #expect(ExperimentReport.complianceLine(arm) == nil)
+    }
+
     // MARK: - Phase 3: send-time opener-edit detection
 
     @Test func openerEditIsFalseWhenDanNeverEdited() {
