@@ -61,19 +61,9 @@ struct SourcesView: View {
     // name, its tag, and the client list), so a row reads its flag in O(1).
     @State private var clientFlags: [String: Bool] = [:]
 
-    // #974/#1440: the section currently at the top of the scroll, tracked by geometry rather than by a
-    // continuous scrollPosition PIN. The pin re-applied the position on every frame and, with only a few
-    // coarse section anchors, fought a fast drag into a jump and a freeze (#1440). This is updated only when
-    // the top section actually changes (a few times per scroll), and read only to restore Dan's place when
-    // the list rebuilds. See the ScrollView below.
-    @State private var topSection: SourceGrade?
-
     // #1175: which single-venue-feed source's location Dan is editing (its sourceId), and the draft text.
     @State private var editingLocationFor: String?
     @State private var locationDraft = ""
-
-    // #1440: the scroll's coordinate space, so each section can report its top-edge offset within it.
-    private static let scrollSpace = "sourcesScroll"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -85,50 +75,36 @@ struct SourcesView: View {
             if sources.isEmpty {
                 empty
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: OVSpacing.lg) {
-                            // #1356: the coverage gap list sits above the sources, because it is where Dan
-                            // acts on a gap (add a source, or tag one below). It renders nothing when every
-                            // client is covered, the common case once the non-targets are dismissed once.
-                            coverageSection
-                            // Sectioning, ordering and the omit-empty rule all come from the tested domain
-                            // function, so this view has no judgement of its own to get wrong. Each section
-                            // reports its top-edge offset (#1440) so the restore below knows where Dan is.
-                            ForEach(SourceGrade.sections(sources), id: \.grade) { sec in
-                                section(sec.grade, sec.sources)
-                                    .background(GeometryReader { geo in
-                                        Color.clear.preference(
-                                            key: TopSectionKey.self,
-                                            value: [GradeOffset(grade: sec.grade,
-                                                                minY: geo.frame(in: .named(Self.scrollSpace)).minY)])
-                                    })
-                            }
-                        }
-                        .padding(OVSpacing.lg)
+                // #1440: a plain scroll view, deliberately. Holding Dan's place across a scout rebuild (#974)
+                // was done first by a `.scrollPosition` PIN and then by per-section geometry tracking, and
+                // BOTH drove a SwiftUI layout feedback loop that froze the sheet on a fast flick right after it
+                // opened (proven by a main-thread sample of the live hang: the loop ran through the per-section
+                // GeometryReader preference). A dumb scroll has no such loop, so it neither jumps nor freezes.
+                // The cost is #974: if a scout refreshes the list WHILE the sheet is open it may snap to the
+                // top, a minor annoyance worth trading for a sheet that never hangs. Revisit place-holding only
+                // with an approach that cannot re-enter layout.
+                ScrollView {
+                    // #1440: a plain VStack, NOT a LazyVStack. A lazy list does not build off-screen rows, so
+                    // it only ESTIMATES the height of the big "watching" section (~35 rows as one child); a
+                    // fast flick into it realizes the real, much larger height, the content size snaps, and the
+                    // scroll lurches to the bottom (the "jumps to the bottom after about halfway" bug). For a
+                    // watchlist of a few dozen rows in a 460pt sheet, building it all up front is cheap and
+                    // gives the scroll a stable, correct height from the first frame, so there is nothing to
+                    // lurch to. (The separate freeze was a scroll-position-tracking layout loop, removed above.)
+                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                        // #1356: the coverage gap list sits above the sources, because it is where Dan acts on
+                        // a gap (add a source, or tag one below). It renders nothing when every client is
+                        // covered, the common case once the non-targets are dismissed once.
+                        coverageSection
+                        // Sectioning, ordering and the omit-empty rule all come from the tested domain
+                        // function, so this view has no judgement of its own to get wrong.
+                        ForEach(SourceGrade.sections(sources), id: \.grade) { section($0.grade, $0.sources) }
                     }
-                    .coordinateSpace(name: Self.scrollSpace)
-                    // Sizes to its content rather than to a fixed height, so today's one-source watchlist
-                    // does not open as a mostly empty box, and a long one still scrolls instead of running
-                    // off the screen.
-                    .frame(maxHeight: 460)
-                    // #1440: track the top-visible section, but update state ONLY when it actually changes (a
-                    // few times per scroll, not every frame), so a normal drag never re-evaluates the sheet
-                    // body (which would re-run the #1429 tally/coverage signatures on every frame).
-                    .onPreferenceChange(TopSectionKey.self) { offsets in
-                        let top = SourcesScrollRestore.topSection(offsets.map { (grade: $0.grade, minY: $0.minY) })
-                        if top != topSection { topSection = top }
-                    }
-                    // #974/#1440: the list just rebuilt (a scout moved a source, restamped a checked time, or
-                    // added or removed one), which would otherwise drop the scroll to the top. Put Dan back on
-                    // the section he was reading. This runs ONCE per rebuild, not on every scroll frame, so
-                    // nothing fights a normal drag: the jump and the freeze both came from the old every-tick
-                    // re-pin (#1440), which is gone. A watchlist long enough to scroll is why it surfaced when
-                    // #359 took the list from 3 sources to 38.
-                    .onChange(of: SourcesScrollRestore.signature(sources)) {
-                        if let topSection { proxy.scrollTo(topSection, anchor: .top) }
-                    }
+                    .padding(OVSpacing.lg)
                 }
+                // Sizes to its content rather than to a fixed height, so today's one-source watchlist does not
+                // open as a mostly empty box, and a long one still scrolls instead of running off the screen.
+                .frame(maxHeight: 460)
             }
         }
         .frame(width: 560)
@@ -739,23 +715,6 @@ struct SourcesView: View {
     // like a rendering bug.
     private func lastChecked(_ source: WatchedSource) -> String {
         SourceReadState.lastCheckedLine(at: source.lastCheckedAt, now: Date())   // #885
-    }
-}
-
-// #1440: each grade section reports its top-edge offset (minY, in the scroll's coordinate space) up to the
-// sheet through this preference, so the sheet can tell which section is currently at the top and restore
-// Dan to it after a rebuild. Replaces the continuous scrollPosition pin whose every-frame re-apply fought a
-// fast drag into a jump and a freeze. The which-is-top and when-to-restore decisions live in the tested
-// SourcesScrollRestore, so this view carries no scroll logic of its own to get wrong.
-private struct GradeOffset: Equatable {
-    let grade: SourceGrade
-    let minY: CGFloat
-}
-
-private struct TopSectionKey: PreferenceKey {
-    static let defaultValue: [GradeOffset] = []
-    static func reduce(value: inout [GradeOffset], nextValue: () -> [GradeOffset]) {
-        value.append(contentsOf: nextValue())
     }
 }
 
