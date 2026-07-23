@@ -24,12 +24,17 @@ set -euo pipefail
 #   scripts/eval-prep-runbook.sh --dry-run NAME  # print the prompt for one fixture; spends nothing
 #   scripts/eval-prep-runbook.sh --yes           # RUN THE REAL EVAL against every fixture; SPENDS TOKENS
 #   scripts/eval-prep-runbook.sh --yes NAME      # RUN THE REAL EVAL against ONE fixture; SPENDS TOKENS
+#   scripts/eval-prep-runbook.sh --yes --failed  # RE-RUN only the fixtures the last run FAILED; SPENDS TOKENS
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FIXTURE_DIR="${REPO_ROOT}/fixtures/prep-eval"
 RUNBOOK="${REPO_ROOT}/docs/prep-runbook.md"
 CLI="${SCRIPT_DIR}/eval-prep-runbook.ts"
+# Where the last real run records which fixtures it left FAILING, so `--yes --failed` can recheck only
+# those (#1400). Gitignored; overridable so the test can point it at a throwaway path. NOT under the
+# per-run mktemp dir (that is deleted on EXIT), because it must survive between invocations.
+FAILURES_FILE="${OVERTURE_EVAL_FAILURES_FILE:-${REPO_ROOT}/.overture-eval-failures}"
 
 cost_warning() {
   cat >&2 <<'WARN'
@@ -92,6 +97,11 @@ _eval_scope=""
 _eval_tmp=""
 _eval_failures=0
 _eval_total=0
+# Newline-separated names of the fixtures this run actually RAN and the subset that FAILED, so the run can
+# rewrite FAILURES_FILE afterward (#1400). Newline strings, not bash arrays, because macOS ships bash 3.2
+# where an empty array under `set -u` is an "unbound variable" error.
+_eval_ran_names=""
+_eval_failed_names=""
 
 # Score ONE fixture: run the drafter on it, then check the output. A malformed or errored AI run counts
 # as that fixture failing and never aborts the rest. claude's stdin is /dev/null so it can neither block
@@ -99,6 +109,7 @@ _eval_total=0
 score_one_fixture() {
   local name="$1" fixture="$2" prompt out
   _eval_total=$((_eval_total + 1))
+  _eval_ran_names="${_eval_ran_names}${name}"$'\n'
   echo "==> ${name}: running claude..."
   prompt="$(build_prompt "${fixture}")"
   out="${_eval_tmp}/${name}.out"
@@ -106,10 +117,12 @@ score_one_fixture() {
   if ! "${_eval_claude}" -p "${prompt}" --model "${OVERTURE_MODEL_DRAFTING}" ${_eval_scope} </dev/null > "${out}" 2>"${_eval_tmp}/${name}.err"; then
     echo "FAIL  ${name} (claude run errored; see ${_eval_tmp}/${name}.err)"
     _eval_failures=$((_eval_failures + 1))
+    _eval_failed_names="${_eval_failed_names}${name}"$'\n'
     return
   fi
   if ! run_cli "${fixture}" "${out}"; then
     _eval_failures=$((_eval_failures + 1))
+    _eval_failed_names="${_eval_failed_names}${name}"$'\n'
   fi
 }
 
@@ -145,7 +158,60 @@ select_and_run() {
   "${fn}" "${only}" "${fixture}"
 }
 
-# $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck).
+# The fixture names the LAST real run left failing, one per line (empty if none / no run yet).
+read_failures() {
+  [ -f "${FAILURES_FILE}" ] || return 0
+  grep -v '^$' -- "${FAILURES_FILE}" 2>/dev/null || true
+}
+
+# Rewrite FAILURES_FILE to the post-run failing set so `--yes --failed` CONVERGES (#1400): keep prior
+# failures this run did NOT retest, drop the ones it retested-and-passed, add the ones it failed. This one
+# rule is correct for a full run (nothing prior survives, so the file becomes exactly this run's failures),
+# a single-fixture run, and a --failed rerun alike, so a targeted recheck can't silently forget the
+# failures it didn't touch. Reads _eval_ran_names / _eval_failed_names (set by score_one_fixture).
+update_failures_file() {
+  local prior n kept=""
+  prior="$(read_failures)"
+  while IFS= read -r n; do
+    [ -n "${n}" ] || continue
+    grep -qxF -- "${n}" <<< "${_eval_ran_names}" && continue   # retested this run: its fresh verdict wins
+    kept="${kept}${n}"$'\n'                                    # not retested: carry the prior failure forward
+  done <<< "${prior}"
+  # `grep -v '^$'` exits 1 on empty input, which under `set -e`/`pipefail` would abort a fully-passing run
+  # (kept and failures both empty) right before the summary; `|| true` tolerates it. sort -u newline-
+  # terminates every line so run_failed_fixtures' `read` loop never drops the last one.
+  { printf '%s%s' "${kept}" "${_eval_failed_names}" | grep -v '^$' || true; } | sort -u > "${FAILURES_FILE}"
+}
+
+# Run <callback> over ONLY the fixtures the last real run left failing (#1400). No recorded failures (or
+# none still exist) is a usage error, exit 2, never a silent no-op and never a silent full run. Reads the
+# name list from FD 3, NOT stdin, for the same reason for_each_fixture does: score_one_fixture's inner
+# claude/tsx calls consume stdin and would otherwise truncate the loop after the first fixture (#1387).
+run_failed_fixtures() {
+  local fn="$1" n fixture ran=0 names
+  names="$(read_failures)"
+  if [ -z "${names}" ]; then
+    echo "eval-prep-runbook: no recorded failures from a previous --yes run to recheck." >&2
+    return 2
+  fi
+  while IFS= read -r n <&3; do
+    [ -n "${n}" ] || continue
+    fixture="$(fixture_path_for "${n}")"
+    if [ ! -f "${fixture}" ]; then
+      echo "eval-prep-runbook: recorded failure '${n}' is no longer a fixture, skipping." >&2
+      continue
+    fi
+    "${fn}" "${n}" "${fixture}"
+    ran=1
+  done 3< <(printf '%s\n' "${names}")
+  if [ "${ran}" -eq 0 ]; then
+    echo "eval-prep-runbook: no recorded failures still exist as fixtures to recheck." >&2
+    return 2
+  fi
+}
+
+# $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck), or the
+# literal "--failed" to recheck only the fixtures the previous real run left failing (#1400).
 real_run() {
   local only="${1:-}"
   cost_warning
@@ -172,7 +238,16 @@ real_run() {
 
   _eval_failures=0
   _eval_total=0
-  select_and_run score_one_fixture "${only}" || return $?
+  _eval_ran_names=""
+  _eval_failed_names=""
+  if [ "${only}" = "--failed" ]; then
+    run_failed_fixtures score_one_fixture || return $?
+  else
+    select_and_run score_one_fixture "${only}" || return $?
+  fi
+
+  # Record which fixtures this run left failing so a later `--yes --failed` can recheck just those.
+  update_failures_file
 
   echo
   echo "eval complete: $(( _eval_total - _eval_failures ))/${_eval_total} fixtures passed"

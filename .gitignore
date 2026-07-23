@@ -52,3 +52,6 @@ DerivedData/
 
 # Transient artifacts from Playwright MCP browser sessions (page snapshots, console logs)
 .playwright-mcp/
+
+# Last real eval-prep-runbook.sh run's failing fixtures, for `--yes --failed` rechecks (#1400)
+.overture-eval-failures
