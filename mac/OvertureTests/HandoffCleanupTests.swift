@@ -164,6 +164,14 @@ struct HandoffCleanupTests {
             "overture-reply-classify-results.json",
             "scout-extract-run.log",
             "scout-extract-running",              // a run marker
+            // The live store itself. In Release the handoff folder IS the data folder (the store
+            // moved there to get off the shared Application Support root), so the sweep now runs
+            // over the same directory Dan's entire database sits in. An age-only sweep would take
+            // it: the store is older than any horizon within days of a quiet week.
+            StoreLocation.storeFilename,
+            StoreLocation.storeFilename + "-wal",
+            StoreLocation.storeFilename + "-shm",
+            StoreLocation.storeFilename + ".lock",
         ].map { try? seed($0, in: dir, ageInDays: 400) }
 
         let result = HandoffCleanup.sweep(handoffDirectory: dir, now: now)
