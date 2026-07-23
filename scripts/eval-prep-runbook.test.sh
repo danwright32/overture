@@ -96,6 +96,54 @@ n_all="$(printf '%s' "${selected}" | wc -w | tr -d ' ')"
 check "--yes with no name still runs every fixture" \
   '[[ "${n_all}" == "${n_fixtures}" && "${n_all}" -gt 1 ]]'
 
+# #1400: --yes --failed rechecks only the fixtures a prior real run left failing, and the failures record
+# converges (fixtures retested-and-passed drop off; still-failing stay; untested stay). Token-free: point
+# FAILURES_FILE at a temp path and drive the failure-tracking functions with the recorder, never claude.
+FAILURES_FILE="$(mktemp -t overture-eval-failures.XXXXXX)"
+trap 'rm -f "${FAILURES_FILE}"' EXIT
+
+# read_failures yields nothing until a run has recorded something.
+rm -f "${FAILURES_FILE}"
+check "read_failures is empty when no run has recorded failures" '[[ -z "$(read_failures)" ]]'
+
+# --failed with no recorded failures is a usage error (exit 2) that runs nothing (never a silent full run).
+selected=""
+rc=0; run_failed_fixtures record_selected 2>/dev/null || rc=$?
+check "--failed with no recorded failures exits 2" '[[ "${rc}" -eq 2 ]]'
+check "--failed with no recorded failures runs nothing" '[[ -z "${selected}" ]]'
+
+# Given two REAL recorded failures, --failed reruns exactly those two.
+printf '%s\n' host-venue-not-target presenter-not-venue > "${FAILURES_FILE}"
+selected=""
+run_failed_fixtures record_selected
+check "--failed reruns exactly the recorded failing fixtures" \
+  '[[ "${selected}" == "host-venue-not-target presenter-not-venue " ]]'
+
+# A recorded name that is no longer a fixture is skipped; the still-valid one still runs.
+printf '%s\n' host-venue-not-target renamed-away-fixture > "${FAILURES_FILE}"
+selected=""
+run_failed_fixtures record_selected 2>/dev/null
+check "--failed skips a stale recorded name but still runs the valid one" \
+  '[[ "${selected}" == "host-venue-not-target " ]]'
+
+# Convergence: prior failures {host, presenter, already-covered}; this run retested {host, presenter},
+# host passed, presenter still failed. Result must be {already-covered, presenter}: host drops (retested +
+# passed), presenter stays (still failing), already-covered stays (never retested).
+printf '%s\n' host-venue-not-target presenter-not-venue already-covered-photographer > "${FAILURES_FILE}"
+_eval_ran_names=$'host-venue-not-target\npresenter-not-venue\n'
+_eval_failed_names=$'presenter-not-venue\n'
+update_failures_file
+after="$(read_failures | sort | tr '\n' ' ')"
+check "update_failures_file drops retested-passing, keeps still-failing and untested" \
+  '[[ "${after}" == "already-covered-photographer presenter-not-venue " ]]'
+
+# When every prior failure was retested and passed, the record empties out.
+printf '%s\n' host-venue-not-target > "${FAILURES_FILE}"
+_eval_ran_names=$'host-venue-not-target\n'
+_eval_failed_names=""
+update_failures_file
+check "update_failures_file empties the record when all prior failures now pass" '[[ -z "$(read_failures)" ]]'
+
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
   exit 0
