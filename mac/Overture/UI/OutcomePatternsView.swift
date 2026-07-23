@@ -9,6 +9,8 @@ struct OutcomePatternsView: View {
     @Query private var prospects: [Prospect]
     @State private var dimension: OutcomePatterns.Dimension = .production
     @State private var auditTarget: AuditTarget?
+    // #5 Phase 4: the opener A/B report opens from here, its analytics sibling, since the toolbar is full.
+    @State private var showExperiments = false
 
     // The segment whose auto-detected bookings the drill-down popover is showing (#212).
     private struct AuditTarget: Identifiable { let value: String; var id: String { value } }
@@ -22,6 +24,7 @@ struct OutcomePatternsView: View {
             HStack {
                 Text("What converts").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Spacer()
+                Button("Opener A/B") { showExperiments = true }
                 Button("Done") { dismiss() }
             }
             .padding(OVSpacing.lg)
@@ -58,6 +61,7 @@ struct OutcomePatternsView: View {
         .popover(item: $auditTarget, arrowEdge: .trailing) { target in
             autoBookedList(for: target.value)
         }
+        .sheet(isPresented: $showExperiments) { ExperimentReportView() }
     }
 
     private func patternRow(name: String, tally: OutcomeTally) -> some View {

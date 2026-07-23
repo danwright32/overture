@@ -176,6 +176,50 @@ struct ExperimentTests {
         #expect(byKey["plain"]?.experimentArmInstruction == nil)
     }
 
+    // MARK: - Phase 4: experiment management (create / end)
+
+    @Test func startCreatesAndActivatesAnExperimentFromTwoDistinctArms() throws {
+        let ctx = ModelContext(try container())
+        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                              startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        #expect(exp != nil)
+        let all = try ctx.fetch(FetchDescriptor<Experiment>())
+        #expect(all.count == 1)
+        #expect(all.first?.isActive == true)
+        #expect(all.first?.variantA == "reason-first")
+        #expect(all.first?.variantB == "credential-first")
+    }
+
+    @Test func startRefusesTwoIdenticalArms() throws {
+        let ctx = ModelContext(try container())
+        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .reasonFirst,
+                                              startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        #expect(exp == nil)
+        #expect(try ctx.fetch(FetchDescriptor<Experiment>()).isEmpty)   // nothing created
+    }
+
+    @Test func startingANewExperimentRetiresThePreviousActiveOne() throws {
+        let ctx = ModelContext(try container())
+        _ = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                        startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        _ = try ExperimentEditing.start(variantA: .observationFirst, variantB: .directIntent,
+                                        startedAt: Date(timeIntervalSince1970: 10), in: ctx)
+        let active = try ctx.fetch(FetchDescriptor<Experiment>()).filter(\.isActive)
+        #expect(active.count == 1)
+        #expect(active.first?.variantA == "observation-first")
+    }
+
+    @Test func endingAnExperimentDeactivatesItButKeepsItAsHistory() throws {
+        let ctx = ModelContext(try container())
+        let exp = try #require(try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+                                                           startedAt: Date(timeIntervalSince1970: 0), in: ctx))
+        try ExperimentEditing.end(exp, at: Date(timeIntervalSince1970: 100), in: ctx)
+        let all = try ctx.fetch(FetchDescriptor<Experiment>())
+        #expect(all.count == 1)                         // NOT deleted: history retained
+        #expect(all.first?.isActive == false)
+        #expect(all.first?.endedAt == Date(timeIntervalSince1970: 100))
+    }
+
     // MARK: - Phase 4: the reporting logic (ExperimentReport)
 
     // A prospect that was SENT under an experiment arm, with a given outcome and drafter echo.
