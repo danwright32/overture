@@ -230,20 +230,29 @@ enum ProspectMutations {
     // picker sheet's confirm, so both go through one implementation. Reuses DayOffEditing.add, which runs
     // the conflict sweep, so every other show on those nights is flagged in the same action. A refused
     // range (backwards, too long) says why instead of failing silently.
+    // #1416: `export` is a parameter, not a hidden read, for the same reason DayOffEditing.add takes one:
+    // the sweep on both sides of this action is testable without a file on disk, so the Undo's WIRING can be
+    // pinned and not just the rule behind it (#887). Threading ONE read through also means the block and its
+    // undo sweep against the SAME calendar, rather than re-reading the export at undo time and possibly
+    // judging against different bookings than the block did.
     @discardableResult
     static func blockDaysOff(start: String, end: String, note: String? = nil,
+                             export: DayOffEditing.Export = DownbeatBridge.loadedExport(),
                              context: ModelContext, feedback: ActionFeedback) -> Bool {
         let range = QueueModel.runDateLabel(start: start, end: end)
-        let result = DayOffEditing.add(start: start, end: end, note: note, into: context)
+        let result = DayOffEditing.add(start: start, end: end, note: note, export: export, into: context)
         guard result == .added else {
             feedback.acknowledge(DayOffEditing.message(for: result) ?? "Couldn't block \(range)", tone: .warning)
             return false
         }
+        // The Undo must reverse the whole action, not just the row: DayOffEditing.remove re-runs the same
+        // sweep, so every show this block flagged is un-flagged and draftable again. A show left flagged
+        // against a day that is no longer blocked would be held back from drafting and sending, silently.
         feedback.acknowledge(ActionAck.dayOffBlocked(range: range),
                              action: .init(label: "Undo") {
                                  if let row = DayOffEditing.rows(in: context)
                                      .first(where: { $0.startDate == start && $0.endDate == end }) {
-                                     DayOffEditing.remove(row, in: context)
+                                     DayOffEditing.remove(row, export: export, in: context)
                                  }
                              })
         return true

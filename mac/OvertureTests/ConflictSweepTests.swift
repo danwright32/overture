@@ -67,6 +67,36 @@ struct ConflictSweepTests {
         #expect(PrepQueueBuilder.needsPrepEligible(p) == true)        // draftable again
     }
 
+    // #1416: the banner's Undo WIRING, not just the rule above. Blocking a range from the dismiss offer runs
+    // the sweep, so every other show on those nights is flagged in the same action. The Undo in that banner
+    // has to put all of them back, not merely delete the DayOff row: a show left carrying a clash against a
+    // day that is no longer blocked is silently held back from drafting and sending, with nothing on screen
+    // saying so.
+    //
+    // #1416 was filed believing the Undo did only the delete. It does not (DayOffEditing.remove re-runs the
+    // sweep), so this is the guard that keeps it true rather than a fix. The rule and its wiring are two
+    // separate claims (#887), and until now only the rule was pinned.
+    @Test func undoingABlockedRangeUnflagsTheShowsItFlagged() throws {
+        let ctx = try context()
+        let p = show(ctx, on: "2026-11-18")
+        let feedback = ActionFeedback()
+
+        ProspectMutations.blockDaysOff(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
+                                       export: (bookings: [], blockedDates: []),
+                                       context: ctx, feedback: feedback)
+
+        #expect(p.hasUnclearedConflict)                              // blocked, so held back
+        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)
+        #expect(feedback.action?.label == "Undo")
+
+        feedback.action?.perform()
+
+        #expect(DayOffEditing.rows(in: ctx).isEmpty)                 // the block is gone
+        #expect(p.hasUnclearedConflict == false)                     // and so is the flag it caused
+        #expect(p.conflictNote == nil)
+        #expect(PrepQueueBuilder.needsPrepEligible(p) == true)       // draftable again
+    }
+
     // A run whose LATER night falls in the blocked week is caught by the sweep too, not just by the scout.
     @Test func theSweepJudgesTheWholeRunNotItsOpeningNight() throws {
         let ctx = try context()
