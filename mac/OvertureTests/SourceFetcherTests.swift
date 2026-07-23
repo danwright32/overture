@@ -564,6 +564,37 @@ struct SourceFetcherTests {
                 == PageNormalizer.contentHash(page(cssBuild: "2026-08-22-09-04-11")))
     }
 
+    // The normalizer collapses ALL whitespace (including newlines) to keep the change hash stable, which
+    // can leave a whole page on ONE line. The detached reader's line-oriented Read tool cannot page past
+    // a single oversized line, so a big single-line page (Chain Theatre: 82KB, zero newlines) is read
+    // only in part and loops on incomplete_extraction forever, re-read on every scout and never clearing.
+    // pageableForReading re-introduces line breaks (for the on-disk pin only) so the reader's offset
+    // paging covers the whole page: a tag-dense page becomes one line per element, none of them oversized.
+    @Test func pageableForReadingBreaksAGiantSingleLineIntoReadableLines() {
+        let oneGiantLine = String(repeating: "<div>Aurora Strings, Oct 3</div>", count: 6000)
+        #expect(!oneGiantLine.contains("\n"))   // the shape the normalizer produces
+
+        let pageable = PageNormalizer.pageableForReading(oneGiantLine)
+        let lines = pageable.split(separator: "\n", omittingEmptySubsequences: false)
+
+        #expect(lines.count > 1)
+        #expect(lines.allSatisfy { $0.count <= PageNormalizer.readerLineWidth })
+        // Only whitespace was added: strip whitespace from both and the bytes are identical, so the reader
+        // sees exactly the same markup and text, and no non-whitespace can have shifted into the hash.
+        #expect(pageable.filter { !$0.isWhitespace } == oneGiantLine.filter { !$0.isWhitespace })
+    }
+
+    // The safety backstop: a run of text with no tag boundaries longer than the reader can take (a
+    // pathological page, not a normal calendar) is still hard-wrapped so no single line is unreadable.
+    @Test func pageableForReadingHardWrapsALongTaglessRun() {
+        let blob = String(repeating: "x", count: PageNormalizer.readerLineWidth * 3 + 17)
+
+        let pageable = PageNormalizer.pageableForReading(blob)
+        let lines = pageable.split(separator: "\n", omittingEmptySubsequences: false)
+
+        #expect(lines.allSatisfy { $0.count <= PageNormalizer.readerLineWidth })
+    }
+
     // Every failure is NAMED. A source that 404s, rate-limits us, or serves a PDF must be visibly
     // broken, never silently empty: a dead source and a quiet off-season look identical otherwise, and
     // the spike found the quiet off-season is the NORMAL state (5 of 7 real sites).

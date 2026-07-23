@@ -141,6 +141,17 @@ struct SourceScheduleTests {
         #expect(plan.deferred.count == 10)
     }
 
+    // Only the deferred sources that actually carry unread listings are WAITING to be read. A deferred
+    // source with nothing new has nothing to read (the free daily run keeps its hash current), so it must
+    // not inflate the "N venues still waiting" count into a fixed total-minus-budget that never converges.
+    @Test func onlyDeferredSourcesWithUnreadChangesAreWaiting() {
+        let changed = source("changed", hasUnreadChanges: true)
+        let quiet = source("quiet", hasUnreadChanges: false)
+
+        #expect(SourceSchedule.waitingToRead(deferred: [changed, quiet]).map(\.sourceId) == ["changed"])
+        #expect(SourceSchedule.waitingToRead(deferred: [quiet]).isEmpty)
+    }
+
     // MARK: - Watching is free. Reading is not. (Dan's 4th decision, 2026-07-12)
 
     // The daily automatic run fetches and hashes every source, so a dead source is noticed within a

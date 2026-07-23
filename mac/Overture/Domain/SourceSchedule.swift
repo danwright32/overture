@@ -107,6 +107,22 @@ enum SourceSchedule {
         }
     }
 
+    // Of the sources a run deferred (over budget, not fetched this press), the ones genuinely WAITING to
+    // be read: those carrying unread listings. An UNCHANGED deferred source has nothing to read. The free
+    // daily watch-only run fetches and hashes every source regardless of budget, so a deferred-but-
+    // unchanged source is fully covered, not neglected, and re-checked for free every night.
+    //
+    // Surfacing every deferred source as "waiting" (changed or not) is what made the end-of-scout popup's
+    // "N venues still waiting to be checked" a fixed total-minus-budget that never fell however many times
+    // Dan pressed Run again: with 42 fetchable sources and a budget of 20 it read "22 waiting" on every
+    // press, forever, because a different 22 unchanged sources are always over the cap. Filtered to the
+    // changed ones, the number is the real backlog of unread pages and it converges: each press reads up
+    // to the budget of changed venues (changed-first, see manualReadOrder), and their unread flag clears
+    // on a successful ingest, so repeated presses drain it to zero.
+    static func waitingToRead(deferred: [WatchedSource]) -> [WatchedSource] {
+        deferred.filter(\.hasUnreadChanges)
+    }
+
     // #1189: the order a run Dan started reads its fetchable sources in. Three keys, in strict order:
     //
     //   1. Changed-first (hasUnreadChanges). A changed venue is never starved behind an unchanged one,

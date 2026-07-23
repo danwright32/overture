@@ -478,6 +478,47 @@ enum PageNormalizer {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // The widest line the pinned page may carry. The detached reader reads with a line-oriented Read tool
+    // that cannot page past a single oversized line, so no line may exceed what one read comfortably
+    // returns. Kept well under that so a page always fits in whole lines the reader's offset paging covers.
+    static let readerLineWidth = 4000
+
+    // Break the pinned page into lines the detached reader can actually page through.
+    //
+    // `normalize` collapses ALL whitespace (including newlines) so the change hash stays stable through a
+    // site's whitespace churn. The cost is that a whole page can end up on ONE line, and the reader's Read
+    // tool cannot page past a single oversized line: Chain Theatre's 82KB one-line page was read to ~56%
+    // and then looped on `incomplete_extraction` forever, re-read on every scout and never clearing, while
+    // spending a paid read each time. This re-introduces line breaks for the ON-DISK PIN ONLY: a newline
+    // after each tag, and a hard wrap of any remaining run wider than the reader can take, so a tag-dense
+    // page becomes one line per element and the reader's existing offset paging covers the whole thing.
+    //
+    // It inserts ONLY whitespace, and the content hash is computed from `normalizedHTML` at fetch time, not
+    // from these pinned bytes (which are never re-hashed), so this can never make an unchanged page look
+    // changed. Applied only where the page is written for the reader, never to the in-memory
+    // `normalizedHTML` the month index and readability checks read.
+    static func pageableForReading(_ normalized: String) -> String {
+        var out = ""
+        out.reserveCapacity(normalized.count + normalized.count / 20)
+        var lineWidth = 0
+        for ch in normalized {
+            out.append(ch)
+            if ch == ">" {
+                out.append("\n")
+                lineWidth = 0
+            } else if ch == "\n" {
+                lineWidth = 0
+            } else {
+                lineWidth += 1
+                if lineWidth >= readerLineWidth {
+                    out.append("\n")
+                    lineWidth = 0
+                }
+            }
+        }
+        return out
+    }
+
     // The hash answers exactly one question: DID THIS PAGE'S CONTENT CHANGE? So it is taken over what
     // the content actually is (the visible text, plus the links, which is how each event is reached),
     // and NOT over the markup that carries it.
@@ -608,7 +649,11 @@ enum ScoutPagePin {
         let target = url(forSourceId: sourceId)
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        try Data(page.normalizedHTML.utf8).write(to: target, options: .atomic)
+        // Broken into reader-sized lines so the detached reader's offset paging can cover the whole page.
+        // The pinned bytes are never re-hashed, and this adds only whitespace, so it cannot affect change
+        // detection (PageNormalizer.pageableForReading).
+        let pinned = PageNormalizer.pageableForReading(page.normalizedHTML)
+        try Data(pinned.utf8).write(to: target, options: .atomic)
         return target
     }
 
