@@ -12,16 +12,18 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `4`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  (`PrepQueue` version `5`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
   night (absent for a single-night show); `openingNightPassed` is `true` only for a run whose
   opening night has already passed while later dates remain (absent otherwise). See "Run dates"
-  under the show-date rule below.
+  under the show-date rule below. `experimentArmInstruction` (v5, #5) is the opener archetype this
+  item MUST use when it belongs to an active A/B experiment; absent (the normal case, no active
+  experiment) means use the normal #362 rotation. See "Opener archetype" in §2 for its precedence.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
   optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
@@ -305,6 +307,14 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   No greeting token in any shape ("I hope this finds you well" and "Hi Emma," are
   both wrong), and never fabricate a detail to fill a shape, if the listing doesn't
   supply what an archetype needs for this prospect, use a different one.
+  If this queue item carries an `experimentArmInstruction` (an A/B experiment assignment,
+  one of the four archetype tokens), use THAT archetype for this draft, even when it
+  repeats the shape of the draft just before it: the assigned archetype OVERRIDES the
+  rotate and don't repeat rule above, so the experiment genuinely randomizes what gets
+  produced. The rotation governs only items with NO `experimentArmInstruction`. The one
+  thing it does not override is "never fabricate": if the assigned archetype truly cannot
+  be written truthfully for this listing, write the closest honest shape instead (you
+  record the shape you actually wrote below, so an unavoidable mismatch stays visible).
   Record which archetype you actually used in the `variant` field, as exactly one of
   these four tokens: `reason-first`, `credential-first`, `observation-first`,
   `direct-intent`. Record the shape you WROTE (the produced opener), never a shape you

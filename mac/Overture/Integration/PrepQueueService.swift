@@ -60,7 +60,10 @@ enum PrepQueueService {
                     // otherwise (single-night, or a run not yet started), so the common case is unchanged.
                     openingNightPassed: PrepQueueBuilder.openingNightPassed(
                         performanceDate: p.performanceDate, runEndDate: p.runEndDate, today: today)
-                        ? true : nil
+                        ? true : nil,
+                    // #5 v5: the assigned A/B arm, so the drafter is told which opener archetype to use.
+                    // nil for a prospect with no assignment (the common case: no active experiment).
+                    experimentArmInstruction: p.assignedArm
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
