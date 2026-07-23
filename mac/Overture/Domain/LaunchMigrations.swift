@@ -26,6 +26,11 @@ enum LaunchMigrations {
         // Idempotent: guarded by "is there a Carnegie row yet", and it never drops a source id a
         // prospect already carries.
         WatchedSourceBackfill.run(in: context)
+        // #16: stamp a first-sighting date on every prospect predating the field, so the funnel report has
+        // a start node for the shows already in the store. Idempotent, and that matters more here than
+        // usual: it runs every launch while `ingestedAt` keeps moving, so a re-stamp would walk the first
+        // sighting forward launch by launch. Guarded by "firstSeenAt is still nil".
+        FirstSeenBackfill.run(in: context)
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)

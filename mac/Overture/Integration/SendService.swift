@@ -78,6 +78,10 @@ enum SendService {
             if prospect.sentAt == nil {
                 prospect.sentAt = now
                 prospect.priorRelationshipAtSend = prospect.priorRelationship
+                // #4: the rest of the ranking features, frozen for the same reason and at the same
+                // moment. Without this, a feedback loop would score this pitch against whatever the
+                // newest scout has since written over the row.
+                prospect.freezeFeaturesAtSend()
                 prospect.gmailThreadId = receipt.threadId
                 prospect.gmailMessageId = receipt.messageID
             }

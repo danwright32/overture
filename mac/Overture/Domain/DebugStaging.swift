@@ -28,6 +28,7 @@ enum DebugStaging {
         prospect.sentAt = now
         prospect.status = .approved
         prospect.priorRelationshipAtSend = prospect.priorRelationship
+        prospect.freezeFeaturesAtSend()
         prospect.sendError = nil
         prospect.gmailMessageId = "debug-\(prospect.naturalKey)-\(Int(now.timeIntervalSince1970))"
         for r in prospect.recipients where r.sendState == .pending {

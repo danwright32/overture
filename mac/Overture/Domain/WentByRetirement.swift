@@ -30,8 +30,7 @@ enum WentByRetirement {
         // Idempotent by construction: a retired show is no longer `new`, so a second pass cannot see it.
         let goneBy = candidates.filter { $0.hasGoneBy(today: today) }
         for p in goneBy {
-            p.status = .dismissed
-            p.dismissReason = .wentBy
+            p.markDismissed(reason: .wentBy)
         }
         return goneBy.count
     }

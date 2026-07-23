@@ -60,7 +60,36 @@ final class Prospect {
 
     var statusRaw: String
     var dismissReasonRaw: String?
+    // "Last read", NOT "first found": ScoutService.apply rewrites this on every run, including on shows
+    // already pitched, so it walks forward for as long as a show stays on a watched calendar.
     var ingestedAt: Date
+
+    // #16: when this show FIRST entered the store, which is the funnel's opening node and the one thing
+    // ingestedAt above cannot answer. Written once at insert and never touched again by the scout.
+    // Defaulted nil so existing rows migrate cleanly; FirstSeenBackfill then stamps them from their
+    // ingestedAt, which for a show re-scouted since it was found is an UPPER BOUND (no later than), not
+    // an exact sighting. Nothing distinguishes a backfilled row from a natively stamped one, so a report
+    // covering the months before this shipped is reading upper bounds (Dan's call, 2026-07-23).
+    var firstSeenAt: Date? = nil
+
+    // #16: when this show LEFT the queue, the missing half of dismissReasonRaw above. The eight reasons
+    // are the whole drop-off side of the funnel and none of them carried a date, so a cut could be
+    // counted but never placed in a year. Owned entirely by markDismissed/clearDismissal, so the four
+    // paths that dismiss a show (Dan's own cut, wentBy, tooFar, a DNC org) and the two that restore one
+    // cannot drift apart. Nil on every row dismissed before this shipped, which honestly means "we never
+    // recorded it" rather than a guessed date.
+    var dismissedAt: Date? = nil
+
+    // #4: the ranking features exactly as they stood when Dan pitched. The scout refreshes every one of
+    // these forever after the email went out (ScoutService.apply), so a feedback loop reading them off
+    // the live row would learn from a profile the pitch was never scored against. Frozen once, on the
+    // first send, alongside priorRelationshipAtSend and freezeSentCopy, which exist for the same reason.
+    var fitScoreAtSend: Int? = nil
+    var tierAtSend: String? = nil
+    var profileAtSend: String? = nil
+    var coverageAtSend: String? = nil
+    var disciplineAtSend: String? = nil
+    var productionAtSend: String? = nil
 
     // The rules classifier's confidence ("confident"/"uncertain"). Scout-owned: refreshed
     // every run. confidenceReviewedByDan is Dan-owned: once he has eyeballed a guess, the
@@ -430,6 +459,9 @@ final class Prospect {
         self.statusRaw = status.rawValue
         self.dismissReasonRaw = dismissReason?.rawValue
         self.ingestedAt = ingestedAt
+        // #16: the row exists as of this moment, so its first sighting IS its first ingest. The only
+        // place this is ever written for a new row; the scout's refresh path deliberately skips it.
+        self.firstSeenAt = ingestedAt
         self.runEndDate = runEndDate
         self.partOfRelatedRun = partOfRelatedRun
         self.runSourceURLs = runSourceURLs
@@ -506,6 +538,39 @@ final class Prospect {
     // this fires once per recipient, but the captured pair is lead-level and one-per-shared-body, so
     // only the FIRST send writes it. Later recipient sends (and any draft edits after) leave it intact,
     // making the frozen template stable regardless of recipient send order.
+    // #16: the ONE place a show is recorded as leaving the queue, so the four paths that dismiss one
+    // (Dan's own cut through ProspectMutations.setStatus, WentByRetirement, ExcludedTownRetirement and
+    // OrgDoNotContact) all date it the same way instead of each remembering to.
+    //
+    // The date is kept if one is already set: re-labelling WHY a dismissed show was cut is not a second
+    // exit, and re-stamping would date the drop-off to whenever Dan last tidied up the reason.
+    func markDismissed(reason: DismissReason?, at now: Date = Date()) {
+        status = .dismissed
+        dismissReasonRaw = reason?.rawValue
+        dismissedAt = dismissedAt ?? now
+    }
+
+    // The exact reverse, for Archive's restore (#28) and the blocked-town Undo (#1238). A show back in
+    // the queue has no exit date; leaving one behind would count a live show as a drop-off.
+    func clearDismissal(to newStatus: ReviewStatus = .new) {
+        status = newStatus
+        dismissReasonRaw = nil
+        dismissedAt = nil
+    }
+
+    // #4: freeze the ranking features as they stood for this pitch. Called from the send path's existing
+    // write-once block, beside priorRelationshipAtSend; guarded here as well so a second recipient's send
+    // cannot re-stamp the snapshot from a row a later scout has since re-scored.
+    func freezeFeaturesAtSend() {
+        guard fitScoreAtSend == nil else { return }
+        fitScoreAtSend = fitScore
+        tierAtSend = tier
+        profileAtSend = profile
+        coverageAtSend = coverage
+        disciplineAtSend = discipline
+        productionAtSend = production
+    }
+
     func freezeSentCopy(subject: String, body: String) {
         guard sentBody == nil else { return }
         sentSubject = subject
