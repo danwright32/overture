@@ -176,6 +176,54 @@ struct ExperimentTests {
         #expect(byKey["plain"]?.experimentArmInstruction == nil)
     }
 
+    // MARK: - Phase 3: send-time opener-edit detection
+
+    @Test func openerEditIsFalseWhenDanNeverEdited() {
+        // originalDraftBody nil == Dan never substantively edited, so the assigned opener is unchanged.
+        #expect(Prospect.experimentOpenerWasEdited(originalDraftBody: nil, draftBody: "Any body. Rest.") == false)
+    }
+
+    @Test func openerEditIsFalseWhenOnlyTheBodyTailChanged() {
+        // The opener SENTENCE is identical; only later text differs, so the arm's opener was NOT changed.
+        let ai = "I photograph performing arts in New York. Original tail sentence."
+        let sent = "I photograph performing arts in New York. A completely different tail sentence."
+        #expect(Prospect.experimentOpenerWasEdited(originalDraftBody: ai, draftBody: sent) == false)
+    }
+
+    @Test func openerEditIsTrueWhenTheOpenerSentenceChanged() {
+        let ai = "I photograph performing arts in New York. Tail."
+        let sent = "Your Carnegie Hall run caught my eye. Tail."
+        #expect(Prospect.experimentOpenerWasEdited(originalDraftBody: ai, draftBody: sent) == true)
+    }
+
+    @Test func freezeStampsOpenerEditedForAnExperimentSendWhoseOpenerChanged() {
+        let p = makeProspect("k1")
+        p.assignedArm = "reason-first"
+        p.originalDraftBody = "I photograph performing arts in New York. Tail."   // the AI's produced body
+        p.draftBody = "Your Carnegie Hall run caught my eye. Tail."               // Dan rewrote the opener
+        // The passed `body` is a performer-style override; the stamp must ignore it and judge the shared body.
+        p.freezeSentCopy(subject: "S", body: "A second-person override body Dan cannot edit. Tail.")
+        #expect(p.experimentOpenerEdited == true)
+    }
+
+    @Test func freezeLeavesOpenerEditedFalseWhenTheOpenerWasNotChanged() {
+        let p = makeProspect("k1")
+        p.assignedArm = "reason-first"
+        p.originalDraftBody = "I photograph performing arts in New York. Old tail."
+        p.draftBody = "I photograph performing arts in New York. New tail."
+        p.freezeSentCopy(subject: "S", body: "eff")
+        #expect(p.experimentOpenerEdited == false)
+    }
+
+    @Test func freezeDoesNotStampOpenerEditedForANonExperimentSend() {
+        let p = makeProspect("k1")
+        // No assignedArm: not under an experiment, so the flag stays false even if the opener changed.
+        p.originalDraftBody = "I photograph performing arts in New York. Tail."
+        p.draftBody = "Totally different opener. Tail."
+        p.freezeSentCopy(subject: "S", body: "eff")
+        #expect(p.experimentOpenerEdited == false)
+    }
+
     @Test func assignmentPersistsSoAReFetchSeesTheStampedArm() throws {
         let ctx = ModelContext(try container())
         let exp = Experiment(dimension: .openerShape, variantA: .reasonFirst, variantB: .credentialFirst, isActive: true)
