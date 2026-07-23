@@ -31,6 +31,11 @@ enum SourceYield {
         var approved: Int
         var sent: Int
         var booked: Int
+
+        // A source that surfaced nothing. It is what `tally` returns for a source no prospect credits, and
+        // what a reader defaults to for a source absent from `tallies(in:)`'s map (#1429), so the two paths
+        // agree on the empty case.
+        static let zero = Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
     }
 
     // The lifetime tally for one source across every prospect it ever surfaced, whatever became of them:
@@ -38,7 +43,7 @@ enum SourceYield {
     // one. A show surfaced by several sources (the upsert merges a venue's calendar and the presenter's
     // own site into one row) credits each of them, because each genuinely did surface it.
     static func tally(sourceId: String, in prospects: [Prospect]) -> Tally {
-        var t = Tally(found: 0, unreviewed: 0, kept: 0, approved: 0, sent: 0, booked: 0)
+        var t = Tally.zero
         for p in prospects where p.sourceIds.contains(sourceId) {
             t.found += 1
 
@@ -62,6 +67,64 @@ enum SourceYield {
             if booked { t.booked += 1 }
         }
         return t
+    }
+
+    // Every source's tally in ONE pass over prospects, keyed by sourceId (#1429). The Sources sheet used to
+    // call `tally` above once PER source row, each an O(all prospects) scan, and its scroll-hold binding
+    // re-ran the whole list on every scroll tick, so one long scroll multiplied (rows x every prospect)
+    // across many redraws on the main thread and froze the app. This loops the store once and credits each
+    // source a prospect surfaced, so the sheet caches the map and reads each row's tally in O(1).
+    //
+    // The stage flags are computed once per prospect and then applied to each of its sources, mirroring
+    // `tally` EXACTLY (deepest-stage-first, monotonic), so the two can never drift; a test asserts they
+    // agree source-for-source. A source no prospect credits is simply absent from the map, and the reader
+    // defaults it to `Tally.zero`, which is what `tally` returns for it too.
+    static func tallies(in prospects: [Prospect]) -> [String: Tally] {
+        var out: [String: Tally] = [:]
+        for p in prospects {
+            let isNew = p.status == .new
+            let booked = p.outcome == .booked
+            let sent = p.wasContacted || booked
+            let approved = p.status == .approved || sent
+            let kept = keptStatuses.contains(p.status) || approved
+
+            // `Set` so a prospect that lists the same source twice credits it ONCE, matching `tally`'s
+            // membership test (`contains`) rather than a raw count over `sourceIds`.
+            for sourceId in Set(p.sourceIds) {
+                var t = out[sourceId] ?? .zero
+                t.found += 1
+                if isNew { t.unreviewed += 1 }
+                if kept { t.kept += 1 }
+                if approved { t.approved += 1 }
+                if sent { t.sent += 1 }
+                if booked { t.booked += 1 }
+                out[sourceId] = t
+            }
+        }
+        return out
+    }
+
+    // The change-key the Sources sheet evaluates every redraw to decide whether the cached `tallies` map is
+    // stale (#1429), the same signature-then-recompute shape #1356/#1374 used for that sheet's coverage
+    // list. It captures exactly the four fields a tally reads (a prospect's status, whether it was
+    // contacted, its outcome, and which sources credited it), so it changes precisely when some tally would
+    // and never on a mere scroll or unrelated redraw.
+    //
+    // Order-independent (an overflow-add of each prospect's own hash, and sourceIds sorted within a
+    // prospect) so a re-fetch that returns the same prospects in a different order does not force a needless
+    // full-store recompute. A hash collision can only mean one stale redraw, never a wrong number, because
+    // the next real change re-fires; the funnel is refreshed from scratch each time the sheet opens.
+    static func signature(_ prospects: [Prospect]) -> Int {
+        var acc = prospects.count
+        for p in prospects {
+            var h = Hasher()
+            h.combine(p.status)
+            h.combine(p.wasContacted)
+            h.combine(p.outcome)
+            for sourceId in p.sourceIds.sorted() { h.combine(sourceId) }
+            acc = acc &+ h.finalize()
+        }
+        return acc
     }
 
     // A show Dan moved past `.new` toward a pitch, on its status alone (the `approved`/`sent` OR in

@@ -31,6 +31,20 @@ enum ClientHorizon {
         return matchesClientName(source.orgName, clients: clients)
     }
 
+    // The `isClient` verdict for every source at once, keyed by sourceId (#1429). The Sources sheet used to
+    // call `isClient` inline once PER row on every redraw, and each call runs a token-set fuzzy match over
+    // the whole client list, so a long scroll (with the sheet re-running its list on every tick) piled that
+    // work onto the main thread. Computing the map once lets the sheet cache it and read each row's flag in
+    // O(1). It returns exactly what `isClient` returns for each source (a test pins the two equal), so the
+    // sheet's cached read can never disagree with the authority.
+    static func clientFlags(sources: [WatchedSource], clients: [DownbeatClient]) -> [String: Bool] {
+        var out: [String: Bool] = [:]
+        for source in sources {
+            out[source.sourceId] = isClient(source, clients: clients)
+        }
+        return out
+    }
+
     // The month horizon this source's calendar is read to.
     static func months(for source: WatchedSource, clients: [DownbeatClient]) -> Int {
         isClient(source, clients: clients) ? clientMonths : CalendarMonthIndex.defaultHorizon

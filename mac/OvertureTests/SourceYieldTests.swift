@@ -228,4 +228,59 @@ struct SourceYieldTests {
         #expect(SourceYield.line(SourceYield.tally(sourceId: "s", in: reviewedKeptNone))
                 == "0 of 3 kept after review")
     }
+
+    // #1429: the Sources sheet used to compute each source's tally with the O(all prospects) scan above,
+    // once PER source row, and the scroll-hold binding re-ran the whole list on every scroll tick, so one
+    // top-to-bottom scroll multiplied (rows x every prospect) into a freeze. `tallies(in:)` computes every
+    // source's tally in ONE pass instead. It must return, for every sourceId, EXACTLY what the per-source
+    // scan returns, or the sheet would silently show wrong funnels. This pins the two equal across a mixed
+    // store, including a show credited to two sources and a show dismissed after being sent.
+    @Test func talliesMatchesThePerSourceTallyForEverySource() {
+        let prospects = [
+            show("a", sources: ["carnegie"], status: .new),
+            show("b", sources: ["carnegie"], status: .queued),
+            show("c", sources: ["carnegie", "presenter-b"], status: .contacted, sent: true),
+            show("d", sources: ["presenter-b"], status: .dismissed, sent: true),
+            show("e", sources: ["presenter-b"], status: .dismissed),
+            show("f", sources: ["symphony-space"], status: .contacted, sent: true, outcome: .booked),
+        ]
+        let map = SourceYield.tallies(in: prospects)
+        for sid in ["carnegie", "presenter-b", "symphony-space"] {
+            #expect(map[sid] == SourceYield.tally(sourceId: sid, in: prospects))
+        }
+        // A source that surfaced nothing is simply absent from the map; the reader defaults it to the zero
+        // tally, which is exactly what the per-source scan returns for it.
+        #expect(map["never-heard-of-it"] == nil)
+        #expect(SourceYield.tally(sourceId: "never-heard-of-it", in: prospects) == SourceYield.Tally.zero)
+    }
+
+    // #1429: a show whose sourceIds happen to list the same source twice must still count ONCE, matching
+    // `tally`'s `contains` (which is membership, not a count). The single-pass version dedupes per prospect
+    // so a stray duplicate can never inflate a source's found.
+    @Test func aDuplicatedSourceIdOnOneShowStillCountsOnce() {
+        let prospects = [show("a", sources: ["s", "s"], status: .queued)]
+        #expect(SourceYield.tallies(in: prospects)["s"] == SourceYield.tally(sourceId: "s", in: prospects))
+        #expect(SourceYield.tallies(in: prospects)["s"]?.found == 1)
+    }
+
+    // #1429: the change-key the sheet uses to decide WHEN to recompute the cached tallies, evaluated every
+    // redraw so an unrelated scroll tick skips the recompute. It must move when something a tally counts
+    // moves (a show added, a status shifted) and stay put on a mere reorder, so it never causes a needless
+    // full-store recompute nor misses a real one.
+    @Test func signatureTracksTallyInputsAndIgnoresOrder() {
+        let base = [show("a", sources: ["s"], status: .new),
+                    show("b", sources: ["s"], status: .queued)]
+        let sig = SourceYield.signature(base)
+
+        // A reorder of the same prospects is not a change.
+        #expect(SourceYield.signature(base.reversed()) == sig)
+
+        // Adding a show is.
+        #expect(SourceYield.signature(base + [show("c", sources: ["s"], status: .new)]) != sig)
+
+        // Moving a show's status is, even with the count unchanged (kept/unreviewed shift).
+        let moved = [show("a", sources: ["s"], status: .queued),
+                     show("b", sources: ["s"], status: .queued)]
+        #expect(SourceYield.signature(moved) != sig)
+    }
 }
