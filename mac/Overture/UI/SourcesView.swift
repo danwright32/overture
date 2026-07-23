@@ -332,46 +332,28 @@ struct SourcesView: View {
         .background(OVColor.surfaceSunk)
     }
 
-    // #845: stopping says what it did AND offers the way back, in the same breath. The Undo is the
-    // immediate correction (a mis-click Dan sees at once); the "Watch again" button on the row is the one
-    // that never expires, because a banner he looked away from is a banner he did not read.
+    // #1417: both of these live in WatchlistMutations now, with every other action that says something
+    // to Dan, so the "only claim success once it saved" rule is stated once and is testable (#863).
     private func stopWatching(_ source: WatchedSource) {
-        WatchlistEditing.stopWatching(source, in: context)
-        feedback.acknowledge(ActionAck.stoppedWatching(org: source.orgName),
-                             action: .init(label: "Undo") { resumeWatching(source) })
+        WatchlistMutations.stopWatching(source, context: context, feedback: feedback)
     }
 
     private func resumeWatching(_ source: WatchedSource) {
-        // The result is not ignored: a refusal must never pass silently as though it worked. The sheet
-        // only draws these controls on a source Dan stopped himself, so this should be unreachable, and
-        // "should be unreachable" is exactly the kind of claim that turns into a source quietly back on
-        // the watchlist that asked not to be.
-        switch WatchlistEditing.resumeWatching(source, in: context) {
-        case .resumed, .alreadyWatching:
-            feedback.acknowledge(ActionAck.resumedWatching(org: source.orgName))
-        case .refused(let orgName):
-            feedback.acknowledge(WatchlistEditing.resumeRefusedMessage(orgName: orgName),
-                                 tone: .warning)
-        case .added, .invalidURL, .needsName:
-            break
-        }
+        WatchlistMutations.resumeWatching(source, context: context, feedback: feedback)
     }
 
+    // #1417: the add itself and its refusals live in WatchlistMutations. What stays here is this form's
+    // own state, which is why .notSaved leaves it open holding what Dan typed: closing it is this
+    // screen's way of saying the source was added, and it must not say that over a write that failed.
     private func addSource() {
-        switch WatchlistEditing.add(orgName: newOrgName, listingsURL: newURL, into: context) {
-        case .added, .resumed:
+        switch WatchlistMutations.addSource(orgName: newOrgName, listingsURL: newURL,
+                                            context: context, feedback: feedback) {
+        case .added:
             newOrgName = ""; newURL = ""; showAdd = false; addMessage = nil
-        case .alreadyWatching(let orgName):
-            addMessage = WatchlistEditing.alreadyWatchingMessage(orgName: orgName)
-        case .refused(let orgName):
-            // He must SEE this. Silently declining would look exactly like a bug, and this is the one
-            // thing in the whole feature that must not be got wrong quietly. #885: the sentence itself
-            // lives with the rule that produces it, and is now written once rather than three times.
-            addMessage = WatchlistEditing.refusedMessage(orgName: orgName)
-        case .invalidURL:
-            addMessage = WatchlistEditing.invalidURLMessage
-        case .needsName:
-            addMessage = WatchlistEditing.needsNameMessage
+        case .message(let text):
+            addMessage = text
+        case .notSaved:
+            break
         }
     }
 
@@ -474,9 +456,8 @@ struct SourcesView: View {
     }
 
     private func saveLocation(_ source: WatchedSource) {
-        WatchlistEditing.setVenueLocation(source, to: locationDraft, in: context)
+        WatchlistMutations.saveVenueLocation(source, to: locationDraft, context: context, feedback: feedback)
         editingLocationFor = nil
-        feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName))
     }
 
     // #1209: the returning-client state line plus a menu to override the automatic Downbeat match. The

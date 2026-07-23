@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Overture
 
 // #845. "Stop watching" took a calendar off the watchlist on a single click, with no confirmation and no
@@ -29,21 +30,46 @@ struct StopWatchingIsReversibleTests {
         #expect(ActionAck.resumedWatching(org: "Bargemusic") == "Watching Bargemusic again.")
     }
 
-    // MARK: - The wiring (#885: these live in a SwiftUI view, where no test can reach them)
+    // MARK: - The wiring
 
     private func sourcesView() -> String {
         SourceGuardHelper.source("Overture/UI/SourcesView.swift")
     }
 
-    // The stop must offer the Undo in the same breath. Without this, the domain function below is a
-    // perfectly good way back that nothing in the app ever calls.
-    @Test func stoppingASourceOffersAnUndo() throws {
-        let body = try SourceGuard.functionBody(named: "stopWatching", in: sourcesView())
+    // #1417: this was a source scan, because the stop lived inside a SwiftUI view where no test could
+    // reach it (#885). It lives in WatchlistMutations now, so the claim is checked by running it: the
+    // source really is stopped, the Undo really is offered, and taking it really does put the source back.
+    @MainActor
+    private func watchedSource(refused: Bool = false, active: Bool = true) throws -> (ModelContext, WatchedSource) {
+        let ctx = ModelContext(try ModelContainer(
+            for: Schema([WatchedSource.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let s = WatchedSource(sourceId: "s1", orgName: "Bargemusic",
+                              listingsURL: "https://bargemusic.org/events", kind: .html)
+        s.isActive = active
+        if !active { s.inactiveReason = refused ? .orgRefusal : .removedByDan }
+        ctx.insert(s)
+        return (ctx, s)
+    }
 
-        #expect(body.contains("WatchlistEditing.stopWatching(source, in: context)"))
-        #expect(body.contains("ActionAck.stoppedWatching(org: source.orgName)"))
-        #expect(body.contains("label: \"Undo\""))
-        #expect(body.contains("resumeWatching(source)"))
+    @MainActor
+    @Test func stoppingASourceOffersAnUndoThatPutsItBack() throws {
+        let (ctx, source) = try watchedSource()
+        let feedback = ActionFeedback()
+
+        WatchlistMutations.stopWatching(source, context: ctx, feedback: feedback)
+
+        #expect(!source.isActive)
+        #expect(source.inactiveReason == .removedByDan)
+        #expect(feedback.message == ActionAck.stoppedWatching(org: "Bargemusic"))
+        let undo = try #require(feedback.action)
+        #expect(undo.label == "Undo")
+
+        undo.perform()
+
+        #expect(source.isActive)
+        #expect(source.inactiveReason == nil)
+        #expect(feedback.message == ActionAck.resumedWatching(org: "Bargemusic"))
     }
 
     // And the row keeps a way back that never expires. The banner auto-dismisses; a mis-click Dan notices
@@ -66,12 +92,19 @@ struct StopWatchingIsReversibleTests {
     // A refusal must never pass silently as though it worked. The sheet should never draw a resume control
     // on a refused org at all, and "should never" is exactly the claim that ends with somebody being
     // emailed who asked not to be, so the view handles the refusal rather than discarding the result.
+    @MainActor
     @Test func theSheetSaysSoRatherThanSwallowingARefusal() throws {
-        let body = try SourceGuard.functionBody(named: "resumeWatching", in: sourcesView())
+        let (ctx, source) = try watchedSource(refused: true, active: false)
+        let feedback = ActionFeedback()
 
-        #expect(body.contains("WatchlistEditing.resumeWatching(source, in: context)"))
-        #expect(body.contains("case .refused"))
-        #expect(body.contains("tone: .warning"))
+        WatchlistMutations.resumeWatching(source, context: ctx, feedback: feedback)
+
+        // The org that asked to stop stays off the watchlist, and Dan is told why rather than being
+        // shown a confirmation for something that did not happen.
+        #expect(!source.isActive)
+        #expect(source.inactiveReason == .orgRefusal)
+        #expect(feedback.message == WatchlistEditing.resumeRefusedMessage(orgName: "Bargemusic"))
+        #expect(feedback.tone == .warning)
     }
 
     // The sheet is a separate window on macOS, so the main view's banner cannot cover it (#285). Without

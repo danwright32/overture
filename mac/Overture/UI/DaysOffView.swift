@@ -132,14 +132,20 @@ struct DaysOffView: View {
         .background(OVColor.surfaceSunk)
     }
 
+    // #1417: the add and its refusals live in DayOffMutations. What stays here is this form's own state,
+    // which is why .notSaved leaves it open: closing it is this screen's way of saying the range was
+    // blocked, and it must not say that over a write that failed.
     private func add() {
-        let result = DayOffEditing.add(start: EasternDate.dayString(from: newStart),
-                                       end: EasternDate.dayString(from: newEnd),
-                                       note: newNote, into: context)
-        // Every refusal SAYS something. A form that silently declines to add the range Dan just typed
-        // looks exactly like a bug, and he would try again rather than fix the range.
-        addMessage = DayOffEditing.message(for: result)
-        if result == .added { newNote = ""; showAdd = false }
+        switch DayOffMutations.add(start: EasternDate.dayString(from: newStart),
+                                   end: EasternDate.dayString(from: newEnd),
+                                   note: newNote, context: context, feedback: feedback) {
+        case .added:
+            addMessage = nil; newNote = ""; showAdd = false
+        case .refused(let text):
+            addMessage = text
+        case .notSaved:
+            break
+        }
     }
 
     // #925: away for a week, and it says so without pretending anything was solved. The sheet stays open:
@@ -216,15 +222,10 @@ struct DaysOffView: View {
         }
     }
 
-    // Removing is reversible from the banner it happened in (#845): a mis-clicked Remove otherwise means
-    // retyping the range, and the row Dan just deleted is the one thing he can no longer read it off.
+    // #1417: lives in DayOffMutations now, so the removal, its Undo, and the rule that neither claims
+    // success before the change is saved are testable (#863).
     private func remove(_ row: DayOff) {
-        let (start, end, note) = (row.startDate, row.endDate, row.note)
-        DayOffEditing.remove(row, in: context)
-        feedback.acknowledge(ActionAck.dayOffRemoved(range: QueueModel.runDateLabel(start: start, end: end)),
-                             action: .init(label: "Undo") {
-                                 DayOffEditing.add(start: start, end: end, note: note, into: context)
-                             })
+        DayOffMutations.remove(row, context: context, feedback: feedback)
     }
 
     private func sectionHeading(_ title: String, systemImage: String, count: Int) -> some View {
