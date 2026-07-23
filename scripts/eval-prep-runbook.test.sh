@@ -73,32 +73,33 @@ n_fixtures="$(list_fixtures | wc -l | tr -d ' ')"
 check "for_each_fixture visits every fixture despite a stdin-consuming callback" \
   '[[ "${n_visited}" == "${n_fixtures}" && "${n_visited}" -gt 1 ]]'
 
-# #1397: --yes accepts an optional single fixture name so a targeted recheck after a focused runbook edit
-# is one claude call, not eight. The SELECTION is token-free and testable: drive select_and_run with a
-# recorder callback (never claude) and assert it dispatches to exactly the right fixtures. A bad name must
-# be a usage error, never a silent no-op and never a silent full real run.
+# The shared list-runner primitive backs both the full run and the targeted reruns: it must dispatch the
+# callback over EXACTLY the names it is given (run_plan already chose the set), with the same FD-3 discipline
+# as for_each_fixture so a stdin-eating callback can't truncate it. Token-free: the recorder never spends.
 selected=""
 record_selected() { selected="${selected}${1} "; }
+for_each_in_list record_selected $'host-venue-not-target\npresenter-not-venue\n' </dev/null
+check "for_each_in_list dispatches over exactly the names given" \
+  '[[ "${selected}" == "host-venue-not-target presenter-not-venue " ]]'
 
-selected=""
-select_and_run record_selected stale-site-misnamed-co-performer </dev/null
-check "--yes NAME runs exactly the one named fixture" \
-  '[[ "${selected}" == "stale-site-misnamed-co-performer " ]]'
+# #1397/#1400 warning-ordering (#1400 follow-up): run_plan is the single token-free resolver for WHICH
+# fixtures a real run would score. real_run calls it BEFORE the SPENDS-TOKENS warning and any setup, so a
+# no-op selection resolves to nothing and exits 2 as a free usage error, and the warning is therefore never
+# printed on a run that spends nothing. These assertions pin exactly that: the no-op cases resolve empty + 2.
 
-selected=""
-rc=0; select_and_run record_selected no-such-fixture </dev/null 2>/dev/null || rc=$?
-check "--yes with an unknown fixture is a usage error (exit 2)" '[[ "${rc}" -eq 2 ]]'
-check "--yes with an unknown fixture runs nothing" '[[ -z "${selected}" ]]'
+# #1397: a single named fixture resolves to exactly itself; an unknown name is a usage error resolving nothing.
+check "run_plan NAME resolves to exactly that fixture" \
+  '[[ "$(run_plan stale-site-misnamed-co-performer)" == "stale-site-misnamed-co-performer" ]]'
+rc=0; out="$(run_plan no-such-fixture 2>/dev/null)" || rc=$?
+check "run_plan with an unknown fixture exits 2" '[[ "${rc}" -eq 2 ]]'
+check "run_plan with an unknown fixture resolves nothing (no run, no token warning)" '[[ -z "${out}" ]]'
 
-selected=""
-select_and_run record_selected </dev/null
-n_all="$(printf '%s' "${selected}" | wc -w | tr -d ' ')"
-check "--yes with no name still runs every fixture" \
-  '[[ "${n_all}" == "${n_fixtures}" && "${n_all}" -gt 1 ]]'
+# No name resolves the full fixture set.
+n_all="$(run_plan "" | wc -l | tr -d ' ')"
+check "run_plan with no name resolves every fixture" '[[ "${n_all}" == "${n_fixtures}" && "${n_all}" -gt 1 ]]'
 
-# #1400: --yes --failed rechecks only the fixtures a prior real run left failing, and the failures record
-# converges (fixtures retested-and-passed drop off; still-failing stay; untested stay). Token-free: point
-# FAILURES_FILE at a temp path and drive the failure-tracking functions with the recorder, never claude.
+# #1400: --yes --failed resolves to only the fixtures a prior real run left failing, and the record converges
+# (retested-and-passed drop off; still-failing stay; untested stay). Token-free: FAILURES_FILE -> temp path.
 FAILURES_FILE="$(mktemp -t overture-eval-failures.XXXXXX)"
 trap 'rm -f "${FAILURES_FILE}"' EXIT
 
@@ -106,25 +107,26 @@ trap 'rm -f "${FAILURES_FILE}"' EXIT
 rm -f "${FAILURES_FILE}"
 check "read_failures is empty when no run has recorded failures" '[[ -z "$(read_failures)" ]]'
 
-# --failed with no recorded failures is a usage error (exit 2) that runs nothing (never a silent full run).
-selected=""
-rc=0; run_failed_fixtures record_selected 2>/dev/null || rc=$?
-check "--failed with no recorded failures exits 2" '[[ "${rc}" -eq 2 ]]'
-check "--failed with no recorded failures runs nothing" '[[ -z "${selected}" ]]'
+# --failed with no record resolves nothing and exits 2 (never a silent full run, never a token warning).
+rc=0; out="$(run_plan --failed 2>/dev/null)" || rc=$?
+check "run_plan --failed with no record exits 2" '[[ "${rc}" -eq 2 ]]'
+check "run_plan --failed with no record resolves nothing (no run, no token warning)" '[[ -z "${out}" ]]'
 
-# Given two REAL recorded failures, --failed reruns exactly those two.
+# Given two REAL recorded failures, --failed resolves exactly those two.
 printf '%s\n' host-venue-not-target presenter-not-venue > "${FAILURES_FILE}"
-selected=""
-run_failed_fixtures record_selected
-check "--failed reruns exactly the recorded failing fixtures" \
-  '[[ "${selected}" == "host-venue-not-target presenter-not-venue " ]]'
+check "run_plan --failed resolves exactly the recorded failing fixtures" \
+  '[[ "$(run_plan --failed | tr "\n" " ")" == "host-venue-not-target presenter-not-venue " ]]'
 
-# A recorded name that is no longer a fixture is skipped; the still-valid one still runs.
+# A recorded name that is no longer a fixture is skipped; the still-valid one stays.
 printf '%s\n' host-venue-not-target renamed-away-fixture > "${FAILURES_FILE}"
-selected=""
-run_failed_fixtures record_selected 2>/dev/null
-check "--failed skips a stale recorded name but still runs the valid one" \
-  '[[ "${selected}" == "host-venue-not-target " ]]'
+check "run_plan --failed skips a stale recorded name but keeps the valid one" \
+  '[[ "$(run_plan --failed 2>/dev/null)" == "host-venue-not-target" ]]'
+
+# If EVERY recorded name is stale, that is a usage error resolving nothing, not a silent full run.
+printf '%s\n' renamed-away-fixture > "${FAILURES_FILE}"
+rc=0; out="$(run_plan --failed 2>/dev/null)" || rc=$?
+check "run_plan --failed with only stale names exits 2" '[[ "${rc}" -eq 2 ]]'
+check "run_plan --failed with only stale names resolves nothing" '[[ -z "${out}" ]]'
 
 # Convergence: prior failures {host, presenter, already-covered}; this run retested {host, presenter},
 # host passed, presenter still failed. Result must be {already-covered, presenter}: host drops (retested +
