@@ -168,8 +168,18 @@ This follows from the decisions above and was open to revision during the build;
 1. Repeat-client season radar (#1)
 2. Post-shoot referral and testimonial loop (#2)
 3. Availability-aware pitching, calendar-connected (#3)
-4. Outcome-feedback loop to auto-tune the fit score (#4)
-5. Subject-line and opener A/B testing, the deeper analysis layer (#5)
+4. Outcome-feedback loop to auto-tune the fit score (#4). **Gated, do not build yet (2026-07-22, #5
+   Phase 5).** Auto-promoting a winning opener style (or tuning the fit score off outcomes) depends on two
+   numbers nobody has measured: real send volume per style, and Dan's actual opener-rewrite rate. Both are
+   now surfaced by the opener A/B report (#5, ExperimentReport). Building the auto-tune engine before those
+   numbers exist would tune to noise, and a low drafter-compliance rate would mean tuning off sends that
+   never used the assigned style at all. Revisit only once the report shows both arms clearing its sample
+   bar with high compliance.
+5. Subject-line and opener A/B testing (#5). **Framework built 2026-07-22 (Phases 0 through 5).** Overture
+   randomly assigns one of the four opener styles at draft time, tells the drafter to use it, tracks reply
+   rate per style, excludes sends whose opener Dan rewrote, and reports honestly (never auto-declaring a
+   winner, that is #4). The subject-line dimension is a documented extension point, not built: the runbook
+   deliberately fixes the subject formula. Dormant until Dan starts an experiment.
 6. Pipeline analytics dashboard (#6)
 
 ---
