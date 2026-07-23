@@ -30,21 +30,9 @@ struct ShowSearchField: View {
     }
 
     var body: some View {
-        HStack(spacing: OVSpacing.xs) {
-            Image(systemName: "magnifyingglass").foregroundStyle(OVColor.inkFaint)
-            TextField(placeholder, text: $query)
-                .textFieldStyle(.plain)
-                .focused($isFocused)
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(OVColor.inkFaint)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 6)
-        .background(Capsule().fill(OVColor.surfaceSunk))
-        .overlay(Capsule().strokeBorder(OVColor.line, lineWidth: 1))
+        // #1432: the control itself is OVSearchField, shared with the Sources sheet's own field. Only the
+        // behavior below (the results popover and what opens it) is this field's own.
+        OVSearchField(query: $query, placeholder: placeholder, focused: $isFocused)
         .frame(maxWidth: 280)
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
             Group {

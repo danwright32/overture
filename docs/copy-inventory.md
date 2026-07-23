@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **765 sentences**, from 254 source files.
+Every sentence Overture can say to Dan: **768 sentences**, from 256 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -390,6 +390,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
+"Clear the search"
+    `Domain/SourceSearch.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
     `UI/SourceFixConfirmActions.swift`
 "Closed (not interested)"
@@ -770,6 +772,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ReplyClassifyService.swift`
 "No response"
     `Domain/ReviewStatus.swift`
+"No source matches that name."
+    `Domain/SourceSearch.swift`
 "No sources need re-reading right now."
     `Integration/ScoutExtractService.swift`
 "No sources yet."
@@ -1103,6 +1107,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily."
     `App/RootView.swift`
+"Search by name"
+    `Domain/SourceSearch.swift`
 "Search shows, venues, contacts"
     `UI/ShowSearchField.swift`
 "Self-produced \(discipline.rawValue) group, a strong-fit target\(where_)."
