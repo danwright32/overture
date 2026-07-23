@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **751 sentences**, from 249 source files.
+Every sentence Overture can say to Dan: **760 sentences**, from 251 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -518,6 +518,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Email found"
     `Domain/Reachability.swift`
+"End this experiment"
+    `UI/ExperimentReportView.swift`
 "Event passed, send a closing note"
     `Domain/ConversationReminder.swift`
 "Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing."
@@ -750,6 +752,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "No email yet"
     `UI/QueueView+Model.swift`
+"No experiment running. Start one to test two opener styles against each other and see which earns more replies. Nothing changes until you start it."
+    `UI/ExperimentReportView.swift`
 "No kept prospects need prepping. Keep some prospects first."
     `Integration/PrepQueueService.swift`
 "No longer in the feed, may be cancelled"
@@ -935,6 +939,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Performs today, too close to book"
     `UI/QueueView+Model.swift`
+"Pick two different styles to compare."
+    `UI/ExperimentReportView.swift`
 "Possible booking, confirm?"
     `UI/ProspectRowView.swift`
 "Possible match to \(where_): \(name)?"
@@ -1186,8 +1192,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Sources you stopped watching."
     `Domain/SourceGrade.swift`
+"Start a new experiment"
+    `UI/ExperimentReportView.swift`
 "Start at login"
     `UI/OnboardingView.swift`
+"Start experiment"
+    `UI/ExperimentReportView.swift`
 "States a rate other than $250 an hour plus tax"
     `Domain/DraftCheck.swift`
 "Stern Auditorium / Perelman Stage"
@@ -1383,6 +1393,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReviewStatus.swift`
 "Too far (\(count))"
     `UI/QueueView+Model.swift`
+"Too few sends to call anything yet. Both styles need at least \(experimentCallThreshold) sends before the reply rates mean much."
+    `Domain/ExperimentReport.swift`
 "Too soon"
     `Domain/ReviewStatus.swift`
 "Towns Overture keeps out of your queue."
@@ -1505,6 +1517,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "\(added) from watched calendars"
     `Domain/ScoutRunSummary.swift`
+"\(arm.editedExcluded) edited, excluded from the rate"
+    `Domain/ExperimentReport.swift`
+"\(arm.tally.replied + arm.tally.booked) replied of \(arm.tally.contacted)"
+    `Domain/ExperimentReport.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
 "\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
@@ -1652,6 +1668,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "delivery failed"
     `Domain/BounceDetection.swift`
+"drafter used this shape on \(Int((rate * 100).rounded()))% of sends"
+    `Domain/ExperimentReport.swift`
 "edit it before sending."
     `Domain/DraftReviewNotes.swift`
 "elsewhere on \(dateLabel)"

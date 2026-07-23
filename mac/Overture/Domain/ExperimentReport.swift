@@ -93,6 +93,12 @@ enum ExperimentReport {
         return tooFewToTell ? base : base + OutcomePatterns.percentSuffix(arm.tally.responseRate)
     }
 
+    // The honest low-N banner, naming the bar. Lives here (not the view) so the interpolation of the
+    // threshold is testable copy, not a sentence computed in a SwiftUI body (#863).
+    static func tooFewToTellLine() -> String {
+        "Too few sends to call anything yet. Both styles need at least \(experimentCallThreshold) sends before the reply rates mean much."
+    }
+
     // Only shown when there is something to say (never "0 excluded").
     static func editedExcludedLine(_ arm: ArmReport) -> String? {
         arm.editedExcluded == 0 ? nil : "\(arm.editedExcluded) edited, excluded from the rate"

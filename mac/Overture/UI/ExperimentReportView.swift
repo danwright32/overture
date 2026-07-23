@@ -69,7 +69,7 @@ struct ExperimentReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.md) {
                     if report.tooFewToTell {
-                        Text("Too few sends to call anything yet. Both styles need at least \(ExperimentReport.experimentCallThreshold) sends before the reply rates mean much.")
+                        Text(ExperimentReport.tooFewToTellLine())
                             .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                     }
                     ForEach(report.arms, id: \.arm) { arm in

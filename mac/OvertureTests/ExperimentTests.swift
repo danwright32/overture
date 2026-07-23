@@ -300,6 +300,11 @@ struct ExperimentTests {
         #expect(ExperimentReport.complianceLine(arm) == nil)
     }
 
+    @Test func tooFewToTellLineNamesTheSampleBar() {
+        // The honest banner must state the actual bar, so a future threshold change updates the words too.
+        #expect(ExperimentReport.tooFewToTellLine().contains("\(ExperimentReport.experimentCallThreshold)"))
+    }
+
     // MARK: - Phase 3: send-time opener-edit detection
 
     @Test func openerEditIsFalseWhenDanNeverEdited() {
