@@ -65,6 +65,11 @@ struct SourcesView: View {
     @State private var editingLocationFor: String?
     @State private var locationDraft = ""
 
+    // #1432: what Dan has typed into the search field. Only the string lives here; every decision it
+    // drives (is this a search, does this name match, what the sheet says when nothing does) belongs to
+    // SourceSearch, so none of it sits in a view the suite cannot run (#863).
+    @State private var searchQuery = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -75,36 +80,63 @@ struct SourcesView: View {
             if sources.isEmpty {
                 empty
             } else {
-                // #1440: a plain scroll view, deliberately. Holding Dan's place across a scout rebuild (#974)
-                // was done first by a `.scrollPosition` PIN and then by per-section geometry tracking, and
-                // BOTH drove a SwiftUI layout feedback loop that froze the sheet on a fast flick right after it
-                // opened (proven by a main-thread sample of the live hang: the loop ran through the per-section
-                // GeometryReader preference). A dumb scroll has no such loop, so it neither jumps nor freezes.
-                // The cost is #974: if a scout refreshes the list WHILE the sheet is open it may snap to the
-                // top, a minor annoyance worth trading for a sheet that never hangs. Revisit place-holding only
-                // with an approach that cannot re-enter layout.
-                ScrollView {
-                    // #1440: a plain VStack, NOT a LazyVStack. A lazy list does not build off-screen rows, so
-                    // it only ESTIMATES the height of the big "watching" section (~35 rows as one child); a
-                    // fast flick into it realizes the real, much larger height, the content size snaps, and the
-                    // scroll lurches to the bottom (the "jumps to the bottom after about halfway" bug). For a
-                    // watchlist of a few dozen rows in a 460pt sheet, building it all up front is cheap and
-                    // gives the scroll a stable, correct height from the first frame, so there is nothing to
-                    // lurch to. (The separate freeze was a scroll-position-tracking layout loop, removed above.)
-                    VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                        // #1356: the coverage gap list sits above the sources, because it is where Dan acts on
-                        // a gap (add a source, or tag one below). It renders nothing when every client is
-                        // covered, the common case once the non-targets are dismissed once.
-                        coverageSection
-                        // Sectioning, ordering and the omit-empty rule all come from the tested domain
-                        // function, so this view has no judgement of its own to get wrong.
-                        ForEach(SourceGrade.sections(sources), id: \.grade) { section($0.grade, $0.sources) }
+                // #1432: pinned above the scroll rather than inside it, so it cannot scroll away from Dan
+                // half-way down the list he is trying to search.
+                searchField
+                Divider().overlay(OVColor.line)
+
+                // #1432: matching is SourceSearch's decision, not this view's. An empty query returns every
+                // source unchanged, so an unsearched sheet renders exactly what it always did.
+                let visible = SourceSearch.filter(sources, query: searchQuery)
+
+                if visible.isEmpty {
+                    // Only reachable while searching, since an empty watchlist took the branch above. It has
+                    // to SAY so: a blank sheet where the sources were reads as the sources having gone.
+                    noMatches
+                } else {
+                    // #1440: a plain scroll view, deliberately. Holding Dan's place across a scout rebuild (#974)
+                    // was done first by a `.scrollPosition` PIN and then by per-section geometry tracking, and
+                    // BOTH drove a SwiftUI layout feedback loop that froze the sheet on a fast flick right after it
+                    // opened (proven by a main-thread sample of the live hang: the loop ran through the per-section
+                    // GeometryReader preference). A dumb scroll has no such loop, so it neither jumps nor freezes.
+                    // The cost is #974: if a scout refreshes the list WHILE the sheet is open it may snap to the
+                    // top, a minor annoyance worth trading for a sheet that never hangs. Revisit place-holding only
+                    // with an approach that cannot re-enter layout.
+                    ScrollView {
+                        // #1440: a plain VStack, NOT a LazyVStack. A lazy list does not build off-screen rows, so
+                        // it only ESTIMATES the height of the big "watching" section (~35 rows as one child); a
+                        // fast flick into it realizes the real, much larger height, the content size snaps, and the
+                        // scroll lurches to the bottom (the "jumps to the bottom after about halfway" bug). For a
+                        // watchlist of a few dozen rows in a 460pt sheet, building it all up front is cheap and
+                        // gives the scroll a stable, correct height from the first frame, so there is nothing to
+                        // lurch to. (The separate freeze was a scroll-position-tracking layout loop, removed above.)
+                        VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                            // #1356: the coverage gap list sits above the sources, because it is where Dan acts on
+                            // a gap (add a source, or tag one below). It renders nothing when every client is
+                            // covered, the common case once the non-targets are dismissed once.
+                            //
+                            // #1432: hidden while searching. It is a diagnostic about the WHOLE watchlist, not a
+                            // search result, so leaving it on top of a filtered list would put an answer to a
+                            // question Dan did not ask above the one he did. Its cached value is untouched by the
+                            // search (the filter never reaches the recompute's inputs below), so clearing the
+                            // field brings it straight back without recomputing anything.
+                            if !SourceSearch.isSearching(searchQuery) {
+                                coverageSection
+                            }
+                            // Sectioning, ordering and the omit-empty rule all come from the tested domain
+                            // function, so this view has no judgement of its own to get wrong. #1432: it is handed
+                            // the FILTERED list, and it already drops sections that end up empty, so a search
+                            // keeps every heading it still has rows for. That is the point of keeping the
+                            // headings (Dan's call, 2026-07-23): a source that asked him to stop stays labelled
+                            // as one in the results, rather than sitting namelessly beside one he watches.
+                            ForEach(SourceGrade.sections(visible), id: \.grade) { section($0.grade, $0.sources) }
+                        }
+                        .padding(OVSpacing.lg)
                     }
-                    .padding(OVSpacing.lg)
+                    // Sizes to its content rather than to a fixed height, so today's one-source watchlist does not
+                    // open as a mostly empty box, and a long one still scrolls instead of running off the screen.
+                    .frame(maxHeight: 460)
                 }
-                // Sizes to its content rather than to a fixed height, so today's one-source watchlist does not
-                // open as a mostly empty box, and a long one still scrolls instead of running off the screen.
-                .frame(maxHeight: 460)
             }
         }
         .frame(width: 560)
@@ -255,6 +287,25 @@ struct SourcesView: View {
             Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
+    }
+
+    // #1432: finding one source on a watchlist that passed 38 in #359's backfill and only grows. The
+    // control is the SHARED one (OVSearchField), so this field and the toolbar's show search look and
+    // behave alike rather than being two search bars that happen to resemble each other.
+    private var searchField: some View {
+        OVSearchField(query: $searchQuery,
+                      placeholder: SourceSearch.fieldPlaceholder,
+                      clearLabel: SourceSearch.clearButtonLabel)
+            .padding(.horizontal, OVSpacing.lg)
+            .padding(.vertical, OVSpacing.xs)
+    }
+
+    // #1432: a search that found nothing says so. Silence here would read as the watchlist having emptied.
+    private var noMatches: some View {
+        Text(SourceSearch.noMatchesLine)
+            .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(OVSpacing.lg)
     }
 
     private var addForm: some View {
