@@ -162,3 +162,61 @@ struct SourcesViewWiringTests {
         #expect(sourcesView.contains("WatchedSource"))
     }
 }
+
+// #1440: the Sources sheet used to pin its scroll to the top-visible SECTION on every tick (#974, to hold
+// place across a scout rebuild). With only a few coarse section anchors, that continuous re-pin fought a
+// fast drag into a jump to the bottom and a feedback-loop freeze, and #1429's caching alone did not cure
+// it. The sheet now scrolls freely (no pin) and restores Dan's place only when the list actually rebuilds.
+// Two pure helpers make that logic testable without a UI: which section is on top right now, and whether
+// the list changed in a way that would reset the scroll.
+@MainActor
+@Suite("The Sources sheet's scroll restore (#1440)")
+struct SourcesScrollRestoreTests {
+    private func source(_ id: String, health: SourceHealth = .ok, checkedAt: Date? = nil) -> WatchedSource {
+        let s = WatchedSource(sourceId: id, orgName: id, kind: .html)
+        s.health = health
+        s.isActive = true
+        s.lastCheckedAt = checkedAt
+        return s
+    }
+
+    // The top-visible section is the one whose top edge has just crossed the viewport top (minY at or just
+    // above 0); among those, the one closest to the top (greatest minY). That is where the sheet restores to
+    // after a rebuild.
+    @Test func picksTheSectionWhoseTopHasJustPassedTheViewportTop() {
+        let top = SourcesScrollRestore.topSection(
+            [(.watching, -120), (.failing, -10), (.stoppedAtTheirRequest, 200)])
+        #expect(top == .failing)
+    }
+
+    // Before any scrolling every section sits below the top (minY > 0); the top one is simply the first.
+    @Test func atRestTheTopSectionIsTheFirstOne() {
+        #expect(SourcesScrollRestore.topSection([(.watching, 8), (.failing, 300)]) == .watching)
+    }
+
+    @Test func noSectionsMeansNoTopSection() {
+        #expect(SourcesScrollRestore.topSection([]) == nil)
+    }
+
+    // The restore fires when a scout could have reset the scroll (a source moved grade, its checked time was
+    // restamped, or one was added or removed) and stays put otherwise, so the restore neither misfires on a
+    // no-op redraw nor misses a real rebuild.
+    @Test func theRestoreSignatureTracksWhatResetsTheScroll() {
+        let base = [source("x", checkedAt: Date(timeIntervalSince1970: 100)),
+                    source("y", checkedAt: Date(timeIntervalSince1970: 100))]
+        let same = [source("x", checkedAt: Date(timeIntervalSince1970: 100)),
+                    source("y", checkedAt: Date(timeIntervalSince1970: 100))]
+        #expect(SourcesScrollRestore.signature(base) == SourcesScrollRestore.signature(same))
+
+        let gradeMoved = [source("x", health: .failing, checkedAt: Date(timeIntervalSince1970: 100)),
+                          source("y", checkedAt: Date(timeIntervalSince1970: 100))]
+        #expect(SourcesScrollRestore.signature(base) != SourcesScrollRestore.signature(gradeMoved))
+
+        let rechecked = [source("x", checkedAt: Date(timeIntervalSince1970: 200)),
+                         source("y", checkedAt: Date(timeIntervalSince1970: 100))]
+        #expect(SourcesScrollRestore.signature(base) != SourcesScrollRestore.signature(rechecked))
+
+        let added = base + [source("z", checkedAt: Date(timeIntervalSince1970: 100))]
+        #expect(SourcesScrollRestore.signature(base) != SourcesScrollRestore.signature(added))
+    }
+}
