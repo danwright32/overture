@@ -369,9 +369,13 @@ enum ScoutService {
             }
         }
 
-        // Deferred is a visible state, never silence. A source over budget was NOT checked, and Dan has
-        // to be able to see that, or it could go unchecked for weeks while reporting as healthy.
-        for source in plan.deferred {
+        // Deferred is a visible state, never silence, but only for a source that actually has something
+        // unread waiting. A source over budget with NOTHING new to read is fully covered: the free daily
+        // watch-only run fetches and hashes it every night regardless of budget, so it can never go
+        // unchecked for weeks. Surfacing the unchanged ones too made "N venues still waiting" a fixed
+        // total-minus-budget that never converged however many times Dan pressed Run again
+        // (SourceSchedule.waitingToRead).
+        for source in SourceSchedule.waitingToRead(deferred: plan.deferred) {
             outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
                                                 state: .deferred, listingsURL: source.listingsURL))
         }

@@ -123,4 +123,43 @@ struct ScoutFairnessClockTests {
         // And the run still respected the cap: at most the budget of pages was queued.
         #expect(launched.count <= 20)
     }
+
+    // An over-budget source with nothing new to read is NOT "waiting to be checked": the free daily
+    // watch-only run keeps its content hash current, so it is fully covered, not neglected. Before this,
+    // EVERY deferred source (changed or not) was surfaced as waiting, so the popup's "N venues still
+    // waiting" was a fixed total-minus-budget that never fell however many times Dan pressed Run again
+    // (42 fetchable sources, budget 20, so it read "22 waiting" on every press, forever).
+    @Test func anUnchangedDeferredSourceIsNotSurfacedAsWaiting() async throws {
+        let ctx = try context()
+        // Both unchanged (the page returns the same hash the row already stored), budget 1: "aaa" sorts
+        // first and is checked; "zzz" is deferred, but it has nothing unread, so it is not waiting.
+        source(ctx, "aaa", lastHash: "same")
+        source(ctx, "zzz", lastHash: "same")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let outcome = try await ScoutService.runScout(
+            into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("same"),
+            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults())
+
+        #expect(outcome.sources.contains { $0.state == .deferred } == false)
+    }
+
+    // The other half: a CHANGED source pushed past the budget IS still waiting. It has unread listings,
+    // so it must be counted, or a genuine backlog would go silent. This is what keeps the number honest
+    // when a big batch changes at once, and it converges: the changed ones sort first next press and
+    // their unread flag clears on ingest, so repeated presses drain it to zero.
+    @Test func aChangedDeferredSourceIsStillSurfacedAsWaiting() async throws {
+        let ctx = try context()
+        // Two CHANGED sources (their stored hash is stale and the page returns new bytes), budget 1:
+        // "aaa" is read; "zzz" is deferred but genuinely carries unread listings.
+        source(ctx, "aaa", lastHash: "old", hasUnreadChanges: true)
+        source(ctx, "zzz", lastHash: "old", hasUnreadChanges: true)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let outcome = try await ScoutService.runScout(
+            into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
+            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults())
+
+        #expect(outcome.sources.contains { $0.sourceId == "zzz" && $0.state == .deferred })
+    }
 }
