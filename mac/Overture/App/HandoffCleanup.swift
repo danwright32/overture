@@ -37,9 +37,11 @@ enum HandoffCleanup {
     }
 
     // The handoff directory is NOT a scratch folder. It holds Dan's booking history, his Gmail tokens, his
-    // voice guidance, and the queue and results files the detached runs hand back. So the test is by NAME
-    // first and age second: a file this enum does not own is not a candidate at any age. An age-only sweep
-    // of this directory would eventually take every one of those, and the loss would be silent.
+    // voice guidance, the queue and results files the detached runs hand back, and in Release the live
+    // SwiftData store itself (which moved into this folder to get off the shared Application Support
+    // root). So the test is by NAME first and age second: a file this enum does not own is not a candidate
+    // at any age. An age-only sweep of this directory would eventually take every one of those, starting
+    // with the store, and the loss would be silent.
     static func owns(_ filename: String) -> Bool {
         (filename.hasPrefix("overture-scout-page-") && filename.hasSuffix(".html"))
             || filename.hasSuffix(".corrupt")
