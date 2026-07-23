@@ -510,6 +510,26 @@ final class Prospect {
         guard sentBody == nil else { return }
         sentSubject = subject
         sentBody = body
+        // #5 Phase 3: freeze whether Dan materially rewrote the ASSIGNED opener, so a rewritten arm is
+        // excluded from the A/B tally (Phase 4) while staying visible. Judge the SHARED body's opener
+        // (the text the assigned arm shaped), NEVER the passed `body` (which for a performer is a
+        // different second-person override Dan cannot edit). Only meaningful under an experiment; a
+        // non-experiment send leaves it false. Frozen inside the same once-only guard as the sent copy,
+        // so it is stable against later draft edits and idempotent under the per-recipient fan-out.
+        if assignedArm != nil {
+            experimentOpenerEdited = Prospect.experimentOpenerWasEdited(
+                originalDraftBody: originalDraftBody, draftBody: draftBody)
+        }
+    }
+
+    // #5 Phase 3: did Dan materially change the ASSIGNED opener? Compare the opener SENTENCE of the AI's
+    // original shared body against the current shared body. `originalDraftBody` is the AI's produced body,
+    // snapshotted by applyEdit only on Dan's first substantive edit; nil means he never edited, so the
+    // opener is unchanged. Pure (never in a view, #863) so the send path stays testable.
+    static func experimentOpenerWasEdited(originalDraftBody: String?, draftBody: String?) -> Bool {
+        // No snapshot means Dan never substantively edited, so the arm's opener is exactly as produced.
+        guard let original = originalDraftBody else { return false }
+        return RecentOpenersBuilder.opener(from: original) != RecentOpenersBuilder.opener(from: draftBody ?? "")
     }
 
     // An edit is substantive (worth learning from) when the text differs beyond whitespace. Pure
