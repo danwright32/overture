@@ -111,33 +111,45 @@ any cross-boundary file shape.
 ## Restoring Overture from a backup
 
 The live SwiftData store (every prospect, contact, and outreach record) lives at
-`~/Library/Application Support/default.store` for the Release build, or
-`~/Library/Application Support/Overture-Debug/default.store` for a Debug run. It is NOT at
-`~/Library/Application Support/Overture/default.store`: that legacy path predates the
-#264/#267 Debug/Release split and isn't used by the current app, since `Overture/` today only
-holds the JSON handoff files, never the store.
+`~/Library/Application Support/Overture/Overture.store` for the Release build, or
+`~/Library/Application Support/Overture-Debug/Overture.store` for a Debug run. In Release the store
+sits in the SAME folder as the JSON handoff files, deliberately: that folder's path is a published
+contract (`docs/contracts.md`, the runbooks, `import-history.ts`, `runner-setup.sh`), so putting the
+store there moved it off the shared root without changing a single documented path.
+
+It did NOT always live there. Until the store-path move it sat directly in the Application Support
+ROOT as `default.store`, which is what SwiftData names a store when the app doesn't say otherwise.
+Both halves of that were defaults nobody chose, and both are shared by every unsandboxed SwiftData
+app on the Mac. It cost Dan his live store twice: Downbeat opened it on 2026-07-08, and on
+2026-07-23 `/usr/libexec/icloudmailagent` ran a Core Data lightweight migration onto it and replaced
+every Overture table with its own single `ZAPIREQUESTMODEL`. Do not move the store back toward
+either default. `StoreLocation` owns both the folder and the filename; `StoreRelocation` performs
+the one-time move at launch and refuses to carry a file that isn't Overture's.
 
 As of #601/#602, every launch first copies the store into a dated subfolder under
 `overture-store-backups/` next to the live one (for example
-`~/Library/Application Support/overture-store-backups/20260706-101800/`), keeping the last 10.
-Each backup's outcome is logged to `overture-store-backups/backup.log`. Separately, a handful of
-older, ONE-OFF manual backups made by hand before risky migrations already sit loose directly in
-`~/Library/Application Support/` (for example `overture-store-backup-20260628-*/`,
-`default.store.phasef-backup-*`, `default.store.435-backup-*`); those predate the automatic
-mechanism and aren't rotated or pruned, so check their timestamps if a launch-time backup isn't
-recent enough.
+`~/Library/Application Support/Overture/overture-store-backups/20260706-101800/`), keeping the
+last 10. Each backup's outcome is logged to `overture-store-backups/backup.log`.
 
-To restore: quit Overture (including from the menu bar), copy the desired backup's
-`default.store` (+ `-wal`/`-shm`, if present) over the live files at the path above, then
-relaunch.
+Backups made BEFORE the store-path move are a frozen archive at the OLD location,
+`~/Library/Application Support/overture-store-backups/`, and hold a file named `default.store`
+rather than `Overture.store`. Nothing rotates or prunes them any more, which is a useful property
+(that history can no longer be aged out), but it means a restore from one of those is a rename on
+the way in. Separately, a handful of older ONE-OFF manual backups made by hand before risky
+migrations sit loose directly in `~/Library/Application Support/` (for example
+`overture-store-backup-20260628-*/`, `default.store.phasef-backup-*`, `default.store.435-backup-*`).
+
+To restore: quit Overture (including from the menu bar), copy the desired backup's store file
+(+ `-wal`/`-shm`, if present) over the live files at the path above, renaming `default.store` to
+`Overture.store` if the backup predates the move, then relaunch.
 
 As of #663, launch also refuses to open a file at that path that doesn't already contain
 Overture's own `ZPROSPECT` table (checked read-only, before anything else touches the file). This
-catches another app writing its own database to the same shared, unsandboxed path (it happened
-once with Downbeat, 2026-07-08): instead of CoreData silently creating a fresh, near-empty store
-inside the foreign file, Overture shows the store-unavailable screen with a reason naming the
-path, so the collision is caught at launch instead of requiring a manual sqlite3 inspection to
-even notice.
+is what caught BOTH collisions above: instead of CoreData silently creating a fresh, near-empty
+store inside the foreign file, Overture shows the store-unavailable screen with a reason naming the
+path. The same check gates the one-time move, so a foreign file left at the old path is never
+carried onto the new one. The folder move makes the collision impossible in the first place; the
+guard remains the net under it.
 
 ## CI status before merging
 

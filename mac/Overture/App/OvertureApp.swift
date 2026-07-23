@@ -40,6 +40,14 @@ struct OvertureApp: App {
             // Tests build their own in-memory stores; the host never touches the real store or its lock.
             container = try? ModelContainer(for: schema,
                 configurations: [ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)])
+        } else if case let .blocked(relocationReason) = StoreRelocation.migrate(
+            legacyStoreURL: StoreLocation.legacyStoreURL, newStoreURL: StoreLocation.storeURL
+        ) {
+            // The one-time move off the shared Application Support root, run BEFORE the lock is taken
+            // (the lock lives at the new path) and before anything opens the store. It only blocks
+            // when the file left at the old path isn't Overture's or the move couldn't finish; in
+            // both cases nothing has been touched, and saying so beats coming up empty.
+            reason = relocationReason
         } else if let acquired = StoreLock.acquire(at: StoreLocation.lockURL) {
             // Single-writer guard taken BEFORE opening the store (#264): flock is the real guard.
             lock = acquired
