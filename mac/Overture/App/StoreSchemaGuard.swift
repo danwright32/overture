@@ -33,8 +33,11 @@ enum StoreSchemaGuard {
         storeURL: URL, dataDirectory: URL, now: Date, fileManager: FileManager = .default
     ) -> String? {
         guard !hasExpectedSchema(at: storeURL, fileManager: fileManager) else { return nil }
+        // #1410: taken as .foreignFile, so the log and the folder name both say this is a copy of a file
+        // that was not Overture's rather than a backup of Dan's data, and so it stays out of the
+        // rotation it would otherwise count against.
         _ = StoreBackup.performLaunchBackup(
-            dataDirectory: dataDirectory, now: now, keep: 10, fileManager: fileManager
+            dataDirectory: dataDirectory, now: now, keep: 10, reason: .foreignFile, fileManager: fileManager
         ) { () -> Bool? in nil }
         return foreignFileReason(path: storeURL.path)
     }

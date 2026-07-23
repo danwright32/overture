@@ -156,9 +156,13 @@ struct StoreSchemaGuardTests {
 
             #expect(reason.contains(storeURL.path))
             let backupsDirectory = StoreBackup.backupsDirectory(dataDirectory: dir)
+            // #1410: the snapshot lands in a MARKED folder. It is a copy of a file that was not
+            // Overture's, and under a plain dated name it read as the most recent good backup.
             let backedUpStore = backupsDirectory
-                .appendingPathComponent("20231114-171320/\(StoreLocation.storeFilename)")
+                .appendingPathComponent("20231114-171320.foreign/\(StoreLocation.storeFilename)")
             #expect(FileManager.default.fileExists(atPath: backedUpStore.path))
+            #expect(!FileManager.default.fileExists(
+                atPath: backupsDirectory.appendingPathComponent("20231114-171320").path))
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()

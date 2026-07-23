@@ -131,6 +131,14 @@ As of #601/#602, every launch first copies the store into a dated subfolder unde
 `~/Library/Application Support/Overture/overture-store-backups/20260706-101800/`), keeping the
 last 10. Each backup's outcome is logged to `overture-store-backups/backup.log`.
 
+A folder whose name ends in `.foreign` (for example `20260723-113732.foreign`) is NOT a backup of
+Dan's data and must never be restored from (#1410). It is the snapshot the #663 guard takes of
+whatever file it found at the store path before refusing to open it, kept as evidence: the one on
+2026-07-23 holds icloudmailagent's database. Its log line says so, and it is deliberately outside the
+plain `yyyyMMdd-HHmmss` shape that rotation counts and deletes, so a run of refusals can never age
+out the ten real backups. `backup.log` also now distinguishes a launch whose copy failed outright, or
+copied only some of the store's files, from a clean `success`.
+
 Backups made BEFORE the store-path move are a frozen archive at the OLD location,
 `~/Library/Application Support/overture-store-backups/`, and hold a file named `default.store`
 rather than `Overture.store`. Nothing rotates or prunes them any more, which is a useful property
