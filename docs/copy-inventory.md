@@ -20,6 +20,7 @@ What is not, and why:
 
 ## Excluded at the source
 
+- `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)

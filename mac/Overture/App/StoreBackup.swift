@@ -25,28 +25,82 @@ enum StoreBackup {
         return f
     }()
 
+    // #1410: WHY a snapshot is being taken, because it changes what the snapshot is worth. The launch
+    // backup is a copy of Dan's data. The one the #663 guard takes before refusing to open is a copy of
+    // a file that was NOT Dan's data, kept only as evidence of whatever landed at that path. Logging
+    // and naming them identically (which is what happened on 2026-07-23) makes the second one read as
+    // the most recent good backup.
+    enum Reason: Equatable {
+        case launch
+        case foreignFile
+
+        // Appended to the folder name so the distinction survives in the folder listing, not just in
+        // the log. Kept out of the plain `yyyyMMdd-HHmmss` shape on purpose: pruneOldBackups counts and
+        // deletes only that shape, so a refusal can never age out a real backup.
+        var folderSuffix: String { self == .foreignFile ? ".foreign" : "" }
+    }
+
+    // The log's own words. Constants so a test names the same thing the code writes, rather than
+    // re-typing a sentence that can drift.
+    // copy-inventory:ignore-start  backup.log is a diagnostic record, not the app's voice on screen
+    static let foreignFileLogNote =
+        "refused: the file at the store path was not Overture's own database, so nothing was opened. "
+        + "This folder holds a copy of that file, not a backup of your data."
+    static let nothingCopiedLogNote = "failed: nothing was copied, so there is no backup for this launch."
+    static func incompleteLogNote(copied: Int, of expected: Int) -> String {
+        "incomplete: copied \(copied) of \(expected) files, so this backup may not restore cleanly."
+    }
+    // copy-inventory:ignore-end
+
     // Copies the live store (+ its -wal/-shm sidecars, when present) into a new dated subfolder.
-    // Returns nil when there's nothing to back up yet (a fresh install with no store).
+    // Returns nil when there's nothing to back up yet (a fresh install with no store), and #1410 also
+    // when the copy failed outright: handing back a folder path implies a backup is sitting in it.
     @discardableResult
-    static func makeBackup(dataDirectory: URL, now: Date, fileManager: FileManager = .default) -> URL? {
+    static func makeBackup(dataDirectory: URL, now: Date, reason: Reason = .launch,
+                           fileManager: FileManager = .default) -> URL? {
         let storeURL = dataDirectory.appendingPathComponent(StoreLocation.storeFilename)
         guard fileManager.fileExists(atPath: storeURL.path) else { return nil }
 
-        let destination = backupsDirectory(dataDirectory: dataDirectory)
-            .appendingPathComponent(timestampFormatter.string(from: now), isDirectory: true)
+        let stamp = timestampFormatter.string(from: now)
+        let backups = backupsDirectory(dataDirectory: dataDirectory)
+        let destination = backups.appendingPathComponent(stamp + reason.folderSuffix, isDirectory: true)
         // A second launch in the same second (the app's own crash-relaunch-loop concern, per
         // #601's red-team) would otherwise collide on this exact folder name; treat an existing
         // one as already backed up rather than attempting (and failing) another copy into it.
         guard !fileManager.fileExists(atPath: destination.path) else { return destination }
         try? fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        for filename in storeFilenames {
-            let source = dataDirectory.appendingPathComponent(filename)
-            guard fileManager.fileExists(atPath: source.path) else { continue }
-            try? fileManager.copyItem(at: source, to: destination.appendingPathComponent(filename))
+        let present = storeFilenames.filter {
+            fileManager.fileExists(atPath: dataDirectory.appendingPathComponent($0).path)
         }
-        appendLog("\(timestampFormatter.string(from: now)) success",
-                  backupsDirectory: backupsDirectory(dataDirectory: dataDirectory), fileManager: fileManager)
+        var copied = 0
+        for filename in present {
+            let source = dataDirectory.appendingPathComponent(filename)
+            // #1410: a failed copy used to be swallowed here and then logged as a success, so a backup
+            // that copied nothing at all was indistinguishable from a good one.
+            do {
+                try fileManager.copyItem(at: source, to: destination.appendingPathComponent(filename))
+                copied += 1
+            } catch {
+                continue
+            }
+        }
+
+        guard copied > 0 else {
+            appendLog("\(stamp) \(nothingCopiedLogNote)", backupsDirectory: backups, fileManager: fileManager)
+            // Leaving the empty folder would put a directory holding nothing into the rotation, where it
+            // would be counted as one of the ten kept and could push a real backup off the end.
+            try? fileManager.removeItem(at: destination)
+            return nil
+        }
+
+        let outcome: String
+        switch (reason, copied == present.count) {
+        case (.foreignFile, _): outcome = foreignFileLogNote
+        case (.launch, true): outcome = "success"
+        case (.launch, false): outcome = incompleteLogNote(copied: copied, of: present.count)
+        }
+        appendLog("\(stamp) \(outcome)", backupsDirectory: backups, fileManager: fileManager)
         return destination
     }
 
@@ -78,12 +132,23 @@ enum StoreBackup {
         }
     }
 
+    // A plain `yyyyMMdd-HHmmss` folder: a real backup, and the only thing rotation touches. #1410: a
+    // refusal snapshot (`yyyyMMdd-HHmmss.foreign`) deliberately fails this, so it is neither counted
+    // toward `keep` nor deleted. It is evidence of a file that should never have been at that path,
+    // and a burst of them must not quietly rotate away every real backup Dan has.
+    static func isRotatableBackupFolder(_ name: String) -> Bool {
+        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0].count == 8, parts[1].count == 6 else { return false }
+        return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
+    }
+
     // Deletes all but the `keep` most recent dated backup folders. Folder names are
     // `yyyyMMdd-HHmmss`, which sort chronologically as plain strings, so no date parsing needed.
     static func pruneOldBackups(in backupsDirectory: URL, keep: Int, fileManager: FileManager = .default) {
         let entries = (try? fileManager.contentsOfDirectory(
             at: backupsDirectory, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         let dated = entries.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+            .filter { isRotatableBackupFolder($0.lastPathComponent) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         guard dated.count > keep else { return }
         for old in dated.dropLast(keep) {
@@ -97,10 +162,11 @@ enum StoreBackup {
     // succeeds: an undetected corrupted store must never cause its own last-good backups to be
     // rotated away just because this launch's open attempt failed (#602 red-team finding).
     static func performLaunchBackup<Container>(
-        dataDirectory: URL, now: Date, keep: Int, fileManager: FileManager = .default,
+        dataDirectory: URL, now: Date, keep: Int, reason: Reason = .launch,
+        fileManager: FileManager = .default,
         open: () -> Container?
     ) -> Container? {
-        makeBackup(dataDirectory: dataDirectory, now: now, fileManager: fileManager)
+        makeBackup(dataDirectory: dataDirectory, now: now, reason: reason, fileManager: fileManager)
         let result = open()
         if result != nil {
             pruneOldBackups(in: backupsDirectory(dataDirectory: dataDirectory), keep: keep, fileManager: fileManager)
