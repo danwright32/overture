@@ -255,14 +255,25 @@ export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectat
   const name = ctx?.name ?? expected.description;
   const failures: string[] = [];
 
-  const version = (produced as { version?: unknown })?.version;
+  // #1389: the eval scores the drafter's JUDGMENT (contacts, draft, provenance), not run-level metadata.
+  // A single-item eval output legitimately omits `generatedAt` (that wrapper field belongs to the real
+  // Prep run that writes the whole file, not to drafting one item), so inject a placeholder when it is
+  // missing or empty rather than rejecting an otherwise-valid result on a timestamp the eval never judges.
+  let normalized = produced;
+  if (produced && typeof produced === "object" && !Array.isArray(produced)) {
+    const obj = produced as Record<string, unknown>;
+    const hasGeneratedAt = typeof obj.generatedAt === "string" && obj.generatedAt.length > 0;
+    if (!hasGeneratedAt) normalized = { ...obj, generatedAt: "eval" };
+  }
+
+  const version = (normalized as { version?: unknown })?.version;
   try {
-    assertPrepResultsShape(produced, "(produced output)", typeof version === "number" ? version : 6);
+    assertPrepResultsShape(normalized, "(produced output)", typeof version === "number" ? version : 6);
   } catch (e) {
     return { name, pass: false, failures: [`output is not a valid PrepResults: ${(e as Error).message}`] };
   }
 
-  const entries = ((produced as { results?: ResultEntry[] }).results ?? []) as ResultEntry[];
+  const entries = ((normalized as { results?: ResultEntry[] }).results ?? []) as ResultEntry[];
   if (entries.length === 0) {
     failures.push(`output has no results entry`);
     return { name, pass: false, failures };
