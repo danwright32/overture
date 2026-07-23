@@ -298,6 +298,34 @@ struct ExperimentTests {
         // No edited sends and no counted sends: neither line appears.
         #expect(ExperimentReport.editedExcludedLine(arm) == nil)
         #expect(ExperimentReport.complianceLine(arm) == nil)
+        // No sends at all: the #4-gate send-volume line stays silent too (never "0 of 30").
+        #expect(ExperimentReport.sendVolumeLine(arm) == nil)
+    }
+
+    @Test func sendVolumeLineShowsProgressTowardTheBarThenMarksItCleared() {
+        // #1396: surface countedSends (the deferred-#4 gate number) as per-arm progress toward the
+        // sample bar, which the reply line and the global banner never frame per arm.
+        func arm(counted: Int) -> ExperimentReport.ArmReport {
+            var t = OutcomeTally(); t.contacted = counted
+            return ExperimentReport.ArmReport(arm: "reason-first", tally: t, editedExcluded: 0,
+                                              complianceMatched: counted, complianceTotal: counted)
+        }
+        let bar = ExperimentReport.experimentCallThreshold
+        #expect(ExperimentReport.sendVolumeLine(arm(counted: 12)) == "12 of \(bar) sends toward a reliable read")
+        // At or past the bar it must not read "30 of 30" / "35 of 30"; it flips to a cleared line.
+        #expect(ExperimentReport.sendVolumeLine(arm(counted: bar)) == "\(bar) sends in, enough for the rate to mean something")
+        #expect(ExperimentReport.sendVolumeLine(arm(counted: bar + 5)) == "\(bar + 5) sends in, enough for the rate to mean something")
+    }
+
+    @Test func editedExcludedLineCarriesTheRewriteRate() {
+        // #1396: the raw edited count is already shown, so the NEW gate number is the rewrite rate (%),
+        // folded into this one line rather than a duplicate line about the same edits (#843).
+        // 3 edited of (12 counted + 3 edited) = 3/15 = 20%.
+        var t = OutcomeTally(); t.contacted = 12
+        let arm = ExperimentReport.ArmReport(arm: "reason-first", tally: t, editedExcluded: 3,
+                                             complianceMatched: 12, complianceTotal: 12)
+        #expect(arm.rewriteRate == 0.2)
+        #expect(ExperimentReport.editedExcludedLine(arm) == "3 edited (20% of sends), excluded from the rate")
     }
 
     @Test func tooFewToTellLineNamesTheSampleBar() {

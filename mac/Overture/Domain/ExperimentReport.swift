@@ -99,9 +99,28 @@ enum ExperimentReport {
         "Too few sends to call anything yet. Both styles need at least \(experimentCallThreshold) sends before the reply rates mean much."
     }
 
-    // Only shown when there is something to say (never "0 excluded").
+    // Only shown when there is something to say (never "0 excluded"). Carries the opener-rewrite RATE,
+    // one of the two numbers that gate the deferred #4 auto-tune (#1396): the raw edited count is already
+    // here, so the % is the only new number and it rides this same line rather than a duplicate one (#843).
     static func editedExcludedLine(_ arm: ArmReport) -> String? {
-        arm.editedExcluded == 0 ? nil : "\(arm.editedExcluded) edited, excluded from the rate"
+        guard arm.editedExcluded > 0 else { return nil }
+        guard let rate = arm.rewriteRate else {
+            return "\(arm.editedExcluded) edited, excluded from the rate"
+        }
+        return "\(arm.editedExcluded) edited (\(Int((rate * 100).rounded()))% of sends), excluded from the rate"
+    }
+
+    // The other deferred-#4 gate number (#1396): this arm's counted send volume, framed as progress toward
+    // the sample bar so Dan can watch each style climb toward a trustworthy read. The reply line's
+    // denominator carries the same count but never relates it to the bar, and the "too few to tell" banner
+    // states the bar only in the abstract, never per arm. Nil when nothing has sent yet (never "0 of 30").
+    static func sendVolumeLine(_ arm: ArmReport) -> String? {
+        let sends = arm.countedSends
+        guard sends > 0 else { return nil }
+        if sends >= experimentCallThreshold {
+            return "\(sends) sends in, enough for the rate to mean something"
+        }
+        return "\(sends) of \(experimentCallThreshold) sends toward a reliable read"
     }
 
     // The drafter-compliance line: what share of this arm's counted sends actually used the assigned shape.

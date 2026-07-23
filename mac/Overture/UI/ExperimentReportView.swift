@@ -89,6 +89,9 @@ struct ExperimentReportView: View {
                 .font(OVType.groupName).foregroundStyle(OVColor.ink)
             Text(ExperimentReport.replyLine(arm, tooFewToTell: tooFewToTell))
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            if let volume = ExperimentReport.sendVolumeLine(arm) {
+                Text(volume).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+            }
             if let compliance = ExperimentReport.complianceLine(arm) {
                 Text(compliance).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
             }
