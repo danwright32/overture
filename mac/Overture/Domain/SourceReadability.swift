@@ -61,6 +61,17 @@ enum SourceReadability {
         return toleranceLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
     }
 
+    // #1428: true when the note above is the SELF-HEALING shrunken-feed hold (the feed came back smaller but
+    // every show it found read cleanly), rather than an actionable forfeit. That hold needs no input and
+    // clears itself, so the Sources sheet renders its line in plain text, not the amber an actionable
+    // problem gets. Mirrors `note`'s precedence exactly (a pages-unreadable forfeit wins over the shrink), so
+    // this flag can never disagree with the sentence it colors. It is also why the attention badge no longer
+    // counts this state (SourceAttention.needsALook).
+    static func noteIsSelfHealingHold(readable: Int, unreadable: Int, baseline: Int) -> Bool {
+        !FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable)
+            && FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline)
+    }
+
     // Past the tolerance, the source has forfeited its right to mark anything gone. Complete sentences per
     // case (#1032, and the standing rule against assembled fragments): the common venue-only case keeps its
     // original wording; the mixed and title-only cases name what was actually dropped.
