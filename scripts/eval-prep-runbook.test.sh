@@ -58,6 +58,21 @@ fi
 rc=0; "${SCRIPT}" --nonsense >/dev/null 2>&1 || rc=$?
 check "unknown option exits nonzero (never a silent real run)" '[[ "${rc}" -eq 2 ]]'
 
+# #1387: the real-AI loop used to read fixture names from stdin, so the inner claude/tsx call (both read
+# stdin) swallowed the rest and only the FIRST of 8 fixtures ever ran. for_each_fixture must visit EVERY
+# fixture even when its callback consumes stdin. Source the script (main is source-guarded, so nothing
+# spends) and drive for_each_fixture with a stdin-eating callback; a truncating loop visits 1, the fixed
+# loop visits all of them. Token-free: the callback never calls claude.
+visited=""
+count_visits() { cat >/dev/null 2>&1 || true; visited="${visited}${1} "; }
+# shellcheck source=/dev/null
+source "${SCRIPT}"
+for_each_fixture count_visits </dev/null
+n_visited="$(printf '%s' "${visited}" | wc -w | tr -d ' ')"
+n_fixtures="$(list_fixtures | wc -l | tr -d ' ')"
+check "for_each_fixture visits every fixture despite a stdin-consuming callback" \
+  '[[ "${n_visited}" == "${n_fixtures}" && "${n_visited}" -gt 1 ]]'
+
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
   exit 0

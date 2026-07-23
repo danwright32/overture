@@ -84,6 +84,45 @@ $(cat "${RUNBOOK}")
 PROMPT
 }
 
+# Script-scoped so score_one_fixture (a for_each_fixture callback) can see them: a bash callback cannot
+# capture the caller's locals.
+_eval_claude=""
+_eval_scope=""
+_eval_tmp=""
+_eval_failures=0
+_eval_total=0
+
+# Score ONE fixture: run the drafter on it, then check the output. A malformed or errored AI run counts
+# as that fixture failing and never aborts the rest. claude's stdin is /dev/null so it can neither block
+# on nor (with the FD-3 loop below) truncate the fixture list.
+score_one_fixture() {
+  local name="$1" fixture="$2" prompt out
+  _eval_total=$((_eval_total + 1))
+  echo "==> ${name}: running claude..."
+  prompt="$(build_prompt "${fixture}")"
+  out="${_eval_tmp}/${name}.out"
+  # shellcheck disable=SC2086  # $_eval_scope MUST word-split into --allowedTools <list> --permission-mode <mode>
+  if ! "${_eval_claude}" -p "${prompt}" --model "${OVERTURE_MODEL_DRAFTING}" ${_eval_scope} </dev/null > "${out}" 2>"${_eval_tmp}/${name}.err"; then
+    echo "FAIL  ${name} (claude run errored; see ${_eval_tmp}/${name}.err)"
+    _eval_failures=$((_eval_failures + 1))
+    return
+  fi
+  if ! run_cli "${fixture}" "${out}"; then
+    _eval_failures=$((_eval_failures + 1))
+  fi
+}
+
+# Visit every committed fixture in sorted order, calling `${1} <name> <fixture-path>` for each. Reads the
+# fixture list from FD 3, NOT stdin, so an inner command that consumes stdin (claude -p and tsx both do)
+# can no longer swallow the remaining names and truncate the loop after the first fixture (#1387).
+for_each_fixture() {
+  local fn="$1" name fixture
+  while IFS= read -r name <&3; do
+    fixture="$(fixture_path_for "${name}")"
+    "${fn}" "${name}" "${fixture}"
+  done 3< <(list_fixtures)
+}
+
 real_run() {
   cost_warning
   command -v jq >/dev/null 2>&1 || { echo "eval-prep-runbook: jq is required" >&2; exit 1; }
@@ -96,41 +135,24 @@ real_run() {
   . "${REPO_ROOT}/mac/scripts/lib/models.sh"
   # shellcheck source=/dev/null
   . "${REPO_ROOT}/mac/scripts/lib/claude-run-scope.sh"
-  local scope
-  scope="$(claude_run_scope "Read" "manual" "Bash Edit WebFetch WebSearch Skill" "eval-prep-runbook")" || {
+  _eval_scope="$(claude_run_scope "Read" "manual" "Bash Edit WebFetch WebSearch Skill" "eval-prep-runbook")" || {
     echo "eval-prep-runbook: refusing to run, unsafe tool scope" >&2
     exit 1
   }
 
-  local claude
-  claude="$(command -v claude || true)"
-  [ -n "${claude}" ] || { echo "eval-prep-runbook: the 'claude' CLI is not on PATH" >&2; exit 1; }
+  _eval_claude="$(command -v claude || true)"
+  [ -n "${_eval_claude}" ] || { echo "eval-prep-runbook: the 'claude' CLI is not on PATH" >&2; exit 1; }
 
-  local tmp
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "${tmp}"' EXIT
+  _eval_tmp="$(mktemp -d)"
+  trap 'rm -rf "${_eval_tmp}"' EXIT
 
-  local failures=0 total=0 name fixture prompt out
-  while IFS= read -r name; do
-    total=$((total + 1))
-    fixture="$(fixture_path_for "${name}")"
-    echo "==> ${name}: running claude..."
-    prompt="$(build_prompt "${fixture}")"
-    out="${tmp}/${name}.out"
-    # shellcheck disable=SC2086  # $scope MUST word-split into --allowedTools <list> --permission-mode <mode>
-    if ! "${claude}" -p "${prompt}" --model "${OVERTURE_MODEL_DRAFTING}" ${scope} > "${out}" 2>"${tmp}/${name}.err"; then
-      echo "FAIL  ${name} (claude run errored; see ${tmp}/${name}.err)"
-      failures=$((failures + 1))
-      continue
-    fi
-    if ! run_cli "${fixture}" "${out}"; then
-      failures=$((failures + 1))
-    fi
-  done < <(list_fixtures)
+  _eval_failures=0
+  _eval_total=0
+  for_each_fixture score_one_fixture
 
   echo
-  echo "eval complete: $((total - failures))/${total} fixtures passed"
-  [ "${failures}" -eq 0 ]
+  echo "eval complete: $(( _eval_total - _eval_failures ))/${_eval_total} fixtures passed"
+  [ "${_eval_failures}" -eq 0 ]
 }
 
 # One place that runs the TS scorer, whether directly (tsx on PATH) or through pnpm.
@@ -170,4 +192,8 @@ main() {
   esac
 }
 
-main "$@"
+# Source guard (#1387): a pure-shell test sources this file to exercise for_each_fixture directly, without
+# running the real, token-spending eval. Only run main when executed, never when sourced.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
