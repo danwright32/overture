@@ -169,6 +169,44 @@ struct ScoutExtractContractTests {
         }
     }
 
+    // v5 (#1469): a row whose venue the PAGE ITSELF has not published yet says so, so the app can tell it
+    // apart from a row whose detail page the run could not open. Smoke Ring's real Oct 24 Palm Springs gig
+    // is the case: the band's own page prints "Info coming soon" with no title, no venue and no link.
+    @Test func aVersionFiveResultsFileMarksARowThePageHasNotPublishedAVenueFor() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v5.json"))
+        let smokeRing = try #require(results.results.first { $0.sourceId == "smoke-ring-quartet" })
+
+        let placeholder = try #require(smokeRing.events.first { $0.performanceDate == "2026-10-24" })
+        #expect(placeholder.venueNotPublished == true)
+        #expect(placeholder.venue == nil)
+        #expect(placeholder.sourceUrl == nil)           // the placeholder row links nowhere, as on the real page
+        // Every row the run DID read a venue off carries no flag, so the two cases stay distinguishable.
+        #expect(smokeRing.events.filter { $0.venueNotPublished == true }.count == 1)
+    }
+
+    // The field is optional, so a file written before the run was ever asked for it still decodes and simply
+    // carries none. That is the same outcome as a v5 run whose pages all published their venues, which is
+    // nearly every run, so the app cannot tell those apart and does not need to.
+    @Test func anEarlierResultsFileDecodesWithNoVenueNotPublishedFlag() throws {
+        for name in ["results-v1.json", "results-v2.json", "results-v3.json", "results-v4.json"] {
+            let results = try ScoutExtractResultsDecoder.decode(fixture(name))
+            #expect(results.results.allSatisfy { $0.events.allSatisfy { $0.venueNotPublished == nil } })
+        }
+    }
+
+    // Decoding is not enough: the flag has to survive the hop into the app's own event type, or the
+    // readability rule downstream would go on counting the placeholder as an unread page while this suite
+    // stayed green. Read through `rawEvents` the way the ingest sees it, not off the wire struct.
+    @Test func theVenueNotPublishedFlagSurvivesTheHopIntoTheAppsOwnEventType() throws {
+        let results = try ScoutExtractResultsDecoder.decode(fixture("results-v5.json"))
+
+        let tally = results.rejectionCounts(for: "smoke-ring-quartet")
+
+        #expect(tally.structuralGapCount == 1)
+        #expect(tally.unreadTotal == 0)
+        #expect(tally.structuralGapDates == ["2026-10-24"])
+    }
+
     // The seriesId decodes off the wire AND survives the hop into the app's own ExtractedEvent, the same
     // way `location` must: a field that decoded but fell out of `asExtractedEvent` would leave this green
     // while RunGrouping downstream still saw nothing to collapse.

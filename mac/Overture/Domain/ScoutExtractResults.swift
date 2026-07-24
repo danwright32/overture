@@ -116,11 +116,16 @@ struct ScoutExtractEvent: Codable, Equatable, Sendable {
     // one show together (VenueTix tags every night of a run with a shared seriesId). Optional and additive,
     // so a v1/v2/v3 file written before the run was ever asked for it still decodes and simply carries none.
     var seriesId: String?
+    // #1469 (v5): the run read this row and the PAGE ITSELF publishes no venue for it yet (a placeholder row,
+    // an explicit TBA), as opposed to a detail page the run could not open. Optional and additive, so a
+    // v1-v4 file written before the run was ever asked for it still decodes and simply carries none, which is
+    // the same outcome as a v5 run whose pages all named their venues.
+    var venueNotPublished: Bool?
 
     var asExtractedEvent: ExtractedEvent {
         ExtractedEvent(title: title, presenter: presenter, venue: venue,
                        performanceDate: performanceDate, sourceUrl: sourceUrl, location: location,
-                       seriesId: seriesId)
+                       seriesId: seriesId, venueNotPublished: venueNotPublished)
     }
 }
 

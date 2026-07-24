@@ -17,6 +17,11 @@ const runbook = readFileSync(join(repoRoot, "docs", "scout-extract-runbook.md"),
 const RULES: { name: string; pattern: RegExp }[] = [
   { name: "sourceurl-never-a-signup-form", pattern: /never a registration or\s+sign-up form/i },
   { name: "sourceurl-dciny-concrete-example", pattern: /getfeedback\.com[\s\S]*?dciny\.org\/events\//i },
+  // #1469: the run is the ONLY thing that can tell "this page publishes no venue yet" from "I could not
+  // open this show's page". Lose this rule and every placeholder row goes back to reading as an unread
+  // page, which switches a small source's cancellation detection off for as long as the placeholder is up.
+  { name: "venue-not-published-flag", pattern: /set `venueNotPublished: true`/i },
+  { name: "venue-not-published-never-for-an-unread-page", pattern: /Never set it for a page you could not\s+reach/i },
 ];
 
 describe("scout-extract-runbook sourceUrl rule is present (#1276)", () => {

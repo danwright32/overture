@@ -1,0 +1,44 @@
+{
+  "generatedAt" : "2026-07-24T14:00:00Z",
+  "results" : [
+    {
+      "events" : [
+        {
+          "location" : "New York, NY",
+          "performanceDate" : "2026-09-11",
+          "presenter" : "Smoke Ring Quartet",
+          "sourceUrl" : "https://www.eventbrite.com/e/gotham-chorus-show",
+          "title" : "Gotham Chorus Show",
+          "venue" : "Merkin Hall"
+        },
+        {
+          "location" : "San Rafael, CA",
+          "performanceDate" : "2026-10-17",
+          "presenter" : "Smoke Ring Quartet",
+          "sourceUrl" : "https://www.smokeringquartet.com/gigs/harmony-sweepstakes",
+          "title" : "Harmony Sweepstakes",
+          "venue" : "Marin Center Showcase Theatre"
+        },
+        {
+          "location" : "Palm Springs, CA",
+          "performanceDate" : "2026-10-24",
+          "presenter" : "Smoke Ring Quartet",
+          "title" : "",
+          "venueNotPublished" : true
+        },
+        {
+          "location" : "Harrogate, UK",
+          "performanceDate" : "2026-10-30",
+          "presenter" : "Smoke Ring Quartet",
+          "sourceUrl" : "https://www.smokeringquartet.com/gigs/labbs-50th",
+          "title" : "LABBS 50th Convention",
+          "venue" : "Harrogate Convention Centre"
+        }
+      ],
+      "note" : "The Oct 24 row is a placeholder: the page prints 'Info coming soon' with no title, venue or link, so its venue is not published yet rather than unread.",
+      "sourceId" : "smoke-ring-quartet",
+      "verdict" : "upcoming_listings"
+    }
+  ],
+  "version" : 5
+}

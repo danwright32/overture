@@ -74,3 +74,16 @@ and `Carnegie Hall Debut Recital` from `rainercrosett.com/schedule`, which names
 so it decodes with `location` absent. Absent is normal: it means the page did not say, and an unknown
 place is a show to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop
 the event. `results-v1.json` stays byte-identical and still decodes, carrying no locations.
+
+`results-v5.json` (#1469): adds an optional `venueNotPublished` per event, the run saying the PAGE
+ITSELF has not published a venue for this row, as opposed to a detail page it could not open. Both
+come back with a null `venue` and are indistinguishable in the file, and Overture treats them
+oppositely: an unread page means the run does not know what else it missed, so the source loses the
+right to say any show was cancelled (#887), while a publisher's own gap means nothing of the kind.
+The fixture is Smoke Ring's real page (`smokeringquartet.com/gigs`): three rows the run read a venue
+off, plus the Oct 24 Palm Springs row the band prints as "Info coming soon" with no title, no venue
+and no link. That one row is 25% of a four-show calendar, which is how a healthy artist page ended up
+with its cancellation detection switched off indefinitely. Note the placeholder carries no
+`sourceUrl`: its DATE is the only identity it has, which is why the reconcile holds its show by the
+night as well as by the link. Earlier fixtures stay byte-identical and decode with the flag absent,
+which keeps the pre-#1469 reading.

@@ -166,6 +166,12 @@ enum FeedReconcile {
         // merely filtered out this run is never mistaken for one the venue cancelled).
         var seenKeys: Set<String>
         var seenSourceURLs: Set<String>
+        // #1469: nights this source listed a row for that could not be ingested because it publishes no venue
+        // for them yet. Kept apart from `seenSourceURLs` and matched only against shows THIS source owns,
+        // because a date is far weaker evidence than a listing URL: pooled across sources the way URLs are, one
+        // venue's placeholder would shelter every other venue's show that night. Its own show is still listed
+        // (the row is right there on the page), so it must not be counted absent; nobody else's is.
+        var structuralGapDates: Set<String> = []
         // Judged against THIS source's own baseline. A merged multi-source count must never feed a
         // shared baseline: one healthy source's big season would mask another's dead scraper, and both
         // of the failures Dan named live inside that one mistake.
@@ -251,10 +257,15 @@ enum FeedReconcile {
     static func reconcile(stored: [Prospect], reports: [SourceReport], today: String) {
         let seenKeys = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenKeys) }
         let seenSourceURLs = reports.reduce(into: Set<String>()) { $0.formUnion($1.seenSourceURLs) }
+        // #1469: kept PER SOURCE rather than pooled, unlike the two sets above. See SourceReport.
+        let gapDates = reports.reduce(into: [String: Set<String>]()) { map, report in
+            guard !report.structuralGapDates.isEmpty else { return }
+            map[report.sourceId, default: []].formUnion(report.structuralGapDates)
+        }
         let believable = Set(reports.filter(\.absenceIsEvidence).map(\.sourceId))
 
         for p in stored {
-            if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs) {
+            if isStillListed(p, seenKeys: seenKeys, seenSourceURLs: seenSourceURLs, gapDates: gapDates) {
                 p.missedScoutCount = 0                                  // listed somewhere: definitely live
             } else if isFuture(p, today: today), everyOwnerWasAskedAndNoneHasIt(p, believable: believable) {
                 p.missedScoutCount += 1
@@ -264,10 +275,17 @@ enum FeedReconcile {
         }
     }
 
-    private static func isStillListed(_ p: Prospect, seenKeys: Set<String>, seenSourceURLs: Set<String>) -> Bool {
+    private static func isStillListed(_ p: Prospect, seenKeys: Set<String>, seenSourceURLs: Set<String>,
+                                      gapDates: [String: Set<String>]) -> Bool {
         if seenKeys.contains(p.naturalKey) { return true }
         let urls = ([p.sourceListingURL].compactMap { $0 } + p.runSourceURLs)
-        return urls.contains { seenSourceURLs.contains($0) }
+        if urls.contains(where: seenSourceURLs.contains) { return true }
+        // #1472/#1469: a row this run SAW but could not ingest, because the source publishes no venue for it.
+        // Its show is on the calendar right now, so it is listed, even though nothing was upserted from it. A
+        // row that carries a link is caught above (its URL joins seenSourceURLs); this is the linkless
+        // placeholder, held by its night, and only against a source that owns this show.
+        guard let date = p.performanceDate, !gapDates.isEmpty else { return false }
+        return p.sourceIds.contains { gapDates[$0]?.contains(date) == true }
     }
 
     // The conservative half of the rule, and the reason a show co-listed by a venue and a presenter

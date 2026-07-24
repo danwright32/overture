@@ -491,7 +491,8 @@ enum ScoutService {
                             // still listed. Without this the exemption above would be the #887 bug it was
                             // meant to prevent: a Met production whose venue field goes blank between runs
                             // would look exactly like one that was cancelled.
-                            structuralGapURLs: rejection.structuralGapURLs),
+                            structuralGapURLs: rejection.structuralGapURLs,
+                            structuralGapDates: rejection.structuralGapDates),
             // #1302: derive applySweep's upcoming-only 'today' from THIS run's now, not the wall clock.
             // Without it a scout given an injected now (a test, or any non-real clock) had its events pass
             // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
@@ -725,6 +726,9 @@ enum ScoutService {
         // quieter, and it is why a row with no link of its own is never exempted (ExtractedEventGuard): with
         // nothing to hand over there is nothing to protect the stored show with.
         var structuralGapURLs: Set<String> = []
+        // #1469: the nights of those rows that carry no link (a placeholder row links nowhere), so the show
+        // behind one can still be held. Source-scoped by the reconcile, never pooled: see SourceReport.
+        var structuralGapDates: Set<String> = []
     }
 
     // #888 part B: one source sweeping its own feed, applied AND reconciled.
@@ -980,6 +984,7 @@ enum ScoutService {
                 // venue for them. A blank venue field is not a cancellation, and the show is right there on
                 // the calendar, so it counts as listed even though nothing was upserted from it.
                 seenSourceURLs: Set(events.compactMap { $0.sourceUrl }).union(feed.structuralGapURLs),
+                structuralGapDates: feed.structuralGapDates,
                 feedCount: events.count,
                 baseline: feed.baseline,
                 successfulCheckCount: feed.successfulCheckCount,

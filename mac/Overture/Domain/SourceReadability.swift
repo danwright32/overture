@@ -75,9 +75,17 @@ enum SourceReadability {
     // whichever line above applies rather than folded into it, because it is a different fact with a different
     // consequence: those shows are not in the queue, and nothing about the source is broken. Silence when
     // there are none, so the line can never become wallpaper.
+    //
+    // #1469: ONE sentence for both paths, deliberately, and that is why it does not say "in the feed" as it
+    // did when only feeds could reach it. A structured feed's blank field and an artist page's "Info coming
+    // soon" row are the same fact to Dan (this listing named no venue, so it is not in your queue), and two
+    // near-identical sentences are exactly the duplicate copy #843 was filed about.
+    // Singular matters here rather than being fussiness: #1469's live case is exactly one row (Smoke Ring's
+    // single "Info coming soon" placeholder), so "left those out" would be the sentence Dan actually reads.
     private static func structuralGapLine(total: Int, structuralGaps: Int) -> String? {
         guard structuralGaps > 0 else { return nil }
-        return "\(structuralGaps) of \(total) listings in the feed named no venue, so Overture left those out of the queue."
+        let left = structuralGaps == 1 ? "it" : "those"
+        return "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     }
 
     // Whole sentences, joined, never assembled fragments (the standing rule, and #1032's reason for stating

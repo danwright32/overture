@@ -1647,7 +1647,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
-"\(structuralGaps) of \(total) listings in the feed named no venue, so Overture left those out of the queue."
+"\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`

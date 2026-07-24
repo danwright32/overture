@@ -36,7 +36,7 @@ the workflow's runbook is its spec.
 | `reply-classify-cancel` | App (`ReplyClassifyService.requestCancel`) writes it to ask a running reply-classify run to stop; App (`startClassify`) clears any stale one before a fresh run | `reply-classify-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `overture-scout-page-<sourceId>.html` | App (`ScoutPagePin.write`, normalized + hashed) | Scout-extract run (workflow, reads it; never fetches the listings page itself) | n/a (HTML, not JSON) | none (the shape is a web page) | `SourceFetcherTests.swift` (normalization, hash, safe filename), `HandoffCleanupTests.swift` (retention) |
 | `overture-scout-extract-queue.json` | App (`ScoutExtractQueueBuilder.encode`) | Scout-extract run (workflow) | 1, 2 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift` |
-| `overture-scout-extract-results.json` | Scout-extract run (workflow, rewrites it after every item, not only once at the end; #1015) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1, 2, 3 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
+| `overture-scout-extract-results.json` | Scout-extract run (workflow, rewrites it after every item, not only once at the end; #1015) **and `scout-extract-run.sh`** (#856: it writes a `not_read` result for any queued source the run never came back with) | App (`ScoutExtractResultsDecoder`) | 1, 2, 3, 4, 5 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `RunVanishedTests.swift`, `lib/results-guard.test.sh` |
 | `overture-scout-extract-progress.json` | `scout-extract-run.sh` **only**: seeds it, then derives every update from `overture-scout-extract-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`). #1015: the workflow never writes this file; a run that forgets to self-report (2026-07-16) can no longer leave the count wrong. | App (`ScoutExtractProgressDecoder`) | 1 | `fixtures/scout-extract/` | `ScoutExtractContractTests.swift`, `lib/progress-watcher.test.sh`, `ScoutProgressWiringGuardTests.swift` |
 | `scout-extract-cancel` | App (`ScoutExtractService.requestCancel`) writes it to ask a running read to stop; App (`startExtract`) clears any stale one before a fresh run | `scout-extract-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `ScoutCancelTests.swift`, `lib/scout-cancel.test.sh`, `ScoutCancelWiringGuardTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
@@ -361,3 +361,24 @@ version bump is documentation, not a behavioral gate: nothing reads `version`, a
 unchanged and simply never collapses, which is the same outcome as before this field existed.
 `results-v1.json`/`results-v2.json`/`results-v3.json` stay byte-identical as that proof; `results-v4.json`
 is the seriesId spec, a three-night run sharing one id plus a standalone show that carries none.
+
+Version 5 (#1469) adds an optional `venueNotPublished` to each event: the run read this row and the PAGE
+ITSELF has not published a venue for it (a placeholder row, an explicit TBA), as opposed to a detail page
+the run could not open. Both come back with a null `venue` and are indistinguishable in the file, and they
+are opposite facts about a source. An unread detail page means the run does not know what ELSE it failed to
+reach, so past a small tolerance (`FeedReconcile.maxRejectedFraction`) that source forfeits the right to say
+any show was cancelled (#887). A publisher's own blank field means nothing of the kind, and treating it as
+though it did switched cancellation detection off indefinitely on real sources: 34 of OPERA America's 92
+NY-area rows (#1472, the native-feed half of the same defect), and one permanent "Info coming soon" row on
+Smoke Ring's four-show page, which is 25% of that calendar. The run is the only thing that ever saw the
+page, so it is the only thing that can tell them apart, and the flag is where it says so. Set it ONLY for a
+page that published no venue; leave it absent for anything unreached, which keeps the suspicious reading.
+The dropped row is still not ingested (`ExtractedEventGuard` is unchanged: a venue-less prospect would name
+the wrong place in Dan's email); it simply stops counting against the source's readability, and its own show
+is held as still listed by its listing link, or by its date when the row has no link (a placeholder links
+nowhere), so nothing stored is struck for a row that is on the page right now. Purely additive, and like
+every field above the version bump is documentation, not a behavioral gate: nothing reads `version`, and an
+absent flag (a v1 to v4 file, or any run whose pages all named their venues, which is nearly all of them)
+decodes unchanged and keeps the pre-#1469 behaviour exactly. `results-v1.json` through `results-v4.json`
+stay byte-identical as that proof; `results-v5.json` is the spec, Smoke Ring's real page with three read
+rows and the Oct 24 Palm Springs placeholder.
