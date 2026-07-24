@@ -40,19 +40,35 @@ struct DaysOffAttentionTests {
 
     // MARK: - What Dan reads
 
-    @Test func theToolbarNamesTheGapRatherThanJustGlowing() {
+    // #1430 (second pass, Dan 2026-07-24): the toolbar says the same thing in both states, and the
+    // difference is carried by the icon's colour alone. He asked for no words unless something is wrong,
+    // and settled on keeping a quiet mark once it was clear this is the ONLY thing in the app watching for
+    // a dry Downbeat pipe: the export's own health check asks whether the FILE is recent and parses, so a
+    // fresh export containing zero upcoming bookings reports perfectly healthy. That is the #901 trap
+    // exactly. The mark stays so the blind spot is visible at a glance; the sentence moves to the hover and
+    // the sheet, which is where there is room to say it properly.
+    @Test func theToolbarSaysTheSameThingInBothStates() {
         #expect(DaysOffAttention.badgeTitle(needsALook: false) == "Days off")
-        #expect(DaysOffAttention.badgeTitle(needsALook: true) == "Days off (no shoots from Downbeat)")
+        #expect(DaysOffAttention.badgeTitle(needsALook: true) == "Days off")
     }
 
-    // #1430. Dan read the old badge as an alarm: gold, and "(no shoots)". Both halves said the wrong thing.
-    // Having no days off, and having no shoots, are not problems, and the state this marks is neither: it
-    // means Overture has been handed nothing to keep clear of. So the words name WHERE the gap is (nothing
-    // arrived from Downbeat) rather than describing his schedule.
-    @Test func theBadgeDoesNotCallAnEmptyScheduleAProblem() {
+    // The words are gone from the toolbar, so nothing there may describe his schedule back to him. This is
+    // what stops the "(no shoots)" reading ("you have no work") from creeping back in a later edit.
+    @Test func theToolbarNeverDescribesHisScheduleBackToHim() {
         let title = DaysOffAttention.badgeTitle(needsALook: true)
-        #expect(title.contains("Downbeat"), "it must point at the missing hand-off, not at his diary")
-        #expect(!title.contains("(no shoots)"), "bare 'no shoots' reads as 'you have no work'")
+        #expect(!title.lowercased().contains("shoot"), "the toolbar must not talk about his shoots at all")
+        #expect(!title.contains("("), "no parenthetical: the explanation lives in the hover and the sheet")
+    }
+
+    // And the item must not RESERVE space for a title it no longer has: showsTitle drives an always-on
+    // static label, so leaving it wired to the no-shoots state would print a bare duplicate "Days off"
+    // beside the icon while the pipe is dry, which is the one thing this pass exists to remove.
+    @Test func theToolbarItemStopsPrintingAStaticTitle() throws {
+        let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let range = try #require(rootView.range(of: "DaysOffAttention.badgeTitle"))
+        let item = rootView[range.lowerBound...].prefix(400)
+        #expect(!item.contains("showsTitle: noBookedShootData"),
+                "the label is carried by colour now, not by printed text")
     }
 
     // And it must not wear the app's attention colour. Gold is reserved for something that is WRONG (a

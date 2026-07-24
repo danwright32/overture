@@ -401,14 +401,19 @@ struct RootView: View {
                     // #1430: quiet secondary ink, NOT the gold two items to the left. Gold is the app's
                     // "something is wrong" colour, and nothing here is wrong: a long stretch with no shoots
                     // to keep clear of is an ordinary state of affairs, and Dan read the gold as being told
-                    // otherwise. The label still appears, because the blind spot is worth knowing about; it
-                    // just stops shouting. Sources keeps its gold, where a failing calendar really is wrong.
+                    // otherwise. Sources keeps its gold, where a failing calendar really is wrong.
+                    //
+                    // And no printed title (Dan, 2026-07-24: no words unless something is wrong). The item
+                    // reads "Days off" in both states; the whole difference is the ink. That keeps the mark
+                    // this feature exists for, because nothing else in the app watches for a dry Downbeat
+                    // pipe (its health check passes a fresh export holding no bookings, the #901 trap),
+                    // while giving the toolbar nothing to say about Dan's schedule. The sentence is on the
+                    // hover and in the sheet, which have room for it.
                     Button {
                         showDaysOff = true
                     } label: {
                         ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(needsALook: noBookedShootData),
-                                          systemImage: "calendar.badge.clock",
-                                          showsTitle: noBookedShootData)
+                                          systemImage: "calendar.badge.clock")
                             .foregroundStyle(noBookedShootData ? OVColor.inkSoft : Color.primary)
                     }
                     .help(DaysOffAttention.help(needsALook: noBookedShootData))

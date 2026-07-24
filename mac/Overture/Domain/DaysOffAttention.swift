@@ -51,17 +51,21 @@ enum DaysOffAttention {
         defaults.set(now.addingTimeInterval(snoozeDuration).timeIntervalSince1970, forKey: snoozeKey)
     }
 
-    // #1430: it used to read "Days off (no shoots)", in the app's gold attention colour, and Dan read the
+    // #1430: it used to read "Days off (no shoots)" in the app's gold attention colour, and Dan read the
     // whole thing as an alarm: "this is too urgent. Not having any days off isn't a bad thing."
     //
-    // He was right, and the words were the larger half of it. Neither "you have no days off" nor "you have
-    // no shoots" is a problem, and this state is neither of those things: it is that Downbeat has handed
-    // Overture nothing upcoming, so there is nothing for it to keep clear of. Naming the hand-off is what
-    // stops the badge describing his diary back to him as though an empty one were a fault. The colour is
-    // the other half, and that lives at the toolbar item (gold is reserved for what is actually wrong).
-    static func badgeTitle(needsALook: Bool) -> String {
-        needsALook ? "Days off (no shoots from Downbeat)" : "Days off"
-    }
+    // He was right on both counts. Neither "you have no days off" nor "you have no shoots" is a problem,
+    // and this state is neither of those things: it is that Downbeat has handed Overture nothing upcoming,
+    // so there is nothing for it to keep clear of. The toolbar now says the same two words whatever the
+    // state, and the difference is carried by the icon's colour alone (RootView). Dan's second call,
+    // 2026-07-24: no words unless something is wrong, and this is not wrong.
+    //
+    // The MARK stays, though, because this is the only thing in the app watching for a dry pipe:
+    // DownbeatExport.health asks whether the file exists, parses, and is recent, so a fresh export holding
+    // zero upcoming bookings reports .ok. That is the #901 trap exactly, and it cost Dan his evenings twice.
+    // The sentence explaining it lives in `help` and in the sheet, which have room to say it properly; a
+    // toolbar has room only to be noticed.
+    static func badgeTitle(needsALook: Bool) -> String { "Days off" }
 
     static func help(needsALook: Bool) -> String {
         guard needsALook else {
