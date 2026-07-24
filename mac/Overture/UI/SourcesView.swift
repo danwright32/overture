@@ -681,7 +681,8 @@ struct SourcesView: View {
             // removing it himself is the deliberate escape hatch. An escape hatch he cannot see is not
             // one. Same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, so
             // "you can do this" looks the same everywhere in the app, and sitting on its own trailing
-            // line rather than in the metadata stack.
+            // line rather than in the metadata stack. #1460: "same idiom" is now enforced, not matched by
+            // eye: both wear the shared ovCapsuleAction() modifier (the Dismiss menu had drifted chunkier).
             //
             // #1451: that idiom is OVCapsuleButton's, not this row's. These three actions used to spell
             // it out here in six lines each, which meant they matched the sheet's own venue-location

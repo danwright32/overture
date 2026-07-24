@@ -11,12 +11,25 @@ struct OVCapsuleButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 11))
                 .foregroundStyle(tint)
-                .padding(.horizontal, OVSpacing.sm)
-                .padding(.vertical, 4)
-                .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                .ovCapsuleAction()
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension View {
+    // #1460: the shared secondary-action capsule chrome (font, padding, bordered capsule) that says "you
+    // can do this". Worn by BOTH OVCapsuleButton and the queue's Dismiss control, which is a Menu (it opens
+    // a reason list) rather than a Button, so a struct wrapper could not cover both: a modifier can. Before
+    // this the two matched only by eye and had drifted (the Dismiss menu was semibold and md/6, chunkier
+    // than this; #1460 standardised on these, the OVCapsuleButton metrics). Foreground stays at the call
+    // site: the TINT varies (forest for a positive action, inkSoft for a neutral one), the shape must not.
+    func ovCapsuleAction() -> some View {
+        self
+            .font(.system(size: 11))
+            .padding(.horizontal, OVSpacing.sm)
+            .padding(.vertical, 4)
+            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
     }
 }
