@@ -211,6 +211,10 @@ struct StructuralVenueGapTests {
         #expect(turandot.missedScoutCount == FeedReconcile.goneThreshold)
         #expect(turandot.disappearedFromFeed)
         #expect(SourceAttention.needsALook(source) == false)
+        // #1471: and the row says WHICH listing it could not use, so Dan can open the feed's own page and
+        // see for himself. Asserted through the real scout, because the count reaching the row and the name
+        // reaching it are two separate claims.
+        #expect(source.readabilityNote?.hasSuffix("That was Tosca on Mar 14.") == true)
     }
 
     // The other half of #1472, the stale html-era read left on a converted source, is covered beside its
@@ -325,7 +329,10 @@ struct StructuralVenueGapTests {
         #expect(SourceAttention.needsALook(source) == false)
         // The sentence Dan actually reads on this row, and #1469's live case is exactly one placeholder, so
         // the singular is the common path rather than an edge case.
-        #expect(source.readabilityNote == "1 of 4 listings named no venue, so Overture left it out of the queue.")
+        // #1471: named, so Dan can look the Oct 24 row up on the band's own page. The placeholder has no
+        // title at all, so it is named by its act and its night, which is exactly how the page shows it.
+        #expect(source.readabilityNote == "1 of 4 listings named no venue, so Overture left it out of the queue."
+                + " That was Smoke Ring Quartet on Oct 24.")
         #expect(source.readabilityNoteIsInformationalOnly)
         #expect(placeholderShow.missedScoutCount == 0)
         #expect(placeholderShow.disappearedFromFeed == false)
