@@ -101,6 +101,35 @@ enum ActionAck {
         "Restored \(org) to the queue"
     }
 
+    // #1415: an undo (Cmd+Z) restores a row into a stage Dan is usually not looking at (the queue is
+    // stage-only since #1134), so the store changes and the screen does not, and a working undo looked
+    // identical to a dead shortcut. Name what came back and the STAGE PILL Dan taps to find it, not the raw
+    // status, which is a label on no pill.
+    static func undoRestored(org: String, priorStatus: ReviewStatus) -> String {
+        "\(org) is back in \(undoStageWord(for: priorStatus))"
+    }
+
+    // The stage pill's own name, in Dan's vocabulary (Scout/Prep/Review/Reached out), so the sentence
+    // points at the pill he would click. Approve and Send are two buttons on the same Review card
+    // (#1146 still open), so an approved show is seen in Review. `.dismissed` cannot be a PRIOR status an
+    // undo restores to a visible stage; it maps to the archive defensively rather than naming a pill.
+    private static func undoStageWord(for status: ReviewStatus) -> String {
+        switch status {
+        case .new: return "Scout"
+        case .queued: return "Prep"
+        case .drafted, .approved: return "Review"
+        case .contacted: return "Reached out"
+        case .dismissed: return "the archive"
+        }
+    }
+
+    // #1415: the other half of "nothing is silent". When the row moved on since the action (a scout
+    // re-scored it, a sweep took it, a send made it contacted) or is gone, the undo cannot apply. Said,
+    // not swallowed, or a live undo and a dead one look the same from the keyboard.
+    static func undoSkipped(org: String) -> String {
+        "\(org) already moved on, so there was nothing to undo"
+    }
+
     // #924: the day(s) off just captured from a dismissal. Reversible from the banner, the way removing a
     // range is (#845): the show it came from is now off the queue, so this banner is the one place the
     // range Dan just blocked is written down.

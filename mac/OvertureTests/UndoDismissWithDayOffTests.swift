@@ -216,4 +216,14 @@ struct UndoDismissWithDayOffWiringTests {
         let root = source("Overture/App/RootView.swift")
         #expect(root.contains("QueueUndo.apply(entry, to: model, in: context)"))
     }
+
+    // #1415: an undo restores a row into a stage Dan is usually not looking at, so a working Cmd+Z was
+    // pixel-identical to a dead one. Both the success and the skipped paths of performQueueUndo must post a
+    // banner. Guarded at the source because the logic lives inside a SwiftUI view, which no test can reach
+    // (the #863 lesson); the copy itself is proven behaviourally in ActionAckTests.
+    @Test func theWindowsUndoNamesWhatCameBackAndWhereOnBothPaths() {
+        let root = source("Overture/App/RootView.swift")
+        #expect(root.contains("ActionAck.undoRestored(org: entry.groupName, priorStatus: entry.priorStatus)"))
+        #expect(root.contains("ActionAck.undoSkipped(org: entry.groupName)"))
+    }
 }

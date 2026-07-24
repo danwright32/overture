@@ -708,12 +708,18 @@ struct RootView: View {
         guard let entry = undoStack.takeTop() else { return }
         let model = allProspects.first { $0.naturalKey == entry.naturalKey }
         guard QueueUndo.apply(entry, to: model, in: context) else {
-            // The row moved since (a scout re-scored it, a sweep took it, a send made it contacted) or
-            // is gone. Deliberately silent: Dan's own call in the discovery interview was "I don't need
-            // here's why, it's fine if it just doesn't work". #1415 covers what a SUCCESSFUL undo says.
+            // #1415: the row moved since (a scout re-scored it, a sweep took it, a send made it contacted)
+            // or is gone, so there is nothing to put back. Since #1134 the store and the visible stage move
+            // independently, so a silent no-op here is pixel-identical to a working undo; say so instead.
+            feedback.acknowledge(ActionAck.undoSkipped(org: entry.groupName))
             return
         }
-        context.saveOrWarn(org: entry.groupName, feedback: feedback)
+        // #1415: an undo usually restores the row into a stage Dan is not looking at, so name what came
+        // back and where. Only on a good save: saveOrWarn already posts its own warning on failure, and a
+        // "back in Prep" over a failed save would contradict it.
+        if context.saveOrWarn(org: entry.groupName, feedback: feedback) {
+            feedback.acknowledge(ActionAck.undoRestored(org: entry.groupName, priorStatus: entry.priorStatus))
+        }
     }
 
     #if DEBUG
