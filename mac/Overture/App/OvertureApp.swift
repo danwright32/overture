@@ -25,6 +25,13 @@ struct OvertureApp: App {
     // Built in init() from the store itself (#899), so it cannot claim a store the app does not have.
     @State private var addLead: AddLeadPresenter
 
+    // #1413: the session undo stack, owned HERE rather than beside ActionFeedback, which is @State
+    // inside RootView: a Scene-level .commands block cannot read view state. Owning it on the App also
+    // settles the window question, since Overture is LSUIElement and closing the window is not
+    // quitting: the stack survives a close and dies only on quit, which is what Dan asked for. In
+    // RootView it would have silently emptied every time he closed the window.
+    @State private var undoStack = QueueUndoStack()
+
     init() {
         // #800: WatchedSource joins the schema. Additive (a new entity plus a defaulted [String] on
         // Prospect), so SwiftData's lightweight migration handles it, which is the only migration this
@@ -130,10 +137,31 @@ struct OvertureApp: App {
         AppDelegate.sharedContainer = container
     }
 
+    // #1413: the two AppKit reads behind UndoRouting, kept to these three lines because nothing in the
+    // test bundle can reach the responder chain. The DECISION they feed lives in UndoRouting, which is
+    // a pure function and is tested; this only gathers its inputs.
+    //
+    // `undoManager.canUndo` rather than "is this a text view": the question that matters is whether the
+    // focused field has real pending edits, not what class it is. A focused field with an empty undo
+    // stack must let the keystroke through to the queue, or an invisible focus (a TextEditor holds it
+    // with no visible ring) would silently swallow every Cmd+Z Dan pressed after a dismiss.
+    @MainActor private func performUndo() {
+        let textEditingCanUndo = NSApp.keyWindow?.firstResponder?.undoManager?.canUndo ?? false
+        let destination = UndoRouting.destination(textEditingCanUndo: textEditingCanUndo,
+                                                  queueCanUndo: undoStack.canUndo)
+        guard UndoRouting.forwardsToResponderChain(destination) else {
+            // #1414 performs the reversal. Unreachable until then, because nothing records into the
+            // stack yet, so `queueCanUndo` is always false, which also means this whole function is
+            // today byte-for-byte the behaviour #1412 passed on screen.
+            return
+        }
+        NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
+    }
+
     var body: some Scene {
         Window("Overture", id: "main") {
             if let modelContainer {
-                RootView().modelContainer(modelContainer).environment(addLead)
+                RootView().modelContainer(modelContainer).environment(addLead).environment(undoStack)
                     .storeShrinkNotice(shrinkWarning,
                                        backupsPath: StoreShrinkCheck.backupsPath(
                                            dataDirectory: StoreLocation.dataDirectory))
@@ -151,6 +179,41 @@ struct OvertureApp: App {
         // #799: a REAL menu-bar command, which is the only kind whose keyboard shortcut actually
         // registers. Also more discoverable than a toolbar menu.
         .commands {
+            // #1413: Overture's own Undo, replacing the system pair. Cleared by the #1412 spike, which
+            // proved on a real Debug run that owning Cmd+Z this way leaves ordinary text editing
+            // undoable in the draft body editor, the Add-a-Lead sheet (a separate NSWindow) and the
+            // inline rename field. Replacing .undoRedo is mandatory rather than chosen: a .commands key
+            // equivalent is matched by NSMenu BEFORE the event reaches the first responder, so a custom
+            // item always wins and forwarding is the only way text editing keeps working.
+            //
+            // Nothing records into the stack yet (#1414), so today this item is always disabled and the
+            // whole group exists to keep text undo working. That is deliberate: shipping the trigger
+            // separately from the recording keeps each half reviewable.
+            CommandGroup(replacing: .undoRedo) {
+                // Titled from the top entry ("Undo Dismiss: The Music Shop"), a plain "Undo" when there
+                // is nothing to undo. The dynamic title re-evaluates this body whenever the stack
+                // changes, which is why only Dan's own actions may record: a background writer pushing
+                // entries would re-render the App body on every reconcile tick, and this app has already
+                // shipped one recompute-per-render freeze (#1374).
+                //
+                // Deliberately NEVER disabled, which reverses #1413's own rough direction ("disabled
+                // when the stack is empty"). That instruction was written before the #1412 spike showed
+                // this same item has to carry TEXT undo as well: a disabled menu item's key equivalent
+                // does not fire, so greying it out on an empty queue stack would kill Cmd+Z inside every
+                // text field in the app, which is precisely what the gate existed to protect. An enabled
+                // item that does nothing when there is nothing to undo is the smaller cost, and matches
+                // Dan's "it's fine if it just doesn't work" for the failure case.
+                Button(undoStack.undoMenuTitle) {
+                    performUndo()
+                }
+                .keyboardShortcut("z", modifiers: .command)
+
+                // Redo forwards and does nothing else. Dan explicitly declined redo for queue actions,
+                // but replacing .undoRedo also removes the system Redo that text fields rely on, so this
+                // exists purely to give that back.
+                Button("Redo") { NSApp.sendAction(Selector(("redo:")), to: nil, from: nil) }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .newItem) {
                 Button("Add a Lead...") { addLead.request() }
                     .keyboardShortcut("l", modifiers: .command)
