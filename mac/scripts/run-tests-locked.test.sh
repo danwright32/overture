@@ -162,6 +162,123 @@ assert_equals "a genuine test failure is never retried" \
 assert_equals "a pass is never retried" \
   "" "$(should_retry "" 1 2)"
 
+echo
+# --- the wiring, not the functions (#1459) ------------------------------------------------
+#
+# Every assertion above passes while the wrapper still tells you the exact opposite of the truth,
+# because run_outcome and should_retry were never the broken part: main handed run_outcome the
+# WRONG exit code. `xcodebuild ... | tee "${output_file}" || true` followed by
+# `test_exit_code="${PIPESTATUS[0]}"` reads 0 on precisely the runs where it should read 65. Under
+# `set -euo pipefail` a red xcodebuild makes the whole pipeline fail, so `true` runs, and `true` is
+# itself a pipeline, so it overwrites PIPESTATUS with (0):
+#
+#   bash -c '(exit 65) | tee /dev/null || true; echo ${PIPESTATUS[0]}'                     -> 65
+#   bash -c 'set -euo pipefail; (exit 65) | tee /dev/null || true; echo ${PIPESTATUS[0]}'  ->  0
+#
+# So every genuine failure took run_outcome's exit-0 branch, found no success banner, and came back
+# "crashed": the #1331 flake retry doubled the runtime of every red run, the real `Failing tests:`
+# list was buried under a message about a Debug app holding a lock, and the run signed off with
+# "if it passes, the code was never the problem" while the code WAS the problem. The exact inverse
+# of what #1006 built this distinction for.
+#
+# These drive the REAL script end to end with flock, xcodebuild and ps stubbed on PATH, because the
+# defect lives in the seam between the functions and nothing that tests a function in isolation can
+# see it.
+
+assert_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if [[ "${haystack}" == *"${needle}"* ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    echo "  expected output to contain: ${needle}"
+    echo "  actual output: ${haystack}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+assert_not_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if [[ "${haystack}" != *"${needle}"* ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    echo "  expected output NOT to contain: ${needle}"
+    echo "  actual output: ${haystack}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+# Runs the real run-tests-locked.sh with flock, xcodebuild and ps stubbed ahead of the real ones on
+# PATH, so main's whole path executes without building anything or reading this Mac's process table.
+# Prints the script's combined output with a final "exit=<code>" line.
+run_wrapper_with_stub_xcodebuild() {
+  local xcodebuild_output="$1" xcodebuild_exit="$2"
+  local bin_dir output code
+
+  bin_dir="$(mktemp -d)"
+
+  # flock's real job is serialising xcodebuild across worktrees, which is irrelevant here; once it
+  # holds the lock it execs the rest of its arguments, and so does this.
+  cat > "${bin_dir}/flock" <<'STUB'
+#!/usr/bin/env bash
+shift
+exec "$@"
+STUB
+
+  # A process table with nothing Overture-shaped in it, so the pre-flight neither kills anything nor
+  # stops for a blocking Debug app.
+  cat > "${bin_dir}/ps" <<'STUB'
+#!/usr/bin/env bash
+echo "  501 /sbin/launchd"
+STUB
+
+  cat > "${bin_dir}/xcodebuild" <<STUB
+#!/usr/bin/env bash
+cat <<'XCODEBUILD_OUTPUT'
+${xcodebuild_output}
+XCODEBUILD_OUTPUT
+exit ${xcodebuild_exit}
+STUB
+
+  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild"
+
+  output="$(PATH="${bin_dir}:${PATH}" "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
+  code=$?
+  rm -rf "${bin_dir}"
+  printf '%s\nexit=%s\n' "${output}" "${code}"
+}
+
+# THE case. Two deliberately-red guards on #1451 came out of this wrapper labelled a crashed run.
+REAL_FAILURE_RUN="$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65)"
+
+assert_equals "a named test failure exits with xcodebuild's own code, not the crash path's 1" \
+  "exit=65" "$(tail -n 1 <<< "${REAL_FAILURE_RUN}")"
+
+assert_not_contains "a named test failure is never retried" \
+  "Retrying once" "${REAL_FAILURE_RUN}"
+
+assert_not_contains "a named test failure is never dressed up as a run that died" \
+  "the test run CRASHED" "${REAL_FAILURE_RUN}"
+
+# The other half of the same claim: fixing the above must not quietly disable #1331's flake retry.
+CRASH_RUN="$(run_wrapper_with_stub_xcodebuild "${CRASHED_OUTPUT}" 65)"
+
+assert_contains "a run that died with nothing named is still retried once" \
+  "Retrying once" "${CRASH_RUN}"
+
+assert_contains "a run that died with nothing named still says so" \
+  "the test run CRASHED" "${CRASH_RUN}"
+
+# And a pass still passes, silently.
+PASSING_RUN="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0)"
+
+assert_equals "a passing run exits 0" \
+  "exit=0" "$(tail -n 1 <<< "${PASSING_RUN}")"
+
+assert_not_contains "a passing run is never retried" \
+  "Retrying once" "${PASSING_RUN}"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0
