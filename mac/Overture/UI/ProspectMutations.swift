@@ -197,15 +197,29 @@ enum ProspectMutations {
         }
     }
 
+    // #1414: `undo` is optional and defaults to nil so this stays the single status setter for every
+    // caller, while only KEEP and DISMISS actually record. setStatus also drives approve, unapprove and
+    // skip-draft; recording unconditionally here would quietly make those undoable too, well past the
+    // scope Dan settled on ("I mostly just need this for keep/dismiss").
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?,
-                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                          undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        // Read BEFORE the mutation, so the entry records where the row actually came from rather than
+        // an inverse guessed at undo time.
+        let priorStatus = model.status
+        let priorReason = model.dismissReasonRaw
+        let priorExit = model.dismissedAt
         // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
         // any move back into the queue, rather than depending on every caller of this setter to remember.
         if status == .dismissed {
             model.markDismissed(reason: reason)
         } else {
             model.clearDismissal(to: status)
+        }
+        if let undo, let undoLabel {
+            undo.record(QueueUndoEntry(recording: undoLabel, on: model, priorStatus: priorStatus,
+                                       priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit))
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -218,8 +232,10 @@ enum ProspectMutations {
     // nothing is blocked until he confirms in the picker (or he closes it with Not now).
     static func dismissForReason(_ item: QueueItem, _ reason: DismissReason,
                                  prospects: [Prospect], context: ModelContext,
-                                 feedback: ActionFeedback, offer: DayOffOfferRequest) {
-        setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback)
+                                 feedback: ActionFeedback, offer: DayOffOfferRequest,
+                                 undo: QueueUndoStack? = nil) {
+        setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback,
+                  undo: undo, undoLabel: "Dismiss")
         // #939: a same-production show at a different venue nearby widens the offer to the whole
         // engagement, so blocking in one action captures every date, not just this row's own.
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))[item.id]?.map(\.date) ?? []

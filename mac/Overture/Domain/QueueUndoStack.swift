@@ -67,6 +67,52 @@ struct QueueUndoEntry: Equatable, Sendable {
     }
 }
 
+extension QueueUndoEntry {
+    // Built from the row itself, AFTER the mutation, with the three "prior" values read off it before.
+    // Reading the result from the row rather than being told it means the precondition is measured
+    // against what actually happened, not against what the caller believed it was doing.
+    @MainActor
+    init(recording actionLabel: String, on prospect: Prospect,
+         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?) {
+        self.init(naturalKey: prospect.naturalKey,
+                  groupName: prospect.groupName,
+                  actionLabel: actionLabel,
+                  priorStatus: priorStatus,
+                  priorDismissReasonRaw: priorDismissReasonRaw,
+                  priorDismissedAt: priorDismissedAt,
+                  resultingStatus: prospect.status,
+                  resultingDismissReasonRaw: prospect.dismissReasonRaw)
+    }
+}
+
+// Performing an undo (#1414).
+//
+// Applies the captured snapshot directly rather than routing back through `markDismissed` /
+// `clearDismissal`. Those two derive the exit date (`dismissedAt = dismissedAt ?? now`, and nil on a
+// restore), so undoing a RESTORE through them would stamp TODAY over the show's real exit date and
+// quietly corrupt the #1403 funnel data, which counts when a show left the queue. The entry already
+// holds the true values, so there is nothing to re-derive: put back exactly what was there.
+enum QueueUndo {
+    // Applies the entry when the row is still exactly how the action left it, and returns whether it
+    // did. `nil` is an ordinary outcome, not an error: rows are deleted at runtime
+    // (NaturalKeyVenueMigration), which is why an entry holds a key rather than the object.
+    //
+    // This single check is what replaced the "wall". A background writer (the reconcile tick, a scout
+    // import, a retirement sweep), a later action of Dan's, and a send that moved the show on are all
+    // the same situation seen from here: the row is not what this entry describes, so leave it alone.
+    @MainActor
+    @discardableResult
+    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?) -> Bool {
+        guard let prospect,
+              entry.stillApplies(status: prospect.status,
+                                 dismissReasonRaw: prospect.dismissReasonRaw) else { return false }
+        prospect.status = entry.priorStatus
+        prospect.dismissReasonRaw = entry.priorDismissReasonRaw
+        prospect.dismissedAt = entry.priorDismissedAt
+        return true
+    }
+}
+
 // Owned by `OvertureApp` and injected with `.environment()`, NOT held beside `ActionFeedback`: that is
 // `@State` inside RootView, and a Scene-level `.commands` block cannot read view state.
 //
@@ -100,6 +146,27 @@ final class QueueUndoStack {
     func clear() {
         entries.removeAll()
     }
+}
+
+// The App's menu command asking the window to perform an undo (#1414).
+//
+// A bridge is needed rather than the menu just doing the work, because performing an undo needs the
+// ModelContext, the live prospects and the ActionFeedback, all of which live in RootView, and #1413's
+// constraint stands: the App must never capture the feedback object. Overture is LSUIElement, so
+// closing the window tears RootView down while the process lives on in the menu bar, and a captured
+// feedback object would post to something no view observes.
+//
+// Raising a token instead means the request simply goes unanswered when there is no window, which is
+// the correct outcome: there is nothing on screen for an undo to put back. Mirrors DayOffOfferRequest,
+// which solves the same shape in the other direction.
+@Observable
+@MainActor
+final class QueueUndoRequest {
+    // Monotonic, not a Bool: two undos in a row are two distinct requests, and a flag would collapse
+    // the second one into the first if the view had not observed it yet.
+    private(set) var token = 0
+
+    func request() { token += 1 }
 }
 
 // Where a Cmd+Z should go (#1412's second question, answered when that spike passed on 2026-07-24).
