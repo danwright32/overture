@@ -279,6 +279,79 @@ assert_equals "a passing run exits 0" \
 assert_not_contains "a passing run is never retried" \
   "Retrying once" "${PASSING_RUN}"
 
+echo
+# --- a build failure is not a flaky host (#1465) ------------------------------------------
+#
+# `crashed` was carrying two different things. It means "the run died without naming a failing test",
+# and a COMPILE failure has exactly that shape: xcodebuild exits 65, prints "** TEST FAILED **", and
+# names no failing test because nothing ever ran. So a Swift syntax error was retried as a #1331 host
+# flake, costing two full builds, and then signed off with "if it passes, the code was never the
+# problem" printed over a list of compiler errors. Seen live on 2026-07-24 while spiking #1412 and
+# again while writing this: the error list appeared twice, once per attempt.
+#
+# A run that never reached the suite is genuinely not a test failure, but it is not a flake either,
+# and only a flake is worth retrying.
+#
+# Captured from a REAL run (a deliberate type error added to a test file, 2026-07-24), not invented,
+# so the tells under test are the ones xcodebuild actually prints.
+BUILD_FAILURE_OUTPUT="/Users/dan/Overture/mac/OvertureTests/PerformerMatchVisibilityTests.swift:214:46: error: cannot convert value of type 'String' to specified type 'Int'
+
+Testing failed:
+	Cannot convert value of type 'String' to specified type 'Int'
+	Testing cancelled because the build failed.
+
+** TEST FAILED **
+
+
+The following build commands failed:
+	SwiftCompile normal arm64 /Users/dan/Overture/mac/OvertureTests/PerformerMatchVisibilityTests.swift (in target 'OvertureTests' from project 'Overture')
+(1 failure)"
+
+assert_equals "code that did not compile is a build failure, not a dead host" \
+  "build-failed" "$(run_outcome "${BUILD_FAILURE_OUTPUT}" 65)"
+
+assert_equals "a build failure is never retried" \
+  "" "$(should_retry "build-failed" 1 2)"
+
+# The false positive that makes a naive `error:` grep wrong, and the reason the tell is the compiler's
+# own file:line:column shape (and its build-commands banner) rather than the word alone. Every real run
+# of this suite prints CoreData noise carrying "error:", and a host that dies mid-run prints it too.
+# Reading that as a build failure would kill #1331's retry for the exact flake it exists to absorb.
+CRASH_WITH_ERROR_NOISE="Test Suite 'All tests' started
+2026-07-24 14:48:55.738 Overture[37030:38151440] [error] CoreData: error: Executing as effective user 501
+Test run with 1574 tests in 229 suites passed after 10.851 seconds.
+Failing tests:
+** TEST FAILED **"
+
+assert_equals "a dead host whose log carries CoreData error noise is still a crash" \
+  "crashed" "$(run_outcome "${CRASH_WITH_ERROR_NOISE}" 65)"
+
+# And the infra failure that never reached a compiler stays a crash, so this change narrows nothing
+# it did not mean to: a dependency resolution that failed once is still worth one more try.
+assert_equals "an infra failure with no compiler errors is still a crash" \
+  "crashed" "$(run_outcome "xcodebuild: error: Could not resolve package dependencies" 70)"
+
+# End to end, which is where the cost actually showed up: two builds and a misleading sign-off.
+BUILD_FAILURE_RUN="$(run_wrapper_with_stub_xcodebuild "${BUILD_FAILURE_OUTPUT}" 65)"
+
+assert_equals "a build failure reports the compiler errors exactly once" \
+  "1" "$(grep -c "error: cannot convert value of type" <<< "${BUILD_FAILURE_RUN}")"
+
+assert_not_contains "a build failure is not retried as a flaky host" \
+  "Retrying once" "${BUILD_FAILURE_RUN}"
+
+assert_not_contains "a build failure is not dressed up as a run that died" \
+  "the test run CRASHED" "${BUILD_FAILURE_RUN}"
+
+assert_not_contains "a build failure is never signed off as not being the code's fault" \
+  "the code was never the problem" "${BUILD_FAILURE_RUN}"
+
+assert_contains "a build failure says the code did not compile" \
+  "the code did not COMPILE, so no test ran" "${BUILD_FAILURE_RUN}"
+
+assert_equals "a build failure exits with xcodebuild's own code" \
+  "exit=65" "$(tail -n 1 <<< "${BUILD_FAILURE_RUN}")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0
