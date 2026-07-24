@@ -687,7 +687,9 @@ struct RootView: View {
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
-            .sheet(item: Bindable(dayOffOffer).pending) { pending in BlockDaysSheet(pending: pending) }
+            .sheet(item: Bindable(dayOffOffer).pending) { pending in
+                BlockDaysSheet(pending: pending, undo: undoStack)
+            }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
@@ -697,13 +699,15 @@ struct RootView: View {
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
     }
 
-    // One press, one whole action reversed (#1414). Takes the top entry whether or not it turns out to
+    // One press, one whole action reversed (#1414), INCLUDING a day off the dismiss led to (#1473), which
+    // is why the store is passed: the block is a row of its own and the sweep it triggered flagged other
+    // shows. Takes the top entry whether or not it turns out to
     // be applicable, because a stale entry is spent either way: leaving it on the stack would make the
     // next Cmd+Z retry the same dead entry forever instead of reaching the one behind it.
     private func performQueueUndo() {
         guard let entry = undoStack.takeTop() else { return }
         let model = allProspects.first { $0.naturalKey == entry.naturalKey }
-        guard QueueUndo.apply(entry, to: model) else {
+        guard QueueUndo.apply(entry, to: model, in: context) else {
             // The row moved since (a scout re-scored it, a sweep took it, a send made it contacted) or
             // is gone. Deliberately silent: Dan's own call in the discovery interview was "I don't need
             // here's why, it's fine if it just doesn't work". #1415 covers what a SUCCESSFUL undo says.

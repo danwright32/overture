@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // The session undo stack for queue actions (#1413, milestone 29), and the record of one reversible
 // action. Nothing records into this yet (#1414) and nothing triggers it yet: the Edit menu command is
@@ -48,6 +49,23 @@ struct QueueUndoEntry: Equatable, Sendable {
     // Where the action LEFT the row. Not restored; this is the precondition.
     let resultingStatus: ReviewStatus
     let resultingDismissReasonRaw: String?
+
+    // #1473: a stretch of days Dan blocked BECAUSE of this dismiss, so one press takes both back.
+    //
+    // A `var` with a default, unlike everything above it, and that is forced by the order Dan meets the
+    // two halves in: he dismisses the show, and only then picks the days in the sheet the dismissal
+    // opened. The entry cannot be built complete, so it is amended once, by `attachBlockedDaysOff`.
+    //
+    // Held as the two day strings rather than the `DayOff` row, for the reason the natural key is held
+    // rather than the `Prospect`: the row can be deleted while this entry is on the stack (Dan can also
+    // reverse just the block, from the banner), so it is looked up fresh at undo time and its absence is
+    // an ordinary outcome.
+    var blockedDays: BlockedDays?
+
+    struct BlockedDays: Equatable, Sendable {
+        let start: String       // yyyy-MM-dd, inclusive
+        let end: String         // yyyy-MM-dd, inclusive
+    }
 
     // The Edit menu's title for this entry, e.g. "Undo Dismiss: The Music Shop". A WHOLE sentence in one
     // place, not a fragment the menu prefixes: #863's guard rejects a view composing its own copy, and a
@@ -100,12 +118,28 @@ enum QueueUndo {
     // This single check is what replaced the "wall". A background writer (the reconcile tick, a scout
     // import, a retirement sweep), a later action of Dan's, and a send that moved the show on are all
     // the same situation seen from here: the row is not what this entry describes, so leave it alone.
+    // #1473: the context is REQUIRED rather than optional-with-a-default, so no call site can quietly get
+    // the row half of an undo and leave the night blocked. That half-undo is the exact bug this fixes, and
+    // it is invisible from the keyboard: the show comes back, so the press looks like it worked.
     @MainActor
     @discardableResult
-    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?) -> Bool {
+    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?, in context: ModelContext,
+                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Bool {
         guard let prospect,
               entry.stillApplies(status: prospect.status,
                                  dismissReasonRaw: prospect.dismissReasonRaw) else { return false }
+        // The precondition is checked BEFORE the day off is touched, not after. A stale entry means Dan's
+        // row moved on under him, and taking the block off anyway would silently unblock a night he told
+        // Overture he cannot work, freeing every show on it to be drafted and sent.
+        //
+        // `DayOffEditing.remove` re-runs the conflict sweep, so the shows this block flagged are un-flagged
+        // in the same press. A range with no row left (he already took the block back from the banner) is
+        // an ordinary outcome: the block is gone, which is what the undo wanted.
+        if let blocked = entry.blockedDays,
+           let row = DayOffEditing.rows(in: context)
+               .first(where: { $0.startDate == blocked.start && $0.endDate == blocked.end }) {
+            DayOffEditing.remove(row, export: export, in: context)
+        }
         prospect.status = entry.priorStatus
         prospect.dismissReasonRaw = entry.priorDismissReasonRaw
         prospect.dismissedAt = entry.priorDismissedAt
@@ -135,6 +169,26 @@ final class QueueUndoStack {
 
     func record(_ entry: QueueUndoEntry) {
         entries.append(entry)
+    }
+
+    // #1473: fold a day off Dan just blocked into the dismiss that led to it, so Cmd+Z reverses the whole
+    // action. Returns whether it attached, which is the caller's only way to know: silence would make a
+    // half-undo indistinguishable from a whole one.
+    //
+    // Attaches ONLY to the top entry, and only when that entry is a dismiss of this same show with nothing
+    // attached yet. Every other case is left alone deliberately rather than searched for: a block that did
+    // not come from the top entry's dismiss riding on it would mean an unrelated Cmd+Z silently deleting a
+    // day off Dan is counting on. Nothing is lost by refusing, because `blockDaysOff` offers its own banner
+    // Undo for the block either way.
+    @discardableResult
+    func attachBlockedDaysOff(start: String, end: String, toDismissOf naturalKey: String) -> Bool {
+        guard var top = entries.last,
+              top.naturalKey == naturalKey,
+              top.resultingStatus == .dismissed,
+              top.blockedDays == nil else { return false }
+        top.blockedDays = QueueUndoEntry.BlockedDays(start: start, end: end)
+        entries[entries.count - 1] = top
+        return true
     }
 
     // Removes and returns the most recent entry. No redo, by Dan's explicit decision, so a taken entry

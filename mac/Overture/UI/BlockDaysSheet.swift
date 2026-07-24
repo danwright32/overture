@@ -17,13 +17,18 @@ struct BlockDaysSheet: View {
     @Environment(DayOffOfferRequest.self) private var offer
 
     let pending: DayOffOfferRequest.Pending
+    // #1473: handed in by RootView rather than read from the environment. An environment lookup that came
+    // back empty here would attach nothing and say nothing, and the resulting half-undo (the show back, the
+    // night still blocked) is precisely the bug this closes, so it must not be reachable by accident.
+    let undo: QueueUndoStack
 
     @State private var start: Date
     @State private var end: Date
     @State private var note: String
 
-    init(pending: DayOffOfferRequest.Pending) {
+    init(pending: DayOffOfferRequest.Pending, undo: QueueUndoStack) {
         self.pending = pending
+        self.undo = undo
         _start = State(initialValue: EasternDate.date(from: pending.start) ?? Date())
         _end = State(initialValue: EasternDate.date(from: pending.end) ?? Date())
         _note = State(initialValue: "")
@@ -59,7 +64,8 @@ struct BlockDaysSheet: View {
     private func block() {
         let ok = ProspectMutations.blockDaysOff(start: EasternDate.dayString(from: start),
                                                 end: EasternDate.dayString(from: end),
-                                                note: note, context: context, feedback: feedback)
+                                                note: note, context: context, feedback: feedback,
+                                                undo: undo, undoDismissOf: pending.id)
         if ok { offer.clear(); dismiss() }
     }
 }
