@@ -129,6 +129,35 @@ struct ActionAckTests {
         #expect(ActionAck.restored(org: "Lumen Dance") == "Restored Lumen Dance to the queue")
     }
 
+    // #1415: since #1134 the queue is stage-only, so an undone dismiss restores a row into a stage Dan is
+    // usually not looking at. The store changes and the screen does not, which made a working undo look
+    // identical to a dead shortcut. The banner names what came back and, crucially, the STAGE PILL Dan
+    // clicks to find it (Scout/Prep/Review/Reached out), not the raw status name, which is on no pill.
+    @Test("an undo names the show and the stage pill it landed back in")
+    func undoRestored() {
+        #expect(ActionAck.undoRestored(org: "The Music Shop", priorStatus: .new)
+                == "The Music Shop is back in Scout")
+        #expect(ActionAck.undoRestored(org: "The Music Shop", priorStatus: .queued)
+                == "The Music Shop is back in Prep")
+        #expect(ActionAck.undoRestored(org: "The Music Shop", priorStatus: .drafted)
+                == "The Music Shop is back in Review")
+        // Approve and Send are two buttons on the same Review card (#1146 still open), so an approved show
+        // is seen in Review, not on a pill of its own.
+        #expect(ActionAck.undoRestored(org: "The Music Shop", priorStatus: .approved)
+                == "The Music Shop is back in Review")
+        #expect(ActionAck.undoRestored(org: "The Music Shop", priorStatus: .contacted)
+                == "The Music Shop is back in Reached out")
+    }
+
+    // The other half of #1415's "nothing is silent": when the row moved on since the action (a scout
+    // re-scored it, a sweep took it, a send made it contacted) or is gone, the undo cannot apply, and that
+    // must be said rather than swallowed, or a live undo and a dead one look the same from the keyboard.
+    @Test("a skipped undo says the row moved on rather than staying silent")
+    func undoSkipped() {
+        #expect(ActionAck.undoSkipped(org: "The Music Shop")
+                == "The Music Shop already moved on, so there was nothing to undo")
+    }
+
     @Test("a follow-up send acknowledges both success and failure")
     func followUpSent() {
         #expect(ActionAck.followUpSent(org: "City Brass", success: true)

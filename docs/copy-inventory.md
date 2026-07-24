@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **784 sentences**, from 263 source files.
+Every sentence Overture can say to Dan: **787 sentences**, from 263 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -134,6 +134,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
 - "Reached out"
+  - `App/ActionFeedback.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
 - "Redraft and find contacts"
@@ -1006,6 +1007,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Reachability may be out of date"
     `Domain/Reachability.swift`
 "Reached out"
+    `App/ActionFeedback.swift`
     `Domain/AgentRoster.swift`
 "Read 1 show before you cancelled."
     `Domain/CancelledReadDisposition.swift`
@@ -1623,11 +1625,15 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
+"\(org) already moved on, so there was nothing to undo"
+    `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to, so there's nothing to redraft"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to; re-prepping to find new contacts only"
+    `App/ActionFeedback.swift`
+"\(org) is back in \(undoStageWord(for: priorStatus))"
     `App/ActionFeedback.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     `Domain/WatchlistEditing.swift`
@@ -1780,6 +1786,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Persistence/PrepImporter.swift`
 "the \(day) listing"
     `Domain/SourceReadability.swift`
+"the archive"
+    `App/ActionFeedback.swift`
 "the booking history couldn't be read"
     `Persistence/PrepImporter.swift`
 "the booking log"
