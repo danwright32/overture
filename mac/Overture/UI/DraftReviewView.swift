@@ -74,7 +74,9 @@ struct DraftReviewView: View {
     @State private var editingReplyFor: String?    // recipient id whose reply draft is being edited (#423 E)
     @State private var replyEditText = ""
     @State private var lostReason = ""
-    @State private var lostReasonSeeded = false
+    // #1418: the value last written to the store, so a commit on focus loss with no edit writes nothing.
+    @State private var lastSavedLostReason = ""
+    @FocusState private var lostReasonFocused: Bool
     @State private var showAddContact = false
     @State private var addContactEmail = ""
     @State private var addContactName = ""
@@ -759,17 +761,28 @@ struct DraftReviewView: View {
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
             TextField("Why lost? (optional note)", text: $lostReason)
                 .textFieldStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.ink)
-                .onSubmit { onSetLostReason(lostReason) }
-                .onChange(of: lostReason) { _, newValue in
-                    if lostReasonSeeded { onSetLostReason(newValue) }
+                .focused($lostReasonFocused)
+                // #1418: commit once, on submit and on focus loss, not on every keystroke. A twelve-character
+                // note used to be twelve full setLostReason + SwiftData saves.
+                .onSubmit { commitLostReason() }
+                .onChange(of: lostReasonFocused) { _, focused in
+                    if !focused { commitLostReason() }
                 }
         }
         .padding(.horizontal, OVSpacing.xs).padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.5)))
         .onAppear {
             lostReason = item.lostReason ?? ""
-            lostReasonSeeded = true
+            lastSavedLostReason = lostReason
         }
+    }
+
+    // #1418: save the note only when it changed since the last write, so submitting or leaving an untouched
+    // field is a no-op rather than a redundant store write. The changed-guard is LostReasonCommit (tested).
+    private func commitLostReason() {
+        guard LostReasonCommit.shouldSave(current: lostReason, lastSaved: lastSavedLostReason) else { return }
+        onSetLostReason(lostReason)
+        lastSavedLostReason = lostReason
     }
 
     private var derivedStatusColor: Color {
