@@ -194,8 +194,9 @@ struct ScoutSummaryView: View {
                     Text(urlString).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
                 }
             }
-            // A source with an editable page (not Carnegie's native feed) gets the inline actions.
-            if let source, source.kind != .algolia, case .failed(let failure) = result.state {
+            // #1450: no kind gate here any more. Which controls a source's kind allows is the component's
+            // own rule; gating the whole block on it here is what left Carnegie's feed with no exit.
+            if let source, case .failed(let failure) = result.state {
                 SourceFixConfirmActions(source: source, failure: failure,
                                         onFixed: { fixedIds.insert($0) },
                                         offersStopWatching: true)

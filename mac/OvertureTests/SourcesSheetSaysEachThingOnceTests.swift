@@ -223,21 +223,22 @@ struct SourceAddressEditorEverywhereTests {
     // With no failure the editor still offers Fix (a wrong address is exactly what a persistently empty
     // but readable source might have) and never offers Confirm (there is no empty-page failure to confirm).
     @Test func aHealthySourceOffersFixButNotConfirm() {
-        #expect(SourceFixConfirmActions.offersFix(nil))
-        #expect(!SourceFixConfirmActions.offersConfirm(nil))
+        #expect(SourceFixConfirmActions.offersFix(nil, kind: .html))
+        #expect(!SourceFixConfirmActions.offersConfirm(nil, kind: .html))
     }
 
     // A real failure keeps deciding exactly as before: the two predicates on the failure itself win.
     @Test func aFailingSourceDefersToTheFailuresOwnPredicates() {
-        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent)))
-        #expect(SourceFixConfirmActions.offersFix(.verdict(.noDatedContent)))
-        #expect(!SourceFixConfirmActions.offersFix(.verdict(.notRead)))          // self-heals; no address fix
-        #expect(!SourceFixConfirmActions.offersConfirm(.fetch(.http(404))))
+        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .html))
+        #expect(SourceFixConfirmActions.offersFix(.verdict(.noDatedContent), kind: .html))
+        #expect(!SourceFixConfirmActions.offersFix(.verdict(.notRead), kind: .html))          // self-heals; no address fix
+        #expect(!SourceFixConfirmActions.offersConfirm(.fetch(.http(404)), kind: .html))
     }
 
-    // The wiring claim: the sheet renders the editor for active non-algolia rows regardless of failure,
-    // passing the live (optional) failure. A guard, because a view has no behavioural surface a domain
-    // test can reach (#887).
+    // The wiring claim: the sheet renders the editor on every active row regardless of failure, passing
+    // the live (optional) failure. A guard, because a view has no behavioural surface a domain test can
+    // reach (#887). #1450: it is no longer the sheet that excludes Carnegie's feed; the component decides
+    // what a source's kind allows, and draws nothing when that is nothing.
     @Test func theSheetRendersTheEditorOutsideTheFailureBlock() {
         let sourcesView = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
         #expect(sourcesView.contains("SourceFixConfirmActions(source: source, failure: source.lastFailure)"))

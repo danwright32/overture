@@ -384,6 +384,17 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
         }
     }
 
+    // #1450: whether this source is watched at an address a person could correct. Deliberately NOT the
+    // same question as usesNativeExtractor: the three host-routed adapters ingest natively AND are watched
+    // at a real URL that can be wrong, so they keep the address control. Only Carnegie's listings URL is a
+    // display-only placeholder over a POST search API, which nothing may ever fetch.
+    var hasEditablePage: Bool {
+        switch self {
+        case .algolia: return false
+        case .html, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
+        }
+    }
+
     // The kind a newly watched (or launch-migrated) listings URL should carry. #1237: the two host-routed
     // feed adapters ingest natively for free; everything else is read as html. Carnegie's .algolia is
     // seeded by hand (its listings URL is a display-only placeholder over a POST search API), never here.

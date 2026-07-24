@@ -39,11 +39,39 @@ struct SourceFixConfirmActions: View {
     // for a healthy row. Fix defaults on (a wrong address is plausible on any editable source); Confirm
     // defaults off (nothing to confirm without an empty-page failure). With a failure, its own predicates
     // win, so the failing-source behaviour is exactly as before.
-    static func offersFix(_ failure: SourceFailure?) -> Bool { failure?.offersFix ?? true }
-    static func offersConfirm(_ failure: SourceFailure?) -> Bool { failure?.offersConfirm ?? false }
+    //
+    // #1450: the kind gets a say, and exactly one: a source with no editable page offers neither. Carnegie
+    // is watched at a display-only placeholder over a POST search API, so "Fix the address" would edit a
+    // field nothing reads, and "This page is right" would confirm a page that does not exist. It is
+    // deliberately keyed on that ONE kind and not on "ingests natively": the other three feed adapters are
+    // host-routed at a real URL, which can be the wrong one, so they keep Fix.
+    //
+    // The rule lives here rather than at each call site because both surfaces used to state it themselves,
+    // and stating it as `kind != .algolia` around the whole block is what hid the exit: it took away Fix
+    // and Confirm, which was the intent, AND Stop watching, which was not (#1450). Nothing about the kind
+    // decides whether a source can be stopped.
+    static func offersFix(_ failure: SourceFailure?, kind: SourceKind) -> Bool {
+        guard kind.hasEditablePage else { return false }
+        return failure?.offersFix ?? true
+    }
 
-    private var offersFix: Bool { Self.offersFix(failure) }
-    private var offersConfirm: Bool { Self.offersConfirm(failure) }
+    static func offersConfirm(_ failure: SourceFailure?, kind: SourceKind) -> Bool {
+        guard kind.hasEditablePage else { return false }
+        return failure?.offersConfirm ?? false
+    }
+
+    // Whether this component has anything at all to draw. The Sources sheet no longer gates it on the
+    // kind, so it is asked to render for Carnegie's row, where it must produce nothing rather than an
+    // empty strip of controls.
+    static func offersAnything(failure: SourceFailure?, kind: SourceKind, stopWatching: Bool) -> Bool {
+        stopWatching || offersFix(failure, kind: kind) || offersConfirm(failure, kind: kind)
+    }
+
+    private var offersFix: Bool { Self.offersFix(failure, kind: source.kind) }
+    private var offersConfirm: Bool { Self.offersConfirm(failure, kind: source.kind) }
+    private var offersAnything: Bool {
+        Self.offersAnything(failure: failure, kind: source.kind, stopWatching: offersStopWatching)
+    }
 
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
@@ -53,6 +81,10 @@ struct SourceFixConfirmActions: View {
     @State private var message: String?
 
     var body: some View {
+        if offersAnything { controls }
+    }
+
+    private var controls: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xxs) {
             if editing {
                 TextField("Their events or season page", text: $draftURL)

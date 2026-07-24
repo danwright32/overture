@@ -622,7 +622,9 @@ struct SourcesView: View {
             // wrong address is plausible on any editable source), Confirm only when there is an empty-page
             // failure to confirm. Carnegie's native feed has no URL to correct (algolia is excluded), and a
             // source Dan stopped is not shown these at all.
-            if source.isActive, source.kind != .algolia {
+            // #1450: the kind gate moved into the component, which now draws nothing at all for a source
+            // it has nothing to offer. A source Dan stopped is still shown none of these.
+            if source.isActive {
                 SourceFixConfirmActions(source: source, failure: source.lastFailure)
             }
 
@@ -664,7 +666,13 @@ struct SourcesView: View {
 
             // A permanently dead source needs a way out that is DAN'S choice, or a failing source would
             // be reported at him every run forever with nothing he could do about it. Recorded as his
-            // decision, never as a refusal: Carnegie is excluded because it has no page to watch.
+            // decision, never as a refusal.
+            //
+            // #1450: EVERY active source, Carnegie's native feed included. It used to be excluded here
+            // because it has no page to correct, which is true of Fix and has nothing to do with leaving
+            // the watchlist: the exclusion took the only exit off the one source that could never get it
+            // back any other way. "Read this one" stays excluded, because reading Carnegie on demand is a
+            // separate question this change does not answer.
             //
             // #842: it has to LOOK like something he can do. Styled as an 11pt plain line under three
             // other 11pt lines, it read as a fourth statement of fact, and it is the only way a source
@@ -673,26 +681,28 @@ struct SourcesView: View {
             // one. Same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, so
             // "you can do this" looks the same everywhere in the app, and sitting on its own trailing
             // line rather than in the metadata stack.
-            if source.isActive, source.kind != .algolia {
+            if source.isActive {
                 HStack {
                     Spacer()
                     // #970: reads THIS source, now. The scout otherwise reads oldest-first, and every
                     // source shares a lastCheckedAt (the daily run checks them in one pass), so "read
                     // that one" is not otherwise expressible: a capped run picks arbitrarily among a
                     // tie. Costs one run instead of twenty.
-                    Button {
-                        readOne(source)
-                        dismiss()
-                    } label: {
-                        Text(WatchlistEditing.readOneTitle)
-                            .font(.system(size: 11))
-                            .foregroundStyle(OVColor.inkSoft)
-                            .padding(.horizontal, OVSpacing.sm)
-                            .padding(.vertical, 4)
-                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                    if source.kind.hasEditablePage {
+                        Button {
+                            readOne(source)
+                            dismiss()
+                        } label: {
+                            Text(WatchlistEditing.readOneTitle)
+                                .font(.system(size: 11))
+                                .foregroundStyle(OVColor.inkSoft)
+                                .padding(.horizontal, OVSpacing.sm)
+                                .padding(.vertical, 4)
+                                .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .help(WatchlistEditing.readOneHelp)
                     }
-                    .buttonStyle(.plain)
-                    .help(WatchlistEditing.readOneHelp)
 
                     Button {
                         stopWatching(source)
