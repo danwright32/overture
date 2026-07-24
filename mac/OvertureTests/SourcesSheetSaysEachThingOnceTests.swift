@@ -152,8 +152,10 @@ struct SourcesSheetSaysEachThingOnceTests {
 struct StopWatchingAffordanceGuardTests {
     private var sourcesView: String { SourceGuardHelper.source("Overture/UI/SourcesView.swift") }
 
+    // #1426: anchored on the constant rather than the literal. Both surfaces that offer this action now
+    // take its words from SourceFixConfirmCopy.stopWatchingTitle, so the sheet no longer spells them out.
     @Test func stopWatchingCarriesTheAppsSecondaryActionAffordance() {
-        guard let range = sourcesView.range(of: "Stop watching") else {
+        guard let range = sourcesView.range(of: "stopWatchingTitle") else {
             Issue.record("the Stop watching button is gone")
             return
         }
@@ -168,7 +170,7 @@ struct StopWatchingAffordanceGuardTests {
     // It must not read as a failure, and it must not shout: stopping a source is Dan's ordinary,
     // reversible housekeeping, not an alarm.
     @Test func itIsNotStyledAsAnError() {
-        guard let range = sourcesView.range(of: "Stop watching") else {
+        guard let range = sourcesView.range(of: "stopWatchingTitle") else {
             Issue.record("the Stop watching button is gone")
             return
         }

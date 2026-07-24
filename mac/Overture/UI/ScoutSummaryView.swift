@@ -68,8 +68,19 @@ struct ScoutSummaryView: View {
 
     // The subtitle explains the inline actions, so it is shown ONLY when there is something to act on. A
     // run whose popup carries only informational notes would be promising a Fix/Confirm that is not there.
+    // #1426: the still-watched list, never the raw one. Stop watching the last failing source and the
+    // subtitle's promise goes with the cards it was describing.
     private var hasActionableFailures: Bool {
-        warnings.sections.contains { if case .failures = $0 { return true }; return false }
+        warnings.sections.contains {
+            if case .failures(let results) = $0 { return !ScoutSummaryRow.stillWatched(results, in: sources).isEmpty }
+            return false
+        }
+    }
+
+    // #1426: the ids Dan fixed, minus any he has since stopped watching. Reading them would spend a scout
+    // run on sources that are off the watchlist.
+    private var fixedAndStillWatched: Set<String> {
+        ScoutSummaryRow.stillWatched(fixedIds, in: sources)
     }
 
     private var sectionStack: some View {
@@ -95,18 +106,18 @@ struct ScoutSummaryView: View {
     private var footer: some View {
         HStack {
             Spacer()
-            if !fixedIds.isEmpty {
-                Button(ScoutSummaryCopy.readFixed(fixedIds.count)) {
+            if !fixedAndStillWatched.isEmpty {
+                Button(ScoutSummaryCopy.readFixed(fixedAndStillWatched.count)) {
                     // #1034: no dismiss() here. The summary and the scout-progress takeover now share ONE
                     // presented sheet, and onReadFixed starts a fresh scout that re-shows that same sheet
                     // as progress. Dismissing first would fight the re-present (a dropped sheet, or a
                     // flicker), so the read just swaps this sheet's content in place instead.
-                    onReadFixed(fixedIds)
+                    onReadFixed(fixedAndStillWatched)
                 }
                 .keyboardShortcut(.defaultAction)
             }
             Button("Done") { dismiss() }
-                .keyboardShortcut(fixedIds.isEmpty ? .defaultAction : .cancelAction)
+                .keyboardShortcut(fixedAndStillWatched.isEmpty ? .defaultAction : .cancelAction)
         }
         .padding(OVSpacing.lg)
     }
@@ -121,7 +132,11 @@ struct ScoutSummaryView: View {
         case .readerFinishedEmpty(let message):
             infoBlock(message)
         case .failures(let results):
-            failuresBlock(results)
+            // #1426: the heading counts what is on screen, because the rows and the count read the same
+            // filtered list. Removing every failing source leaves nothing here at all, rather than a
+            // heading over an empty box.
+            let shown = ScoutSummaryRow.stillWatched(results, in: sources)
+            if !shown.isEmpty { failuresBlock(shown) }
         case .unqueued(let ids):
             infoBlock(ScoutWarningCopy.unqueued(ids: ids))
         case .silentlyEmptyFeed:
@@ -182,7 +197,8 @@ struct ScoutSummaryView: View {
             // A source with an editable page (not Carnegie's native feed) gets the inline actions.
             if let source, source.kind != .algolia, case .failed(let failure) = result.state {
                 SourceFixConfirmActions(source: source, failure: failure,
-                                        onFixed: { fixedIds.insert($0) })
+                                        onFixed: { fixedIds.insert($0) },
+                                        offersStopWatching: true)
             }
         }
         .padding(.horizontal, OVSpacing.sm)
@@ -199,6 +215,32 @@ struct ScoutSummaryView: View {
 enum ScoutSummaryRow {
     static func displayURL(result: ScoutService.SourceResult, source: WatchedSource?) -> String? {
         source?.listingsURL ?? result.listingsURL
+    }
+
+    // #1426: which of the run's failures the popup still has anything to say about. The list it was handed
+    // is a SNAPSHOT taken when the scout finished, so a source Dan stops watching from this very screen
+    // would otherwise keep its card AND keep being counted by the "N sources couldn't be checked" heading.
+    // Asked of the LIVE watchlist rows, which is also what makes the removal's Undo restore the card for
+    // free rather than needing a second path back.
+    //
+    // A result with no live row at all STAYS: that is not a removal, it is the unmatched case #1125 kept
+    // the snapshot for, and dropping it would silently swallow a failure.
+    static func stillWatched(_ results: [ScoutService.SourceResult],
+                             in sources: [WatchedSource]) -> [ScoutService.SourceResult] {
+        results.filter { isStillWatched($0.sourceId, in: sources) }
+    }
+
+    // The same question asked of the ids Dan has fixed, so "Read the ones I fixed" cannot offer to spend a
+    // scout run on a source he fixed and then removed.
+    static func stillWatched(_ sourceIds: Set<String>, in sources: [WatchedSource]) -> Set<String> {
+        sourceIds.filter { isStillWatched($0, in: sources) }
+    }
+
+    // Deliberately "is it still watched", not "did Dan remove it": a source that went inactive because the
+    // org asked us to stop is just as gone from this screen's point of view.
+    private static func isStillWatched(_ sourceId: String, in sources: [WatchedSource]) -> Bool {
+        guard let source = sources.first(where: { $0.sourceId == sourceId }) else { return true }
+        return source.isActive
     }
 }
 
@@ -226,7 +268,11 @@ struct ScoutRerunPrompt: Equatable {
 
 enum ScoutSummaryCopy {
     static let title = "Scout results"
-    static let subtitle = "Fix a source's address or confirm a page is right, and I'll read the ones you fix."
+    // #1426: it used to list the actions ("Fix a source's address or confirm a page is right, and I'll
+    // read the ones you fix."). With a third button on every card that list was both longer and still
+    // wrong, and it was already restating words Dan can read on the buttons themselves (#843). What is
+    // left is the only part no button says: fixing one queues it to be read.
+    static let subtitle = "I'll read the ones you fix."
 
     static func failuresHeading(_ count: Int) -> String {
         count == 1 ? "One source couldn't be checked." : "\(count) sources couldn't be checked."

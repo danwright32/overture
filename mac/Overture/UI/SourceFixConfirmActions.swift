@@ -27,6 +27,13 @@ struct SourceFixConfirmActions: View {
     let failure: SourceFailure?
     // Called with the source id when Dan saves a corrected URL, so the popup can read the ones he fixed.
     var onFixed: (String) -> Void = { _ in }
+    // #1426: whether this surface also offers to stop watching the source. OFF by default, and the Sources
+    // sheet leaves it off, because every active row there already carries its own Stop watching button:
+    // defaulting it on would put two identical buttons on the same row. The scout results popup turns it
+    // on, where the failing source is named in front of Dan and his only alternative is to close the popup
+    // and find that same row in the sheet. Same removal (WatchlistMutations.stopWatching), same banner,
+    // same Undo: this is a second PLACE to take the action, never a second way to take it.
+    var offersStopWatching: Bool = false
 
     // #1177: whether each control is offered, decided here (not in the body) so a test can pin the default
     // for a healthy row. Fix defaults on (a wrong address is plausible on any editable source); Confirm
@@ -67,6 +74,13 @@ struct SourceFixConfirmActions: View {
             }
             HStack(spacing: OVSpacing.xs) {
                 Spacer()
+                // #1426: leftmost and in the app's quiet secondary tint, because it is the one action here
+                // that takes a source off the watchlist rather than repairing it. Hidden while the address
+                // editor is open: mid-correction is not the moment to offer removal beside Save.
+                if offersStopWatching, !editing {
+                    capsule(SourceFixConfirmCopy.stopWatchingTitle, tint: OVColor.inkSoft, action: stopWatching)
+                        .help(SourceFixConfirmCopy.stopWatchingHelp)
+                }
                 if offersConfirm, !editing {
                     capsule(SourceFixConfirmCopy.confirmTitle, tint: OVColor.forest, action: confirm)
                         .help(SourceFixConfirmCopy.confirmHelp)
@@ -113,6 +127,13 @@ struct SourceFixConfirmActions: View {
     private func confirm() {
         WatchlistMutations.confirmEmpty(source, context: context, feedback: feedback)
     }
+
+    // #1426: the SAME soft-remove the Sources sheet takes, which is what keeps it reversible: the row, its
+    // feed history and the source id stamped on every prospect it ever surfaced all survive, the banner
+    // offers an immediate Undo, and the sheet keeps a Watch again that never expires.
+    private func stopWatching() {
+        WatchlistMutations.stopWatching(source, context: context, feedback: feedback)
+    }
 }
 
 // The component's own words, kept out of the view body so the copy inventory reads them and a test can
@@ -124,6 +145,10 @@ enum SourceFixConfirmCopy {
     static let cancelTitle = "Cancel"
     static let confirmTitle = "This page is right"
     static let confirmHelp = "Keep this page but stop flagging it, until its contents change"
+    // #1426: named once, here, and used by BOTH the Sources sheet's own row control and the scout results
+    // popup, so one action cannot end up with two names on two screens.
+    static let stopWatchingTitle = "Stop watching"
+    static let stopWatchingHelp = "Take this source off the watchlist. You can put it back any time"
 
     // #1048: shown only in the Sources sheet, only when the page has changed since it was last read (a
     // watch-only pass saw new bytes but did not re-read). Confirming then anchors to the old bytes, so the
