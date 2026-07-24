@@ -48,7 +48,22 @@ blocking_debug_app_pids() {
     | awk '{print $1}' || true
 }
 
-# run_outcome <xcodebuild output> <exit code>. "crashed", "failed", or "" for a pass.
+# Did the run fail to COMPILE? (#1465)
+#
+# The tell is the compiler's own file:line:column shape, and xcodebuild's build-commands banner,
+# NEVER the bare word "error". Every run of this suite prints CoreData noise carrying "error:", and a
+# host that dies mid-run prints it too, so a naive grep would read the #1331 flake as a build failure
+# and kill the retry that exists to absorb it.
+#
+# Only ever consulted AFTER the named-failure check below, so output that names failing tests is a
+# failure whatever else it contains.
+build_failed() {
+  local output="$1"
+  if grep -q '^The following build commands failed:' <<< "${output}"; then return 0; fi
+  grep -qE '^[^[:space:]].*:[0-9]+:[0-9]+: (fatal )?error: ' <<< "${output}"
+}
+
+# run_outcome <xcodebuild output> <exit code>. "crashed", "build-failed", "failed", or "" for a pass.
 #
 # #1006: a killed run and a failing run must never look alike. On 2026-07-16 this printed
 # `Test run with 1574 tests in 229 suites passed` for a ~2400-test suite and then died with
@@ -80,9 +95,16 @@ run_outcome() {
   named="$(awk '/^Failing tests:/{f=1;next} /^\*\* TEST/{f=0} f' <<< "${output}" | grep -c '[^[:space:]]' || true)"
   if [[ "${named}" -gt 0 ]]; then
     echo "failed"
-  else
-    echo "crashed"
+    return
   fi
+  # #1465: a run that never COMPILED has the same shape as a dead host (failed, nothing named), but it
+  # is not a flake and retrying it just builds the same broken code a second time. Told apart before
+  # falling through to "crashed", which is now only what it says: the run died.
+  if build_failed "${output}"; then
+    echo "build-failed"
+    return
+  fi
+  echo "crashed"
 }
 
 # should_retry <outcome> <attempt> <max_attempts>. Prints "retry" when another attempt should run.
@@ -94,6 +116,11 @@ run_outcome() {
 # failure) is a known flake, so retry it ONCE. A genuine "failed" (named tests) is NEVER retried, or the
 # guard would paper over a real red; a pass ("") is never retried either. The crash/failure distinction
 # is exactly run_outcome's, so this can never retry a real failure.
+#
+# #1465: "build-failed" is likewise never retried. A run that never compiled has a dead host's SHAPE
+# (failed, nothing named) but none of its cause, so a second attempt just builds the same broken code
+# and prints the same errors again. Telling the two apart is run_outcome's job, so nothing changes
+# here beyond the outcome it is handed.
 should_retry() {
   local outcome="$1" attempt="$2" max_attempts="$3"
   [[ "${outcome}" == "crashed" && "${attempt}" -lt "${max_attempts}" ]] && echo "retry"
@@ -166,6 +193,12 @@ main() {
     echo "flake, #1331). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
     attempt=$((attempt + 1))
   done
+
+  if [[ "${outcome}" == "build-failed" ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: the code did not COMPILE, so no test ran. The errors are above." >&2
+    echo "Nothing was retried: this is not the #1006 host crash and not a flake. See #1465." >&2
+  fi
 
   if [[ "${outcome}" == "crashed" ]]; then
     echo >&2
