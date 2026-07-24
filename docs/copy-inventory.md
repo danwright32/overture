@@ -491,7 +491,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Days off"
     `Domain/DaysOffAttention.swift`
     `UI/DaysOffView.swift`
-"Days off (no shoots)"
+"Days off (no shoots from Downbeat)"
     `Domain/DaysOffAttention.swift`
 "Days you blocked"
     `UI/DaysOffView.swift`
