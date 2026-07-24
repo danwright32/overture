@@ -323,10 +323,7 @@ struct ProspectRowView: View {
                 Image(systemName: "calendar.badge.exclamationmark")
                 Text("No longer in the feed, may be cancelled")
             }
-            .font(OVType.tag)
-            .foregroundStyle(OVColor.rust)
-            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-            .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+            .ovPill(.warning)
             .padding(.top, 2)
             .help("This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved.")
         }
@@ -402,10 +399,7 @@ struct ProspectRowView: View {
                         .font(.system(size: 13, weight: .semibold))
                     Text("Not sure of the genre or type, tap to confirm or fix")
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.rust)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+                .ovPill(.warning)
             }
             .buttonStyle(.plain)
             .fixedSize()
@@ -425,35 +419,32 @@ struct ProspectRowView: View {
             EmptyView()
         case .hardToReach:
             reachabilityNote(icon: "envelope", text: ReachabilityCopy.hardToReachBadge,
-                             tint: OVColor.inkSoft, fill: OVColor.surfaceSunk, help: ReachabilityCopy.hardToReachHelp)
+                             tone: .neutral, help: ReachabilityCopy.hardToReachHelp)
         case .noEmailFound:
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.noEmailFoundBadge,
-                             tint: OVColor.rust, fill: OVColor.rust.opacity(0.12), help: ReachabilityCopy.noEmailFoundHelp)
+                             tone: .warning, help: ReachabilityCopy.noEmailFoundHelp)
         case .weakContactOnly:
             // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
             // but only a weak (venue/press) one.
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
-                             tint: OVColor.gold, fill: OVColor.gold.opacity(0.15), help: ReachabilityCopy.weakContactOnlyHelp)
+                             tone: .pending, help: ReachabilityCopy.weakContactOnlyHelp)
         case .staleProbe:
             // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
             // has aged out, so it asks for a re-check rather than asserting reachable or not.
             reachabilityNote(icon: "clock.arrow.circlepath", text: ReachabilityCopy.staleProbeBadge,
-                             tint: OVColor.inkSoft, fill: OVColor.surfaceSunk, help: ReachabilityCopy.staleProbeHelp)
+                             tone: .neutral, help: ReachabilityCopy.staleProbeHelp)
         case .emailFound:
             reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
-                             tint: OVColor.forest, fill: OVColor.forest.opacity(0.12), help: ReachabilityCopy.emailFoundHelp)
+                             tone: .confirmed, help: ReachabilityCopy.emailFoundHelp)
         }
     }
 
-    private func reachabilityNote(icon: String, text: String, tint: Color, fill: Color, help: String) -> some View {
+    private func reachabilityNote(icon: String, text: String, tone: OVPillTone, help: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 12, weight: .semibold))
             Text(text)
         }
-        .font(OVType.tag)
-        .foregroundStyle(tint)
-        .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-        .background(Capsule().fill(fill))
+        .ovPill(tone)
         .help(help)
         .padding(.top, 2)
     }
@@ -470,10 +461,7 @@ struct ProspectRowView: View {
                     Image(systemName: "checkmark.circle.fill")
                     Text("Possible booking, confirm?")
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.gold)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.gold.opacity(0.12)))
+                .ovPill(.pending)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -494,10 +482,7 @@ struct ProspectRowView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                     Text(note)
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.rust)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.rust.opacity(0.12)))
+                .ovPill(.warning)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -518,10 +503,7 @@ struct ProspectRowView: View {
                     Image(systemName: "hand.raised.fill")
                     Text("Do not contact")
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.rust)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.rust.opacity(0.16)))
+                .ovPill(.warning)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -554,10 +536,7 @@ struct ProspectRowView: View {
                           : "person.crop.circle.badge.questionmark")
                     Text(note)
                 }
-                .font(OVType.tag)
-                .foregroundStyle(confirmed ? OVColor.forest : OVColor.gold)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill((confirmed ? OVColor.forest : OVColor.gold).opacity(0.12)))
+                .ovPill(confirmed ? .confirmed : .pending)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -579,10 +558,7 @@ struct ProspectRowView: View {
                     Image(systemName: "checkmark.seal")
                     Text("Auto-detected booking, confirm?")
                 }
-                .font(OVType.tag)
-                .foregroundStyle(OVColor.forest)
-                .padding(.horizontal, OVSpacing.sm).padding(.vertical, 5)
-                .background(Capsule().fill(OVColor.forest.opacity(0.14)))
+                .ovPill(.confirmed)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -656,19 +632,11 @@ struct ProspectRowView: View {
             // date has passed; there is nothing to put it back into.
             if item.dismissReason == .wentBy {
                 Label("Went by", systemImage: "clock.arrow.circlepath")
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.inkFaint)
-                    .padding(.horizontal, OVSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
+                    .ovPill(.neutral)
                     .help("This performance happened before you triaged it, so it is no longer waiting on you")
             } else if item.status == .dismissed, let onRestore {
                 Label("Dismissed", systemImage: "archivebox")
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.inkFaint)
-                    .padding(.horizontal, OVSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.inkFaint.opacity(0.10)))
+                    .ovPill(.neutral)
                 Button { onRestore() } label: {
                     Text("Restore").font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
@@ -679,11 +647,7 @@ struct ProspectRowView: View {
             } else {
                 if item.isKept {
                     Label("Kept", systemImage: "checkmark.seal.fill")
-                        .font(OVType.meta)
-                        .foregroundStyle(OVColor.forest)
-                        .padding(.horizontal, OVSpacing.sm)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(OVColor.forest.opacity(0.10)))
+                        .ovPill(.confirmed)
                 } else {
                     Button {
                         let wasUncertain = item.isClassificationUncertain
