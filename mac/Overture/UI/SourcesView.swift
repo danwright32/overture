@@ -681,6 +681,10 @@ struct SourcesView: View {
             // one. Same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, so
             // "you can do this" looks the same everywhere in the app, and sitting on its own trailing
             // line rather than in the metadata stack.
+            //
+            // #1451: that idiom is OVCapsuleButton's, not this row's. These three actions used to spell
+            // it out here in six lines each, which meant they matched the sheet's own venue-location
+            // controls (already on the component, #1175) only because someone had matched them by eye.
             if source.isActive {
                 HStack {
                     Spacer()
@@ -689,32 +693,16 @@ struct SourcesView: View {
                     // that one" is not otherwise expressible: a capped run picks arbitrarily among a
                     // tie. Costs one run instead of twenty.
                     if source.kind.hasEditablePage {
-                        Button {
+                        OVCapsuleButton(label: WatchlistEditing.readOneTitle, tint: OVColor.inkSoft) {
                             readOne(source)
                             dismiss()
-                        } label: {
-                            Text(WatchlistEditing.readOneTitle)
-                                .font(.system(size: 11))
-                                .foregroundStyle(OVColor.inkSoft)
-                                .padding(.horizontal, OVSpacing.sm)
-                                .padding(.vertical, 4)
-                                .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
                         }
-                        .buttonStyle(.plain)
                         .help(WatchlistEditing.readOneHelp)
                     }
 
-                    Button {
+                    OVCapsuleButton(label: SourceFixConfirmCopy.stopWatchingTitle, tint: OVColor.inkSoft) {
                         stopWatching(source)
-                    } label: {
-                        Text(SourceFixConfirmCopy.stopWatchingTitle)
-                            .font(.system(size: 11))
-                            .foregroundStyle(OVColor.inkSoft)
-                            .padding(.horizontal, OVSpacing.sm)
-                            .padding(.vertical, 4)
-                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.top, 2)
             }
@@ -733,17 +721,9 @@ struct SourcesView: View {
             if SourceGrade(source) == .removed {
                 HStack {
                     Spacer()
-                    Button {
+                    OVCapsuleButton(label: "Watch again", tint: OVColor.forest) {
                         resumeWatching(source)
-                    } label: {
-                        Text("Watch again")
-                            .font(.system(size: 11))
-                            .foregroundStyle(OVColor.forest)
-                            .padding(.horizontal, OVSpacing.sm)
-                            .padding(.vertical, 4)
-                            .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.top, 2)
             }
