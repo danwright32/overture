@@ -41,6 +41,13 @@ the workflow's runbook is its spec.
 | `scout-extract-cancel` | App (`ScoutExtractService.requestCancel`) writes it to ask a running read to stop; App (`startExtract`) clears any stale one before a fresh run | `scout-extract-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `ScoutCancelTests.swift`, `lib/scout-cancel.test.sh`, `ScoutCancelWiringGuardTests.swift` |
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 | `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
+| `overture-run-duration-history.json` | App (`RunDurationHistoryStore.record`) | App (`RunDurationHistoryStore.load`) | 1 | none | `RunDurationHistoryTests.swift` |
+
+#1427: `overture-run-duration-history.json` is app-internal telemetry (the last 10 completed Reading-calendars
+runs, for the "~X remaining" estimate), NOT a cross-language contract: the app both writes and reads it, no
+script touches it, so its shape is pinned by `RunDurationHistoryTests`'s round-trip rather than a fixture. It
+lives in the handoff directory only to sit alongside the other run files; it is deliberately kept out of the
+live SwiftData store (that store's corruption history argues against new tables for low-stakes telemetry).
 
 `PageVerdict` (the token in each scout-extract result's `verdict` field) added `incomplete_extraction`
 in #1012: a page the run could only read part of. Its events are ingested but its source's content
