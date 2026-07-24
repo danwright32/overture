@@ -102,7 +102,13 @@ struct NativePathPlacementTests {
 
     // The #891 readable/unreadable counts and the #150/#152 health fold still land on the native path, and
     // on the SAME successful branch as the run: two shows are kept (readable), one has no venue and is
-    // dropped by the guard (unreadable), and the feed folds to a fresh baseline of the kept size.
+    // dropped by the guard, and the feed folds to a fresh baseline of the kept size.
+    //
+    // #1472: that drop is recorded as a STRUCTURAL GAP, not as an unreadable page. Carnegie's Algolia feed
+    // is parsed row by row with no per-event detail page to fetch, so a blank venue is what the publisher
+    // wrote, and counting it as a page Overture failed to open is what cost National Opera Center its
+    // gone-marking permanently. Both counts are asserted, so a future change cannot quietly move a drop from
+    // one column to the other.
     @Test func aNativeRunRecordsReadableUnreadableAndHealth() async throws {
         let ctx = try context()
         let s = carnegie(ctx)
@@ -113,7 +119,8 @@ struct NativePathPlacementTests {
                                  into: ctx)
 
         #expect(s.lastReadableCount == 2)
-        #expect(s.lastUnreadableCount == 1)
+        #expect(s.lastUnreadableCount == 0)
+        #expect(s.lastStructuralGapCount == 1)
         #expect(s.baselineFeedCount == 2)
         #expect(s.successfulCheckCount == 1)
         #expect(s.health == .ok)

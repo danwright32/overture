@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **778 sentences**, from 263 source files.
+Every sentence Overture can say to Dan: **779 sentences**, from 263 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1647,6 +1647,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
+"\(structuralGaps) of \(total) listings in the feed named no venue, so Overture left those out of the queue."
+    `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
 "\(subject) you to stop still \(verb) on calendars you watch: \(who). "

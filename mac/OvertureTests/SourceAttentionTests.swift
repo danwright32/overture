@@ -60,7 +60,7 @@ struct SourceAttentionTests {
         let s = source(readable: 16, baseline: 30)
         #expect(SourceAttention.needsALook(s) == false)
         #expect(s.readabilityNote?.contains("won't mark anything") == true)   // still said out loud
-        #expect(s.readabilityNoteIsSelfHealing == true)                       // but marked not-an-alarm
+        #expect(s.readabilityNoteIsInformationalOnly == true)                       // but marked not-an-alarm
     }
 
     // The other way a source forfeits its cancelling (#887): it read the page fine and could not reach
@@ -151,7 +151,7 @@ struct SourceAttentionTests {
 
         for s in cases {
             let showsAForfeitLine = (s.readabilityNote?.contains("won't mark anything") ?? false)
-                && !s.readabilityNoteIsSelfHealing
+                && !s.readabilityNoteIsInformationalOnly
             let sheetShowsAnActionableProblem = SourceGrade(s) == .failing || showsAForfeitLine
             // A source Dan is not watching is not in the sheet's working sections at all, and its scraper's
             // opinion is not work he owes anyone.

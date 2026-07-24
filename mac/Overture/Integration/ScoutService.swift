@@ -456,10 +456,18 @@ enum ScoutService {
         let usable = events.map(ExtractedEventGuard.placed)   // #1214: carry a rescued outdoor venue on
             .filter(ExtractedEventGuard.isUsable)
         // #1032: the drops split by family (venue vs title), the SAME helper the agent door counts
-        // through, so the two paths can never disagree. `total` is the tolerance-gate count; the title
+        // through, so the two paths can never disagree. `unreadTotal` is the tolerance-gate count; the title
         // share travels on so the Sources note names a titleless drop correctly rather than "no venue".
-        let rejection = ExtractedEventGuard.rejectionCounts(for: events)
-        let rejectedCount = rejection.total
+        //
+        // #1472: this path's venue gaps are the SOURCE'S OWN blank fields, not pages Overture failed to read.
+        // A native feed parses structured rows and never hops to a per-event detail page, so there is no page
+        // that could have failed (SourceKind.venueGapsAreStructural is where that is decided, once). Those rows
+        // are counted apart from `unreadTotal` and their listing links travel to the reconcile below as still
+        // listed, which is what keeps a stored show safe when its own row goes blank.
+        let kind = source?.kind ?? .algolia
+        let rejection = ExtractedEventGuard.rejectionCounts(
+            for: events, venueGapsAreStructural: kind.venueGapsAreStructural)
+        let rejectedCount = rejection.unreadTotal
 
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
         // own report. `apply` alone no longer reconciles, and using it here would make Carnegie silently
@@ -478,7 +486,12 @@ enum ScoutService {
                             // one whose shows were cancelled (#897/#917's live bug class). Handing the
                             // count over lets #887's tolerance gate forbid this run from concluding that
                             // anything is gone. It may still add and update.
-                            rejectedCount: rejectedCount),
+                            rejectedCount: rejectedCount,
+                            // #1472: the blank-venue rows this run saw, so the reconcile treats their shows as
+                            // still listed. Without this the exemption above would be the #887 bug it was
+                            // meant to prevent: a Met production whose venue field goes blank between runs
+                            // would look exactly like one that was cancelled.
+                            structuralGapURLs: rejection.structuralGapURLs),
             // #1302: derive applySweep's upcoming-only 'today' from THIS run's now, not the wall clock.
             // Without it a scout given an injected now (a test, or any non-real clock) had its events pass
             // the extractor's own now-relative upcoming filter only to be dropped again by applySweep
@@ -500,6 +513,9 @@ enum ScoutService {
                     unreadable: rejectedCount,
                     // #1032: the title share, so the note never calls a titleless drop "no venue".
                     titleUnreadable: rejection.titleRelated,
+                    // #1472: the source's own blank-venue rows, disclosed on the row as a plain fact rather
+                    // than counted as a reading failure that would cost it its cancelling.
+                    structuralGaps: rejection.structuralGapCount,
                     // #986/#1005: how many kept shows named WHERE they are, by the SAME rule the agent
                     // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
@@ -617,11 +633,12 @@ enum ScoutService {
     // there is nothing to record onto), where the agent path always has a real row.
     private static func recordCheck(on source: WatchedSource?, events: Int,
                                     health: FeedReconcile.FeedHealthState, now: Date,
-                                    unreadable: Int = 0, titleUnreadable: Int = 0, placed: Int = 0) {
+                                    unreadable: Int = 0, titleUnreadable: Int = 0,
+                                    structuralGaps: Int = 0, placed: Int = 0) {
         guard let source else { return }
         source.recordSuccessfulRead(events: events, unreadable: unreadable,
-                                    titleUnreadable: titleUnreadable, placed: placed,
-                                    feedHealth: health, now: now)
+                                    titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
+                                    placed: placed, feedHealth: health, now: now)
     }
 
     // #800: the accessors below are `nonisolated`. They touch nothing but UserDefaults, which is
@@ -696,7 +713,18 @@ enum ScoutService {
         // dropped shows may still ADD and UPDATE, but its silence about a show is not evidence the show
         // was cancelled. Defaulted to a clean sweep, so a caller that does not know cannot accidentally
         // claim one.
+        //
+        // #1472: this is now the UNREAD drops only (RejectionCounts.unreadTotal). A row the SOURCE published
+        // with no venue is not a page that failed, and is handed over below instead.
         var rejectedCount: Int = 0
+        // #1472: the listing links of rows this run SAW but could not import because the source published no
+        // venue for them. They go into the report's `seenSourceURLs`, so a stored show whose row went blank
+        // between runs is still counted as listed and can never be marked gone for it.
+        //
+        // This is the half that makes exempting those rows from `rejectedCount` safe rather than merely
+        // quieter, and it is why a row with no link of its own is never exempted (ExtractedEventGuard): with
+        // nothing to hand over there is nothing to protect the stored show with.
+        var structuralGapURLs: Set<String> = []
     }
 
     // #888 part B: one source sweeping its own feed, applied AND reconciled.
@@ -948,7 +976,10 @@ enum ScoutService {
                 // Presence is judged against the RAW feed's listing URLs, not just what we upserted, so
                 // a show we filtered out this run (newly blocked date, do-not-contact) isn't mistaken
                 // for one the venue cancelled (#133).
-                seenSourceURLs: Set(events.compactMap { $0.sourceUrl }),
+                // #1472: plus the rows this run saw and could not import because the source published no
+                // venue for them. A blank venue field is not a cancellation, and the show is right there on
+                // the calendar, so it counts as listed even though nothing was upserted from it.
+                seenSourceURLs: Set(events.compactMap { $0.sourceUrl }).union(feed.structuralGapURLs),
                 feedCount: events.count,
                 baseline: feed.baseline,
                 successfulCheckCount: feed.successfulCheckCount,

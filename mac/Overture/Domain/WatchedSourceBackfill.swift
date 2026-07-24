@@ -22,6 +22,35 @@ enum WatchedSourceBackfill {
         seedCarnegieRow(in: context, defaults: defaults)
         stampCarnegieProspects(in: context)
         migrateFeedAdapterKinds(in: context)
+        clearHtmlEraReadState(in: context)
+    }
+
+    // #1472: a native-feed row must carry no leftover state from the paid html read path, and National Opera
+    // Center proved that nothing was clearing it.
+    //
+    // #1237 flipped that source from .html onto OPERA America's feed and left its July 18 AI page read behind:
+    // a note describing an unrendered Vue.js shell (a page Overture no longer reads at all), a pinned hash
+    // whose `unreadable` verdict never promoted, and hasUnreadChanges still true. The native path writes none
+    // of those three, so none of them could ever clear on their own. The row therefore showed Dan a
+    // permanently false sentence, offered "Read this one now" on a page that is never fetched, and was
+    // promoted to the front of every scout by SourceSchedule's changed-first ordering, forever.
+    //
+    // Keyed on the STATE and not on the flip, deliberately: the conversion already happened on an earlier
+    // launch, so a hook at the flip site would never reach the live row. Idempotent (a cleared row has nothing
+    // to clear), and it leaves every .html source's pin state completely alone, since that is how the paid read
+    // path legitimately works.
+    private static func clearHtmlEraReadState(in context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        for source in all where source.kind.usesNativeExtractor {
+            guard source.hasUnreadChanges || source.pendingContentHash != nil
+                    || source.notes != nil || !source.pendingPageMonths.isEmpty
+            else { continue }
+            source.notes = nil
+            source.pendingContentHash = nil
+            source.pendingPageMonths = []
+            source.hasUnreadChanges = false
+        }
+        try? context.save()
     }
 
     // #1237: an OPERA America or VenueTix source Dan already watches was added before those adapters could
