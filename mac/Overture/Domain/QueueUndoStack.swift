@@ -49,8 +49,11 @@ struct QueueUndoEntry: Equatable, Sendable {
     let resultingStatus: ReviewStatus
     let resultingDismissReasonRaw: String?
 
-    // The title the Edit menu shows for this entry, e.g. "Dismiss: The Music Shop".
-    var menuLabel: String { "\(actionLabel): \(groupName)" }
+    // The Edit menu's title for this entry, e.g. "Undo Dismiss: The Music Shop". A WHOLE sentence in one
+    // place, not a fragment the menu prefixes: #863's guard rejects a view composing its own copy, and a
+    // sentence assembled at the call site is invisible to the copy inventory (#915), so Dan's PR would
+    // not show the words he is going to read.
+    var undoMenuTitle: String { "Undo \(actionLabel): \(groupName)" }
 
     // Is the row still exactly how this action left it? If anything moved it since (a background
     // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so the
@@ -79,8 +82,10 @@ final class QueueUndoStack {
 
     var canUndo: Bool { !entries.isEmpty }
 
-    // The Edit menu item's title, nil when there is nothing to undo (the item is then disabled).
-    var topLabel: String? { entries.last?.menuLabel }
+    // The Edit menu item's title. A plain "Undo" when there is nothing to undo, rather than nil, because
+    // the item is never disabled: it also carries TEXT undo, and a disabled menu item's key equivalent
+    // does not fire, so greying it out on an empty stack would kill Cmd+Z inside every text field.
+    var undoMenuTitle: String { entries.last?.undoMenuTitle ?? "Undo" }
 
     func record(_ entry: QueueUndoEntry) {
         entries.append(entry)
@@ -94,5 +99,50 @@ final class QueueUndoStack {
 
     func clear() {
         entries.removeAll()
+    }
+}
+
+// Where a Cmd+Z should go (#1412's second question, answered when that spike passed on 2026-07-24).
+//
+// The spike proved the app CAN own Cmd+Z without costing Dan ordinary text editing, and in the same
+// run it ruled out the obvious wiring. `NSApp.sendAction(undo:)` returns TRUE whenever any text field
+// holds focus, even with an empty undo stack and nothing typed: it reports that something ACCEPTED
+// the action, not that any work happened. So "forward first, fall back to the queue when that fails"
+// would make the queue undo permanently unreachable while a text field has focus.
+//
+// That is a live failure here rather than a nicety, because focus in this app is often INVISIBLE (a
+// TextEditor holds it with no visible ring). Dan would dismiss a show, press Cmd+Z, and watch nothing
+// happen, with nothing on screen explaining why.
+//
+// A pure function, so the rule is testable without the responder chain, which the test bundle cannot
+// reach at all. Only its two inputs are read from AppKit.
+enum UndoDestination: Equatable, Sendable {
+    case textEditing
+    case queueAction
+    case nothing
+}
+
+enum UndoRouting {
+    // Typing wins whenever the focused field has REAL pending edits, matching every other Mac app:
+    // undoing a dismiss while the cursor sits mid-sentence in an email body would be alarming. It only
+    // falls through to the queue when that field has nothing of its own to give back.
+    static func destination(textEditingCanUndo: Bool, queueCanUndo: Bool) -> UndoDestination {
+        if textEditingCanUndo { return .textEditing }
+        if queueCanUndo { return .queueAction }
+        return .nothing
+    }
+
+    // Whether the menu command hands the keystroke to the responder chain rather than reversing a queue
+    // action. Everything except a queue undo forwards, INCLUDING `.nothing`, and that is a safety
+    // property rather than a tidiness one.
+    //
+    // `undoManager?.canUndo` is a weaker signal than what the #1412 spike proved, since the spike passed
+    // with an item that ALWAYS forwards. If a focused field's undo manager is not reachable where the
+    // app reads it, that read comes back false and a keystroke that would have undone Dan's typing gets
+    // dropped. Forwarding on `.nothing` costs nothing (a chain with nothing to give back does nothing)
+    // and keeps the shipped behaviour identical to the version verified on screen while the stack is
+    // empty, which it is until #1414.
+    static func forwardsToResponderChain(_ destination: UndoDestination) -> Bool {
+        destination != .queueAction
     }
 }
