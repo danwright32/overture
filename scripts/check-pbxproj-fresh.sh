@@ -25,12 +25,14 @@ source "${SCRIPT_DIR}/ci-config.sh"
 
 PBXPROJ_REL="mac/Overture.xcodeproj/project.pbxproj"
 
-# Pure verdict over the two facts the gate turns on: does the installed xcodegen match the pinned version,
-# and (only when it does) is the committed .pbxproj byte-identical to a fresh regen. Prints the operator
-# message to stderr and returns a distinct code per outcome, so a fixture can drive every branch without
-# xcodegen: 0 = fresh, 1 = stale (BLOCK), 2 = cannot verify (version mismatch or xcodegen absent).
+# Pure verdict over the facts the gate turns on: does the installed xcodegen match the pinned version,
+# (only when it does) is the committed .pbxproj byte-identical to a fresh regen, and (only when it is not)
+# did the working tree ALREADY hold that fresh regen before this check ran. Prints the operator message to
+# stderr and returns a distinct code per outcome, so a fixture can drive every branch without xcodegen:
+# 0 = fresh, 1 = BLOCK (stale commit, or a regen that was never committed), 2 = cannot verify (version
+# mismatch or xcodegen absent).
 pbxproj_freshness_verdict() {
-  local installed_version="$1" pinned_version="$2" regen_matches_committed="$3"
+  local installed_version="$1" pinned_version="$2" regen_matches_committed="$3" worktree_held_regen="${4:-false}"
   # Version gate first: under a different (or absent) xcodegen we cannot tell staleness from harmless
   # byte drift, so we refuse to judge and say so, rather than block on a false "stale".
   if [[ "${installed_version}" != "${pinned_version}" ]]; then
@@ -40,6 +42,16 @@ pbxproj_freshness_verdict() {
   fi
   if [[ "${regen_matches_committed}" == "true" ]]; then
     return 0
+  fi
+  # The committed file is behind mac/project.yml either way, so both cases BLOCK (exit 1). What differs is
+  # what the operator should do next. When the working tree ALREADY held the fresh regen, they have done the
+  # regeneration; the problem is only that it is uncommitted, and this check restores the tree, so it has
+  # just reverted their regen. Telling them to "regenerate and commit" here is the loop #1480 hit: the regen
+  # they are sent to make is the one just thrown away. Name that instead of calling the file stale.
+  if [[ "${worktree_held_regen}" == "true" ]]; then
+    echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is regenerated but not committed. Your working tree already held the fresh 'xcodegen generate' output, so only the commit is behind mac/project.yml." >&2
+    echo "  This check restores the tree after regenerating, so it has just reverted your regen and nothing is staged. Redo it in one step: (cd mac && xcodegen generate) && git add ${PBXPROJ_REL} && git commit." >&2
+    return 1
   fi
   echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is stale. A fresh 'xcodegen generate' changes it, so the committed project file does not match mac/project.yml." >&2
   echo "  Regenerate and commit it before merging: cd mac && xcodegen generate, then commit ${PBXPROJ_REL}." >&2
@@ -54,23 +66,38 @@ check_pbxproj_fresh() {
   local dir="${1:-${REPO_ROOT}}"
   local installed
   if ! command -v xcodegen >/dev/null 2>&1; then
-    pbxproj_freshness_verdict "absent" "${XCODEGEN_PINNED_VERSION}" "true"
+    pbxproj_freshness_verdict "absent" "${XCODEGEN_PINNED_VERSION}" "true" "false"
     return $?
   fi
   installed="$(xcodegen --version 2>/dev/null | sed -E 's/^Version:[[:space:]]*//')"
   if [[ "${installed}" != "${XCODEGEN_PINNED_VERSION}" ]]; then
-    pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "true"
+    pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "true" "false"
     return $?
   fi
+  # Hash the working-tree file BEFORE the regen. Compared afterwards against the fresh output, this tells
+  # apart a genuinely stale commit (the operator has not regenerated) from a regen the operator already made
+  # but has not committed (#1480): in the latter the pre-regen file already equals the fresh output.
+  local before_hash=""
+  if [[ -f "${dir}/${PBXPROJ_REL}" ]]; then
+    before_hash="$(git -C "${dir}" hash-object "${PBXPROJ_REL}" 2>/dev/null || true)"
+  fi
   ( cd "${dir}/mac" && xcodegen generate >/dev/null )
-  local regen_matches="true"
+  local regen_matches="true" worktree_held_regen="false"
   if ! git -C "${dir}" diff --quiet -- "${PBXPROJ_REL}"; then
+    # A fresh regen differs from the COMMITTED file, so HEAD is behind mac/project.yml. If the working-tree
+    # file we hashed before already equalled that fresh regen, the operator had regenerated; only the commit
+    # is behind, and the restore below is about to undo their regen.
     regen_matches="false"
+    local after_hash
+    after_hash="$(git -C "${dir}" hash-object "${PBXPROJ_REL}" 2>/dev/null || true)"
+    if [[ -n "${before_hash}" && "${before_hash}" == "${after_hash}" ]]; then
+      worktree_held_regen="true"
+    fi
   fi
   # Leave the tree as we found it: the regen above may have rewritten the committed file (and possibly
   # the schemes alongside it). Restoring the whole .xcodeproj keeps a clean tree whether fresh or stale.
   git -C "${dir}" checkout -- "mac/Overture.xcodeproj" 2>/dev/null || true
-  pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "${regen_matches}"
+  pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "${regen_matches}" "${worktree_held_regen}"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running the gate, so

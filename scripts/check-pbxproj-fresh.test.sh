@@ -60,9 +60,11 @@ assert_not_contains() {
   fi
 }
 
-# Runs the verdict, capturing its stderr message in MSG and its exit code in CODE.
+# Runs the verdict, capturing its stderr message in MSG and its exit code in CODE. The fourth argument
+# (whether the working tree already held the fresh regen) is optional so the version-mismatch and absent
+# cases can omit it, matching how the real gate calls the verdict on its early-return paths.
 run_verdict() {
-  MSG="$(pbxproj_freshness_verdict "$1" "$2" "$3" 2>&1)"
+  MSG="$(pbxproj_freshness_verdict "$1" "$2" "$3" "${4:-false}" 2>&1)"
   CODE=$?
 }
 
@@ -70,11 +72,26 @@ run_verdict() {
 run_verdict "2.45.3" "2.45.3" "true"
 assert_eq "fresh: exit 0" "0" "${CODE}"
 
-# STALE (the mutation this guard exists to catch): versions match but a fresh regen would change the
-# committed pbxproj. MUST block with exit 1 and a "stale" message.
-run_verdict "2.45.3" "2.45.3" "false"
+# STALE (the mutation this guard exists to catch): versions match, a fresh regen would change the committed
+# pbxproj, and the working tree did NOT already hold that regen (the genuinely-stale commit). MUST block
+# with exit 1 and a message that says stale and tells the operator to regenerate and commit.
+run_verdict "2.45.3" "2.45.3" "false" "false"
 assert_eq "stale: exit 1 (BLOCK)" "1" "${CODE}"
 assert_contains "stale: message says stale" "${MSG}" "stale"
+assert_contains "stale: message says to regenerate" "${MSG}" "xcodegen generate"
+
+# REGENERATED-BUT-NOT-COMMITTED (#1480): versions match and a fresh regen still differs from the COMMITTED
+# file, but the working tree already held exactly that fresh output before this check ran. HEAD is behind
+# either way, so it MUST still block (exit 1); but the operator already regenerated, and this check restores
+# the tree, so it has just reverted their regen. The message must say that (not the bare "regenerate and
+# commit", which sends them in a loop: the regen they are told to make is the one just thrown away) and must
+# NOT tell them the committed file is stale as if they had never touched it.
+run_verdict "2.45.3" "2.45.3" "false" "true"
+assert_eq "not-committed: exit 1 (BLOCK)" "1" "${CODE}"
+assert_contains "not-committed: message says not committed" "${MSG}" "not committed"
+assert_contains "not-committed: message names the revert" "${MSG}" "reverted"
+assert_not_contains "not-committed: does NOT call the file stale" "${MSG}" "is stale"
+assert_contains "not-committed: still points at a commit" "${MSG}" "git commit"
 
 # VERSION MISMATCH: the installed xcodegen is not the pinned one, so freshness cannot be verified at all
 # (byte drift between versions would look like staleness). MUST be its own outcome (exit 2) with a
