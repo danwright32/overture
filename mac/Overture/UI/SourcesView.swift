@@ -697,7 +697,7 @@ struct SourcesView: View {
                     Button {
                         stopWatching(source)
                     } label: {
-                        Text("Stop watching")
+                        Text(SourceFixConfirmCopy.stopWatchingTitle)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkSoft)
                             .padding(.horizontal, OVSpacing.sm)

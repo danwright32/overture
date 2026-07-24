@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **778 sentences**, from 261 source files.
+Every sentence Overture can say to Dan: **779 sentences**, from 261 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -543,8 +543,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Fit tier"
     `Domain/OutcomePatterns.swift`
-"Fix a source's address or confirm a page is right, and I'll read the ones you fix."
-    `UI/ScoutSummaryView.swift`
 "Fix the address"
     `UI/SourceFixConfirmActions.swift`
 "Follow-up sent to \(org)"
@@ -626,6 +624,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "I read \(read.count) months of that calendar (\(name(first)) to \(name(last)))."
     `UI/LeadIntakeModel.swift`
+"I'll read the ones you fix."
+    `UI/ScoutSummaryView.swift`
 "If another Overture window is open, use that one. Otherwise quit and reopen Overture."
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
@@ -1233,7 +1233,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Stop the reply drafting run"
     `UI/DraftReviewView.swift`
 "Stop watching"
-    `UI/SourcesView.swift`
+    `UI/SourceFixConfirmActions.swift`
 "Stopped at their request"
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
@@ -1246,6 +1246,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Tagged as returning client \(namedClient): shows surface up to a year ahead."
     `Domain/ClientTagCopy.swift`
+"Take this source off the watchlist. You can put it back any time"
+    `UI/SourceFixConfirmActions.swift`
 "Thalia Spanish Theatre"
     `Domain/VenueParser.swift`
 "That calendar has more months on it (\(list(unreachable.map(name)))), but it "
