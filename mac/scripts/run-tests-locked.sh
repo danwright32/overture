@@ -132,9 +132,23 @@ main() {
     output_file="$(mktemp)"
     # tee, so the run still streams live: a suite that only prints at the end looks hung (#1006's
     # investigation was slow enough without waiting blind).
+    #
+    # #1459: read PIPESTATUS with NOTHING run in between, so `set +e` here rather than `|| true` on
+    # the pipeline. Both survive `set -e`, but under `pipefail` a red xcodebuild fails the whole
+    # pipeline, which is exactly when `|| true` runs, and `true` is itself a pipeline, so it
+    # overwrites PIPESTATUS with (0):
+    #
+    #   bash -c 'set -euo pipefail; (exit 65) | tee /dev/null || true; echo ${PIPESTATUS[0]}'  -> 0
+    #
+    # So test_exit_code read 0 on precisely the runs where it should read 65, run_outcome took its
+    # exit-0 branch, and every genuine failure came back "crashed": retried as a #1331 flake, its
+    # `Failing tests:` list buried, and signed off with "the code was never the problem". The exact
+    # inverse of the distinction #1006 built.
+    set +e
     flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test \
-      2>&1 | tee "${output_file}" || true
+      2>&1 | tee "${output_file}"
     test_exit_code="${PIPESTATUS[0]}"
+    set -e
 
     for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
       kill "${pid}" 2>/dev/null || true
