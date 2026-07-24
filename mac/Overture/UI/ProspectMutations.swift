@@ -254,10 +254,14 @@ enum ProspectMutations {
     // pinned and not just the rule behind it (#887). Threading ONE read through also means the block and its
     // undo sweep against the SAME calendar, rather than re-reading the export at undo time and possibly
     // judging against different bookings than the block did.
+    // #1473: `undo` and `undoDismissOf` fold this block into the dismiss that led to it, so one press of
+    // Cmd+Z takes both back. They are a pair and both optional: the Days Off sheet blocks days that no
+    // dismiss led to, and passes neither.
     @discardableResult
     static func blockDaysOff(start: String, end: String, note: String? = nil,
                              export: DayOffEditing.Export = DownbeatBridge.loadedExport(),
-                             context: ModelContext, feedback: ActionFeedback) -> Bool {
+                             context: ModelContext, feedback: ActionFeedback,
+                             undo: QueueUndoStack? = nil, undoDismissOf naturalKey: String? = nil) -> Bool {
         let range = QueueModel.runDateLabel(start: start, end: end)
         let result = DayOffEditing.add(start: start, end: end, note: note, export: export, into: context)
         guard result == .added else {
@@ -268,6 +272,12 @@ enum ProspectMutations {
         // Dan as "Jul 3 to Jul 5 is now blocked" while every show those nights stayed draftable and
         // sendable. Confirm it landed before saying so, and before offering an Undo for it.
         guard context.saveOrWarn(org: range, feedback: feedback) else { return false }
+        // #1473: attached only once the write is CONFIRMED, under the same guard as the acknowledgment
+        // above. An entry promising to remove a day off that a refused range never wrote would make the
+        // next Cmd+Z delete whatever else happened to sit on those dates.
+        if let undo, let naturalKey {
+            undo.attachBlockedDaysOff(start: start, end: end, toDismissOf: naturalKey)
+        }
         // The Undo must reverse the whole action, not just the row: DayOffEditing.remove re-runs the same
         // sweep, so every show this block flagged is un-flagged and draftable again. A show left flagged
         // against a day that is no longer blocked would be held back from drafting and sending, silently.

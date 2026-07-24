@@ -65,7 +65,7 @@ struct QueueUndoApplyTests {
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
                                    priorDismissReasonRaw: nil, priorDismissedAt: nil)
 
-        #expect(QueueUndo.apply(entry, to: p))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
         #expect(p.status == .contacted)
         #expect(p.dismissReasonRaw == nil)
         #expect(p.dismissedAt == nil)
@@ -91,7 +91,7 @@ struct QueueUndoApplyTests {
                                    priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit)
 
         // ...and then takes that back.
-        #expect(QueueUndo.apply(entry, to: p))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
         #expect(p.status == .dismissed)
         #expect(p.dismissedAt == trueExit)   // NOT today
         #expect(p.dismissReasonRaw == DismissReason.tooFar.rawValue)
@@ -114,7 +114,7 @@ struct QueueUndoApplyTests {
         // A retirement sweep re-labels the cut between the action and the undo.
         p.markDismissed(reason: .wentBy)
 
-        #expect(QueueUndo.apply(entry, to: p) == false)
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])) == false)
         #expect(p.dismissReasonRaw == DismissReason.wentBy.rawValue)   // the newer reason survives
         #expect(p.status == .dismissed)                                // and nothing was restored
     }
@@ -132,7 +132,7 @@ struct QueueUndoApplyTests {
 
         p.clearDismissal(to: .contacted)
 
-        #expect(QueueUndo.apply(entry, to: p) == false)
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])) == false)
         #expect(p.status == .contacted)
     }
 
@@ -147,7 +147,7 @@ struct QueueUndoApplyTests {
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
                                    priorDismissReasonRaw: nil, priorDismissedAt: nil)
 
-        #expect(QueueUndo.apply(entry, to: nil) == false)
+        #expect(QueueUndo.apply(entry, to: nil, in: ctx, export: (bookings: [], blockedDates: [])) == false)
     }
 
     // An undo already performed cannot be performed twice: the second attempt finds the row in its
@@ -161,8 +161,8 @@ struct QueueUndoApplyTests {
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
                                    priorDismissReasonRaw: nil, priorDismissedAt: nil)
 
-        #expect(QueueUndo.apply(entry, to: p))
-        #expect(QueueUndo.apply(entry, to: p) == false)
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])) == false)
         #expect(p.status == .queued)
     }
 
@@ -237,7 +237,7 @@ struct QueueUndoApplyTests {
         #expect(p.status == .queued)
 
         let entry = try #require(stack.takeTop())
-        #expect(QueueUndo.apply(entry, to: p))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
         #expect(p.status == .new)
     }
 }
@@ -267,7 +267,7 @@ struct QueueUndoWiringGuardTests {
         #expect(app.contains(".environment(undoRequest)"))
         #expect(root.contains("onChange(of: undoRequest.token)"))
         #expect(root.contains("performQueueUndo()"))
-        #expect(root.contains("QueueUndo.apply(entry, to: model)"))
+        #expect(root.contains("QueueUndo.apply(entry, to: model, in: context)"))
     }
 
     // The entry is taken off the stack BEFORE it is known to be applicable. A stale entry is spent
