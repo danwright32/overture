@@ -78,15 +78,18 @@ struct StopWatchingIsReversibleTests {
     @Test func aRemovedRowOffersAPermanentWayBack() {
         let view = sourcesView()
 
-        guard let watchAgain = view.range(of: "Text(\"Watch again\")") else {
+        // #1451: anchored on the words, not on the button that carries them. This used to look for
+        // `Text("Watch again")`, the sheet's own hand-built copy of the capsule idiom, so moving that
+        // styling onto the shared OVCapsuleButton reddened a test about a way back that had not moved.
+        guard let watchAgain = view.range(of: "\"Watch again\"") else {
             Issue.record("the Removed row must offer a 'Watch again' button")
             return
         }
         // Drawn only for a source DAN removed. An org that asked him to stop is a different grade, a
         // different section, and never gets this button.
-        let preceding = view[..<watchAgain.lowerBound].suffix(600)
-        #expect(preceding.contains("SourceGrade(source) == .removed"))
-        #expect(preceding.contains("resumeWatching(source)"))
+        #expect(view[..<watchAgain.lowerBound].suffix(600).contains("SourceGrade(source) == .removed"))
+        // And it is the way BACK: the label alone would be satisfied by a button that did nothing.
+        #expect(view[watchAgain.upperBound...].prefix(200).contains("resumeWatching(source)"))
     }
 
     // A refusal must never pass silently as though it worked. The sheet should never draw a resume control

@@ -148,33 +148,57 @@ struct SourcesSheetSaysEachThingOnceTests {
 //
 // A guard on the view's source, matching this project's convention for a change with no behavioural
 // surface of its own.
-@Suite("Stop watching reads as an action (#842)")
+//
+// #1451: the idiom is pinned ONCE, on the component that draws it, and the sheet is checked only for
+// reaching that component. The old shape scanned SourcesView for `Capsule` and `strokeBorder`, which
+// meant the guard was really asserting that the sheet keeps its OWN copy of the styling: the day that
+// copy moved into OVCapsuleButton, the guard went red with nothing on screen having changed. The two
+// claims are separate (#887), because a component that is styled right but never called draws nothing,
+// and a call site that reaches a component with no border draws a label.
+@Suite("The Sources sheet's per-source actions read as actions (#842/#1451)")
 struct StopWatchingAffordanceGuardTests {
     private var sourcesView: String { SourceGuardHelper.source("Overture/UI/SourcesView.swift") }
+    private var capsuleButton: String { SourceGuardHelper.source("Overture/UI/OVCapsuleButton.swift") }
+
+    // The same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, rather than a
+    // fourth line of plain text. One visual language for "you can do this", in one place.
+    @Test func theSharedComponentCarriesTheAppsSecondaryActionAffordance() {
+        #expect(capsuleButton.contains("Capsule"), "it must be shaped like an action, not like a label")
+        #expect(capsuleButton.contains("strokeBorder"),
+                "a border is what separates an action from a statement")
+    }
 
     // #1426: anchored on the constant rather than the literal. Both surfaces that offer this action now
     // take its words from SourceFixConfirmCopy.stopWatchingTitle, so the sheet no longer spells them out.
-    @Test func stopWatchingCarriesTheAppsSecondaryActionAffordance() {
-        guard let range = sourcesView.range(of: "stopWatchingTitle") else {
-            Issue.record("the Stop watching button is gone")
-            return
+    //
+    // Stop watching is the load-bearing one, but all three of the row's trailing actions go through the
+    // component, so none of them can drift away from the other two on a future spacing or colour change.
+    @Test func everyRowActionIsDrawnByTheSharedComponent() {
+        for call in ["OVCapsuleButton(label: WatchlistEditing.readOneTitle",
+                     "OVCapsuleButton(label: SourceFixConfirmCopy.stopWatchingTitle",
+                     "OVCapsuleButton(label: \"Watch again\""] {
+            #expect(sourcesView.contains(call),
+                    "\(call)…) is how this action gets its affordance; a hand-built button drifts")
         }
-        let button = sourcesView[range.lowerBound...].prefix(500)
+    }
 
-        // The same bordered-capsule idiom the queue's own secondary action (Dismiss) uses, rather than a
-        // fourth line of plain text. One visual language for "you can do this".
-        #expect(button.contains("Capsule"), "it must be shaped like an action, not like a label")
-        #expect(button.contains("strokeBorder"), "a border is what separates an action from a statement")
+    // And the sheet may not grow a fourth private copy of the idiom beside them, which is the drift this
+    // whole guard exists to prevent: two buttons match only because someone matched them by eye.
+    @Test func theSheetKeepsNoPrivateCopyOfTheIdiom() {
+        #expect(!sourcesView.contains("Capsule().strokeBorder"),
+                "this styling belongs to OVCapsuleButton; the sheet must call it, not re-draw it")
     }
 
     // It must not read as a failure, and it must not shout: stopping a source is Dan's ordinary,
-    // reversible housekeeping, not an alarm.
+    // reversible housekeeping, not an alarm. Checked on the call site's own line, where its tint is now
+    // stated, so a neighbouring control's colour can't stand in for it.
     @Test func itIsNotStyledAsAnError() {
         guard let range = sourcesView.range(of: "stopWatchingTitle") else {
             Issue.record("the Stop watching button is gone")
             return
         }
-        #expect(!sourcesView[range.lowerBound...].prefix(500).contains("OVColor.rust"))
+        let lineEnd = sourcesView[range.upperBound...].firstIndex(of: "\n") ?? sourcesView.endIndex
+        #expect(!sourcesView[range.lowerBound..<lineEnd].contains("OVColor.rust"))
     }
 }
 
