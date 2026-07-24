@@ -160,4 +160,51 @@ struct WatchedSourceBackfillTests {
 
         #expect(show.sourceIds.sorted() == [WatchedSource.carnegieId, "presenter-b"].sorted())
     }
+
+    // #1472: #1237 flipped National Opera Center from .html onto OPERA America's native feed and left its
+    // July 18 AI page read behind. The native path writes none of that state, so none of it could ever
+    // clear on its own: the row showed Dan a note describing an unrendered Vue.js shell (a page Overture no
+    // longer fetches at all), offered "Read this one now" against a pinned hash that will never promote, and
+    // was pushed to the front of every scout by SourceSchedule's changed-first ordering, permanently.
+    //
+    // Keyed on the STATE rather than on the conversion, because the conversion already happened on an
+    // earlier launch: a hook at the flip site would never reach the live row this exists to repair.
+    @Test func aNativeFeedRowIsStrippedOfItsLeftoverHtmlEraRead() throws {
+        let ctx = try context()
+        let opera = WatchedSource(sourceId: "opera-america", orgName: "National Opera Center",
+                                  listingsURL: "https://operaamerica.org/calendar", kind: .operaAmericaFeed)
+        ctx.insert(opera)
+        opera.notes = "The pinned page is an unrendered Vue.js single-page app shell."
+        opera.pendingContentHash = "july-18-hash"
+        opera.pendingPageMonths = ["2026-07"]
+        opera.hasUnreadChanges = true
+
+        WatchedSourceBackfill.run(in: ctx, defaults: defaults())
+
+        #expect(opera.notes == nil)
+        #expect(opera.pendingContentHash == nil)
+        #expect(opera.pendingPageMonths.isEmpty)
+        #expect(opera.hasUnreadChanges == false)
+    }
+
+    // The contrast, and the reason the test above is not a licence to wipe pin state generally: on an .html
+    // source that same state IS the paid read path (a changed page is hashed, pinned, and read on the next
+    // manual scout), so it must be left exactly as it was found.
+    @Test func anHtmlSourcesPendingReadIsLeftAlone() throws {
+        let ctx = try context()
+        let kaufman = WatchedSource(sourceId: "kaufman", orgName: "Kaufman Music Center",
+                                    listingsURL: "https://kaufman.example/events", kind: .html)
+        ctx.insert(kaufman)
+        kaufman.notes = "Read 30 shows across four months."
+        kaufman.pendingContentHash = "pending-hash"
+        kaufman.pendingPageMonths = ["2026-07"]
+        kaufman.hasUnreadChanges = true
+
+        WatchedSourceBackfill.run(in: ctx, defaults: defaults())
+
+        #expect(kaufman.notes == "Read 30 shows across four months.")
+        #expect(kaufman.pendingContentHash == "pending-hash")
+        #expect(kaufman.pendingPageMonths == ["2026-07"])
+        #expect(kaufman.hasUnreadChanges)
+    }
 }

@@ -290,7 +290,7 @@ struct SourceReadabilityPersistenceTests {
 
     // A feed that came back smaller but read every show cleanly: this IS the self-healing hold.
     @Test func aShrunkenButCleanlyReadFeedIsTheSelfHealingHold() {
-        #expect(SourceReadability.noteIsSelfHealingHold(readable: 16, unreadable: 0, baseline: 30))
+        #expect(SourceReadability.noteIsInformationalOnly(readable: 16, unreadable: 0, baseline: 30))
         // And that is indeed the sentence it produces.
         #expect(SourceReadability.note(readable: 16, unreadable: 0, baseline: 30)?
             .contains("until the smaller calendar holds") == true)
@@ -301,14 +301,14 @@ struct SourceReadabilityPersistenceTests {
     @Test func aForfeitLineIsNotTheSelfHealingHoldEvenWhenTheFeedAlsoShrank() {
         #expect(FeedReconcile.unreadPagesForfeitAbsence(readable: 20, unreadable: 10))   // it is a forfeit
         #expect(FeedReconcile.shrunkenFeedForfeitsAbsence(readable: 20, baseline: 30))   // and it shrank
-        #expect(SourceReadability.noteIsSelfHealingHold(readable: 20, unreadable: 10, baseline: 30) == false)
+        #expect(SourceReadability.noteIsInformationalOnly(readable: 20, unreadable: 10, baseline: 30) == false)
     }
 
     // No note at all (healthy, at size) is not a self-healing hold; nor is a within-tolerance stray drop,
     // which shows a sentence but carries no cancellation consequence.
     @Test func noNoteAndAWithinToleranceDropAreNotTheSelfHealingHold() {
-        #expect(SourceReadability.noteIsSelfHealingHold(readable: 30, unreadable: 0, baseline: 30) == false)
+        #expect(SourceReadability.noteIsInformationalOnly(readable: 30, unreadable: 0, baseline: 30) == false)
         #expect(SourceReadability.note(readable: 39, unreadable: 1, baseline: 40) != nil)               // has a line
-        #expect(SourceReadability.noteIsSelfHealingHold(readable: 39, unreadable: 1, baseline: 40) == false)
+        #expect(SourceReadability.noteIsInformationalOnly(readable: 39, unreadable: 1, baseline: 40) == false)
     }
 }

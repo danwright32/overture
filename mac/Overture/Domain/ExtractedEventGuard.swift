@@ -244,24 +244,61 @@ enum ExtractedEventGuard {
     // titleless drop correctly instead of calling it "no venue". Usable events contribute nothing. Both
     // ingest doors (the agent extract run and the native Carnegie sweep) count through this one function,
     // so they can never disagree on which drops were about a venue.
-    static func rejectionCounts(for events: [ExtractedEvent]) -> RejectionCounts {
-        var venue = 0, title = 0
+    //
+    // #1472: and split again, by whether the missing venue is a READING FAILURE or the SOURCE'S OWN blank
+    // field. `venueGapsAreStructural` is the caller's path saying which it is (SourceKind.venueGapsAreStructural
+    // is the one place that is decided): a native feed parses structured rows and never hops to a per-event
+    // detail page, so a blank venue there is data entry, not a page Overture could not open. Defaulted to
+    // false, the suspicious reading, so a caller that does not know cannot accidentally excuse a broken
+    // scraper.
+    //
+    // A structural gap is exempted ONLY when the row carries its own listing link, and that condition is
+    // load-bearing rather than defensive. The exemption's whole safety argument is that the row can be handed
+    // to the reconcile as still listed (`structuralGapURLs` -> FeedCheck -> SourceReport.seenSourceURLs), so a
+    // stored show whose row went blank between runs cannot be struck for it. A row with no link cannot be
+    // handed over, so it keeps counting against readability. That is every VenueTix and OvationTix row.
+    static func rejectionCounts(for events: [ExtractedEvent],
+                                venueGapsAreStructural: Bool = false) -> RejectionCounts {
+        var venue = 0, title = 0, structural = 0
+        var structuralURLs = Set<String>()
         for event in events {
             guard let reason = rejection(for: event) else { continue }
-            if reason.isAboutVenue { venue += 1 } else { title += 1 }
+            guard reason.isAboutVenue else { title += 1; continue }
+            let link = (event.sourceUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if venueGapsAreStructural, !link.isEmpty {
+                structural += 1
+                structuralURLs.insert(link)
+            } else {
+                venue += 1
+            }
         }
-        return RejectionCounts(venueRelated: venue, titleRelated: title)
+        return RejectionCounts(venueRelated: venue, titleRelated: title,
+                               structuralGapCount: structural, structuralGapURLs: structuralURLs)
     }
 }
 
 // #1032: a run's dropped shows, split into the family the Sources note's "no venue on their own detail
-// page" sentence is about (the three venue reasons) and the one it is not (a titleless row). `total` is
-// every dropped event, which is what the #887 cancellation-tolerance gate counts, since a dropped event
-// of ANY reason is absent from the feed the reconcile reads.
+// page" sentence is about (the three venue reasons) and the one it is not (a titleless row).
+//
+// #1472: and split once more, because "we could not read this show's page" and "the source published no
+// venue for this show" are opposite facts that were being added together. `unreadTotal` is what the #887
+// cancellation-tolerance gate measures: the drops that suggest this run does not know what else it missed.
+// `structuralGapCount` is the rest, disclosed on the row but costing the source nothing, with
+// `structuralGapURLs` carrying those rows into the reconcile as still listed so no stored show can be
+// struck for a row that was present all along.
+//
+// It was ONE number (`total`) and that name is deliberately gone rather than redefined: every call site had
+// to be re-read and told which of the two questions it was asking.
 struct RejectionCounts: Equatable, Sendable {
     var venueRelated: Int
     var titleRelated: Int
-    var total: Int { venueRelated + titleRelated }
+    var structuralGapCount: Int = 0
+    var structuralGapURLs: Set<String> = []
+    // The #887 count. A dropped event is absent from the feed the reconcile reads, so a run that could not
+    // read part of what it looked at may still add and update but may not conclude anything is gone.
+    var unreadTotal: Int { venueRelated + titleRelated }
+    // Everything this run threw away, for a caller that wants to report the whole picture.
+    var droppedTotal: Int { unreadTotal + structuralGapCount }
 }
 
 // One rejected event, kept so it can be reported against its source rather than vanishing.

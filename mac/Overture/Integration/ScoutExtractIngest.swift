@@ -136,7 +136,12 @@ enum ScoutExtractIngest {
                                              baseline: health.baseline,
                                              successfulCheckCount: source.successfulCheckCount,
                                              verdict: effectiveVerdict,
-                                             rejectedCount: rejection.total),
+                                             // #1472: `unreadTotal`, which on this path is still every drop.
+                                             // An .html source IS read page by page, so a venue-less row is a
+                                             // suspected reading failure until the run itself can say the page
+                                             // publishes no venue (#1469), which is where this path gains the
+                                             // same exemption the native feeds have.
+                                             rejectedCount: rejection.unreadTotal),
                 today: today, sourceIds: [source.sourceId], into: context)
             outcome.merge(applied)
 
@@ -160,7 +165,7 @@ enum ScoutExtractIngest {
                 // hash or clearing the unread flag here would mean never going back for the rest of it:
                 // the source would report healthy and unchanged forever, having been read exactly once.
                 recordPartialCheck(on: source, events: events.count, now: now,
-                                   unreadable: rejection.total, titleUnreadable: rejection.titleRelated,
+                                   unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
                                    placed: placedCount)
             } else {
                 recordSuccess(on: source, events: events.count, health: health, now: now,
@@ -171,7 +176,7 @@ enum ScoutExtractIngest {
                               // Dan must not skim.
                               // #1032: the title share rides alongside the total, so the note names a
                               // titleless drop correctly instead of calling it "no venue".
-                              unreadable: rejection.total, titleUnreadable: rejection.titleRelated,
+                              unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
                               placed: placedCount)
             }
             outcome.sources.append(ScoutService.SourceResult(

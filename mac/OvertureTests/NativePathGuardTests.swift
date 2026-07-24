@@ -100,9 +100,25 @@ struct NativePathGuardTests {
 // bitten this repo three times. The agent path is only safe because it hands its rejectedCount to
 // #887's tolerance gate, which then forbids that run from concluding anything is gone.
 //
-// A CONTRAST PAIR, and they must be read together: the second is what stops the first being vacuous.
+// #1472 changed which SHOW that protection covers on a NATIVE feed, and did not remove it. A blanket
+// "this run may cancel nothing" was the right answer while every drop was assumed to be a detail page
+// Overture could not open. On a feed parsed row by row there is no detail page to fail: a blank venue is
+// the publisher's own empty field (OPERA America leaves 34 of its 92 NY-area rows that way, on every
+// scout, forever), and disarming the whole source for it cost National Opera Center its cancellation
+// detection permanently, with nothing Dan could do to clear it.
+//
+// So the protection is now aimed rather than broad, and three separate rules hold it up:
+//
+//   1. the show behind the blank row is protected precisely, by carrying that row's own listing link into
+//      the reconcile as still listed (asserted below, and end to end in StructuralVenueGapTests);
+//   2. a feed whose rows are being dropped WHOLESALE also comes back short, and a run too small to be
+//      credible as this source's size can still cancel nothing (#897, ShrunkenFeedCannotCancelTests);
+//   3. an .html source, whose events really are read page by page, keeps the blanket rule until its own
+//      run can say the page publishes no venue (#1469).
+//
+// A CONTRAST TRIO, and they must be read together: each one is what stops the others being vacuous.
 @MainActor
-@Suite("A native run that dropped events cannot cancel a show (#987)")
+@Suite("What a native run that dropped events may still say (#987/#1472)")
 struct NativePathCannotCancelTests {
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self, WatchedSource.self]),
@@ -156,9 +172,16 @@ struct NativePathCannotCancelTests {
             defaults: UserDefaults(suiteName: "NativeCancel-\(UUID().uuidString)")!)
     }
 
-    // THE hazard. This run threw an event away, so it does not know what else its feed failed to carry.
-    // It may add and update; it may not conclude that last time's show is gone.
-    @Test func aNativeRunThatDroppedAnEventDoesNotMarkLastTimesShowAsMissing() async throws {
+    // #1472: an UNRELATED show is no longer sheltered by somebody else's blank venue field. This feed came
+    // back its full size, one of its rows carries no venue, and the show that vanished from it is not that
+    // row: nothing about a publisher's empty field says anything about the show that is simply not listed
+    // any more, so the run may say so. It is one miss, not a cancellation (goneThreshold is 2), so a single
+    // odd run still cannot take a show away on its own.
+    //
+    // This assertion was the opposite before #1472, and the flip is the whole point: the blanket rule is
+    // what left National Opera Center unable to mark ANY of its shows gone, forever, over 34 rows OPERA
+    // America publishes with an empty venue on every scout.
+    @Test func aNativeRunThatDroppedAnEventCanStillCancelAnUnrelatedShow() async throws {
         let ctx = try context()
         establishedCarnegie(ctx)
         let stranded = showItListedLastTime(ctx)
@@ -166,7 +189,29 @@ struct NativePathCannotCancelTests {
         try await runNativeScout([event("Kept", venue: "Zankel Hall"),
                                   event("Dropped", venue: nil)], into: ctx)
 
+        #expect(stranded.missedScoutCount == 1)
+    }
+
+    // And the show the drop is actually ABOUT keeps its full protection, which is what makes the test above
+    // safe rather than merely permissive. Same run, same blank row, but this time the stranded show IS that
+    // row's show: it is listed on the calendar right now, with an empty venue field, so it is not gone and
+    // must never accrue a miss. Its listing link is what carries that fact into the reconcile.
+    @Test func theShowBehindTheBlankRowIsNeverMarkedMissing() async throws {
+        let ctx = try context()
+        establishedCarnegie(ctx)
+        let stranded = showItListedLastTime(ctx)
+
+        try await runNativeScout([event("Kept", venue: "Zankel Hall"),
+                                  blankVenueRowFor(stranded)], into: ctx)
+
         #expect(stranded.missedScoutCount == 0)
+    }
+
+    // The blank-venue row for a show already in the store: same listing link, no venue. This is the Tosca
+    // shape from #1472, where one production of a run loses its venue while its siblings keep theirs.
+    private func blankVenueRowFor(_ p: Prospect) -> ExtractedEvent {
+        ExtractedEvent(title: p.groupName, presenter: p.groupName, venue: nil,
+                       performanceDate: p.performanceDate, sourceUrl: p.sourceListingURL)
     }
 
     // The contrast, and the reason the test above is not vacuous. Same source, same stranded show, same

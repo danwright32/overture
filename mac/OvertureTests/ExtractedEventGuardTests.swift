@@ -357,7 +357,10 @@ struct ScoutExtractResultsGuardTests {
         ])
         #expect(counts.venueRelated == 3)
         #expect(counts.titleRelated == 1)
-        #expect(counts.total == 4)
+        // #1472: on the default (an .html source, whose events ARE read page by page) every drop is still a
+        // suspected reading failure, so the count the #887 tolerance measures is unchanged.
+        #expect(counts.unreadTotal == 4)
+        #expect(counts.structuralGapCount == 0)
     }
 
     @Test func rejectionCountsAreZeroWhenEveryEventIsUsable() {
@@ -366,7 +369,8 @@ struct ScoutExtractResultsGuardTests {
             extracted("B", venue: "Carnegie Hall")
         ])
         #expect(counts == RejectionCounts(venueRelated: 0, titleRelated: 0))
-        #expect(counts.total == 0)
+        #expect(counts.unreadTotal == 0)
+        #expect(counts.droppedTotal == 0)
     }
 }
 

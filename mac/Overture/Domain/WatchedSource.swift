@@ -134,6 +134,13 @@ final class WatchedSource {
     // of the venue drops, so it counts these apart instead of mislabeling a titleless row. Defaulted, so
     // existing rows migrate cleanly and simply carry no title-drop history.
     var lastUnreadableTitleCount: Int = 0
+    // #1472: rows the last run did not import because the SOURCE published no venue for them, kept apart from
+    // `lastUnreadableCount` rather than added to it. OPERA America leaves 34 of its 92 NY-area rows blank, per
+    // production, on every scout; counted as unreadable pages that is 37% against a 5% tolerance, so the
+    // source forfeited gone-marking forever and sat in the toolbar badge with nothing Dan could do about it.
+    // Disclosed on the row (SourceReadability) and deliberately absent from SourceAttention.needsALook.
+    // Defaulted, so existing rows migrate cleanly and simply carry no history of it.
+    var lastStructuralGapCount: Int = 0
 
     // #986: how many of the last run's kept shows said WHERE they are, and whether this source has EVER said
     // so. #970's gate reads only that `location` string (EventPlace.resolve never sees the venue), so a run
@@ -199,16 +206,19 @@ final class WatchedSource {
     // question the next reconcile will ask, and clears itself the moment the smaller size is accepted.
     var readabilityNote: String? {
         SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount,
-                               titleRejected: lastUnreadableTitleCount, baseline: baselineFeedCount)
+                               titleRejected: lastUnreadableTitleCount,
+                               structuralGaps: lastStructuralGapCount, baseline: baselineFeedCount)
     }
 
-    // #1428: whether `readabilityNote` is the self-healing shrunken-feed hold (a smaller feed, read cleanly)
-    // rather than an actionable forfeit. The Sources sheet colors that line as plain text, not the amber an
-    // actionable problem gets. Derived from the same rule, so the flag and the sentence can never disagree.
-    var readabilityNoteIsSelfHealing: Bool {
-        SourceReadability.noteIsSelfHealingHold(readable: lastReadableCount,
-                                                unreadable: lastUnreadableCount,
-                                                baseline: baselineFeedCount)
+    // #1428/#1472: whether `readabilityNote` reports something no action of Dan's would change (a smaller feed
+    // read cleanly, or rows the source itself published with no venue) rather than an actionable forfeit. The
+    // Sources sheet colors those lines as plain text, not the gold an actionable problem gets. Derived from the
+    // same rule as the sentence, so the flag and the words can never disagree.
+    var readabilityNoteIsInformationalOnly: Bool {
+        SourceReadability.noteIsInformationalOnly(readable: lastReadableCount,
+                                                  unreadable: lastUnreadableCount,
+                                                  structuralGaps: lastStructuralGapCount,
+                                                  baseline: baselineFeedCount)
     }
 
     // #986: has this source EVER said where one of its shows is? A high-water mark, derived rather than
@@ -231,7 +241,8 @@ final class WatchedSource {
     //
     // Deliberately does NOT touch the content hash. That is the agent path's alone (the native Algolia feed
     // has no fetched page to hash), so its caller promotes the hash itself after this returns.
-    func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0, placed: Int,
+    func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0,
+                              structuralGaps: Int = 0, placed: Int,
                               feedHealth: FeedReconcile.FeedHealthState, now: Date) {
         // #1114: record this scout's movement (current vs the previous scout's count, and the baseline)
         // BEFORE the fields below overwrite them, so #913 has real per-source movement to retune against.
@@ -240,6 +251,7 @@ final class WatchedSource {
         lastReadableCount = events
         lastUnreadableCount = unreadable
         lastUnreadableTitleCount = titleUnreadable
+        lastStructuralGapCount = structuralGaps
 
         hadPlacedBeforeLastRun = hasEverPlaced
         lastPlacedCount = placed
@@ -378,6 +390,26 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     // native source ingests structured events synchronously and free on every run (including the automatic
     // daily one); an html source is fetched, hashed, and read by the paid extract run only when it changes.
     var usesNativeExtractor: Bool {
+        switch self {
+        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
+        case .html: return false
+        }
+    }
+
+    // #1472: whether a row from this kind that carries NO VENUE is the source's own blank field rather than a
+    // page Overture failed to read. Those are opposite facts and #887's tolerance was adding them together,
+    // so National Opera Center's 34 blank feed rows (OPERA America's data entry, per production, recurring on
+    // every scout) read as a broken scraper and cost it gone-marking permanently.
+    //
+    // A native feed parses structured rows and never hops to a per-event detail page: there is no page that
+    // could have failed, so a blank venue can only be what the publisher wrote. An .html source is read by the
+    // extract run, which DOES fetch each event's own detail page, so a blank venue there stays suspicious
+    // until the run itself says the page publishes none (#1469).
+    //
+    // Deliberately its own switch rather than a reuse of `usesNativeExtractor`, which answers a different
+    // question (does this row cost a paid read). They agree today and an exhaustive switch means a new kind
+    // has to decide this on its own terms.
+    var venueGapsAreStructural: Bool {
         switch self {
         case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
         case .html: return false
