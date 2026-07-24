@@ -68,6 +68,22 @@ struct RunProgressViewStateTests {
         #expect(RunProgressCopy.overallProgressLine(completed: 0, total: 0) == nil)
     }
 
+    // #1427: the predicted-remaining line reads as an approximation ("~") in minutes and seconds, rounded
+    // to the nearest ten seconds so it never implies a precision an averaged pace does not have.
+    @Test func theRemainingLineReadsAsAnApproximateDuration() {
+        #expect(RunProgressCopy.remainingLine(150) == "~2m 30s remaining")
+        #expect(RunProgressCopy.remainingLine(120) == "~2m remaining")   // no dangling "0s"
+        #expect(RunProgressCopy.remainingLine(30) == "~30s remaining")
+        #expect(RunProgressCopy.remainingLine(152) == "~2m 30s remaining")   // rounded to the nearest 10s
+    }
+
+    // No line when there is nothing to predict (no estimate available) or the run is effectively done.
+    @Test func theRemainingLineIsNilWhenThereIsNothingToSay() {
+        #expect(RunProgressCopy.remainingLine(nil) == nil)
+        #expect(RunProgressCopy.remainingLine(0) == nil)
+        #expect(RunProgressCopy.remainingLine(3) == nil)   // rounds to zero, so the run is basically done
+    }
+
     // MARK: - The rendered states
 
     @Test func runningNamesThePhaseTheSourceAndTheElapsedCounter() throws {
@@ -100,6 +116,40 @@ struct RunProgressViewStateTests {
         #expect(texts.contains("Kaufman Music Center"))
         #expect(texts.contains("2 of 5 done"))
         #expect(!texts.contains { $0.contains("·") })
+    }
+
+    // #1427: given enough history, the reading phase shows a predicted "~X remaining" from the learned pace
+    // times the sources left. 5s/source over 5 sources with 2 done -> 3 left -> 15s.
+    @Test func theReadingPhaseShowsThePredictedRemainingWhenHistoryExists() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1030)
+        let history = RunDurationHistory(runs: [.init(sources: 10, seconds: 50),
+                                                .init(sources: 10, seconds: 50),
+                                                .init(sources: 10, seconds: 50)])   // 5s/source
+        let view = RunProgressView(phase: .reading, since: since,
+                                    snapshot: snapshot("Kaufman Music Center", 2, 5),
+                                    durationHistory: { history }).content(now: now)
+        #expect(try allTexts(view).contains("~20s remaining"))   // 15s rounds to nearest 10s
+    }
+
+    // The estimate is Reading-only and history-gated: the Scouting phase never shows it (its own timing is
+    // out of scope), and a thin history shows nothing rather than a guess.
+    @Test func noRemainingLineForScoutingOrWhenHistoryIsThin() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1030)
+        let fullHistory = RunDurationHistory(runs: [.init(sources: 10, seconds: 50),
+                                                    .init(sources: 10, seconds: 50),
+                                                    .init(sources: 10, seconds: 50)])
+        let scouting = RunProgressView(phase: .scouting, since: since,
+                                       snapshot: snapshot("Carnegie Hall", 2, 5),
+                                       durationHistory: { fullHistory }).content(now: now)
+        #expect(!(try allTexts(scouting).contains { $0.contains("remaining") }))
+
+        let thin = RunProgressView(phase: .reading, since: since,
+                                   snapshot: snapshot("Kaufman Music Center", 2, 5),
+                                   durationHistory: { RunDurationHistory(runs: [.init(sources: 5, seconds: 25)]) })
+            .content(now: now)
+        #expect(!(try allTexts(thin).contains { $0.contains("remaining") }))
     }
 
     // Past the phase's timeout with a dead heartbeat: a visibly distinct stalled state, not a spinner

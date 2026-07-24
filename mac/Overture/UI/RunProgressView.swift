@@ -41,6 +41,10 @@ struct RunProgressView: View {
     // The reading phase's real heartbeat (marker freshness), so a slow-but-living run never flips to the
     // misleading "looks stuck" state while a genuinely dead one does. nil keeps wall-clock-only behaviour.
     var runAlive: (() -> Bool)? = nil
+    // #1427: the learned run-duration history, injected like `snapshot` so the estimate is testable and the
+    // view stays ignorant of where it comes from. Read each tick; the default returns nil so every existing
+    // caller (and every non-reading phase) shows no estimate, exactly as before.
+    var durationHistory: () -> RunDurationHistory? = { nil }
     // Stalled-state retry: abandon the apparently-dead run and start fresh (wired by the caller).
     var onRetry: (() -> Void)? = nil
     // Dismiss-to-hide: the run keeps going untouched; the caller shows a reopen affordance.
@@ -104,6 +108,15 @@ struct RunProgressView: View {
         }
         if let elapsed = RunProgress.elapsedLabel(since: since, now: now) {
             Text(elapsed).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                .monospacedDigit()
+        }
+        // #1427: the predicted time left, on the Reading-calendars phase only, and only once enough runs
+        // have been recorded to learn a pace (RunDurationHistory returns nil otherwise, so the line simply
+        // does not appear, same as today). Sits under the elapsed counter it complements.
+        if phase == .reading,
+           let remaining = durationHistory()?.remaining(total: snap.total, completed: snap.completed),
+           let line = RunProgressCopy.remainingLine(remaining) {
+            Text(line).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                 .monospacedDigit()
         }
     }
@@ -197,5 +210,23 @@ enum RunProgressCopy {
     static func overallProgressLine(completed: Int, total: Int) -> String? {
         guard total > 1 else { return nil }
         return "\(min(completed, total)) of \(total) done"
+    }
+
+    // #1427: the predicted time left on a Reading-calendars run, e.g. "~2m 30s remaining", or nil when
+    // there is nothing to say (no estimate available, or the run is effectively done). Rounded to the
+    // nearest ten seconds on purpose: this is a prediction from an averaged pace, and a per-second value
+    // would imply a precision it does not have. The "~" says "about" so it never reads as a countdown clock.
+    static func remainingLine(_ remaining: TimeInterval?) -> String? {
+        guard let remaining, remaining > 0 else { return nil }
+        let rounded = Int((remaining / 10).rounded()) * 10
+        guard rounded > 0 else { return nil }
+        let hours = rounded / 3600
+        let minutes = (rounded % 3600) / 60
+        let seconds = rounded % 60
+        var parts: [String] = []
+        if hours > 0 { parts.append("\(hours)h") }
+        if minutes > 0 { parts.append("\(minutes)m") }
+        if seconds > 0 { parts.append("\(seconds)s") }
+        return "~\(parts.joined(separator: " ")) remaining"
     }
 }

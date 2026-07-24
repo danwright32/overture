@@ -105,6 +105,10 @@ struct RootView: View {
     // reading calendars for minutes with nothing on screen at all, and nothing to say if that run hung.
     // CLAUDE.md's rule is binding, and this was a straight violation of it.
     @State private var readingStartedAt: Date?
+    // #1427: how many sources THIS reading run set out to read, captured when the read begins, so a normal
+    // completion can record {sources, elapsed} for the "~X remaining" pace. Kept alongside readingStartedAt
+    // because both describe the same run.
+    @State private var readingSourceCount = 0
 
     // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
@@ -1021,6 +1025,19 @@ struct RootView: View {
         case cancelledWithPartial(readCount: Int)
     }
 
+    // #1427: record this Reading-calendars run's pace for the "~X remaining" estimate, but ONLY for a run
+    // that finished normally. Called on the `.ingested` path alone: a produced-and-imported result is the
+    // one unambiguous "the detached run worked through its queue and finished" signal. `.finishedEmpty` is
+    // deliberately excluded, because it cannot be told apart from a run that crashed early producing nothing,
+    // whose tiny elapsed would poison the pace toward too-optimistic. A run past its own timeout is excluded
+    // too (a stall's timing is not real pace), as are degenerate zero counts. Best-effort: the write never
+    // touches the live store and never disturbs the run.
+    private func recordReadingRun(elapsed: TimeInterval?) {
+        guard let elapsed, elapsed > 0, elapsed < RunTimeouts.scoutExtract,
+              readingSourceCount > 0 else { return }
+        RunDurationHistoryStore.record(sources: readingSourceCount, seconds: elapsed)
+    }
+
     private func watchScoutExtractRun() async -> ScoutReadResult {
         while ScoutExtractService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
@@ -1224,12 +1241,18 @@ struct RootView: View {
                     // it lands (the queue/results diff) and counting the run's own "3 of 9", with a
                     // stalled state if the detached run dies.
                     readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
+                    readingSourceCount = outcome.sources.filter { $0.state == .queuedForReading }.count
                     scoutNativeSnapshot = nil
                     let read = await watchScoutExtractRun()
                     guard gen == scoutGeneration else { return }
+                    // #1427: the read's elapsed, captured before readingStartedAt is cleared, so a normal
+                    // completion can record its pace.
+                    let readingElapsed = readingStartedAt.map { Date().timeIntervalSince($0) }
                     readingStartedAt = nil
                     switch read {
-                    case .ingested(let o): extract = o
+                    case .ingested(let o):
+                        extract = o
+                        recordReadingRun(elapsed: readingElapsed)
                     case .finishedEmpty(let m): finishedEmpty = m
                     case .idle: break
                     case .cancelledWithPartial(let count):
@@ -1307,13 +1330,18 @@ struct RootView: View {
         scoutNativeSnapshot = nil
         scoutWarnings = nil
         readingStartedAt = ScoutExtractService.lastRunStartedAt ?? Date()
+        // #1427: the native half ran in the session that started this run, so its queued count is gone; the
+        // run's own live progress file still carries the total it set out to read.
+        readingSourceCount = ScoutExtractProgressDecoder.loadCurrent()?.total ?? 0
         scoutSheetShown = true
         let read = await watchScoutExtractRun()
         guard gen == scoutGeneration else { return }
+        let readingElapsed = readingStartedAt.map { Date().timeIntervalSince($0) }
         readingStartedAt = nil
         let emptyNative = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
         switch read {
         case .ingested(let o):
+            recordReadingRun(elapsed: readingElapsed)
             finishScout(ScoutWarnings.from(native: emptyNative, extract: o, finishedEmpty: nil), auto: false)
         case .finishedEmpty(let m):
             finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: m), auto: false)
@@ -1390,6 +1418,10 @@ struct RootView: View {
                 snapshot: { readingStartedAt != nil ? RunProgressView.Snapshot.liveReading()
                                                     : (scoutNativeSnapshot ?? .init()) },
                 runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
+                // #1427: the reading phase predicts "~X remaining" from past completed runs; every other
+                // phase (and a thin history) shows nothing. Loaded each tick so a run recorded moments ago
+                // is already in the average.
+                durationHistory: readingStartedAt != nil ? { RunDurationHistoryStore.load() } : { nil },
                 onRetry: { retryScout() },
                 onHide: { scoutSheetShown = false },
                 onCancel: { cancelScout() })

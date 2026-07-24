@@ -65,3 +65,33 @@ struct RunProgressWiringGuardTests {
         #expect(!runner.contains(#"Update \$PROGRESS"#))
     }
 }
+
+// #1427: the "~X remaining" estimate's two wires that no unit test can see, because they live inside the
+// RootView view. The pure prediction and copy are proven in RunDurationHistoryTests/RunProgressViewStateTests;
+// these guard that the view actually READS the history into the reading modal and WRITES it on completion.
+@Suite("The Reading-calendars remaining estimate is wired in RootView (#1427)")
+struct ReadingRemainingWiringGuardTests {
+    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
+        SourceGuardHelper.source(relativeFromMac, file: file)
+    }
+
+    private var root: String { source("Overture/App/RootView.swift") }
+
+    // The reading takeover feeds the learned history into the modal so it can predict; nothing else does.
+    @Test func theReadingModalIsGivenTheDurationHistory() {
+        #expect(root.contains("durationHistory: readingStartedAt != nil ? { RunDurationHistoryStore.load() }"))
+    }
+
+    // A normal completion records this run's pace. Guarded that record is reached only from the helper (so
+    // the stall/timeout gate cannot be bypassed) and that the helper is called on the ingested path.
+    @Test func aNormallyFinishedReadRecordsItsPace() {
+        #expect(root.contains("RunDurationHistoryStore.record(sources: readingSourceCount, seconds: elapsed)"))
+        #expect(root.contains("recordReadingRun(elapsed: readingElapsed)"))
+    }
+
+    // The gate that keeps a stalled/timed-out run out of the average: the helper refuses anything at or past
+    // the reading timeout. Without this a hung 10-minute run would be recorded as real per-source pace.
+    @Test func aStalledRunIsExcludedFromThePace() {
+        #expect(root.contains("elapsed < RunTimeouts.scoutExtract"))
+    }
+}
