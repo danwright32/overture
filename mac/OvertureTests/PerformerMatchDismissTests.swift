@@ -188,4 +188,116 @@ struct PerformerMatchDismissTests {
 
         #expect(item.priorRelationship == "booked")
     }
+
+    // MARK: - Saying whether the action actually did anything (#1419)
+
+    // Both methods open with a guard and returned Void, so a caller could not tell a real change from
+    // a no-op: ProspectMutations saved and carried on either way.
+    //
+    // Unreachable from the queue as the app stands, and deliberately still fixed. The flag only renders
+    // while the correction is live (ProspectRowView.performerMatchFlag), and the one place that wipes a
+    // live correction, ScoutService.apply, is synchronous on the main actor against the context the
+    // queue's own @Query reads, so there is no moment at which Dan can click a flag whose match has
+    // already gone. What is real today is the write that had nothing to write. What would be real
+    // tomorrow is the undo stack (#1413): undoing a no-op here would forge a performer-match correction
+    // that never existed, which is why the honest answer belongs on the model now, before anything is
+    // built on top of it.
+
+    @Test func dismissingALiveMatchSaysItChangedSomething() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+
+        #expect(p.dismissPerformerMatch())
+    }
+
+    @Test func confirmingALiveMatchSaysItChangedSomething() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+
+        #expect(p.confirmPerformerMatch())
+    }
+
+    // The guarded case: a show never corrected by a performer match. Already covered for its EFFECTS by
+    // dismissingOrConfirmingAProspectWithNoMatchDoesNothing above; this pins what it REPORTS.
+    @Test func aShowWithNoMatchSaysNothingChanged() throws {
+        let ctx = ModelContext(try container())
+        let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-08-02", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
+                         performanceDate: "2026-08-02", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "warm", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 17, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+
+        #expect(p.dismissPerformerMatch() == false)
+        #expect(p.confirmPerformerMatch() == false)
+    }
+
+    // A second dismissal has nothing left to revert: the first released the lock, so the guard catches
+    // it and the snapshot is not re-applied over values that already came from it.
+    @Test func dismissingAnAlreadyDismissedMatchSaysNothingChanged() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+        #expect(p.dismissPerformerMatch())
+
+        #expect(p.dismissPerformerMatch() == false)
+    }
+
+    // And a second confirmation is the case the lock check alone does NOT catch: the correction is
+    // still live, so that guard passes, but both fields already hold exactly what confirming sets.
+    @Test func confirmingAnAlreadyConfirmedMatchSaysNothingChanged() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+        #expect(p.confirmPerformerMatch())
+
+        #expect(p.confirmPerformerMatch() == false)
+        #expect(p.performerMatchReviewed)          // and it is still confirmed, not toggled back off
+    }
+
+    // MARK: - The mutation layer stops writing what it cannot change (#1419)
+
+    @Test func actingOnALiveMatchReportsSuccessAndPersistsIt() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+        let feedback = ActionFeedback()
+
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [p],
+                                                        context: ctx, feedback: feedback))
+
+        #expect(p.performerMatchReviewed)
+        #expect(feedback.message == nil)   // it has never claimed anything on success, and still does not
+    }
+
+    // The failure path: nothing to do, so nothing is written and the caller is told so. Before this the
+    // caller got the same silent Void it got for a real change, and the save ran regardless, which meant
+    // a failed save could warn Dan about an action that was never attempted.
+    @Test func actingOnAMatchThatIsNoLongerThereReportsNoChange() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+        p.clearPerformerMatch()            // a confident org match superseded it (ScoutService.apply)
+        try ctx.save()
+        let feedback = ActionFeedback()
+
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [p],
+                                                        context: ctx, feedback: feedback) == false)
+        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), prospects: [p],
+                                                        context: ctx, feedback: feedback) == false)
+
+        #expect(p.performerMatchReviewed == false)
+        #expect(p.performerMatchDismissed == false)
+        #expect(feedback.message == nil)   // and it does not warn about a save it never attempted
+    }
+
+    // A show that is not in the array at all cannot be acted on either, and must say so rather than
+    // report the success of a mutation that never found its target.
+    @Test func actingOnAShowThatIsNotInTheListReportsNoChange() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+        let feedback = ActionFeedback()
+
+        #expect(ProspectMutations.confirmPerformerMatch(QueueItem(p), prospects: [],
+                                                        context: ctx, feedback: feedback) == false)
+        #expect(ProspectMutations.dismissPerformerMatch(QueueItem(p), prospects: [],
+                                                        context: ctx, feedback: feedback) == false)
+    }
 }
