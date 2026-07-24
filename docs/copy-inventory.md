@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **779 sentences**, from 263 source files.
+Every sentence Overture can say to Dan: **783 sentences**, from 263 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1274,6 +1274,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "That page has no dated listings on it. It may be the wrong page for this org."
     `Domain/WatchedSource.swift`
+"That was \(named[0])."
+    `Domain/SourceReadability.swift`
 "That's longer than a year. Block a shorter stretch."
     `Domain/DayOff.swift`
 "The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
@@ -1357,6 +1359,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
     `Domain/SourceGrade.swift`
+"They include \(named.joined(separator: " and ")), and \(others) \(plural)."
+    `Domain/SourceReadability.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -1409,6 +1413,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "This wasn't a genuine reply (an auto-reply or out of office). Revert it; a new reply still flags."
     `UI/DraftReviewView.swift`
+"Those were \(named[0]) and \(named[1])."
+    `Domain/SourceReadability.swift`
 "Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."
     `Integration/GmailAuthManager.swift`
 "Too far"
@@ -1770,6 +1776,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Persistence/PrepImporter.swift`
 "the Downbeat client export is \(days) days old"
     `Persistence/PrepImporter.swift`
+"the \(day) listing"
+    `Domain/SourceReadability.swift`
 "the booking history couldn't be read"
     `Persistence/PrepImporter.swift`
 "the booking log"

@@ -141,6 +141,22 @@ final class WatchedSource {
     // Disclosed on the row (SourceReadability) and deliberately absent from SourceAttention.needsALook.
     // Defaulted, so existing rows migrate cleanly and simply carry no history of it.
     var lastStructuralGapCount: Int = 0
+    // #1471: the first few dropped rows of the last run, already labelled the way Dan reads them
+    // (SourceReadability.showLabel), so the Sources sheet can say WHICH show it could not use instead of a
+    // bare count he then has to decode out of the raw results file. Capped at
+    // SourceReadability.namedShowCap where it is written, because the sentence names no more than that and
+    // storing a longer list would keep data nothing can show. Defaulted, so existing rows migrate cleanly and
+    // simply name nothing until their next run.
+    //
+    // Stored newline-joined rather than as a `[String]` column, the same way `pendingPageMonthsRaw` is and
+    // for the same reason: a list column needs transformable storage, and this migration runs against Dan's
+    // live store.
+    var lastDroppedShowLabelsRaw: String = ""
+
+    var lastDroppedShowLabels: [String] {
+        get { lastDroppedShowLabelsRaw.isEmpty ? [] : lastDroppedShowLabelsRaw.components(separatedBy: "\n") }
+        set { lastDroppedShowLabelsRaw = newValue.joined(separator: "\n") }
+    }
 
     // #986: how many of the last run's kept shows said WHERE they are, and whether this source has EVER said
     // so. #970's gate reads only that `location` string (EventPlace.resolve never sees the venue), so a run
@@ -207,7 +223,8 @@ final class WatchedSource {
     var readabilityNote: String? {
         SourceReadability.note(readable: lastReadableCount, unreadable: lastUnreadableCount,
                                titleRejected: lastUnreadableTitleCount,
-                               structuralGaps: lastStructuralGapCount, baseline: baselineFeedCount)
+                               structuralGaps: lastStructuralGapCount,
+                               droppedShowLabels: lastDroppedShowLabels, baseline: baselineFeedCount)
     }
 
     // #1428/#1472: whether `readabilityNote` reports something no action of Dan's would change (a smaller feed
@@ -242,7 +259,7 @@ final class WatchedSource {
     // Deliberately does NOT touch the content hash. That is the agent path's alone (the native Algolia feed
     // has no fetched page to hash), so its caller promotes the hash itself after this returns.
     func recordSuccessfulRead(events: Int, unreadable: Int, titleUnreadable: Int = 0,
-                              structuralGaps: Int = 0, placed: Int,
+                              structuralGaps: Int = 0, droppedShows: [DroppedShow] = [], placed: Int,
                               feedHealth: FeedReconcile.FeedHealthState, now: Date) {
         // #1114: record this scout's movement (current vs the previous scout's count, and the baseline)
         // BEFORE the fields below overwrite them, so #913 has real per-source movement to retune against.
@@ -252,6 +269,13 @@ final class WatchedSource {
         lastUnreadableCount = unreadable
         lastUnreadableTitleCount = titleUnreadable
         lastStructuralGapCount = structuralGaps
+        // #1471: labelled HERE, once, on the same success branch as the counts they belong to, and capped to
+        // what the sentence can name. A row with nothing to name it by drops out rather than being stored as
+        // an empty string the sheet would then have to guard against.
+        lastDroppedShowLabels = droppedShows
+            .compactMap { SourceReadability.showLabel(name: $0.name, date: $0.date) }
+            .prefix(SourceReadability.namedShowCap)
+            .map { $0 }
 
         hadPlacedBeforeLastRun = hasEverPlaced
         lastPlacedCount = placed

@@ -311,4 +311,67 @@ struct SourceReadabilityPersistenceTests {
         #expect(SourceReadability.note(readable: 39, unreadable: 1, baseline: 40) != nil)               // has a line
         #expect(SourceReadability.noteIsInformationalOnly(readable: 39, unreadable: 1, baseline: 40) == false)
     }
+
+    // MARK: #1471, WHICH show
+
+    // The line reported a count and never said which show, so finding the offending row meant reading the
+    // raw extract results file. Named, Dan can open the source page and see for himself in a second whether
+    // it is a placeholder, a broken detail page, or a real problem.
+    @Test func oneDroppedShowIsNamedOutright() {
+        let note = SourceReadability.note(readable: 3, unreadable: 0, structuralGaps: 1,
+                                          droppedShowLabels: ["Smoke Ring Quartet on Oct 24"], baseline: 3)
+
+        #expect(note == "1 of 4 listings named no venue, so Overture left it out of the queue."
+                + " That was Smoke Ring Quartet on Oct 24.")
+    }
+
+    // Two, and both fit, so both are said outright rather than teased with a count.
+    @Test func twoDroppedShowsAreBothNamed() {
+        let note = SourceReadability.note(readable: 38, unreadable: 2,
+                                          droppedShowLabels: ["Aurora Strings on Mar 3", "Rainer Crosett on Mar 10"],
+                                          baseline: 40)
+
+        #expect(note?.hasSuffix("Those were Aurora Strings on Mar 3 and Rainer Crosett on Mar 10.") == true)
+    }
+
+    // Past the cap the sentence names two and COUNTS the rest, so a badly broken source cannot dump a list
+    // into the sheet. The remainder is derived from the drop counts, never stored, so it can never disagree
+    // with the number in the sentence before it.
+    @Test func aBadlyBrokenSourceNamesTwoAndCountsTheRest() {
+        let note = SourceReadability.note(readable: 68, unreadable: 12,
+                                          droppedShowLabels: ["Aurora Strings on Mar 3", "Rainer Crosett on Mar 10"],
+                                          baseline: 80)
+
+        #expect(note?.hasSuffix("They include Aurora Strings on Mar 3 and Rainer Crosett on Mar 10, and 10 others.") == true)
+        // The forfeit sentence it follows is untouched: this adds detail, it does not restate the cost.
+        #expect(note?.contains("won't mark anything from this source as gone") == true)
+    }
+
+    // One named of several: the same shape, in the singular, rather than a fragment that reads as if one
+    // show were the whole story.
+    @Test func oneNamedOfSeveralStillCountsTheRest() {
+        let note = SourceReadability.note(readable: 68, unreadable: 12,
+                                          droppedShowLabels: ["Aurora Strings on Mar 3"], baseline: 80)
+
+        #expect(note?.hasSuffix("They include Aurora Strings on Mar 3, and 11 others.") == true)
+    }
+
+    // A row with nothing to identify it by is not named at all, rather than named as an empty string or a
+    // bare "on". The count sentence still reports it, so nothing is hidden.
+    @Test func aRowWithNothingToNameItByAddsNoSentence() {
+        let note = SourceReadability.note(readable: 39, unreadable: 1, droppedShowLabels: [], baseline: 40)
+
+        #expect(note == "1 of 40 shows had no venue on their own detail page.")
+    }
+
+    // The label is built in ONE place, so the sheet, the recorder, and any future surface agree on how a
+    // show is named. Date-less and name-less rows each degrade to something a person can still act on.
+    @Test func aShowIsLabelledTheSameWayEverywhere() {
+        #expect(SourceReadability.showLabel(name: "Aurora Strings", date: "2027-03-03") == "Aurora Strings on Mar 3")
+        #expect(SourceReadability.showLabel(name: "Aurora Strings", date: nil) == "Aurora Strings")
+        #expect(SourceReadability.showLabel(name: nil, date: "2027-03-03") == "the Mar 3 listing")
+        #expect(SourceReadability.showLabel(name: nil, date: nil) == nil)
+        // An unparseable date is never rendered as a plausible-looking wrong one (EasternDate.dayLabel).
+        #expect(SourceReadability.showLabel(name: "Aurora Strings", date: "not-a-date") == "Aurora Strings")
+    }
 }

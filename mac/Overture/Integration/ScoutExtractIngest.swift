@@ -171,7 +171,8 @@ enum ScoutExtractIngest {
                 // the source would report healthy and unchanged forever, having been read exactly once.
                 recordPartialCheck(on: source, events: events.count, now: now,
                                    unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
-                                   structuralGaps: rejection.structuralGapCount, placed: placedCount)
+                                   structuralGaps: rejection.structuralGapCount,
+                                   droppedShows: rejection.droppedShows, placed: placedCount)
             } else {
                 recordSuccess(on: source, events: events.count, health: health, now: now,
                               // #891: recorded on the SAME branch as the run's success, so the count can
@@ -184,7 +185,10 @@ enum ScoutExtractIngest {
                               unreadable: rejection.unreadTotal, titleUnreadable: rejection.titleRelated,
                               // #1469: rows the PAGE publishes no venue for, disclosed on the row as a plain
                               // fact rather than counted as pages the run failed to open.
-                              structuralGaps: rejection.structuralGapCount, placed: placedCount)
+                              structuralGaps: rejection.structuralGapCount,
+                              // #1471: and WHICH shows they were, so the sheet names the row rather than
+                              // leaving Dan to find it in the raw results file.
+                              droppedShows: rejection.droppedShows, placed: placedCount)
             }
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
@@ -264,10 +268,11 @@ enum ScoutExtractIngest {
     private static func recordSuccess(on source: WatchedSource, events: Int,
                                       health: FeedReconcile.FeedHealthState, now: Date,
                                       unreadable: Int = 0, titleUnreadable: Int = 0,
-                                      structuralGaps: Int = 0, placed: Int = 0) {
+                                      structuralGaps: Int = 0, droppedShows: [DroppedShow] = [],
+                                      placed: Int = 0) {
         source.recordSuccessfulRead(events: events, unreadable: unreadable,
                                     titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
-                                    placed: placed, feedHealth: health, now: now)
+                                    droppedShows: droppedShows, placed: placed, feedHealth: health, now: now)
 
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
@@ -291,11 +296,16 @@ enum ScoutExtractIngest {
     //     to protect by updating the baseline, only something to corrupt by doing so anyway.
     private static func recordPartialCheck(on source: WatchedSource, events: Int, now: Date,
                                            unreadable: Int = 0, titleUnreadable: Int = 0,
-                                           structuralGaps: Int = 0, placed: Int = 0) {
+                                           structuralGaps: Int = 0, droppedShows: [DroppedShow] = [],
+                                           placed: Int = 0) {
         source.lastReadableCount = events
         source.lastUnreadableCount = unreadable
         source.lastUnreadableTitleCount = titleUnreadable
         source.lastStructuralGapCount = structuralGaps
+        source.lastDroppedShowLabels = droppedShows
+            .compactMap { SourceReadability.showLabel(name: $0.name, date: $0.date) }
+            .prefix(SourceReadability.namedShowCap)
+            .map { $0 }
         source.hadPlacedBeforeLastRun = source.hasEverPlaced
         source.lastPlacedCount = placed
 

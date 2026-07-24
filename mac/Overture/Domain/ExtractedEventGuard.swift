@@ -262,8 +262,15 @@ enum ExtractedEventGuard {
         var venue = 0, title = 0, structural = 0
         var structuralURLs = Set<String>()
         var structuralDates = Set<String>()
+        var dropped: [DroppedShow] = []
         for event in events {
             guard let reason = rejection(for: event) else { continue }
+            // #1471: who each dropped row WAS, so the Sources sheet can name it instead of reporting a bare
+            // count Dan then has to go and decode out of the raw results file. Named by the same rule the
+            // show would have carried into the queue (`displayName`: its title, else the act, else the room),
+            // so the sheet calls it what a prospect would have been called. Every family, because Dan's next
+            // move is the same either way: open the source's page and look at that row.
+            dropped.append(DroppedShow(name: displayName(for: placed(event)), date: event.performanceDate))
             guard reason.isAboutVenue else { title += 1; continue }
             // #1469: the OTHER way this can be the source's own gap rather than a failed read. On the native
             // path the whole path answers it (there is no detail page to fail); on the agent path only the run
@@ -287,7 +294,7 @@ enum ExtractedEventGuard {
         }
         return RejectionCounts(venueRelated: venue, titleRelated: title,
                                structuralGapCount: structural, structuralGapURLs: structuralURLs,
-                               structuralGapDates: structuralDates)
+                               structuralGapDates: structuralDates, droppedShows: dropped)
     }
 }
 
@@ -314,11 +321,23 @@ struct RejectionCounts: Equatable, Sendable {
     // date is nothing like as specific as a URL, and unioned across sources one venue's placeholder would
     // shelter every other venue's show that night.
     var structuralGapDates: Set<String> = []
+    // #1471: who the dropped rows were, in the order the source listed them, so the Sources sheet can name
+    // the first couple. Deliberately NOT a rendered sentence: how a show is written for Dan is decided once,
+    // in SourceReadability, and a guard that started producing copy would be the second place it lives.
+    var droppedShows: [DroppedShow] = []
     // The #887 count. A dropped event is absent from the feed the reconcile reads, so a run that could not
     // read part of what it looked at may still add and update but may not conclude anything is gone.
     var unreadTotal: Int { venueRelated + titleRelated }
     // Everything this run threw away, for a caller that wants to report the whole picture.
     var droppedTotal: Int { unreadTotal + structuralGapCount }
+}
+
+// #1471: one dropped row, as much of its identity as the source published. Both may be absent (a row with
+// no name and no date), which is why the label is optional at the other end rather than rendered as a bare
+// "on" or an empty quote.
+struct DroppedShow: Equatable, Sendable {
+    var name: String?
+    var date: String?
 }
 
 // One rejected event, kept so it can be reported against its source rather than vanishing.

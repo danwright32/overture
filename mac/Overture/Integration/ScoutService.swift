@@ -517,6 +517,9 @@ enum ScoutService {
                     // #1472: the source's own blank-venue rows, disclosed on the row as a plain fact rather
                     // than counted as a reading failure that would cost it its cancelling.
                     structuralGaps: rejection.structuralGapCount,
+                    // #1471: WHICH shows those were, so the sheet can name them instead of leaving Dan to
+                    // find the offending row in the raw feed himself.
+                    droppedShows: rejection.droppedShows,
                     // #986/#1005: how many kept shows named WHERE they are, by the SAME rule the agent
                     // path uses. Wired here so this path feeds the placement detector too. (#1029 removed
                     // the Dan-facing line the count fed; the count still records for #970's drift check.)
@@ -635,11 +638,12 @@ enum ScoutService {
     private static func recordCheck(on source: WatchedSource?, events: Int,
                                     health: FeedReconcile.FeedHealthState, now: Date,
                                     unreadable: Int = 0, titleUnreadable: Int = 0,
-                                    structuralGaps: Int = 0, placed: Int = 0) {
+                                    structuralGaps: Int = 0, droppedShows: [DroppedShow] = [],
+                                    placed: Int = 0) {
         guard let source else { return }
         source.recordSuccessfulRead(events: events, unreadable: unreadable,
                                     titleUnreadable: titleUnreadable, structuralGaps: structuralGaps,
-                                    placed: placed, feedHealth: health, now: now)
+                                    droppedShows: droppedShows, placed: placed, feedHealth: health, now: now)
     }
 
     // #800: the accessors below are `nonisolated`. They touch nothing but UserDefaults, which is

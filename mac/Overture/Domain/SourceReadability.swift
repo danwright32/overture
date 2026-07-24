@@ -34,10 +34,17 @@ enum SourceReadability {
     // they never reach the two forfeit rules above; they are still disclosed, because a run that quietly
     // imported 58 of 92 listings and said nothing is the thing #891 exists to prevent. They also count toward
     // the `total` those sentences quote, since they are part of what the run looked at.
+    // #1471: `droppedShowLabels` are the first few dropped rows, already labelled (`showLabel`), so the line
+    // can say WHICH shows rather than only how many. Capped by the caller at `namedShowCap`; the rest are
+    // counted from the drop totals here, so the remainder can never disagree with the count in the sentence
+    // it follows. Empty (an older row that recorded no labels, or rows with nothing to name them by) simply
+    // adds no sentence.
     static func note(readable: Int, unreadable: Int, titleRejected: Int = 0,
-                     structuralGaps: Int = 0, baseline: Int) -> String? {
+                     structuralGaps: Int = 0, droppedShowLabels: [String] = [],
+                     baseline: Int) -> String? {
         let total = readable + unreadable + structuralGaps
         let venueRejected = max(0, unreadable - titleRejected)
+        let named = namedShowsLine(labels: droppedShowLabels, droppedTotal: unreadable + structuralGaps)
 
         // #887: too much of what this run looked at came back unread. It cannot know what else it missed.
         // Saying only a bare count would hide the consequence, and the consequence is the part Dan can
@@ -45,7 +52,7 @@ enum SourceReadability {
         // able to until it can read its own pages again.
         if FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) {
             return sentences(forfeitLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected),
-                             structuralGapLine(total: total, structuralGaps: structuralGaps))
+                             structuralGapLine(total: total, structuralGaps: structuralGaps), named)
         }
 
         // #897: the run read what it found, but found far less than this source normally lists. A half
@@ -60,7 +67,7 @@ enum SourceReadability {
         if FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline) {
             return sentences("\(readable) shows listed, down from the usual \(baseline), "
                              + "so Overture won't mark anything from this source as gone until the smaller calendar holds.",
-                             structuralGapLine(total: total, structuralGaps: structuralGaps))
+                             structuralGapLine(total: total, structuralGaps: structuralGaps), named)
         }
 
         // Inside the tolerance: worth stating, but it has cost the source nothing, and the copy must not
@@ -68,7 +75,7 @@ enum SourceReadability {
         return sentences(unreadable > 0
                          ? toleranceLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
                          : nil,
-                         structuralGapLine(total: total, structuralGaps: structuralGaps))
+                         structuralGapLine(total: total, structuralGaps: structuralGaps), named)
     }
 
     // #1472: the rows this source published with no venue at all. A whole sentence of its own, appended to
@@ -86,6 +93,47 @@ enum SourceReadability {
         guard structuralGaps > 0 else { return nil }
         let left = structuralGaps == 1 ? "it" : "those"
         return "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
+    }
+
+    // #1471: how many dropped shows the line will NAME before it starts counting them instead. Two, so the
+    // common case (one placeholder, or a pair) is answered outright and a badly broken source cannot unroll a
+    // list into the sheet. It is also what the recorder stores per source, so nothing keeps a longer list
+    // around than the sentence can use.
+    static let namedShowCap = 2
+
+    // #1471: one dropped show, as Dan reads it. The single authority on how a show is named in this sheet, so
+    // the sentence below and anything that stores a label agree by construction.
+    //
+    // Degrades rather than guesses. An unparseable date is dropped entirely (`EasternDate.dayLabel` returns
+    // nil rather than a plausible-looking wrong day), a row with no name is called by its night, and a row
+    // with neither is not named at all: the count sentence still reports it, so nothing is hidden, and there
+    // is no empty quote or dangling "on" anywhere in the copy.
+    static func showLabel(name: String?, date: String?) -> String? {
+        let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let day = date.flatMap(EasternDate.dayLabel)
+        switch (trimmed.isEmpty, day) {
+        case (false, let day?):  return "\(trimmed) on \(day)"
+        case (false, nil):       return trimmed
+        case (true, let day?):   return "the \(day) listing"
+        case (true, nil):        return nil
+        }
+    }
+
+    // #1471: which shows those were. A sentence of its own after the count, never folded into it: the count
+    // and its consequence are the thing Dan must not skim, and a clause spliced into that sentence would make
+    // the part he acts on longer and harder to read.
+    //
+    // The remainder is DERIVED from the drop total rather than stored alongside the labels, so "and 10 others"
+    // can never disagree with the "12 of 80" in the sentence it follows.
+    private static func namedShowsLine(labels: [String], droppedTotal: Int) -> String? {
+        let named = Array(labels.prefix(namedShowCap))
+        guard !named.isEmpty else { return nil }
+        let others = max(0, droppedTotal - named.count)
+        guard others > 0 else {
+            return named.count == 1 ? "That was \(named[0])." : "Those were \(named[0]) and \(named[1])."
+        }
+        let plural = others == 1 ? "other" : "others"
+        return "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
     }
 
     // Whole sentences, joined, never assembled fragments (the standing rule, and #1032's reason for stating

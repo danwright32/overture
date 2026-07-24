@@ -42,6 +42,7 @@ HEALTH_RECORDER_FIELDS=(
   lastUnreadableCount
   lastUnreadableTitleCount
   lastStructuralGapCount
+  lastDroppedShowLabels
   hadPlacedBeforeLastRun
   lastPlacedCount
   baselineFeedCount
