@@ -42,7 +42,30 @@ struct DaysOffAttentionTests {
 
     @Test func theToolbarNamesTheGapRatherThanJustGlowing() {
         #expect(DaysOffAttention.badgeTitle(needsALook: false) == "Days off")
-        #expect(DaysOffAttention.badgeTitle(needsALook: true) == "Days off (no shoots)")
+        #expect(DaysOffAttention.badgeTitle(needsALook: true) == "Days off (no shoots from Downbeat)")
+    }
+
+    // #1430. Dan read the old badge as an alarm: gold, and "(no shoots)". Both halves said the wrong thing.
+    // Having no days off, and having no shoots, are not problems, and the state this marks is neither: it
+    // means Overture has been handed nothing to keep clear of. So the words name WHERE the gap is (nothing
+    // arrived from Downbeat) rather than describing his schedule.
+    @Test func theBadgeDoesNotCallAnEmptyScheduleAProblem() {
+        let title = DaysOffAttention.badgeTitle(needsALook: true)
+        #expect(title.contains("Downbeat"), "it must point at the missing hand-off, not at his diary")
+        #expect(!title.contains("(no shoots)"), "bare 'no shoots' reads as 'you have no work'")
+    }
+
+    // And it must not wear the app's attention colour. Gold is reserved for something that is WRONG (a
+    // failing source, three items along the same toolbar); this is a limit on what Overture can promise,
+    // which is worth saying quietly and exactly once.
+    @Test func theBadgeIsNotDrawnInTheAttentionColour() throws {
+        // The path has to be right or SourceGuardHelper returns "" and a !contains guard passes on an empty
+        // string, which is the shape of a test that can never fail. The #require below is what catches that.
+        let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let range = try #require(rootView.range(of: "DaysOffAttention.badgeTitle"))
+        let item = rootView[range.lowerBound...].prefix(400)
+        #expect(!item.contains("OVColor.gold"), "gold is for what is wrong, and nothing here is wrong")
+        #expect(item.contains("OVColor.inkSoft"), "quiet secondary ink, not an alarm")
     }
 
     // It names the CONSEQUENCE, not just the fact, because the consequence is the part he can act on: he

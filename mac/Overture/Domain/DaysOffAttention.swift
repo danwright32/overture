@@ -51,8 +51,16 @@ enum DaysOffAttention {
         defaults.set(now.addingTimeInterval(snoozeDuration).timeIntervalSince1970, forKey: snoozeKey)
     }
 
+    // #1430: it used to read "Days off (no shoots)", in the app's gold attention colour, and Dan read the
+    // whole thing as an alarm: "this is too urgent. Not having any days off isn't a bad thing."
+    //
+    // He was right, and the words were the larger half of it. Neither "you have no days off" nor "you have
+    // no shoots" is a problem, and this state is neither of those things: it is that Downbeat has handed
+    // Overture nothing upcoming, so there is nothing for it to keep clear of. Naming the hand-off is what
+    // stops the badge describing his diary back to him as though an empty one were a fault. The colour is
+    // the other half, and that lives at the toolbar item (gold is reserved for what is actually wrong).
     static func badgeTitle(needsALook: Bool) -> String {
-        needsALook ? "Days off (no shoots)" : "Days off"
+        needsALook ? "Days off (no shoots from Downbeat)" : "Days off"
     }
 
     static func help(needsALook: Bool) -> String {

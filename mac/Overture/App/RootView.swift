@@ -389,21 +389,27 @@ struct RootView: View {
                     }
                     .help(SourceAttention.help(count: sourcesNeedingALook))
 
-                    // #901: the days Overture won't pitch him for, and (Dan's call, 2026-07-14) a standing
-                    // gold mark while it holds no booked shoots at all.
+                    // #901: the days Overture won't pitch him for, and a standing mark while it holds no
+                    // booked shoots at all.
                     //
                     // That state is the trap this issue was written about: the conflict guard has never
                     // once fired, because Downbeat exports no bookings and nothing ever wrote the local
                     // override file, and a guard protecting nothing looked exactly like one that worked. It
                     // may sit marked for a long time (bookings only accrue going forward), and that is the
                     // honest reading: until he blocks those days himself, Overture cannot keep clear of them.
+                    //
+                    // #1430: quiet secondary ink, NOT the gold two items to the left. Gold is the app's
+                    // "something is wrong" colour, and nothing here is wrong: a long stretch with no shoots
+                    // to keep clear of is an ordinary state of affairs, and Dan read the gold as being told
+                    // otherwise. The label still appears, because the blind spot is worth knowing about; it
+                    // just stops shouting. Sources keeps its gold, where a failing calendar really is wrong.
                     Button {
                         showDaysOff = true
                     } label: {
                         ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(needsALook: noBookedShootData),
                                           systemImage: "calendar.badge.clock",
                                           showsTitle: noBookedShootData)
-                            .foregroundStyle(noBookedShootData ? OVColor.gold : Color.primary)
+                            .foregroundStyle(noBookedShootData ? OVColor.inkSoft : Color.primary)
                     }
                     .help(DaysOffAttention.help(needsALook: noBookedShootData))
 
