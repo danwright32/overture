@@ -694,8 +694,15 @@ final class Prospect {
     // record that stops PrepImporter re-applying this same rejected match the next time it ingests
     // the same evidence. Keeping the finding and tracking the rejection separately is the
     // alreadyCoveredNote/alreadyCoveredDismissed shape (#611).
-    func dismissPerformerMatch() {
-        guard relationshipCorrectedByPerformerMatch else { return }
+    //
+    // #1419: returns whether it actually changed anything, so a caller can tell a real dismissal from
+    // a no-op instead of saving and carrying on either way. Not reachable from the queue (the flag
+    // renders only while the correction is live), but the write that had nothing to write was real,
+    // and an undo stack built on a Void return (#1413) would reverse a no-op into a performer-match
+    // correction that never existed.
+    @discardableResult
+    func dismissPerformerMatch() -> Bool {
+        guard relationshipCorrectedByPerformerMatch else { return false }
         if let relationship = performerMatchPreviousRelationship { priorRelationship = relationship }
         if let score = performerMatchPreviousFitScore { fitScore = score }
         if let previousTier = performerMatchPreviousTier { tier = previousTier }
@@ -703,16 +710,24 @@ final class Prospect {
         downbeatClientId = performerMatchPreviousDownbeatClientId
         relationshipCorrectedByPerformerMatch = false
         performerMatchDismissed = true
+        return true
     }
 
     // Dan says this match is RIGHT (#752, his call: an explicit confirmation, never merely having
     // laid eyes on the prospect). Only this unlocks the warm drafting tone, so an email can sound
     // like it is going to a returning client only because Dan actively said the match was correct.
     // Changes nothing about the score, which the correction already applied.
-    func confirmPerformerMatch() {
-        guard relationshipCorrectedByPerformerMatch else { return }
+    //
+    // #1419: like dismissPerformerMatch, reports whether it changed anything. Needs the second check as
+    // well as the lock: on an already-confirmed match the lock is still held, so that guard passes while
+    // both fields already hold exactly what this would set.
+    @discardableResult
+    func confirmPerformerMatch() -> Bool {
+        let alreadyConfirmed = performerMatchReviewed && !performerMatchDismissed
+        guard relationshipCorrectedByPerformerMatch, !alreadyConfirmed else { return false }
         performerMatchReviewed = true
         performerMatchDismissed = false
+        return true
     }
 
     // The relationship the DRAFTER is allowed to see (#752). The correction is sticky by design, so it

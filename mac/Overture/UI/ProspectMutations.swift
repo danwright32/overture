@@ -488,16 +488,24 @@ enum ProspectMutations {
     // #753/#752: Dan's verdict on a performer match. The real work lives on the model, which owns the
     // snapshot revert and the reviewed flag, so these stay thin and there is exactly one implementation
     // of each.
-    static func confirmPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confirmPerformerMatch()
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    //
+    // #1419: both return whether the verdict actually landed, and neither saves when the model reports
+    // there was nothing to change. A save that writes nothing is not free: if it FAILS it warns Dan
+    // about an action that was never attempted. Neither posts a success acknowledgment (they never
+    // have), so the returned Bool is the only thing that distinguishes a real change from a no-op, and
+    // it is what an undo stack (#1413) must consult before offering to reverse one of these.
+    @discardableResult
+    static func confirmPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              model.confirmPerformerMatch() else { return false }
+        return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func dismissPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.dismissPerformerMatch()
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    @discardableResult
+    static func dismissPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              model.dismissPerformerMatch() else { return false }
+        return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     // #718: Dan's deliberate, confirmed override of the #407 salutation-review send block, for
