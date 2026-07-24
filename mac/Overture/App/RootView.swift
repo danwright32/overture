@@ -230,16 +230,23 @@ struct RootView: View {
             }
             .sheet(isPresented: Bindable(addLead).isPresented) { AddLeadSheet() }
             .toolbar {
+                // #1411: both branches hand macOS a BARE view (a Label, a Text), and macOS sizes the
+                // capsule it draws to exactly that. Every other toolbar item is a Button or a Menu and
+                // brings its own control insets, which is why this was the only slot whose text sat hard
+                // against the edge. The inset is the app's ordinary pill inset, applied through one
+                // modifier so the two branches cannot drift.
                 ToolbarItem(placement: .status) {
                     if omniFocusFailedAt > 0 {
                         Label("OmniFocus sync failing", systemImage: "exclamationmark.triangle.fill")
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
+                            .toolbarStatusInset()
                             .help("The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this.")
                     } else if let text = status.text {
                         Text(text)
                             .font(.system(size: 11))
                             .foregroundStyle(OVColor.inkFaint)
+                            .toolbarStatusInset()
                     }
                 }
                 // #352: Scout and Prep are sequential steps in one flow (scout finds performances,
