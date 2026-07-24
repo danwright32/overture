@@ -31,6 +31,10 @@ struct OvertureApp: App {
     // quitting: the stack survives a close and dies only on quit, which is what Dan asked for. In
     // RootView it would have silently emptied every time he closed the window.
     @State private var undoStack = QueueUndoStack()
+    // #1414: the App's menu raises a request; RootView performs it, because the reversal needs the
+    // ModelContext, the live rows and the ActionFeedback, none of which a Scene-level .commands block
+    // can reach (and the App must never capture the feedback object, see the stack above).
+    @State private var undoRequest = QueueUndoRequest()
 
     init() {
         // #800: WatchedSource joins the schema. Additive (a new entity plus a defaulted [String] on
@@ -150,9 +154,8 @@ struct OvertureApp: App {
         let destination = UndoRouting.destination(textEditingCanUndo: textEditingCanUndo,
                                                   queueCanUndo: undoStack.canUndo)
         guard UndoRouting.forwardsToResponderChain(destination) else {
-            // #1414 performs the reversal. Unreachable until then, because nothing records into the
-            // stack yet, so `queueCanUndo` is always false, which also means this whole function is
-            // today byte-for-byte the behaviour #1412 passed on screen.
+            // A queue undo. RootView owns the reversal; this only asks for it.
+            undoRequest.request()
             return
         }
         NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
@@ -161,7 +164,7 @@ struct OvertureApp: App {
     var body: some Scene {
         Window("Overture", id: "main") {
             if let modelContainer {
-                RootView().modelContainer(modelContainer).environment(addLead).environment(undoStack)
+                RootView().modelContainer(modelContainer).environment(addLead).environment(undoStack).environment(undoRequest)
                     .storeShrinkNotice(shrinkWarning,
                                        backupsPath: StoreShrinkCheck.backupsPath(
                                            dataDirectory: StoreLocation.dataDirectory))

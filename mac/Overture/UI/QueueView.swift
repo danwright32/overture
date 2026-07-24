@@ -5,6 +5,11 @@ import AppKit
 // The window Dan lives in: ranked performances, grouped by date, kept or dismissed.
 struct QueueView: View {
     @Environment(\.modelContext) private var context
+    // #1414: the session undo stack, owned by the App and injected, so keep and dismiss record.
+    // OPTIONAL deliberately: a non-optional Observable environment lookup FATAL ERRORS when the object
+    // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
+    // test that builds this view directly). Nil simply means this surface records nothing.
+    @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
@@ -723,6 +728,7 @@ struct QueueView: View {
                 }
                 ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                                       dayOffOffer: dayOffOffer,
+                                      undoStack: undoStack,
                                       highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                                       replySendSince: { rid in replySending[rid] },
                                       onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },

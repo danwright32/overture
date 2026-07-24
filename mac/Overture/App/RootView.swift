@@ -22,6 +22,9 @@ struct RootView: View {
     // effect isn't otherwise visible still shows it ran.
     @State private var feedback = ActionFeedback()
     @State private var dayOffOffer = DayOffOfferRequest()   // #924: dismiss-to-day-off picker request
+    // #1414: owned by the App (a .commands block cannot read view state) and injected down to here.
+    @Environment(QueueUndoStack.self) private var undoStack
+    @Environment(QueueUndoRequest.self) private var undoRequest
     @State private var gmailConnected = GmailAuthManager.shared.isConnected
     @State private var isConnectingGmail = false
     @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
@@ -689,6 +692,24 @@ struct RootView: View {
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
             .environment(dayOffOffer)
+            // #1414: the Edit menu's Undo raises a token on the App; the reversal happens HERE, where
+            // the context, the live rows and the feedback banner all exist.
+            .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
+    }
+
+    // One press, one whole action reversed (#1414). Takes the top entry whether or not it turns out to
+    // be applicable, because a stale entry is spent either way: leaving it on the stack would make the
+    // next Cmd+Z retry the same dead entry forever instead of reaching the one behind it.
+    private func performQueueUndo() {
+        guard let entry = undoStack.takeTop() else { return }
+        let model = allProspects.first { $0.naturalKey == entry.naturalKey }
+        guard QueueUndo.apply(entry, to: model) else {
+            // The row moved since (a scout re-scored it, a sweep took it, a send made it contacted) or
+            // is gone. Deliberately silent: Dan's own call in the discovery interview was "I don't need
+            // here's why, it's fine if it just doesn't work". #1415 covers what a SUCCESSFUL undo says.
+            return
+        }
+        context.saveOrWarn(org: entry.groupName, feedback: feedback)
     }
 
     #if DEBUG

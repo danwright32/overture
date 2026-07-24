@@ -27,6 +27,11 @@ enum ArchiveReveal {
 // (Mark menu, booking confirm, restore) behaves identically here.
 struct ArchiveView: View {
     @Environment(\.modelContext) private var context
+    // #1414: the session undo stack, owned by the App and injected, so keep and dismiss record.
+    // OPTIONAL deliberately: a non-optional Observable environment lookup FATAL ERRORS when the object
+    // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
+    // test that builds this view directly). Nil simply means this surface records nothing.
+    @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
     @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
@@ -191,6 +196,7 @@ struct ArchiveView: View {
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
+                              undoStack: undoStack,
                               highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
                               outboundSendSince: outboundSendSince,
                               replySendSince: { rid in replySending[rid] },
