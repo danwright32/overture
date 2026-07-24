@@ -25,6 +25,16 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     // normalized here: RunGrouping uses it downstream to collapse those nights into one run regardless of
     // how far apart they fall. Nil for every source that names no such id, which is nearly all of them.
     var seriesId: String?
+    // #1469: the run read this row's page and the PAGE ITSELF has not published a venue yet (a placeholder
+    // row, an explicit TBA). Absent, the near-universal case, means the ordinary reading: a row that came
+    // back with no venue is one whose detail page may never have been opened, which is a suspected reading
+    // failure and still costs the source its ability to mark shows gone (#887).
+    //
+    // The two look identical in the data and are opposite facts about a source. Smoke Ring's own page prints
+    // "Info coming soon" against its Oct 24 gig; counted as an unread page that one row is 25% of a four-show
+    // calendar, so the band's page sat past the 5% tolerance with cancellation detection switched off, for as
+    // long as the placeholder existed. The run is the only thing that can see the difference, so it says so.
+    var venueNotPublished: Bool?
 }
 
 enum Confidence: String, Sendable { case confident, uncertain }

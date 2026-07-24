@@ -261,19 +261,33 @@ enum ExtractedEventGuard {
                                 venueGapsAreStructural: Bool = false) -> RejectionCounts {
         var venue = 0, title = 0, structural = 0
         var structuralURLs = Set<String>()
+        var structuralDates = Set<String>()
         for event in events {
             guard let reason = rejection(for: event) else { continue }
             guard reason.isAboutVenue else { title += 1; continue }
+            // #1469: the OTHER way this can be the source's own gap rather than a failed read. On the native
+            // path the whole path answers it (there is no detail page to fail); on the agent path only the run
+            // can, because it is the one thing that saw the page, so it says so per row.
+            let publisherGap = venueGapsAreStructural || event.venueNotPublished == true
             let link = (event.sourceUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if venueGapsAreStructural, !link.isEmpty {
-                structural += 1
+            let date = (event.performanceDate ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard publisherGap, !link.isEmpty || !date.isEmpty else { venue += 1; continue }
+            structural += 1
+            // #1469: the link where there is one, and ONLY otherwise the date. A listing URL identifies one
+            // show; a date identifies every show that source has that night. Recording both would shelter a
+            // genuinely cancelled sibling that happens to share the night with a blank row, for nothing: the
+            // link already holds the show the blank row is about. So the weaker key is used only where it is
+            // the sole identity the row has, which is Smoke Ring's placeholder ("Info coming soon", no title,
+            // no venue, no link, but a night).
+            if !link.isEmpty {
                 structuralURLs.insert(link)
             } else {
-                venue += 1
+                structuralDates.insert(date)
             }
         }
         return RejectionCounts(venueRelated: venue, titleRelated: title,
-                               structuralGapCount: structural, structuralGapURLs: structuralURLs)
+                               structuralGapCount: structural, structuralGapURLs: structuralURLs,
+                               structuralGapDates: structuralDates)
     }
 }
 
@@ -294,6 +308,12 @@ struct RejectionCounts: Equatable, Sendable {
     var titleRelated: Int
     var structuralGapCount: Int = 0
     var structuralGapURLs: Set<String> = []
+    // #1469: the nights those rows fall on, for the ones that carry no link of their own. A placeholder row
+    // ("Info coming soon") routinely has no title, no venue and no link, and its date is the only identity
+    // left to hold a stored show by. Scoped to the source that published it when the reconcile reads it: a
+    // date is nothing like as specific as a URL, and unioned across sources one venue's placeholder would
+    // shelter every other venue's show that night.
+    var structuralGapDates: Set<String> = []
     // The #887 count. A dropped event is absent from the feed the reconcile reads, so a run that could not
     // read part of what it looked at may still add and update but may not conclude anything is gone.
     var unreadTotal: Int { venueRelated + titleRelated }

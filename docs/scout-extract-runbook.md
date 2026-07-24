@@ -110,6 +110,19 @@ For each item in the work-list:
    A city is not a room. `location` (3a) is where that fact belongs, and it has its own field precisely
    so `venue` never has to absorb it.
 
+   **When the PAGE ITSELF says the venue is not announced yet, set `venueNotPublished: true`** (#1469),
+   alongside the null `venue`. This is the difference between "this page has not published a venue for this
+   show yet" and "I could not open this show's detail page", which look identical in the file and are
+   opposite facts about a source. Set it ONLY for the first: a placeholder row (Smoke Ring's Palm Springs
+   gig prints "Info coming soon" with no title, venue or link), an explicit "venue TBA", or a detail page
+   you DID read that names no venue. Never set it for a page you could not reach, a link that 404ed, or a
+   fetch you skipped: leave those unflagged, which is what says "treat this as possibly unread".
+
+   It matters because Overture reads the unflagged ones as a sign the run does not know what else it
+   missed, and past a small tolerance it stops trusting that source to tell it a show was cancelled. One
+   permanent placeholder on a four-show artist page is 25% of that calendar, so leaving it unflagged
+   switches cancellation detection off for that source for as long as the placeholder exists.
+
    **Before you null, check the outdoor exception below.** Null is right only when the page names no
    specific place at all. A specific NAMED outdoor space (a park, plaza, pier) is a real venue, not a
    location, so it belongs in `venue`. Nulling "Sakura Park" is the exact slip #1214 was filed for: the
