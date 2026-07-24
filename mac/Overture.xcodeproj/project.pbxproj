@@ -585,6 +585,7 @@
 		DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */; };
 		DDD50C538C8C05972C205837 /* WatchedSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1419836FA8F86910102B0B1D /* WatchedSourceTests.swift */; };
 		DDE9A993CA6F315D1BBB4F1F /* AlgoliaCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E61D4E3018F1962ABE8602 /* AlgoliaCalendar.swift */; };
+		DF29C323DA1550670F39B0D4 /* OVCapsuleActionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5935B68EAA469B53F220382C /* OVCapsuleActionGuardTests.swift */; };
 		DF9069647F653F6DB3F3F456 /* BounceDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF05EC0BA918EF0073F0AF09 /* BounceDetection.swift */; };
 		DF9F919C6E72FBB40D329E66 /* TicketLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB6AB214C94FAA63B14B637 /* TicketLink.swift */; };
 		E07FB07A0F1045D5570174E4 /* ScoutServiceNativeProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928DF411126F2DB5C7D3193D /* ScoutServiceNativeProgressTests.swift */; };
@@ -908,6 +909,7 @@
 		57E7EFEF49D57DEF70DFF640 /* TooSoonDismissReasonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TooSoonDismissReasonTests.swift; sourceTree = "<group>"; };
 		58091E7E5682F2DC98DF631F /* FollowUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowUpTests.swift; sourceTree = "<group>"; };
 		58D17DC1074893CC29A3EB58 /* RunWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunWindowTests.swift; sourceTree = "<group>"; };
+		5935B68EAA469B53F220382C /* OVCapsuleActionGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OVCapsuleActionGuardTests.swift; sourceTree = "<group>"; };
 		595B0E6C06FF1BA88F84DBEA /* ReconcileScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconcileScheduler.swift; sourceTree = "<group>"; };
 		59DE693FC4DE46904203D785 /* DaysOffSnoozeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffSnoozeTests.swift; sourceTree = "<group>"; };
 		5AFFF2BD478618FF1D29304A /* HandoffCompletenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffCompletenessTests.swift; sourceTree = "<group>"; };
@@ -1564,6 +1566,7 @@
 				AA9397FDF7E49A3E34623AD3 /* OutcomeStatsTests.swift */,
 				5C34BF6FFEC79EE1375261E5 /* OutreachEventPhrasingTests.swift */,
 				973A2EC8D67BB0AF24543FC4 /* OvationTixCalendarTests.swift */,
+				5935B68EAA469B53F220382C /* OVCapsuleActionGuardTests.swift */,
 				35A5F71943676BDD3495EB3C /* OvertureDeepLinkTests.swift */,
 				43FCC61A3F6D5B7810C33E7C /* OVPillTests.swift */,
 				E73D4129E9A92AF7133DCAE6 /* PartialSweepCannotCancelTests.swift */,
@@ -2630,6 +2633,7 @@
 				B59A9FC6B274B0F898E07406 /* NaturalKeyTests.swift in Sources */,
 				D491A8A11F9226DB81EA8392 /* NaturalKeyVenueMigrationTests.swift in Sources */,
 				534815A4119D1F98E4E5389D /* NotificationServiceTests.swift in Sources */,
+				DF29C323DA1550670F39B0D4 /* OVCapsuleActionGuardTests.swift in Sources */,
 				5A4BEA1E95144947860D54D2 /* OVPillTests.swift in Sources */,
 				10E81F68130C8EB21253842E /* OmniFocusAutomationPermissionTests.swift in Sources */,
 				F9B6E90D71CAA491068B0BB1 /* OmniFocusSyncLivenessGuardTests.swift in Sources */,

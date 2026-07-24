@@ -682,9 +682,11 @@ struct ProspectRowView: View {
                         Button(QueueModel.excludeTownLabel(town: town)) { onExcludeTown() }
                     }
                 } label: {
-                    Text("Dismiss").font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                        .background(Capsule().strokeBorder(OVColor.lineStrong, lineWidth: 1))
+                    // #1460: the same secondary-action capsule OVCapsuleButton wears, via the shared
+                    // modifier, so "you can do this" reads identically here (a Menu) and in the Sources sheet
+                    // (Buttons). Only the neutral tint is this control's own.
+                    Text("Dismiss").foregroundStyle(OVColor.inkSoft)
+                        .ovCapsuleAction()
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
