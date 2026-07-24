@@ -71,7 +71,16 @@ struct QueueUndoEntry: Equatable, Sendable {
     // place, not a fragment the menu prefixes: #863's guard rejects a view composing its own copy, and a
     // sentence assembled at the call site is invisible to the copy inventory (#915), so Dan's PR would
     // not show the words he is going to read.
-    var undoMenuTitle: String { "Undo \(actionLabel): \(groupName)" }
+    //
+    // #1479: when a block of days off rode along on this dismiss (#1473), the single press reverses both, and
+    // un-flags every other show that block held back. The title names that whole action so Dan can tell it
+    // apart from a plain dismiss BEFORE he presses; "Undo Dismiss: X" would promise less than the press does.
+    var undoMenuTitle: String {
+        if blockedDays != nil {
+            return "Undo \(actionLabel) and Days Off: \(groupName)"
+        }
+        return "Undo \(actionLabel): \(groupName)"
+    }
 
     // Is the row still exactly how this action left it? If anything moved it since (a background
     // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so the

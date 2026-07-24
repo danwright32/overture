@@ -47,6 +47,28 @@ struct QueueUndoStackTests {
         #expect(stack.undoMenuTitle == "Undo Dismiss: The Music Shop")
     }
 
+    // #1479: since #1473 one press can reverse a dismiss AND the days off it led to (which un-flags every
+    // other show that block held back). The menu title Dan reads right before pressing must name that whole
+    // action, so he can tell the two cases apart before committing to the press.
+    @Test func aDismissThatAlsoBlockedNightsNamesTheWholeAction() {
+        let stack = QueueUndoStack()
+        var entry = dismissal()
+        entry.blockedDays = QueueUndoEntry.BlockedDays(start: "2026-11-18", end: "2026-11-18")
+        stack.record(entry)
+
+        #expect(stack.undoMenuTitle == "Undo Dismiss and Days Off: The Music Shop")
+    }
+
+    // The other half of the same distinction: an ordinary dismiss with no block behind it must NOT claim to
+    // undo any days off, or the title would promise more than the press performs.
+    @Test func aDismissWithNoBlockDoesNotClaimToUndoDaysOff() {
+        let stack = QueueUndoStack()
+        stack.record(dismissal())
+
+        #expect(stack.undoMenuTitle == "Undo Dismiss: The Music Shop")
+        #expect(!stack.undoMenuTitle.contains("Days Off"))
+    }
+
     // Dan's answer 1: he walks BACKWARD through several actions, not just the last one.
     @Test func severalActionsComeBackOffInReverseOrder() {
         let stack = QueueUndoStack()
