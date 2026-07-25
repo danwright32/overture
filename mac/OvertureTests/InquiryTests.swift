@@ -58,6 +58,27 @@ struct InquiryTests {
         #expect(InquiryIntake.duplicate(ofKey: otherBareKey, in: [bare]) == nil)
     }
 
+    // Dan marks an inquiry booked or lost by hand (Lost is ALWAYS a manual close, #1435). A manual
+    // mark is sticky: it stamps the manual source so auto reply/booking detection never overwrites it,
+    // and it clears any booking suggestion.
+    @Test func markingBookedIsAManualStickyOutcome() {
+        let inq = Inquiry(source: .directEmail, inquirerName: "Ada", inquirerEmail: nil, eventName: "Gala")
+        inq.bookingSuggested = true
+        inq.markOutcomeManually(.booked, now: Date(timeIntervalSince1970: 5))
+        #expect(inq.outcome == .booked)
+        #expect(inq.outcomeSourceRaw == OutcomeSource.manual.rawValue)
+        #expect(inq.outcomeAt == Date(timeIntervalSince1970: 5))
+        #expect(inq.bookingSuggested == false)
+        #expect(inq.isOpen == false)
+    }
+
+    @Test func markingLostClosesTheInquiry() {
+        let inq = Inquiry(source: .contactForm, inquirerName: "Bo", inquirerEmail: nil, eventName: "Recital")
+        inq.markOutcomeManually(.lostSoft, now: Date())
+        #expect(inq.isOpen == false)
+        #expect(inq.outcomeSourceRaw == OutcomeSource.manual.rawValue)
+    }
+
     // Intake trims its inputs and turns blank optional fields into nil, so the form stays dumb and the
     // rules live here (the WatchlistEditing idiom). The built inquiry is inserted.
     @Test func createTrimsInputsNilsBlanksAndInserts() throws {

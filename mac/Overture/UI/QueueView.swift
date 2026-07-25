@@ -23,6 +23,12 @@ struct QueueView: View {
     )
     private var prospects: [Prospect]
 
+    // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
+    // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
+    @Query private var inquiries: [Inquiry]
+    // The inquiry Dan is composing a first reply to (nil = none).
+    @State private var replyingTo: Inquiry?
+
     // #991: Dan's stored town refusals. A @Query so ADDING one re-renders the queue and the gate
     // re-decides every row against the new union at once, which is the "no migration" property #990's
     // derived verdict makes possible.
@@ -168,6 +174,8 @@ struct QueueView: View {
                 onSend: performSend,
                 onConnectGmail: onConnectGmail
             )
+            // #1436: compose and send Dan's first reply to a hire inquiry.
+            .sheet(item: $replyingTo) { InquiryReplySheet(inquiry: $0) }
     }
 
     // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
@@ -236,7 +244,11 @@ struct QueueView: View {
     // rows for that stage, or the #308 away-alert leads when focusedStage is nil.
     @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
         if focusedStage == .reachedOut {
-            reachedOutList(data.reachedOut)
+            // #1436: replied inquiries (awaiting a response) show above the reached-out prospects.
+            VStack(alignment: .leading, spacing: OVSpacing.md) {
+                inquirySection(stageInquiryRows(.reachedOut))
+                reachedOutList(data.reachedOut)
+            }
         } else {
             // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft
             // drops out); in leads mode, keep the frozen key set. The dispatch lives in
@@ -262,7 +274,8 @@ struct QueueView: View {
                 }
                 .padding(.bottom, OVSpacing.xxs)
                 .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
-                if rows.isEmpty {
+                let inquiryRows = stageInquiryRows(focusedStage)
+                if rows.isEmpty && inquiryRows.isEmpty {
                     if focusedStage == nil {
                         // #308: the away-alert leads path names specific leads; some may have since left.
                         Text("These leads are no longer in your queue.")
@@ -275,12 +288,61 @@ struct QueueView: View {
                     // every stage. #976: the date groups are the scroll targets, so scrollTargetLayout lets
                     // scrollPosition($topGroup) pin the top visible one across a @Query rebuild.
                     LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
+                        // #1436: un-replied inquiries (the to-send stage) surface with the shows.
+                        inquirySection(inquiryRows)
                         ForEach(QueueModel.groupByDate(rows)) { group in dateSection(group) }
                     }
                     .scrollTargetLayout()
                 }
             }
         }
+    }
+
+    // #1436: the inquiries belonging to a stage, as display rows (StageNavigation.stage decides which).
+    private func stageInquiryRows(_ stage: StageFocus?) -> [InquiryRow] {
+        guard let stage else { return [] }
+        let forStage = inquiries.filter { StageNavigation.stage(for: $0) == stage }
+        return QueueModel.inquiryRows(forStage, now: Date())
+    }
+
+    // #1436: inquiries for a stage, as their own date-grouped block. Kept separate from the prospect
+    // rows so the prospect rendering is untouched; whether they interleave between shows by date is a
+    // walk-time refinement. The source tag and lifecycle state stand in for a prospect's fit/geo, which
+    // an inquiry has no equivalent for.
+    @ViewBuilder private func inquirySection(_ rows: [InquiryRow]) -> some View {
+        if !rows.isEmpty {
+            let byId = Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
+                                  uniquingKeysWith: { first, _ in first })
+            ForEach(QueueModel.groupRowsByDate(rows.map { QueueRow.inquiry($0) })) { group in
+                VStack(alignment: .leading, spacing: OVSpacing.sm) {
+                    HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
+                        if !group.weekday.isEmpty {
+                            Text(group.weekday.uppercased()).font(.system(size: 11, weight: .semibold))
+                                .tracking(1.4).foregroundStyle(OVColor.inkFaint)
+                        }
+                        Text(group.monthDay).font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+                        if !group.year.isEmpty {
+                            Text(group.year).font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                        }
+                    }
+                    ForEach(group.rows) { queueRow in
+                        if case .inquiry(let inquiryRow) = queueRow, let inquiry = byId[inquiryRow.id] {
+                            InquiryRowView(
+                                row: inquiryRow,
+                                onReply: { replyingTo = inquiry },
+                                onMarkBooked: { markInquiry(inquiry, .booked) },
+                                onMarkLost: { markInquiry(inquiry, .lost) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // #1436: the outcome and its write both live in InquiryMutations, so a failed save warns Dan
+    // instead of the row quietly leaving the queue over a change that never reached disk.
+    private func markInquiry(_ inquiry: Inquiry, _ action: InquiryMutations.MarkAction) {
+        InquiryMutations.mark(inquiry, as: action, context: context, feedback: feedback)
     }
 
     // #1220: every stage view groups its rows by date, reusing the pre-#1134 date-group header (weekday,
@@ -523,7 +585,7 @@ struct QueueView: View {
     private var agentInputs: AgentInputs {
         let now = Date()
         return AgentInputs.from(
-            prospects: prospects, now: now, today: today,
+            prospects: prospects, inquiries: inquiries, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
             replyRunAlive: ReplyClassifyService.isRunning(now: now)

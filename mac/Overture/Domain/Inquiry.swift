@@ -139,6 +139,16 @@ extension Inquiry {
         guard isOpen, !replied, let sentAt else { return false }
         return BusinessDay.count(after: sentAt, through: now) >= Inquiry.closingSuggestionBusinessDays
     }
+
+    // Dan's own call on the outcome (booked or a lost close): manual source so auto reply/booking
+    // detection never overwrites it, timestamped, and any booking suggestion cleared. Mirrors
+    // Prospect.markOutcomeManually.
+    func markOutcomeManually(_ outcome: Outcome, now: Date) {
+        self.outcome = outcome
+        outcomeSourceRaw = OutcomeSource.manual.rawValue
+        outcomeAt = now
+        bookingSuggested = false
+    }
 }
 
 // Intake rules, kept OUT of the sheet that draws them (the WatchlistEditing / DayOffEditing idiom):
@@ -154,6 +164,18 @@ enum InquiryIntake {
 
     static func isBlankKey(_ key: String) -> Bool {
         key.replacingOccurrences(of: "|", with: "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // The only required field. Everything else about the event can legitimately be unknown when an
+    // inquiry arrives as a bare email.
+    static func canSave(name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // An unknown date must stay genuinely unknown rather than defaulting to whatever the picker was
+    // showing: a wrong date both mis-keys the event and files the inquiry under the wrong day.
+    static func performanceDate(hasDate: Bool, date: Date) -> String? {
+        hasDate ? EasternDate.dayString(from: date) : nil
     }
 
     // Build a normalized inquiry from raw form fields and insert it: trims every field and turns a
