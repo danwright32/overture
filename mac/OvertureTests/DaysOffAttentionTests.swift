@@ -18,6 +18,18 @@ struct DaysOffAttentionTests {
                         startDate: date, endDate: date, venueId: nil, venueName: "V")
     }
 
+    // #1456 helpers: a fixed clock and today, an isolated defaults suite (so the snooze never leaks between
+    // tests or reads Dan's real one), and a calendar that DOES have an upcoming shoot (so the stalled-feed
+    // reason is the one under test, not the no-shoots one).
+    private let today = "2026-11-01"
+    private let now = Date(timeIntervalSince1970: 1_762_000_000)
+    private func scratchDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "days-off-attention-\(UUID().uuidString)")!
+    }
+    private func calendarWithUpcomingShoot() -> BlockedCalendar {
+        BlockedCalendar.build(bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
+    }
+
     // MARK: - When Overture is protecting nothing, it says so
 
     @Test func noBookedShootDataNeedsALook() {
@@ -48,14 +60,15 @@ struct DaysOffAttentionTests {
     // exactly. The mark stays so the blind spot is visible at a glance; the sentence moves to the hover and
     // the sheet, which is where there is room to say it properly.
     @Test func theToolbarSaysTheSameThingInBothStates() {
-        #expect(DaysOffAttention.badgeTitle(needsALook: false) == "Days off")
-        #expect(DaysOffAttention.badgeTitle(needsALook: true) == "Days off")
+        #expect(DaysOffAttention.badgeTitle(.none) == "Days off")
+        #expect(DaysOffAttention.badgeTitle(.noUpcomingShoots) == "Days off")
+        #expect(DaysOffAttention.badgeTitle(.feedStalled) == "Days off")   // #1456: the stalled feed too
     }
 
     // The words are gone from the toolbar, so nothing there may describe his schedule back to him. This is
     // what stops the "(no shoots)" reading ("you have no work") from creeping back in a later edit.
     @Test func theToolbarNeverDescribesHisScheduleBackToHim() {
-        let title = DaysOffAttention.badgeTitle(needsALook: true)
+        let title = DaysOffAttention.badgeTitle(.noUpcomingShoots)
         #expect(!title.lowercased().contains("shoot"), "the toolbar must not talk about his shoots at all")
         #expect(!title.contains("("), "no parenthetical: the explanation lives in the hover and the sheet")
     }
@@ -67,7 +80,7 @@ struct DaysOffAttentionTests {
         let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
         let range = try #require(rootView.range(of: "DaysOffAttention.badgeTitle"))
         let item = rootView[range.lowerBound...].prefix(400)
-        #expect(!item.contains("showsTitle: noBookedShootData"),
+        #expect(!item.contains("showsTitle: daysOffReason"),
                 "the label is carried by colour now, not by printed text")
     }
 
@@ -87,14 +100,45 @@ struct DaysOffAttentionTests {
     // It names the CONSEQUENCE, not just the fact, because the consequence is the part he can act on: he
     // has to block those days by hand, or Overture will keep pitching him for nights he is working.
     @Test func theHelpSaysWhatOvertureCannotProtectHimFrom() {
-        let help = DaysOffAttention.help(needsALook: true)
+        let help = DaysOffAttention.help(.noUpcomingShoots)
         #expect(help.contains("no upcoming shoots"))     // #925: upcoming, not "ever seen a booking"
         #expect(help.contains("Downbeat"))
         #expect(help.contains("Block those days here"))   // what he can DO about it
     }
 
     @Test func theHelpIsOrdinaryWhenTheDataIsThere() {
-        #expect(DaysOffAttention.help(needsALook: false) == "The days Overture won't pitch you for: your booked shoots, and the days you block.")
+        #expect(DaysOffAttention.help(.none) == "The days Overture won't pitch you for: your booked shoots, and the days you block.")
+    }
+
+    // MARK: - #1456: the stalled-feed reason
+
+    // The precedence: no upcoming shoots is the more fundamental "Overture is blind" state and wins; the
+    // stalled-feed nudge only speaks when there ARE upcoming shoots to have gone stale on. The snooze
+    // silences the whole mark.
+    @Test func reasonPrefersNoShootsThenStalledThenNone() {
+        let defaults = scratchDefaults()
+        let withShoot = calendarWithUpcomingShoot()
+        let noShoot = BlockedCalendar.empty
+
+        #expect(DaysOffAttention.reason(noShoot, feedStalled: true, today: today, now: now, defaults: defaults) == .noUpcomingShoots)
+        #expect(DaysOffAttention.reason(withShoot, feedStalled: true, today: today, now: now, defaults: defaults) == .feedStalled)
+        #expect(DaysOffAttention.reason(withShoot, feedStalled: false, today: today, now: now, defaults: defaults) == .none)
+    }
+
+    @Test func snoozeSilencesTheStalledFeedToo() {
+        let defaults = scratchDefaults()
+        DaysOffAttention.snooze(now: now, into: defaults)
+        #expect(DaysOffAttention.reason(calendarWithUpcomingShoot(), feedStalled: true,
+                                        today: today, now: now, defaults: defaults) == .none)
+    }
+
+    // The stalled-feed help names the fact and the action; the sheet sentence adds the reassurance the
+    // toolbar has no room for, because a broken export and a quiet booking spell look identical.
+    @Test func theStalledFeedCopyNudgesWithoutAccusing() {
+        let help = DaysOffAttention.help(.feedStalled)
+        #expect(help.contains("last four weeks"))
+        #expect(help.contains("Downbeat"))
+        #expect(DaysOffAttention.feedStalledExplanation.contains("nothing is wrong"))
     }
 
     // The sentence inside the sheet, where the promise is actually made. It has to explain WHY the list is

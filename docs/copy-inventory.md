@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **787 sentences**, from 266 source files.
+Every sentence Overture can say to Dan: **789 sentences**, from 267 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -767,6 +767,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "No matches for \"\(query)\""
     `Domain/ShowSearch.swift`
+"No new shoots have come through from Downbeat in the last four weeks. If you simply haven't booked, nothing is wrong; if you have, check that Downbeat is still exporting to Overture."
+    `Domain/DaysOffAttention.swift`
+"No new shoots have come through from Downbeat in the last four weeks. If you've booked one, check that Downbeat is still exporting to Overture."
+    `Domain/DaysOffAttention.swift`
 "No new shows landed in the queue from that page."
     `UI/LeadIntakeModel.swift`
 "No one to follow up with"

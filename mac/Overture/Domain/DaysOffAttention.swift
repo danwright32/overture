@@ -31,12 +31,31 @@ enum DaysOffAttention {
     //
     // The snooze hides a WARNING, never a fact: a genuine upcoming shoot silences this on its own merits,
     // so a stale snooze sitting underneath one changes nothing and cannot mask a later gap.
-    static func needsALook(_ calendar: BlockedCalendar,
+    // #1456: the mark now covers two ways Overture's picture of Dan's schedule can be off, not one. Both
+    // show the same quiet "Days off" toolbar word (#1430); the sentence that explains which one lives in the
+    // help and the sheet, which have room.
+    enum Reason: Equatable, Sendable {
+        case none
+        case noUpcomingShoots   // #901/#925: Downbeat has handed over nothing upcoming to keep clear of.
+        case feedStalled        // #1456: it HAS upcoming shoots, but no new one has appeared in a long while.
+    }
+
+    // The no-shoots case wins when both could apply: it is the more fundamental "Overture is blind" state,
+    // and it is the one with a direct action (block the days yourself). The stalled-feed nudge is only
+    // meaningful while there ARE upcoming shoots. The snooze silences the whole mark for a week.
+    static func reason(_ calendar: BlockedCalendar, feedStalled: Bool = false,
+                       today: String = QueueModel.easternToday(), now: Date = Date(),
+                       defaults: UserDefaults = .standard) -> Reason {
+        guard !isSnoozed(now: now, defaults: defaults) else { return .none }
+        if !calendar.hasUpcomingBookedShoot(today: today) { return .noUpcomingShoots }
+        return feedStalled ? .feedStalled : .none
+    }
+
+    static func needsALook(_ calendar: BlockedCalendar, feedStalled: Bool = false,
                            today: String = QueueModel.easternToday(),
                            now: Date = Date(),
                            defaults: UserDefaults = .standard) -> Bool {
-        guard !calendar.hasUpcomingBookedShoot(today: today) else { return false }
-        return !isSnoozed(now: now, defaults: defaults)
+        reason(calendar, feedStalled: feedStalled, today: today, now: now, defaults: defaults) != .none
     }
 
     static func isSnoozed(now: Date, defaults: UserDefaults = .standard) -> Bool {
@@ -65,14 +84,18 @@ enum DaysOffAttention {
     // zero upcoming bookings reports .ok. That is the #901 trap exactly, and it cost Dan his evenings twice.
     // The sentence explaining it lives in `help` and in the sheet, which have room to say it properly; a
     // toolbar has room only to be noticed.
-    static func badgeTitle(needsALook: Bool) -> String { "Days off" }
+    static func badgeTitle(_ reason: Reason) -> String { "Days off" }
 
-    static func help(needsALook: Bool) -> String {
-        guard needsALook else {
+    static func help(_ reason: Reason) -> String {
+        switch reason {
+        case .none:
             return "The days Overture won't pitch you for: your booked shoots, and the days you block."
+        case .noUpcomingShoots:
+            // The consequence, not just the fact: what he can do about it is block the days himself.
+            return "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
+        case .feedStalled:
+            return "No new shoots have come through from Downbeat in the last four weeks. If you've booked one, check that Downbeat is still exporting to Overture."
         }
-        // The consequence, not just the fact: what he can do about it is block the days himself.
-        return "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     }
 
     // The sentence in the sheet itself, where the promise is made. An empty list with no explanation reads
@@ -83,6 +106,12 @@ enum DaysOffAttention {
     // one thing he needs to know, which is that Downbeat has handed over nothing upcoming.
     static let noBookedShootsExplanation =
         "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
+
+    // #1456: the stalled-feed sentence in the sheet. It carries the reassurance the toolbar has no room for,
+    // because this is a soft nudge, not an error: a broken export and a genuinely quiet booking spell look
+    // identical from the data, so it must not accuse the feed of being broken when Dan simply hasn't booked.
+    static let feedStalledExplanation =
+        "No new shoots have come through from Downbeat in the last four weeks. If you simply haven't booked, nothing is wrong; if you have, check that Downbeat is still exporting to Overture."
 
     static let snoozeButtonTitle = "Hide this for a week"
 }

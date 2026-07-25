@@ -129,10 +129,14 @@ struct RootView: View {
     // #925: the snooze is bound rather than merely read, so dismissing it in the sheet clears the mark on
     // this toolbar immediately instead of on the next launch.
     @AppStorage(DaysOffAttention.snoozeKey) private var daysOffSnoozedUntil: Double = 0
+    // #1456: the timestamp of the last genuinely-new upcoming booking, read reactively so the mark updates
+    // as the reconcile tick advances it.
+    @AppStorage(DownbeatFeedFreshnessStore.lastNewAtKey) private var feedLastNewAt: Double = 0
 
-    private var noBookedShootData: Bool {
-        DaysOffAttention.needsALook(
-            ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context))
+    private var daysOffReason: DaysOffAttention.Reason {
+        DaysOffAttention.reason(
+            ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context),
+            feedStalled: DownbeatFeedFreshness.isStalled(lastNewAt: feedLastNewAt, now: Date()))
     }
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
@@ -426,11 +430,11 @@ struct RootView: View {
                     Button {
                         showDaysOff = true
                     } label: {
-                        ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(needsALook: noBookedShootData),
+                        ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(daysOffReason),
                                           systemImage: "calendar.badge.clock")
-                            .foregroundStyle(noBookedShootData ? OVColor.inkSoft : Color.primary)
+                            .foregroundStyle(daysOffReason != .none ? OVColor.inkSoft : Color.primary)
                     }
-                    .help(DaysOffAttention.help(needsALook: noBookedShootData))
+                    .help(DaysOffAttention.help(daysOffReason))
 
                     // #1118: the towns Overture keeps out of the queue, and where Dan takes one back off.
                     // It shares this group with Sources and Days off (SwiftUI's toolbar builder tops out at
