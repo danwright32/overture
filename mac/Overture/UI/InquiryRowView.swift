@@ -7,7 +7,7 @@ struct InquiryRowView: View {
     let row: InquiryRow
     var onReply: () -> Void
     var onMarkBooked: () -> Void
-    var onMarkLost: () -> Void
+    var onMarkLost: (InquiryLostReason) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
@@ -68,7 +68,15 @@ struct InquiryRowView: View {
             }
             Menu {
                 Button("Mark booked") { onMarkBooked() }
-                Button("Mark lost") { onMarkLost() }
+                // #16 needs the reasons apart, and closing an inquiry is the only moment anyone knows
+                // which it was. Kept under a heading rather than loose in the menu: on their own,
+                // "Never heard back" beside "Mark booked" reads as setting a status rather than closing
+                // the inquiry. The heading says what all three do, so each is still one click.
+                Section("Mark lost") {
+                    ForEach(InquiryLostReason.allCases, id: \.self) { reason in
+                        Button(reason.label) { onMarkLost(reason) }
+                    }
+                }
             } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(OVColor.inkSoft)
             }
