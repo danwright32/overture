@@ -140,6 +140,30 @@ struct ExtractedEventGuardTests {
         }
     }
 
+    // #1498: the disguise that got through. A run reported the city with its own explanation stapled on
+    // the end, and because the guard compared the raw string, neither the equality nor the clause check
+    // matched, so it passed. It reached the live store as a venue and would have gone into a pitch:
+    // "downtown Brooklyn, NY (specific venue not named on page)" on the 2026 Brooklyn Folk Festival.
+    // A parenthetical is a note ABOUT the venue, never part of its name, so it is stripped before the
+    // comparison.
+    @Test func aCityWithAnExplanationStapledOnIsStillNotAVenue() {
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "downtown Brooklyn, NY (specific venue not named on page)",
+                       location: "downtown Brooklyn, NY")) == .locationAsVenue)
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Baltimore (venue TBA)", location: "Baltimore, Maryland")) == .locationAsVenue)
+    }
+
+    // The other half: a real venue that legitimately carries a parenthetical keeps passing. Stripping it
+    // for the comparison must not start rejecting rooms that are named this way.
+    @Test func aRealVenueKeepsItsParenthetical() {
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "Merkin Hall (Kaufman Music Center)", location: "New York, NY")) == nil)
+        #expect(ExtractedEventGuard.rejection(
+            for: event(venue: "The Church of St. Mary the Virgin (Times Square)",
+                       location: "New York, NY")) == nil)
+    }
+
     // The same disguise with the edges filed off: a run that reports the city alone, or in another case,
     // is making the identical claim and must fail identically.
     @Test func restatingOnlyPartOfTheLocationIsStillNotAVenue() {

@@ -63,6 +63,47 @@ struct VenueNormalizationTests {
         #expect(comma == noComma)
     }
 
+    // #1498: the same venue written with and without its trailing location or parent building is ONE
+    // venue, and until now was two shows. Measured on the live store 2026-07-25: 34 shows had fragmented
+    // into 71 queue rows, "Jalopy Theatre" and "Jalopy Theatre, Red Hook, Brooklyn, NY" among them, so
+    // Dan was triaging the same night more than once. #1064 deliberately kept the trailing city on the
+    // grounds that dropping it could merge two same-named venues in different towns, and noted the audit
+    // had seen no collisions; that premise is what changed. The risk it named cannot bite here anyway,
+    // because the key also carries the group and the date, so two different churches would only merge if
+    // the same group played the same night in both towns.
+    @Test func oneVenueWrittenWithAndWithoutItsLocationIsOneShow() {
+        // The live case, exactly as stored.
+        #expect(key("Bruce Molsky & Darol Anger", "2026-07-25", "Jalopy Theatre")
+                == key("Bruce Molsky & Darol Anger", "2026-07-25", "Jalopy Theatre, Red Hook, Brooklyn, NY"))
+        // A parent building, not a city, folds the same way.
+        #expect(key("G", "2026-07-01", "Weill Recital Hall")
+                == key("G", "2026-07-01", "Weill Recital Hall, Carnegie Hall"))
+        // And a street address, which already folded, still does.
+        #expect(key("G", "2026-07-01", "The Cutting Room")
+                == key("G", "2026-07-01", "The Cutting Room, 44 East 32nd Street, New York, NY"))
+    }
+
+    // The other half of that change: it must not start merging genuinely different rooms, which is the
+    // risk #1064 was protecting against. Two different rooms in one building keep different first names,
+    // so they stay apart.
+    @Test func twoRoomsInOneBuildingStillDoNotMerge() {
+        #expect(key("G", "2026-07-01", "Weill Recital Hall, Carnegie Hall")
+                != key("G", "2026-07-01", "Zankel Hall, Carnegie Hall"))
+        #expect(key("G", "2026-07-01", "Stern Auditorium / Perelman Stage, Carnegie Hall")
+                != key("G", "2026-07-01", "Weill Recital Hall, Carnegie Hall"))
+    }
+
+    // The display path must NOT lose the parent building: `strippingEmbeddedAddress` is shared with
+    // VenueDisplay, so the key-only reduction has to happen somewhere else. A card still reads
+    // "Weill Recital Hall, Carnegie Hall".
+    @Test func theDisplayPathKeepsTheParentBuilding() {
+        #expect(VenueNormalization.strippingEmbeddedAddress("Weill Recital Hall, Carnegie Hall")
+                == "Weill Recital Hall, Carnegie Hall")
+        // It still drops a street address, which is what it was for.
+        #expect(VenueNormalization.strippingEmbeddedAddress("The Cutting Room, 44 East 32nd Street, New York, NY")
+                == "The Cutting Room")
+    }
+
     // A trailing street-suffix abbreviation folds to its full word, so "65th St" and "65th Street" agree.
     @Test func aTrailingStreetSuffixAbbreviationFolds() {
         #expect(key("G", "2026-07-01", "Holy Trinity Church at 65th St")

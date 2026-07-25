@@ -99,6 +99,14 @@ For each item in the work-list:
    at Pier 5, Brooklyn, NY", and the concert is not even on the barge. Take the venue from the listing
    and every pitch names the wrong place, with nothing downstream able to notice.
 
+   **A listing that names only a CITY is the reason to follow the link, not a substitute for it**
+   (#1498). "Located in downtown Brooklyn, NY" is not a venue, and it is also not evidence that the venue
+   is unpublished: it is the listings page doing what listings pages do. If the row has its own link, you
+   must follow the link before concluding anything about the venue. The live miss: Jalopy Theatre's 2026
+   Brooklyn Folk Festival was nulled on exactly that reasoning, while its own detail page names
+   "St. Ann & the Holy Trinity Church, 157 Montague St" outright. That cost Dan a wrong venue on a show
+   he was deciding whether to shoot, and a second copy of it in his queue.
+
    **A null venue is a RIGHT answer, not a lost row** (#995). Read the paragraph above as a fact about
    what a venue is for, never as pressure to produce one. Some pages publish no venue anywhere, for any
    event, and never will: on those, null on every row is the correct and complete result, and the run
