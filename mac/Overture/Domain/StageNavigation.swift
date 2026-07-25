@@ -81,6 +81,15 @@ enum StageNavigation {
     // fault at most once. It goes through the SAME private `matches` predicate as `naturalKeys`, so
     // counts[focus] is identical to naturalKeys(for: focus).count by construction, which is the #863
     // invariant (the number a pill shows is the rows its tap lands on). Pinned by StageNavigationCountsTests.
+    // Which stage a hire inquiry belongs to (#1436). Only two prospect stages apply: an inquiry Dan
+    // has not yet replied to needs to go out (.sendApproved, the to-send list); once he has replied and
+    // is awaiting a response it moves to .reachedOut. A booked or hand-lost inquiry is closed and in no
+    // stage. Pure and tested; the view and the counts both read it so they cannot drift.
+    static func stage(for inquiry: Inquiry) -> StageFocus? {
+        guard inquiry.isOpen else { return nil }
+        return inquiry.sentAt == nil ? .sendApproved : .reachedOut
+    }
+
     static func counts(in prospects: [Prospect],
                        today: String = QueueModel.easternToday(),
                        now: Date = Date()) -> [StageFocus: Int] {
