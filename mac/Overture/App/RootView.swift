@@ -94,6 +94,8 @@ struct RootView: View {
     // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
     @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
+    // #1435/#1436: the "Log an inquiry" intake sheet, opened from the same grouped menu as "Add a lead".
+    @State private var showInquiryIntake = false
     @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
     @State private var prepSheetShown = false      // #1130: the Prep run's takeover progress screen
     @State private var showSources = false
@@ -282,6 +284,8 @@ struct RootView: View {
                         // registers with the system, so the key did nothing at all. This item stays as
                         // the clickable route, and drives the same presenter.
                         Button("Add a lead...") { addLead.request() }
+                        // #1435: a direct hire inquiry Dan logs by hand, tracked alongside scouted shows.
+                        Button("Log an inquiry...") { showInquiryIntake = true }
                         Toggle("Auto-scout daily", isOn: $autoScoutEnabled)
                         Divider()
                         // #953: opens the per-run picker rather than prepping every kept show at once, so
@@ -668,6 +672,7 @@ struct RootView: View {
                            onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
+            .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
             .sheet(isPresented: $showFollowUps) {
                 FollowUpsView(onOpenInArchive: { key, recipientId in
                     showFollowUps = false
