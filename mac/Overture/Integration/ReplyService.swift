@@ -11,21 +11,23 @@ enum ReplyService {
     // `fetchFullThread` returns the full thread WITH the body, and is consulted only for a thread
     // that actually has a reply (lazy), so the body text is captured for the classify workflow (#112)
     // without pulling full bodies for the whole sent list. Threads are keyed by recipient.gmailThreadId.
+    // Genericized over `ReplyWatchable` (#1434) so an Inquiry rides the same pipeline; behavior for
+    // `Prospect` is unchanged (it flows in via the implicit `[Prospect]` → `[any ReplyWatchable]` upcast).
     @discardableResult
-    static func detectReplies(in prospects: [Prospect], selfEmail: String, now: Date,
+    static func detectReplies(in entities: [any ReplyWatchable], selfEmail: String, now: Date,
                               fetchThread: (String) -> Data?,
                               fetchFullThread: (String) -> Data? = { _ in nil }) -> Int {
         var count = 0
-        for p in prospects {
+        for p in entities {
             // A hand-resolved or booked show is closed; stop watching ALL its recipients. This is a
             // lead-level guard on the MANUAL source only, so one contact's reply can't blind another.
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
-            if p.outcome == .booked { continue }
+            if p.replyWatchManualOutcome { continue }
+            if p.replyWatchIsBooked { continue }
             var newReply = false
-            for r in p.recipients {
+            for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
-                if r.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
-                if r.replied || r.resolution == .booked { continue }
+                if r.replyWatchManualOutcome { continue }
+                if r.replied || r.replyWatchIsBooked { continue }
                 guard let data = fetchThread(threadId),
                       ReplyDetection.hasReply(fromAddresses: ReplyDetection.fromAddresses(threadJSON: data),
                                               selfEmail: selfEmail) else { continue }

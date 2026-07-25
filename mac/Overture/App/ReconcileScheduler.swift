@@ -179,7 +179,9 @@ final class ReconcileScheduler {
     func reconcileBookings(now: Date, from url: URL = DownbeatBridge.defaultURL) -> (count: Int, saveFailed: Bool) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let n = DownbeatBooking.reconcileBooked(prospects: all, clients: loaded.clients,
+        // #1434: the single generic reconcile pass. Phase 2 appends Inquiry entities to this one list
+        // so a booking is consumed once across both types.
+        let n = DownbeatBooking.reconcileBooked(entities: all, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)
         guard n > 0 else { return (0, false) }
         do {

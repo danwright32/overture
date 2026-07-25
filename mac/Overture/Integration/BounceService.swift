@@ -13,17 +13,19 @@ import Foundation
 // hard bounce takes precedence when a thread somehow carries both.
 @MainActor
 enum BounceService {
+    // Genericized over `ReplyWatchable` (#1434), mirroring ReplyService; behavior for `Prospect` is
+    // unchanged (it flows in via the implicit `[Prospect]` → `[any ReplyWatchable]` upcast).
     @discardableResult
-    static func detectBounces(in prospects: [Prospect], selfEmail: String, now: Date,
+    static func detectBounces(in entities: [any ReplyWatchable], selfEmail: String, now: Date,
                              fetchThread: (String) -> Data?) -> Int {
         var count = 0
-        for p in prospects {
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
-            if p.outcome == .booked { continue }
-            for r in p.recipients {
+        for p in entities {
+            if p.replyWatchManualOutcome { continue }
+            if p.replyWatchIsBooked { continue }
+            for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
-                if r.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
-                if r.bounced || r.replied || r.resolution == .booked { continue }
+                if r.replyWatchManualOutcome { continue }
+                if r.bounced || r.replied || r.replyWatchIsBooked { continue }
                 guard let data = fetchThread(threadId) else { continue }
                 if let bounceId = BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: selfEmail),
                    bounceId != r.dismissedBounceId {

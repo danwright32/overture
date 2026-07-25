@@ -6,9 +6,26 @@ import Foundation
 // health gate, manual-outcome sticky, monotonic (never reverts a booking), 1:1
 // booking-to-prospect via consumed-id set.
 enum DownbeatBooking {
+    // Back-compat overload for the concrete `Prospect` callers/tests (#1434); forwards into the
+    // genericized single-pass core below.
     @discardableResult
     static func reconcileBooked(
         prospects: [Prospect],
+        clients: [DownbeatClient],
+        bookings: [OvertureBooking],
+        health: DownbeatBridge.Health,
+        now: Date
+    ) -> Int {
+        reconcileBooked(entities: prospects, clients: clients, bookings: bookings, health: health, now: now)
+    }
+
+    // Genericized over `BookingMatchable` (#1434). One `consumed` set spans the WHOLE entity list, so
+    // a single real booking is auto-booked exactly once even when a Prospect and an Inquiry both match
+    // it (the dual-attribution bug this closes): the first in deterministic order wins the booking, the
+    // rest fall to a suggestion.
+    @discardableResult
+    static func reconcileBooked(
+        entities: [any BookingMatchable],
         clients: [DownbeatClient],
         bookings: [OvertureBooking],
         health: DownbeatBridge.Health,
@@ -19,7 +36,7 @@ enum DownbeatBooking {
         var consumed: Set<String> = []
         // Deterministic order: sort by performanceDate then groupName so 1:1 booking
         // consumption is stable across runs.
-        let sorted = prospects
+        let sorted = entities
             .filter { $0.wasProvablyContacted }
             .sorted {
                 let d0 = $0.performanceDate ?? ""
@@ -28,31 +45,23 @@ enum DownbeatBooking {
                 return $0.groupName < $1.groupName
             }
         for p in sorted {
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue { continue }
-            if p.outcome == .booked { continue }
-            if p.priorRelationshipAtSend == PriorRelationship.booked.rawValue { continue }
-            switch BookingMatch.classify(prospect: p, bookings: bookings) {
+            if p.bookingManualOutcome { continue }
+            if p.bookingIsBooked { continue }
+            if p.bookingPriorRelationshipBooked { continue }
+            switch BookingMatch.classify(entity: p, bookings: bookings) {
             case .exact(let booking):
                 // Dan rejected this exact booking as a wrong match (#203), or rejected a legacy
                 // auto-booking with no recorded id (#218): never re-book from it, and don't fall
                 // through to suggesting it either.
                 if p.autoBookingRejectedWithoutId || p.rejectedBookingIds.contains(booking.id) { continue }
                 if !consumed.contains(booking.id) {
-                    p.outcome = .booked
-                    p.outcomeSourceRaw = OutcomeSource.auto.rawValue
-                    p.outcomeAt = now
-                    p.bookingSuggested = false
-                    p.autoBookedFromBookingId = booking.id
+                    // The confirmed auto-book (outcome, source, timestamp, id, booking-freeze) is the
+                    // conformer's own `markAutoBooked` so each entity applies its own freeze semantics.
+                    p.markAutoBooked(bookingId: booking.id, now: now)
                     consumed.insert(booking.id)
                     count += 1
-                    // Booking-freeze (#418 A4, locked decision g): a confirmed booking pauses every
-                    // still-unsent recipient so Overture stops emailing the other contacts on a show
-                    // that already landed. Uses .suppressed (its documented booking-freeze meaning);
-                    // reply-triage auto-pause uses the separate recipient.pausedByReply flag instead.
-                    // Shared with the manual booking/decline/closing paths (#542).
-                    p.suppressUntriedRecipients(reason: .bookedElsewhere)
                 } else {
-                    // Tiebreak loser: suggest only if the prospect hasn't dismissed
+                    // Tiebreak loser: suggest only if the entity hasn't dismissed
                     if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
                 }
             case .possible:

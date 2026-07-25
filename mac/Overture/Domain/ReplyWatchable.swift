@@ -1,0 +1,48 @@
+import Foundation
+
+// Phase 1 (#1434): the seam that lets reply and bounce detection run over ANY contacted entity, not
+// just `Prospect`, so a second entity type (Inquiry, #1435) rides the same tested ReplyService /
+// BounceService pipeline instead of a duplicated one. Class-bound (`AnyObject`) on purpose: the
+// detection loops mutate the recipient in place, and that write must reach the live `@Model`.
+//
+// The guards are exposed as semantic booleans (`replyWatchManualOutcome`, `replyWatchIsBooked`)
+// rather than the raw `outcomeSourceRaw` / `resolution` enums, so a conformer whose outcome model
+// differs from Prospect's (Inquiry keeps its own) still expresses the same "leave this alone" rule
+// without inheriting Prospect's enum vocabulary.
+
+// One contacted address whose Gmail thread is watched for a reply or a bounce.
+protocol ReplyWatchableRecipient: AnyObject {
+    var gmailThreadId: String? { get }
+    var replyWatchManualOutcome: Bool { get }   // Dan hand-set this contact's state; never auto-overwrite.
+    var replyWatchIsBooked: Bool { get }         // this contact is booked; stop watching it.
+    var replied: Bool { get set }
+    var repliedAt: Date? { get set }
+    var lastReplyId: String? { get set }
+    var lastReplyText: String? { get set }
+    var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.
+    var bounced: Bool { get set }
+    var lastBounceId: String? { get set }
+    var dismissedBounceId: String? { get }
+    var lastDelayMessageId: String? { get set }
+    var delayNoticeAt: Date? { get set }
+}
+
+// A contacted entity (a show's lead, or an inquiry) that owns one or more watched threads.
+protocol ReplyWatchable: AnyObject {
+    var replyWatchManualOutcome: Bool { get }   // lead hand-resolved; stop watching ALL its threads.
+    var replyWatchIsBooked: Bool { get }         // lead booked; the whole thing is closed.
+    var replyWatchRecipients: [any ReplyWatchableRecipient] { get }
+    // A fresh reply on this entity pauses its still-unsent contacts pending Dan's triage (#430).
+    func pausePendingForReply()
+}
+
+extension Recipient: ReplyWatchableRecipient {
+    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
+    var replyWatchIsBooked: Bool { resolution == .booked }
+}
+
+extension Prospect: ReplyWatchable {
+    var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
+    var replyWatchIsBooked: Bool { outcome == .booked }
+    var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
+}
