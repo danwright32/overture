@@ -802,7 +802,77 @@ enum QueueModel {
                     items: bucket
                 )
             }
-            return DateGroup(id: key, weekday: "", monthDay: "Date to be confirmed", year: "", items: bucket)
+            return DateGroup(id: key, weekday: "", monthDay: Self.undatedGroupLabel, year: "", items: bucket)
+        }
+    }
+
+    // ── Hire inquiries fold into the same daily list (#1436) ─────────────────────
+
+    // Live inquiries as display rows. A booked or hand-lost inquiry is closed and leaves the daily
+    // list, exactly as a confirmed booking leaves the pitch queue. Nudge/closing state is computed
+    // against `now` here so the row is a pure snapshot.
+    static func inquiryRows(_ inquiries: [Inquiry], now: Date) -> [InquiryRow] {
+        inquiries.filter { $0.isOpen }.map { inquiry in
+            InquiryRow(
+                id: String(describing: inquiry.persistentModelID),
+                inquirerName: inquiry.inquirerName,
+                source: inquiry.source,
+                eventName: inquiry.eventName,
+                performanceDate: inquiry.performanceDate,
+                venue: inquiry.venue,
+                outcome: inquiry.outcome,
+                sentAt: inquiry.sentAt,
+                replied: inquiry.replied,
+                bookingSuggested: inquiry.bookingSuggested,
+                followUpNudgeDue: inquiry.followUpNudgeDue(now: now),
+                shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now)
+            )
+        }
+    }
+
+    // The unified daily list: scouted shows (run through the SAME pitch windowing as always) plus
+    // inquiries, which are NEVER dropped by that window. THE AUDIT (#1436, the plan's worst failure
+    // mode): an inquiry is live because someone awaits Dan's reply, whatever the event date, so a past,
+    // far-future, or unknown event date must never remove it. Rows interleave by date via a stable sort
+    // (undated last), preserving each source's own order within a date.
+    static func combinedQueueRows(prospectItems: [QueueItem], inquiryRows: [InquiryRow],
+                                  reachedOutKeys: Set<String>, today: String) -> [QueueRow] {
+        let prospectRows = toSendQueue(prospectItems, reachedOutKeys: reachedOutKeys, today: today)
+            .map { QueueRow.prospect($0) }
+        let inquiryQueueRows = inquiryRows.map { QueueRow.inquiry($0) }
+        return (prospectRows + inquiryQueueRows).enumerated().sorted { lhs, rhs in
+            switch (lhs.element.performanceDate, rhs.element.performanceDate) {
+            case let (a?, b?): return a != b ? a < b : lhs.offset < rhs.offset
+            case (nil, .some): return false     // undated groups last
+            case (.some, nil): return true
+            case (nil, nil): return lhs.offset < rhs.offset
+            }
+        }.map { $0.element }
+    }
+
+    // Groups QueueRows by date, mirroring groupByDate exactly (undated bucket last, naming itself). The
+    // caller passes combinedQueueRows output, already date-ordered, so buckets appear in date order.
+    static func groupRowsByDate(_ rows: [QueueRow]) -> [RowDateGroup] {
+        var order: [String] = []
+        var buckets: [String: [QueueRow]] = [:]
+        for row in rows {
+            let key = row.performanceDate ?? "tbd"
+            if buckets[key] == nil { order.append(key); buckets[key] = [] }
+            buckets[key]?.append(row)
+        }
+        return order.map { key in
+            let bucket = buckets[key] ?? []
+            if key != "tbd", let d = day(key) {
+                let cal = easternCalendar
+                return RowDateGroup(
+                    id: key,
+                    weekday: shortWeekday(cal.component(.weekday, from: d)),
+                    monthDay: "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d))",
+                    year: String(cal.component(.year, from: d)),
+                    rows: bucket
+                )
+            }
+            return RowDateGroup(id: key, weekday: "", monthDay: Self.undatedGroupLabel, year: "", rows: bucket)
         }
     }
 
@@ -1032,6 +1102,10 @@ enum QueueModel {
     // Overture is always reckoned in New York time, never UTC or the Mac's local zone.
     // Date math delegates to the shared EasternDate helper, the one source of truth (#116). The
     // label formatting below still uses the Eastern calendar + day parsing through it.
+    // The header an undated group names itself with, shared by groupByDate and groupRowsByDate so the
+    // two never drift and the sentence lives in one place (#1436).
+    static let undatedGroupLabel = "Date to be confirmed"
+
     private static let easternCalendar = EasternDate.calendar
     private static func day(_ iso: String) -> Date? { EasternDate.date(from: iso) }
 
