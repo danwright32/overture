@@ -143,6 +143,10 @@ extension Inquiry {
 
     func followUpNudgeDue(now: Date) -> Bool {
         guard isOpen, !replied, !bounced, let sentAt else { return false }
+        // #1438: the two nudges are drawn as badges side by side on the row, so they must not both be
+        // true. Once the silence is long enough to suggest closing, that supersedes "follow up"; showing
+        // both told Dan to chase it and to give up on it at the same time.
+        guard !shouldSuggestClosing(now: now) else { return false }
         return BusinessDay.count(after: sentAt, through: now) >= Inquiry.followUpNudgeBusinessDays
     }
 
