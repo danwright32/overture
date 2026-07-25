@@ -384,8 +384,13 @@ enum ScoutService {
 
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        if DownbeatBooking.reconcileBooked(entities: all, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
+        // #1434/#1435: one generic reconcile pass over prospects AND inquiries (suggestion-only, but
+        // claiming a booking to win the tie-break). `try?` yields none on a container predating Inquiry.
+        let prospectsForBooking = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let inquiriesForBooking = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let bookingEntities: [any BookingMatchable] = prospectsForBooking.map { $0 as any BookingMatchable }
+            + inquiriesForBooking.map { $0 as any BookingMatchable }
+        if DownbeatBooking.reconcileBooked(entities: bookingEntities, clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: Date()) > 0 {
             do {
                 try context.save()
             } catch {

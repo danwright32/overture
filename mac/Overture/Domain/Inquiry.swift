@@ -1,0 +1,158 @@
+import Foundation
+import SwiftData
+
+// Where a direct hire inquiry came from. Contact form and direct email ONLY (Dan's locked scope,
+// #1435): referral, phone, and repeat-client are deliberately out.
+enum InquirySource: String, CaseIterable, Sendable {
+    case contactForm = "contact_form"
+    case directEmail = "direct_email"
+
+    var label: String {
+        switch self {
+        case .contactForm: return "Contact form"
+        case .directEmail: return "Direct email"
+        }
+    }
+}
+
+// A direct hire inquiry: someone reaching out to hire Dan, tracked ALONGSIDE the scout/pitch queue
+// but a fully separate entity. Zero `@Relationship` to Prospect or Recipient by design (#1433), never
+// linked or merged even when it references the same show. Its identity is the EVENT, not the
+// inquirer, because Dan logs it by hand and wouldn't re-log the same event twice. Reuses the shared
+// `Outcome` vocabulary (open = noResponse/replied, booked, lost = lostSoft/lostHard) and rides the
+// Phase 1 `ReplyWatchable` / `BookingMatchable` seams so reply detection and booking-match are the
+// same tested code prospects use, not a second copy.
+@Model
+final class Inquiry {
+    // Contact form / direct email, stored raw so a future source can't break decoding.
+    var sourceRaw: String
+    var inquirerName: String
+    var inquirerEmail: String?
+    // The event, the natural key's basis. All optional past the name because an inquiry can arrive
+    // as a bare email with nothing pinned down yet.
+    var eventName: String
+    var performanceDate: String?   // yyyy-MM-dd, Eastern
+    var venue: String?
+    var notes: String?
+    // When Dan logged it. Drives the longer-silence "consider closing" suggestion.
+    var createdAt: Date
+
+    // Dan types and sends the first reply himself (#1435); these track that send and its thread.
+    var sentAt: Date?
+    var gmailThreadId: String?
+    var gmailMessageId: String?    // stamped on the sent reply → `wasProvablyContacted`
+    var threadIdDegraded: Bool = false
+
+    // Reply / bounce detection state. An inquiry has ONE thread, not a contact list, so it presents
+    // itself to the shared pipeline as a single self-thread (see Inquiry+ReplyWatchable).
+    var replied: Bool = false
+    var repliedAt: Date?
+    var lastReplyId: String?
+    var lastReplyText: String?
+    var dismissedReplyId: String?
+    var bounced: Bool = false
+    var lastBounceId: String?
+    var dismissedBounceId: String?
+    var lastDelayMessageId: String?
+    var delayNoticeAt: Date?
+
+    // Outcome, reusing the shared Outcome enum. open = noResponse/replied, booked, lost = the two
+    // lost cases. Lost is ALWAYS a manual close (#1435); nothing here auto-closes.
+    var outcomeRaw: String = Outcome.noResponse.rawValue
+    var outcomeSourceRaw: String? = nil
+    var outcomeAt: Date? = nil
+
+    // Downbeat booking match: SUGGESTION-ONLY for an inquiry, never a silent auto-book (#1435), since
+    // the org-name matcher it reuses isn't calibrated for private-individual name collisions.
+    var bookingSuggested: Bool = false
+    var bookingSuggestionDismissed: Bool = false
+    var autoBookingRejectedWithoutId: Bool = false
+    var rejectedBookingIdsRaw: String = ""
+    var downbeatClientId: String? = nil   // a private individual usually has none.
+    var runEndDate: String? = nil
+
+    init(source: InquirySource, inquirerName: String, inquirerEmail: String?,
+         eventName: String, performanceDate: String? = nil, venue: String? = nil,
+         notes: String? = nil, createdAt: Date = Date()) {
+        self.sourceRaw = source.rawValue
+        self.inquirerName = inquirerName
+        self.inquirerEmail = inquirerEmail
+        self.eventName = eventName
+        self.performanceDate = performanceDate
+        self.venue = venue
+        self.notes = notes
+        self.createdAt = createdAt
+    }
+
+    var source: InquirySource { InquirySource(rawValue: sourceRaw) ?? .directEmail }
+
+    var outcome: Outcome {
+        get { Outcome.fromStored(outcomeRaw) }
+        set { outcomeRaw = newValue.rawValue }
+    }
+
+    // Booking ids Dan has rejected as wrong matches (#203 idiom, reused).
+    var rejectedBookingIds: Set<String> {
+        Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
+    }
+
+    // The EVENT key (performance / date / venue), canonicalized exactly as a Prospect's is so the two
+    // stay comparable. Computed, so editing the event re-keys the inquiry.
+    var naturalKey: String {
+        Inquiry.makeNaturalKey(eventName: eventName, performanceDate: performanceDate, venue: venue)
+    }
+
+    // A real send stamps a message id (mirrors Prospect.wasProvablyContacted, #963), so a record with
+    // a timestamp but no id was never actually sent and never auto-books.
+    var wasProvablyContacted: Bool { gmailMessageId != nil }
+
+    static func makeNaturalKey(eventName: String, performanceDate: String?, venue: String?) -> String {
+        let normalizedVenue = venue.map(VenueNormalization.normalizeForKey)
+        return [eventName, performanceDate ?? "", normalizedVenue ?? ""]
+            .map(Prospect.canonicalize)
+            .joined(separator: "|")
+    }
+}
+
+extension Inquiry {
+    // The follow-up nudge fires at 3 business days of silence after Dan's first reply. The longer
+    // "consider closing" suggestion waits far longer (about six weeks of weekdays). Both are pure
+    // derivations off stored timestamps, never a stored "fired" flag (#1435), so they self-correct
+    // the instant a reply lands or Dan closes the inquiry.
+    static let followUpNudgeBusinessDays = 3
+    static let closingSuggestionBusinessDays = 30
+
+    // Still live: not booked, and not manually closed to a lost state. Lost is ALWAYS a manual close.
+    var isOpen: Bool {
+        if outcome == .booked { return false }
+        let manuallyResolved = outcomeSourceRaw == OutcomeSource.manual.rawValue
+        if manuallyResolved && (outcome == .lostSoft || outcome == .lostHard) { return false }
+        return true
+    }
+
+    func followUpNudgeDue(now: Date) -> Bool {
+        guard isOpen, !replied, !bounced, let sentAt else { return false }
+        return BusinessDay.count(after: sentAt, through: now) >= Inquiry.followUpNudgeBusinessDays
+    }
+
+    func shouldSuggestClosing(now: Date) -> Bool {
+        guard isOpen, !replied, let sentAt else { return false }
+        return BusinessDay.count(after: sentAt, through: now) >= Inquiry.closingSuggestionBusinessDays
+    }
+}
+
+// Intake rules, kept OUT of the sheet that draws them (the WatchlistEditing / DayOffEditing idiom):
+// logic stated in a SwiftUI body drifts under a green suite because nothing can reach it (#863).
+@MainActor
+enum InquiryIntake {
+    // Soft pre-insert duplicate check on the EVENT natural key. A blank key (no event pinned down) is
+    // NEVER a duplicate, so two under-specified inquiries don't falsely collide.
+    static func duplicate(ofKey key: String, in inquiries: [Inquiry]) -> Inquiry? {
+        guard !isBlankKey(key) else { return nil }
+        return inquiries.first { $0.naturalKey == key }
+    }
+
+    static func isBlankKey(_ key: String) -> Bool {
+        key.replacingOccurrences(of: "|", with: "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
