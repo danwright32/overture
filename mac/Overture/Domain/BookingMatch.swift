@@ -7,10 +7,21 @@ enum BookingMatchResult: Equatable {
 }
 
 enum BookingMatch {
+    // Back-compat overload for the concrete `Prospect` callers/tests (#1434); forwards to the
+    // genericized core below.
     static func classify(
         prospect: Prospect,
         bookings: [OvertureBooking]
     ) -> BookingMatchResult {
+        classify(entity: prospect, bookings: bookings)
+    }
+
+    // Genericized over `BookingMatchable` (#1434) so an Inquiry classifies against the same rules.
+    static func classify(
+        entity: any BookingMatchable,
+        bookings: [OvertureBooking]
+    ) -> BookingMatchResult {
+        let prospect = entity
         guard let perfDate = prospect.performanceDate else { return .none }
         guard let sentAt = prospect.sentAt else { return .none }
 
@@ -49,7 +60,7 @@ enum BookingMatch {
 
     private static func orgMatches(
         booking: OvertureBooking,
-        prospect: Prospect
+        prospect: any BookingMatchable
     ) -> Bool {
         if let clientId = prospect.downbeatClientId {
             return booking.clientId == clientId
