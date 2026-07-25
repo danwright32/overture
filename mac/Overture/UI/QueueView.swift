@@ -584,7 +584,7 @@ struct QueueView: View {
     private var agentInputs: AgentInputs {
         let now = Date()
         return AgentInputs.from(
-            prospects: prospects, now: now, today: today,
+            prospects: prospects, inquiries: inquiries, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
             replyRunAlive: ReplyClassifyService.isRunning(now: now)

@@ -36,4 +36,28 @@ struct InquiryStageTests {
         inq.outcomeSourceRaw = OutcomeSource.manual.rawValue
         #expect(StageNavigation.stage(for: inq) == nil)
     }
+
+    // The stage pills must count inquiries too, or a logged inquiry would hide behind a pill that
+    // reads "0" and Dan would never tap in. The count and the rows the tap lands on must agree.
+    private func inputs(inquiries: [Inquiry]) -> AgentInputs {
+        AgentInputs.from(prospects: [], inquiries: inquiries, now: Date(), today: "2026-07-01",
+                         gmailConnected: true, prepRunning: false, replyRunAlive: false)
+    }
+
+    @Test func anUnrepliedInquiryAddsToTheReadyToSendPill() {
+        #expect(inputs(inquiries: [inquiry()]).readyToSend == 1)
+    }
+
+    @Test func aRepliedInquiryAddsToTheReachedOutPill() {
+        let inq = inquiry()
+        inq.sentAt = Date()
+        #expect(inputs(inquiries: [inq]).reachedOut == 1)
+    }
+
+    @Test func aClosedInquiryAddsToNeitherPill() {
+        let inq = inquiry()
+        inq.outcome = .booked
+        #expect(inputs(inquiries: [inq]).readyToSend == 0)
+        #expect(inputs(inquiries: [inq]).reachedOut == 0)
+    }
 }

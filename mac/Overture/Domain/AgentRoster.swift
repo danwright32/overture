@@ -55,7 +55,7 @@ struct AgentInputs: Sendable {
 // can reach. Everything the roster needs that is NOT a prospect (is Gmail connected, is a run alive)
 // is passed in, so this stays pure and testable.
 extension AgentInputs {
-    static func from(prospects: [Prospect], now: Date, today: String,
+    static func from(prospects: [Prospect], inquiries: [Inquiry] = [], now: Date, today: String,
                      gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
@@ -63,12 +63,16 @@ extension AgentInputs {
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
         let focusCounts = StageNavigation.counts(in: prospects, today: today, now: now)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
+        // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
+        func inquiryCount(_ focus: StageFocus) -> Int {
+            inquiries.filter { StageNavigation.stage(for: $0) == focus }.count
+        }
         return AgentInputs(
             toTriage: count(.scout),
             keptToPrep: count(.prep),
             prepRunning: prepRunning,
             toReview: count(.review),
-            readyToSend: count(.sendApproved),
+            readyToSend: count(.sendApproved) + inquiryCount(.sendApproved),
             gmailConnected: gmailConnected,
             sendErrors: count(.sendErrors),
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: now).count,
@@ -81,6 +85,7 @@ extension AgentInputs {
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
             reachedOut: ReachedOutQueue.showCount(from: prospects, now: now)   // #1194: shows, not recipients
+                + inquiryCount(.reachedOut)   // #1436: replied inquiries awaiting a response
         )
     }
 }
