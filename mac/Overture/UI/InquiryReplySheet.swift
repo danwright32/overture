@@ -95,7 +95,7 @@ struct InquiryReplySheet: View {
         Task {
             // What to do next is decided in InquiryMutations (tested, including the sent-but-not-saved
             // path); this only renders the answer.
-            switch await InquiryMutations.sendFirstReply(inquiry, subject: subject, body: replyBody,
+            switch await InquiryMutations.sendReply(inquiry, subject: subject, body: replyBody,
                                                          now: Date(), sender: sender,
                                                          context: context, feedback: feedback) {
             case .sent:

@@ -23,7 +23,7 @@ struct InquiryReplySenderTests {
     @Test func aSuccessfulSendStampsThreadAndSentAt() async {
         let inq = inquiry()
         let sender = StubSender(receipt: SentReceipt(threadId: "th-1", messageID: "mid-1"))
-        let ok = await InquiryReplySender.sendFirstReply(inq, subject: "Re: your inquiry", body: "Hi Ada",
+        let ok = await InquiryReplySender.sendReply(inq, subject: "Re: your inquiry", body: "Hi Ada",
                                                          now: Date(timeIntervalSince1970: 5), sender: sender)
         #expect(ok == true)
         #expect(inq.sentAt == Date(timeIntervalSince1970: 5))
@@ -36,7 +36,7 @@ struct InquiryReplySenderTests {
     // never a silent fake success.
     @Test func aFailedSendLeavesTheInquiryUnsentAndReportsFailure() async {
         let inq = inquiry()
-        let ok = await InquiryReplySender.sendFirstReply(inq, subject: "s", body: "b",
+        let ok = await InquiryReplySender.sendReply(inq, subject: "s", body: "b",
                                                          now: Date(), sender: FailingSender())
         #expect(ok == false)
         #expect(inq.sentAt == nil)
@@ -46,7 +46,7 @@ struct InquiryReplySenderTests {
 
     @Test func aMissingRecipientEmailIsNotSent() async {
         let inq = inquiry(email: nil)
-        let ok = await InquiryReplySender.sendFirstReply(inq, subject: "s", body: "b",
+        let ok = await InquiryReplySender.sendReply(inq, subject: "s", body: "b",
                                                          now: Date(), sender: StubSender(receipt: SentReceipt(threadId: "x")))
         #expect(ok == false)
         #expect(inq.sentAt == nil)
@@ -57,7 +57,7 @@ struct InquiryReplySenderTests {
     @Test func aDegradedThreadIsRecordedAndFlagged() async {
         let inq = inquiry()
         let sender = StubSender(receipt: SentReceipt(threadId: "", messageID: "mid-2", threadIdDegraded: true))
-        let ok = await InquiryReplySender.sendFirstReply(inq, subject: "s", body: "b",
+        let ok = await InquiryReplySender.sendReply(inq, subject: "s", body: "b",
                                                          now: Date(timeIntervalSince1970: 9), sender: sender)
         #expect(ok == true)
         #expect(inq.sentAt == Date(timeIntervalSince1970: 9))

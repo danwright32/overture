@@ -51,9 +51,10 @@ enum InquiryMutations {
             && !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // Reply is the FIRST reply only. Answering again once they have written back is a different,
-    // unbuilt thing (#1497), so the button must not imply it exists.
-    static func showsReplyAction(sentAt: Date?) -> Bool { sentAt == nil }
+    // #1513: Dan can answer before the first send, and again whenever they have written back. What he
+    // cannot do is send into silence: while he is waiting on them the action is absent, because chasing
+    // is the follow-up nudge's job, not a second reply.
+    static func showsReplyAction(sentAt: Date?, replied: Bool) -> Bool { sentAt == nil || replied }
 
     // What the reply sheet should do next. `.sent` means the mail is gone and the sheet closes, whether
     // or not the local record of it saved: a save failure there is warned through the shared banner
@@ -63,11 +64,11 @@ enum InquiryMutations {
         case sendFailed
     }
 
-    static func sendFirstReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
-                               sender: MailSender, context: ModelContext,
-                               feedback: ActionFeedback) async -> SendResult {
-        let sent = await InquiryReplySender.sendFirstReply(inquiry, subject: subject, body: body,
-                                                           now: now, sender: sender)
+    static func sendReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
+                          sender: MailSender, context: ModelContext,
+                          feedback: ActionFeedback) async -> SendResult {
+        let sent = await InquiryReplySender.sendReply(inquiry, subject: subject, body: body,
+                                                      now: now, sender: sender)
         guard sent else { return .sendFailed }
         // #623's shared "sent, but the local record didn't save" path, not a hand-rolled copy of it.
         _ = context.saveOrWarnSendNotConfirmed(org: inquiry.inquirerName, feedback: feedback)
