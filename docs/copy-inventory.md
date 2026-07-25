@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **818 sentences**, from 281 source files.
+Every sentence Overture can say to Dan: **822 sentences**, from 281 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -333,6 +333,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
     `App/OvertureApp.swift`
+"Another inquiry is already logged for this event. You can still save this one."
+    `Domain/InquiryCopy.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
 "Approve a show on a date you're already pitching?"
@@ -534,6 +536,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyClassifyProgress.swift`
 "Drafts waiting for you to read, edit, and approve."
     `Domain/AgentRoster.swift`
+"Edit details..."
+    `UI/InquiryRowView.swift`
+"Edit inquiry"
+    `Domain/InquiryCopy.swift`
 "Email found"
     `Domain/Reachability.swift`
 "End this experiment"
@@ -715,11 +721,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Local login listener never reported a port."
     `Integration/LoopbackListener.swift`
 "Log an inquiry"
-    `UI/InquiryIntakeSheet.swift`
+    `Domain/InquiryCopy.swift`
 "Log an inquiry..."
     `App/RootView.swift`
 "Log inquiry"
-    `UI/InquiryIntakeSheet.swift`
+    `Domain/InquiryCopy.swift`
 "Login agent is installed."
     `UI/OnboardingView.swift`
 "Login failed: \(m)"
@@ -1152,6 +1158,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;"
     `App/StoreSchemaGuard.swift`
+"Save changes"
+    `Domain/InquiryCopy.swift`
 "Saved \(org)'s address. Its shows are placed on the next read."
     `UI/SourcesView.swift`
 "Scout & Prep"
@@ -1600,7 +1608,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own."
     `UI/LeadIntakeModel.swift`
 "You've already logged an inquiry for this event. You can still add this one."
-    `UI/InquiryIntakeSheet.swift`
+    `Domain/InquiryCopy.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."

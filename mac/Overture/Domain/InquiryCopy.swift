@@ -8,6 +8,24 @@ enum InquiryCopy {
         "Reply to \(inquirerName)"
     }
 
+    // #1504: one sheet both logs an inquiry and corrects one, so every sentence in it has to say which
+    // it is doing. "Log" wording on an edit would tell Dan he is about to add a second record.
+    static func intakeTitle(isEditing: Bool) -> String {
+        isEditing ? "Edit inquiry" : "Log an inquiry"
+    }
+
+    static func intakeSaveButton(isEditing: Bool) -> String {
+        isEditing ? "Save changes" : "Log inquiry"
+    }
+
+    // The second half matches the button's verb: on an edit nothing is being added, and the clash is
+    // with ANOTHER inquiry rather than the one on screen.
+    static func intakeDuplicateWarning(isEditing: Bool) -> String {
+        isEditing
+            ? "Another inquiry is already logged for this event. You can still save this one."
+            : "You've already logged an inquiry for this event. You can still add this one."
+    }
+
     // "Gala at Weill Recital Hall", or whichever parts are known, or empty when neither is.
     static func rowSubtitle(event: String, venue: String?) -> String {
         let e = event.trimmingCharacters(in: .whitespaces)

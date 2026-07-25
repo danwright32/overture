@@ -6,6 +6,7 @@ import SwiftUI
 struct InquiryRowView: View {
     let row: InquiryRow
     var onReply: () -> Void
+    var onEdit: () -> Void
     var onMarkBooked: () -> Void
     var onMarkLost: (InquiryLostReason) -> Void
 
@@ -67,6 +68,9 @@ struct InquiryRowView: View {
                 .buttonStyle(.plain)
             }
             Menu {
+                // #1504: the fields here are hand-typed and often incomplete at intake (a date learned
+                // later re-keys the inquiry), so correcting them has to be reachable from the row.
+                Button("Edit details...") { onEdit() }
                 Button("Mark booked") { onMarkBooked() }
                 // #16 needs the reasons apart, and closing an inquiry is the only moment anyone knows
                 // which it was. Kept under a heading rather than loose in the menu: on their own,
