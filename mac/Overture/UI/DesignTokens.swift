@@ -69,10 +69,38 @@ enum OVColor {
 
     private static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-            return isDark ? dark : light
+            OVAppearanceDarkness.shared.isDark(appearance) ? dark : light
         }))
     }
+}
+
+/// Memoizes the light/dark decision for an `NSAppearance` so a dynamic colour's provider closure does not
+/// re-run `bestMatch(from:)` on every resolution (#1444). The decision depends only on the appearance's
+/// name, which is stable, so the match runs once per distinct appearance and is reused for every colour on
+/// every subsequent redraw. Callers hit `shared`; the initializer is left open only so tests can inject a
+/// countable matcher. `@unchecked Sendable`: the dynamic-provider closure is `@Sendable` and AppKit may
+/// resolve a colour off the main thread, so the cache is guarded by a lock rather than actor isolation.
+final class OVAppearanceDarkness: @unchecked Sendable {
+    private let lock = NSLock()
+    private var byName: [NSAppearance.Name: Bool] = [:]
+    private let match: (NSAppearance) -> Bool
+
+    init(match: @escaping (NSAppearance) -> Bool = { appearance in
+        appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+    }) {
+        self.match = match
+    }
+
+    func isDark(_ appearance: NSAppearance) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = byName[appearance.name] { return cached }
+        let resolved = match(appearance)
+        byName[appearance.name] = resolved
+        return resolved
+    }
+
+    static let shared = OVAppearanceDarkness()
 }
 
 enum OVSpacing {
