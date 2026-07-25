@@ -576,7 +576,9 @@ enum ProspectMutations {
     // real network or the GmailAuthManager.shared singleton (#468, SUP-006).
     // #360: the sending identity comes from SendIdentity (the same value the confirmation's From line
     // reads), so the address Dan is shown before a send can never drift from the one it goes out as.
-    private static func liveSender() -> MailSender {
+    // Internal (not private) so the inquiry first-reply sheet (#1436) reuses the ONE live-sender
+    // construction rather than duplicating the identity wiring.
+    static func liveSender() -> MailSender {
         GmailSender(fromName: SendIdentity.danWright.name, fromEmail: SendIdentity.danWright.email)
     }
 

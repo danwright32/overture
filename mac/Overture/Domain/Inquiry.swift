@@ -139,6 +139,16 @@ extension Inquiry {
         guard isOpen, !replied, let sentAt else { return false }
         return BusinessDay.count(after: sentAt, through: now) >= Inquiry.closingSuggestionBusinessDays
     }
+
+    // Dan's own call on the outcome (booked or a lost close): manual source so auto reply/booking
+    // detection never overwrites it, timestamped, and any booking suggestion cleared. Mirrors
+    // Prospect.markOutcomeManually.
+    func markOutcomeManually(_ outcome: Outcome, now: Date) {
+        self.outcome = outcome
+        outcomeSourceRaw = OutcomeSource.manual.rawValue
+        outcomeAt = now
+        bookingSuggested = false
+    }
 }
 
 // Intake rules, kept OUT of the sheet that draws them (the WatchlistEditing / DayOffEditing idiom):
