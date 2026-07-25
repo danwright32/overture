@@ -71,8 +71,8 @@ extension AgentInputs {
             toTriage: count(.scout),
             keptToPrep: count(.prep),
             prepRunning: prepRunning,
-            toReview: count(.review),
-            readyToSend: count(.sendApproved) + inquiryCount(.sendApproved),
+            toReview: count(.review) + inquiryCount(.review),   // #1436: un-replied inquiries live here
+            readyToSend: count(.sendApproved),
             gmailConnected: gmailConnected,
             sendErrors: count(.sendErrors),
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: now).count,

@@ -3,10 +3,11 @@ import Foundation
 @testable import Overture
 
 // Phase 3 (#1436): a hire inquiry flows through the queue's stages like a prospect (Dan's call,
-// 2026-07-25), but only two apply. An inquiry Dan has not yet replied to needs to go out, so it sits
-// in the to-send list (.sendApproved). Once he has sent the first reply and is awaiting a response, it
-// moves to reached-out (.reachedOut), where the follow-up nudge lives. A booked or hand-lost inquiry
-// is closed and belongs to no stage.
+// 2026-07-25), but only two apply. An inquiry Dan has not yet replied to needs his action, so it sits
+// in the Review stage (.review, a clickable pill Dan reaches, unlike .sendApproved which surfaces only
+// in the masthead and has no navigable pill, #1436 walk finding). Once he has sent the first reply and
+// is awaiting a response, it moves to reached-out (.reachedOut). A booked or hand-lost inquiry is
+// closed and belongs to no stage.
 @MainActor
 @Suite("Inquiry stage placement")
 struct InquiryStageTests {
@@ -14,8 +15,8 @@ struct InquiryStageTests {
         Inquiry(source: .directEmail, inquirerName: "Ada", inquirerEmail: "ada@x.org", eventName: "Gala")
     }
 
-    @Test func anUnrepliedInquiryIsInTheToSendList() {
-        #expect(StageNavigation.stage(for: inquiry()) == .sendApproved)
+    @Test func anUnrepliedInquiryIsInTheReviewStage() {
+        #expect(StageNavigation.stage(for: inquiry()) == .review)
     }
 
     @Test func aRepliedInquiryMovesToReachedOut() {
@@ -44,8 +45,8 @@ struct InquiryStageTests {
                          gmailConnected: true, prepRunning: false, replyRunAlive: false)
     }
 
-    @Test func anUnrepliedInquiryAddsToTheReadyToSendPill() {
-        #expect(inputs(inquiries: [inquiry()]).readyToSend == 1)
+    @Test func anUnrepliedInquiryAddsToTheReviewPill() {
+        #expect(inputs(inquiries: [inquiry()]).toReview == 1)
     }
 
     @Test func aRepliedInquiryAddsToTheReachedOutPill() {
@@ -57,7 +58,7 @@ struct InquiryStageTests {
     @Test func aClosedInquiryAddsToNeitherPill() {
         let inq = inquiry()
         inq.outcome = .booked
-        #expect(inputs(inquiries: [inq]).readyToSend == 0)
+        #expect(inputs(inquiries: [inq]).toReview == 0)
         #expect(inputs(inquiries: [inq]).reachedOut == 0)
     }
 }
