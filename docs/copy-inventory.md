@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **816 sentences**, from 279 source files.
+Every sentence Overture can say to Dan: **815 sentences**, from 280 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1374,8 +1374,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryReplySheet.swift`
 "The reply drafter finished but didn't produce a draft. It may have hit an error."
     `Domain/DetachedRunOutcome.swift`
-"The reply was sent, but saving it here failed. Reopen Overture before relying on reply tracking for this one."
-    `UI/InquiryReplySheet.swift`
 "The run ended before reading this page, so it has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
 "The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."

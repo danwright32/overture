@@ -331,7 +331,7 @@ struct QueueView: View {
                                 row: inquiryRow,
                                 onReply: { replyingTo = inquiry },
                                 onMarkBooked: { markInquiry(inquiry, .booked) },
-                                onMarkLost: { markInquiry(inquiry, .lostSoft) })
+                                onMarkLost: { markInquiry(inquiry, .lost) })
                         }
                     }
                 }
@@ -339,9 +339,10 @@ struct QueueView: View {
         }
     }
 
-    private func markInquiry(_ inquiry: Inquiry, _ outcome: Outcome) {
-        inquiry.markOutcomeManually(outcome, now: Date())
-        try? context.save()
+    // #1436: the outcome and its write both live in InquiryMutations, so a failed save warns Dan
+    // instead of the row quietly leaving the queue over a change that never reached disk.
+    private func markInquiry(_ inquiry: Inquiry, _ action: InquiryMutations.MarkAction) {
+        InquiryMutations.mark(inquiry, as: action, context: context, feedback: feedback)
     }
 
     // #1220: every stage view groups its rows by date, reusing the pre-#1134 date-group header (weekday,

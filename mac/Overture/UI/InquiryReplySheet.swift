@@ -11,6 +11,7 @@ struct InquiryReplySheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(ActionFeedback.self) private var feedback
 
     @State private var subject = "Re: your inquiry"
     @State private var replyBody = ""
@@ -19,9 +20,7 @@ struct InquiryReplySheet: View {
     private enum Phase: Equatable { case compose, sending, failed(String) }
 
     private var canSend: Bool {
-        (inquiry.inquirerEmail?.isEmpty == false)
-            && !subject.trimmingCharacters(in: .whitespaces).isEmpty
-            && !replyBody.trimmingCharacters(in: .whitespaces).isEmpty
+        InquiryMutations.canSend(email: inquiry.inquirerEmail, subject: subject, body: replyBody)
     }
 
     var body: some View {
@@ -97,14 +96,12 @@ struct InquiryReplySheet: View {
             let ok = await InquiryReplySender.sendFirstReply(inquiry, subject: subject, body: replyBody,
                                                              now: Date(), sender: sender)
             if ok {
-                // Persist the sent stamp and thread so reply-watching can attach; a save failure is
-                // surfaced, never swallowed.
-                do {
-                    try context.save()
-                    dismiss()
-                } catch {
-                    phase = .failed("The reply was sent, but saving it here failed. Reopen Overture before relying on reply tracking for this one.")
-                }
+                // Persist the sent stamp and thread so reply-watching can attach. The "sent, but the
+                // local record didn't save" case is the shared one #623 consolidated: warn through the
+                // same banner as every other send rather than hand-rolling a fifth copy of it here. The
+                // mail is already gone either way, so the sheet closes and the warning carries it.
+                _ = context.saveOrWarnSendNotConfirmed(org: inquiry.inquirerName, feedback: feedback)
+                dismiss()
             } else {
                 phase = .failed("The reply couldn't be sent. Check that Gmail is connected, then try again.")
             }

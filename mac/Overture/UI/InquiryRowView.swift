@@ -58,7 +58,7 @@ struct InquiryRowView: View {
 
     private var actions: some View {
         HStack(spacing: OVSpacing.sm) {
-            if row.sentAt == nil {
+            if InquiryMutations.showsReplyAction(sentAt: row.sentAt) {
                 Button(action: onReply) {
                     Text("Reply").font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
