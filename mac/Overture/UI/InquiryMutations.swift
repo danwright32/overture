@@ -44,4 +44,23 @@ enum InquiryMutations {
     // Reply is the FIRST reply only. Answering again once they have written back is a different,
     // unbuilt thing (#1497), so the button must not imply it exists.
     static func showsReplyAction(sentAt: Date?) -> Bool { sentAt == nil }
+
+    // What the reply sheet should do next. `.sent` means the mail is gone and the sheet closes, whether
+    // or not the local record of it saved: a save failure there is warned through the shared banner
+    // (the mail cannot be un-sent, so holding the sheet open would misdescribe what happened).
+    enum SendResult: Equatable {
+        case sent
+        case sendFailed
+    }
+
+    static func sendFirstReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
+                               sender: MailSender, context: ModelContext,
+                               feedback: ActionFeedback) async -> SendResult {
+        let sent = await InquiryReplySender.sendFirstReply(inquiry, subject: subject, body: body,
+                                                           now: now, sender: sender)
+        guard sent else { return .sendFailed }
+        // #623's shared "sent, but the local record didn't save" path, not a hand-rolled copy of it.
+        _ = context.saveOrWarnSendNotConfirmed(org: inquiry.inquirerName, feedback: feedback)
+        return .sent
+    }
 }

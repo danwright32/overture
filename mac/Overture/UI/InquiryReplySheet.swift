@@ -93,16 +93,14 @@ struct InquiryReplySheet: View {
     private func send() {
         phase = .sending
         Task {
-            let ok = await InquiryReplySender.sendFirstReply(inquiry, subject: subject, body: replyBody,
-                                                             now: Date(), sender: sender)
-            if ok {
-                // Persist the sent stamp and thread so reply-watching can attach. The "sent, but the
-                // local record didn't save" case is the shared one #623 consolidated: warn through the
-                // same banner as every other send rather than hand-rolling a fifth copy of it here. The
-                // mail is already gone either way, so the sheet closes and the warning carries it.
-                _ = context.saveOrWarnSendNotConfirmed(org: inquiry.inquirerName, feedback: feedback)
+            // What to do next is decided in InquiryMutations (tested, including the sent-but-not-saved
+            // path); this only renders the answer.
+            switch await InquiryMutations.sendFirstReply(inquiry, subject: subject, body: replyBody,
+                                                         now: Date(), sender: sender,
+                                                         context: context, feedback: feedback) {
+            case .sent:
                 dismiss()
-            } else {
+            case .sendFailed:
                 phase = .failed("The reply couldn't be sent. Check that Gmail is connected, then try again.")
             }
         }

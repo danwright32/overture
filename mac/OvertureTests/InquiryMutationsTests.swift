@@ -102,4 +102,92 @@ struct InquiryMutationsTests {
         #expect(InquiryMutations.showsReplyAction(sentAt: nil))
         #expect(!InquiryMutations.showsReplyAction(sentAt: Date()))
     }
+
+    private struct StubSender: MailSender {
+        let receipt: SentReceipt
+        func send(_ mail: OutgoingMail) async throws -> SentReceipt { receipt }
+    }
+    private struct FailingSender: MailSender {
+        func send(_ mail: OutgoingMail) async throws -> SentReceipt { throw MailSenderError.notConfigured }
+    }
+
+    @Test("a sent first reply is recorded and the sheet closes clean")
+    func sendSucceedsAndSaves() async throws {
+        let ctx = ModelContext(try container())
+        let feedback = ActionFeedback()
+        let inquiry = make(ctx)
+        let now = Date(timeIntervalSince1970: 42)
+
+        let result = await InquiryMutations.sendFirstReply(
+            inquiry, subject: "Re: your inquiry", body: "Hello Ada", now: now,
+            sender: StubSender(receipt: SentReceipt(threadId: "th-1", messageID: "mid-1")),
+            context: ctx, feedback: feedback)
+
+        #expect(result == .sent)
+        #expect(inquiry.sentAt == now)
+        #expect(feedback.message == nil)
+    }
+
+    // The mail is already gone in this case, so the sheet must still close; what must NOT happen is it
+    // closing quietly. Dan gets the shared "check Gmail" warning rather than a fifth bespoke sentence.
+    @Test("a send that goes out but fails to save still closes, and warns Dan to check Gmail")
+    func sendSucceedsButSaveFails() async throws {
+        let feedback = ActionFeedback()
+
+        let result = try await ImmutableStoreFixture.withFailingSave(
+            schema: Schema([Inquiry.self]),
+            seed: { _ = self.make($0, name: "Seed Person") },
+            body: { ctx in
+                let inquiry = self.make(ctx, name: "Ada Lovelace")
+                return await InquiryMutations.sendFirstReply(
+                    inquiry, subject: "s", body: "b", now: Date(),
+                    sender: StubSender(receipt: SentReceipt(threadId: "th-2", messageID: "mid-2")),
+                    context: ctx, feedback: feedback)
+            })
+
+        #expect(result == .sent)
+        #expect(feedback.message == "Couldn't save what happened sending to Ada Lovelace: check Gmail to see if it went out.")
+        #expect(feedback.tone == .warning)
+    }
+
+    // A refused send must leave the inquiry visibly unsent and keep the sheet open on an actionable
+    // error, never a dead spinner and never a silent fake success.
+    @Test("a refused send reports failure and leaves the inquiry unsent")
+    func sendFails() async throws {
+        let ctx = ModelContext(try container())
+        let feedback = ActionFeedback()
+        let inquiry = make(ctx)
+
+        let result = await InquiryMutations.sendFirstReply(
+            inquiry, subject: "s", body: "b", now: Date(),
+            sender: FailingSender(), context: ctx, feedback: feedback)
+
+        #expect(result == .sendFailed)
+        #expect(inquiry.sentAt == nil)
+        #expect(!inquiry.wasProvablyContacted)
+    }
+}
+
+// #1436: the intake sheet's own rules, lifted out of the SwiftUI body for the same reason as the rest
+// (#863). Only the name is required; everything else about the event can be unknown at intake.
+@MainActor
+@Suite("Inquiry intake rules (#1436)")
+struct InquiryIntakeRulesTests {
+    @Test("an inquiry can be logged with only a name, but not without one")
+    func nameIsTheOnlyRequirement() {
+        #expect(InquiryIntake.canSave(name: "Ada"))
+        #expect(!InquiryIntake.canSave(name: ""))
+        #expect(!InquiryIntake.canSave(name: "   "))
+    }
+
+    // The "date is known" toggle is the whole point: an inquiry often arrives before a date exists, and
+    // an unknown date must stay genuinely unknown rather than defaulting to today, which would both
+    // mis-key the event and file it under the wrong day in the queue.
+    @Test("an unknown date stays nil rather than defaulting to today")
+    func unknownDateStaysUnknown() {
+        let someDay = Date(timeIntervalSince1970: 1_780_000_000)
+        #expect(InquiryIntake.performanceDate(hasDate: false, date: someDay) == nil)
+        #expect(InquiryIntake.performanceDate(hasDate: true, date: someDay)
+                == EasternDate.dayString(from: someDay))
+    }
 }

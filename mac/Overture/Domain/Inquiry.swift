@@ -166,6 +166,18 @@ enum InquiryIntake {
         key.replacingOccurrences(of: "|", with: "").trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    // The only required field. Everything else about the event can legitimately be unknown when an
+    // inquiry arrives as a bare email.
+    static func canSave(name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // An unknown date must stay genuinely unknown rather than defaulting to whatever the picker was
+    // showing: a wrong date both mis-keys the event and files the inquiry under the wrong day.
+    static func performanceDate(hasDate: Bool, date: Date) -> String? {
+        hasDate ? EasternDate.dayString(from: date) : nil
+    }
+
     // Build a normalized inquiry from raw form fields and insert it: trims every field and turns a
     // blank optional into nil, so a bare intake keys cleanly and the view stays free of rules.
     @discardableResult

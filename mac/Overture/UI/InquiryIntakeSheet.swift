@@ -19,12 +19,10 @@ struct InquiryIntakeSheet: View {
     @State private var venue = ""
     @State private var notes = ""
 
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-    }
+    private var canSave: Bool { InquiryIntake.canSave(name: name) }
 
     private var performanceDate: String? {
-        hasDate ? EasternDate.dayString(from: date) : nil
+        InquiryIntake.performanceDate(hasDate: hasDate, date: date)
     }
 
     private var duplicate: Inquiry? {
