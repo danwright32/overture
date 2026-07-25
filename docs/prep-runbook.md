@@ -340,6 +340,15 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   Carnegie tenure, another marquee venue can lead with itself or pair with the
   Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
+- **Discipline-matched portfolio link (#1405):** point the portfolio link at the gallery
+  for the show's discipline, so the recipient lands on relevant work rather than the general
+  site. Use exactly these gallery URLs and never invent one: music links
+  danwrightphotography.com/music, band links danwrightphotography.com/bands, comedy links
+  danwrightphotography.com/comedy, dance links danwrightphotography.com/dance, and opera or
+  theater links danwrightphotography.com/performing-arts (that gallery is Dan's theater and
+  opera work). For any other discipline, or when none fits, link the main site
+  danwrightphotography.com. This strengthens the same pitch honestly, showing relevant work
+  rather than claiming genre experience Dan does not have (see the overclaim rule below).
 - **Don't overclaim genre experience:** Dan has shot far more concert, choral, and
   opera work than dance. When pitching a dance company or another genre he's less
   experienced in, don't describe genre-specific technique as established practice (for

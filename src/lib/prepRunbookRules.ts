@@ -34,6 +34,10 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // this rule would send a stranger's self-introduction and credential recital to someone who already
   // knows Dan, and would remove the guardrail against inventing a past-project memory to sound warm.
   { name: "returning-client-register", pattern: /a returning-client register does not license invented history/i },
+  // #1405: the portfolio link must be matched to the show's discipline (music, bands, comedy, dance,
+  // and opera/theater to the performing-arts gallery), so the recipient lands on relevant work.
+  // Dropping this rule sends every prospect the general site again, the exact regression #1405 closed.
+  { name: "discipline-matched-portfolio-link", pattern: /Discipline-matched portfolio link \(#1405\)/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */
