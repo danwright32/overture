@@ -74,6 +74,28 @@ struct InquiryNudgeTests {
         #expect(inq.shouldSuggestClosing(now: date("2026-03-01")) == false)
     }
 
+    // #1438, found by cold-reading the row's copy rather than by any test: the two nudges are drawn as
+    // badges side by side, and the follow-up one had no upper bound. Past the closing threshold BOTH
+    // were true, so the row told Dan to chase it and to give up on it in the same breath. The later
+    // suggestion supersedes the earlier one.
+    @Test func theFollowUpNudgeStopsOnceClosingIsSuggested() {
+        let inq = sentInquiry()
+        let longSilence = date("2026-03-01")
+
+        #expect(inq.shouldSuggestClosing(now: longSilence) == true)
+        #expect(inq.followUpNudgeDue(now: longSilence) == false)
+    }
+
+    // The handover point: the nudge is still the right advice right up until closing takes over.
+    @Test func theFollowUpNudgeStillShowsJustBeforeTheClosingThreshold() {
+        let inq = sentInquiry()
+        // 29 business days after Thu 2026-01-01 is Wed 2026-02-11; closing needs 30.
+        let justBefore = date("2026-02-11")
+
+        #expect(inq.shouldSuggestClosing(now: justBefore) == false)
+        #expect(inq.followUpNudgeDue(now: justBefore) == true)
+    }
+
     @Test func closingIsSuggestedOnlyAfterLongSilence() {
         let inq = sentInquiry()
         // A few business days in: not yet.

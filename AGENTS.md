@@ -4,6 +4,16 @@ Overture finds performing arts performances worth pitching for Dan Wright Photog
 ranks them by fit, and surfaces them for Dan to review, keep, and (later) approve a
 drafted email. See `PLAN.md` for the full product plan.
 
+It also tracks the traffic going the other way: a direct hire inquiry (someone reaching out
+to hire Dan through his contact form or by email) is logged by hand and rides the SAME daily
+queue, stages, reply detection, and booking match as a scouted show, so both halves of the
+funnel live on one surface instead of splitting his attention with his inbox. Inquiries are a
+fully separate entity from scouted prospects with no relationship between them, never linked
+or merged even when they reference the same show, and they deliberately bypass the queue's
+lead-time date window: an inquiry is live because someone is waiting on a reply, whatever the
+event date. Milestone #31 (issues #1434 to #1438) built it; #16 is the intended home for
+reporting on the outcomes it captures.
+
 This repository holds two pieces:
 
 - **The native macOS app** (`mac/`): a SwiftUI app (the review surface Dan lives in),
