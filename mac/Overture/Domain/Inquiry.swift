@@ -204,11 +204,16 @@ extension Inquiry {
 // logic stated in a SwiftUI body drifts under a green suite because nothing can reach it (#863).
 @MainActor
 enum InquiryIntake {
-    // Soft pre-insert duplicate check on the EVENT natural key. A blank key (no event pinned down) is
-    // NEVER a duplicate, so two under-specified inquiries don't falsely collide.
-    static func duplicate(ofKey key: String, in inquiries: [Inquiry]) -> Inquiry? {
+    // Soft duplicate check on the EVENT natural key. A blank key (no event pinned down) is NEVER a
+    // duplicate, so two under-specified inquiries don't falsely collide.
+    //
+    // #1504: `excluding` is the inquiry being EDITED. Without it an edit compares the record against
+    // itself and warns Dan that everything he opens is already logged. A clash with any OTHER inquiry
+    // must still warn, or editing becomes a way to create the very duplicate this exists to catch.
+    static func duplicate(ofKey key: String, in inquiries: [Inquiry],
+                          excluding editing: Inquiry? = nil) -> Inquiry? {
         guard !isBlankKey(key) else { return nil }
-        return inquiries.first { $0.naturalKey == key }
+        return inquiries.first { $0.naturalKey == key && $0 !== editing }
     }
 
     static func isBlankKey(_ key: String) -> Bool {
@@ -227,16 +232,20 @@ enum InquiryIntake {
         hasDate ? EasternDate.dayString(from: date) : nil
     }
 
-    // Build a normalized inquiry from raw form fields and insert it: trims every field and turns a
-    // blank optional into nil, so a bare intake keys cleanly and the view stays free of rules.
+    // Trims a field and turns a blank one into a genuine absence, so an empty string never masquerades
+    // as a value. Shared by create and apply: if editing normalized differently, the same event typed
+    // once at intake and once as an edit would key two different ways and stop matching itself.
+    static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty ?? true) ? nil : trimmed
+    }
+
+    // Build a normalized inquiry from raw form fields and insert it, so a bare intake keys cleanly and
+    // the view stays free of rules.
     @discardableResult
     static func create(source: InquirySource, name: String, email: String?, eventName: String,
                        performanceDate: String?, venue: String?, notes: String?,
                        in context: ModelContext) -> Inquiry {
-        func cleaned(_ value: String?) -> String? {
-            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (trimmed?.isEmpty ?? true) ? nil : trimmed
-        }
         let inquiry = Inquiry(source: source,
                               inquirerName: name.trimmingCharacters(in: .whitespacesAndNewlines),
                               inquirerEmail: cleaned(email),
@@ -246,5 +255,45 @@ enum InquiryIntake {
                               notes: cleaned(notes))
         context.insert(inquiry)
         return inquiry
+    }
+
+    // #1504: apply edited fields to an existing inquiry, through the SAME normalization create uses.
+    // Touches only what the form owns. The reply already sent, the watched thread, and the outcome are
+    // none of the edit sheet's business, and `naturalKey` is computed, so correcting the event or
+    // filling in a date learned later simply re-keys the inquiry.
+    static func apply(to inquiry: Inquiry, source: InquirySource, name: String, email: String?,
+                      eventName: String, performanceDate: String?, venue: String?, notes: String?) {
+        inquiry.sourceRaw = source.rawValue
+        inquiry.inquirerName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        inquiry.inquirerEmail = cleaned(email)
+        inquiry.eventName = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        inquiry.performanceDate = cleaned(performanceDate)
+        inquiry.venue = cleaned(venue)
+        inquiry.notes = cleaned(notes)
+    }
+
+    // Reopening an inquiry has to show the date it already has. An absent or unparseable stored value
+    // must NOT come back pre-ticked, which would silently invent a date on the next save.
+    static func editingDate(from stored: String?) -> (hasDate: Bool, date: Date) {
+        guard let stored, let parsed = EasternDate.date(from: stored) else { return (false, Date()) }
+        return (true, parsed)
+    }
+
+    // The sheet's whole save action: log a new inquiry or change the one being edited, then confirm the
+    // write. Kept out of the view so both the choice and its failure path are reachable by a test
+    // (#863). Returns whether it is confirmed on disk; a false means Dan has already been warned. The
+    // sheet is the ONLY place these fields exist, so a silently failed write is his typing gone.
+    @discardableResult
+    static func save(editing: Inquiry?, source: InquirySource, name: String, email: String?,
+                     eventName: String, performanceDate: String?, venue: String?, notes: String?,
+                     in context: ModelContext, feedback: ActionFeedback) -> Bool {
+        if let editing {
+            apply(to: editing, source: source, name: name, email: email, eventName: eventName,
+                  performanceDate: performanceDate, venue: venue, notes: notes)
+        } else {
+            create(source: source, name: name, email: email, eventName: eventName,
+                   performanceDate: performanceDate, venue: venue, notes: notes, in: context)
+        }
+        return context.saveOrWarn(org: name.trimmingCharacters(in: .whitespaces), feedback: feedback)
     }
 }

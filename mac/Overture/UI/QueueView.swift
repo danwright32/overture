@@ -28,6 +28,8 @@ struct QueueView: View {
     @Query private var inquiries: [Inquiry]
     // The inquiry Dan is composing a first reply to (nil = none).
     @State private var replyingTo: Inquiry?
+    // #1504: the inquiry whose logged details Dan is correcting (nil = none).
+    @State private var editingInquiry: Inquiry?
 
     // #991: Dan's stored town refusals. A @Query so ADDING one re-renders the queue and the gate
     // re-decides every row against the new union at once, which is the "no migration" property #990's
@@ -176,6 +178,8 @@ struct QueueView: View {
             )
             // #1436: compose and send Dan's first reply to a hire inquiry.
             .sheet(item: $replyingTo) { InquiryReplySheet(inquiry: $0) }
+            // #1504: the same sheet that logs one, opened on an existing record.
+            .sheet(item: $editingInquiry) { InquiryIntakeSheet(editing: $0) }
     }
 
     // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
@@ -330,6 +334,7 @@ struct QueueView: View {
                             InquiryRowView(
                                 row: inquiryRow,
                                 onReply: { replyingTo = inquiry },
+                                onEdit: { editingInquiry = inquiry },
                                 onMarkBooked: { markInquiry(inquiry, .booked) },
                                 onMarkLost: { markInquiry(inquiry, .lost($0)) })
                         }
