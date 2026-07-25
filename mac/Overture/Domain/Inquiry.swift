@@ -122,12 +122,23 @@ extension Inquiry {
     static let followUpNudgeBusinessDays = 3
     static let closingSuggestionBusinessDays = 30
 
-    // Still live: not booked, and not manually closed to a lost state. Lost is ALWAYS a manual close.
+    // Still live: not booked and not closed to a lost state. Keyed on the OUTCOME alone, deliberately.
+    //
+    // A prospect has to check that a lost outcome came from Dan by hand, because its outcome can also be
+    // set automatically. An inquiry's cannot: bookings are suggestion-only for it (permitsAutoBook ==
+    // false) and lost is always Dan's manual close, so the only automatic write an inquiry ever receives
+    // is `.replied`, which is open either way. Requiring the manual source here therefore guarded a
+    // state that cannot occur, and guarded it the WRONG WAY: a lost inquiry whose source was anything
+    // but manual read as open forever and would have sat in the queue with no way to close it.
+    //
+    // Keying on one field is also what lets #1437 express this as a #Predicate for #16 to query
+    // (InquiryReporting.openPredicate); a two-key version could not be (#901). InquiryReportingTests
+    // pins the two in agreement across every outcome and source.
     var isOpen: Bool {
-        if outcome == .booked { return false }
-        let manuallyResolved = outcomeSourceRaw == OutcomeSource.manual.rawValue
-        if manuallyResolved && (outcome == .lostSoft || outcome == .lostHard) { return false }
-        return true
+        switch outcome {
+        case .booked, .lostSoft, .lostHard: return false
+        case .noResponse, .replied: return true
+        }
     }
 
     func followUpNudgeDue(now: Date) -> Bool {
