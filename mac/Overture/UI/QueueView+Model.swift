@@ -759,6 +759,27 @@ enum QueueModel {
         let rows: [Row]
     }
 
+    // #1513: both kinds of Reached-out row in ONE list ordered by when each next needs Dan, so the
+    // grouping below produces a single sequence of headings that all answer the same question. An
+    // inquiry with no reach-out date is left out rather than dated arbitrarily; it has nothing to be due
+    // about, and inventing a date would put a row under a heading that lies about it.
+    static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                                  inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        let prospectEntries = prospects.map {
+            ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
+        }
+        // Each inquiry is paired with ITS OWN row rather than matched back by id: a row's id comes from
+        // the persistent model id, which is temporary and not yet distinct for an object that has not
+        // been saved, so looking the model up by it silently gave every row the first inquiry's date.
+        let inquiryEntries = inquiries.compactMap { inquiry -> ReachedOutEntry? in
+            guard let due = inquiry.nextReachOutDate,
+                  let row = inquiryRows([inquiry], now: now).first else { return nil }
+            return .inquiry(inquiry: inquiry, row: row, next: due)
+        }
+        // Stable: equal dates keep prospects before inquiries rather than reordering run to run.
+        return (prospectEntries + inquiryEntries).sorted { $0.next < $1.next }
+    }
+
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
         let cal = easternCalendar
         var order: [String] = []

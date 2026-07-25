@@ -4,7 +4,14 @@ import SwiftUI
 // score, geo, or reachability (all Prospect-only); it shows where it came from and its own lifecycle
 // state instead. Actions are closures so the view stays free of the store.
 struct InquiryRowView: View {
+    // #1513: how this row sits in the list it is in. `.card` is the standalone block used where
+    // inquiries have a section of their own (Review). `.listRow` drops the box and adopts the
+    // surrounding rows' typography, for Reached out, where inquiries and shows are one list and two
+    // visual languages read as two unrelated things.
+    enum Style { case card, listRow }
+
     let row: InquiryRow
+    var style: Style = .card
     var onReply: () -> Void
     var onEdit: () -> Void
     var onMarkBooked: () -> Void
@@ -14,7 +21,9 @@ struct InquiryRowView: View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 sourceTag
-                Text(row.inquirerName).font(OVType.body).foregroundStyle(OVColor.ink)
+                Text(row.inquirerName)
+                    .font(style == .card ? OVType.body : OVType.groupName)
+                    .foregroundStyle(OVColor.ink)
                 Spacer()
                 actions
             }
@@ -24,8 +33,12 @@ struct InquiryRowView: View {
             }
             stateLine
         }
-        .padding(OVSpacing.md)
-        .background(RoundedRectangle(cornerRadius: 10).fill(OVColor.surfaceSunk))
+        .padding(style == .card ? OVSpacing.md : 0)
+        .background {
+            if style == .card {
+                RoundedRectangle(cornerRadius: 10).fill(OVColor.surfaceSunk)
+            }
+        }
     }
 
     private var sourceTag: some View {

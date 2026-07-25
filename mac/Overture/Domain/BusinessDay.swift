@@ -20,4 +20,21 @@ enum BusinessDay {
         }
         return count
     }
+
+    // #1513: the inverse of `count`. The day that is `businessDays` weekdays strictly AFTER `start`,
+    // which is when a nudge counted by `count` becomes due. Defined against the same walk, so
+    // `count(after: start, through: advance(start, by: n)) == n` holds by construction rather than by
+    // two pieces of arithmetic agreeing.
+    static func advance(_ start: Date, byBusinessDays businessDays: Int) -> Date {
+        let cal = EasternDate.calendar
+        var day = cal.startOfDay(for: start)
+        guard businessDays > 0 else { return day }
+        var remaining = businessDays
+        while remaining > 0 {
+            day = cal.date(byAdding: .day, value: 1, to: day)!
+            let weekday = cal.component(.weekday, from: day)   // Sunday = 1 ... Saturday = 7
+            if weekday != 1 && weekday != 7 { remaining -= 1 }
+        }
+        return day
+    }
 }

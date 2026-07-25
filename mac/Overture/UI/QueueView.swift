@@ -248,11 +248,11 @@ struct QueueView: View {
     // rows for that stage, or the #308 away-alert leads when focusedStage is nil.
     @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
         if focusedStage == .reachedOut {
-            // #1436: replied inquiries (awaiting a response) show above the reached-out prospects.
-            VStack(alignment: .leading, spacing: OVSpacing.md) {
-                inquirySection(stageInquiryRows(.reachedOut))
-                reachedOutList(data.reachedOut)
-            }
+            // #1513: inquiries and shows are ONE list here, ordered by when each next needs Dan, so the
+            // "Grouped by when to reach out next" caption governs every date heading in the stage. They
+            // used to be two blocks whose headings looked identical and meant different things (event
+            // date above, reach-out date below).
+            reachedOutList(data.reachedOut)
         } else {
             // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft
             // drops out); in leads mode, keep the frozen key set. The dispatch lives in
@@ -662,7 +662,12 @@ struct QueueView: View {
     // (group name, this one contact, timing, and the state control), not the entire show card, so
     // two contacts due on the same show don't render as two large, nearly-identical cards.
     @ViewBuilder private func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)]) -> some View {
-        if dated.isEmpty {
+        let entries = QueueModel.reachedOutEntries(prospects: dated,
+                                                   inquiries: inquiries.filter {
+                                                       StageNavigation.stage(for: $0) == .reachedOut
+                                                   },
+                                                   now: Date())
+        if entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 Text("Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out.")
@@ -673,7 +678,7 @@ struct QueueView: View {
             .padding(.horizontal, OVSpacing.xl)
         } else {
             let now = Date()
-            let groups = QueueModel.reachOutDateGroups(dated, reachDate: { $0.next })
+            let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
             let note = ReachedOutQueue.contactsAcrossShowsNote(
                 contactCount: dated.count,
                 showCount: Set(dated.map(\.prospect.naturalKey)).count)
@@ -690,8 +695,22 @@ struct QueueView: View {
                 ForEach(groups) { group in
                     VStack(alignment: .leading, spacing: OVSpacing.sm) {
                         reachOutDateHeader(group)
-                        ForEach(group.rows, id: \.recipient.id) { pair in
-                            reachedOutRow(pair, now: now)
+                        ForEach(group.rows) { entry in
+                            switch entry {
+                            case .prospect(let prospect, let recipient, let next):
+                                reachedOutRow((prospect: prospect, recipient: recipient, next: next),
+                                              now: now)
+                            case .inquiry(let inquiry, let row, _):
+                                // #1513: the same row shape as a show, so the two read as one list. The
+                                // source capsule and lifecycle line stay, because they say what an
+                                // inquiry is; the card box and its own typography are gone.
+                                InquiryRowView(
+                                    row: row, style: .listRow,
+                                    onReply: { replyingTo = inquiry },
+                                    onEdit: { editingInquiry = inquiry },
+                                    onMarkBooked: { markInquiry(inquiry, .booked) },
+                                    onMarkLost: { markInquiry(inquiry, .lost($0)) })
+                            }
                             Divider()
                         }
                     }
