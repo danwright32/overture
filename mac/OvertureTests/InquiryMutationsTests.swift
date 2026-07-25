@@ -44,14 +44,15 @@ struct InquiryMutationsTests {
         #expect(feedback.message == nil)
     }
 
-    // "Mark lost" is the SOFT lost case, not lostHard: Dan is closing an inquiry that went quiet, which
-    // is not the same as a hard refusal, and the two feed #16's outcome reporting differently.
-    @Test("marking lost closes it as the soft lost case, never lostHard")
+    // Closing an inquiry that went quiet is the SOFT lost case: the door stays open for future work,
+    // which is not the same as a refusal. InquiryLostReasonTests covers the full split.
+    @Test("closing a silence is the soft lost case, never lostHard")
     func lostIsTheSoftCase() throws {
         let ctx = ModelContext(try container())
         let inquiry = make(ctx)
 
-        InquiryMutations.mark(inquiry, as: .lost, context: ctx, feedback: ActionFeedback(), now: Date())
+        InquiryMutations.mark(inquiry, as: .lost(.neverHeardBack), context: ctx,
+                              feedback: ActionFeedback(), now: Date())
 
         #expect(inquiry.outcome == .lostSoft)
         #expect(inquiry.outcome != .lostHard)

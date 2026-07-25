@@ -14,12 +14,19 @@ enum InquiryMutations {
     // not a hard refusal, and #16's outcome reporting keeps the two apart.
     enum MarkAction: Equatable {
         case booked
-        case lost
+        case lost(InquiryLostReason)
 
         var outcome: Outcome {
             switch self {
             case .booked: return .booked
-            case .lost: return .lostSoft
+            case .lost(let reason): return reason.outcome
+            }
+        }
+
+        var lostReason: InquiryLostReason? {
+            switch self {
+            case .booked: return nil
+            case .lost(let reason): return reason
             }
         }
     }
@@ -30,6 +37,9 @@ enum InquiryMutations {
     static func mark(_ inquiry: Inquiry, as action: MarkAction, context: ModelContext,
                      feedback: ActionFeedback, now: Date = Date()) -> Bool {
         inquiry.markOutcomeManually(action.outcome, now: now)
+        // Always assigned, so marking a previously-lost inquiry booked clears the stale reason rather
+        // than leaving one behind for #16 to double-count.
+        inquiry.lostReasonRaw = action.lostReason?.rawValue
         return context.saveOrWarn(org: inquiry.inquirerName, feedback: feedback)
     }
 

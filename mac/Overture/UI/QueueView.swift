@@ -331,7 +331,7 @@ struct QueueView: View {
                                 row: inquiryRow,
                                 onReply: { replyingTo = inquiry },
                                 onMarkBooked: { markInquiry(inquiry, .booked) },
-                                onMarkLost: { markInquiry(inquiry, .lost) })
+                                onMarkLost: { markInquiry(inquiry, .lost($0)) })
                         }
                     }
                 }

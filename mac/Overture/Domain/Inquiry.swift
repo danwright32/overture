@@ -15,6 +15,31 @@ enum InquirySource: String, CaseIterable, Sendable {
     }
 }
 
+// Why an inquiry ended without a booking. #16's year-end Sankey wants "Declined" and "Not a fit" as
+// separate drop-offs, and unlike the rest of the funnel that distinction is NOT derivable from anything
+// stored: only Dan knows whether the client said no or he passed on it. So it is captured at the one
+// moment anyone knows, when he closes the inquiry. A silence is included because closing one out is a
+// real, common ending and saying so beats leaving it blank.
+enum InquiryLostReason: String, CaseIterable, Sendable {
+    case theyDeclined = "they_declined"
+    case notAFit = "not_a_fit"
+    case neverHeardBack = "never_heard_back"
+
+    var label: String {
+        switch self {
+        case .theyDeclined: return "They declined"
+        case .notAFit: return "Not a fit for me"
+        case .neverHeardBack: return "Never heard back"
+        }
+    }
+
+    // Their refusal is the hard lost case. Dan's own pass and a silence both leave the door open for
+    // future work, which is what the soft case means.
+    var outcome: Outcome {
+        self == .theyDeclined ? .lostHard : .lostSoft
+    }
+}
+
 // A direct hire inquiry: someone reaching out to hire Dan, tracked ALONGSIDE the scout/pitch queue
 // but a fully separate entity. Zero `@Relationship` to Prospect or Recipient by design (#1433), never
 // linked or merged even when it references the same show. Its identity is the EVENT, not the
@@ -61,6 +86,9 @@ final class Inquiry {
     var outcomeRaw: String = Outcome.noResponse.rawValue
     var outcomeSourceRaw: String? = nil
     var outcomeAt: Date? = nil
+    // Why it ended, for #16. Optional and defaulted so it migrates additively; an inquiry closed before
+    // this shipped simply has none, and reporting falls back to what it can derive.
+    var lostReasonRaw: String? = nil
 
     // Downbeat booking match: SUGGESTION-ONLY for an inquiry, never a silent auto-book (#1435), since
     // the org-name matcher it reuses isn't calibrated for private-individual name collisions.
@@ -85,6 +113,12 @@ final class Inquiry {
     }
 
     var source: InquirySource { InquirySource(rawValue: sourceRaw) ?? .directEmail }
+
+    // nil when it was never lost, or when a later version wrote a reason this build doesn't know. A raw
+    // value it can't read must never be reported as one of today's reasons.
+    var lostReason: InquiryLostReason? {
+        lostReasonRaw.flatMap(InquiryLostReason.init(rawValue:))
+    }
 
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }

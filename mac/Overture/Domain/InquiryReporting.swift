@@ -33,6 +33,16 @@ enum InquiryReporting {
         return inquiry.replied ? .inConversation : .awaitingTheirAnswer
     }
 
+    // Why it ended, for #16's Declined / Not a fit split. Dan's own answer always wins; an inquiry
+    // closed before that was captured (or by a later version this build can't read) falls back to what
+    // the timestamps can honestly support, so it still lands in the lost column rather than vanishing
+    // from the year-end total.
+    static func lostReason(for inquiry: Inquiry) -> InquiryLostReason? {
+        guard stage(for: inquiry) == .lost else { return nil }
+        if let stated = inquiry.lostReason { return stated }
+        return .neverHeardBack
+    }
+
     static func lostAfter(_ inquiry: Inquiry) -> LostAfter? {
         guard stage(for: inquiry) == .lost else { return nil }
         if inquiry.sentAt == nil { return .neverReplied }

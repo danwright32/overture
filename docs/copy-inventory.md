@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **815 sentences**, from 281 source files.
+Every sentence Overture can say to Dan: **818 sentences**, from 281 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -766,6 +766,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadState.swift`
 "Never contact \(groupName) again"
     `Domain/DraftReviewNotes.swift`
+"Never heard back"
+    `Domain/Inquiry.swift`
 "Never show me shows in \(town)"
     `UI/QueueView+Model.swift`
 "New York, NY"
@@ -834,6 +836,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Not a fit"
     `Domain/ReviewStatus.swift`
+"Not a fit for me"
+    `Domain/Inquiry.swift`
 "Not a real reply"
     `UI/DraftReviewView.swift`
 "Not actually covered"
@@ -1419,6 +1423,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
     `Domain/SourceGrade.swift`
+"They declined"
+    `Domain/Inquiry.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
     `Domain/SourceReadability.swift`
 "They replied"
