@@ -679,9 +679,11 @@ struct QueueView: View {
         } else {
             let now = Date()
             let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
-            let note = ReachedOutQueue.contactsAcrossShowsNote(
-                contactCount: dated.count,
-                showCount: Set(dated.map(\.prospect.naturalKey)).count)
+            // #1513: counted from the rendered entries, so the note can never describe fewer rows than
+            // the list shows.
+            let counts = QueueModel.reachedOutNoteCounts(entries)
+            let note = ReachedOutQueue.contactsAcrossShowsNote(contactCount: counts.contacts,
+                                                              showCount: counts.shows)
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
                 // rather than let them read like the performance-date headers on every other stage.

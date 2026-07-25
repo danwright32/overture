@@ -93,6 +93,61 @@ struct ReachedOutMergeTests {
         if case .inquiry = entries[1] { Issue.record("the show should sit between the two inquiries") }
     }
 
+    // #1513: the "N contacts across M shows" note sits directly above these rows, so its numbers have to
+    // describe the rows Dan can actually see. Counting prospects only made it smaller than the list the
+    // moment an inquiry joined it.
+    @Test("the contacts note counts inquiries too, so it matches the visible rows")
+    func noteCountsInquiries() throws {
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
+                         performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        let a = Recipient(id: "r-1", email: "a@x.org", name: "A", provenance: .act)
+        let b = Recipient(id: "r-2", email: "b@x.org", name: "B", provenance: .presenter)
+        p.recipients = [a, b]
+        ctx.insert(p)
+        let inq = inquiry(sentAt: day("2026-01-01"))
+        ctx.insert(inq)
+
+        let entries = QueueModel.reachedOutEntries(
+            prospects: [(prospect: p, recipient: a, next: day("2026-01-12")),
+                        (prospect: p, recipient: b, next: day("2026-01-12"))],
+            inquiries: [inq], now: day("2026-01-05"))
+        let counts = QueueModel.reachedOutNoteCounts(entries)
+
+        // Three rows on screen: two contacts for one show, plus the inquiry.
+        #expect(entries.count == 3)
+        #expect(counts.contacts == 3)
+        #expect(counts.shows == 2)
+    }
+
+    // Two contacts on ONE show is the fan-out the note exists to explain, and it must still read that
+    // way when no inquiry is present.
+    @Test("with no inquiries the note counts exactly what it always did")
+    func noteUnchangedWithoutInquiries() throws {
+        let ctx = ModelContext(try container())
+        let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
+                         performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        let a = Recipient(id: "r-1", email: "a@x.org", name: "A", provenance: .act)
+        let b = Recipient(id: "r-2", email: "b@x.org", name: "B", provenance: .presenter)
+        p.recipients = [a, b]
+        ctx.insert(p)
+
+        let entries = QueueModel.reachedOutEntries(
+            prospects: [(prospect: p, recipient: a, next: day("2026-01-12")),
+                        (prospect: p, recipient: b, next: day("2026-01-12"))],
+            inquiries: [], now: day("2026-01-05"))
+        let counts = QueueModel.reachedOutNoteCounts(entries)
+
+        #expect(counts.contacts == 2)
+        #expect(counts.shows == 1)
+    }
+
     // An inquiry with no reach-out date must not silently vanish from a stage it is placed in. If it
     // reaches this list at all it is because StageNavigation put it in Reached out, so it needs a date.
     @Test("an inquiry with nothing to be due about is left out rather than dated arbitrarily")
