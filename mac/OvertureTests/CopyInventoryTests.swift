@@ -278,4 +278,42 @@ struct CopyInventoryTests {
             says what you meant it to say, commit it.
             """)
     }
+
+    // MARK: - Relative source paths survive a symlinked root (#1491)
+    //
+    // FileManager's enumerator hands back each file in canonical (/private/var/...) form while the root
+    // derived from #filePath stays in /var/... form. The old unanchored replacingOccurrences strip then
+    // removed the root chunk from the MIDDLE of the file path, fusing the leading /private onto the first
+    // component ("/privateDomain/EmptyState.swift"). It never showed in a normal checkout under /Users (no
+    // symlink in the path), only in a $TMPDIR worktree, which is exactly where verify-and-merge-branch.sh
+    // runs the suite, so it failed CopyInventoryTests on every Mac branch there. This pins the
+    // relativization against a real symlinked root, so the regression fails in any checkout.
+    @Test func relativizesASourcePathAddressedThroughASymlinkedRoot() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("copyinv-\(UUID().uuidString)")
+        let real = base.appendingPathComponent("real")
+        let sub = real.appendingPathComponent("Sub")
+        try fm.createDirectory(at: sub, withIntermediateDirectories: true)
+        let file = sub.appendingPathComponent("Fixture.swift")
+        try "Text(\"x\")".write(to: file, atomically: true, encoding: .utf8)
+        let link = base.appendingPathComponent("link")
+        try fm.createSymbolicLink(at: link, withDestinationURL: real)
+        defer { try? fm.removeItem(at: base) }
+
+        // The root is the symlink; the file is addressed through the real directory, the mismatch the
+        // enumerator produces. The relative name must still come out clean.
+        #expect(CopyInventory.relativePath(of: file, under: link) == "Sub/Fixture.swift")
+    }
+
+    @Test func relativizesAPlainNestedSourcePath() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("copyinv-\(UUID().uuidString)")
+        let sub = root.appendingPathComponent("Domain")
+        try fm.createDirectory(at: sub, withIntermediateDirectories: true)
+        let file = sub.appendingPathComponent("EmptyState.swift")
+        try "".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? fm.removeItem(at: root) }
+
+        #expect(CopyInventory.relativePath(of: file, under: root) == "Domain/EmptyState.swift")
+    }
 }

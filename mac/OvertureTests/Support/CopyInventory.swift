@@ -153,8 +153,16 @@ enum CopyInventory {
         return out.sorted { $0.path < $1.path }
     }
 
-    private static func relativePath(of file: URL, under root: URL) -> String {
-        file.path.replacingOccurrences(of: root.path + "/", with: "")
+    // Internal (not private) so the #1491 regression test can pin it directly. Both paths are
+    // canonicalized first: resolvingSymlinksInPath collapses /var vs /private/var, and a symlinked root
+    // vs a real file path, into one form, so the strip is an ANCHORED prefix removal rather than the old
+    // unanchored replacingOccurrences that fused a leading /private onto the first component.
+    static func relativePath(of file: URL, under root: URL) -> String {
+        let rootPath = root.resolvingSymlinksInPath().path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        let filePath = file.resolvingSymlinksInPath().path
+        guard filePath.hasPrefix(prefix) else { return filePath }
+        return String(filePath.dropFirst(prefix.count))
     }
 
     // MARK: - Where things live
