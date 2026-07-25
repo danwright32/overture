@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# One-time setup for Overture's stable local code-signing identity (#1425).
+#
+# The installed Release bundle used to be ad-hoc re-signed, whose cdhash changes on every rebuild, so
+# macOS silently dropped Dan's TCC grants (calendar, Gmail/automation, reminders) on each reinstall.
+# This creates a dedicated self-signed certificate that gives every rebuild the SAME code-signing
+# identity, so those grants persist. build-install.sh then signs with it automatically and refuses to
+# fall back to ad-hoc.
+#
+# Run this once per Mac. It is idempotent: if the identity already exists it does nothing. The single
+# manual step is a macOS "Certificate Trust Settings" password dialog, which you approve once here so
+# that every build afterward can sign without a prompt.
+
+cd "$(dirname "$0")"
+# shellcheck source=lib/stable-signing.sh
+source "$(pwd)/lib/stable-signing.sh"
+
+if [[ -n "$(overture_signing_identity_sha)" ]]; then
+  echo "Signing identity \"${OVERTURE_SIGNING_IDENTITY}\" already exists. Nothing to do."
+  exit 0
+fi
+
+KC="${OVERTURE_SIGNING_KEYCHAIN}"
+PW="${OVERTURE_SIGNING_KEYCHAIN_PASSWORD}"
+
+echo "==> Creating dedicated signing keychain: ${KC}"
+if [[ ! -f "${KC}" ]]; then
+  security create-keychain -p "${PW}" "${KC}"
+fi
+# No auto-lock, so a later build can unlock and sign without the keychain having relocked underneath it.
+security set-keychain-settings "${KC}"
+security unlock-keychain -p "${PW}" "${KC}"
+
+# Add the keychain to the user's search list (once) so codesign and find-identity resolve the identity.
+existing_keychains=()
+while IFS= read -r line; do
+  line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+  line="${line%\"}"; line="${line#\"}"        # strip surrounding quotes
+  [[ -n "${line}" ]] && existing_keychains+=("${line}")
+done < <(security list-keychains -d user)
+in_list=0
+for k in "${existing_keychains[@]}"; do
+  [[ "${k}" == "${KC}" ]] && in_list=1
+done
+if [[ "${in_list}" -eq 0 ]]; then
+  echo "==> Adding it to the user keychain search list"
+  security list-keychains -d user -s "${existing_keychains[@]}" "${KC}"
+fi
+
+echo "==> Generating a self-signed code-signing certificate"
+tmp="$(mktemp -d)"
+trap 'rm -rf "${tmp}"' EXIT
+# A transient password on the PKCS#12 blob: macOS's `security import` rejects an empty-password MAC,
+# and openssl 3.x needs -legacy for a bundle `security` can read. The password never leaves this run.
+p12pw="transfer"
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "${tmp}/key.pem" -out "${tmp}/cert.pem" -days 3650 \
+  -subj "/CN=${OVERTURE_SIGNING_IDENTITY}" \
+  -addext "extendedKeyUsage=codeSigning" \
+  -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1
+openssl pkcs12 -export -legacy \
+  -inkey "${tmp}/key.pem" -in "${tmp}/cert.pem" \
+  -out "${tmp}/identity.p12" -passout "pass:${p12pw}" \
+  -name "${OVERTURE_SIGNING_IDENTITY}" >/dev/null 2>&1
+
+echo "==> Importing it and authorizing codesign to use its key"
+security import "${tmp}/identity.p12" -k "${KC}" -P "${p12pw}" -T /usr/bin/codesign >/dev/null
+security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${PW}" "${KC}" >/dev/null 2>&1
+
+echo "==> Trusting the certificate for code signing (approve the password dialog)..."
+security add-trusted-cert -r trustRoot -p codeSign -k "${KC}" "${tmp}/cert.pem"
+
+sha="$(overture_signing_identity_sha)"
+if [[ -z "${sha}" ]]; then
+  echo "ERROR: the identity was not created successfully. See the messages above." >&2
+  exit 1
+fi
+echo "Done. Created and trusted \"${OVERTURE_SIGNING_IDENTITY}\" (${sha})."
+echo "Reinstall once with mac/build-install.sh; you will re-grant permissions this one time, then they persist."

@@ -55,7 +55,14 @@ already drifting from the Swift version it mirrored.
   state and the change under test looks broken), builds Debug, verifies the built bundle really
   carries the Debug identity, and only then launches it, printing the exact `.app` path and the
   store it will touch. It refuses to launch a bundle claiming the Release identity, which would
-  open the LIVE store. Release has its own installer, `mac/build-install.sh`.
+  open the LIVE store. Release has its own installer, `mac/build-install.sh`. That installer signs the
+  bundle with a stable local identity so macOS keeps its TCC grants (calendar, Gmail/automation,
+  reminders) across reinstalls instead of dropping them, which an ad-hoc signature silently did because
+  its cdhash changes every rebuild (#1425). Run `mac/scripts/setup-signing-identity.sh` ONCE per Mac
+  first (it creates and trusts a dedicated "Overture Local Signing" certificate, the one manual step is
+  a trust-settings password dialog); after that every build signs automatically. `build-install.sh`
+  fails loud if that identity is missing rather than falling back to ad-hoc. The one-time switch to this
+  identity re-prompts for permissions on the first install after it, then they persist.
 - Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
   (#915), generated from the source and checked in. The test suite regenerates it and fails when it
   is stale, so a PR that changes the app's wording shows that change in the diff, in the words Dan

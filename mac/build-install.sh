@@ -15,6 +15,8 @@ source "$(pwd)/scripts/lib/install-dedupe.sh"
 source "$(pwd)/scripts/lib/await-registered.sh"
 # shellcheck source=scripts/lib/launch-surface.sh
 source "$(pwd)/scripts/lib/launch-surface.sh"
+# shellcheck source=scripts/lib/stable-signing.sh
+source "$(pwd)/scripts/lib/stable-signing.sh"
 
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
@@ -72,9 +74,13 @@ cp -R "${BUILT_APP}" "${DEST}"
 # Strip quarantine so Gatekeeper doesn't nag on first launch.
 xattr -dr com.apple.quarantine "${DEST}" 2>/dev/null || true
 
-# Ad-hoc re-sign so the bundle identity is stable across rebuilds
-# (helps TCC/Full Disk Access grants persist).
-codesign --force --deep --sign - "${DEST}" >/dev/null 2>&1 || true
+# Sign with the stable local identity so the bundle presents the SAME code signature on every
+# reinstall, which is what lets macOS keep TCC grants (calendar, Gmail/automation, reminders) instead
+# of dropping them (#1425). An ad-hoc signature does NOT do this: its cdhash is a hash of the binary
+# and changes every rebuild, so macOS treats each reinstall as a different app. overture_stable_sign
+# fails loud if the identity is missing (run mac/scripts/setup-signing-identity.sh once) rather than
+# silently falling back to ad-hoc.
+overture_stable_sign "${DEST}"
 
 # Drop the stray build copy and make /Applications the canonical overture:// handler, so the
 # `open overture://show` surface below can only resolve to the installed bundle. Without this a
