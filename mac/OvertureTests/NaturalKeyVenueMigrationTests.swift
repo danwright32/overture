@@ -147,6 +147,53 @@ struct NaturalKeyVenueMigrationTests {
 
     // A lone row that carries an embedded address (no duplicate twin) is simply re-keyed to its folded
     // form, so a future scout of the bare spelling dedupes against it. Nothing is deleted.
+    // #1498: the shape this migration could not see until the key stopped carrying the trailing location.
+    // Measured on the live store 2026-07-25: 29 pairs exactly like this one, every row untriaged with no
+    // recipients and nothing sent, so Dan was triaging the same night twice. The two Jalopy spellings are
+    // the live case verbatim.
+    @Test func aVenueWithAndWithoutItsTrailingLocationCollapsesToOneShow() throws {
+        let ctx = try context()
+        let group = "Bruce Molsky & Darol Anger", date = "2026-07-25"
+        let folded = foldedKey(group, date, "Jalopy Theatre")
+
+        let older = insert(ctx, key: "old-bare", group: group, date: date, venue: "Jalopy Theatre",
+                           ingestedAt: Date(timeIntervalSince1970: 100))
+        insert(ctx, key: "old-with-location", group: group, date: date,
+               venue: "Jalopy Theatre, Red Hook, Brooklyn, NY",
+               ingestedAt: Date(timeIntervalSince1970: 200))
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+
+        let remaining = allProspects(ctx)
+        #expect(remaining.count == 1, "one show must be one row")
+        #expect(remaining.first === older, "the earliest-ingested row survives when both are pristine")
+        #expect(remaining.first?.naturalKey == folded)
+        #expect(summary.duplicatesDeleted == 1)
+    }
+
+    // The parent-building spelling from the same audit (eight Carnegie shows). Worth its own case because
+    // NEITHER stored key equals the new folded key, so without this pass a fresh scout would have added a
+    // THIRD row rather than converging on one of the two.
+    @Test func aParentBuildingSpellingCollapsesTooAndLeavesNoStaleKey() throws {
+        let ctx = try context()
+        let group = "A Gospel of Gratitude", date = "2026-11-28"
+        let venue = "Stern Auditorium/Perelman Stage"
+        let folded = foldedKey(group, date, venue)
+
+        insert(ctx, key: "old-long", group: group, date: date,
+               venue: "\(venue), Carnegie Hall, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 100))
+        insert(ctx, key: "old-short", group: group, date: date, venue: "\(venue), Carnegie Hall",
+               ingestedAt: Date(timeIntervalSince1970: 200))
+
+        NaturalKeyVenueMigration.run(in: ctx)
+
+        let remaining = allProspects(ctx)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.naturalKey == folded,
+                "the survivor must carry the folded key, or the next scout adds a third row")
+    }
+
     @Test func aLoneAddressRowIsRekeyedNotDeleted() throws {
         let ctx = try context()
         let group = "Solo Recital", date = "2026-10-10"
