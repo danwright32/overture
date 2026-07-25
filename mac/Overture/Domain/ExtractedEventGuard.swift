@@ -209,7 +209,12 @@ enum ExtractedEventGuard {
     // carries a place-type word, so it can't falsely rescue the #995 fabricated rows this guard exists
     // to catch.
     private static func restatesLocation(venue: String, location: String?) -> Bool {
-        let venueKey = normalized(venue)
+        // #1498: compare the venue's NAME, not the run's commentary on it. A run reported
+        // "downtown Brooklyn, NY (specific venue not named on page)" against the location
+        // "downtown Brooklyn, NY", and the trailing note was enough to miss both comparisons below, so
+        // the city passed as a venue, reached the live store, and would have gone into a pitch. A
+        // parenthetical is always a note about a venue, never part of its name.
+        let venueKey = normalized(strippingTrailingParenthetical(venue))
         guard !venueKey.isEmpty,
               let location, case let locationKey = normalized(location), !locationKey.isEmpty
         else { return false }
@@ -219,6 +224,14 @@ enum ExtractedEventGuard {
         return locationKey.split(separator: ",")
             .map { normalized(String($0)) }
             .contains(venueKey)
+    }
+
+    // Only a TRAILING parenthetical, and only for this comparison: a real venue that carries one
+    // ("Merkin Hall (Kaufman Music Center)") still keeps it everywhere Dan reads it, and still passes,
+    // because "Merkin Hall" is not the city either.
+    private static func strippingTrailingParenthetical(_ s: String) -> String {
+        s.replacingOccurrences(of: #"\s*\([^)]*\)\s*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 
     // A bare city/state/country name never carries one of these; a specific named outdoor performance

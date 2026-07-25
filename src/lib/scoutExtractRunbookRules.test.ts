@@ -22,6 +22,11 @@ const RULES: { name: string; pattern: RegExp }[] = [
   // page, which switches a small source's cancellation detection off for as long as the placeholder is up.
   { name: "venue-not-published-flag", pattern: /set `venueNotPublished: true`/i },
   { name: "venue-not-published-never-for-an-unread-page", pattern: /Never set it for a page you could not\s+reach/i },
+  // #1498: the step that was skipped. On 2026-07-23 a run read Jalopy's listings text for the Brooklyn
+  // Folk Festival, saw only "downtown Brooklyn, NY", and nulled the venue without following the row's own
+  // link, where the detail page names St. Ann & the Holy Trinity Church outright. A city in the listings
+  // text is the reason to follow the link, not a substitute for it.
+  { name: "city-in-listing-is-not-a-reason-to-skip-the-link", pattern: /only a CITY[\s\S]*?follow the link before/i },
 ];
 
 describe("scout-extract-runbook sourceUrl rule is present (#1276)", () => {

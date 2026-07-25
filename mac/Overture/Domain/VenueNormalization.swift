@@ -11,19 +11,48 @@ import Foundation
 //   - common street-suffix abbreviations ("65th St" versus "65th Street"),
 //   - spacing around a slash ("a/b" versus "a / b").
 //
-// Conservative by design: it folds only variance shown to denote one venue. In particular it never
-// expands a LEADING "St" that means "Saint" (see foldStreetSuffixes), and it does NOT strip a trailing
-// city or state from a venue name (that would risk merging two genuinely different venues that share a
-// name in different towns): "Chatham United Methodist Church" bare and "..., Chatham NJ" stay distinct,
-// which the audit confirmed have not collided.
+// Conservative where it must be: it never expands a LEADING "St" that means "Saint" (see
+// foldStreetSuffixes).
+//
+// #1498 changed one of #1064's calls. This originally KEPT a trailing city or state, on the reasoning
+// that dropping it could merge two same-named venues in different towns, and recorded that the audit had
+// seen no collisions. That last part stopped being true: by 2026-07-25 the live store held 34 shows split
+// across 71 queue rows on exactly this variance ("Jalopy Theatre" versus "Jalopy Theatre, Red Hook,
+// Brooklyn, NY"), so Dan was triaging the same night more than once. `keyName` now reduces a venue to its
+// own name for the KEY, and the collision that reasoning feared cannot occur, because every consumer of
+// the key also carries the date. Note the reduction is key-only: `strippingEmbeddedAddress` is shared
+// with VenueDisplay and still keeps a parent building for the card.
 enum VenueNormalization {
 
-    // The single canonical form used for the natural KEY. Strip the embedded address first (so the bare
-    // name and the address-appended name converge), then fold the remaining punctuation variance. Case is
-    // preserved here; the key path lowercases downstream in Prospect.canonicalize, the display path keeps
-    // it for the card.
+    // The single canonical form used for the natural KEY: the venue's own name, then the punctuation fold.
+    // Case is preserved here; the key path lowercases downstream in Prospect.canonicalize.
     static func normalizeForKey(_ raw: String) -> String {
-        fold(strippingEmbeddedAddress(raw))
+        fold(keyName(raw))
+    }
+
+    // #1498: for the KEY, a venue reduces to its own name, dropping every trailing clause: a street
+    // address, a city, a neighbourhood, or a parent building. Whatever follows the first comma describes
+    // WHERE the venue is or what it sits inside, never which venue it is, and a source that sometimes
+    // appends it and sometimes does not was splitting one show into several.
+    //
+    // Measured on the live store 2026-07-25: 34 shows had fragmented into 71 queue rows, so Dan was
+    // triaging the same night more than once. Every collapse this makes there is a correct one (three
+    // spellings of Chatham United Methodist Church, "Jalopy Theatre" with and without Red Hook, Weill
+    // Recital Hall with and without Carnegie Hall) and it makes no false merge.
+    //
+    // #1064 deliberately KEPT the trailing city, reasoning that dropping it could merge two same-named
+    // venues in different towns, and recorded that the audit had seen no collisions. That premise is what
+    // changed. The risk it named also cannot bite here: every consumer of this key (Prospect and Inquiry
+    // natural keys, SameDateVenueMerge) also carries the DATE, and the two show keys carry the group, so
+    // two different churches would have to host the same group on the same night to collide.
+    //
+    // Deliberately NOT done inside `strippingEmbeddedAddress`, which VenueDisplay shares: a card should
+    // still read "Weill Recital Hall, Carnegie Hall". This reduction is for identity only.
+    static func keyName(_ raw: String) -> String {
+        let firstClause = raw.split(separator: ",", omittingEmptySubsequences: false)[0]
+            .trimmingCharacters(in: .whitespaces)
+        // A venue that is nothing but a comma clause keeps its raw form rather than becoming empty.
+        return firstClause.isEmpty ? raw : firstClause
     }
 
     // A source page can bake the street address directly into the venue string. The heuristic (shared
