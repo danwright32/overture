@@ -20,6 +20,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "carnegie-citywide-press-example",
+      "discipline-matched-portfolio-link",
       "high-confidence-only-when-read",
       "named-performer-never-dropped",
       "never-host-venue-target",

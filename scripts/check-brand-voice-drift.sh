@@ -37,6 +37,13 @@ BRAND_VOICE_ANCHORS=(
   "observation-first"
   "direct-intent"
   "Happy to answer any questions"
+  # #1405: the discipline-matched portfolio galleries. Each must appear in both sources; a gallery
+  # link present on one side but not the other would send some prospects the wrong (or general) page.
+  "danwrightphotography.com/music"
+  "danwrightphotography.com/bands"
+  "danwrightphotography.com/comedy"
+  "danwrightphotography.com/dance"
+  "danwrightphotography.com/performing-arts"
 )
 
 # #1227: phrases Dan has SUPERSEDED. Unlike an anchor (a fact that must appear on both sides), a rejected
