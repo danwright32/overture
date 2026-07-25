@@ -92,6 +92,9 @@ final class ReconcileScheduler {
         // #923: same trigger as the booking pass. Re-judge conflicts so a night newly booked in the export
         // flags its show at once, instead of leaving it sendable until the next scout.
         reapplyConflicts(now: now)
+        // #1456: watch whether Downbeat's feed is still MOVING, on this same free tick, so the dry-pipe
+        // nudge advances daily without a scout.
+        observeFeedFreshness(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
@@ -159,6 +162,17 @@ final class ReconcileScheduler {
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.
     // #499: saveFailed reports a persistence failure back to the caller so it can surface via
+    // #1456: record whether Downbeat's feed is still moving. A booking id never seen before, dated today or
+    // later, resets the dry-spell clock the Days off mark reads; nothing new for four weeks lights the mark.
+    // Best-effort telemetry in UserDefaults, never fails the tick. `from`/`into` are injectable so a test can
+    // drive it against a fixture export and a scratch defaults suite.
+    func observeFeedFreshness(now: Date, from url: URL = DownbeatBridge.defaultURL,
+                              into defaults: UserDefaults = .standard) {
+        let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
+        DownbeatFeedFreshnessStore.record(bookings: loaded.bookings,
+                                          today: QueueModel.easternToday(), now: now, into: defaults)
+    }
+
     // ReconcileSummary instead of failing silently. #617: `from` mirrors DownbeatBridge.loadWithHealth's
     // own injectable URL, so a test can drive a real booking match without touching Dan's real export.
     @discardableResult

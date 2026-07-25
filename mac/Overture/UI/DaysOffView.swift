@@ -28,6 +28,9 @@ struct DaysOffView: View {
     // and a view deciding for itself what a timestamp means is how the toolbar and the sheet would come to
     // different answers about the same fact.
     @AppStorage(DaysOffAttention.snoozeKey) private var snoozedUntil: Double = 0
+    // #1456: the last-new-booking timestamp, read reactively so a stalled feed shows its notice here and
+    // clears the moment the reconcile tick records a genuinely new shoot.
+    @AppStorage(DownbeatFeedFreshnessStore.lastNewAtKey) private var feedLastNewAt: Double = 0
 
     @State private var showAdd = false
     @State private var newStart = Date()
@@ -180,6 +183,19 @@ struct DaysOffView: View {
                         .padding(.top, 2)
                 }
             } else {
+                // #1456: there ARE upcoming shoots, but the feed may have stopped bringing new ones. Said
+                // here (where there is room for the reassurance) rather than on the toolbar. Gated on the
+                // FACT (feed stalled), never the snooze, for the same reason the no-shoots line above is.
+                if DownbeatFeedFreshness.isStalled(lastNewAt: feedLastNewAt, now: Date()) {
+                    Text(DaysOffAttention.feedStalledExplanation)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if DaysOffAttention.needsALook(calendar, feedStalled: true) {
+                        Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .padding(.top, 2)
+                    }
+                }
                 ForEach(calendar.days.filter { $0.kind == .bookedShoot }, id: \.key) { day in
                     HStack(spacing: OVSpacing.sm) {
                         Text(EasternDate.dayLabel(day.date) ?? day.date)
