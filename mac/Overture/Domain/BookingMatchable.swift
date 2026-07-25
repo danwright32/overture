@@ -28,8 +28,15 @@ protocol BookingMatchable: AnyObject {
     var bookingSuggestionDismissed: Bool { get }
     var bookingSuggested: Bool { get set }
 
+    // Whether an EXACT booking match may flip this entity to booked automatically. A Prospect permits
+    // it; an Inquiry does NOT (suggestion-only, #1435). An entity that does not permit auto-book still
+    // CLAIMS a matched booking (consumes it) so it can win the tie-break and downgrade a competing
+    // prospect to a suggestion, per #1434.
+    var permitsAutoBook: Bool { get }
+
     // The confirmed auto-book: set outcome, stamp source/time, record the booking id, and freeze
     // the entity's still-unsent contacts. Encapsulated so each conformer applies its own freeze.
+    // Only ever called when `permitsAutoBook` is true.
     func markAutoBooked(bookingId: String, now: Date)
 }
 
@@ -37,6 +44,7 @@ extension Prospect: BookingMatchable {
     var bookingManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var bookingIsBooked: Bool { outcome == .booked }
     var bookingPriorRelationshipBooked: Bool { priorRelationshipAtSend == PriorRelationship.booked.rawValue }
+    var permitsAutoBook: Bool { true }
 
     func markAutoBooked(bookingId: String, now: Date) {
         outcome = .booked

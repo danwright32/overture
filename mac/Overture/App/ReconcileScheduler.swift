@@ -178,10 +178,14 @@ final class ReconcileScheduler {
     @discardableResult
     func reconcileBookings(now: Date, from url: URL = DownbeatBridge.defaultURL) -> (count: Int, saveFailed: Bool) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        // #1434: the single generic reconcile pass. Phase 2 appends Inquiry entities to this one list
-        // so a booking is consumed once across both types.
-        let n = DownbeatBooking.reconcileBooked(entities: all, clients: loaded.clients,
+        // #1434/#1435: one generic reconcile pass over prospects AND inquiries, so a booking is
+        // consumed once across both types. Inquiries are suggestion-only but claim a booking to win the
+        // tie-break. `try?` yields none on a container predating Inquiry.
+        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let entities: [any BookingMatchable] = prospects.map { $0 as any BookingMatchable }
+            + inquiries.map { $0 as any BookingMatchable }
+        let n = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)
         guard n > 0 else { return (0, false) }
         do {

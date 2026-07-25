@@ -42,6 +42,11 @@ enum DownbeatBooking {
                 let d0 = $0.performanceDate ?? ""
                 let d1 = $1.performanceDate ?? ""
                 if d0 != d1 { return d0 < d1 }
+                // #1434 tie-break: at the same date a suggestion-only entity (an Inquiry) is reached
+                // BEFORE an auto-booking one (a Prospect), so it claims a shared booking first and the
+                // prospect is downgraded to a suggestion rather than auto-booking. Among same-kind
+                // entities this is constant and falls through to the stable groupName order.
+                if $0.permitsAutoBook != $1.permitsAutoBook { return !$0.permitsAutoBook }
                 return $0.groupName < $1.groupName
             }
         for p in sorted {
@@ -55,11 +60,19 @@ enum DownbeatBooking {
                 // through to suggesting it either.
                 if p.autoBookingRejectedWithoutId || p.rejectedBookingIds.contains(booking.id) { continue }
                 if !consumed.contains(booking.id) {
-                    // The confirmed auto-book (outcome, source, timestamp, id, booking-freeze) is the
-                    // conformer's own `markAutoBooked` so each entity applies its own freeze semantics.
-                    p.markAutoBooked(bookingId: booking.id, now: now)
+                    // Claim the booking either way so it is consumed once across the whole list (the
+                    // #1434 dual-attribution guarantee). A prospect auto-books; a suggestion-only entity
+                    // (an Inquiry) only suggests, but its claim still blocks a competing prospect from
+                    // auto-booking the same booking (#1435 suggestion-only, #1434 tie-break).
                     consumed.insert(booking.id)
-                    count += 1
+                    if p.permitsAutoBook {
+                        // The confirmed auto-book (outcome, source, timestamp, id, booking-freeze) is the
+                        // conformer's own `markAutoBooked` so each entity applies its own freeze semantics.
+                        p.markAutoBooked(bookingId: booking.id, now: now)
+                        count += 1
+                    } else if !p.bookingSuggestionDismissed {
+                        p.bookingSuggested = true
+                    }
                 } else {
                     // Tiebreak loser: suggest only if the entity hasn't dismissed
                     if !p.bookingSuggestionDismissed { p.bookingSuggested = true }

@@ -31,17 +31,23 @@ struct GmailReplyChecker {
         now: Date = Date(),
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Bool {
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #1435: hire inquiries ride the SAME reply/bounce pipeline as a single self-thread. `try?`
+        // keeps a container that predates Inquiry (an older test harness) working: it just yields none.
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let all: [any ReplyWatchable] = prospects.map { $0 as any ReplyWatchable }
+            + inquiries.map { $0 as any ReplyWatchable }
         // Watch EVERY sent recipient's own thread (#418 A2), not just the lead's first-send thread,
         // so a reply to any contact is seen. Skip a show only on a MANUAL lead resolution or a booking
         // (a closed show); never on the auto .replied rollup, or a second contact's reply would be missed.
+        // An inquiry presents itself here as its own single recipient.
         var threadIds: Set<String> = []
         for p in all {
-            if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
-            for r in p.recipients {
+            if p.replyWatchManualOutcome || p.replyWatchIsBooked { continue }
+            for r in p.replyWatchRecipients {
                 guard let t = r.gmailThreadId, !t.isEmpty,
-                      r.outcomeSourceRaw != OutcomeSource.manual.rawValue,
-                      !r.replied, r.resolution != .booked else { continue }
+                      !r.replyWatchManualOutcome,
+                      !r.replied, !r.replyWatchIsBooked else { continue }
                 threadIds.insert(t)
             }
         }
