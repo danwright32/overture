@@ -155,4 +155,25 @@ enum InquiryIntake {
     static func isBlankKey(_ key: String) -> Bool {
         key.replacingOccurrences(of: "|", with: "").trimmingCharacters(in: .whitespaces).isEmpty
     }
+
+    // Build a normalized inquiry from raw form fields and insert it: trims every field and turns a
+    // blank optional into nil, so a bare intake keys cleanly and the view stays free of rules.
+    @discardableResult
+    static func create(source: InquirySource, name: String, email: String?, eventName: String,
+                       performanceDate: String?, venue: String?, notes: String?,
+                       in context: ModelContext) -> Inquiry {
+        func cleaned(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (trimmed?.isEmpty ?? true) ? nil : trimmed
+        }
+        let inquiry = Inquiry(source: source,
+                              inquirerName: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                              inquirerEmail: cleaned(email),
+                              eventName: eventName.trimmingCharacters(in: .whitespacesAndNewlines),
+                              performanceDate: cleaned(performanceDate),
+                              venue: cleaned(venue),
+                              notes: cleaned(notes))
+        context.insert(inquiry)
+        return inquiry
+    }
 }

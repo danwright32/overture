@@ -57,6 +57,21 @@ struct InquiryTests {
         let otherBareKey = Inquiry.makeNaturalKey(eventName: "", performanceDate: nil, venue: nil)
         #expect(InquiryIntake.duplicate(ofKey: otherBareKey, in: [bare]) == nil)
     }
+
+    // Intake trims its inputs and turns blank optional fields into nil, so the form stays dumb and the
+    // rules live here (the WatchlistEditing idiom). The built inquiry is inserted.
+    @Test func createTrimsInputsNilsBlanksAndInserts() throws {
+        let ctx = ModelContext(try container())
+        let inq = InquiryIntake.create(source: .contactForm, name: "  Ada Lovelace  ",
+                                       email: "   ", eventName: "  Gala  ", performanceDate: nil,
+                                       venue: "   ", notes: "Wants a portrait", in: ctx)
+        #expect(inq.inquirerName == "Ada Lovelace")
+        #expect(inq.inquirerEmail == nil)
+        #expect(inq.venue == nil)
+        #expect(inq.notes == "Wants a portrait")
+        #expect(inq.source == .contactForm)
+        #expect(try ctx.fetch(FetchDescriptor<Inquiry>()).count == 1)
+    }
 }
 
 // An inquiry has ONE email thread, not a contact list, so it rides the Phase 1 ReplyWatchable seam
