@@ -1030,7 +1030,10 @@ enum ScoutService {
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing)
                 updated += 1
-            } else if let byConcert = matchByConcertIdentity(enriched.seriesId, venue: enriched.venue, in: context) {
+            } else if let byConcert = matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
+                                                             openingNight: enriched.performanceDate,
+                                                             runEndDate: enriched.runEndDate,
+                                                             venue: enriched.venue, in: context) {
                 // #1260 Phase 2: no exact key match, but a stored merged prospect carries the SAME synthetic
                 // concert id (samedatevenue:DATE|VENUE). The name and the representative URL both shifted
                 // because the scout re-listed the per-conductor rows in a new order or with refreshed links,
@@ -1171,11 +1174,60 @@ enum ScoutService {
     // refreshed links). Only ever fires for a merged cluster (isMerged gate), and the id already encodes
     // date+venue, so `sameVenue` is belt-and-braces against a hash-collision, never load-bearing. Fetch-all
     // + filter, like matchByStableSource; the store is small.
-    private static func matchByConcertIdentity(_ seriesId: String?, venue: String?,
+    //
+    // #1528: and a REAL feed production id now matches too, which is the whole fix for a run whose opening
+    // night moves. OvationTix and VenueTix tag every night of one show with a shared id and pass
+    // `sourceUrl: nil`, so when the first night plays and leaves the feed, the key drifts, both URL arms
+    // find nothing, and this arm's `isMerged` gate refused the one piece of identity actually on the row.
+    // A new prospect appeared every day and Dan re-triaged a show he had dismissed.
+    //
+    // NOT simply "any non-empty seriesId", because the field is not reliably a production id. The extract
+    // runbook (§3b) tells the paid AI to copy any "Series:" marker off a page verbatim, and a page reading
+    // "Series: Broadway Sessions" is a SEASON spanning different productions. Matching on that would
+    // re-key a stored prospect onto a different show while keeping its dismissal, sent record and thread
+    // id, which is precisely the #797 failure. So a real id carries identity only with two corroborations
+    // a season marker cannot fake: the titles must be the same act, and the two RUNS must overlap in time.
+    //
+    // The overlap test is also what makes a remount safe, with no arbitrary window constant. A run whose
+    // opening night creeps forward (or backward: a feed can GAIN an earlier night, which is how Jena
+    // Friedman drifted) still overlaps its own stored dates. The same production remounted next season
+    // does not, so it correctly becomes a new card Dan is asked about rather than silently inheriting an
+    // old dismissal and vanishing.
+    private static func matchByConcertIdentity(_ seriesId: String?, groupName: String,
+                                               openingNight: String?, runEndDate: String?, venue: String?,
                                                in context: ModelContext) -> Prospect? {
-        guard SameDateVenueMerge.isMerged(seriesId) else { return nil }
+        guard let seriesId, !seriesId.isEmpty else { return nil }
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return all.first { $0.seriesId == seriesId && sameVenue($0.venue, venue) }
+        let sharing = all.filter { $0.seriesId == seriesId && sameVenue($0.venue, venue) }
+
+        // A synthetic same-date id already encodes date and venue and is minted only for a
+        // mergeSameDateVenue source, so it needs no corroboration: recognizing a concert whose NAME
+        // changed is that path's entire purpose (#1260) and a title check would defeat it.
+        if SameDateVenueMerge.isMerged(seriesId) { return sharing.first }
+
+        let corroborated = sharing.filter {
+            GroupNameMatch.isConfident($0.groupName, groupName)
+                && runsOverlap(storedStart: $0.performanceDate, storedEnd: $0.runEndDate,
+                               incomingStart: openingNight, incomingEnd: runEndDate)
+        }
+        // Deterministic, never `first` on an unordered fetch. Today's store already holds four rows sharing
+        // one id, so an arbitrary pick would land Dan's dismissal on a different row each sweep. A row
+        // carrying any history wins (it is the one holding a decision or an email); otherwise the freshest,
+        // because these rows are a time series and the oldest is the most stale, typically already past
+        // FeedReconcile's gone threshold and hidden from the queue.
+        return corroborated.first(where: NaturalKeyVenueMigration.hasOutreachHistory)
+            ?? corroborated.max(by: { $0.ingestedAt < $1.ingestedAt })
+    }
+
+    // Do these two runs cover any of the same days? Dates are ISO `yyyy-MM-dd`, so string ordering IS date
+    // ordering. A run with no end date is a single night. A run with no start cannot be compared at all and
+    // is deliberately treated as no overlap: an unknown date must never authorize a re-key.
+    private static func runsOverlap(storedStart: String?, storedEnd: String?,
+                                    incomingStart: String?, incomingEnd: String?) -> Bool {
+        guard let storedStart, let incomingStart else { return false }
+        let storedClose = storedEnd ?? storedStart
+        let incomingClose = incomingEnd ?? incomingStart
+        return incomingStart <= storedClose && storedStart <= incomingClose
     }
 
     // A prospect identified by its stable source listing (URL + date), used to recognize
