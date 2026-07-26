@@ -28,14 +28,21 @@ enum BulkDismiss {
         // its dates, so dismissing one of them dismisses the whole prospect: naming them is what stops
         // losing Jul 31 from being a surprise sprung by an action that said "Jul 24".
         let runsPastTheNight: [String]
+        // #1500 follow-up (Dan, 2026-07-26, on a Jul 26 group of 12 where 4 were runs): the shows that
+        // exist ONLY on this night, so he can clear the night without touching anything that plays on.
+        let keysOnlyThisNight: [String]
 
         var count: Int { keys.count }
         var isEmpty: Bool { keys.isEmpty }
+        // Worth offering only when both sides exist. With no runs the two buttons would do the same thing;
+        // with nothing BUT runs the narrower one would dismiss nothing at all.
+        var offersChoice: Bool { !runsPastTheNight.isEmpty && !keysOnlyThisNight.isEmpty }
     }
 
     static func plan(for shows: [Show], on date: String) -> Plan {
         Plan(keys: shows.map(\.key),
-             runsPastTheNight: shows.filter { playsPast(date, $0) }.map(\.groupName))
+             runsPastTheNight: shows.filter { playsPast(date, $0) }.map(\.groupName),
+             keysOnlyThisNight: shows.filter { !playsPast(date, $0) }.map(\.key))
     }
 
     // Judged with EasternDate.runLastNight, the same definition of "the last night of this run" the
@@ -63,22 +70,35 @@ enum BulkDismiss {
     // Names the reason every row is about to carry, then the runs that lose their later nights. Bulk
     // dismissal is exactly where a wrong reason gets written to many shows at once, so the reason is
     // stated, never implied by the menu item Dan clicked a moment ago.
-    static func confirmMessage(count: Int, reason: DismissReason, runs: [String], dateLabel: String) -> String {
+    static func confirmMessage(count: Int, reason: DismissReason, runs: [String], dateLabel: String,
+                               offeringChoice: Bool = false) -> String {
         // The count is already in the title above this line, so the message spends its words on the thing
         // the title does not carry: the reason every one of them will be filed under.
-        let filed = count == 1
-            ? "It leaves your queue, filed as \(reason.label)."
-            : "They all leave your queue, filed as \(reason.label)."
+        //
+        // When the sheet offers a second, narrower way forward, this sentence must not pre-commit to the
+        // wider one: "They all leave your queue" over a button that deliberately leaves the runs behind
+        // describes an outcome Dan has not chosen yet.
+        let filed: String
+        if offeringChoice {
+            filed = "Filed as \(reason.label) either way."
+        } else if count == 1 {
+            filed = "It leaves your queue, filed as \(reason.label)."
+        } else {
+            filed = "They all leave your queue, filed as \(reason.label)."
+        }
         guard let note = runsNote(runs, dateLabel: dateLabel) else { return filed }
         return "\(filed) \(note)"
     }
 
+    // Names the runs and what dismissing them costs. Phrased as the CONSEQUENCE of the choice rather than
+    // as a settled fact, because since Dan's 2026-07-26 follow-up the sheet offers a second button that
+    // leaves them alone: "their later nights go too" would describe an outcome he can still decline.
     private static func runsNote(_ runs: [String], dateLabel: String) -> String? {
         guard !runs.isEmpty else { return nil }
         if runs.count == 1 {
-            return "\(runs[0]) runs past \(dateLabel), so its later nights go too."
+            return "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
         }
-        return "\(list(runs)) run past \(dateLabel), so their later nights go too."
+        return "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     }
 
     private static func list(_ names: [String]) -> String {
@@ -88,8 +108,18 @@ enum BulkDismiss {
 
     // The proceed button says what it does to what. A bare "OK" on a destructive batch is the control Dan
     // clicks without reading the title above it.
-    static func confirmProceed(count: Int) -> String {
-        count == 1 ? "Dismiss it" : "Dismiss them"
+    //
+    // With the narrower button beside it, "Dismiss them" stops being clear about WHICH them, so each side
+    // of the choice names its own number instead.
+    static func confirmProceed(count: Int, offeringChoice: Bool) -> String {
+        if offeringChoice { return "Dismiss all \(count)" }
+        return count == 1 ? "Dismiss it" : "Dismiss them"
+    }
+
+    // The second way out (Dan, 2026-07-26): clear the night of everything that only plays tonight, and
+    // leave the runs to be judged on their own.
+    static func confirmProceedOnlyThisNight(count: Int) -> String {
+        count == 1 ? "Dismiss only that one" : "Dismiss only the \(count)"
     }
 
     // MARK: - What one Cmd+Z offers to reverse

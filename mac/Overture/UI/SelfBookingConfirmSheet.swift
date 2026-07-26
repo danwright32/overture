@@ -15,6 +15,12 @@ struct SelfBookingConfirmSheet: View {
     // calendar warning is the wrong picture over "dismiss the whole night as Not a fit". Defaulted, so
     // every existing caller keeps the icon it shipped with.
     var symbol: String = "calendar.badge.exclamationmark"
+    // #1500 follow-up: a NARROWER way to proceed, beside the full one (Dan, 2026-07-26: dismiss the whole
+    // night, or only the shows that play just tonight). Optional and defaulted to nil, so every existing
+    // caller stays a plain confirm with one way forward. Plain, not tinted: the rust button stays the one
+    // that does the whole thing, so the pair cannot read as two equally weighted commits.
+    var alternativeLabel: String? = nil
+    var onAlternative: (() -> Void)? = nil
     let onProceed: () -> Void
     let onCancel: () -> Void
 
@@ -44,6 +50,9 @@ struct SelfBookingConfirmSheet: View {
                     Button(SendConfirmCopy.cancel) { onCancel() }
                         .keyboardShortcut(.cancelAction)
                     Spacer()
+                    if let alternativeLabel, let onAlternative {
+                        Button(alternativeLabel) { onAlternative() }
+                    }
                     Button { onProceed() } label: {
                         Text(proceedLabel)
                     }

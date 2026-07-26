@@ -59,6 +59,45 @@ struct BulkDismissTests {
         #expect(plan.runsPastTheNight.isEmpty)
     }
 
+    // Dan's second ask (2026-07-26, looking at a Jul 26 group of 12 where 4 were runs): dismiss the shows
+    // that exist ONLY on this night, and leave the runs alone. So the plan carries that narrower set too,
+    // rather than the view subtracting one list from the other.
+    @Test func itSeparatesTheShowsThatOnlyPlayThisNight() {
+        let plan = BulkDismiss.plan(for: [show("a", "The Music Shop", on: "2026-07-24"),
+                                          show("b", "Hadestown", on: "2026-07-24", runEnd: "2026-07-31"),
+                                          show("c", "Paulo Szot", on: "2026-07-24")],
+                                    on: "2026-07-24")
+
+        #expect(plan.keys == ["a", "b", "c"])
+        #expect(plan.keysOnlyThisNight == ["a", "c"])
+    }
+
+    // The choice is only worth offering when both sides of it exist.
+    @Test func anightWithNoRunsOffersNoChoice() {
+        let plan = BulkDismiss.plan(for: [show("a", "The Music Shop", on: "2026-07-24")], on: "2026-07-24")
+
+        #expect(plan.offersChoice == false)
+    }
+
+    // The other empty side: when EVERY show on the night runs past it, "dismiss only the ones that play
+    // just tonight" would dismiss nothing, so it must not be offered.
+    @Test func anightOfNothingButRunsOffersNoChoice() {
+        let plan = BulkDismiss.plan(for: [show("b", "Hadestown", on: "2026-07-24", runEnd: "2026-07-31"),
+                                          show("c", "Shifters", on: "2026-07-24", runEnd: "2026-08-02")],
+                                    on: "2026-07-24")
+
+        #expect(plan.keysOnlyThisNight.isEmpty)
+        #expect(plan.offersChoice == false)
+    }
+
+    @Test func amixedNightOffersTheChoice() {
+        let plan = BulkDismiss.plan(for: [show("a", "The Music Shop", on: "2026-07-24"),
+                                          show("b", "Hadestown", on: "2026-07-24", runEnd: "2026-07-31")],
+                                    on: "2026-07-24")
+
+        #expect(plan.offersChoice)
+    }
+
     // MARK: - What Dan reads before it happens
 
     // The menu is opened by right-clicking a date, so the menu itself has to say what the action is and
@@ -93,7 +132,7 @@ struct BulkDismissTests {
         let message = BulkDismiss.confirmMessage(count: 2, reason: .dateConflict,
                                                  runs: ["Hadestown"], dateLabel: "Jul 24")
 
-        #expect(message.contains("Hadestown runs past Jul 24, so its later nights go too."))
+        #expect(message.contains("Hadestown runs past Jul 24, so dismissing it takes its later nights too."))
     }
 
     // Two runs read as a list, with the verb agreeing, rather than the same sentence stamped twice.
@@ -101,14 +140,45 @@ struct BulkDismissTests {
         let message = BulkDismiss.confirmMessage(count: 3, reason: .dateConflict,
                                                  runs: ["Hadestown", "The Music Shop"], dateLabel: "Jul 24")
 
-        #expect(message.contains("Hadestown and The Music Shop run past Jul 24, so their later nights go too."))
+        #expect(message.contains(
+            "Hadestown and The Music Shop run past Jul 24, so dismissing them takes their later nights too."))
     }
 
     // The button says what it does to what: a bare "OK" on a destructive batch is exactly the control
     // Dan would click without reading the title above it.
     @Test func theProceedButtonAgreesWithTheCount() {
-        #expect(BulkDismiss.confirmProceed(count: 5) == "Dismiss them")
-        #expect(BulkDismiss.confirmProceed(count: 1) == "Dismiss it")
+        #expect(BulkDismiss.confirmProceed(count: 5, offeringChoice: false) == "Dismiss them")
+        #expect(BulkDismiss.confirmProceed(count: 1, offeringChoice: false) == "Dismiss it")
+    }
+
+    // With a second button beside it, "Dismiss them" is ambiguous about which them. Both buttons name
+    // their own number, so the pair reads as a choice rather than as one button and an escape hatch.
+    @Test func withAChoiceOnOfferBothButtonsNameTheirCount() {
+        #expect(BulkDismiss.confirmProceed(count: 12, offeringChoice: true) == "Dismiss all 12")
+        #expect(BulkDismiss.confirmProceedOnlyThisNight(count: 8) == "Dismiss only the 8")
+    }
+
+    @Test func theNarrowerButtonReadsNaturallyForOneShow() {
+        #expect(BulkDismiss.confirmProceedOnlyThisNight(count: 1) == "Dismiss only that one")
+    }
+
+    // With two ways forward, the message must not pre-commit to one of them. "They all leave your queue"
+    // above a button that deliberately leaves the runs behind describes an outcome Dan is still choosing.
+    @Test func withAChoiceOnOfferTheMessageDoesNotPreCommit() {
+        let message = BulkDismiss.confirmMessage(count: 12, reason: .tooSoon, runs: ["Shifters"],
+                                                 dateLabel: "Jul 26", offeringChoice: true)
+
+        #expect(message.hasPrefix("Filed as Too soon either way."))
+        #expect(!message.contains("They all leave"))
+        #expect(message.contains("Shifters runs past Jul 26"))
+    }
+
+    // A night of nothing BUT runs has no choice to offer, so it still says plainly what will happen.
+    @Test func withNoChoiceTheMessageStillStatesTheOutcome() {
+        let message = BulkDismiss.confirmMessage(count: 3, reason: .tooSoon, runs: ["Shifters"],
+                                                 dateLabel: "Jul 26", offeringChoice: false)
+
+        #expect(message.hasPrefix("They all leave your queue, filed as Too soon."))
     }
 
     // MARK: - What one Cmd+Z will offer to reverse

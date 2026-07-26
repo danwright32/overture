@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **861 sentences**, from 290 source files.
+Every sentence Overture can say to Dan: **865 sentences**, from 290 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -523,7 +523,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Dismiss all \(Plural.count(count, "show")) on \(dateLabel)"
     `Domain/BulkDismiss.swift`
+"Dismiss all \(count)"
+    `Domain/BulkDismiss.swift`
 "Dismiss it"
+    `Domain/BulkDismiss.swift`
+"Dismiss only that one"
+    `Domain/BulkDismiss.swift`
+"Dismiss only the \(count)"
     `Domain/BulkDismiss.swift`
 "Dismiss the show on \(dateLabel)"
     `Domain/BulkDismiss.swift`
@@ -567,6 +573,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Far towns skipped from the start. Allow one back if you now want its shows."
     `UI/ExcludedTownsView.swift`
+"Filed as \(reason.label) either way."
+    `Domain/BulkDismiss.swift`
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -1734,7 +1742,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
-"\(list(runs)) run past \(dateLabel), so their later nights go too."
+"\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
     `Domain/ScoutWarningCopy.swift`
@@ -1800,7 +1808,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
-"\(runs[0]) runs past \(dateLabel), so its later nights go too."
+"\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
 "\(sends) of \(experimentCallThreshold) sends toward a reliable read"
     `Domain/ExperimentReport.swift`
