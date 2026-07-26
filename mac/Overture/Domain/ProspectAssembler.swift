@@ -48,6 +48,7 @@ struct AssembledProspect: Equatable, Sendable {
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
+    var runNights: [String] = []          // #1523: the nights the run plays, for the conflict check
     // #901: the day of this run Dan cannot work, if any. Set by ScoutService.apply once the run is known
     // (a conflict is a fact about the whole run, not about its opening night), never by `decide`.
     var conflictKey: String? = nil

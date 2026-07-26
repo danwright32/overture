@@ -170,8 +170,27 @@ struct BlockedCalendar: Equatable, Sendable {
     // #901's trap: this tests the WHOLE run, not its opening night. The old check compared
     // performanceDate alone, so a four-night run whose third night sat on a booked shoot went through
     // clean, and Dan would have pitched a show he could not finish.
-    func conflict(performanceDate: String?, runEndDate: String?) -> Day? {
+    // #1523: judged on the nights the run ACTUALLY plays, when it knows them.
+    //
+    // Walking every day of the span is right for a run that plays every night and wrong for everything
+    // else. `The Lineup with Susie Mosher` plays sixteen Tuesdays across 106 days, so a shoot on any
+    // Wednesday in October used to flag a show that is dark on Wednesdays. Measured 2026-07-26, three shows
+    // carried an open conflict against one booked Friday, and at least two of them do not play Fridays.
+    //
+    // Dan's call, and it is why this fixes the CHECK and not the grouping: "I think I'd want it to be one
+    // long run. I'm not going to send them an email every week pitching the show. I'm going to pitch it
+    // once." Splitting a weekly series into its nights would have given him sixteen cards for one pitch,
+    // which is the clutter measured in #1558.
+    //
+    // An empty `nights` falls back to the old span walk, deliberately. Every prospect already in the store
+    // predates this and records none, and for those the span is genuinely all we know: clearing their
+    // conflicts on no evidence would be the one direction of this change that could lose a real clash. They
+    // pick up their nights on the next scout.
+    func conflict(performanceDate: String?, runEndDate: String?, nights: [String] = []) -> Day? {
         guard let performanceDate else { return nil }   // "date to be confirmed" collides with nothing
+        guard nights.isEmpty else {
+            return nights.compactMap { byDate[$0] }.min { $0.date < $1.date }
+        }
         let lastNight = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate)
         return EasternDate.days(from: performanceDate, through: lastNight ?? performanceDate)
             .compactMap { byDate[$0] }

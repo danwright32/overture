@@ -153,7 +153,8 @@ enum ConflictSweep {
 
         var changed = 0
         for p in prospects {
-            let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate)?.key
+            let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate,
+                                        nights: p.runNights)?.key
             guard key != p.conflictKey else { continue }
             p.setScoutConflict(key)
             changed += 1

@@ -998,6 +998,7 @@ enum ScoutService {
             enriched.runEndDate = gr.runEndDate
             enriched.partOfRelatedRun = gr.partOfRelatedRun
             enriched.runSourceURLs = gr.runSourceURLs
+            enriched.runNights = gr.memberDates    // #1523: the nights it plays, for the clash check
 
             // #1236: a synthetic same-date+venue merge (DCINY) collapsed several per-conductor rows into
             // this one. RunGrouping keeps only the representative row's title, so rebuild the name from
@@ -1021,7 +1022,8 @@ enum ScoutService {
             // It FLAGS, it does not drop (Dan's call, 2026-07-13). A dropped show is a decision the app
             // made for him, silently, and he would rather see the clash and decide himself.
             enriched.conflictKey = blocked.conflict(performanceDate: enriched.performanceDate,
-                                                    runEndDate: enriched.runEndDate)?.key
+                                                    runEndDate: enriched.runEndDate,
+                                                    nights: enriched.runNights)?.key
 
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
@@ -1255,7 +1257,8 @@ enum ScoutService {
             coverage: p.coverage, fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
-            runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs)
+            runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs,
+            runNights: p.runNights)
         prospect.presenter = p.presenter
         prospect.location = p.location
         prospect.classificationConfidence = p.confidence
@@ -1374,6 +1377,7 @@ enum ScoutService {
         existing.runEndDate = p.runEndDate
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs
+        existing.runNights = p.runNights        // #1523: keep the played nights current
 
         // #771: UNION, never replace, and this is the only correct home for it. The chain above
         // deliberately merges the same show arriving from a venue's calendar and from the presenter's
