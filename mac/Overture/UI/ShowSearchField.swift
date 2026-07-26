@@ -16,6 +16,9 @@ struct ShowSearchField: View {
     var onSelect: (QueueItem) -> Void = { _ in }
     @FocusState private var isFocused: Bool
     @State private var showDropdown = false
+    // #1574: which result the arrow keys are sitting on. All the arithmetic is in ShowSearchSelection;
+    // this view only turns key presses into moves and draws the highlight.
+    @State private var selection = ShowSearchSelection()
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -34,6 +37,31 @@ struct ShowSearchField: View {
         // behavior below (the results popover and what opens it) is this field's own.
         OVSearchField(query: $query, placeholder: placeholder, focused: $isFocused)
         .frame(maxWidth: 280)
+        // #1574. The arrows are ignored (so the text field keeps its own caret movement) unless there
+        // is actually a list of results on screen to move through.
+        .onKeyPress(.downArrow) {
+            guard showDropdown, !matches.isEmpty else { return .ignored }
+            selection.moveDown(resultCount: matches.count)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            guard showDropdown, !matches.isEmpty else { return .ignored }
+            selection.moveUp(resultCount: matches.count)
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            guard showDropdown else { return .ignored }
+            selection.clear()
+            showDropdown = false
+            return .handled
+        }
+        // Return opens whatever the arrows are sitting on, down the same path as a click. With nothing
+        // highlighted, commitIndex is nil and this does nothing at all, which is the point: a query
+        // typed and submitted by reflex must never open a show Dan has not looked at.
+        .onSubmit {
+            guard let position = selection.commitIndex(resultCount: matches.count) else { return }
+            pick(matches[position])
+        }
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
             Group {
                 if matches.isEmpty {
@@ -42,11 +70,9 @@ struct ShowSearchField: View {
                         .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.sm)
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(matches) { result in
+                        ForEach(Array(matches.enumerated()), id: \.element.id) { position, result in
                             Button {
-                                onSelect(result)
-                                query = ""
-                                isFocused = false
+                                pick(result)
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(result.groupName).font(OVType.body).foregroundStyle(OVColor.ink)
@@ -57,6 +83,9 @@ struct ShowSearchField: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
+                            // The row Return would open, marked so the keyboard is never moving something
+                            // invisible.
+                            .background(selection.index == position ? OVColor.forest.opacity(0.14) : Color.clear)
                             if result.id != matches.last?.id { Divider() }
                         }
                     }
@@ -65,7 +94,21 @@ struct ShowSearchField: View {
             }
             .frame(minWidth: 280, maxWidth: 320)
         }
-        .onChange(of: isFocused) { _, focused in showDropdown = focused && !trimmedQuery.isEmpty }
-        .onChange(of: query) { _, _ in showDropdown = isFocused && !trimmedQuery.isEmpty }
+        .onChange(of: isFocused) { _, focused in
+            showDropdown = focused && !trimmedQuery.isEmpty
+            if !focused { selection.clear() }
+        }
+        // A new query means a new list, so the old highlight points at a row that is no longer there.
+        .onChange(of: query) { _, _ in
+            selection.clear()
+            showDropdown = isFocused && !trimmedQuery.isEmpty
+        }
+    }
+
+    private func pick(_ result: QueueItem) {
+        onSelect(result)
+        query = ""
+        selection.clear()
+        isFocused = false
     }
 }
