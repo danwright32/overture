@@ -743,20 +743,38 @@ struct RootView: View {
     // next Cmd+Z retry the same dead entry forever instead of reaching the one behind it.
     private func performQueueUndo() {
         guard let entry = undoStack.takeTop() else { return }
-        let model = allProspects.first { $0.naturalKey == entry.naturalKey }
-        guard QueueUndo.apply(entry, to: model, in: context) else {
+        let outcome = QueueUndo.apply(entry, resolving: { key in
+            allProspects.first { $0.naturalKey == key }
+        }, in: context)
+        guard outcome.didAnything else {
             // #1415: the row moved since (a scout re-scored it, a sweep took it, a send made it contacted)
             // or is gone, so there is nothing to put back. Since #1134 the store and the visible stage move
             // independently, so a silent no-op here is pixel-identical to a working undo; say so instead.
-            feedback.acknowledge(ActionAck.undoSkipped(org: entry.groupName))
+            feedback.acknowledge(entry.rows.count == 1
+                                 ? ActionAck.undoSkipped(org: entry.groupName)
+                                 : ActionAck.undoSkippedNight(count: entry.rows.count))
             return
         }
         // #1415: an undo usually restores the row into a stage Dan is not looking at, so name what came
         // back and where. Only on a good save: saveOrWarn already posts its own warning on failure, and a
         // "back in Prep" over a failed save would contradict it.
-        if context.saveOrWarn(org: entry.groupName, feedback: feedback) {
-            feedback.acknowledge(ActionAck.undoRestored(org: entry.groupName, priorStatus: entry.priorStatus))
+        guard context.saveOrWarn(org: entry.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(undoMessage(for: entry, outcome: outcome))
+    }
+
+    // #1500: an entry can now cover a whole night, and a night can come back in part (a show a scout or a
+    // sweep moved on stays dismissed). All three cases are said in the row's own terms: which stage pill to
+    // look at, and how many did NOT come back, which nothing else on screen would tell him.
+    private func undoMessage(for entry: QueueUndoEntry, outcome: QueueUndo.Outcome) -> String {
+        guard entry.rows.count > 1 else {
+            return ActionAck.undoRestored(org: entry.groupName, priorStatus: entry.priorStatus)
         }
+        let stages = entry.rows.map(\.priorStatus)
+        if outcome.isPartial {
+            return ActionAck.undoRestoredPartOfNight(restored: outcome.restored, missed: outcome.missed,
+                                                     priorStatuses: stages)
+        }
+        return ActionAck.undoRestoredNight(count: outcome.restored, priorStatuses: stages)
     }
 
     #if DEBUG

@@ -1265,3 +1265,13 @@ extension RecipientSnapshot {
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed)
     }
 }
+
+// #1500: the queue row, as the little the whole-night dismiss needs to decide. Here rather than in the
+// domain so BulkDismiss stays independent of the view's QueueItem, and here rather than in the date header
+// so the mapping is one definition instead of one per call site.
+extension BulkDismiss.Show {
+    init(_ item: QueueItem) {
+        self.init(key: item.id, groupName: item.groupName,
+                  performanceDate: item.performanceDate, runEndDate: item.runEndDate)
+    }
+}

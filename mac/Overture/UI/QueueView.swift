@@ -42,6 +42,9 @@ struct QueueView: View {
     private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
 
     @State private var pendingConfirm: PendingSend?
+    // #1500: a whole night waiting on its confirm (nil = none). Holds the keys the group was SHOWING when
+    // Dan picked the reason, so what the confirm counts is what the action takes.
+    @State private var pendingNightDismiss: NightDismiss?
     // #1219: a committing action (Approve or per-row Re-prep) waiting on the self-booking confirm (nil =
     // none pending). One guard for both, since they share the dialog and differ only in verb and action.
     @State private var pendingSelfBookingGuard: SelfBookingGuard?
@@ -199,6 +202,17 @@ struct QueueView: View {
         var id: String { key }
     }
 
+    // #1500: the night Dan right-clicked, the reason he picked, and the rows that were on screen when he
+    // picked it. The keys are captured at that moment rather than re-derived on confirm, so a scout landing
+    // between the menu and the button cannot widen what he agreed to.
+    private struct NightDismiss: Identifiable {
+        let dateLabel: String
+        let reason: DismissReason
+        let keys: [String]
+        let runs: [String]
+        var id: String { "\(dateLabel)|\(reason.rawValue)" }
+    }
+
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
             .background(OVColor.canvas)
@@ -221,6 +235,24 @@ struct QueueView: View {
                     onProceed: { onProbeReachability(Set(pending.keys)); pendingProbe = nil },
                     onCancel: { pendingProbe = nil })
             }
+            // #1500: confirm a whole night before it goes. The count is the point: Dan has to know exactly
+            // how much he is about to bury, and which run loses its later dates with it.
+            .sheet(item: $pendingNightDismiss) { pending in
+                SelfBookingConfirmSheet(
+                    title: BulkDismiss.confirmTitle(count: pending.keys.count, dateLabel: pending.dateLabel),
+                    message: BulkDismiss.confirmMessage(count: pending.keys.count, reason: pending.reason,
+                                                        runs: pending.runs, dateLabel: pending.dateLabel),
+                    proceedLabel: BulkDismiss.confirmProceed(count: pending.keys.count),
+                    symbol: "archivebox",
+                    onProceed: { dismissNight(pending); pendingNightDismiss = nil },
+                    onCancel: { pendingNightDismiss = nil })
+            }
+    }
+
+    private func dismissNight(_ pending: NightDismiss) {
+        ProspectMutations.dismissAll(pending.keys, reason: pending.reason, dateLabel: pending.dateLabel,
+                                     prospects: prospects, context: context, feedback: feedback,
+                                     undo: undoStack)
     }
 
     private func queueScroll(_ data: RenderData) -> some View {
@@ -411,8 +443,31 @@ struct QueueView: View {
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+            // #1500: right-click the date to dismiss everything under it for one reason (Dan's call,
+            // 2026-07-26: no new visible control on a header that already carries the Unavailable pill and
+            // the reachability check). Scout only, by his call in the same conversation: a night of shows he
+            // has already kept or drafted is not something to lose to one right-click.
+            .contextMenu { if focusedStage == .scout { nightDismissMenu(group) } }
 
             ForEach(group.items) { item in prospectRow(item) }
+        }
+    }
+
+    // The reasons, under a heading that says what they are about to do and to how many shows. Without the
+    // heading a right-click would show a bare list of dismiss reasons that names neither the action nor the
+    // night. `danCanChoose` (#864), the same list a card's own Dismiss menu offers, so the reason written
+    // here is one Dan could have written by hand: "Went by" and "Too far" are Overture's own.
+    @ViewBuilder private func nightDismissMenu(_ group: QueueModel.DateGroup) -> some View {
+        let plan = BulkDismiss.plan(for: group.items.map(BulkDismiss.Show.init), on: group.id)
+        if !plan.isEmpty {
+            Section(BulkDismiss.menuTitle(count: plan.count, dateLabel: group.monthDay)) {
+                ForEach(DismissReason.danCanChoose, id: \.self) { reason in
+                    Button(reason.label) {
+                        pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
+                                                           keys: plan.keys, runs: plan.runsPastTheNight)
+                    }
+                }
+            }
         }
     }
 

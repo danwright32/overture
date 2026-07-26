@@ -224,6 +224,51 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #1500: one reason, applied to every show Dan can see on one date, as ONE undoable action. His words
+    // (2026-07-25): "I need a way to auto dismiss everything on one date."
+    //
+    // Takes KEYS rather than deciding for itself which shows are on the night: the caller hands over the
+    // rows that date group is actually rendering, so a filter or a search that narrows the night narrows
+    // this with it, and nothing is buried that was not on screen.
+    //
+    // Deliberately does NOT offer to capture the date as a day off the way a single calendar-reason
+    // dismiss does (#924). Dan's call, 2026-07-26: a bulk dismiss should stay quiet.
+    static func dismissAll(_ keys: [String], reason: DismissReason, dateLabel: String,
+                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                           undo: QueueUndoStack? = nil) {
+        let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
+        // Two rows are skipped rather than recorded: one whose key has no prospect left (deleted at runtime
+        // by NaturalKeyVenueMigration), and one this exact action already dismissed for this exact reason
+        // ("assume it runs twice"). An entry describing a dismissal that did not happen would spend the
+        // next Cmd+Z doing nothing while looking exactly like a working undo.
+        let targets = keys.compactMap { byKey[$0] }
+            .filter { !($0.status == .dismissed && $0.dismissReasonRaw == reason.rawValue) }
+        guard !targets.isEmpty else { return }
+
+        let rows = targets.map { model -> QueueUndoEntry.Row in
+            let priorStatus = model.status
+            let priorReason = model.dismissReasonRaw
+            let priorExit = model.dismissedAt
+            // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
+            // stamps it, and a show dismissed twice keeps its FIRST exit date.
+            model.markDismissed(reason: reason)
+            return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
+                                      priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit)
+        }
+        // #1417: nothing is claimed and nothing is made undoable until the write is confirmed. An undo
+        // entry for a dismissal that never reached disk would put back rows that never left.
+        guard context.saveOrWarn(org: dateLabel, feedback: feedback) else { return }
+        if let undo,
+           let entry = QueueUndoEntry.batch(actionLabel: "Dismiss",
+                                            label: BulkDismiss.undoLabel(count: rows.count,
+                                                                         dateLabel: dateLabel),
+                                            rows: rows) {
+            undo.record(entry)
+        }
+        feedback.acknowledge(ActionAck.nightDismissed(count: rows.count, reason: reason,
+                                                      dateLabel: dateLabel))
+    }
+
     // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date
     // as a day off. Dan telling Overture "not this day" is the most natural moment to block it, instead of
     // making him say it twice. The offer is a CENTERED picker (via the injected request RootView presents),
