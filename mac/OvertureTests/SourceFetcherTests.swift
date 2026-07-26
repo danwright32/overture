@@ -282,6 +282,74 @@ struct SourceFetcherTests {
         #expect(!PageNormalizer.carriesReadableContent(page.normalizedHTML))   // and it is still nothing
     }
 
+    // MARK: - #1543: a broken handshake is not a dead link
+
+    private func fetchFailure(given transport: Error) async -> SourceFetchError? {
+        PageStubURLProtocol.reset()
+        PageStubURLProtocol.transportError = transport
+        do {
+            _ = try await SourceFetcher.fetch(url, session: stubSession(), render: { _ in "" })
+            return nil
+        } catch let error as SourceFetchError {
+            return error
+        } catch {
+            return nil
+        }
+    }
+
+    // Dan's Dinu Mihailescu row. The site answers plain http with 200 and 37KB of HTML; its https endpoint
+    // sends a fatal TLS alert as soon as the client offers ALPN, which every real client does. #972
+    // predicted this source by name ("a genuinely broken TLS handshake, which no scheme fixes and which
+    // SHOULD keep failing") and it does keep failing, correctly. What was wrong is only what it SAID: the
+    // same "Couldn't reach that page." as a dead domain, which sends Dan to fix or retire a live site.
+    @Test func aBrokenTLSHandshakeIsNamedRatherThanCalledUnreachable() async {
+        let failure = await fetchFailure(given: URLError(.secureConnectionFailed))
+
+        #expect(failure == .secureConnectionFailed)
+    }
+
+    // The rest of the TLS family lands in the same place. An expired or untrusted certificate is the same
+    // fact from Dan's side: the site is there, its secure connection cannot be established, and nothing he
+    // does to the address will change that.
+    @Test func theRestOfTheCertificateFamilyIsTheSameHonestFailure() async {
+        for code in [URLError.Code.serverCertificateUntrusted, .serverCertificateHasBadDate,
+                     .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot] {
+            let failure = await fetchFailure(given: URLError(code))
+            #expect(failure == .secureConnectionFailed, "\(code) should read as a broken secure connection")
+        }
+    }
+
+    // The guard that keeps the new sentence honest. A timeout and a dead domain are still `unreachable`,
+    // because for those the sentence is TRUE and the response Dan owes is different. Widening the TLS case
+    // to swallow ordinary transport failures would trade one wrong sentence for another.
+    @Test func anOrdinaryTransportFailureIsStillJustUnreachable() async {
+        for code in [URLError.Code.timedOut, .cannotFindHost, .notConnectedToInternet,
+                     .networkConnectionLost] {
+            let failure = await fetchFailure(given: URLError(code))
+            #expect(failure == .unreachable, "\(code) should stay unreachable")
+        }
+    }
+
+    // A transport error that is not a URLError at all (a URLSession can surface others) must fail SAFE on
+    // the generic sentence rather than claim a TLS problem it has no evidence for.
+    @Test func anUnrecognizedTransportErrorFallsBackToUnreachable() async {
+        struct Odd: Error {}
+        let failure = await fetchFailure(given: Odd())
+
+        #expect(failure == .unreachable)
+    }
+
+    // The reader itself, at the boundary the feed adapters reach it by. None of them catch their own
+    // session errors, so a raw URLError from an OperaAmerica or VenueTix host arrives untyped at
+    // ScoutService and is read here. Without this the same broken handshake would read honestly on an html
+    // source and as a dead link on a feed one, which is the drift the shared reader exists to prevent.
+    @Test func theSameReaderNamesAnUntypedTransportErrorFromAFeedHost() {
+        #expect(SourceFetchError.transport(URLError(.secureConnectionFailed)) == .secureConnectionFailed)
+        #expect(SourceFetchError.transport(URLError(.timedOut)) == .unreachable)
+        // An already typed error is never re-read as a transport failure: a 404 stays a 404.
+        #expect(SourceFetchError.transport(SourceFetchError.http(404)) == .unreachable)
+    }
+
     // A browser that hangs, crashes, or is simply unavailable must not take the fetch down with it: the
     // raw page is still the best thing we have, and returning it lets the honest "I can't read this"
     // path run instead of an opaque crash.

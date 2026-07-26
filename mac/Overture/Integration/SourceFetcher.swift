@@ -25,6 +25,17 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
     // which parses to zero from zero and is a normal quiet result. Named so drift reads as broken and is
     // caught on the first bad fetch, rather than looking like an empty calendar and going unnoticed.
     case feedShapeChanged
+    // #1543: the site is THERE and answering, and its secure connection is broken, so no client can read
+    // it. Split out of `unreachable` because the two ask different things of Dan. A dead domain is his to
+    // fix or retire. A broken handshake on a live site is nobody's to fix from here, and re-checking it
+    // forever will never clear it, so saying "Couldn't reach that page." sent him to look at a site that
+    // was up the whole time.
+    //
+    // His Dinu Mihailescu row is the live case, and #972 predicted this source by name: the server answers
+    // plain http with 200 and 37KB of HTML, and kills the https handshake with a fatal alert the moment a
+    // client offers ALPN. Every real HTTP client offers ALPN, so every real client fails; Safari works only
+    // because it never tries https on that site. #1544 is the separate question of reading it anyway.
+    case secureConnectionFailed
 
     var errorDescription: String? {
         switch self {
@@ -32,7 +43,28 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
         case .notHTML(let type):     return "That link isn't a web page (it served \(type ?? "an unknown type"))."
         case .redirectedAway(let h): return "That link redirects to a different site (\(h)). Check the address."
         case .unreachable:           return "Couldn't reach that page."
+        case .secureConnectionFailed: return "That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
         case .feedShapeChanged:      return "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
+        }
+    }
+
+    // #1543: which transport failure this actually was, read off the error rather than guessed at. Every
+    // caller that catches a thrown URLSession error routes through here, so the fetch path and the feed
+    // adapters can never end up describing the same failure two different ways.
+    //
+    // Deliberately narrow. Only the TLS family becomes `secureConnectionFailed`; a timeout, a DNS failure
+    // and a dropped connection stay `unreachable`, because for those "Couldn't reach that page." is TRUE
+    // and the response Dan owes is a different one. Anything that is not a URLError at all falls back to
+    // `unreachable` rather than claiming a TLS problem on no evidence.
+    static func transport(_ error: Error) -> SourceFetchError {
+        guard let urlError = error as? URLError else { return .unreachable }
+        switch urlError.code {
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot,
+             .clientCertificateRejected, .clientCertificateRequired:
+            return .secureConnectionFailed
+        default:
+            return .unreachable
         }
     }
 }
@@ -374,7 +406,9 @@ enum SourceFetcher {
             request.timeoutInterval = 30
             (data, response) = try await session.data(for: request)
         } catch {
-            throw SourceFetchError.unreachable
+            // #1543: named, not flattened. This catch used to swallow every transport failure into
+            // `unreachable`, which is how a live site with a broken handshake read as a dead link.
+            throw SourceFetchError.transport(error)
         }
 
         guard let http = response as? HTTPURLResponse else { throw SourceFetchError.unreachable }

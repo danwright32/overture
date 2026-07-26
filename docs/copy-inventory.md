@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **840 sentences**, from 287 source files.
+Every sentence Overture can say to Dan: **841 sentences**, from 287 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1358,6 +1358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "That page has no dated listings on it. It may be the wrong page for this org."
     `Domain/WatchedSource.swift`
+"That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
+    `Integration/SourceFetcher.swift`
 "That was \(named[0])."
     `Domain/SourceReadability.swift`
 "That's longer than a year. Block a shorter stretch."
