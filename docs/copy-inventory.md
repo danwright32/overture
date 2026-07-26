@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **836 sentences**, from 286 source files.
+Every sentence Overture can say to Dan: **840 sentences**, from 287 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -55,8 +55,6 @@ What is not, and why:
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: an outbound API request scoped by a header, not the app's voice (#915)
-- `Integration/SourceFetcher.swift`: a fallback venue label in synthesized source HTML, not app voice (#915)
-- `Integration/SourceFetcher.swift`: a fallback venue label in synthesized source HTML, not app voice (#915)
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: an outbound fetch's headers for the venue page hop, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: a search marker for the widget's JS assignment, not the app's voice (#915)
@@ -680,6 +678,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
     `App/StoreShrinkCheck.swift`
+"Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
+    `UI/SourcesView.swift`
 "Just this show"
     `UI/DraftReviewView.swift`
 "Keep 1 show"
@@ -772,6 +772,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Name (optional)"
     `UI/DraftReviewView.swift`
+"Name the venue"
+    `UI/SourcesView.swift`
 "Never a returning client"
     `Domain/ClientTagCopy.swift`
 "Never checked"
@@ -1178,6 +1180,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Saved \(org)'s address. Its shows are placed on the next read."
     `UI/SourcesView.swift`
+"Saved \(org)'s venue. Its shows are read again on the next scout."
+    `UI/SourcesView.swift`
 "Scout & Prep"
     `App/RootView.swift`
 "Scout progress"
@@ -1402,6 +1406,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryReplySheet.swift`
 "The reply drafter finished but didn't produce a draft. It may have hit an error."
     `Domain/DetachedRunOutcome.swift`
+"The room its shows play in"
+    `UI/SourcesView.swift`
 "The run ended before reading this page, so it has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
 "The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."

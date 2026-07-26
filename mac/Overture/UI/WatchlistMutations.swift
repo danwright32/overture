@@ -50,6 +50,15 @@ enum WatchlistMutations {
         feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName))
     }
 
+    // #1529: Dan names the room a ticketing-feed source's shows play in, which is the one thing standing
+    // between those shows and the queue.
+    static func saveVenueName(_ source: WatchedSource, to draft: String,
+                              context: ModelContext, feedback: ActionFeedback) {
+        WatchlistEditing.setVenueName(source, to: draft, in: context)
+        guard context.saveOrWarn(org: source.orgName, feedback: feedback) else { return }
+        feedback.acknowledge(VenueNameCopy.savedAck(org: source.orgName))
+    }
+
     // What the editor should do next. `.notSaved` is its own case rather than an error message: the
     // save warning is already on the banner, and the editor stays OPEN holding Dan's typed address, so a
     // failure costs him nothing to retry. Closing it on a write that did not land is the exact defect.

@@ -10,22 +10,27 @@ import Foundation
 // the live variant from the source row; the tests build one over an in-memory list.
 final class OvationTixExtractor: SourceExtractor {
     private let fetchEvents: @Sendable () async throws -> [OvationTixCalendar.OTEvent]
-    private let venueName: String
+    private let presenter: String
+    // #1529: nil when nobody with the standing to say so has named the room these shows play in. Those rows
+    // reach the guard with no venue and are left out of the queue, which is the honest outcome: this feed
+    // publishes no venue anywhere, and the org's own name is not proof its shows are in its own room.
+    private let venue: String?
     private let location: String?
 
     init(fetchEvents: @escaping @Sendable () async throws -> [OvationTixCalendar.OTEvent],
-         venueName: String, location: String?) {
+         presenter: String, venue: String?, location: String?) {
         self.fetchEvents = fetchEvents
-        self.venueName = venueName
+        self.presenter = presenter
+        self.venue = venue
         self.location = location
     }
 
     // The live reader. A failed fetch throws (never an empty list, which the reconcile would read as "every
     // show was cancelled"), so an empty read can never strike real shows.
-    convenience init(url: URL, venueName: String, location: String?,
+    convenience init(url: URL, presenter: String, venue: String?, location: String?,
                      now: Date = Date(), session: URLSession = .shared) {
         self.init(fetchEvents: { try await OvationTixCalendar.liveEvents(url: url, now: now, session: session) },
-                  venueName: venueName, location: location)
+                  presenter: presenter, venue: venue, location: location)
     }
 
     // A structured feed can only ever be "here are the upcoming events" or "there are none", so the verdict
@@ -33,6 +38,6 @@ final class OvationTixExtractor: SourceExtractor {
     func extract() async throws -> ExtractedListing {
         let events = try await fetchEvents()
         return ExtractedListing.fromStructuredFeed(
-            OvationTixCalendar.extractedEvents(from: events, venueName: venueName, location: location))
+            OvationTixCalendar.extractedEvents(from: events, presenter: presenter, venue: venue, location: location))
     }
 }

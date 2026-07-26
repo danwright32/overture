@@ -114,16 +114,23 @@ enum VenueTixCalendar {
     // #1174: a production that runs more than one night stamps each night with a shared `Series:` tag (see
     // seriesTags), the one signal that lets those nights collapse into a single run downstream.
     // copy-inventory:ignore-start  synthesized source HTML the extractor reads, not the app's voice (#915)
-    static func listingHTML(_ events: [VTEvent], venueName: String, location: String? = nil) -> String {
-        let place = location.map { "\(venueName), \($0)" } ?? venueName
+    //
+    // #1529: `venueName` is OPTIONAL, and a nil one writes no place at all rather than the next best string
+    // to hand (which, on the ticket-link hop that reaches this feed without a source, was the request's
+    // HOSTNAME). A date stands alone as a complete row; the venue is supplied at ingest instead.
+    static func listingHTML(_ events: [VTEvent], venueName: String?, location: String? = nil) -> String {
+        let place = venueName.map { name in location.map { "\(name), \($0)" } ?? name }
         let tags = seriesTags(events)
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
             let seriesLine = e.seriesId.flatMap { tags[$0] }.map { "<p>Series: \($0)</p>" } ?? ""
-            return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
+            let day = dayFormatter.string(from: e.date)
+            let dateLine = place.map { "\(day) at \($0)" } ?? day
+            return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dateLine)</p></article>"
         }.joined(separator: "\n")
-        return "<section title=\"\(venueName)\">\n\(rows)\n</section>"
+        let open = venueName.map { "<section title=\"\($0)\">" } ?? "<section>"
+        return "\(open)\n\(rows)\n</section>"
     }
     // copy-inventory:ignore-end
 
@@ -162,13 +169,19 @@ enum VenueTixCalendar {
 
     // Synthesizes one document from the events (the html path, still used for a one-off lead pointed at a
     // venuetix host). A failed fetch THROWS, never an empty document, for the same reconcile-safety reason.
-    static func fetch(url: URL, venueName: String, location: String? = nil, now: Date,
+    // #1529: the raw feed body travels back on the page, so the scout can ingest this source natively from
+    // the very bytes the document (and so its hash) was built from, rather than paying to have an AI read a
+    // document Overture wrote itself.
+    static func fetch(url: URL, venueName: String?, location: String? = nil, now: Date,
                       get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
-        let events = try await fetchEvents(url: url, now: now, get: get)
+        let data = try await get(feedRequest(forVenueHost: url.host ?? ""))
+        let events = upcoming(try parseEvents(data), now: now)
         let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName, location: location))
         return FetchedPage(normalizedHTML: html,
                            finalURL: url.absoluteString,
-                           contentHash: PageNormalizer.contentHash(html))
+                           contentHash: PageNormalizer.contentHash(html),
+                           ticketingFeedURL: url.absoluteString,
+                           ticketingFeedJSON: data)
     }
 
     // #1237: the events mapped straight to ExtractedEvent for the native extractor. Every show is attributed
@@ -179,13 +192,15 @@ enum VenueTixCalendar {
     // collapse into one run downstream; a single-night show keeps a nil id so it still merges by the
     // gap-and-title walk if a sibling appears. `seriesTags` computes exactly that multi-night set, the same
     // rule the synthesized-HTML path used before the extractor echoed it back.
-    static func extractedEvents(from events: [VTEvent], venueName: String,
+    // #1529: who PRESENTS and which ROOM are two different claims (see OvationTixCalendar for the case that
+    // taught it). The venue is nil unless somebody with the standing to say so has said so.
+    static func extractedEvents(from events: [VTEvent], presenter: String, venue: String?,
                                 location: String?) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
-                           presenter: venueName,
-                           venue: venueName,
+                           presenter: presenter,
+                           venue: venue,
                            performanceDate: dayFormatter.string(from: e.date),
                            sourceUrl: nil,
                            location: location,
@@ -205,7 +220,7 @@ enum VenueTixCalendar {
     }
 
     // The real network fetch as a synthesized page (the html path, used by the router).
-    static func liveFetch(url: URL, venueName: String, location: String? = nil, now: Date = Date(),
+    static func liveFetch(url: URL, venueName: String?, location: String? = nil, now: Date = Date(),
                           session: URLSession = .shared) async throws -> FetchedPage {
         try await fetch(url: url, venueName: venueName, location: location, now: now, get: liveGet(session))
     }

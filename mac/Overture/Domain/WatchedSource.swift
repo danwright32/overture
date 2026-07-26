@@ -179,6 +179,21 @@ final class WatchedSource {
     // location (a national calendar, a fetched page), so this changes nothing for them.
     var venueLocation: String? = nil
 
+    // #1529: the room every show from this source plays in, ASSERTED BY DAN. It exists for one shape: the
+    // scout could not read the org's own page, followed its ticket link, and landed on a single-venue
+    // ticketing feed (OvationTix, VenueTix) that names no venue anywhere in its data. The org name is not
+    // an answer to that question (the Bargemusic rule: an org's own name is not proof the show is in that
+    // org's own room, and an ensemble's ticket link routinely lands on somebody else's hall), so the venue
+    // has to come from the one person who knows. Unset, those shows keep their null venue and stay out of
+    // the queue, which is the honest outcome rather than a guessed one.
+    var venueName: String? = nil
+
+    // #1529: the single-venue ticketing feed this source's own page turned out to be a front for, recorded
+    // the first time the ticket-link hop landed on one. A fact, not a judgment: it is what tells the Sources
+    // sheet to ask for `venueName` on THIS row rather than on all 62, and it is why the row's shows arrive
+    // with no venue of their own. nil for every source whose page carries its own listings.
+    var ticketingFeedURL: String? = nil
+
     // #1209: Dan's manual override of whether this source is a known client's (see ClientHorizon). nil (the
     // default) means "decide automatically", by matching the org name against the Downbeat client list, so
     // a client added or removed in Downbeat arms or disarms the year-ahead read on its own with no stale

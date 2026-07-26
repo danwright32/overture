@@ -64,7 +64,8 @@ struct NativeFeedAdapterTests {
 
     @Test func venueTixEventsAreAttributedToTheVenueAndCarryDansLocation() {
         let events = try! VenueTixCalendar.parseEvents(Data(VenueTixCalendarTests.feed.utf8))
-        let mapped = VenueTixCalendar.extractedEvents(from: events, venueName: "The Green Room 42",
+        let mapped = VenueTixCalendar.extractedEvents(from: events, presenter: "The Green Room 42",
+                                                      venue: "The Green Room 42",
                                                       location: "570 Tenth Ave, New York, NY")
         #expect(mapped.count == 2)
         let first = mapped[0]
@@ -87,7 +88,7 @@ struct NativeFeedAdapterTests {
         let events = [ev("Run A night 1", "s1", 2_000_000_000),
                       ev("Run A night 2", "s1", 2_000_086_400),
                       ev("One-off", "s2", 2_000_200_000)]
-        let mapped = VenueTixCalendar.extractedEvents(from: events, venueName: "V", location: nil)
+        let mapped = VenueTixCalendar.extractedEvents(from: events, presenter: "V", venue: "V", location: nil)
         #expect(mapped[0].seriesId == "s1")
         #expect(mapped[1].seriesId == "s1")
         #expect(mapped[2].seriesId == nil)                           // single night: no id, so it never wrongly collapses
@@ -131,12 +132,12 @@ struct NativeFeedAdapterTests {
     // exactly what the feed adapters already guard, and the native path must not lose it.
     @Test func venueTixExtractorThrowsOnFailureRatherThanReturningAnEmptyList() async {
         struct Boom: Error {}
-        let extractor = VenueTixExtractor(fetchEvents: { throw Boom() }, venueName: "V", location: nil)
+        let extractor = VenueTixExtractor(fetchEvents: { throw Boom() }, presenter: "V", venue: "V", location: nil)
         await #expect(throws: Boom.self) { _ = try await extractor.extract() }
     }
 
     @Test func venueTixExtractorWithGenuinelyNoShowsReportsNoDatedContent() async throws {
-        let extractor = VenueTixExtractor(fetchEvents: { [] }, venueName: "V", location: nil)
+        let extractor = VenueTixExtractor(fetchEvents: { [] }, presenter: "V", venue: "V", location: nil)
         let listing = try await extractor.extract()
         #expect(listing.events.isEmpty)
         #expect(listing.verdict == .noDatedContent)

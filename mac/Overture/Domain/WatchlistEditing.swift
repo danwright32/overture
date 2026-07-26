@@ -179,8 +179,33 @@ enum WatchlistEditing {
     static func setVenueLocation(_ source: WatchedSource, to newLocation: String, in context: ModelContext) {
         let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueLocation = trimmed.isEmpty ? nil : trimmed
-        source.hasUnreadChanges = true
+        markForFreshRead(source)
         try? context.save()
+    }
+
+    // #1529: Dan names the ROOM every show from this source plays in. Needed where the shows come from a
+    // ticketing feed that publishes no venue anywhere and the app reached it by following the org's ticket
+    // link, so nothing on the page entitles it to assume the org's own name (the Bargemusic rule). Like
+    // setVenueLocation this does NOT reset feed history: the set of shows is unchanged, only what Overture
+    // may say about where they are. An empty string clears it back to nil, and those shows leave the queue
+    // again on the next read, which is the honest consequence of withdrawing the answer.
+    static func setVenueName(_ source: WatchedSource, to newName: String, in context: ModelContext) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        source.venueName = trimmed.isEmpty ? nil : trimmed
+        markForFreshRead(source)
+        try? context.save()
+    }
+
+    // Makes the next scout READ this source again instead of skipping it as unchanged.
+    //
+    // `hasUnreadChanges` alone does not do that, and believing it did was the flaw in #1175's own comment:
+    // the read decision compares the fetched page's hash against `lastContentHash` (SourceSchedule.decide),
+    // so an answer Dan supplies about a calendar that has not itself changed would sit unused until the
+    // venue happened to publish something new. Clearing the ingested hash is what that code already calls
+    // "changed by definition", and it costs exactly one re-read.
+    private static func markForFreshRead(_ source: WatchedSource) {
+        source.lastContentHash = nil
+        source.hasUnreadChanges = true
     }
 
     // #1027: Dan confirms a no_dated_content page is the right calendar, just quiet right now.

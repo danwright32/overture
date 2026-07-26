@@ -322,28 +322,34 @@ enum ScoutService {
             // fetch is now uncapped, so stamping on a fetch would put an identical timestamp on all 62
             // sources every press and flatten this clock into one big tie, which is precisely the coverage
             // loss #1189 fixed for lastCheckedAt. Keyed to the read, it also finally matches its own name.
-            if let page, let widgetHTML = page.ticketTailorWidgetHTML {
-                // #1295: the fetched page is a TicketTailor widget, so parse its embedded selectableDates
-                // JSON NATIVELY (free) here instead of handing the widget HTML to the paid detached read.
-                // runNative gives it the SAME usable-event guard and #887 cancellation tolerance every
-                // native feed gets, so this can never falsely mark shows gone.
-                //
+            // #1295 / #1529: the fetched page carries the structure it was built from (a TicketTailor
+            // widget's embedded JSON, or the ticketing feed body a hop landed on), so it is parsed NATIVELY
+            // here, for free, instead of paying a detached read to look at a document Overture wrote itself.
+            // runNative gives either one the SAME usable-event guard and #887 cancellation tolerance every
+            // native feed gets, so this can never falsely mark shows gone.
+            if let page, let inlineExtractor = inlineNativeExtractor(for: page, source: source, now: now) {
                 // The pending hash/months belong to the detached ingest, which a native parse never runs,
                 // so clear them either way, or the reattach path would believe a read is still owed. Mark
                 // the bytes INGESTED (lastContentHash) only on a successful parse, the same state the
-                // detached ingest sets on success, so the next run skips an unchanged widget; a drift/parse
+                // detached ingest sets on success, so the next run skips an unchanged page; a drift/parse
                 // failure leaves lastContentHash on the old bytes so the next run re-reads and it stays
                 // visibly failing until fixed.
                 source.pendingContentHash = nil
                 source.pendingPageMonths = []
-                let extractor = TicketTailorExtractor(
-                    fetchEvents: {
-                        try TicketTailorCalendar.upcoming(
-                            TicketTailorCalendar.parseWidget(widgetHTML), now: now)
-                    },
-                    venueName: source.orgName, location: source.venueLocation)
-                let native = await runNative(source, extractor: extractor, clients: loaded.clients,
-                                             history: history, blocked: blocked, now: now, into: context)
+                // #1529: remember that this row's shows come from a ticketing feed, so the Sources sheet can
+                // ask for the room on THIS row (TicketingFeedRead.needsVenueName) instead of on all of them.
+                if let feed = page.ticketingFeedURL, page.followedTicketLinkFrom != nil {
+                    source.ticketingFeedURL = feed
+                }
+                let native = await runNative(source, extractor: inlineExtractor, clients: loaded.clients,
+                                             history: history, blocked: blocked, now: now,
+                                             // #1529: a feed parse follows no per-event detail page, so a row
+                                             // the feed named no venue for is the feed's own gap, never a page
+                                             // Overture failed to read (#1472's rule, applied to the READ that
+                                             // happened rather than to the kind on the row: these two paths
+                                             // ingest natively while the row still says .html).
+                                             venueGapsAreStructural: true,
+                                             into: context)
                 if let s = native.sources.first, case .ingested = s.state {
                     source.lastContentHash = page.contentHash
                     source.hasUnreadChanges = false
@@ -453,11 +459,32 @@ enum ScoutService {
         return outcome
     }
 
+    // #1295 / #1529: an html source whose fetched page came back carrying the structure behind it reads
+    // natively, for free, rather than paying to have an AI read a document Overture synthesized. Returns the
+    // extractor for such a page, or nil for the ordinary page (which goes on to the paid read as before).
+    // One place, so the two shapes cannot drift apart on how they are ingested and counted.
+    private static func inlineNativeExtractor(for page: FetchedPage, source: WatchedSource,
+                                              now: Date) -> (any SourceExtractor)? {
+        if let widgetHTML = page.ticketTailorWidgetHTML {
+            return TicketTailorExtractor(
+                fetchEvents: {
+                    try TicketTailorCalendar.upcoming(
+                        TicketTailorCalendar.parseWidget(widgetHTML), now: now)
+                },
+                venueName: source.orgName, location: source.venueLocation)
+        }
+        return TicketingFeedRead.extractor(for: page, source: source, now: now)
+    }
+
     // One native source: extract, classify, upsert, reconcile. Its failure is recorded and reported,
     // never thrown, so a source that is down cannot cost Dan the rest of his watchlist.
     private static func runNative(_ source: WatchedSource?, extractor: any SourceExtractor,
                                   clients: [DownbeatClient], history: [HistoryRecord],
                                   blocked: BlockedCalendar, now: Date,
+                                  // #1529: overrides the row's own answer for a read that ingested natively
+                                  // while the row still says .html. nil keeps the kind's rule (SourceKind
+                                  // .venueGapsAreStructural), which is right for every other caller.
+                                  venueGapsAreStructural: Bool? = nil,
                                   into context: ModelContext) async -> Outcome {
         let sourceId = source?.sourceId ?? WatchedSource.carnegieId
         let orgName = source?.orgName ?? "Carnegie Hall"
@@ -511,7 +538,7 @@ enum ScoutService {
         // listed, which is what keeps a stored show safe when its own row goes blank.
         let kind = source?.kind ?? .algolia
         let rejection = ExtractedEventGuard.rejectionCounts(
-            for: events, venueGapsAreStructural: kind.venueGapsAreStructural)
+            for: events, venueGapsAreStructural: venueGapsAreStructural ?? kind.venueGapsAreStructural)
         let rejectedCount = rejection.unreadTotal
 
         // #888 part B: applySweep, because this IS a single-source sweep and it must still reconcile its
