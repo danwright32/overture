@@ -11,13 +11,17 @@ struct SelfBookingConfirmSheet: View {
     let title: String
     let message: String
     let proceedLabel: String
+    // #1500: the sheet is now the app's one branded confirm for any deliberate, cautionary action, and a
+    // calendar warning is the wrong picture over "dismiss the whole night as Not a fit". Defaulted, so
+    // every existing caller keeps the icon it shipped with.
+    var symbol: String = "calendar.badge.exclamationmark"
     let onProceed: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: OVSpacing.sm) {
-                Image(systemName: "calendar.badge.exclamationmark")
+                Image(systemName: symbol)
                     .font(.system(size: 15))
                     .foregroundStyle(OVColor.goldBright)
                 Text(title)

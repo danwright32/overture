@@ -212,9 +212,12 @@ struct UndoDismissWithDayOffWiringTests {
         #expect(sheet.contains("undo: undo, undoDismissOf: pending.id"))
     }
 
+    // #1500 moved the call from one row to every row in the entry; the claim guarded here is unchanged and
+    // is the whole point of #1473: the store goes with it, so the day off half of the undo can run.
     @Test func theWindowsUndoPassesTheStoreSoTheDayOffHalfCanRun() {
         let root = source("Overture/App/RootView.swift")
-        #expect(root.contains("QueueUndo.apply(entry, to: model, in: context)"))
+        #expect(root.contains("QueueUndo.apply(entry, resolving:"))
+        #expect(root.contains("}, in: context)"))
     }
 
     // #1415: an undo restores a row into a stage Dan is usually not looking at, so a working Cmd+Z was

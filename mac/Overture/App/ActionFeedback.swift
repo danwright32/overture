@@ -123,6 +123,45 @@ enum ActionAck {
         }
     }
 
+    // #1500: a whole night, dismissed in one action, for the one reason Dan picked. Names the count and
+    // the reason, because a bulk dismiss is exactly where a wrong reason gets written to many rows at once
+    // and this line is his only chance to notice it.
+    static func nightDismissed(count: Int, reason: DismissReason, dateLabel: String) -> String {
+        count == 1
+            ? "The show on \(dateLabel) is dismissed as \(reason.label)"
+            : "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
+    }
+
+    // #1500: the same night, back in one press. Names the stage pill to go and look at, for the #1415
+    // reason: since #1134 an undo restores rows into a stage Dan is usually not looking at, so the store
+    // changes and the screen does not.
+    static func undoRestoredNight(count: Int, priorStatuses: [ReviewStatus]) -> String {
+        "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
+    }
+
+    // The honest partial, and the case this wording exists for: the shows that had moved on are STILL
+    // dismissed, and nothing else on screen would tell him that some of the night stayed behind.
+    static func undoRestoredPartOfNight(restored: Int, missed: Int, priorStatuses: [ReviewStatus]) -> String {
+        let others = missed == 1 ? "The other one had" : "The other \(missed) had"
+        return "\(undoRestoredNight(count: restored, priorStatuses: priorStatuses)). \(others) already moved on."
+    }
+
+    // Rows restored from one action can have come from different stages, and there is no one pill to point
+    // at then. It stops naming a stage rather than naming the wrong one.
+    private static func undoStageWord(for statuses: [ReviewStatus]) -> String {
+        let words = Set(statuses.map(undoStageWord))
+        guard words.count == 1, let only = words.first else { return "your queue" }
+        return only
+    }
+
+    // #1500: the batch version of undoSkipped. Counts rather than names orgs: a night is not one show, and
+    // listing five org names in a banner is not something Dan reads.
+    static func undoSkippedNight(count: Int) -> String {
+        count == 1
+            ? "That show had already moved on, so there was nothing to undo"
+            : "Those \(count) shows had already moved on, so there was nothing to undo"
+    }
+
     // #1415: the other half of "nothing is silent". When the row moved on since the action (a scout
     // re-scored it, a sweep took it, a send made it contacted) or is gone, the undo cannot apply. Said,
     // not swallowed, or a live undo and a dead one look the same from the keyboard.

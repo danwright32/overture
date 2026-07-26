@@ -30,25 +30,61 @@ import SwiftData
 // object would post its acknowledgment to something no view observes, which is indistinguishable
 // from silent failure.
 struct QueueUndoEntry: Equatable, Sendable {
-    let naturalKey: String
-    let groupName: String
+    // One row's before-and-after. #1500 made an action able to cover a whole night at once, so the
+    // snapshot moved down a level: the entry is what Dan DID, and this is what it did to each show.
+    struct Row: Equatable, Sendable {
+        let naturalKey: String
+        let groupName: String
+
+        // Where the row came FROM, which is what undo restores. Recorded rather than inferred: a keep from
+        // the Review stage and a keep from the queue land the row in different places, and guessing at an
+        // inverse is exactly the mistake #752's snapshot exists to avoid.
+        let priorStatus: ReviewStatus
+        let priorDismissReasonRaw: String?
+        // `Prospect.markDismissed` stamps `dismissedAt` only when it is nil, so a show dismissed twice keeps
+        // its FIRST exit date. Undoing the second dismissal has to put that original date back rather than
+        // clear it, or the row loses the record of when it first left the queue (#16 counts on that date).
+        let priorDismissedAt: Date?
+
+        // Where the action LEFT the row. Not restored; this is the precondition.
+        let resultingStatus: ReviewStatus
+        let resultingDismissReasonRaw: String?
+
+        // Is the row still exactly how this action left it? If anything moved it since (a background
+        // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so this
+        // row no longer applies.
+        //
+        // Checks the dismiss REASON as well as the status, and that is the case a status-only check misses:
+        // re-labelling why a dismissed show was cut leaves it dismissed, so undo would restore the row and
+        // silently discard the newer reason.
+        func stillApplies(status: ReviewStatus, dismissReasonRaw: String?) -> Bool {
+            status == resultingStatus && dismissReasonRaw == resultingDismissReasonRaw
+        }
+    }
+
+    // Held as one row plus the rest, rather than an array, so "an entry always covers at least one show"
+    // is structural. An empty entry would sit on the stack and swallow a Cmd+Z while appearing to work.
+    let primaryRow: Row
+    let otherRows: [Row]
+    var rows: [Row] { [primaryRow] + otherRows }
+
     // What Dan did, for the menu title ("Undo Dismiss: The Music Shop"). Held as text rather than an
     // enum because the menu is the only reader, and an enum would invite behaviour to hang off it.
     let actionLabel: String
 
-    // Where the row came FROM, which is what undo restores. Recorded rather than inferred: a keep from
-    // the Review stage and a keep from the queue land the row in different places, and guessing at an
-    // inverse is exactly the mistake #752's snapshot exists to avoid.
-    let priorStatus: ReviewStatus
-    let priorDismissReasonRaw: String?
-    // `Prospect.markDismissed` stamps `dismissedAt` only when it is nil, so a show dismissed twice keeps
-    // its FIRST exit date. Undoing the second dismissal has to put that original date back rather than
-    // clear it, or the row loses the record of when it first left the queue (#16 counts on that date).
-    let priorDismissedAt: Date?
+    // #1500: what the menu calls a whole night ("5 shows on Jul 24"), when the action took more than one
+    // show. nil for the ordinary one-show action, which names the show itself.
+    let batchLabel: String?
 
-    // Where the action LEFT the row. Not restored; this is the precondition.
-    let resultingStatus: ReviewStatus
-    let resultingDismissReasonRaw: String?
+    // The single-row reads every existing caller makes, kept so one action on one show stays the simple
+    // thing it was. They speak for the primary row, which for a single-row entry is the only row.
+    var naturalKey: String { primaryRow.naturalKey }
+    var groupName: String { primaryRow.groupName }
+    var priorStatus: ReviewStatus { primaryRow.priorStatus }
+    var priorDismissReasonRaw: String? { primaryRow.priorDismissReasonRaw }
+    var priorDismissedAt: Date? { primaryRow.priorDismissedAt }
+    var resultingStatus: ReviewStatus { primaryRow.resultingStatus }
+    var resultingDismissReasonRaw: String? { primaryRow.resultingDismissReasonRaw }
 
     // #1473: a stretch of days Dan blocked BECAUSE of this dismiss, so one press takes both back.
     //
@@ -75,40 +111,80 @@ struct QueueUndoEntry: Equatable, Sendable {
     // #1479: when a block of days off rode along on this dismiss (#1473), the single press reverses both, and
     // un-flags every other show that block held back. The title names that whole action so Dan can tell it
     // apart from a plain dismiss BEFORE he presses; "Undo Dismiss: X" would promise less than the press does.
+    // #1500: a whole night says so ("Undo Dismiss: 5 shows on Jul 24"). Naming the first show's org would
+    // promise one show back and give back five.
     var undoMenuTitle: String {
+        let subject = batchLabel ?? groupName
         if blockedDays != nil {
-            return "Undo \(actionLabel) and Days Off: \(groupName)"
+            return "Undo \(actionLabel) and Days Off: \(subject)"
         }
-        return "Undo \(actionLabel): \(groupName)"
+        return "Undo \(actionLabel): \(subject)"
     }
 
-    // Is the row still exactly how this action left it? If anything moved it since (a background
-    // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so the
-    // entry no longer applies.
-    //
-    // Checks the dismiss REASON as well as the status, and that is the case a status-only check misses:
-    // re-labelling why a dismissed show was cut leaves it dismissed, so undo would restore the row and
-    // silently discard the newer reason.
     func stillApplies(status: ReviewStatus, dismissReasonRaw: String?) -> Bool {
-        status == resultingStatus && dismissReasonRaw == resultingDismissReasonRaw
+        primaryRow.stillApplies(status: status, dismissReasonRaw: dismissReasonRaw)
+    }
+
+    // The one-show action: the shape every caller but #1500's night uses.
+    init(naturalKey: String, groupName: String, actionLabel: String,
+         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         resultingStatus: ReviewStatus, resultingDismissReasonRaw: String?) {
+        self.init(actionLabel: actionLabel, batchLabel: nil,
+                  primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
+                                  priorStatus: priorStatus, priorDismissReasonRaw: priorDismissReasonRaw,
+                                  priorDismissedAt: priorDismissedAt,
+                                  resultingStatus: resultingStatus,
+                                  resultingDismissReasonRaw: resultingDismissReasonRaw),
+                  otherRows: [])
+    }
+
+    private init(actionLabel: String, batchLabel: String?, primaryRow: Row, otherRows: [Row]) {
+        self.actionLabel = actionLabel
+        self.batchLabel = batchLabel
+        self.primaryRow = primaryRow
+        self.otherRows = otherRows
+    }
+
+    // #1500: one action over a whole night, as ONE entry, so Cmd+Z gives the night back in one press
+    // rather than one press per card. Refuses an empty set rather than recording an entry that would
+    // swallow the next press and appear to have done something.
+    static func batch(actionLabel: String, label: String, rows: [Row]) -> QueueUndoEntry? {
+        guard let first = rows.first else { return nil }
+        return QueueUndoEntry(actionLabel: actionLabel, batchLabel: label,
+                              primaryRow: first, otherRows: Array(rows.dropFirst()))
     }
 }
 
-extension QueueUndoEntry {
+extension QueueUndoEntry.Row {
     // Built from the row itself, AFTER the mutation, with the three "prior" values read off it before.
     // Reading the result from the row rather than being told it means the precondition is measured
     // against what actually happened, not against what the caller believed it was doing.
+    //
+    // #1500: the single place that rule lives, now that two actions record one (one show, or a night).
     @MainActor
-    init(recording actionLabel: String, on prospect: Prospect,
+    init(recording prospect: Prospect,
          priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
-                  actionLabel: actionLabel,
                   priorStatus: priorStatus,
                   priorDismissReasonRaw: priorDismissReasonRaw,
                   priorDismissedAt: priorDismissedAt,
                   resultingStatus: prospect.status,
                   resultingDismissReasonRaw: prospect.dismissReasonRaw)
+    }
+}
+
+extension QueueUndoEntry {
+    @MainActor
+    init(recording actionLabel: String, on prospect: Prospect,
+         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?) {
+        let row = Row(recording: prospect, priorStatus: priorStatus,
+                      priorDismissReasonRaw: priorDismissReasonRaw, priorDismissedAt: priorDismissedAt)
+        self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
+                  priorStatus: row.priorStatus, priorDismissReasonRaw: row.priorDismissReasonRaw,
+                  priorDismissedAt: row.priorDismissedAt,
+                  resultingStatus: row.resultingStatus,
+                  resultingDismissReasonRaw: row.resultingDismissReasonRaw)
     }
 }
 
@@ -120,11 +196,24 @@ extension QueueUndoEntry {
 // quietly corrupt the #1403 funnel data, which counts when a show left the queue. The entry already
 // holds the true values, so there is nothing to re-derive: put back exactly what was there.
 enum QueueUndo {
-    // Applies the entry when the row is still exactly how the action left it, and returns whether it
-    // did. `nil` is an ordinary outcome, not an error: rows are deleted at runtime
-    // (NaturalKeyVenueMigration), which is why an entry holds a key rather than the object.
+    // How much of the entry actually came back. #1500 made an entry able to cover several shows, and the
+    // caller has to be able to tell "the night is back" from "four of the five are back": since #1134 the
+    // store and the visible stage move independently, so a partial restore and a whole one look identical
+    // on screen unless the banner says otherwise (#1415).
+    struct Outcome: Equatable, Sendable {
+        let restored: Int
+        let total: Int
+
+        var didAnything: Bool { restored > 0 }
+        var isPartial: Bool { restored > 0 && restored < total }
+        var missed: Int { total - restored }
+    }
+
+    // Applies every row of the entry that is still exactly how the action left it, and reports how many
+    // that was. A row that is gone (deleted at runtime by NaturalKeyVenueMigration) or that moved on is an
+    // ordinary outcome, not an error, which is why an entry holds keys rather than objects.
     //
-    // This single check is what replaced the "wall". A background writer (the reconcile tick, a scout
+    // The precondition is what replaced the "wall". A background writer (the reconcile tick, a scout
     // import, a retirement sweep), a later action of Dan's, and a send that moved the show on are all
     // the same situation seen from here: the row is not what this entry describes, so leave it alone.
     // #1473: the context is REQUIRED rather than optional-with-a-default, so no call site can quietly get
@@ -132,11 +221,16 @@ enum QueueUndo {
     // it is invisible from the keyboard: the show comes back, so the press looks like it worked.
     @MainActor
     @discardableResult
-    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?, in context: ModelContext,
-                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Bool {
-        guard let prospect,
-              entry.stillApplies(status: prospect.status,
-                                 dismissReasonRaw: prospect.dismissReasonRaw) else { return false }
+    static func apply(_ entry: QueueUndoEntry, resolving lookup: (String) -> Prospect?,
+                      in context: ModelContext,
+                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Outcome {
+        let applicable = entry.rows.compactMap { row -> (Prospect, QueueUndoEntry.Row)? in
+            guard let prospect = lookup(row.naturalKey),
+                  row.stillApplies(status: prospect.status,
+                                   dismissReasonRaw: prospect.dismissReasonRaw) else { return nil }
+            return (prospect, row)
+        }
+        guard !applicable.isEmpty else { return Outcome(restored: 0, total: entry.rows.count) }
         // The precondition is checked BEFORE the day off is touched, not after. A stale entry means Dan's
         // row moved on under him, and taking the block off anyway would silently unblock a night he told
         // Overture he cannot work, freeing every show on it to be drafted and sent.
@@ -149,10 +243,20 @@ enum QueueUndo {
                .first(where: { $0.startDate == blocked.start && $0.endDate == blocked.end }) {
             DayOffEditing.remove(row, export: export, in: context)
         }
-        prospect.status = entry.priorStatus
-        prospect.dismissReasonRaw = entry.priorDismissReasonRaw
-        prospect.dismissedAt = entry.priorDismissedAt
-        return true
+        for (prospect, row) in applicable {
+            prospect.status = row.priorStatus
+            prospect.dismissReasonRaw = row.priorDismissReasonRaw
+            prospect.dismissedAt = row.priorDismissedAt
+        }
+        return Outcome(restored: applicable.count, total: entry.rows.count)
+    }
+
+    // The one-show call, unchanged for every caller that reverses a single action on a single row.
+    @MainActor
+    @discardableResult
+    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?, in context: ModelContext,
+                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Bool {
+        apply(entry, resolving: { _ in prospect }, in: context, export: export).didAnything
     }
 }
 

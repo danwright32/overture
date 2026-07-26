@@ -267,7 +267,9 @@ struct QueueUndoWiringGuardTests {
         #expect(app.contains(".environment(undoRequest)"))
         #expect(root.contains("onChange(of: undoRequest.token)"))
         #expect(root.contains("performQueueUndo()"))
-        #expect(root.contains("QueueUndo.apply(entry, to: model, in: context)"))
+        // #1500: the entry can cover a whole night, so the window resolves every row it names rather than
+        // one model it looked up itself.
+        #expect(root.contains("QueueUndo.apply(entry, resolving:"))
     }
 
     // The entry is taken off the stack BEFORE it is known to be applicable. A stale entry is spent
