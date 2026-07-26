@@ -41,8 +41,24 @@ enum RunGrouping {
     }
 
     // #939: shared with EngagementLink, which uses the same "how many dark days still count as one
-    // engagement" window to link the same production across DIFFERENT venues.
+    // engagement" window to link the same production across DIFFERENT venues, and mirrored by
+    // DuplicateContactGuard to pace how often Dan may contact one org. Deliberately NOT widened by #1558:
+    // those are different questions, and nobody asked them.
     static let gapDays = 3
+
+    // #1558: how far apart two nights of the SAME show at the SAME venue can be and still read as one
+    // engagement. Dan's number, 2026-07-26, chosen over "any gap" and over the old three days.
+    //
+    // Three days was right when a run's whole SPAN was conflict-checked against his calendar, because
+    // collapsing a weekly series then invented a clash on every dark day inside it. #1523 removed that: a
+    // run is now judged on the nights it actually plays. So the window can follow how Dan really works,
+    // which is that he pitches a run ONCE ("I'm not going to send them an email every week pitching the
+    // show"), not once a week. His Neo-Futurists row was twelve cards for one weekly show.
+    //
+    // Bounded in practice by the scout's own four-month horizon, so this can never reach across a season.
+    // A silence longer than this is a separate engagement and earns its own card, which is what keeps a
+    // show returning after a break something he is still asked about.
+    static let sameShowGapDays = 56
 
     private static func canon(_ s: String?) -> String {
         (s ?? "").lowercased().replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
@@ -94,16 +110,44 @@ enum RunGrouping {
                 }
             }
 
-            // #369: the remaining, id-less rows still cluster by the gap-and-title walk exactly as before.
-            var gapRuns: [[RunRow]] = []
+            // #1558: the remaining, id-less rows cluster by SHOW first, and only then walk dates inside
+            // each show.
+            //
+            // The old walk scanned every row at the venue in date order and joined a row only to the one
+            // immediately before it, so any OTHER show at that venue broke a run in half. Live proof at
+            // Asylum NYC: Neo-Futurists 08-07, Marcus Monroe 08-08, Neo-Futurists 08-08. The two Neo
+            // nights are one day apart and belong together; Marcus Monroe sitting between them in the sort
+            // stranded each in a run of its own. That is exactly the failure the seriesId path above was
+            // given its own clustering to avoid, and it went on happening to every source with no id,
+            // which is all 36 of the duplicate cards Dan could actually see.
+            //
+            // Clustering by title first makes the result independent of who else plays that venue. Each
+            // cluster stays date-sorted because `venueRows` was, and `showClusters` preserves that order.
+            var showOrder: [[RunRow]] = []
             for r in untaggedRows {
-                if let last = gapRuns.last, let prev = last.last,
-                   let gap = EasternDate.daysUntil(from: prev.performanceDate!, to: r.performanceDate!),
-                   gap <= gapDays,
-                   GroupNameMatch.isConfident(prev.groupName, r.groupName) {
-                    gapRuns[gapRuns.count - 1].append(r)
+                if let i = showOrder.firstIndex(where: {
+                    GroupNameMatch.isConfident($0[0].groupName, r.groupName)
+                }) {
+                    showOrder[i].append(r)
                 } else {
-                    gapRuns.append([r])
+                    showOrder.append([r])
+                }
+            }
+
+            var gapRuns: [[RunRow]] = []
+            for show in showOrder {
+                for r in show {
+                    // The title check stays, and now also stops one show's cluster running into the next
+                    // one's when a new cluster begins. The window is the same-show one (#1558), never the
+                    // cross-venue engagement window.
+                    if let last = gapRuns.last, let prev = last.last,
+                       GroupNameMatch.isConfident(prev.groupName, r.groupName),
+                       let gap = EasternDate.daysUntil(from: prev.performanceDate!, to: r.performanceDate!),
+                       gap <= sameShowGapDays {
+                        gapRuns[gapRuns.count - 1].append(r)
+                    } else {
+                        gapRuns.append([r])
+                    }
                 }
             }
 

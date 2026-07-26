@@ -50,16 +50,23 @@ struct RunGroupingTests {
         #expect(out[0].partOfRelatedRun == false)
     }
 
+    // #1558: same assertion, new boundary. These dates were 16 and 19 days apart, which split a run when
+    // the window was three days and now read as one engagement. The rule being pinned is unchanged (a run
+    // chains across dark days and splits on a gap too large to be one engagement); only where "too large"
+    // sits has moved, to Dan's eight weeks, because he pitches a run once rather than once a week and
+    // #1523 removed the false-conflict cost of a long run.
     @Test func chainsAcrossDarkDaysButSplitsOnLargerGap() {
-        let out = RunGrouping.group([row("X", "2026-07-01"), row("X", "2026-07-04"), row("X", "2026-07-20")])
+        let out = RunGrouping.group([row("X", "2026-07-01"), row("X", "2026-07-04"), row("X", "2026-11-20")])
         #expect(out.count == 2)
         #expect(out[0].runEndDate == "2026-07-04")
-        #expect(out[1].row.performanceDate == "2026-07-20")
+        #expect(out[1].row.performanceDate == "2026-11-20")
         #expect(out[1].runEndDate == nil)
     }
 
+    // Likewise: two runs of one act at one venue are still flagged as related, they just have to be
+    // genuinely separate engagements now (more than eight weeks apart) rather than merely 19 days.
     @Test func flagsSeparateRunsOfSameGroupVenueAsRelated() {
-        let out = RunGrouping.group([row("Y", "2026-07-01"), row("Y", "2026-07-20")])
+        let out = RunGrouping.group([row("Y", "2026-07-01"), row("Y", "2026-11-20")])
         #expect(out.count == 2)
         #expect(out.allSatisfy { $0.partOfRelatedRun })
     }
