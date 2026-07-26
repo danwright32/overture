@@ -258,6 +258,24 @@ struct CleartextFallbackTests {
         #expect(sourcesView.contains("source.insecureFetchNote"))
     }
 
+    // Dan's call on review, 2026-07-26, and it restores a rule this sheet already had. Gold is the signal
+    // colour for a source that has forfeited its ability to say a show is gone: work he can act on. A
+    // broken certificate on somebody else's website is not work he can act on, at all. Dressing a fact he
+    // can do nothing about as an alarm is exactly how #1428/#1472/#1498 taught the badge and these lines to
+    // cry wolf, and a row that cries wolf trains him to skim the line that is genuinely urgent.
+    //
+    // It shipped gold in #1544 by my mistake, three lines under the comment stating this rule.
+    @MainActor
+    @Test func theInsecureFetchNoteIsDisclosedNotDressedAsAnAlarm() {
+        let sourcesView = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        let block = SourceGuardHelper.propertyBody("if let insecure = source.insecureFetchNote {",
+                                                   in: sourcesView)
+
+        #expect(block?.contains("OVColor.ink") == true)
+        #expect(block?.contains("OVColor.gold") == false,
+                "a fact Dan cannot act on must not wear the colour reserved for work he can")
+    }
+
     // The derived-address rule, tested where it actually bites. A month page inside a stitched calendar is
     // an address the APP built from the landing page's own index, not one Dan supplied, so it must never
     // be read in the clear even on the allowed host. The fallback lives on the entry point only, and this

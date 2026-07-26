@@ -715,13 +715,17 @@ struct SourcesView: View {
             }
 
             // #1544: this source's page came back unencrypted, because its https handshake is broken and
-            // Overture fell back to the cleartext address Dan stored. Gold: it is not a failure (the shows
-            // were read) and it is not nothing either, because those bytes could have been altered in
-            // flight and they feed the reconcile that cancels shows. Disclosed rather than silent, and it
-            // clears itself the day the site fixes its certificate. Wording lives on the model (#863).
+            // Overture fell back to the cleartext address Dan stored. Worth saying: those bytes could have
+            // been altered in flight and they feed the reconcile that cancels shows.
+            //
+            // PLAIN TEXT, not gold, by the same rule as the readability line directly above (#1428/#1472/
+            // #1498) and by Dan's own call on review: gold is for a source that has forfeited its ability
+            // to say a show is gone, which is work he can act on. Another site's broken certificate is not
+            // work he can act on at all. Disclosed without being dressed as an alarm, and it clears itself
+            // the day they fix it. It shipped gold and was corrected. Wording lives on the model (#863).
             if let insecure = source.insecureFetchNote {
                 Text(insecure).font(.system(size: 11))
-                    .foregroundStyle(OVColor.gold)
+                    .foregroundStyle(OVColor.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
