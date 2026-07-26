@@ -720,8 +720,13 @@ enum ScoutService {
 
     // Anything a source's extractor or fetcher throws that is not already typed is a connectivity
     // problem as far as the row is concerned. Named, not swallowed.
+    //
+    // #1543: and named as precisely as the error allows. This is the path a FEED ADAPTER's untyped throw
+    // takes (none of them catch their own session errors), so routing it through the same reader the plain
+    // fetch uses is what stops a broken handshake on a feed host reading as a dead link while the identical
+    // failure on an html source reads honestly.
     private static func fetchError(from error: Error) -> SourceFetchError {
-        (error as? SourceFetchError) ?? .unreachable
+        (error as? SourceFetchError) ?? .transport(error)
     }
 
     // Carnegie's watchlist row, or nil on a store whose #800 backfill has not run yet (and in a test

@@ -111,6 +111,7 @@ struct SourceFailureTests {
             .fetch(.http(401)), .fetch(.http(429)), .fetch(.unreachable),
             .fetch(.notHTML("application/pdf")), .fetch(.redirectedAway("thirdstreetmusicschool.org")),
             .fetch(.feedShapeChanged),   // #1171
+            .fetch(.secureConnectionFailed),   // #1543
             .verdict(.noDatedContent), .verdict(.unreadable),
         ]
         for failure in cases {
@@ -144,6 +145,31 @@ struct SourceFailureTests {
     @Test func anUnknownStoredStringIsRefusedRatherThanGuessed() {
         #expect(SourceFailure(raw: "wat") == nil)
         #expect(SourceFailure(raw: "") == nil)
+    }
+
+    // #1543: a site whose secure connection is broken said something quite different from a dead link, and
+    // both used to read as "Couldn't reach that page." Dan's Dinu Mihailescu row is the live case: the
+    // server answers plain http with a 200 and 37KB of HTML, and kills the https handshake with a fatal
+    // alert the instant a client offers ALPN. Every real client offers ALPN, so every real client fails,
+    // and Safari only works because it never tries https on that site at all.
+    //
+    // The two failures ask different things of Dan. A dead link is his to fix or retire. A broken
+    // handshake on a site that is up is nobody's to fix from here, and no re-check will ever change it.
+    @Test func aBrokenSecureConnectionDoesNotSayTheSameThingAsADeadLink() {
+        let tls = SourceFailure.fetch(.secureConnectionFailed)
+
+        #expect(tls != .fetch(.unreachable))
+        #expect(tls.message != SourceFailure.fetch(.unreachable).message)
+        // It says the site ANSWERED, which is the whole distinction, and that it is not his to fix.
+        #expect(tls.message.contains("secure connection"))
+    }
+
+    // Confirm is for a page that read fine and was empty, which this is not: nothing was read at all.
+    // Fix stays on offer, and is the only local remedy: re-pointing the source at a host whose https
+    // works is the one thing that can resolve this from here.
+    @Test func aBrokenSecureConnectionOffersFixButNothingToConfirm() {
+        #expect(SourceFailure.fetch(.secureConnectionFailed).offersFix)
+        #expect(SourceFailure.fetch(.secureConnectionFailed).offersConfirm == false)
     }
 
     // #1171: a feed that answered but parsed to nothing is a broken feed, not a fixable address. Re-pointing
