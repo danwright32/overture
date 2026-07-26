@@ -409,13 +409,17 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     case operaAmericaFeed = "opera_america_feed"   // OPERA America's national opera calendar (Umbraco feed)
     case venueTixFeed = "venue_tix_feed"           // any *.venuetix.com single-venue feed (Green Room 42, ...)
     case ovationTixFeed = "ovation_tix_feed"       // any *.ovationtix.com single-venue feed (SoHo Playhouse, ...)
+    // #1503: a Squarespace page built on its EVENTS collection, read from `?format=json`. Unlike the
+    // three above this is NOT host-routed: Squarespace serves arbitrary domains, so this kind is
+    // assigned by a CONTENT probe (SquarespaceCalendar.isEventsCollection), never by URL.
+    case squarespaceFeed = "squarespace_feed"
 
     // The dispatch rule, in one place so nothing can disagree about which sources cost a paid read. A
     // native source ingests structured events synchronously and free on every run (including the automatic
     // daily one); an html source is fetched, hashed, and read by the paid extract run only when it changes.
     var usesNativeExtractor: Bool {
         switch self {
-        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
+        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed, .squarespaceFeed: return true
         case .html: return false
         }
     }
@@ -435,7 +439,7 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     // has to decide this on its own terms.
     var venueGapsAreStructural: Bool {
         switch self {
-        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
+        case .algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed, .squarespaceFeed: return true
         case .html: return false
         }
     }
@@ -447,7 +451,9 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     var hasEditablePage: Bool {
         switch self {
         case .algolia: return false
-        case .html, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed: return true
+        // #1503: a Squarespace source is watched at the org's own events page, which is a real address a
+        // person could have typed wrong, so it keeps the control too.
+        case .html, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed, .squarespaceFeed: return true
         }
     }
 
