@@ -28,7 +28,7 @@ struct NativeExtractorEndToEndTests {
                 VenueTixCalendar.upcoming(
                     try VenueTixCalendar.parseEvents(Data(VenueTixCalendarTests.feed.utf8)), now: now)
             },
-            venueName: "The Green Room 42", location: "New York, NY")
+            presenter: "The Green Room 42", venue: "The Green Room 42", location: "New York, NY")
     }
 
     // OPERA America: the real Umbraco feed page injected as the paged POST response, driven through

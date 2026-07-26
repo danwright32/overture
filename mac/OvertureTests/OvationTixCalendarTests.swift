@@ -181,7 +181,8 @@ struct OvationTixCalendarTests {
     // extracted events so those nights collapse into one run; a single-night show keeps a nil id.
     @Test func extractedEventsAttributeTheVenueAndTagMultiNightRunsOnly() throws {
         let events = try OvationTixCalendar.parseEvents(Data(Self.feed.utf8))
-        let extracted = OvationTixCalendar.extractedEvents(from: events, venueName: "SoHo Playhouse",
+        let extracted = OvationTixCalendar.extractedEvents(from: events, presenter: "SoHo Playhouse",
+                                                           venue: "SoHo Playhouse",
                                                            location: "New York, NY")
         #expect(extracted.allSatisfy { $0.presenter == "SoHo Playhouse" && $0.venue == "SoHo Playhouse" })
         #expect(extracted.allSatisfy { $0.location == "New York, NY" })

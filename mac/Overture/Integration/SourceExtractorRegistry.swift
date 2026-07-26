@@ -25,14 +25,18 @@ enum SourceExtractorRegistry {
             }
         case .venueTixFeed:
             let url = source.listingsURL.flatMap { URL(string: $0) }
-            let venueName = source.orgName
+            // #1529: Dan is watching this venue AT ITS OWN TICKETING FEED, an address he pasted himself, so
+            // the org name on the row is his own answer to "which room is this?" and stays the venue. Only a
+            // source whose page had to be LEFT (the ticket-link hop) loses that standing, and it asks for
+            // `venueName` instead of assuming.
+            let venue = source.venueName ?? source.orgName
             let location = source.venueLocation
             return VenueTixExtractor(
                 fetchEvents: {
                     guard let url else { throw SourceFetchError.unreachable }
                     return try await VenueTixCalendar.liveEvents(url: url)
                 },
-                venueName: venueName, location: location)
+                presenter: source.orgName, venue: venue, location: location)
         case .squarespaceFeed:
             // #1503: the org's own events page, read from its JSON view. The org presents; each show
             // keeps whichever venue the feed names, so nothing is threaded in here but the org name and
@@ -48,14 +52,15 @@ enum SourceExtractorRegistry {
                 orgName: orgName, location: location)
         case .ovationTixFeed:
             let url = source.listingsURL.flatMap { URL(string: $0) }
-            let venueName = source.orgName
+            // Same as VenueTix above (#1529): this address IS the venue's own feed, pasted by Dan.
+            let venue = source.venueName ?? source.orgName
             let location = source.venueLocation
             return OvationTixExtractor(
                 fetchEvents: {
                     guard let url else { throw SourceFetchError.unreachable }
                     return try await OvationTixCalendar.liveEvents(url: url)
                 },
-                venueName: venueName, location: location)
+                presenter: source.orgName, venue: venue, location: location)
         }
     }
 }

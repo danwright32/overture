@@ -130,16 +130,24 @@ enum OvationTixCalendar {
     // A production that runs more than one day stamps each of its dates with a shared `Series:` tag (see
     // seriesTags), the one signal that lets those dates collapse into a single run downstream.
     // copy-inventory:ignore-start  synthesized source HTML the extractor reads, not the app's voice (#915)
-    static func listingHTML(_ events: [OTEvent], venueName: String, location: String? = nil) -> String {
-        let place = location.map { "\(venueName), \($0)" } ?? venueName
+    //
+    // #1529: `venueName` is OPTIONAL, and a nil one writes no place at all rather than the next best string
+    // to hand. It is nil on exactly one path (the ticket-link hop, which reaches this feed without a source),
+    // and the next best string there was the request's HOSTNAME, which cost The Players Theatre all 149 of
+    // its shows. The date still stands alone as a complete row; the venue is supplied at ingest instead.
+    static func listingHTML(_ events: [OTEvent], venueName: String?, location: String? = nil) -> String {
+        let place = venueName.map { name in location.map { "\(name), \($0)" } ?? name }
         let tags = seriesTags(events)
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
             let seriesLine = e.seriesId.flatMap { tags[$0] }.map { "<p>Series: \($0)</p>" } ?? ""
-            return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dayFormatter.string(from: e.date)) at \(place)</p></article>"
+            let day = dayFormatter.string(from: e.date)
+            let dateLine = place.map { "\(day) at \($0)" } ?? day
+            return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dateLine)</p></article>"
         }.joined(separator: "\n")
-        return "<section title=\"\(venueName)\">\n\(rows)\n</section>"
+        let open = venueName.map { "<section title=\"\($0)\">" } ?? "<section>"
+        return "\(open)\n\(rows)\n</section>"
     }
     // copy-inventory:ignore-end
 
@@ -187,13 +195,20 @@ enum OvationTixCalendar {
 
     // Synthesizes one document from the events (the html path, still used for a one-off lead pointed at an
     // ovationtix host). A failed fetch THROWS, never an empty document, for the same reconcile-safety reason.
-    static func fetch(url: URL, venueName: String, location: String? = nil, now: Date,
+    // #1529: the raw feed body travels back on the page. It is what lets the scout ingest this source
+    // natively from the very bytes this document (and so its hash) was built from, instead of paying to
+    // have an AI read a document Overture wrote itself.
+    static func fetch(url: URL, venueName: String?, location: String? = nil, now: Date,
                       get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
-        let events = try await fetchEvents(url: url, now: now, get: get)
+        guard let clientId = clientId(from: url) else { throw SourceFetchError.unreachable }
+        let data = try await get(feedRequest(clientId: clientId))
+        let events = upcoming(try parseEvents(data), now: now)
         let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName, location: location))
         return FetchedPage(normalizedHTML: html,
                            finalURL: url.absoluteString,
-                           contentHash: PageNormalizer.contentHash(html))
+                           contentHash: PageNormalizer.contentHash(html),
+                           ticketingFeedURL: url.absoluteString,
+                           ticketingFeedJSON: data)
     }
 
     // The events mapped straight to ExtractedEvent for the native extractor. Every show is attributed to the
@@ -202,13 +217,18 @@ enum OvationTixCalendar {
     // dropped rather than allowed to pollute the pitchable identity. Only a production spanning MORE THAN ONE
     // day here keeps a seriesId, so those dates collapse into one run downstream; a single-day show keeps a
     // nil id so it still merges by the gap-and-title walk if a sibling appears.
-    static func extractedEvents(from events: [OTEvent], venueName: String,
+    //
+    // #1529: who PRESENTS and which ROOM are two different claims, and only the second one can be wrong in
+    // a way nothing downstream can catch. The presenter is whoever's calendar this is; the venue is nil
+    // unless somebody with the standing to say so has said so (Dan pointed at the venue's own feed, or
+    // named the room himself). A nil venue drops the row, which is the right answer over a guessed one.
+    static func extractedEvents(from events: [OTEvent], presenter: String, venue: String?,
                                 location: String?) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
-                           presenter: venueName,
-                           venue: venueName,
+                           presenter: presenter,
+                           venue: venue,
                            performanceDate: dayFormatter.string(from: e.date),
                            sourceUrl: nil,
                            location: location,
@@ -228,7 +248,7 @@ enum OvationTixCalendar {
     }
 
     // The real network fetch as a synthesized page (the html path, used by the router for a one-off lead).
-    static func liveFetch(url: URL, venueName: String, location: String? = nil, now: Date = Date(),
+    static func liveFetch(url: URL, venueName: String?, location: String? = nil, now: Date = Date(),
                           session: URLSession = .shared) async throws -> FetchedPage {
         try await fetch(url: url, venueName: venueName, location: location, now: now, get: liveGet(session))
     }

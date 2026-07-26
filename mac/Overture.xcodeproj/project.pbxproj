@@ -119,6 +119,7 @@
 		26460FED7F2043031C225282 /* WatchlistSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C353470B0C04EEC9D2212B /* WatchlistSeed.swift */; };
 		26772762E14CAAA2B0A2C528 /* DownbeatFeedFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620DF06AF9EDFC253359DFD4 /* DownbeatFeedFreshness.swift */; };
 		267FB2C06ADC7729ECF11DEB /* ConversationStateMenuConsolidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEAEB9856A59888A24A62836 /* ConversationStateMenuConsolidationTests.swift */; };
+		26973562291C922CE96165EC /* TicketingFeedRead.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6611ECB26297046DD46F53CC /* TicketingFeedRead.swift */; };
 		269EDF3697A2EE262C44884E /* ConflictScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B494FF28FAA214F72C6F75 /* ConflictScope.swift */; };
 		26C7A3EC195C48B08A70F1FE /* BounceDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41C68E20A6CC3E50634FB0E5 /* BounceDetectionTests.swift */; };
 		277F165CDA86EC541F68793F /* ReplyClassifyRunSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CB0523213D49948BAEA94FE /* ReplyClassifyRunSummaryTests.swift */; };
@@ -416,6 +417,7 @@
 		88F26269A5AE258D197CE4BF /* ArchiveViewSendStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E92364A32C69992E1C6982E /* ArchiveViewSendStateTests.swift */; };
 		8959A68A26FD5D8C49AACACE /* WatchlistEditURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F8CC2C00BB870172AFAAC3 /* WatchlistEditURLTests.swift */; };
 		89617C4C06DF3C1EBBD07310 /* SourceAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C47F6D032C7626D5EB10063 /* SourceAttention.swift */; };
+		89980BE53CE59A00D875BD7C /* TicketingFeedVenueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A66520FDC93087810E032A2 /* TicketingFeedVenueTests.swift */; };
 		899D605E7F5EE86355DC7D98 /* ProspectRowViewOrgDoNotContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78C097F77457AB8AE82FD73B /* ProspectRowViewOrgDoNotContactTests.swift */; };
 		8A22BF00A0004D69E99D1899 /* GmailConnectFailureAlertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8747E85852096E1E10DCA2 /* GmailConnectFailureAlertTests.swift */; };
 		8AEAE230F42A46977A6E57D0 /* HandoffPathGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */; };
@@ -1002,6 +1004,7 @@
 		65A943DF75101562C55B2040 /* OrgDoNotContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgDoNotContactTests.swift; sourceTree = "<group>"; };
 		65B129F207D7325A80D5360D /* DismissedProspects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissedProspects.swift; sourceTree = "<group>"; };
 		6608A0D729FFCB9FC56CE572 /* StageOnlyNavWiringGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageOnlyNavWiringGuardTests.swift; sourceTree = "<group>"; };
+		6611ECB26297046DD46F53CC /* TicketingFeedRead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketingFeedRead.swift; sourceTree = "<group>"; };
 		66E0002EA23829D5A2B07E14 /* GmailConnectProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailConnectProbeTests.swift; sourceTree = "<group>"; };
 		670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuth.swift; sourceTree = "<group>"; };
 		67A2558CD68C551E52DBB31E /* SourceGuardHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuardHelperTests.swift; sourceTree = "<group>"; };
@@ -1155,6 +1158,7 @@
 		99B8E902F435592B18905194 /* ViewCopyGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewCopyGuardTests.swift; sourceTree = "<group>"; };
 		9A1DE5364AA0ED4486D8CA23 /* ReconcileSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconcileSummaryTests.swift; sourceTree = "<group>"; };
 		9A6341DB6204D5AE36BB2880 /* ReplyWatchable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyWatchable.swift; sourceTree = "<group>"; };
+		9A66520FDC93087810E032A2 /* TicketingFeedVenueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketingFeedVenueTests.swift; sourceTree = "<group>"; };
 		9A6A8FCB7AD6337DA0165681 /* WatchedSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchedSource.swift; sourceTree = "<group>"; };
 		9AC295EEB93919BAE4F3339D /* ProspectRowViewLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectRowViewLayoutTests.swift; sourceTree = "<group>"; };
 		9AEB2402FA7C0F3A4A82D9F0 /* ProspectRowFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectRowFactory.swift; sourceTree = "<group>"; };
@@ -1884,6 +1888,7 @@
 				DF456BBB7078D51777CAF2AE /* SuppressionReportTests.swift */,
 				48F0E816E7C256AE68641FB8 /* SweepCoverageTests.swift */,
 				45627AD994F92590ACE3A053 /* TestsNeverTouchTheRealStoreTests.swift */,
+				9A66520FDC93087810E032A2 /* TicketingFeedVenueTests.swift */,
 				D4EDC2D420E6745C4CAC2AB5 /* TicketLinkTests.swift */,
 				F8E50E1CCE6D16F3DC96EB91 /* TicketTailorCalendarTests.swift */,
 				ED2657E18FAF1A3394F245CD /* TicketTailorEndToEndTests.swift */,
@@ -1984,6 +1989,7 @@
 				77EB99B0DABB30BA99AE149F /* SourceFetcher.swift */,
 				CEC9ECD003CC5290CC5CE4C2 /* SquarespaceCalendar.swift */,
 				A1423E953F1EF86A22CFAFFB /* SquarespaceExtractor.swift */,
+				6611ECB26297046DD46F53CC /* TicketingFeedRead.swift */,
 				FE3ACFFFA31FDCB29B005897 /* TicketTailor.swift */,
 				30020AB881BE973CC440C5D3 /* TicketTailorCalendar.swift */,
 				EAAEC789391135A974DC258F /* TicketTailorExtractor.swift */,
@@ -2615,6 +2621,7 @@
 				38896B67B21D10085DAD50E7 /* TicketTailor.swift in Sources */,
 				15D53FD0ACFF3225006BE187 /* TicketTailorCalendar.swift in Sources */,
 				5585F1BBFAF75DD064544F5A /* TicketTailorExtractor.swift in Sources */,
+				26973562291C922CE96165EC /* TicketingFeedRead.swift in Sources */,
 				76F9973271C5034D209D14BF /* ToolbarHoverLabel.swift in Sources */,
 				FF97838B7906765E19194239 /* ToolbarStatusStyle.swift in Sources */,
 				A94E926C164498E82612A6AF /* Typography.swift in Sources */,
@@ -3037,6 +3044,7 @@
 				A25ACA126F49F5FC6D4B345E /* TicketTailorExtractorTests.swift in Sources */,
 				BCD39644066A6FF9A5015CD3 /* TicketTailorReadPathTests.swift in Sources */,
 				8C8DAEA061F5480844E566CE /* TicketTailorTests.swift in Sources */,
+				89980BE53CE59A00D875BD7C /* TicketingFeedVenueTests.swift in Sources */,
 				A02D498BAE774D252215C746 /* TooSoonDismissReasonTests.swift in Sources */,
 				81795147A6E8C5854E031D72 /* ToolbarConsolidationGuardTests.swift in Sources */,
 				2A5CFE0787DB7369750F37A8 /* ToolbarPopoverGuardTests.swift in Sources */,

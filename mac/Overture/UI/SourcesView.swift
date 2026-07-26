@@ -65,6 +65,11 @@ struct SourcesView: View {
     @State private var editingLocationFor: String?
     @State private var locationDraft = ""
 
+    // #1529: the same pair for the VENUE NAME of a source whose shows come from a ticketing feed that
+    // names no room.
+    @State private var editingVenueNameFor: String?
+    @State private var venueNameDraft = ""
+
     // #1432: what Dan has typed into the search field. Only the string lives here; every decision it
     // drives (is this a search, does this name match, what the sheet says when nothing does) belongs to
     // SourceSearch, so none of it sits in a view the suite cannot run (#863).
@@ -460,6 +465,64 @@ struct SourcesView: View {
         editingLocationFor = nil
     }
 
+    // #1529: where Dan names the ROOM for a source whose shows come off a ticketing feed that publishes no
+    // venue anywhere. Until he does, every one of those shows arrives with no venue and stays out of the
+    // queue, which is why the unnamed state is the loud one. Same three states as the address control
+    // above (editing, named, unnamed); which rows show it at all is TicketingFeedRead.needsVenueName's
+    // call, so the view holds no rule of its own.
+    @ViewBuilder
+    private func venueNameControl(_ source: WatchedSource) -> some View {
+        if editingVenueNameFor == source.sourceId {
+            VStack(alignment: .leading, spacing: OVSpacing.xxs) {
+                TextField(VenueNameCopy.placeholder, text: $venueNameDraft)
+                    .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    .onSubmit { saveVenueName(source) }
+                HStack(spacing: OVSpacing.xs) {
+                    Spacer()
+                    OVCapsuleButton(label: VenueNameCopy.cancel, tint: OVColor.inkSoft) {
+                        editingVenueNameFor = nil
+                    }
+                    OVCapsuleButton(label: VenueNameCopy.save, tint: OVColor.forest) {
+                        saveVenueName(source)
+                    }
+                }
+            }
+        } else if let venue = source.venueName {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                Text(VenueNameCopy.named(venue)).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                OVCapsuleButton(label: VenueNameCopy.edit, tint: OVColor.inkSoft) {
+                    beginEditingVenueName(source)
+                }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                Text(VenueNameCopy.promptWhenUnset)
+                    .font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                OVCapsuleButton(label: VenueNameCopy.add, tint: OVColor.forest) {
+                    beginEditingVenueName(source)
+                }
+            }
+        }
+    }
+
+    private func beginEditingVenueName(_ source: WatchedSource) {
+        // Prefilled with the org name: on the row this exists for it is usually the right answer, and Dan
+        // is confirming rather than typing. It is still HIS answer, which is the whole point: the app may
+        // not assume it (the Bargemusic rule), and an ensemble that sells through somebody else's hall is
+        // exactly the row where he will type something different.
+        venueNameDraft = source.venueName ?? source.orgName
+        editingVenueNameFor = source.sourceId
+    }
+
+    private func saveVenueName(_ source: WatchedSource) {
+        WatchlistMutations.saveVenueName(source, to: venueNameDraft, context: context, feedback: feedback)
+        editingVenueNameFor = nil
+    }
+
     // #1209: the returning-client state line plus a menu to override the automatic Downbeat match. The
     // effective state and all wording live in ClientHorizon / ClientTagCopy, so this view holds no rule.
     // #1286: most of the ~37 non-Carnegie rows are neither a client nor tagged, so the override menu is
@@ -557,7 +620,12 @@ struct SourcesView: View {
             // as location-unknown rather than the local venue they are. This is where Dan supplies the
             // address once; it is then stamped into the synthesized listing so the geography gate places
             // the shows. Shown only on those rows, since every other source's shows carry their own place.
-            if isSingleVenueFeed(source) {
+            // #1529: and a source whose own page turned out to be a front for a ticketing feed needs BOTH
+            // answers: which room (nothing on that feed says, and the app may not assume) and where it is.
+            if TicketingFeedRead.readsATicketingFeed(source) {
+                venueNameControl(source)
+            }
+            if isSingleVenueFeed(source) || TicketingFeedRead.readsATicketingFeed(source) {
                 venueLocationControl(source, hasSurfacedShows: tally.found > 0)
             }
 
@@ -766,5 +834,28 @@ enum VenueLocationCopy {
 
     static func savedAck(org: String) -> String {
         "Saved \(org)'s address. Its shows are placed on the next read."
+    }
+}
+
+// #1529: naming the ROOM for a source whose shows come off a ticketing feed. Separate from the address
+// above and not a restatement of it: one says which room, the other says where that room is, and this
+// source publishes neither. The unnamed line states the fact and what it costs; the control beside it is
+// what says what to do, so the two never say the same thing twice (#843).
+enum VenueNameCopy {
+    static let placeholder = "The room its shows play in"
+
+    static let promptWhenUnset = "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
+
+    static let add = "Name the venue"
+    static let edit = "Edit"
+    static let save = "Save"
+    static let cancel = "Cancel"
+
+    // Fronted with a label because this row carries two Dan-supplied lines (the room and its address) and
+    // a bare name beside a bare address leaves him working out which is which.
+    static func named(_ venue: String) -> String { "Venue: \(venue)" }
+
+    static func savedAck(org: String) -> String {
+        "Saved \(org)'s venue. Its shows are read again on the next scout."
     }
 }
