@@ -199,9 +199,7 @@ enum OperaAmericaCalendar {
         return { page in
             let req = filteredRequest(host: host, from: now, to: to, page: page, pageSize: pageSize)
             let (data, response) = try await session.data(for: req)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                throw SourceFetchError.unreachable
-            }
+            try FeedResponse.check(response)
             return data
         }
     }

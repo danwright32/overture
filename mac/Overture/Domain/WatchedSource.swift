@@ -600,6 +600,7 @@ enum SourceFailure: Equatable, Sendable {
         case .fetch(.unreachable):           return "unreachable"
         case .fetch(.feedShapeChanged):      return "feed_shape_changed"
         case .fetch(.secureConnectionFailed): return "secure_connection_failed"
+        case .fetch(.addressUnusable):       return "address_unusable"
         case .verdict(let v):                return "verdict_\(v.rawValue)"
         case .inconsistentResult:            return "inconsistent"
         }
@@ -618,6 +619,8 @@ enum SourceFailure: Equatable, Sendable {
             self = .fetch(.feedShapeChanged)
         case "secure_connection_failed":
             self = .fetch(.secureConnectionFailed)
+        case "address_unusable":
+            self = .fetch(.addressUnusable)
         case "inconsistent":
             self = .inconsistentResult
         case "not_html":

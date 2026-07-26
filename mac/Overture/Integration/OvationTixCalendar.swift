@@ -188,7 +188,7 @@ enum OvationTixCalendar {
     // was cancelled". Shared by the html and native paths below.
     static func fetchEvents(url: URL, now: Date,
                             get: (URLRequest) async throws -> Data) async throws -> [OTEvent] {
-        guard let clientId = clientId(from: url) else { throw SourceFetchError.unreachable }
+        guard let clientId = clientId(from: url) else { throw SourceFetchError.addressUnusable }
         let data = try await get(feedRequest(clientId: clientId))
         return upcoming(try parseEvents(data), now: now)
     }
@@ -200,7 +200,7 @@ enum OvationTixCalendar {
     // have an AI read a document Overture wrote itself.
     static func fetch(url: URL, venueName: String?, location: String? = nil, now: Date,
                       get: (URLRequest) async throws -> Data) async throws -> FetchedPage {
-        guard let clientId = clientId(from: url) else { throw SourceFetchError.unreachable }
+        guard let clientId = clientId(from: url) else { throw SourceFetchError.addressUnusable }
         let data = try await get(feedRequest(clientId: clientId))
         let events = upcoming(try parseEvents(data), now: now)
         let html = PageNormalizer.normalize(listingHTML(events, venueName: venueName, location: location))
@@ -240,9 +240,7 @@ enum OvationTixCalendar {
     private static func liveGet(_ session: URLSession) -> (URLRequest) async throws -> Data {
         { req in
             let (data, response) = try await session.data(for: req)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                throw SourceFetchError.unreachable
-            }
+            try FeedResponse.check(response)
             return data
         }
     }

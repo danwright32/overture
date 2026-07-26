@@ -36,6 +36,11 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
     // client offers ALPN. Every real HTTP client offers ALPN, so every real client fails; Safari works only
     // because it never tries https on that site. #1544 is the separate question of reading it anyway.
     case secureConnectionFailed
+    // #1555: the stored address is not one this feed can be read from at all. OvationTix reads a venue's
+    // calendar by the client id embedded in its link, and with no id there nothing can be fetched. That is
+    // a WRONG ADDRESS, not a network problem, and it is the one failure where the "Fix the address" button
+    // already on the row is exactly the right next step.
+    case addressUnusable
 
     var errorDescription: String? {
         switch self {
@@ -44,6 +49,7 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
         case .redirectedAway(let h): return "That link redirects to a different site (\(h)). Check the address."
         case .unreachable:           return "Couldn't reach that page."
         case .secureConnectionFailed: return "That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
+        case .addressUnusable:       return "That address is missing the part Overture needs to read this venue's calendar."
         case .feedShapeChanged:      return "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
         }
     }

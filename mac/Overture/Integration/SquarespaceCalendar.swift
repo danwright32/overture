@@ -140,9 +140,7 @@ enum SquarespaceCalendar {
     // a drifted body throws, so an empty list can never be manufactured out of a failure.
     static func liveEvents(url: URL, session: URLSession = .shared) async throws -> [SQEvent] {
         let (data, response) = try await session.data(from: jsonURL(for: url))
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw SourceFetchError.unreachable
-        }
+        try FeedResponse.check(response)
         return try parseEvents(data)
     }
 
