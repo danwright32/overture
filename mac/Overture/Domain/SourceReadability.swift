@@ -46,36 +46,75 @@ enum SourceReadability {
         let venueRejected = max(0, unreadable - titleRejected)
         let named = namedShowsLine(labels: droppedShowLabels, droppedTotal: unreadable + structuralGaps)
 
+        let leadingLine: String?
+        switch leading(readable: readable, unreadable: unreadable, baseline: baseline) {
+        case .unreadPagesForfeit:
+            leadingLine = forfeitLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
+        case .shrunkenFeedHold:
+            leadingLine = "\(readable) shows listed, down from the usual \(baseline), "
+                        + "so Overture won't mark anything from this source as gone until the smaller calendar holds."
+        case .withinTolerance:
+            leadingLine = toleranceLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
+        case .nothingToSay:
+            leadingLine = nil
+        }
+
+        return sentences(leadingLine, structuralGapLine(total: total, structuralGaps: structuralGaps), named)
+    }
+
+    // #1498: WHICH leading line this run earns, decided once. Both the sentence Dan reads and whether it is
+    // drawn in gold are read off this value, so the colour is a property of the kind rather than a second
+    // rule kept mirroring the first by hand. Every comment in this file used to say the two "mirror `note`'s
+    // precedence exactly", which is a promise a person has to keep on every future edit; now a new kind
+    // cannot be added to the sentence and forgotten in the colour, because there is only one place to add it.
+    //
+    // Ordered by cause, not severity, and only ever one at a time: whichever is actually doing it. Events
+    // thrown away are missing from the feed count as well, so heavy unread pages ALSO shrink the feed; naming
+    // the shrink in that case would describe a symptom and hide the thing Dan can act on.
+    enum Leading {
         // #887: too much of what this run looked at came back unread. It cannot know what else it missed.
         // Saying only a bare count would hide the consequence, and the consequence is the part Dan can
         // actually act on: this source can no longer tell him a show has been cancelled, and it will not be
-        // able to until it can read its own pages again.
-        if FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) {
-            return sentences(forfeitLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected),
-                             structuralGapLine(total: total, structuralGaps: structuralGaps), named)
-        }
+        // able to until it can read its own pages again. The ONE kind that is his to do something about.
+        case unreadPagesForfeit
 
         // #897: the run read what it found, but found far less than this source normally lists. A half
         // loaded page looks exactly like a calendar that emptied out, so Overture believes neither until the
         // smaller size holds (FeedReconcile.updatedHealth re-baselines after selfHealThreshold reads, and
-        // this line clears itself the moment it does).
-        //
-        // Drawn from the SAME rule the reconcile just used, never a second copy of it, so the sheet can
-        // never tell Dan cancellation is working on a source where it is switched off. An empty feed is
-        // deliberately not this case: that is a broken fetch or a quiet off-season, which the source's own
-        // health and run note already speak for.
-        if FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline) {
-            return sentences("\(readable) shows listed, down from the usual \(baseline), "
-                             + "so Overture won't mark anything from this source as gone until the smaller calendar holds.",
-                             structuralGapLine(total: total, structuralGaps: structuralGaps), named)
-        }
+        // this line clears itself the moment it does). An empty feed is deliberately not this case: that is a
+        // broken fetch or a quiet off-season, which the source's own health and run note already speak for.
+        case shrunkenFeedHold
 
         // Inside the tolerance: worth stating, but it has cost the source nothing, and the copy must not
         // imply that it has. A "venue TBA" listing is a normal, permanent feature of a real calendar.
-        return sentences(unreadable > 0
-                         ? toleranceLine(total: total, venueRejected: venueRejected, titleRejected: titleRejected)
-                         : nil,
-                         structuralGapLine(total: total, structuralGaps: structuralGaps), named)
+        case withinTolerance
+
+        // Nothing about readability itself. A structural-gap line or a named-shows line may still speak.
+        case nothingToSay
+
+        // #1498: gold, or plain. Dan reported a source painted gold over a festival that had not announced a
+        // venue yet: nothing was forfeited, nothing was broken, and there was no action of his that would
+        // change it. Gold on a line he cannot act on is what teaches him to skim, and this is the one line in
+        // the sheet he must never skim past. So only the forfeit is his.
+        //
+        // This reverses a decision #1472 wrote down deliberately, that a tolerated unread page is "still a
+        // page Overture failed to open, which is Dan's to look at". Two things about that reasoning did not
+        // survive contact: the page in question had been read (the venue simply was not published), and even
+        // where it truly was not, the source stays inside its tolerance and keeps cancelling, so there is no
+        // consequence to act on. The count is still disclosed in words; it is the alarm that was wrong.
+        var isDansToAct: Bool { self == .unreadPagesForfeit }
+    }
+
+    static func leading(readable: Int, unreadable: Int, baseline: Int) -> Leading {
+        // Drawn from the SAME rules the reconcile just used, never a second copy of them, so the sheet can
+        // never tell Dan cancellation is working on a source where it is switched off.
+        if FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) {
+            return .unreadPagesForfeit
+        }
+        if FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline) {
+            return .shrunkenFeedHold
+        }
+        return unreadable > 0 ? .withinTolerance : .nothingToSay
     }
 
     // #1472: the rows this source published with no venue at all. A whole sentence of its own, appended to
@@ -143,26 +182,19 @@ enum SourceReadability {
         return said.isEmpty ? nil : said.joined(separator: " ")
     }
 
-    // #1428: true when the note above needs nothing FROM DAN, rather than reporting an actionable forfeit.
-    // The Sources sheet renders those lines in plain text, not the gold an actionable problem gets, and the
-    // attention badge does not count them (SourceAttention.needsALook). Mirrors `note`'s precedence exactly,
-    // so this flag can never disagree with the sentence it colors.
+    // #1428/#1498: true when the note above needs nothing FROM DAN. The Sources sheet renders those lines in
+    // plain text, not the gold an actionable problem gets. Read straight off the kind, so this can never
+    // disagree with the sentence it colours.
     //
-    // Two states qualify. The shrunken-feed hold (#1428) is a pause that clears itself after three stable
-    // reads. #1472's structural venue gaps are the other, and they are why this is no longer named for
-    // self-healing: OPERA America may never fill in the venue on its Glimmerglass rows, so that line may
-    // never clear, and it is still not work Dan owes anyone. What both share is that no action of his would
-    // change them.
+    // #1498 took `structuralGaps` out of the signature rather than leaving it unread: the answer no longer
+    // depends on it, and a parameter a function ignores is a lie about what decides the outcome.
     //
-    // A tolerated unread page (inside the 5%) deliberately does NOT qualify: it is still a page Overture
-    // failed to open, which is Dan's to look at, and that is unchanged from before #1472.
-    static func noteIsInformationalOnly(readable: Int, unreadable: Int,
-                                        structuralGaps: Int = 0, baseline: Int) -> Bool {
-        guard !FeedReconcile.unreadPagesForfeitAbsence(readable: readable, unreadable: unreadable) else {
-            return false
-        }
-        if FeedReconcile.shrunkenFeedForfeitsAbsence(readable: readable, baseline: baseline) { return true }
-        return structuralGaps > 0 && unreadable == 0
+    // The attention badge is a SEPARATE question and deliberately not this one. SourceAttention.needsALook
+    // asks FeedReconcile directly for the unread-pages forfeit, so a tolerated note has never counted toward
+    // it; measured on the live store the day #1498 was filed, the three sources in the badge were all real
+    // forfeits and the tolerated one (Jalopy, 1 of 28) was not among them.
+    static func noteIsInformationalOnly(readable: Int, unreadable: Int, baseline: Int) -> Bool {
+        !leading(readable: readable, unreadable: unreadable, baseline: baseline).isDansToAct
     }
 
     // Past the tolerance, the source has forfeited its right to mark anything gone. Complete sentences per

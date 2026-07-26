@@ -227,14 +227,14 @@ final class WatchedSource {
                                droppedShowLabels: lastDroppedShowLabels, baseline: baselineFeedCount)
     }
 
-    // #1428/#1472: whether `readabilityNote` reports something no action of Dan's would change (a smaller feed
-    // read cleanly, or rows the source itself published with no venue) rather than an actionable forfeit. The
-    // Sources sheet colors those lines as plain text, not the gold an actionable problem gets. Derived from the
-    // same rule as the sentence, so the flag and the words can never disagree.
+    // #1428/#1472/#1498: whether `readabilityNote` reports something no action of Dan's would change (a smaller
+    // feed read cleanly, rows the source itself published with no venue, or a stray unread page inside the
+    // tolerance) rather than an actionable forfeit. The Sources sheet colors those lines as plain text, not the
+    // gold an actionable problem gets. Read off the same decision as the sentence, so the flag and the words
+    // can never disagree.
     var readabilityNoteIsInformationalOnly: Bool {
         SourceReadability.noteIsInformationalOnly(readable: lastReadableCount,
                                                   unreadable: lastUnreadableCount,
-                                                  structuralGaps: lastStructuralGapCount,
                                                   baseline: baselineFeedCount)
     }
 

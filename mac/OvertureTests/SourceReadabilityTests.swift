@@ -285,8 +285,9 @@ struct SourceReadabilityPersistenceTests {
 
     // #1428: which note is the self-healing shrunken-feed hold. The Sources sheet renders that one as plain
     // text rather than the amber an actionable forfeit gets, because the hold needs no input and clears
-    // itself. It mirrors `note`'s own precedence (a pages-unreadable forfeit wins over the shrink), so the
-    // flag can never disagree with the sentence it colors.
+    // itself. #1498: the flag and the sentence are now read off ONE decision (SourceReadability.Leading)
+    // rather than two rules kept mirroring each other, so a pages-unreadable forfeit still wins over the
+    // shrink by construction rather than by a precedence copied into both.
 
     // A feed that came back smaller but read every show cleanly: this IS the self-healing hold.
     @Test func aShrunkenButCleanlyReadFeedIsTheSelfHealingHold() {
@@ -304,12 +305,38 @@ struct SourceReadabilityPersistenceTests {
         #expect(SourceReadability.noteIsInformationalOnly(readable: 20, unreadable: 10, baseline: 30) == false)
     }
 
-    // No note at all (healthy, at size) is not a self-healing hold; nor is a within-tolerance stray drop,
-    // which shows a sentence but carries no cancellation consequence.
-    @Test func noNoteAndAWithinToleranceDropAreNotTheSelfHealingHold() {
-        #expect(SourceReadability.noteIsInformationalOnly(readable: 30, unreadable: 0, baseline: 30) == false)
-        #expect(SourceReadability.note(readable: 39, unreadable: 1, baseline: 40) != nil)               // has a line
-        #expect(SourceReadability.noteIsInformationalOnly(readable: 39, unreadable: 1, baseline: 40) == false)
+    // #1498: a within-tolerance drop is stated, and it is NOT gold. It forfeits nothing, and the row Dan
+    // reported it on was a festival whose page had not announced a venue yet, which is not work he can do.
+    // Gold on a line he cannot act on teaches him to skim the one line here he must never skim.
+    //
+    // This reverses #1472's written decision that a tolerated unread page is still Dan's to look at. Left as
+    // its own test rather than folded into the one above, so a future reader meets the reversal on purpose
+    // instead of finding it as a changed number inside a test about something else.
+    @Test func aWithinToleranceDropIsStatedWithoutTheGoldSignal() {
+        #expect(SourceReadability.note(readable: 27, unreadable: 1, baseline: 28) != nil)               // has a line
+        #expect(SourceReadability.noteIsInformationalOnly(readable: 27, unreadable: 1, baseline: 28))
+    }
+
+    // ...and the wiring, which is a second claim (#887 cut its own wire and left 1,829 tests green). The view
+    // reads `source.readabilityNoteIsInformationalOnly`, not the pure function, so this drives a REAL source
+    // through a real read at Jalopy's exact live shape and asks the property the sheet asks.
+    @Test func aRealSourceAtJalopysShapeReportsItsToleratedDropAsPlain() throws {
+        let ctx = try context()
+        let s = source(ctx)
+        s.baselineFeedCount = 28
+        s.successfulCheckCount = WatchedSource.warmupRuns
+
+        var events = (1...27).map { event("Show \($0)", venue: "Jalopy Theatre") }
+        events.append(event("The 2026 Brooklyn Folk Festival", venue: nil))
+        ingest(events, into: ctx)
+
+        #expect(s.lastReadableCount == 27)
+        #expect(s.lastUnreadableCount == 1)
+        // The whole line, named show and all, which is the sentence Dan reported this issue against.
+        #expect(s.readabilityNote == "1 of 28 shows had no venue on their own detail page."
+                + " That was The 2026 Brooklyn Folk Festival on Oct 1.")
+        #expect(s.readabilityNoteIsInformationalOnly)
+        #expect(SourceAttention.needsALook(s) == false)      // and it was never in the badge
     }
 
     // MARK: #1471, WHICH show

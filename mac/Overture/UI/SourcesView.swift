@@ -636,10 +636,11 @@ struct SourcesView: View {
             // Gold, not rust: this is a source degrading, not a source that failed. The wording is decided
             // in SourceReadability, never here (#863/#885).
             if let readability = source.readabilityNote {
-                // #1428/#1472: a line that needs nothing from Dan (the self-healing shrunken-feed hold, or rows
-                // the source itself published with no venue) reads as plain text, not the gold signal colour.
-                // It is disclosed without being dressed as an alarm; an actionable forfeit (unreadable pages)
-                // keeps the gold.
+                // #1428/#1472/#1498: a line that needs nothing from Dan reads as plain text, not the gold
+                // signal colour. It is disclosed without being dressed as an alarm; only a source that has
+                // actually forfeited its cancelling keeps the gold. #1498 moved the last case over: a stray
+                // unread page inside the tolerance costs the source nothing, and the row that prompted it was
+                // a festival whose page had not announced a venue, which is not work Dan could do.
                 Text(readability).font(.system(size: 11))
                     .foregroundStyle(source.readabilityNoteIsInformationalOnly ? OVColor.ink : OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
