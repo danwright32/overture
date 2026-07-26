@@ -759,6 +759,49 @@ enum QueueModel {
         let rows: [Row]
     }
 
+    // #1513: both kinds of Reached-out row in ONE list ordered by when each next needs Dan, so the
+    // grouping below produces a single sequence of headings that all answer the same question. An
+    // inquiry with no reach-out date is left out rather than dated arbitrarily; it has nothing to be due
+    // about, and inventing a date would put a row under a heading that lies about it.
+    static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
+                                  inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+        let prospectEntries = prospects.map {
+            ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
+        }
+        // Each inquiry is paired with ITS OWN row rather than matched back by id: a row's id comes from
+        // the persistent model id, which is temporary and not yet distinct for an object that has not
+        // been saved, so looking the model up by it silently gave every row the first inquiry's date.
+        let inquiryEntries = inquiries.compactMap { inquiry -> ReachedOutEntry? in
+            guard let due = inquiry.nextReachOutDate,
+                  let row = inquiryRows([inquiry], now: now).first else { return nil }
+            return .inquiry(inquiry: inquiry, row: row, next: due)
+        }
+        // Stable: equal dates keep prospects before inquiries rather than reordering run to run.
+        return (prospectEntries + inquiryEntries).sorted { $0.next < $1.next }
+    }
+
+    // #1513: the numbers behind the "N contacts across M shows" note, counted from the SAME entries the
+    // list renders. Counting only prospects made the note smaller than the rows on screen the moment an
+    // inquiry joined them, and that note sits directly above those rows.
+    //
+    // An inquiry is one contact and one event, so it adds one to each: it can never create the fan-out
+    // (more contacts than shows) the note exists to explain, and it can never hide it either.
+    static func reachedOutNoteCounts(_ entries: [ReachedOutEntry]) -> (contacts: Int, shows: Int) {
+        var showKeys = Set<String>()
+        var contacts = 0
+        for entry in entries {
+            switch entry {
+            case .prospect(let prospect, _, _):
+                contacts += 1
+                showKeys.insert("p:\(prospect.naturalKey)")
+            case .inquiry(_, let row, _):
+                contacts += 1
+                showKeys.insert("i:\(row.id)")
+            }
+        }
+        return (contacts, showKeys.count)
+    }
+
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
         let cal = easternCalendar
         var order: [String] = []

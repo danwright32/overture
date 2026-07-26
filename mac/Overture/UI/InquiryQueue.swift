@@ -41,6 +41,32 @@ enum QueueRow: Identifiable, Equatable {
     }
 }
 
+// #1513: one row of the Reached-out stage, whichever kind it is. Both carry the SAME date meaning (when
+// this next needs Dan), which is what lets them share one grouping and therefore one heading. Before
+// this, an inquiry block sat above the "Grouped by when to reach out next" caption carrying its EVENT
+// date, so two identical-looking headings in one view answered different questions.
+enum ReachedOutEntry: Identifiable {
+    case prospect(prospect: Prospect, recipient: Recipient, next: Date)
+    // Carries the Inquiry itself, not just its display row: the view needs the model to act on it, and
+    // looking it back up by the row's id is unreliable (that id comes from the persistent model id,
+    // which is not yet distinct for an unsaved object).
+    case inquiry(inquiry: Inquiry, row: InquiryRow, next: Date)
+
+    var next: Date {
+        switch self {
+        case .prospect(_, _, let next): return next
+        case .inquiry(_, _, let next): return next
+        }
+    }
+
+    var id: String {
+        switch self {
+        case .prospect(_, let recipient, _): return "p:\(recipient.id)"
+        case .inquiry(_, let row, _): return "i:\(row.id)"
+        }
+    }
+}
+
 // A date section of the unified list, mirroring QueueModel.DateGroup but over QueueRow.
 struct RowDateGroup: Identifiable, Equatable {
     let id: String

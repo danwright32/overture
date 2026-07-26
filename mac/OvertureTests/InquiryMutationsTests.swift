@@ -100,8 +100,8 @@ struct InquiryMutationsTests {
     // different, unbuilt thing (#1497 covers the stalled follow-up), so the button must not imply it.
     @Test("the Reply action is offered only before the first reply has been sent")
     func replyActionOnlyBeforeFirstReply() {
-        #expect(InquiryMutations.showsReplyAction(sentAt: nil))
-        #expect(!InquiryMutations.showsReplyAction(sentAt: Date()))
+        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false))
+        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false))
     }
 
     private struct StubSender: MailSender {
@@ -119,7 +119,7 @@ struct InquiryMutationsTests {
         let inquiry = make(ctx)
         let now = Date(timeIntervalSince1970: 42)
 
-        let result = await InquiryMutations.sendFirstReply(
+        let result = await InquiryMutations.sendReply(
             inquiry, subject: "Re: your inquiry", body: "Hello Ada", now: now,
             sender: StubSender(receipt: SentReceipt(threadId: "th-1", messageID: "mid-1")),
             context: ctx, feedback: feedback)
@@ -140,7 +140,7 @@ struct InquiryMutationsTests {
             seed: { _ = self.make($0, name: "Seed Person") },
             body: { ctx in
                 let inquiry = self.make(ctx, name: "Ada Lovelace")
-                return await InquiryMutations.sendFirstReply(
+                return await InquiryMutations.sendReply(
                     inquiry, subject: "s", body: "b", now: Date(),
                     sender: StubSender(receipt: SentReceipt(threadId: "th-2", messageID: "mid-2")),
                     context: ctx, feedback: feedback)
@@ -159,7 +159,7 @@ struct InquiryMutationsTests {
         let feedback = ActionFeedback()
         let inquiry = make(ctx)
 
-        let result = await InquiryMutations.sendFirstReply(
+        let result = await InquiryMutations.sendReply(
             inquiry, subject: "s", body: "b", now: Date(),
             sender: FailingSender(), context: ctx, feedback: feedback)
 
