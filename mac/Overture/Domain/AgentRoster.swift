@@ -56,12 +56,15 @@ struct AgentInputs: Sendable {
 // is passed in, so this stays pure and testable.
 extension AgentInputs {
     static func from(prospects: [Prospect], inquiries: [Inquiry] = [], now: Date, today: String,
-                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
+                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool,
+                     // #1570: Dan's geography refusals, so a pill cannot count a show its own stage
+                     // list will not render. Defaulted, so a test that is not about geography is unchanged.
+                     geo: GeoRefusals = .none) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
-        let focusCounts = StageNavigation.counts(in: prospects, today: today, now: now)
+        let focusCounts = StageNavigation.counts(in: prospects, today: today, now: now, geo: geo)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {

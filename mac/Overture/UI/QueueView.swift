@@ -41,6 +41,12 @@ struct QueueView: View {
     @Query private var allowedSeedTownRows: [AllowedSeedTown]
     private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
 
+    // #1570: Dan's standing geography refusals as one value, handed to StageNavigation so the stage
+    // lists, the pill counts and the masthead all apply them. They used to reach only the masthead.
+    private var geo: GeoRefusals {
+        GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
+    }
+
     @State private var pendingConfirm: PendingSend?
     // #1500: a whole night waiting on its confirm (nil = none). Holds the keys the group was SHOWING when
     // Dan picked the reason, so what the confirm counts is what the action takes.
@@ -165,12 +171,13 @@ struct QueueView: View {
         // so the line can no longer state a smaller backlog than the pills it sits above. It used to run
         // through queueOrder's own 90-day window and untouched-and-gone rule, neither of which any stage
         // list applies, which read 452 against the pills' 589 on the live store.
+        //
+        // #1570: the town refusals ride INSIDE that predicate now. This used to run the result through
+        // QueueModel.filter a second time to apply them, which is precisely how the masthead and the
+        // stage list came to answer one question two ways; the stage list called no such filter.
         let inAStage = StageNavigation.queueKeys(in: prospects, reachedOutKeys: reachedOutKeys,
-                                                 today: today, now: now)
-        let visible = QueueModel.filter(items.filter { inAStage.contains($0.id) },
-                                        discipline: nil, highOnly: false, pendingBookingsOnly: false,
-                                        tooFarOnly: false, userExcludedTowns: userExcludedTowns,
-                                        allowedSeedTowns: allowedSeedTowns)
+                                                 today: today, now: now, geo: geo)
+        let visible = items.filter { inAStage.contains($0.id) }
         return RenderData(items: items, visible: visible, reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
                           pendingBookings: QueueModel.pendingBookingCount(items))
@@ -313,7 +320,8 @@ struct QueueView: View {
             // drops out); in leads mode, keep the frozen key set. The dispatch lives in
             // StageNavigation.focusedKeys so it is tested, not decided inline in this view.
             let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: keys,
-                                                         in: prospects, today: today, now: Date()))
+                                                         in: prospects, today: today, now: Date(),
+                                                         geo: geo))
             // #361: fold any departing (just-sent) rows back in so each plays its leaving delight in place.
             let rows = QueueModel.withDeparting(data.items.filter { wanted.contains($0.id) },
                                                 departing: departing)
@@ -501,7 +509,7 @@ struct QueueView: View {
     // stage that has some (never auto-jumping there). The pointer logic is the pure StageEmptyState so it
     // is tested; this view just renders it in the same dashed-border card the queue used before.
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
-        let counts = StageNavigation.counts(in: prospects, today: today, now: Date())
+        let counts = StageNavigation.counts(in: prospects, today: today, now: Date(), geo: geo)
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
@@ -568,7 +576,8 @@ struct QueueView: View {
         // set here are the initial/fallback values; focusedSection recomputes both live while in stage mode.
         focusedStage = status.focus
         focusedHeading = "\(status.name): \(status.detail)"
-        focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today, now: Date())
+        focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today,
+                                                  now: Date(), geo: geo)
     }
 
     // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
@@ -581,7 +590,8 @@ struct QueueView: View {
         // #1134: focus the stage that contains this lead so its row renders; fall back to Scout if the
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
         focusedStage = StageNavigation.stage(containing: key, in: prospects,
-                                             reachedOutKeys: reachedOutKeys) ?? StageNavigation.openingStage
+                                             reachedOutKeys: reachedOutKeys,
+                                             geo: geo) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
         highlightedKey = key
@@ -687,7 +697,8 @@ struct QueueView: View {
             prospects: prospects, inquiries: inquiries, now: now, today: today,
             gmailConnected: GmailAuthManager.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
-            replyRunAlive: ReplyClassifyService.isRunning(now: now)
+            replyRunAlive: ReplyClassifyService.isRunning(now: now),
+            geo: geo
         )
     }
 
