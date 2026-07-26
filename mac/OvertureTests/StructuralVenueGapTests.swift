@@ -59,7 +59,12 @@ struct StructuralVenueGapTests {
         #expect(SourceKind.operaAmericaFeed.venueGapsAreStructural)
         #expect(SourceKind.venueTixFeed.venueGapsAreStructural)
         #expect(SourceKind.ovationTixFeed.venueGapsAreStructural)
-        #expect(SourceKind.allCases.count == 5, "a new SourceKind must decide whether its venue gaps are structural")
+        // #1503: a Squarespace events collection is read from the publisher's own JSON and never hops to
+        // a per-event detail page, so there is no page that could have failed. Rainer Crosett's single
+        // upcoming show is exactly this: the feed names no venue for it, which is his data, not a bad
+        // read, and counting it as unreadable would push a healthy source toward #1498's false alarm.
+        #expect(SourceKind.squarespaceFeed.venueGapsAreStructural)
+        #expect(SourceKind.allCases.count == 6, "a new SourceKind must decide whether its venue gaps are structural")
     }
 
     // MARK: the tally

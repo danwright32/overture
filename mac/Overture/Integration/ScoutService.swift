@@ -537,6 +537,28 @@ enum ScoutService {
         return outcome
     }
 
+    // #1503: returns whether this source was just promoted to the native Squarespace feed. Only an .html
+    // source is a candidate (the others already ingest natively), and the cheap marker check runs first
+    // so no request is spent on a page that is obviously not Squarespace. A probe that fails for any
+    // reason simply leaves the source exactly as it was, on the path that already works.
+    private static func promoteToSquarespaceIfEventsCollection(_ source: WatchedSource,
+                                                        page: FetchedPage) async -> Bool {
+        // The cheap half first, so no request is spent on a page that is obviously not Squarespace.
+        guard source.kind == .html,
+              SquarespaceCalendar.looksLikeSquarespace(page.normalizedHTML),
+              let listings = source.listingsURL, let url = URL(string: listings) else { return false }
+        // A probe that fails for ANY reason yields nil, which shouldPromote reads as "leave it alone".
+        var jsonBody: Data?
+        if let (data, response) = try? await URLSession.shared.data(from: SquarespaceCalendar.jsonURL(for: url)),
+           let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+            jsonBody = data
+        }
+        guard SquarespaceCalendar.shouldPromote(kind: source.kind, pageHTML: page.normalizedHTML,
+                                                jsonBody: jsonBody) else { return false }
+        source.kind = .squarespaceFeed
+        return true
+    }
+
     // One html source: fetch it, hash it, and decide. Never throws. Returns the page ONLY when this run
     // is going to read it, so the caller cannot accidentally spend a token on a run Dan did not start.
     private static func check(_ source: WatchedSource,
@@ -563,6 +585,18 @@ enum ScoutService {
             fetched = .success(try await fetch(url, source.orgName, source.venueLocation))
         } catch {
             fetched = .failure(fetchError(from: error))
+        }
+
+        // #1503: a Squarespace EVENTS collection publishes its whole schedule as data, so it never needs
+        // a paid read. Detection has to be by CONTENT (Squarespace serves arbitrary domains, so nothing
+        // in the URL says so), and it rides the fetch that just happened rather than a launch migration,
+        // which would have meant a network probe per source at startup. Promoted here, the source ingests
+        // natively from the NEXT run on, and this run does not read it, so the last paid read is saved
+        // too. Covers the 7 already on the watchlist and every Squarespace org Dan adds later, through
+        // one mechanism instead of two.
+        if case .success(let page) = fetched,
+           await promoteToSquarespaceIfEventsCollection(source, page: page) {
+            return (result(.unchanged), nil)
         }
 
         switch SourceCheck.decide(source: source, result: fetched, depth: depth, now: now) {
