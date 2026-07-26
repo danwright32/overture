@@ -22,10 +22,9 @@ enum ExcludedTownRetirement {
     // approved and contacted carry live outreach and are left exactly as they are.
     static func shouldRetire(status: ReviewStatus, location: String?, discipline: Discipline,
                              userExcludedTowns: Set<String>, allowedSeedTowns: Set<String>) -> Bool {
-        switch status {
-        case .new, .queued, .drafted: break
-        case .approved, .contacted, .dismissed: return false
-        }
+        // #1570: the same line GeoRefusals draws before hiding anything, asked in one place so the two
+        // cannot drift about which shows are Overture's to act on.
+        guard GeoRefusals.isOvertureToCut(status) else { return false }
         // The excluded-town verdict is decided before discipline in EventPlace.resolve, so a town refusal
         // holds for every discipline; the discipline passed here does not affect this branch.
         return EventPlace.resolve(location: location, discipline: discipline,

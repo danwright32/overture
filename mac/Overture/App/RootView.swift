@@ -86,6 +86,15 @@ struct RootView: View {
     // #805: the live store, not a snapshot taken when the window opened. A source that degrades DURING a
     // scout must light the badge on that scout, not on the next launch.
     @Query private var watchedSources: [WatchedSource]
+    // #1570: Dan's town refusals and un-skipped seed towns, read here for the same reason QueueView
+    // reads them: the routing below decides whether a show opens the Queue, and it can only answer that
+    // correctly if it applies the same geography gate the Queue's own lists do.
+    @Query private var excludedTownRows: [ExcludedTown]
+    @Query private var allowedSeedTownRows: [AllowedSeedTown]
+    private var geo: GeoRefusals {
+        GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
+                    allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
+    }
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
     // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
@@ -160,7 +169,7 @@ struct RootView: View {
     private func handleSearchSelection(_ item: QueueItem) {
         let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
         if StageNavigation.opensInQueue(key: item.id, in: nonDismissedProspects,
-                                        reachedOutKeys: reachedOutKeys) {
+                                        reachedOutKeys: reachedOutKeys, geo: geo) {
             deepLinkedKey = item.id
         } else {
             archiveJumpKey = item.id

@@ -403,12 +403,13 @@ enum QueueModel {
     // stays usable as a first-class function value, e.g. `items.filter(QueueModel.isTooFar)`.
     static func isTooFar(_ item: QueueItem) -> Bool { isTooFar(item, userExcludedTowns: []) }
 
+    // #1570: through GeoRefusals, the same value StageNavigation's predicate applies, so the queue's
+    // own gate and this one cannot answer differently about a row.
     static func isTooFar(_ item: QueueItem, userExcludedTowns: Set<String>,
                          allowedSeedTowns: Set<String> = []) -> Bool {
-        let discipline = Discipline(rawValue: item.discipline) ?? .other
-        return EventPlace.resolve(location: item.location, discipline: discipline,
-                                  userExcludedTowns: userExcludedTowns,
-                                  allowedSeedTowns: allowedSeedTowns).verdict == .outOfRange
+        GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
+            .hidesFromQueue(location: item.location,
+                            discipline: Discipline(rawValue: item.discipline) ?? .other)
     }
 
     // #992. The chip's number says HOW MANY the gate hid; this says WHY this row in particular was, in one
