@@ -238,7 +238,7 @@ enum ScoutService {
                          launch: ([ScoutExtractQueueItem]) throws -> Void = {
                              _ = try ScoutExtractService.startExtract(items: $0, now: Date())
                          },
-                         budget: Int = SourceSchedule.defaultBudget,
+                         budget: Int = SourceSchedule.unlimitedBudget,
                          now: Date = Date(),
                          defaults: UserDefaults = .standard,
                          // #1034: the native "Scouting" phase heartbeat for the takeover modal. Called
@@ -251,7 +251,15 @@ enum ScoutService {
                          // When it flips true the sweep stops cleanly and, because the run was abandoned,
                          // NO detached read is launched. Default never-cancelled, so every existing
                          // caller sweeps and hands off exactly as before.
-                         isCancelled: () -> Bool = { false }) async throws -> Outcome {
+                         isCancelled: () -> Bool = { false },
+                         // #1498: asked ONCE, after the free sweep, when more pages need reading than
+                         // ScoutReadBudget's threshold. It is handed the true count and returns what Dan
+                         // chose. Defaulting to `.all` keeps every existing caller and every test reading
+                         // exactly what it read before, and means a caller that cannot ask (a headless or
+                         // scheduled path) never blocks on a question nobody is there to answer, which is
+                         // the failure that lost twenty shows in the detached runner.
+                         askReadBudget: (Int) async -> ScoutReadBudget.Choice = { _ in .all })
+                         async throws -> Outcome {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
@@ -302,13 +310,15 @@ enum ScoutService {
             // read, so a cancelled run leaves nothing behind for a detached process to finish.
             if isCancelled() { break }
             let (result, page) = await check(source, fetch: fetchFor(source), depth: depth, now: now)
-            // #1189: advance the manual scout's OWN fairness clock, but ONLY on a run Dan started and only
-            // for the sources it actually checked. The free daily watch-only run leaves it untouched (it
-            // advances only the shared lastCheckedAt, inside SourceCheck.decide), so a source this run
-            // deferred keeps its older lastManualReadAt and is genuinely first in line on the next press,
-            // regardless of the daily run re-stamping lastCheckedAt every morning. A source not reached
-            // this run (deferred, or past a cancel) is never advanced, which is exactly what keeps it next.
-            if depth == .readChanged { source.lastManualReadAt = now }
+            // #1189: advance the manual scout's OWN fairness clock, but ONLY on a run Dan started. The
+            // free daily watch-only run leaves it untouched (it advances only the shared lastCheckedAt,
+            // inside SourceCheck.decide), so unlike lastCheckedAt it is not flattened every morning and a
+            // source that did not get its turn is genuinely first in line on the next press.
+            //
+            // #1498: stamped where the source is actually READ, not here where it is merely fetched. The
+            // fetch is now uncapped, so stamping on a fetch would put an identical timestamp on all 62
+            // sources every press and flatten this clock into one big tie, which is precisely the coverage
+            // loss #1189 fixed for lastCheckedAt. Keyed to the read, it also finally matches its own name.
             if let page, let widgetHTML = page.ticketTailorWidgetHTML {
                 // #1295: the fetched page is a TicketTailor widget, so parse its embedded selectableDates
                 // JSON NATIVELY (free) here instead of handing the widget HTML to the paid detached read.
@@ -361,9 +371,30 @@ enum ScoutService {
         // are simply not handed off, so no detached process starts to be cancelled a moment later. The
         // sources keep their pending hash and unread flag, exactly as an un-launched run does, so the
         // next scout reads them.
+        // #1498: the one point in the run where money is about to be spent, and so the one place worth
+        // asking about. Everything above was free (fetch, hash, health), which is why the count handed to
+        // the question is the TRUE number of pages that need reading rather than a guess from last night's
+        // hashes. At or under the threshold nothing is asked and the run just goes, exactly as before.
+        //
+        // A run Dan did NOT start can never reach here: `check` only ever hands back a page to read at
+        // .readChanged, so toRead is empty on the free daily watch and the ask is unreachable from it.
+        // A scoped "read this one" run cannot reach it either, being a single source.
+        var declined: [WatchedSource] = []
+        if case .ask(let pending) = ScoutReadBudget.decide(pending: toRead.count), !isCancelled() {
+            let chosen = ScoutReadBudget.pagesToRead(toRead, choice: await askReadBudget(pending))
+            // Whatever he did not take keeps its unread flag and its older fairness clock, so it is not
+            // lost: it is reported as waiting below and sorts to the front of the next press. Backing out
+            // entirely is a real answer and lands here with everything declined.
+            declined = toRead.dropFirst(chosen.count).map(\.source)
+            toRead = chosen
+        }
+
         if !toRead.isEmpty && !isCancelled() {
             do {
                 try queueForReading(toRead, pin: pin, launch: launch)
+                // #1498: the fairness clock moves for the sources this run actually READ, and only those.
+                // See the fetch loop above for why it can no longer be stamped there.
+                for (source, _) in toRead { source.lastManualReadAt = now }
             } catch {
                 outcome.extractLaunchFailure = extractLaunchMessage(error)
             }
@@ -375,7 +406,13 @@ enum ScoutService {
         // unchecked for weeks. Surfacing the unchanged ones too made "N venues still waiting" a fixed
         // total-minus-budget that never converged however many times Dan pressed Run again
         // (SourceSchedule.waitingToRead).
-        for source in SourceSchedule.waitingToRead(deferred: plan.deferred) {
+        //
+        // #1498: `declined` joins them, and is the same state for the same reason. A page Dan chose not to
+        // read this press is waiting exactly as an over-budget one was, so it is reported through the one
+        // path that already exists rather than gaining a second word for the same fact. It is NOT filtered
+        // by waitingToRead: that filter exists to drop UNCHANGED sources a budget skipped, and every source
+        // here reached toRead, which means it has something to read by definition.
+        for source in SourceSchedule.waitingToRead(deferred: plan.deferred) + declined {
             outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
                                                 state: .deferred, listingsURL: source.listingsURL))
         }

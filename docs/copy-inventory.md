@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **822 sentences**, from 283 source files.
+Every sentence Overture can say to Dan: **829 sentences**, from 285 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1062,12 +1062,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Read 1 show before you cancelled."
     `Domain/CancelledReadDisposition.swift`
+"Read \(askAbove) now"
+    `Domain/ScoutReadBudget.swift`
 "Read \(n) shows before you cancelled."
     `Domain/CancelledReadDisposition.swift`
 "Read \(reads) times but never turned up a show. It may be pointed at the wrong page."
     `Domain/SourceYield.swift`
+"Read all \(pending)"
+    `Domain/ScoutReadBudget.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
+"Read none"
+    `Domain/ScoutReadBudget.swift`
 "Read the \(count) I fixed"
     `UI/ScoutSummaryView.swift`
 "Read the one I fixed"
@@ -1080,6 +1086,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "Reading calendars"
     `UI/RunProgressView.swift`
+"Reading them all takes a few minutes. A smaller batch leaves \(them) first in line next time."
+    `Domain/ScoutReadBudget.swift`
 "Reconcile complete: "
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."
@@ -1725,6 +1733,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(pending) calendars have new listings to read."
+    `Domain/ScoutReadBudget.swift`
 "\(previous). Nothing has been changed. If that drop is a surprise, quit Overture and "
     `App/StoreShrinkCheck.swift`
 "\(range) is no longer blocked"
@@ -1877,6 +1887,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "the metropolitan museum of art"
     `Domain/VenueDisplay.swift`
+"the other \(leftover)"
+    `Domain/ScoutReadBudget.swift`
+"the other one"
+    `Domain/ScoutReadBudget.swift`
 "the queue"
     `UI/ProspectMutations.swift`
 "to confirm"

@@ -51,6 +51,10 @@ struct RootView: View {
     // stopped via a cancel file the runner checks; and finishScout reads it to close quietly instead of
     // popping a summary for a run he chose to abandon.
     @State private var scoutCancelRequested = false
+    // #1498: the pending "read all of them, or 20 now?" question, non-nil only while the sweep is
+    // suspended waiting for Dan. The one-shot answer lives on ScoutReadAsk, so no route out of this alert
+    // can leave the run waiting forever or answer it twice.
+    @State private var scoutReadAsk: ScoutReadAsk? = nil
     // #1054: non-nil while the keep-or-discard prompt is up, holding the count of shows a cancelled read
     // wrote before it stopped. Its partial results file is NOT imported until Dan answers.
     @State private var cancelledScoutRead: Int?
@@ -648,6 +652,22 @@ struct RootView: View {
             } message: { count in
                 Text(CancelledReadCopy.message(readCount: count))
             }
+            // #1498: the run has fetched and hashed everything (all free) and is about to spend. Above
+            // ScoutReadBudget's threshold it stops here and asks, with the true count of pages that need
+            // reading. A plain alert, matching the reconnect prompt rather than the send sheet: this is a
+            // recoverable interruption to a run in flight, not a consequential commit.
+            //
+            // Every route out answers the sweep, including the dismissal, because doing nothing is the one
+            // outcome that leaves the modal spinning on a run that can never finish.
+            .alert(ScoutReadBudget.askTitle(pending: scoutReadAsk?.pending ?? 0),
+                   isPresented: scoutReadAskBinding, presenting: scoutReadAsk) { ask in
+                Button(ScoutReadBudget.readAllTitle(pending: ask.pending)) { answerReadAsk(ask, .all) }
+                    .keyboardShortcut(.defaultAction)
+                Button(ScoutReadBudget.readBatchTitle()) { answerReadAsk(ask, .firstBatch) }
+                Button(ScoutReadBudget.readNoneTitle, role: .cancel) { answerReadAsk(ask, .none) }
+            } message: { ask in
+                Text(ScoutReadBudget.askMessage(pending: ask.pending))
+            }
             // #1034/#1027: ONE presented sheet for a manual scout, from click to results. While the run
             // is in flight (scoutWarnings still nil) it is the RunProgressView takeover; the instant the
             // run finishes with something to say it becomes #1027's ScoutSummaryView, in the same sheet,
@@ -1152,6 +1172,27 @@ struct RootView: View {
         Binding(get: { cancelledScoutRead != nil }, set: { if !$0 { cancelledScoutRead = nil } })
     }
 
+    // #1498: same shape as the binding above, with one addition that matters. Any dismissal that is not a
+    // button (Escape, a click away, the window going down) lands in the setter with false, and it MUST
+    // still answer the sweep: a run left suspended on an unanswered continuation shows as the takeover
+    // modal spinning forever on a scout that can never finish. `replyIfUnanswered` is a no-op when a
+    // button already answered, so the ordinary path is unaffected.
+    private var scoutReadAskBinding: Binding<Bool> {
+        Binding(get: { scoutReadAsk != nil },
+                set: { presented in
+                    guard !presented else { return }
+                    scoutReadAsk?.replyIfUnanswered()
+                    scoutReadAsk = nil
+                })
+    }
+
+    // Answer, then clear. Clearing goes through the binding above, so the one-shot on ScoutReadAsk is what
+    // stops the dismissal that follows from resuming the continuation a second time.
+    private func answerReadAsk(_ ask: ScoutReadAsk, _ choice: ScoutReadBudget.Choice) {
+        ask.reply(choice)
+        scoutReadAsk = nil
+    }
+
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
     // on (#33). Safe to trigger unattended: the scout only reads/extracts, never sends.
     // Ingest classifications a prior reply-classify run wrote (suggests states, auto). No-op if the
@@ -1221,7 +1262,18 @@ struct RootView: View {
                         scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total)
                     },
                     // #1037: the native sweep stops between sources when Dan cancels, and launches no read.
-                    isCancelled: { scoutCancelRequested })
+                    isCancelled: { scoutCancelRequested },
+                    // #1498: the one question in the run, asked only when more pages need reading than
+                    // ScoutReadBudget's threshold. An abandoned run must not put a question on screen for
+                    // a run Dan already replaced, and it must not leave the sweep awaiting an answer that
+                    // can never come, so a superseded generation answers itself with `.none`: it reads
+                    // nothing, and every page stays flagged for the run that replaced it.
+                    askReadBudget: { pending in
+                        guard gen == scoutGeneration, !scoutCancelRequested else { return .none }
+                        return await withCheckedContinuation { continuation in
+                            scoutReadAsk = ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) }
+                        }
+                    })
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
                 scoutSummary = ScoutRunSummary.summary(for: outcome)   // #885
 
