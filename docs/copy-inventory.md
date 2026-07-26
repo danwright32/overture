@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **829 sentences**, from 285 source files.
+Every sentence Overture can say to Dan: **834 sentences**, from 286 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -257,6 +257,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
+"A later night of this run is out: you blocked \(day) (\(name))."
+    `Domain/BlockedCalendar.swift`
+"A later night of this run is out: you blocked \(day)."
+    `Domain/BlockedCalendar.swift`
+"A later night of this run is out: you're already shooting \(name) on \(day)."
+    `Domain/BlockedCalendar.swift`
+"A later night of this run is out: you're already shooting on \(day)."
+    `Domain/BlockedCalendar.swift`
 "A previous run is still reading pages. The pages that changed will be read on the next scout."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -991,6 +999,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Owes a reply"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`
+"Partly booked"
+    `Domain/ConflictScope.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"

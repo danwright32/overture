@@ -990,7 +990,14 @@ enum QueueModel {
     // would state something untrue. Items in a group share their performanceDate, so comparing each show's
     // blocked night against its own performanceDate is the same as comparing against the group's date.
     static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
-        items.contains { $0.hasUnclearedConflict && $0.conflictBlockedDate == $0.performanceDate }
+        items.contains { $0.hasUnclearedConflict && conflictScope($0) == .thisNight }
+    }
+
+    // #1501: which night of a flagged show's run the clash is on, derived from two fields the item already
+    // carries so the header, the pill and the sentence are three renderings of ONE decision rather than
+    // three rules that eventually contradict each other on screen (#863/#885).
+    static func conflictScope(_ item: QueueItem) -> ConflictScope? {
+        ConflictScope.of(blockedDate: item.conflictBlockedDate, performanceDate: item.performanceDate)
     }
 
     // #1219: self double-booking. The detection lives here (testable, the #863 lesson); the views just
