@@ -87,8 +87,8 @@ enum ScoutService {
             // queued) is shown alongside, not masked by, the failures, because both can happen in one run.
             let parts = [failureWarning, unqueuedWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
-            if silentlyEmptyFeed {
-                return ScoutWarningCopy.silentlyEmptyFeed
+            if !silentlyEmptySources.isEmpty {
+                return ScoutWarningCopy.silentlyEmptyFeed(orgNames: silentlyEmptySources.map(\.orgName))
             }
             return clientListWarning
         }
@@ -110,13 +110,16 @@ enum ScoutService {
                 : "\(failed.count) sources couldn't be checked.\n\n" + lines.joined(separator: "\n")
         }
 
-        // A source that has succeeded before (so it has a baseline to be judged against) and came back
-        // empty anyway. A brand-new source with no history has nothing unusual about an empty first
+        // The sources that have succeeded before (so they have a baseline to be judged against) and came
+        // back empty anyway. A brand-new source with no history has nothing unusual about an empty first
         // check, and a quiet off-season is not a defect.
         // #1027: internal, not private, so the structured ScoutWarnings can read the SAME rule the old
         // single-string warning used rather than restating it and eventually disagreeing with it.
-        var silentlyEmptyFeed: Bool {
-            sources.contains { $0.state == .ingested(found: 0) && $0.hadBaseline }
+        // #1531: the SOURCES, no longer a bare Bool. The rule is unchanged; what changed is that the
+        // answer keeps the one fact Dan can act on, which of them went quiet, instead of discarding it
+        // and leaving the warning to say "the calendar feed" about any of 62 sources.
+        var silentlyEmptySources: [SourceResult] {
+            sources.filter { $0.state == .ingested(found: 0) && $0.hadBaseline }
         }
 
         // Folds one source's ingest into the run's totals. The counts stay additive so the #797 identity
