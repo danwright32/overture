@@ -134,7 +134,18 @@ struct SourcesView: View {
                             // keeps every heading it still has rows for. That is the point of keeping the
                             // headings (Dan's call, 2026-07-23): a source that asked him to stop stays labelled
                             // as one in the results, rather than sitting namelessly beside one he watches.
-                            ForEach(SourceGrade.sections(visible), id: \.grade) { section($0.grade, $0.sources) }
+                            // #1541: the sources the toolbar badge is counting come FIRST, ahead of every
+                            // graded section. The badge used to send Dan into an alphabetical list of 66
+                            // with no route to the row it meant: the state it fires on grades as
+                            // `.watching`, so no existing heading grouped it, and it sat wherever its
+                            // initial put it. The split lifts those rows OUT of `visible`, so nothing is
+                            // listed twice, and it uses the same predicate the badge counts, so the two
+                            // can never disagree. Empty means absent, exactly like every other section.
+                            let attention = SourceAttention.split(visible)
+                            if !attention.needsALook.isEmpty {
+                                attentionSection(attention.needsALook)
+                            }
+                            ForEach(SourceGrade.sections(attention.rest), id: \.grade) { section($0.grade, $0.sources) }
                         }
                         .padding(OVSpacing.lg)
                     }
@@ -370,6 +381,33 @@ struct SourcesView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(OVSpacing.lg)
+    }
+
+    // #1541: the same section shape as a graded one, so a row reads identically wherever it sits and Dan
+    // is not learning a second layout. Rust, like Failing: these are the rows the toolbar sent him for,
+    // and every one of them has either broken outright or lost the ability to tell him a show was
+    // cancelled. Its wording lives on SourceAttention, never here (#863/#885).
+    private func attentionSection(_ rows: [WatchedSource]) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            HStack(spacing: OVSpacing.xxs) {
+                Image(systemName: SourceAttention.sectionSystemImage).font(.system(size: 11))
+                Text(SourceAttention.sectionLabel).font(.system(size: 12, weight: .semibold))
+                Text("(\(rows.count))").font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+            }
+            .foregroundStyle(OVColor.rust)
+
+            VStack(spacing: 0) {
+                ForEach(rows) { source in
+                    row(source)
+                    if source.persistentModelID != rows.last?.persistentModelID {
+                        Divider().overlay(OVColor.line)
+                    }
+                }
+            }
+            .background(OVColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
+        }
     }
 
     private func section(_ grade: SourceGrade, _ rows: [WatchedSource]) -> some View {
