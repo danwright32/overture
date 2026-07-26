@@ -7,16 +7,33 @@ import Foundation
 // deterministic hop, not a render. It is not host-routed like the OPERA/VenueTix feed adapters, because
 // tickettailor is embedded in arbitrary venue hosts; instead the fetched page is inspected for the embed.
 enum TicketTailor {
-    // The tickettailor events widget URL declared in a page's embed, or nil if the page carries no
-    // tickettailor box-office calendar embed. Only the `all-tickets-calendar` embed (the events widget)
-    // counts; a plain tickettailor link (a "powered by" credit, a promoter link) must not match.
+    // The tickettailor events widget URL to fetch for a page's embed, or nil if the page carries no
+    // tickettailor box office at all. A plain tickettailor link (a "powered by" credit, a promoter link)
+    // must not match.
+    //
+    // #1502: Ticket Tailor serves the SAME box office in two shapes, `all-tickets/<slug>` (list view) and
+    // `all-tickets-calendar/<slug>` (calendar view), and only the calendar one was recognised. A venue that
+    // embedded the list view (After Arts) therefore fell through to the unreadable verdict and was told its
+    // calendar was "drawn by JavaScript, so there is nothing to read", with Fix the address and Stop
+    // watching beside it: both wrong advice on a page whose address is right and whose events are readable.
     static func widgetURL(inPage html: String) -> URL? {
-        // The events widget URL, wherever it appears (a data-url attribute, an href). The
-        // `all-tickets-calendar/<slug>` path is what distinguishes the events embed from a plain
-        // tickettailor link, so it is required.
-        let pattern = #"https://www\.tickettailor\.com/all-tickets-calendar/[A-Za-z0-9_-]+/?"#
+        // The events widget URL, wherever it appears (a data-url attribute, an href). The `/<slug>` after
+        // the path segment is still REQUIRED and is the only thing separating a box office from a plain
+        // tickettailor link, which is why the segment was pinned in the first place. Widening it to an
+        // optional `-calendar` does not loosen that.
+        let pattern = #"https://www\.tickettailor\.com/all-tickets(?:-calendar)?/[A-Za-z0-9_-]+/?"#
         guard let range = html.range(of: pattern, options: .regularExpression) else { return nil }
-        return URL(string: String(html[range]))
+        let declared = String(html[range])
+
+        // Fetch the CALENDAR twin whichever shape the page declared, because only it carries the
+        // `selectableDates` JSON TicketTailorCalendar parses natively for free; the list view has no dates
+        // in it at all. Verified live 2026-07-25 with the header set below: both paths return 200 for the
+        // same slug, and only the calendar one carries that literal.
+        //
+        // A URL that already names the calendar view is left byte for byte as declared: the substring
+        // swapped here cannot occur in it, so The Cell keeps the exact URL it has been read from since
+        // #1127 rather than being rewritten on the way through a fix for a different venue.
+        return URL(string: declared.replacingOccurrences(of: "/all-tickets/", with: "/all-tickets-calendar/"))
     }
 
     // The widget answers a bare fetch with a Cloudflare 403; a full, realistic browser header set returns
