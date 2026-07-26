@@ -211,12 +211,16 @@ final class ReconcileScheduler {
     //
     // Judged against the tick's own `now`, like every other pass here, and it reports a save failure
     // instead of swallowing it (#499): a retirement that never reached disk would come straight back.
+    //
+    // `save` is injected purely so that failure path is reachable from a test. A SwiftData in-memory
+    // container cannot be made to fail its save on demand, so without this seam the do/catch would be
+    // asserted only by reading it, which is how #499's silent `try?` survived in the first place.
     @discardableResult
-    func retireShowsThatOpened(now: Date) -> (count: Int, saveFailed: Bool) {
+    func retireShowsThatOpened(now: Date, save: (() throws -> Void)? = nil) -> (count: Int, saveFailed: Bool) {
         let n = WentByRetirement.run(in: context, today: QueueModel.easternToday(now))
         guard n > 0 else { return (0, false) }
         do {
-            try context.save()
+            if let save { try save() } else { try context.save() }
             return (n, false)
         } catch {
             return (n, true)

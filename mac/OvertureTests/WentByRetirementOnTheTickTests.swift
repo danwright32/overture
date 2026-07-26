@@ -83,6 +83,25 @@ struct WentByRetirementOnTheTickTests {
         #expect(result.saveFailed == false)
     }
 
+    // The failure path that matters: the store refuses the write. #499 is exactly this bug one pass over,
+    // a save swallowed by a bare `try?`, so a retirement that never reached disk would report success,
+    // vanish the row from this session, and have it back at the next launch with no signal anywhere.
+    // Reported through the tick summary, which wakes Dan on saveFailed alone even with no new leads.
+    @Test func aRetirementThatCannotBeSavedIsReportedNotSwallowed() throws {
+        struct StoreRefused: Error {}
+        let ctx = try context()
+        let show = untriaged(ctx, "opened", date: openingNight)
+
+        let result = ReconcileScheduler(context: ctx)
+            .retireShowsThatOpened(now: after, save: { throw StoreRefused() })
+
+        #expect(result.count == 1, "it still says what it did, so the count is not lost with the save")
+        #expect(result.saveFailed, "a failed save must surface, never read as a clean tick")
+        #expect(ReconcileSummary(omniFocusChanged: 0, saveFailed: result.saveFailed).message
+                    .contains("couldn't save"), "and reach Dan in words, not just as a flag")
+        #expect(show.dismissReason == .wentBy, "the in-memory cut stands; only its persistence failed")
+    }
+
     // A guard and its wiring are two claims. The three above prove the pass works; this proves the tick
     // actually calls it, by running the real tick rather than the method it is supposed to reach.
     @Test func therealTickRetiresAnOpenedShow() async throws {
