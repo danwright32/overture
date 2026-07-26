@@ -69,8 +69,12 @@ struct QueueView: View {
     // (the #974 shape), so mid review the queue snaps away before he can act on a row. Pinned to the top
     // visible date group, not the individual show, because the groups are the stable landmarks a run
     // reshuffles shows within. Only the to-send date list carries the scroll target layout, so this stays
-    // nil (no restore, nothing to fight) while the reached-out list or a focused lead view is showing, and
-    // the intentional jumps clear it so a rebuilt restore can never override proxy.scrollTo (see below).
+    // nil (no restore, nothing to fight) while the reached-out list is showing.
+    // #1573: this binding OWNS the scroll position, so the intentional jumps drive it to the group they
+    // want rather than clearing it and asking proxy.scrollTo for a row id. Clearing and scrolling was the
+    // bug: the two mechanisms fought over the same ScrollView and the row jump was silently dropped, so a
+    // picked search result did nothing at all. Holds a namespaced group id (QueueModel.showGroupScrollID),
+    // never a bare date; see that helper for why the bare date is ambiguous.
     @State private var topGroup: String?
 
     // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
@@ -345,7 +349,13 @@ struct QueueView: View {
                     LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
                         inquirySection(inquiryRows)
-                        ForEach(QueueModel.groupByDate(rows)) { group in dateSection(group) }
+                        // #1573: the scroll-target identity is namespaced, not the bare date. The
+                        // inquiry groups above share this layout and were keyed on the same raw dates,
+                        // so a day holding both gave one id to two targets and a jump could land on the
+                        // wrong one.
+                        ForEach(QueueModel.groupByDate(rows)) { group in
+                            dateSection(group).id(QueueModel.showGroupScrollID(group.id))
+                        }
                     }
                     .scrollTargetLayout()
                 }
@@ -391,6 +401,8 @@ struct QueueView: View {
                         }
                     }
                 }
+                // #1573: distinct from the show group on the same date, which shares this layout.
+                .id(QueueModel.inquiryGroupScrollID(group.id))
             }
         }
     }
@@ -533,10 +545,12 @@ struct QueueView: View {
         focusedKeys = keys
         focusedStage = nil   // #1140: a named leads set, not a stage; keep it frozen, don't re-derive.
         deepLinkedKeys = nil
-        // #976: release any pinned date group so the persisted restore cannot fight this jump. The
-        // focused view is a flat list without scroll targets anyway, so there is nothing to hold here.
-        topGroup = nil
         let target = QueueModel.firstVisibleKey(keys, among: items)
+        // #1573: drive the scroll position to the group holding the lead instead of clearing it and
+        // asking for the row. The old comment here claimed this view was "a flat list without scroll
+        // targets", which stopped being true at #1220 when every stage started grouping by date: it is
+        // the same layout, with the same binding, and the same dropped jump as navigateToLead had.
+        topGroup = target.flatMap { QueueModel.scrollGroupID(containing: $0, among: items) }
         DispatchQueue.main.async {
             if let target { withAnimation { proxy.scrollTo(target, anchor: .top) } }
         }
@@ -572,11 +586,16 @@ struct QueueView: View {
         focusedHeading = nil
         highlightedKey = key
         deepLinkedKey = nil
-        // #976: release any pinned date group so a rebuild during this jump cannot restore the old top
-        // over the row we are scrolling to. The scrollTo below (dispatched after the stage change lays
-        // out) then owns the position, and normal scrolling re-populates topGroup afterward.
-        topGroup = nil
-        // Let the stage change lay out before scrolling to the row.
+        // #1573: land the jump in two stages, because the row alone cannot carry it. Stage one drives
+        // the scrollPosition binding, which owns this ScrollView and is the only thing that can resolve
+        // a target the lazy layout has not realized yet, to the group holding the row. Clearing it and
+        // asking proxy.scrollTo for the row (what this did before) fought that binding and was silently
+        // dropped, so the click read as dead. Computed over `items` rather than the stage's own rows: a
+        // group's id is its date either way, and the stage was just set to the one containing this key.
+        topGroup = QueueModel.scrollGroupID(containing: key, among: items)
+        // Stage two: once that group is on screen its rows are realized, so nudge the row itself into
+        // the middle. If this runs before the layout settles it simply no-ops, leaving Dan on the right
+        // date, which is the old behavior's best case rather than its actual one.
         DispatchQueue.main.async {
             withAnimation { proxy.scrollTo(key, anchor: .center) }
         }
