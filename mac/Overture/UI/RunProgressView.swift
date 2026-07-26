@@ -31,6 +31,14 @@ struct RunProgressView: View {
         var sourceName: String? = nil
         var completed: Int = 0
         var total: Int = 0
+        // #1530: when this snapshot last ADVANCED, i.e. when the run last landed an item. It rides on the
+        // snapshot rather than sitting in the caller as a second piece of state deliberately: the caller
+        // already replaces the whole snapshot on every heartbeat and already nils it when a run ends, so a
+        // stamp on it cannot be forgotten in one of those paths and go stale into the next run.
+        //
+        // Set by the in-process sweep (the one phase with no marker file to prove it is alive). The
+        // detached phases leave it nil and keep passing their marker check as `runAlive`.
+        var advancedAt: Date? = nil
     }
 
     let phase: Phase
@@ -76,13 +84,21 @@ struct RunProgressView: View {
     // Internal (not private) so RunProgressViewStateTests can call it with a fixed `now`, the same
     // reason LiveRunLabel.content(now:) is (see its #470 comment).
     @ViewBuilder func content(now: Date) -> some View {
-        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: runAlive?())
+        // Read ONCE per tick and pass it down: the same snapshot decides both what the run says and, for
+        // the sweep, whether it is still alive, so reading it twice could answer the two from different
+        // instants.
+        let snap = snapshot()
+        // #1530: a phase with a marker file uses it (`runAlive`); the in-process sweep has none, so its
+        // still-alive evidence is that the snapshot advanced recently. A phase with neither falls through
+        // to `false`, which leaves the wall-clock ceiling deciding exactly as it did before.
+        let alive = runAlive?() ?? RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now)
+        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: alive)
         VStack(spacing: OVSpacing.md) {
             switch state {
             case .stalled(let elapsed):
                 stalled(elapsed: elapsed)
             case .running, .idle:
-                running(now: now)
+                running(snap, now: now)
             }
             controls(state: state)
         }
@@ -90,8 +106,7 @@ struct RunProgressView: View {
         .padding(OVSpacing.lg)
     }
 
-    @ViewBuilder private func running(now: Date) -> some View {
-        let snap = snapshot()
+    @ViewBuilder private func running(_ snap: Snapshot, now: Date) -> some View {
         ProgressView().controlSize(.large).tint(OVColor.gold)
         Text(RunProgressCopy.title(phase))
             .font(OVType.dateHeading).foregroundStyle(OVColor.ink)

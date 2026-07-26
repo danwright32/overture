@@ -124,3 +124,48 @@ struct RunProgressLivenessTests {
                                      timeout: timeout, runAlive: false) == .running(elapsed: "0:45"))
     }
 }
+
+// #1530: the in-process sweep's heartbeat. It had none: the Scouting phase was judged on wall clock
+// alone against RunTimeouts.scout, and once #1518 sent a manual sweep through all 62 sources a healthy
+// run passed that ceiling every time and flipped to "looks stuck" moments before finishing. The sweep
+// does publish a per-source signal (ScoutService's onNativeProgress), so "did a source land recently"
+// is the real answer to whether it is working, and the ceiling stops being the only judge.
+@Suite("Scout sweep heartbeat (#1530)")
+struct ScoutSweepHeartbeatTests {
+    private let now = Date(timeIntervalSince1970: 10_000)
+
+    @Test func aSweepThatLandedASourceRecentlyIsAlive() {
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: now.addingTimeInterval(-10), now: now) == true)
+    }
+
+    // The whole point: 62 sources take longer than the 3-minute ceiling, and a sweep that is still
+    // landing them is working, not stuck.
+    @Test func aLongSweepStillLandingSourcesIsAliveWellPastTheOverallCeiling() {
+        #expect(RunTimeouts.scoutSourceStep < RunTimeouts.scout,
+                "a per-source window at or above the whole sweep's ceiling could never flag a wedged sweep")
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: now.addingTimeInterval(-30), now: now) == true)
+    }
+
+    // A sweep wedged on ONE source must still reach the stalled state: that is the case the ceiling was
+    // written for, and a heartbeat that never goes false would have traded one wrong answer for another.
+    @Test func aSweepWedgedOnOneSourceIsNotAlive() {
+        let stale = now.addingTimeInterval(-(RunTimeouts.scoutSourceStep + 1))
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: stale, now: now) == false)
+    }
+
+    @Test func theWindowBoundaryCountsAsWedged() {
+        let boundary = now.addingTimeInterval(-RunTimeouts.scoutSourceStep)
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: boundary, now: now) == false)
+    }
+
+    // Nothing has landed yet, so there is no heartbeat to trust and the wall-clock ceiling stays in
+    // charge: a sweep that cannot get past its first source in RunTimeouts.scout is genuinely wedged.
+    @Test func noSourceLandedYetLeavesTheCeilingInCharge() {
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: nil, now: now) == false)
+    }
+
+    // A backwards clock must never read as wedged (the elapsed label clamps skew for the same reason).
+    @Test func clockSkewReadsAsAlive() {
+        #expect(RunProgress.sweepIsAlive(lastProgressAt: now.addingTimeInterval(30), now: now) == true)
+    }
+}
