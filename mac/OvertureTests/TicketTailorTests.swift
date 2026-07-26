@@ -23,8 +23,67 @@ struct TicketTailorTests {
 
     @Test func returnsNilWhenThePageHasNoTicketTailorEmbed() {
         #expect(TicketTailor.widgetURL(inPage: "<div>no tickets here</div>") == nil)
-        // A tickettailor link that is not the all-tickets-calendar embed must not be mistaken for one.
+        // A tickettailor link that is not a box-office embed must not be mistaken for one.
         #expect(TicketTailor.widgetURL(inPage: #"<a href="https://www.tickettailor.com/?rf=wdg_1">x</a>"#) == nil)
+    }
+
+    // #1502: Ticket Tailor serves the SAME box office in two shapes, `all-tickets/<slug>` (list view) and
+    // `all-tickets-calendar/<slug>` (calendar view). Only the calendar shape was recognised, so a venue
+    // that embedded the list view fell through to the unreadable verdict and told Dan its calendar was
+    // "drawn by JavaScript, so there is nothing to read", with Fix the address and Stop watching beside it.
+    // Both are wrong advice on a page whose address is right and whose events are perfectly readable.
+    //
+    // Verified live 2026-07-25 with the header set in widgetRequest: both paths return 200 for the same
+    // slug, and only the calendar one carries the `selectableDates` JSON the native parser reads for free.
+    // So a list-view embed is normalised to its calendar twin rather than fetched as declared.
+    static let afterArtsPage = #"""
+    <div class="tt-widget" data-url="https://www.tickettailor.com/all-tickets/afterarts/?ref=website_widget&show_search_filter=true&show_date_filter=true&show_sort=true"></div>
+    <script src="https://cdn.tickettailor.com/js/widgets/min/widget.js"></script>
+    """#
+
+    @Test func aListViewEmbedIsFoundAndPointedAtItsCalendarTwin() {
+        let url = TicketTailor.widgetURL(inPage: Self.afterArtsPage)
+
+        #expect(url?.absoluteString == "https://www.tickettailor.com/all-tickets-calendar/afterarts/")
+    }
+
+    // A calendar embed keeps exactly the URL it declares. The working case is not rewritten on the way
+    // through: The Cell has been read from this URL since #1127 and must come out of here byte for byte.
+    @Test func aCalendarEmbedIsLeftExactlyAsItWasDeclared() {
+        #expect(TicketTailor.widgetURL(inPage: Self.embedPage)?.absoluteString
+                == "https://www.tickettailor.com/all-tickets-calendar/thecelltheatre/")
+    }
+
+    // The path segment is what tells a box office from a plain link, and widening it must not have widened
+    // it to anything with "tickets" in the URL. These are the shapes that must still not match.
+    @Test func aPlainTicketTailorLinkStillDoesNotCountAsABoxOffice() {
+        for link in ["https://www.tickettailor.com/",
+                     "https://www.tickettailor.com/pricing/",
+                     "https://www.tickettailor.com/all-tickets/",       // no slug: not a box office
+                     "https://www.tickettailor.com/box-office/afterarts/"] {
+            #expect(TicketTailor.widgetURL(inPage: #"<a href="\#(link)">Powered by Ticket Tailor</a>"#) == nil,
+                    "\(link) must not be read as a box-office embed")
+        }
+    }
+
+    // #1502, the point of the fix: what Dan is TOLD changes, even though today it produces no shows.
+    //
+    // After Arts' box office is genuinely empty right now (verified live 2026-07-25: the calendar view
+    // returns `var selectableDates = [];`). Before this, the hop never fired, so the shell read as
+    // unreadable and the row said the calendar was drawn by JavaScript, offering Fix the address and Stop
+    // watching. Now the hop fires, parses an honest zero, and the verdict is noDatedContent: nothing is
+    // broken, there is simply nothing on. That is the difference between sending Dan to fix a page that is
+    // fine and telling him the truth, and it means the source picks itself up the moment After Arts lists
+    // a show, with no attention from him.
+    @Test func anEmptyBoxOfficeReadsAsNothingOnRatherThanAsUnreadable() async throws {
+        let extractor = TicketTailorExtractor(fetchEvents: { [] },
+                                              venueName: "After Arts", location: "Brooklyn, NY")
+
+        let listing = try await extractor.extract()
+
+        #expect(listing.events.isEmpty)
+        #expect(listing.verdict == .noDatedContent)
+        #expect(listing.verdict != .unreadable)
     }
 
     // The widget is only reachable with a full browser header set; a bare fetch gets a Cloudflare 403.
