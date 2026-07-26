@@ -150,14 +150,20 @@ struct QueueView: View {
         let now = Date()
         let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
-        // The masthead's at-a-glance summary reflects the actionable to-send queue (not reached-out,
-        // windowed to the bookable date range with too-close events demoted). #1134 removed the filter
-        // chips, so this is the whole to-send queue, unfiltered but for Dan's standing town refusals.
-        let visible = QueueModel.toSendQueue(
-            QueueModel.filter(items, discipline: nil, highOnly: false, pendingBookingsOnly: false,
-                              tooFarOnly: false, userExcludedTowns: userExcludedTowns,
-                              allowedSeedTowns: allowedSeedTowns),
-            reachedOutKeys: reachedOutKeys, today: today)
+        // The masthead's at-a-glance summary is every show a stage will render, minus the ones already
+        // pitched. #1134 removed the filter chips, so this is the whole to-send queue, unfiltered but
+        // for Dan's standing town refusals.
+        //
+        // #1567: counted through StageNavigation, the same predicate as the pills directly beneath it,
+        // so the line can no longer state a smaller backlog than the pills it sits above. It used to run
+        // through queueOrder's own 90-day window and untouched-and-gone rule, neither of which any stage
+        // list applies, which read 452 against the pills' 589 on the live store.
+        let inAStage = StageNavigation.queueKeys(in: prospects, reachedOutKeys: reachedOutKeys,
+                                                 today: today, now: now)
+        let visible = QueueModel.filter(items.filter { inAStage.contains($0.id) },
+                                        discipline: nil, highOnly: false, pendingBookingsOnly: false,
+                                        tooFarOnly: false, userExcludedTowns: userExcludedTowns,
+                                        allowedSeedTowns: allowedSeedTowns)
         return RenderData(items: items, visible: visible, reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
                           pendingBookings: QueueModel.pendingBookingCount(items))

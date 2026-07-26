@@ -151,12 +151,16 @@ struct RootView: View {
 
     // Whether picking a global search result, or an OmniFocus follow-up tap (#628), should jump
     // into the Queue (#236's existing deep link mechanism) or open Archive with that row forced
-    // into view instead. A dismissed show, or one otherwise absent from both Queue pipelines
-    // (closed, past its window), never renders in the Queue, so it routes to Archive instead of
-    // silently landing nowhere.
+    // into view instead. A show no stage will render never appears in the Queue, so it routes to
+    // Archive instead of silently landing nowhere.
+    //
+    // #1567: asked through StageNavigation, the same predicate the focused list renders from, rather
+    // than a second date filter of its own. A show Dan can SEE in his Scout list is now always
+    // reachable from search, and a show no stage renders never opens the Queue on an empty list.
     private func handleSearchSelection(_ item: QueueItem) {
         let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
-        if QueueModel.isReachableForDeepLink(item, reachedOutKeys: reachedOutKeys, today: QueueModel.easternToday()) {
+        if StageNavigation.opensInQueue(key: item.id, in: nonDismissedProspects,
+                                        reachedOutKeys: reachedOutKeys) {
             deepLinkedKey = item.id
         } else {
             archiveJumpKey = item.id
