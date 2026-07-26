@@ -58,3 +58,24 @@ struct ShowSearchFieldNoResultsGuardTests {
         #expect(src.contains("ShowSearch.noMatchesNote"))
     }
 }
+
+// #1574. The behavior is tested in ShowSearchSelectionTests; what a test cannot reach is whether the
+// view's key handling actually goes through that type instead of doing its own index arithmetic in a
+// closure, which is how this logic became untestable in the first place.
+@Suite("ShowSearchField drives its results from the shared selection type")
+struct ShowSearchFieldKeyboardGuardTests {
+    private var src: String { SourceGuardHelper.source("Overture/UI/ShowSearchField.swift") }
+
+    @Test func arrowsAndReturnRouteThroughShowSearchSelection() {
+        #expect(!src.isEmpty)
+        #expect(src.contains("selection.moveDown(resultCount:"))
+        #expect(src.contains("selection.moveUp(resultCount:"))
+        #expect(src.contains("selection.commitIndex(resultCount:"),
+                "Return must ask the selection what to open, so the empty-highlight and stale-index cases stay in one tested place.")
+    }
+
+    @Test func arrowsAreIgnoredWhenThereIsNoResultListToMoveThrough() {
+        #expect(src.contains("guard showDropdown, !matches.isEmpty else { return .ignored }"),
+                "swallowing the arrow keys with no results on screen would break the text field's own caret movement.")
+    }
+}
