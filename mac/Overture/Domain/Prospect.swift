@@ -334,6 +334,12 @@ final class Prospect {
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
+    // #1523: the nights this run ACTUALLY plays, not merely its first and last. A weekly series spans
+    // months and is dark most of them, so the span alone made every blocked day inside it look like a
+    // clash. Stored rather than derived because the member rows are gone by the time anything asks.
+    // Empty on every row that predates this, which BlockedCalendar.conflict reads as "fall back to the
+    // span", so nothing already flagged is cleared on no evidence. Fills in on the next scout.
+    var runNights: [String] = []
 
     // #804: the model that wrote the draft currently on this show.
     //
@@ -437,7 +443,8 @@ final class Prospect {
         ingestedAt: Date = Date(),
         runEndDate: String? = nil,
         partOfRelatedRun: Bool = false,
-        runSourceURLs: [String] = []
+        runSourceURLs: [String] = [],
+        runNights: [String] = []
     ) {
         self.naturalKey = naturalKey
         self.groupName = groupName
@@ -465,6 +472,7 @@ final class Prospect {
         self.runEndDate = runEndDate
         self.partOfRelatedRun = partOfRelatedRun
         self.runSourceURLs = runSourceURLs
+        self.runNights = runNights
     }
 
     var status: ReviewStatus {

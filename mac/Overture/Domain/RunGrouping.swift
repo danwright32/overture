@@ -35,6 +35,9 @@ enum RunGrouping {
         // serve: it is a compactMap over the members' URLs, so it silently omits exactly the
         // URL-less members. This is what lets the caller account for the nights it collapsed.
         var memberIds: [Int] = []
+        // #1523: every member night's date, in order. `runEndDate` alone describes a SPAN, and a weekly
+        // series is dark for most of its own span, so the conflict check needs the nights themselves.
+        var memberDates: [String] = []
     }
 
     // #939: shared with EngagementLink, which uses the same "how many dark days still count as one
@@ -125,14 +128,15 @@ enum RunGrouping {
                     runEndDate: run.rows.count > 1 ? run.rows.last?.performanceDate : nil,
                     partOfRelatedRun: related,
                     runSourceURLs: run.rows.compactMap { $0.sourceListingURL },
-                    memberIds: run.rows.map(\.id)
+                    memberIds: run.rows.map(\.id),
+                    memberDates: run.rows.compactMap(\.performanceDate)
                 ))
             }
         }
         for r in undated {
             out.append(GroupedRun(row: r, runEndDate: nil, partOfRelatedRun: false,
                                   runSourceURLs: r.sourceListingURL.map { [$0] } ?? [],
-                                  memberIds: [r.id]))
+                                  memberIds: [r.id], memberDates: []))
         }
         return out
     }
