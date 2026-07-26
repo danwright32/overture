@@ -69,12 +69,27 @@ struct ScoutOneSourceTests {
         #expect(plan.fetch.isEmpty)
     }
 
-    // Absent scoping is the normal run, unchanged. This is the regression guard: the ordinary path must
-    // not have quietly become a scoped one.
+    // Absent scoping is the normal run. This is the regression guard: the ordinary path must not have
+    // quietly become a scoped one.
+    //
+    // #1498: the ordinary run now FETCHES everything rather than the first 20. Fetching is free, and
+    // rationing it starved sources that had something to say behind ones that did not; the guard against a
+    // surprise spend moved to the paid read, where the money is (ScoutReadBudget). So the assertion is that
+    // nothing is skipped, which is the opposite number from before and the whole point of the change.
     @Test func noScopingIsTheOrdinaryRun() {
         let all = (1...25).map { source("s\($0)") }
         let plan = SourceSchedule.plan(sources: all, depth: .readChanged, now: Date())
-        #expect(plan.fetch.count == 20)         // the ordinary budget still applies
+        #expect(plan.fetch.count == 25)
+        #expect(plan.deferred.isEmpty)
+    }
+
+    // ...and an explicit ceiling still defers, so that path is live code rather than something only the
+    // default used to reach. It is how a caller can still bound a run, and it is what the fairness order
+    // exists to make fair.
+    @Test func anExplicitCeilingStillDefersTheTail() {
+        let all = (1...25).map { source("s\($0)") }
+        let plan = SourceSchedule.plan(sources: all, depth: .readChanged, budget: 20, now: Date())
+        #expect(plan.fetch.count == 20)
         #expect(plan.deferred.count == 5)
     }
 

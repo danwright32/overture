@@ -76,22 +76,42 @@ struct ScoutFairnessClockTests {
         #expect(s.lastManualReadAt == now)
     }
 
-    // A deferred source is not advanced: only the ones actually checked this press are. So next press it is
-    // genuinely first in line. (Cap 1: one source is checked, the other is deferred untouched.)
-    @Test func aDeferredSourceKeepsItsManualClockAcrossAManualPress() async throws {
+    // #1498: the clock moves when a source is actually READ, not merely fetched, and this is the test that
+    // holds that line. A press now fetches EVERY source (fetching is free), so stamping on a fetch would
+    // put one identical timestamp on all 62 rows every press and flatten this clock into a single tie,
+    // which is precisely the coverage loss #1189 restored it to prevent. Both sources below are fetched;
+    // only the changed one is read, and only it moves to the back of the line.
+    @Test func onlyASourceThisPressActuallyReadAdvancesTheManualClock() async throws {
         let ctx = try context()
-        // Both unchanged (nothing to read), so ordering falls to the manual clock then sourceId. "aaa"
-        // sorts first and is the one that gets checked under a cap of 1.
-        let checked = source(ctx, "aaa", lastHash: "same")
-        let deferred = source(ctx, "zzz", lastHash: "same")
+        let wasRead = source(ctx, "aaa", lastHash: "old")        // differs from the fetched page: read
+        let onlyFetched = source(ctx, "zzz", lastHash: "new")    // matches it, and has nothing to say
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
         _ = try await ScoutService.runScout(
-            into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("same"),
-            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults())
+            into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
+            pin: noPin, launch: { _ in }, now: now, defaults: defaults())
 
-        #expect(checked.lastManualReadAt == now)     // it had its turn
-        #expect(deferred.lastManualReadAt == nil)    // it did not, so it stays first in line
+        #expect(onlyFetched.lastCheckedAt == now)        // it WAS fetched, and the shared clock says so
+        #expect(wasRead.lastManualReadAt == now)         // it had its turn
+        #expect(onlyFetched.lastManualReadAt == nil)     // it did not, so it stays first in line
+    }
+
+    // And a source Dan declined at the read prompt is in exactly the same position as one an explicit
+    // ceiling deferred: it keeps its older clock, so it sorts to the FRONT next press rather than being
+    // punished for having been offered and passed over.
+    @Test func aSourceDanDeclinedAtThePromptKeepsItsClock() async throws {
+        let ctx = try context()
+        let sources = (1...25).map { source(ctx, "s\(String(format: "%02d", $0))", lastHash: "old") }
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        _ = try await ScoutService.runScout(
+            into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
+            pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
+            askReadBudget: { _ in .firstBatch })
+
+        let stamped = sources.filter { $0.lastManualReadAt == now }
+        #expect(stamped.count == ScoutReadBudget.askAbove)          // the batch he took
+        #expect(sources.filter { $0.lastManualReadAt == nil }.count == 5)   // the five he did not
     }
 
     // Guarantee 2, the follow-path: a changed source stranded at the back of a daily-flattened watchlist

@@ -28,10 +28,16 @@ enum ScoutDepth: Equatable, Sendable {
 // and consumed inside one run on the main actor.
 @MainActor
 enum SourceSchedule {
-    // The cap on how many sources a run Dan STARTED will read. A backstop, not the cost model: the
-    // content hash is the cost model, and it means a steady-state run reads almost nothing. This exists
-    // for the day Dan adds fifty sources and immediately presses Scout.
-    static let defaultBudget = 20
+    // #1498: how many sources a run Dan started FETCHES. Unlimited, because fetching and hashing costs
+    // nothing and the content hash is the real cost model: only a page that actually changed is ever
+    // handed to the paid read. This used to be 20, a backstop against "the day Dan adds fifty sources and
+    // immediately presses Scout", but it guarded the wrong half: it rationed free work, left 42 of 62
+    // sources unfetched every press, and did not bound the spend at all. That guard now sits on the READ,
+    // where the money is (ScoutReadBudget), and asks Dan with the true count.
+    //
+    // Still a real parameter rather than a deleted one: a caller passing a number smaller than the
+    // watchlist gets the old deferred behaviour, so that path stays live and tested.
+    static let unlimitedBudget = Int.max
 
     struct Plan: Equatable {
         // Sources with their own native extractor (Carnegie's Algolia index). They never enter the
@@ -56,7 +62,7 @@ enum SourceSchedule {
     // source in one pass, so the ordinary read plan cannot know which source Dan cares about right now;
     // capping a run to 3 reads the 3 the fairness order happens to surface, not the 3 he meant.
     static func plan(sources: [WatchedSource], depth: ScoutDepth, only: Set<String>? = nil,
-                     budget: Int = defaultBudget, now: Date) -> Plan {
+                     budget: Int = unlimitedBudget, now: Date) -> Plan {
         // An org that asked Dan to stop, or a dead source he removed, is not checked at all. Not
         // fetched, not hashed, not read. Re-checking an org that asked to be left alone is the one
         // mistake in this feature that cannot be taken back.
@@ -99,7 +105,22 @@ enum SourceSchedule {
                             fetch: ordered.filter { only.contains($0.sourceId) },
                             deferred: [], depth: depth)
             }
+            // #1498: the budget no longer rations the FETCH by default. Fetching and hashing is free, and
+            // only a page whose content actually changed is ever handed to the paid read, so capping here
+            // rationed the free half of the run: a 62-source watchlist checked 20 a press and left 42
+            // untouched, which is how a source with something to say ended up three presses back through
+            // no fault of its own (#1498's Finding B looked stuck for exactly that reason). The question
+            // moved to the paid read, where the money is, and is asked with the true count once everything
+            // has been fetched (ScoutReadBudget). Nothing is deferred here any more, because nothing is
+            // skipped.
+            //
+            // `budget` stays in the signature and is honoured as a hard ceiling when a caller passes one
+            // BELOW the number of sources, so a test can still pin the deferred shape and a future runaway
+            // guard has a lever. The default is unlimited.
             let cap = max(0, budget)
+            guard cap < ordered.count else {
+                return Plan(native: native, fetch: ordered, deferred: [], depth: depth)
+            }
             return Plan(native: native,
                         fetch: Array(ordered.prefix(cap)),
                         deferred: Array(ordered.dropFirst(cap)),
