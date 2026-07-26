@@ -293,6 +293,67 @@ struct SourceCheckTests {
         #expect(decision == .unchanged)
     }
 
+    // #1498: the retry used to key off the unreadable COUNT, which is only one of the three things a
+    // readability line can be about. A source whose line is about rows the source itself published with no
+    // venue has an unreadable count of zero, so it never earned the retry, and a fix to the rule that wrote
+    // that line could not reach it until its page happened to change on its own. Measured on the live store:
+    // four sources were in exactly that state with no way out.
+    @Test func aSourceWhoseOnlyComplaintIsStructuralGapsIsAlsoReReadOnAManualScout() {
+        let s = source(hash: "abc")
+        s.lastReadableCount = 58
+        s.baselineFeedCount = 58
+        s.lastStructuralGapCount = 34          // OPERA America's blank-venue rows: unreadable is still 0
+        #expect(s.lastUnreadableCount == 0)    // so the old rule did not fire
+        #expect(s.readabilityNote != nil)      // yet Dan is being shown a line about it
+
+        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+                                   depth: .readChanged, now: now) == .read(page("abc")))
+    }
+
+    // The shrunken-feed hold is the other one, and it is the case that could get PERMANENTLY stuck: the hold
+    // only clears once the smaller size holds for selfHealThreshold reads, and a page that never changes
+    // again never earns a read, so it would hold forever. 54 Below is the live example (16 of a usual 28).
+    @Test func aSourceHoldingOnAShrunkenFeedIsAlsoReReadOnAManualScout() {
+        let s = source(hash: "abc")
+        s.lastReadableCount = 16
+        s.baselineFeedCount = 28
+        #expect(s.lastUnreadableCount == 0)
+        #expect(s.readabilityNote != nil)
+
+        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+                                   depth: .readChanged, now: now) == .read(page("abc")))
+    }
+
+    // The cost gate, which is the whole reason this is a note and not "re-read everything": a source with
+    // nothing to say is not re-read, however many times Dan presses Scout. Without this the widened rule
+    // would turn every press into a full paid sweep of all 62 sources.
+    @Test func aSourceWithNothingToSayIsStillNeverReReadWhenUnchanged() {
+        let s = source(hash: "abc")
+        s.lastReadableCount = 40
+        s.baselineFeedCount = 40
+        #expect(s.readabilityNote == nil)
+
+        #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+                                   depth: .readChanged, now: now) == .unchanged)
+    }
+
+    // And neither new case reaches the free daily run, which still never spends a token.
+    @Test func theWidenedRetryStillNeverFiresOnTheFreeDailyRun() {
+        let gaps = source(hash: "abc")
+        gaps.lastReadableCount = 58
+        gaps.baselineFeedCount = 58
+        gaps.lastStructuralGapCount = 34
+
+        let shrunken = source(hash: "abc")
+        shrunken.lastReadableCount = 16
+        shrunken.baselineFeedCount = 28
+
+        for s in [gaps, shrunken] {
+            #expect(SourceCheck.decide(source: s, result: .success(page("abc")),
+                                       depth: .watchOnly, now: now) == .unchanged)
+        }
+    }
+
     // A source with no hash yet has never been ingested, so it is changed by definition.
     @Test func aSourceNeverIngestedCountsAsChanged() {
         let s = source(hash: nil)

@@ -383,13 +383,27 @@ final class WatchedSource {
     }
 
     // #1217: did this source's LAST check end in anything other than a clean success? Either a hard fetch
-    // failure (health failing, or a recorded lastFailure), or a read that dropped one or more events (the
-    // degraded "won't mark anything gone until it can confirm a venue" state, lastUnreadableCount > 0). A
-    // clean unchanged success is NOT this. It is read off state Overture already stores, no new
-    // persistence, and it is what lets a MANUAL scout force a re-read of a still-broken source even when
-    // the page hash is unchanged, on the assumption Dan fixed the underlying cause between scouts.
+    // failure (health failing, or a recorded lastFailure), or a read that left something to say about what
+    // it could not turn into shows. A clean unchanged success is NOT this. It is read off state Overture
+    // already stores, no new persistence, and it is what lets a MANUAL scout force a re-read of a
+    // still-broken source even when the page hash is unchanged, on the assumption Dan fixed the underlying
+    // cause between scouts.
+    //
+    // #1498: the second clause used to be `lastUnreadableCount > 0`, which is only ONE of the three things
+    // that line can be about. It is now the line itself, so the two can never disagree about what counts as
+    // unclean, and the other two cases stop being stranded:
+    //
+    //   - Rows the SOURCE published with no venue (#1472) leave the unreadable count at zero, so a fix to
+    //     the rule that wrote that line could not reach the source until its page changed on its own.
+    //   - The shrunken-feed hold is worse, because it could get stuck FOREVER: the hold only clears once
+    //     the smaller size holds for selfHealThreshold reads, and a page that never changes again never
+    //     earns a read. Four live sources were in that state when this was measured.
+    //
+    // Deliberately keyed to a source having something TO SAY rather than to any weaker condition: the note
+    // is the cost gate. A source with nothing to say is never re-read, so a press does not become a full
+    // paid sweep of the whole watchlist.
     var lastCheckWasNotCleanSuccess: Bool {
-        health == .failing || lastFailure != nil || lastUnreadableCount > 0
+        health == .failing || lastFailure != nil || readabilityNote != nil
     }
 
     // The dispatch rule, stated as a property of the row so Phase 4's loop cannot be written any other
