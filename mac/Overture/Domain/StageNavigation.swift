@@ -66,6 +66,43 @@ enum StageNavigation {
         return naturalKeys(for: stage, in: prospects, today: today, now: now)
     }
 
+    // #1567: whether the Queue will show Dan this lead at all, which is what a global search pick and an
+    // OmniFocus follow-up tap need to know before choosing between the Queue and Archive.
+    //
+    // It is `stage(containing:)`, the SAME call the focused list renders from, because that is the only
+    // honest answer: a stage list IS the Queue's content. This used to be QueueModel.isReachableForDeepLink,
+    // a second filter (the 90-day window, the untouched-and-gone rule) that no stage list applies, so the
+    // two disagreed about 137 of 589 untriaged shows on the live store. Searching for a November show
+    // sitting in the Scout list opened ARCHIVE, which reads as "this show is gone" about a visible row.
+    //
+    // It closes a dead end in the other direction too: a contacted show with no send problem passed the
+    // old date filter and then no stage rendered it, so the Queue opened on nothing (#792's failure mode).
+    // A dismissed show, or a key no show answers to, is in no stage, so both still route to Archive.
+    static func opensInQueue(key: String, in prospects: [Prospect], reachedOutKeys: Set<String>,
+                             today: String = QueueModel.easternToday(), now: Date = Date()) -> Bool {
+        stage(containing: key, in: prospects, reachedOutKeys: reachedOutKeys,
+              today: today, now: now) != nil
+    }
+
+    // #1567: the shows behind the masthead's "N in the queue", which is every show a stage will render
+    // apart from the ones already pitched. Reached-out leads stay out, as they always have: that line is
+    // about work still to send, and Reached out has its own pill and its own per-recipient rows.
+    //
+    // Counted through the same `matches` predicate as the pill beneath it, so the masthead can no longer
+    // read lower than the pills it sits above (452 against 589 on the live store). One pass over the
+    // prospects, in the style of `counts` above, so a prospect's recipients fault at most once (#1121).
+    static func queueKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
+                          today: String = QueueModel.easternToday(),
+                          now: Date = Date()) -> Set<String> {
+        var result = Set<String>()
+        for p in prospects where !reachedOutKeys.contains(p.naturalKey) {
+            if countedFocuses.contains(where: { matches($0, p, today: today, now: now) }) {
+                result.insert(p.naturalKey)
+            }
+        }
+        return result
+    }
+
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [

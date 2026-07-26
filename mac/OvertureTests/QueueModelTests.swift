@@ -786,52 +786,11 @@ struct BookedQueueTests {
     }
 }
 
-// Whether clicking a global search result would land on a real, visible row in the Queue,
-// as opposed to a show the Queue hides (past its bookable window, or no longer active).
-@Suite("Queue reachability")
-struct QueueReachabilityTests {
-    @Test func aShowInTheReachedOutSetIsReachableEvenIfLongPast() {
-        let a = item(performanceDate: "2020-01-01", key: "a")
-        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: ["a"], today: "2026-07-07"))
-    }
-
-    @Test func aShowWithinTheBookableWindowIsReachable() {
-        let a = item(performanceDate: "2026-08-01", key: "a")
-        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: [], today: "2026-07-07"))
-    }
-
-    @Test func aPastShowNotInTheReachedOutSetIsUnreachable() {
-        let a = item(performanceDate: "2020-01-01", key: "a")
-        #expect(QueueModel.isReachableInQueue(a, reachedOutKeys: [], today: "2026-07-07") == false)
-    }
-}
-
-// #628: an OmniFocus follow-up tap (or a global search pick) must route to the Queue only when
-// the show would really render there, and to Archive otherwise, so it never silently lands nowhere.
-@Suite("Deep link reachability")
-struct DeepLinkReachabilityTests {
-    @Test func aDismissedShowIsNeverReachableEvenIfWithinTheBookableWindow() {
-        let a = item(performanceDate: "2026-08-01", status: .dismissed, key: "a")
-        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07") == false)
-    }
-
-    @Test func aClosedShowPastItsWindowWithALateReplyIsUnreachable() {
-        // Mirrors #628's exact scenario: a closed show, no longer in either Queue pipeline, that
-        // still generated a follow-up task because a different contact replied late.
-        let a = item(performanceDate: "2020-01-01", key: "a")
-        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07") == false)
-    }
-
-    @Test func aShowInTheReachedOutSetIsReachableEvenIfLongPast() {
-        let a = item(performanceDate: "2020-01-01", key: "a")
-        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: ["a"], today: "2026-07-07"))
-    }
-
-    @Test func aShowWithinTheBookableWindowIsReachable() {
-        let a = item(performanceDate: "2026-08-01", key: "a")
-        #expect(QueueModel.isReachableForDeepLink(a, reachedOutKeys: [], today: "2026-07-07"))
-    }
-}
+// #1567: the QueueReachabilityTests and DeepLinkReachabilityTests suites lived here. Both asked
+// QueueModel whether a show would render in the Queue, through a date window no stage list
+// applies, so they pinned an answer that disagreed with the rows Dan actually sees. Whether the
+// Queue shows a lead is StageNavigation.opensInQueue now, and QueueShowableIsOneFilterTests holds
+// it to the stage lists, carrying over every case these two covered.
 
 // #674: a multi-lead OmniFocus alert's initial auto-scroll must land on a lead that's actually
 // still in the focused list, not blindly the first key named in the (possibly stale) notification,
