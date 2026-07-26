@@ -36,7 +36,9 @@ struct ScoutWarnings: Equatable, Sendable {
     var extractRunFinishedEmpty: String?    // the reader ran and produced nothing (its own shape of failure)
     var failedSources: [ScoutService.SourceResult]   // the actionable per-source failures
     var unqueuedIds: [String]               // results returned under an id we never queued (#857)
-    var silentlyEmptyFeed: Bool             // an established feed came back empty (#27)
+    // The established calendars that came back empty (#27). #1531: the sources themselves, so the warning
+    // can name them; a Bool here is what forced the popup to say "the calendar feed" about any of 62.
+    var silentlyEmptySources: [ScoutService.SourceResult]
     var clientListWarning: String?          // the past-client export was missing/stale (#22/#23)
     // #1190: how many watched sources this run was over budget to check. A real state, not silence: they
     // were NOT checked, so the manual summary offers a one-click re-run rather than letting them go
@@ -55,6 +57,16 @@ struct ScoutWarnings: Equatable, Sendable {
             failures.append(r)
         }
 
+        // #1531: an established source can come back empty in EITHER half, so both are unioned, and a
+        // co-listed source seen empty in both is named once. Same shape as the failures above, for the
+        // same reason: a run must never list one source twice.
+        var seenEmpty = Set<String>()
+        var empties: [ScoutService.SourceResult] = []
+        for r in native.silentlyEmptySources + (extract?.silentlyEmptySources ?? [])
+        where seenEmpty.insert(r.sourceId).inserted {
+            empties.append(r)
+        }
+
         // The deferred sources are recorded on whichever outcome the schedule budgeted them out of (the
         // native half, today). Count across both halves so the source of the record cannot change the
         // number Dan sees.
@@ -67,7 +79,7 @@ struct ScoutWarnings: Equatable, Sendable {
             extractRunFinishedEmpty: finishedEmpty,
             failedSources: failures,
             unqueuedIds: native.unqueuedResultIds + (extract?.unqueuedResultIds ?? []),
-            silentlyEmptyFeed: native.silentlyEmptyFeed || (extract?.silentlyEmptyFeed ?? false),
+            silentlyEmptySources: empties,
             clientListWarning: native.clientListWarning ?? extract?.clientListWarning,
             deferredCount: deferred)
     }
@@ -87,7 +99,7 @@ struct ScoutWarnings: Equatable, Sendable {
         case readerFinishedEmpty(String)
         case failures([ScoutService.SourceResult])
         case unqueued([String])
-        case silentlyEmptyFeed
+        case silentlyEmptyFeed([ScoutService.SourceResult])
         case pastClientList(String)
     }
 
@@ -110,8 +122,12 @@ struct ScoutWarnings: Equatable, Sendable {
                 : "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
         case .unqueued:
             return "Some results came back under an unknown source and were ignored this run."
-        case .silentlyEmptyFeed:
-            return "An established calendar came back empty this run."
+        case .silentlyEmptyFeed(let empties):
+            // #1531: named here too. "An established calendar came back empty" sent Dan to the Sources
+            // sheet to work out which one, on the one line meant to save him opening anything.
+            return empties.count == 1
+                ? "\(empties[0].orgName) has listed shows before and came back empty this run."
+                : "\(empties.count) established calendars came back empty this run."
         case .pastClientList(let message):
             return message
         }
@@ -124,7 +140,7 @@ struct ScoutWarnings: Equatable, Sendable {
         if let extractRunFinishedEmpty { out.append(.readerFinishedEmpty(extractRunFinishedEmpty)) }
         if !failedSources.isEmpty { out.append(.failures(failedSources)) }
         if !unqueuedIds.isEmpty { out.append(.unqueued(unqueuedIds)) }
-        if silentlyEmptyFeed { out.append(.silentlyEmptyFeed) }
+        if !silentlyEmptySources.isEmpty { out.append(.silentlyEmptyFeed(silentlyEmptySources)) }
         if let clientListWarning { out.append(.pastClientList(clientListWarning)) }
         return out
     }

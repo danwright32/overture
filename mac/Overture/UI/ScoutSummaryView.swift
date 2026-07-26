@@ -139,8 +139,8 @@ struct ScoutSummaryView: View {
             if !shown.isEmpty { failuresBlock(shown) }
         case .unqueued(let ids):
             infoBlock(ScoutWarningCopy.unqueued(ids: ids))
-        case .silentlyEmptyFeed:
-            infoBlock(ScoutWarningCopy.silentlyEmptyFeed)
+        case .silentlyEmptyFeed(let empties):
+            infoBlock(ScoutWarningCopy.silentlyEmptyFeed(orgNames: empties.map(\.orgName)))
         case .pastClientList(let message):
             infoBlock(message)
         }

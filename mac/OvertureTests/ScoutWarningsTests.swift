@@ -109,6 +109,49 @@ struct ScoutWarningsTests {
         #expect(w.isEmpty)
     }
 
+    // MARK: - An established calendar that came back empty (#1531)
+
+    private func emptyWithBaseline(_ id: String, _ org: String) -> ScoutService.SourceResult {
+        ScoutService.SourceResult(sourceId: id, orgName: org, state: .ingested(found: 0), hadBaseline: true)
+    }
+
+    // #1531: the run KNOWS which calendar went quiet, and that is the only actionable fact in the warning.
+    // The old model collapsed it to a Bool, so the popup could only say "the calendar feed" and Dan had no
+    // way to tell which of 62 sources it meant.
+    @Test func theEmptyFeedWarningCarriesTheSourceThatWentQuiet() {
+        var native = outcome()
+        native.sources = [emptyWithBaseline("jalopy", "Jalopy Theatre")]
+        let w = ScoutWarnings.from(native: native, extract: nil, finishedEmpty: nil)
+
+        #expect(w.silentlyEmptySources.map(\.orgName) == ["Jalopy Theatre"])
+        #expect(w.sections == [.silentlyEmptyFeed(w.silentlyEmptySources)])
+    }
+
+    // A source with no history has nothing unusual about an empty check, and a quiet off-season is not a
+    // defect: that rule is unchanged, and is what keeps this warning rare enough to be worth reading.
+    @Test func aSourceWithNoBaselineNeverWarns() {
+        var native = outcome()
+        native.sources = [ScoutService.SourceResult(sourceId: "new", orgName: "New Venue",
+                                                    state: .ingested(found: 0), hadBaseline: false)]
+        let w = ScoutWarnings.from(native: native, extract: nil, finishedEmpty: nil)
+        #expect(w.silentlyEmptySources.isEmpty)
+        #expect(w.isEmpty)
+    }
+
+    // Both halves of a run can land an established source, so both must be able to report one empty, and a
+    // co-listed source seen empty in both is named once (the same rule the failures already follow).
+    @Test func emptySourcesFromBothHalvesAreUnionedAndDeduped() {
+        var native = outcome()
+        native.sources = [emptyWithBaseline("jalopy", "Jalopy Theatre"),
+                          emptyWithBaseline("roulette", "Roulette")]
+        var extract = outcome()
+        extract.sources = [emptyWithBaseline("roulette", "Roulette"),
+                           emptyWithBaseline("kitchen", "The Kitchen")]
+
+        let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
+        #expect(w.silentlyEmptySources.map(\.sourceId) == ["jalopy", "roulette", "kitchen"])
+    }
+
     // MARK: - The quiet line an unattended scheduled run leaves instead of the popup
 
     @Test func aCleanRunLeavesNoQuietLine() {
@@ -136,6 +179,60 @@ struct ScoutWarningsTests {
                        failed("b", "B", .fetch(.http(404)))]
         #expect(ScoutWarnings.from(native: outcome(), extract: two, finishedEmpty: nil).quietLine
                 == "2 sources couldn't be checked. Open Sources to fix or confirm them.")
+    }
+
+    // #1531: even the one quiet line a scheduled run leaves names the calendar. "An established calendar
+    // came back empty" sent Dan to the Sources sheet to work out which one.
+    @Test func theEmptyFeedQuietLineNamesTheCalendar() {
+        var one = outcome()
+        one.sources = [emptyWithBaseline("jalopy", "Jalopy Theatre")]
+        let line = ScoutWarnings.from(native: one, extract: nil, finishedEmpty: nil).quietLine
+        #expect(line?.contains("Jalopy Theatre") == true)
+
+        var three = outcome()
+        three.sources = [emptyWithBaseline("jalopy", "Jalopy Theatre"),
+                         emptyWithBaseline("roulette", "Roulette"),
+                         emptyWithBaseline("kitchen", "The Kitchen")]
+        #expect(ScoutWarnings.from(native: three, extract: nil, finishedEmpty: nil).quietLine
+                == "3 established calendars came back empty this run.")
+    }
+}
+
+// #1531: the sentence the popup shows when a calendar that has listed shows before comes back with
+// nothing. It used to name no source at all ("the scout reached the calendar feed") and to explain the
+// surprise with a 90-day window, which was Carnegie's Algolia index horizon from when Carnegie was the
+// only established feed. Shown for any of 62 sources it was simply a number about none of them, and it
+// was not the app's own horizon either (a month plus three).
+@MainActor
+@Suite("Empty-feed warning copy (#1531)")
+struct SilentlyEmptyFeedCopyTests {
+    @Test func itNamesTheOneCalendarThatWentQuiet() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(orgNames: ["Jalopy Theatre"])
+        #expect(line == "Jalopy Theatre has listed shows before and came back with nothing this run. Its page format may have changed.")
+    }
+
+    // The claim it can no longer make: a window nobody measured for this source.
+    @Test func itClaimsNoWindowOfItsOwn() {
+        for names in [["Jalopy Theatre"], ["Jalopy Theatre", "Roulette"]] {
+            let line = ScoutWarningCopy.silentlyEmptyFeed(orgNames: names)
+            #expect(!line.contains("90"))
+            #expect(!line.lowercased().contains("day"))
+        }
+    }
+
+    // Several established calendars can go quiet in one run, and the sentence names every one of them
+    // rather than reading as though there were only ever a single feed.
+    @Test func itNamesEveryCalendarWhenSeveralGoQuiet() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(orgNames: ["Jalopy Theatre", "Roulette", "The Kitchen"])
+        #expect(line == "3 sources have listed shows before and came back with nothing this run: Jalopy Theatre, Roulette, The Kitchen. Their page formats may have changed.")
+    }
+
+    // The old single-string warning reads the SAME copy, so the two surfaces cannot drift apart.
+    @Test func theSingleStringWarningNamesTheCalendarToo() {
+        var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        outcome.sources = [ScoutService.SourceResult(sourceId: "jalopy", orgName: "Jalopy Theatre",
+                                                    state: .ingested(found: 0), hadBaseline: true)]
+        #expect(outcome.warning == ScoutWarningCopy.silentlyEmptyFeed(orgNames: ["Jalopy Theatre"]))
     }
 }
 

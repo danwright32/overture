@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **834 sentences**, from 286 source files.
+Every sentence Overture can say to Dan: **836 sentences**, from 286 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -335,8 +335,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Always skipped"
     `UI/ExcludedTownsView.swift`
-"An established calendar came back empty this run."
-    `Domain/ScoutWarnings.swift`
 "An organization that asked"
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
@@ -1426,8 +1424,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarnings.swift`
 "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
     `Domain/ScoutWarningCopy.swift`
-"The scout reached the calendar feed but found no upcoming events. That's unusual for a 90-day window. The feed's data format may have changed."
-    `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
 "The scout's rules weren't sure how to classify this one. Set the genre and production type, then confirm."
@@ -1673,6 +1669,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
+"\(empties.count) established calendars came back empty this run."
+    `Domain/ScoutWarnings.swift`
+"\(empties[0].orgName) has listed shows before and came back empty this run."
+    `Domain/ScoutWarnings.swift`
 "\(error.localizedDescription). Your data is safe and unchanged at "
     `App/StoreRelocation.swift`
 "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
@@ -1693,6 +1693,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
+"\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
+    `Domain/ScoutWarningCopy.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
@@ -1735,6 +1737,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."
     `Domain/WatchlistEditing.swift`
+"\(orgNames.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
+    `Domain/ScoutWarningCopy.swift`
 "\(outcome.skippedEdited) kept your edits"
     `Domain/PrepRunSummary.swift`
 "\(outcome.unmatchedKeys.count) didn't match"

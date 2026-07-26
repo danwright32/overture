@@ -11,7 +11,7 @@ import Foundation
 struct ScoutWarningsPresentationTests {
     private func warnings(saveFailed: Bool = false) -> ScoutWarnings {
         ScoutWarnings(saveFailed: saveFailed, extractLaunchFailure: nil, extractRunFinishedEmpty: nil,
-                      failedSources: [], unqueuedIds: [], silentlyEmptyFeed: false, clientListWarning: nil)
+                      failedSources: [], unqueuedIds: [], silentlyEmptySources: [], clientListWarning: nil)
     }
 
     @Test func aCleanRunShowsNothing() {
