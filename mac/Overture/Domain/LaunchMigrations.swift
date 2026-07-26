@@ -44,6 +44,14 @@ enum LaunchMigrations {
         // and defers any collision where two rows both carry outreach history. Can delete a row, so the
         // launch backup (#601/#602) taken just before this matters here most.
         NaturalKeyVenueMigration.run(in: context)
+        // #1559: collapse the duplicate rows a drifting opening night left behind before #1528 stopped
+        // them appearing. Idempotent (a collapsed group is a singleton, which it skips). Deletes rows, so
+        // like the migration above it leans on the launch backup taken just before this, and it refuses
+        // to touch any group where two rows carry outreach history. Deliberately does NOT rewrite a key
+        // or a date: the next scout re-keys the survivor through #1528's own match, and a key rewrite is
+        // the only step here that could throw against the unique index and take the shared save below
+        // down with it.
+        DriftedRunMerge.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show
