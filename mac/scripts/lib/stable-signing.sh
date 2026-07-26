@@ -24,6 +24,25 @@
 # nothing if it is absent. "-v" lists only valid identities, which is what codesign will accept and
 # what the setup script's trust step produces. The ${scope[@]+...} guard keeps an empty array from
 # tripping "unbound variable" under set -u in macOS's bash 3.2.
+# #1524: the self-signed certificate the identity is built from. It lives here, as a function, so its
+# SHAPE can be tested without a keychain, a trust store, or the password dialog the real setup needs.
+#
+# The first version of this was inline in setup-signing-identity.sh and set no keyUsage extension at all.
+# macOS's code-signing policy requires the Digital Signature bit, so `find-identity` listed the identity
+# as "(Invalid Key Usage for policy)" and `codesign` answered "no identity found": the setup reported
+# success, and every install then silently kept its ad-hoc build signature, which is the exact trap #1425
+# was written to close. Diagnosed against a self-signed cert on the same Mac that codesign DOES accept;
+# the two differences were this extension and marking the extended usage critical.
+overture_generate_signing_cert() {
+  local keyout="$1" certout="$2"
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "${keyout}" -out "${certout}" -days 3650 \
+    -subj "/CN=${OVERTURE_SIGNING_IDENTITY}" \
+    -addext "keyUsage=critical,digitalSignature" \
+    -addext "extendedKeyUsage=critical,codeSigning" \
+    -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1
+}
+
 overture_signing_identity_sha() {
   local -a scope=()
   if [[ -n "${OVERTURE_SIGNING_KEYCHAIN:-}" && -f "${OVERTURE_SIGNING_KEYCHAIN}" ]]; then
