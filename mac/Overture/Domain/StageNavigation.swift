@@ -106,6 +106,21 @@ enum StageNavigation {
         return result
     }
 
+    // #1580: every show a stage will render, which is what the global search bar is allowed to find.
+    // The masthead's `queueKeys` above plus the reached-out leads it deliberately leaves out: that line
+    // is about work still to send, but Reached out is a real stage with its own pill and its own rows,
+    // so a show Dan has pitched and is waiting on is still somewhere he can be taken.
+    //
+    // Written as the union rather than as a second sweep so it cannot drift from `opensInQueue`, which
+    // is the same question asked of one key. `SearchScopedToQueueTests` holds the two to each other.
+    static func stagedKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
+                           today: String = QueueModel.easternToday(),
+                           now: Date = Date(), geo: GeoRefusals = .none) -> Set<String> {
+        var result = queueKeys(in: prospects, reachedOutKeys: reachedOutKeys, today: today, now: now, geo: geo)
+        for p in prospects where reachedOutKeys.contains(p.naturalKey) { result.insert(p.naturalKey) }
+        return result
+    }
+
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [

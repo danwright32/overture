@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **865 sentences**, from 292 source files.
+Every sentence Overture can say to Dan: **868 sentences**, from 292 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -757,6 +757,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Login response didn't match the request. Try again."
     `Integration/GmailAuthManager.swift`
+"Look in Archive (\(archiveMatches))"
+    `Domain/ShowSearch.swift`
 "Look-ahead window"
     `UI/ReminderSettingsView.swift`
 "Looks booked?"
@@ -913,6 +915,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Nothing here right now"
     `Domain/StageEmptyState.swift`
+"Nothing in the queue matches \"\(query)\""
+    `Domain/ShowSearch.swift`
 "Nothing matches this filter"
     `Domain/EmptyState.swift`
 "Nothing new"
@@ -1219,6 +1223,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceSearch.swift`
 "Search shows, venues, contacts"
     `UI/ShowSearchField.swift`
+"Search the queue"
+    `App/RootView.swift`
 "Self-produced \(discipline.rawValue) group, a strong-fit target\(where_)."
     `Domain/EventClassifier.swift`
 "Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."

@@ -1,9 +1,11 @@
 import SwiftUI
 
-// The shared search UI for finding any show Overture has ever tracked, whether it is still
-// in the Queue's date window or has since gone past, booked, closed, or dismissed. Used both as
-// the persistent bar in the main window's toolbar and inside Archive's own narrowing field, so
-// the matching behavior and the dropdown look identical everywhere Dan searches. The results list
+// The shared search UI for finding a show, over whatever set of shows the surface hosting it hands
+// over. That scope is the caller's to choose and the two callers choose differently (#1580): the
+// persistent bar above the Queue searches only the shows a stage will render, so a pick can only land
+// on a row Dan can see, while Archive's own field searches everything Overture has ever tracked,
+// because that is the screen whose job is everything else. The matching behavior and the dropdown look
+// identical everywhere Dan searches. The results list
 // renders as a popover, not an inline row beneath the field, because a real macOS NSToolbar clips
 // or refuses to host any content taller than its own fixed strip: an inline VStack dropdown never
 // appeared at all when this field lived in the toolbar (confirmed against the running app), even
@@ -13,7 +15,15 @@ struct ShowSearchField: View {
     @Binding var query: String
     let allItems: [QueueItem]
     var placeholder: String = "Search shows, venues, contacts"
+    // Declared ahead of the #1580 pair below so a call site's trailing closure still binds HERE. Swift's
+    // forward scan matches a trailing closure to the first closure-typed parameter it reaches, so moving
+    // this down silently handed Archive's `{ result in reveal(result.id) }` to onSearchArchive instead.
     var onSelect: (QueueItem) -> Void = { _ in }
+    // #1580: the shows OUTSIDE this field's scope, counted (never listed) so an empty result can tell
+    // Dan whether the show is missing or merely somewhere else, and hand him the jump. Both are empty on
+    // Archive's own field, which already searches everything and has nowhere to send him.
+    var archiveItems: [QueueItem] = []
+    var onSearchArchive: ((String) -> Void)?
     @FocusState private var isFocused: Bool
     @State private var showDropdown = false
     // #1574: which result the arrow keys are sitting on. All the arithmetic is in ShowSearchSelection;
@@ -65,9 +75,7 @@ struct ShowSearchField: View {
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
             Group {
                 if matches.isEmpty {
-                    Text(ShowSearch.noMatchesNote(query: trimmedQuery))
-                        .font(OVType.body).foregroundStyle(OVColor.inkFaint)
-                        .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.sm)
+                    emptyState
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(matches.enumerated()), id: \.element.id) { position, result in
@@ -103,6 +111,37 @@ struct ShowSearchField: View {
             selection.clear()
             showDropdown = isFocused && !trimmedQuery.isEmpty
         }
+    }
+
+    // #1580. Which of the two things happened is ShowSearch.emptyState's call, not this view's; all that
+    // is decided here is that the jump is a real button (it is the next step, and Dan clicks it) rather
+    // than a sentence telling him to go and search again himself.
+    private var emptyState: some View {
+        let state = ShowSearch.emptyState(query: trimmedQuery, archiveMatches: archiveMatchCount)
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            Text(state.note).font(OVType.body).foregroundStyle(OVColor.inkFaint)
+            if state.offersArchive, let onSearchArchive {
+                Button(state.archiveAction) {
+                    let carried = trimmedQuery
+                    query = ""
+                    selection.clear()
+                    isFocused = false
+                    onSearchArchive(carried)
+                }
+                .buttonStyle(.link)
+                .font(OVType.body)
+            }
+        }
+        .padding(.horizontal, OVSpacing.sm).padding(.vertical, OVSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Counted, never listed: the popover's job here is to say the show is elsewhere, not to become a
+    // second Archive. Skipped entirely when there is nowhere to send him, so Archive's own field does
+    // no matching work it will never use.
+    private var archiveMatchCount: Int {
+        guard onSearchArchive != nil, !trimmedQuery.isEmpty else { return 0 }
+        return archiveItems.filter { ShowSearch.matches($0, query: trimmedQuery) }.count
     }
 
     private func pick(_ result: QueueItem) {

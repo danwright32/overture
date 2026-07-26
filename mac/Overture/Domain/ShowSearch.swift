@@ -26,4 +26,28 @@ enum ShowSearch {
 // what makes it useful (a typo is visible in it), and that quoting was being done in a view.
 extension ShowSearch {
     static func noMatchesNote(query: String) -> String { "No matches for \"\(query)\"" }
+
+    // #1580: what an empty result MEANS, now that the global bar searches only the shows a stage will
+    // render. "No matches" was true of the whole store before; against the narrowed scope it is usually
+    // false, because the show is sitting in Archive. Saying which of the two happened is the difference
+    // between a dead end and a next step, so the second case carries the jump.
+    //
+    // A value, not two strings composed in the view, so the wording and the "which case is this" rule
+    // can be read by a test. Archive's own field passes no count and gets the plain line.
+    struct EmptyState: Equatable {
+        let note: String
+        let archiveMatches: Int
+
+        var offersArchive: Bool { archiveMatches > 0 }
+        // The count lives here and nowhere else. Stating it in the sentence too would be the same
+        // number twice on one small popover (#843).
+        var archiveAction: String { "Look in Archive (\(archiveMatches))" }
+    }
+
+    static func emptyState(query: String, archiveMatches: Int) -> EmptyState {
+        guard archiveMatches > 0 else {
+            return EmptyState(note: noMatchesNote(query: query), archiveMatches: 0)
+        }
+        return EmptyState(note: "Nothing in the queue matches \"\(query)\"", archiveMatches: archiveMatches)
+    }
 }

@@ -36,9 +36,9 @@ struct FollowUpsRowArchiveJumpGuardTests {
                 "FollowUpsView doesn't declare an onOpenInArchive callback for its rows to call (#686).")
     }
 
-    // Must reuse the existing archiveJumpKey/showArchive pair, not a second one, and must dismiss
-    // this sheet first (showFollowUps = false) since Archive opens as a sibling sheet on the same
-    // parent view.
+    // Must reuse the one way Archive opens (#1580 gathered the three state writes into openArchive),
+    // not a second one, and must dismiss this sheet first (showFollowUps = false) since Archive opens
+    // as a sibling sheet on the same parent view.
     @Test func rootViewWiresTheCallbackAndDismissesTheSheetFirst() {
         #expect(!rootView.isEmpty)
         guard let callSite = rootView.range(of: "FollowUpsView(") else {
@@ -50,10 +50,8 @@ struct FollowUpsRowArchiveJumpGuardTests {
                 "RootView doesn't wire onOpenInArchive at the FollowUpsView call site (#686).")
         #expect(wiring.contains("showFollowUps = false"),
                 "onOpenInArchive should dismiss the Follow-ups sheet before Archive opens (#686).")
-        #expect(wiring.contains("archiveJumpKey = "),
-                "onOpenInArchive should set archiveJumpKey, reusing the existing jump mechanism (#686).")
-        #expect(wiring.contains("showArchive = true"),
-                "onOpenInArchive should set showArchive, reusing the existing jump mechanism (#686).")
+        #expect(wiring.contains("openArchive(key: key, recipientId: recipientId)"),
+                "onOpenInArchive should go through openArchive, reusing the existing jump mechanism (#686).")
     }
 }
 

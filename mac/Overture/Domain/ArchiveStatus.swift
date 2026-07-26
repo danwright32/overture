@@ -43,3 +43,18 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
         }
     }
 }
+
+// #1580: which status chips Archive opens on. Normally the two Dan works from, but an Archive opened
+// by the search bar's "Look in Archive" jump has to SHOW him the matches it just counted, and the
+// shows the narrowed bar can no longer find are precisely the ones outside those two chips. Opening
+// on the usual pair would land him on an empty list one keystroke after being told there were three.
+//
+// Out of the view, which cannot be tested at all, and next to the type it decides over.
+enum ArchiveOpening {
+    static let defaultStatuses: Set<ArchiveStatus> = [.new, .active]
+
+    static func statuses(forQuery query: String) -> Set<ArchiveStatus> {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? defaultStatuses : Set(ArchiveStatus.allCases)
+    }
+}
