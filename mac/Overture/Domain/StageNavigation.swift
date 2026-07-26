@@ -111,8 +111,10 @@ enum StageNavigation {
             // every show still marked new, so Dan's backlog read 102 when 25 of them were June shows
             // already three weeks gone: work that could not be done, and he went looking for it.
             // #864: the exact complement of what the launch retirement sweeps up, by construction, both
-            // asking Prospect.hasGoneBy. An untriaged show is either waiting on him or already gone.
-            return p.status == .new && !p.hasGoneBy(today: today)
+            // asking Prospect.hasOpened. An untriaged show is either waiting on him or already open.
+            // #1540: "already open", not "already over" -- once a run has started Dan will not pitch it,
+            // so it is not work, and the triage list drops it on the same rule.
+            return p.status == .new && !p.hasOpened(today: today)
 
         case .prep:
             // #901: through needsPrepEligible, not needsPrep with the fields spelled out again. Spelled

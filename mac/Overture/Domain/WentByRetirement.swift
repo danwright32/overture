@@ -1,7 +1,13 @@
 import Foundation
 import SwiftData
 
-// #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting on Dan".
+// #864: retire an untriaged show Dan will never work now, so `new` genuinely means "waiting on Dan".
+//
+// #1540 moved where that line falls: from the run's closing night to its OPENING night. Dan ruled that a
+// client's need for photos is over once they have opened, so an untriaged run that has started is not a
+// lead, whatever nights remain on it. Asked directly whether such a run should be archived here or merely
+// hidden from the queue, he chose archived, so that "waiting on Dan", "shown in triage" and "swept up"
+// stay ONE rule (Prospect.hasOpened) with no invisible class of row sitting in none of them.
 //
 // #861 stopped COUNTING shows that had already happened, so the Scout pill reads correctly again. But
 // those shows are still in the store, still marked `new`, and always would be: nothing ever retired one
@@ -28,10 +34,10 @@ enum WentByRetirement {
         guard let candidates = try? context.fetch(untriaged) else { return 0 }
 
         // Idempotent by construction: a retired show is no longer `new`, so a second pass cannot see it.
-        let goneBy = candidates.filter { $0.hasGoneBy(today: today) }
-        for p in goneBy {
+        let opened = candidates.filter { $0.hasOpened(today: today) }
+        for p in opened {
             p.markDismissed(reason: .wentBy)
         }
-        return goneBy.count
+        return opened.count
     }
 }

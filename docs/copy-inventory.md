@@ -1175,7 +1175,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Run the scout to comb the venue calendars. Ranked candidates land here for review."
     `Domain/EmptyState.swift`
-"Run underway, still bookable"
+"Run underway"
     `UI/QueueView+Model.swift`
 "Running now…"
     `Domain/AgentRoster.swift`
@@ -1482,8 +1482,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This page is right"
     `UI/SourceFixConfirmActions.swift`
-"This performance happened before you triaged it, so it is no longer waiting on you"
-    `UI/ProspectRowView.swift`
 "This production also plays \(list)."
     `UI/QueueView+Model.swift`
 "This production also plays at \(venue) on \(dateLabel)."
@@ -1504,6 +1502,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "This show"
     `Domain/SelfBookingConflict.swift`
+"This show opened before you triaged it, so it is no longer waiting on you"
+    `UI/ProspectRowView.swift`
 "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
     `Domain/Reachability.swift`
 "This show was in an earlier scout but has dropped out of the venue feed across the last two scouts, so it was likely cancelled or pulled. Your keep/dismiss history is preserved."

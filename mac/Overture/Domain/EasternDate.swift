@@ -101,6 +101,17 @@ enum EasternDate {
         return lastNight < today
     }
 
+    // #1540: has the run STARTED? Judged on its OPENING night, the mirror image of runHasPassed above,
+    // and the near edge of the triage queue since Dan ruled that a client's need for photos is over once
+    // they have opened. Strictly behind us, so a run opening TONIGHT has not started (his distinction,
+    // made after being shown both readings). An UNKNOWN date has not opened, for the same reason it has
+    // not passed: "date to be confirmed" is a normal listing state, and dropping it would lose a real
+    // show (#798). One definition, because the triage filter and Prospect both ask it.
+    static func runHasOpened(openingNight: String?, today: String) -> Bool {
+        guard let openingNight else { return false }
+        return openingNight < today
+    }
+
     // Known to be today or later. Deliberately NOT `!runHasPassed`: an unknown date is neither passed
     // nor confirmed-live. Reconcile needs THIS one, so an undated prospect never accrues
     // "disappeared from the feed" misses on the strength of a date nobody has. The asymmetry is the

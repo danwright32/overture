@@ -363,19 +363,19 @@ final class Prospect {
         set { dismissReasonRaw = newValue?.rawValue }
     }
 
-    // #861/#864: "has this show demonstrably happened?", asked in exactly one place.
+    // #861/#864/#1540: "is this show past the point where Dan would ever work it?", asked in one place.
     //
     // The Scout pill asks it to decide what is still waiting on Dan, and the launch retirement asks it to
     // decide what has rotted. They are the same question, and if they ever answered it differently a show
-    // could be retired while still being counted, or counted while already retired. Judged on the run's
-    // LAST night (EasternDate, #798), so a run that opened last week but plays through next week is still
-    // a live lead. An UNDATED show has not happened: "date to be confirmed" is a normal state on a season
-    // page, and treating it as past would silently throw away a real lead whose date is not announced yet.
-    func hasGoneBy(today: String) -> Bool {
-        EasternDate.runHasPassed(
-            lastNight: EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: performanceDate),
-            today: today
-        )
+    // could be retired while still being counted, or counted while already retired.
+    //
+    // #1540 moved the answer from the run's closing night to its OPENING night, reversing #1122: Dan
+    // ruled that once a run has opened its client no longer needs photos, so an untriaged opened run is
+    // not a lead he will work, whatever nights remain on it. A run opening TONIGHT has not opened yet.
+    // An UNDATED show has not opened: "date to be confirmed" is a normal state on a season page, and
+    // treating it as gone would silently throw away a real lead whose date is not announced yet.
+    func hasOpened(today: String) -> Bool {
+        EasternDate.runHasOpened(openingNight: performanceDate, today: today)
     }
 
     // Consecutive scouts where this prospect's source was scouted but it was absent from the
