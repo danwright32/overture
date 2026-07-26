@@ -827,6 +827,25 @@ enum QueueModel {
         }
     }
 
+    // #1573: the scroll-target identity of a rendered date group, which is what the queue's
+    // scrollPosition binding names. Deliberately NOT the bare date: the show groups and the hire-inquiry
+    // groups (#1436) sit in the SAME scrollTargetLayout and were both keyed on the raw date, so on a day
+    // holding both, one id named two different targets and a jump could land on the inquiry block instead
+    // of the show. The group models keep their date-valued `id` (BulkDismiss reads it as a date); only the
+    // view identity is namespaced.
+    static func showGroupScrollID(_ date: String) -> String { "show-group:\(date)" }
+    static func inquiryGroupScrollID(_ date: String) -> String { "inquiry-group:\(date)" }
+
+    // #1573: the group a jump should land on to bring `key` into view, or nil when the key is not among
+    // the rendered rows at all. Resolved THROUGH groupByDate rather than by reading the item's date
+    // directly, so the id a jump names can never drift from the ids the layout actually draws.
+    static func scrollGroupID(containing key: String, among items: [QueueItem]) -> String? {
+        guard let group = groupByDate(items).first(where: { group in
+            group.items.contains { $0.id == key }
+        }) else { return nil }
+        return showGroupScrollID(group.id)
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
