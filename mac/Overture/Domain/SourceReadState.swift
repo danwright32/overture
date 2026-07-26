@@ -56,10 +56,18 @@ enum SourceReadState: Equatable, Sendable {
             //   - unreadable (#958): the page is drawn by JavaScript, so a plain re-fetch reads the same
             //     empty shell every time. "Run a scout to read them" promises a re-run will fix what a
             //     re-run cannot; the failure line ("drawn by JavaScript, nothing to read") is the truth.
+            //   - noDatedContent (#1545): the page was read in full and had nothing dated on it, so there
+            //     are no new listings to promise and no scout can produce any. This flag is not merely
+            //     unhelpful here, it is PINNED: ScoutExtractIngest.fail() sets it on every failed read and
+            //     only a successful read or a Confirm empty can clear it, so the row said "Run a scout to
+            //     read them" forever on a page with nothing to read. And this is the one failure carrying
+            //     BOTH buttons, so the honest next step is "Fix the address" or "This page is right",
+            //     never a scout. Dan's call, 2026-07-26: hide it rather than reword it, matching the two
+            //     above. The row is not left silent; the failure line still says the page is empty.
             // Any other failure (a transient fetch error, say) can genuinely be cleared by another scout,
             // so the line stays, always loud.
             switch failure {
-            case .verdict(.notRead), .verdict(.unreadable): return false
+            case .verdict(.notRead), .verdict(.unreadable), .verdict(.noDatedContent): return false
             default: return true
             }
         case .neverRead:

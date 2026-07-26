@@ -140,16 +140,34 @@ enum SourceSchedule {
     // changed ones, the number is the real backlog of unread pages and it converges: each press reads up
     // to the budget of changed venues (changed-first, see manualReadOrder), and their unread flag clears
     // on a successful ingest, so repeated presses drain it to zero.
+    //
+    // #1546: and NOT a source whose flag is only an owed retry. `ScoutExtractIngest.fail()` sets the same
+    // flag on every failed read, and for a no_dated_content page nothing ever clears it, so that source is
+    // unread by this definition on every run forever and could hold the count off zero however many times
+    // Dan pressed Run again. It is not waiting to be read: reading it again reproduces the same failure.
+    // It is still reported, loudly, as a FAILING source, which is where a broken page belongs.
+    //
+    // Worth stating plainly for whoever reads this next: since #1498 removed the default fetch budget,
+    // `plan.deferred` is empty on every run the app actually makes, so this filter currently decides
+    // nothing on screen. It is kept correct rather than deleted because the budget is still honoured when a
+    // caller passes one, and a rule that is wrong while dormant is a bug waiting for the day it wakes up.
     static func waitingToRead(deferred: [WatchedSource]) -> [WatchedSource] {
-        deferred.filter(\.hasUnreadChanges)
+        deferred.filter(\.isCarryingUnreadListings)
     }
 
     // #1189: the order a run Dan started reads its fetchable sources in. Three keys, in strict order:
     //
-    //   1. Changed-first (hasUnreadChanges). A changed venue is never starved behind an unchanged one,
-    //      which has nothing to read anyway. This alone converges coverage: each press clears up to the
-    //      cap of changed venues, and their flag clears on successful ingest, so the next press reads the
-    //      next batch.
+    //   1. Changed-first, in THREE ranks rather than two (#1546). A changed venue is never starved behind
+    //      an unchanged one, which has nothing to read anyway. This alone converges coverage: each press
+    //      clears up to the cap of changed venues, and their flag clears on successful ingest, so the next
+    //      press reads the next batch. The middle rank is the fix: a source whose unread flag is only an
+    //      owed retry (its last read failed and its bytes have not moved since) used to sort on the same
+    //      key as a genuine change and so led every press, forever, because that flag can never clear
+    //      itself. It is demoted, not dropped: #1217 still re-reads a still broken source on a run Dan
+    //      started, on the assumption he fixed the cause between presses, and it still outranks a quiet
+    //      source with nothing to read. What it no longer does is take the first slot of the batch Dan
+    //      agreed to pay for (ScoutReadBudget slices exactly this order) away from a venue that genuinely
+    //      posted a new season.
     //   2. Oldest by the manual scout's own fairness clock (lastManualReadAt, nil sorting oldest). The
     //      daily watch-only run never advances this clock, so unlike lastCheckedAt it is not flattened
     //      every morning: a source the last press deferred stays genuinely next in line across days. This
@@ -157,11 +175,19 @@ enum SourceSchedule {
     //   3. sourceId, a deterministic final tie-break, so the order is stable rather than dependent on the
     //      store's internal (unsorted) FetchDescriptor row order.
     private static func manualReadOrder(_ a: WatchedSource, _ b: WatchedSource) -> Bool {
-        if a.hasUnreadChanges != b.hasUnreadChanges { return a.hasUnreadChanges }
+        if readRank(a) != readRank(b) { return readRank(a) < readRank(b) }
         let aClock = a.lastManualReadAt ?? .distantPast
         let bClock = b.lastManualReadAt ?? .distantPast
         if aClock != bClock { return aClock < bClock }
         return a.sourceId < b.sourceId
+    }
+
+    // #1546: the first key's three ranks, lowest read first. Kept as a named function rather than inlined
+    // so the order it encodes is legible: real unread listings, then a retry we owe on a page that has not
+    // moved, then a source with nothing to read at all.
+    private static func readRank(_ source: WatchedSource) -> Int {
+        guard source.hasUnreadChanges else { return 2 }
+        return source.unreadIsOnlyAnOwedRetry ? 1 : 0
     }
 }
 

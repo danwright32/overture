@@ -328,6 +328,32 @@ final class WatchedSource {
                                                  lastSeenHash: lastObservedContentHash)
     }
 
+    // #1546: which of its two jobs is `hasUnreadChanges` doing on THIS row?
+    //
+    // The flag is set by two unrelated events and cannot tell them apart. A check that saw new bytes sets
+    // it to mean "there are listings here nobody has read." `ScoutExtractIngest.fail()` sets it on every
+    // failed read to mean something quite different: "do not skip this source next time." For a
+    // no_dated_content failure the second meaning is permanent, because only a successful read or a
+    // Confirm empty stamps lastContentHash and neither has happened, so the row is pinned as unread
+    // forever and every consumer of the flag believed it (#1545 believed it on screen, waitingToRead
+    // counted it as backlog, manualReadOrder sorted it to the front of every press).
+    //
+    // Decided on the BYTES, not on which failure it was. If the page has not moved since the read that
+    // failed, re-reading it reproduces that failure and there is nothing new here whatever the verdict
+    // says. The moment the org edits their page the hashes diverge and this is real unread content again,
+    // with nothing having to notice or reset anything.
+    //
+    // A never-read source is deliberately NOT this: its lastFailure is nil, so it stays real backlog.
+    var unreadIsOnlyAnOwedRetry: Bool {
+        guard hasUnreadChanges, lastFailure != nil else { return false }
+        return !SourceConfirmation.pageMovedSinceRead(readHash: pendingContentHash ?? lastContentHash,
+                                                      lastSeenHash: lastObservedContentHash)
+    }
+
+    // The positive half, and the one the schedule asks: is this source actually carrying listings nobody
+    // has read? Named apart from the raw flag so a caller has to choose which question it means.
+    var isCarryingUnreadListings: Bool { hasUnreadChanges && !unreadIsOnlyAnOwedRetry }
+
     init(sourceId: String, orgName: String, listingsURL: String? = nil, kind: SourceKind,
          addedAt: Date = Date()) {
         self.sourceId = sourceId
