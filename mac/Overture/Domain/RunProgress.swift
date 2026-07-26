@@ -52,6 +52,23 @@ enum RunProgress {
         }
         return .running(elapsed: elapsed)
     }
+
+    // #1530: the in-process scout sweep's heartbeat, to feed `liveness(runAlive:)` above.
+    //
+    // A detached run proves it is alive by touching a marker file; the sweep has no marker, so it was
+    // judged on wall clock alone and every 62-source run ended by claiming to be stuck. What it does have
+    // is a per-source signal (ScoutService's onNativeProgress fires as each source lands), so "a source
+    // landed within the last `window`" is the same kind of positive still-alive evidence, and it holds
+    // however long the whole sweep runs.
+    //
+    // `nil` (not one source has landed yet) reads as not-alive on purpose: there is no heartbeat to trust,
+    // so RunTimeouts.scout stays in charge, which is the wedged-on-the-first-source case it was written
+    // for. Clock skew (a stamp in the future) reads as alive, matching elapsedLabel's clamp.
+    static func sweepIsAlive(lastProgressAt: Date?, now: Date,
+                             window: TimeInterval = RunTimeouts.scoutSourceStep) -> Bool {
+        guard let lastProgressAt else { return false }
+        return now.timeIntervalSince(lastProgressAt) < window
+    }
 }
 
 // The three visibly-distinct states the saved UX principle requires of any non-instant action:

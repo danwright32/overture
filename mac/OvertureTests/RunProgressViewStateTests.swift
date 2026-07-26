@@ -210,6 +210,52 @@ struct RunProgressViewStateTests {
         #expect(cancelled == true)
     }
 
+    // MARK: - The sweep's own heartbeat (#1530)
+
+    // A manual sweep walks all 62 sources since #1518, so it routinely passes RunTimeouts.scout (3m) and
+    // used to show the rust "looks stuck" warning moments before every run finished. A sweep whose count
+    // is still advancing reads as working, however long it has been going.
+    @Test func aScoutSweepStillLandingSourcesRendersAsRunningPastTheCeiling() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = since.addingTimeInterval(RunTimeouts.scout + 90)
+        let view = RunProgressView(phase: .scouting, since: since,
+                                     snapshot: { .init(sourceName: "Jalopy Theatre", completed: 55, total: 62,
+                                                       advancedAt: now.addingTimeInterval(-8)) })
+            .content(now: now)
+        let texts = try allTexts(view)
+
+        #expect(!texts.contains { $0.contains("looks stuck") })
+        #expect(texts.contains("Scouting"))
+        #expect(texts.contains("55 of 62 done"))
+        #expect((try? view.inspect().find(ViewType.ProgressView.self)) != nil)
+    }
+
+    // The other half of the same claim: a sweep that stopped advancing still reaches the stalled state, so
+    // this did not trade a false "stuck" for a spinner that never admits a wedged run.
+    @Test func aScoutSweepWedgedOnOneSourceStillRendersAsStalled() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = since.addingTimeInterval(RunTimeouts.scout + 90)
+        let elapsed = RunProgress.elapsedLabel(since: since, now: now)!
+        let view = RunProgressView(phase: .scouting, since: since,
+                                     snapshot: { .init(sourceName: "Jalopy Theatre", completed: 55, total: 62,
+                                                       advancedAt: now.addingTimeInterval(-(RunTimeouts.scoutSourceStep + 5))) })
+            .content(now: now)
+
+        #expect(try allTexts(view).contains(RunProgress.stalledLabel("Scouting", elapsed: elapsed)))
+        #expect((try? view.inspect().find(ViewType.ProgressView.self)) == nil,
+                "a wedged sweep must not keep spinning as though it were alive")
+    }
+
+    // A sweep that has not landed a single source has no heartbeat to trust, so the wall-clock ceiling
+    // still decides and the stalled state is reached exactly as before.
+    @Test func aSweepThatNeverLandedASourceStalledAtTheCeilingAsBefore() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = since.addingTimeInterval(RunTimeouts.scout + 5)
+        let view = RunProgressView(phase: .scouting, since: since,
+                                     snapshot: snapshot(nil, 0, 62)).content(now: now)
+        #expect(try allTexts(view).contains { $0.contains("looks stuck") })
+    }
+
     @Test func thereIsNoCancelControlWhenNoneIsProvided() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let view = RunProgressView(phase: .scouting, since: since,

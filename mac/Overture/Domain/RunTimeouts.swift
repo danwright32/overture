@@ -17,8 +17,21 @@ enum RunTimeouts {
     // classify marker because Dan is watching this one and a stranded request should surface sooner.
     static let replyDraft: TimeInterval = 5 * 60
 
-    // Scout: an in-process run; a normal scout returns in well under this, so passing it means stuck.
+    // Scout: an in-process run. This is no longer the whole answer, and on its own it was WRONG: it was
+    // sized when a manual sweep fetched at most 20 sources, and #1518 sent it through all 62, so a healthy
+    // run passes three minutes routinely and every single scout ended by warning "looks stuck" moments
+    // before it finished (#1530). It survives as the ceiling for a sweep that has not landed one source
+    // yet (nothing has published a heartbeat, so elapsed time is all there is to go on); once sources are
+    // landing, `scoutSourceStep` below is what judges the run.
     static let scout: TimeInterval = 3 * 60
+
+    // Scout sweep, PER SOURCE (#1530): how long the sweep may go without landing a source before it reads
+    // as wedged rather than merely long. Sized from the worst legitimate single source: a 30s HTTP fetch
+    // (SourceFetcher), or a 25s WebKit render plus its 2.5s settle (RenderedPage) followed by an embed
+    // hop's own request. That is about 90s of real work, so 120s leaves headroom without letting a truly
+    // stuck sweep hide for long. Deliberately a per-source window and not a bigger total: a total goes
+    // stale every time the watchlist grows, which is exactly how the old ceiling broke.
+    static let scoutSourceStep: TimeInterval = 120
 
     // Scout extract (#799): a DETACHED run that reads several pinned listings pages and follows each
     // event's own detail page for the venue and exact date. Nothing like the in-process scout above,

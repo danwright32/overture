@@ -1259,7 +1259,12 @@ struct RootView: View {
                     // "3 of 9". Guarded so an abandoned run's late callback cannot move a fresh run's bar.
                     onNativeProgress: { name, index, total in
                         guard gen == scoutGeneration else { return }
-                        scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total)
+                        // #1530: stamped as it lands, which is what tells the takeover a long sweep is
+                        // working rather than stuck. A sweep through all 62 sources (#1518) passes the
+                        // 3-minute ceiling every run, so without this every scout ended by warning that
+                        // it looked stuck. Carried on the snapshot so it clears with it.
+                        scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total,
+                                                    advancedAt: Date())
                     },
                     // #1037: the native sweep stops between sources when Dan cancels, and launches no read.
                     isCancelled: { scoutCancelRequested },
