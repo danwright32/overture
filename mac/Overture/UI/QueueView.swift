@@ -210,6 +210,9 @@ struct QueueView: View {
         let reason: DismissReason
         let keys: [String]
         let runs: [String]
+        // The narrower set: the shows that play only on this night. Empty when there is no choice to make.
+        let keysOnlyThisNight: [String]
+        var offersChoice: Bool { !runs.isEmpty && !keysOnlyThisNight.isEmpty }
         var id: String { "\(dateLabel)|\(reason.rawValue)" }
     }
 
@@ -241,16 +244,26 @@ struct QueueView: View {
                 SelfBookingConfirmSheet(
                     title: BulkDismiss.confirmTitle(count: pending.keys.count, dateLabel: pending.dateLabel),
                     message: BulkDismiss.confirmMessage(count: pending.keys.count, reason: pending.reason,
-                                                        runs: pending.runs, dateLabel: pending.dateLabel),
-                    proceedLabel: BulkDismiss.confirmProceed(count: pending.keys.count),
+                                                        runs: pending.runs, dateLabel: pending.dateLabel,
+                                                        offeringChoice: pending.offersChoice),
+                    proceedLabel: BulkDismiss.confirmProceed(count: pending.keys.count,
+                                                             offeringChoice: pending.offersChoice),
                     symbol: "archivebox",
-                    onProceed: { dismissNight(pending); pendingNightDismiss = nil },
+                    // #1500 follow-up (Dan, 2026-07-26): leave the runs where they are and clear only what
+                    // plays tonight. Offered only when a night actually holds both kinds.
+                    alternativeLabel: pending.offersChoice
+                        ? BulkDismiss.confirmProceedOnlyThisNight(count: pending.keysOnlyThisNight.count)
+                        : nil,
+                    onAlternative: pending.offersChoice
+                        ? { dismissNight(pending, keys: pending.keysOnlyThisNight); pendingNightDismiss = nil }
+                        : nil,
+                    onProceed: { dismissNight(pending, keys: pending.keys); pendingNightDismiss = nil },
                     onCancel: { pendingNightDismiss = nil })
             }
     }
 
-    private func dismissNight(_ pending: NightDismiss) {
-        ProspectMutations.dismissAll(pending.keys, reason: pending.reason, dateLabel: pending.dateLabel,
+    private func dismissNight(_ pending: NightDismiss, keys: [String]) {
+        ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
                                      prospects: prospects, context: context, feedback: feedback,
                                      undo: undoStack)
     }
@@ -464,7 +477,8 @@ struct QueueView: View {
                 ForEach(DismissReason.danCanChoose, id: \.self) { reason in
                     Button(reason.label) {
                         pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
-                                                           keys: plan.keys, runs: plan.runsPastTheNight)
+                                                           keys: plan.keys, runs: plan.runsPastTheNight,
+                                                           keysOnlyThisNight: plan.keysOnlyThisNight)
                     }
                 }
             }

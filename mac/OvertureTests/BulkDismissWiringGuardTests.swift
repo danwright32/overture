@@ -45,8 +45,9 @@ struct BulkDismissWiringGuardTests {
         #expect(queue.contains(".sheet(item: $pendingNightDismiss)"))
         // A first-party branded sheet, not a stock system dialog (#1249, and Dan's standing preference).
         #expect(queue.contains("SelfBookingConfirmSheet("))
-        // The dismissal itself happens on the sheet's proceed, and nowhere else in this view.
-        #expect(queue.contains("onProceed: { dismissNight(pending); pendingNightDismiss = nil }"))
+        // The dismissal itself happens on the sheet's own buttons, and nowhere else in this view. Which
+        // shows each button takes is pinned separately, below.
+        #expect(queue.contains("onProceed: { dismissNight(pending,"))
     }
 
     // The action goes through the one mutation that records a single undo entry for the night. A view that
@@ -56,6 +57,23 @@ struct BulkDismissWiringGuardTests {
         let queue = source("Overture/UI/QueueView.swift")
         #expect(queue.contains("ProspectMutations.dismissAll("))
         #expect(queue.contains("undo: undoStack"))
+    }
+
+    // Dan's follow-up (2026-07-26): the second button must dismiss the NARROWER set. Both buttons call the
+    // same mutation, so the only thing separating "clear the night" from "leave the runs alone" is which
+    // key set each one passes. Swapping them is invisible on screen until dates start disappearing.
+    @Test func eachButtonPassesItsOwnSetOfShows() {
+        let queue = source("Overture/UI/QueueView.swift")
+        #expect(queue.contains("onAlternative: pending.offersChoice"))
+        #expect(queue.contains("dismissNight(pending, keys: pending.keysOnlyThisNight)"))
+        #expect(queue.contains("onProceed: { dismissNight(pending, keys: pending.keys)"))
+    }
+
+    // And the narrower way out is offered only when the night actually holds both kinds. A sheet offering
+    // "dismiss only the 0" would be a button that does nothing.
+    @Test func theNarrowerButtonIsOnlyOfferedWhenThereIsAChoice() {
+        let queue = source("Overture/UI/QueueView.swift")
+        #expect(queue.contains("alternativeLabel: pending.offersChoice"))
     }
 
     // And the undo the App performs resolves EVERY row of the entry, not just the first. Resolving one
