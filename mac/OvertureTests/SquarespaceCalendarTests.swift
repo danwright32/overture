@@ -151,6 +151,65 @@ struct SquarespaceCalendarTests {
         #expect(extracted[0].venue == nil)
     }
 
+    // The cheap pre-filter, so no request is ever spent probing a page that is obviously not
+    // Squarespace. Checked against the LIVE pages 2026-07-25: the literal comment "This is Squarespace"
+    // is present in the raw download but sits inside an HTML COMMENT, so it does NOT survive the
+    // normalization Overture applies before hashing. `squarespace.com` does (it is in the image URLs),
+    // which is why the marker is that and not the more obvious one.
+    @Test("the pre-filter survives the page normalization Overture applies")
+    func preFilterUsesAMarkerThatSurvivesNormalization() {
+        // What a normalized Squarespace page still carries.
+        #expect(SquarespaceCalendar.looksLikeSquarespace(
+            #"<img src="https://images.squarespace-cdn.com/x.jpg"><a href="https://static1.squarespace.com/y">"#))
+        // The comment-only marker is gone by then, so relying on it alone would find nothing.
+        #expect(!SquarespaceCalendar.looksLikeSquarespace("<html><body>Concerts</body></html>"))
+    }
+
+    // A generous pre-filter is deliberate and safe: a page that merely MENTIONS Squarespace costs one
+    // extra request and is then rejected by the events-collection check, so it can never take a source
+    // off the paid read it needs.
+    @Test("a page that merely mentions Squarespace is caught by the collection check, not the filter")
+    func aFalsePositiveIsRejectedByTheCollectionCheck() {
+        let blogPost = "<p>We moved our site to squarespace.com last year</p>"
+        #expect(SquarespaceCalendar.looksLikeSquarespace(blogPost))
+        // ...and the JSON view of an ordinary page is not an events collection, so nothing is promoted.
+        #expect(!SquarespaceCalendar.isEventsCollection(Data(#"{"collection":{"typeName":"page"}}"#.utf8)))
+    }
+
+    // The promotion decision that takes a source off the paid read. Every "no" branch matters more than
+    // the "yes": a wrong promotion silently stops a source being read properly.
+    @Test("a source is promoted only when it is an html page that really is an events collection")
+    func promotesOnlyARealEventsCollection() {
+        let squarespacePage = #"<img src="https://images.squarespace-cdn.com/x.jpg">"#
+        let eventsJSON = Data(Self.eventsFeed.utf8)
+
+        #expect(SquarespaceCalendar.shouldPromote(kind: .html, pageHTML: squarespacePage,
+                                                  jsonBody: eventsJSON))
+
+        // Already native: nothing to promote, and re-deciding it could only do harm.
+        for kind in [SourceKind.algolia, .operaAmericaFeed, .venueTixFeed, .ovationTixFeed, .squarespaceFeed] {
+            #expect(!SquarespaceCalendar.shouldPromote(kind: kind, pageHTML: squarespacePage,
+                                                       jsonBody: eventsJSON))
+        }
+        // Squarespace, but one of the 14 that are NOT events collections.
+        #expect(!SquarespaceCalendar.shouldPromote(
+            kind: .html, pageHTML: squarespacePage,
+            jsonBody: Data(#"{"collection":{"typeName":"page"}}"#.utf8)))
+        // Not Squarespace at all.
+        #expect(!SquarespaceCalendar.shouldPromote(kind: .html, pageHTML: "<html>concerts</html>",
+                                                   jsonBody: eventsJSON))
+    }
+
+    // The failure path, which decides what happens on a bad night for the network. A probe that did not
+    // come back must leave the source exactly where it is, still being read the way that works, rather
+    // than being promoted or demoted on no evidence.
+    @Test("a probe that failed leaves the source alone")
+    func aFailedProbeChangesNothing() {
+        #expect(!SquarespaceCalendar.shouldPromote(
+            kind: .html, pageHTML: #"<img src="https://images.squarespace-cdn.com/x.jpg">"#,
+            jsonBody: nil))
+    }
+
     // An events collection with nothing coming up is a real, complete answer (3 of Dan's 7 are in this
     // state today), not a failure and not a shape change.
     @Test("an events collection with nothing upcoming returns no events and does not throw")

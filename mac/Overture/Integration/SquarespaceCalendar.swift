@@ -35,6 +35,31 @@ enum SquarespaceCalendar {
         var upcoming: [Item]?
     }
 
+    // The cheap pre-filter on a page already fetched, so no request is ever spent probing something that
+    // is obviously not Squarespace.
+    //
+    // Checked against the live pages 2026-07-25: the literal comment "This is Squarespace" IS in the raw
+    // download but sits inside an HTML COMMENT, so it does not survive the normalization Overture applies
+    // before hashing. `squarespace.com` does, because it is in the image and asset URLs.
+    //
+    // Deliberately generous. A page that merely MENTIONS Squarespace costs one extra request and is then
+    // rejected by `isEventsCollection`, so a false positive here can never take a source off a paid read
+    // it needs; a false NEGATIVE would silently keep a free source paying, which is the worse error.
+    static func looksLikeSquarespace(_ html: String) -> Bool {
+        html.range(of: "squarespace.com", options: .caseInsensitive) != nil
+            || html.range(of: "squarespace-cdn.com", options: .caseInsensitive) != nil
+    }
+
+    // The promotion decision, kept out of the network call so it is reachable by a test. `jsonBody` is
+    // nil when the probe was not run or failed, which must leave the source exactly as it is: the path
+    // it is on already works, and a wrong promotion would take a source off a paid read it needs.
+    static func shouldPromote(kind: SourceKind, pageHTML: String, jsonBody: Data?) -> Bool {
+        guard kind == .html else { return false }        // the others already ingest natively
+        guard looksLikeSquarespace(pageHTML) else { return false }
+        guard let jsonBody else { return false }
+        return isEventsCollection(jsonBody)
+    }
+
     // Whether this body is a Squarespace EVENTS collection. Deliberately total: anything that is not
     // JSON, not Squarespace, or not an events collection simply answers false, because the caller's
     // fallback is the existing path and a wrong "yes" would take a source off the paid read that needs
