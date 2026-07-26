@@ -22,6 +22,24 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Dan Wright Photography</string>
+	<!-- #1544: the ONE half of a cleartext permission the operating system enforces. The other half is
+	     SourceFetcher.cleartextFallbackHosts, and CleartextFallbackTests fails if the two ever name
+	     different sets. NSAllowsArbitraryLoads is deliberately absent: Dan's decision (2026-07-26) was to
+	     name the single broken host rather than open cleartext everywhere and let app code be the only
+	     gate, so every other source on the watchlist stays under the OS rule. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>dinumihailescu.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Overture creates and updates follow-up tasks in OmniFocus so due reminders reach you when you're away from the app.</string>
 	<key>CFBundleURLTypes</key>

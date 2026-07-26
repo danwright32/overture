@@ -240,6 +240,10 @@ enum SourceCheck {
             // .confirmReadIsStale).
             source.lastObservedContentHash = page.contentHash
 
+            // #1544: and HOW it came back. Stamped on every successful fetch, not only a read, so the row's
+            // warning is current and clears itself the day the site fixes its certificate.
+            source.lastFetchWasInsecure = page.wasReadInsecurely
+
             // The hash is a CORRECTNESS mechanism, not merely a cost lever. If the page did not change,
             // the extractor never runs, so an extracted title cannot drift between runs and re-key a
             // prospect into a duplicate while the original is marked gone. Determinism by abstention.

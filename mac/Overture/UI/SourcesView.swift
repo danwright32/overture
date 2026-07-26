@@ -714,6 +714,17 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #1544: this source's page came back unencrypted, because its https handshake is broken and
+            // Overture fell back to the cleartext address Dan stored. Gold: it is not a failure (the shows
+            // were read) and it is not nothing either, because those bytes could have been altered in
+            // flight and they feed the reconcile that cancels shows. Disclosed rather than silent, and it
+            // clears itself the day the site fixes its certificate. Wording lives on the model (#863).
+            if let insecure = source.insecureFetchNote {
+                Text(insecure).font(.system(size: 11))
+                    .foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // #1029: the #986 venue-precision line is gone from Dan's view. It told him how many shows
             // "said where they are", and he did not understand why it mattered ("I do not understand what
             // that matters"). The underlying placement data still records on every run (WatchedSource's

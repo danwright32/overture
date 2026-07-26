@@ -11,6 +11,9 @@ final class PageStubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var contentType: String? = "text/html; charset=utf-8"
     nonisolated(unsafe) static var finalURL: String? = nil     // set to simulate a redirect
     nonisolated(unsafe) static var transportError: Error? = nil
+    // #1544: fail ONE address at the transport level while another answers, which is the whole shape of a
+    // site whose https handshake is broken and whose plain http serves the page.
+    nonisolated(unsafe) static var transportErrorsByURL: [String: Error] = [:]
     // #806 follow-up: serve DIFFERENT pages for different URLs, so the ticket-link hop (page A links to
     // page B; B is the one with the listing) can be exercised for real.
     nonisolated(unsafe) static var bodiesByURL: [String: String] = [:]
@@ -28,7 +31,15 @@ final class PageStubURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: e)
             return
         }
-        let requested = request.url?.absoluteString ?? ""
+        // Recorded BEFORE the per-URL failure, so a test can assert which addresses were actually asked
+        // for even when one of them was refused at the transport level.
+        let asked = request.url?.absoluteString ?? ""
+        if let e = Self.transportErrorsByURL[asked] {
+            Self.requestedURLs.append(asked)
+            client?.urlProtocol(self, didFailWithError: e)
+            return
+        }
+        let requested = asked
         Self.requestedURLs.append(requested)
         let url = URL(string: Self.finalURL ?? request.url!.absoluteString)!
         var headers: [String: String] = [:]
@@ -46,7 +57,7 @@ final class PageStubURLProtocol: URLProtocol {
     static func reset() {
         status = 200; body = Data(); contentType = "text/html; charset=utf-8"
         finalURL = nil; transportError = nil; bodiesByURL = [:]
-        statusByURL = [:]; requestedURLs = []
+        statusByURL = [:]; requestedURLs = []; transportErrorsByURL = [:]
     }
 }
 
