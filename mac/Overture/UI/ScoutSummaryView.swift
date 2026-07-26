@@ -72,7 +72,7 @@ struct ScoutSummaryView: View {
     // subtitle's promise goes with the cards it was describing.
     private var hasActionableFailures: Bool {
         warnings.sections.contains {
-            if case .failures(let results) = $0 { return !ScoutSummaryRow.stillWatched(results, in: sources).isEmpty }
+            if case .failures(let results) = $0 { return !ScoutSummaryRow.stillWorthShowing(results, in: sources).isEmpty }
             return false
         }
     }
@@ -80,7 +80,7 @@ struct ScoutSummaryView: View {
     // #1426: the ids Dan fixed, minus any he has since stopped watching. Reading them would spend a scout
     // run on sources that are off the watchlist.
     private var fixedAndStillWatched: Set<String> {
-        ScoutSummaryRow.stillWatched(fixedIds, in: sources)
+        ScoutSummaryRow.stillWorthShowing(fixedIds, in: sources)
     }
 
     private var sectionStack: some View {
@@ -135,7 +135,7 @@ struct ScoutSummaryView: View {
             // #1426: the heading counts what is on screen, because the rows and the count read the same
             // filtered list. Removing every failing source leaves nothing here at all, rather than a
             // heading over an empty box.
-            let shown = ScoutSummaryRow.stillWatched(results, in: sources)
+            let shown = ScoutSummaryRow.stillWorthShowing(results, in: sources)
             if !shown.isEmpty { failuresBlock(shown) }
         case .unqueued(let ids):
             infoBlock(ScoutWarningCopy.unqueued(ids: ids))
@@ -218,30 +218,52 @@ enum ScoutSummaryRow {
         source?.listingsURL ?? result.listingsURL
     }
 
-    // #1426: which of the run's failures the popup still has anything to say about. The list it was handed
-    // is a SNAPSHOT taken when the scout finished, so a source Dan stops watching from this very screen
-    // would otherwise keep its card AND keep being counted by the "N sources couldn't be checked" heading.
-    // Asked of the LIVE watchlist rows, which is also what makes the removal's Undo restore the card for
-    // free rather than needing a second path back.
+    // #1426/#1499: which of the run's failures the popup still has anything to say about. The list it was
+    // handed is a SNAPSHOT taken when the scout finished, so an action Dan takes on this very screen cannot
+    // change it: without this filter the card would keep its rust failure line AND keep being counted by the
+    // "N sources couldn't be checked" heading. Asked of the LIVE watchlist rows, which is also what makes an
+    // Undo restore the card for free rather than needing a second path back.
     //
-    // A result with no live row at all STAYS: that is not a removal, it is the unmatched case #1125 kept
-    // the snapshot for, and dropping it would silently swallow a failure.
-    static func stillWatched(_ results: [ScoutService.SourceResult],
-                             in sources: [WatchedSource]) -> [ScoutService.SourceResult] {
-        results.filter { isStillWatched($0.sourceId, in: sources) }
+    // #1499 made this ONE question instead of a list of actions. It was "is it still watched", which covered
+    // the stop-watching button and nothing else, so when "This page is right" cleared the failure underneath
+    // the card went on stating the problem the press had just settled. That is the "did that work?" failure
+    // mode: the only evidence a press landed is a banner that disappears, above a card that contradicts it.
+    // Three buttons have now needed the same treatment one at a time (#1125 the address, #1426 stop
+    // watching, this), so the rule is stated as the question rather than as the actions, and a fourth button
+    // gets it for free.
+    static func stillWorthShowing(_ results: [ScoutService.SourceResult],
+                                  in sources: [WatchedSource]) -> [ScoutService.SourceResult] {
+        results.filter { hasSomethingLeftToSay($0.sourceId, in: sources) }
     }
 
     // The same question asked of the ids Dan has fixed, so "Read the ones I fixed" cannot offer to spend a
-    // scout run on a source he fixed and then removed.
-    static func stillWatched(_ sourceIds: Set<String>, in sources: [WatchedSource]) -> Set<String> {
-        sourceIds.filter { isStillWatched($0, in: sources) }
+    // scout run on a source he fixed and then removed, or on one he has since confirmed is fine.
+    static func stillWorthShowing(_ sourceIds: Set<String>, in sources: [WatchedSource]) -> Set<String> {
+        sourceIds.filter { hasSomethingLeftToSay($0, in: sources) }
     }
 
-    // Deliberately "is it still watched", not "did Dan remove it": a source that went inactive because the
-    // org asked us to stop is just as gone from this screen's point of view.
-    private static func isStillWatched(_ sourceId: String, in sources: [WatchedSource]) -> Bool {
+    // Two ways a card stops having anything to say, and one deliberate way it does not.
+    //
+    // Not watched any more: deliberately "is it still watched" rather than "did Dan remove it", because a
+    // source that went inactive when the org asked us to stop is just as gone from this screen's view.
+    //
+    // Settled: the live row reports no problem at all. Keyed to that ANSWER rather than to any particular
+    // field a confirm writes, because `confirmEmpty` does not always write them all (with no bytes to anchor
+    // to it returns .noHash having still cleared the failure), and a rule that watched for the hash would
+    // miss that path.
+    //
+    // A CORRECTED address is the case this must not swallow, and it is why "settled" is not merely "has no
+    // failure". `editURL` also clears lastFailure, but leaves health at .neverChecked, because the page has
+    // not been checked at the new address yet: unknown is not settled. That card has to stay, both so Dan can
+    // see his correction on it (#1125) and because the footer's "Read the ones I fixed" is about exactly
+    // those sources.
+    //
+    // A result with no live row at all STAYS: that is not a removal, it is the unmatched case #1125 kept the
+    // snapshot for, and dropping it would silently swallow a failure.
+    private static func hasSomethingLeftToSay(_ sourceId: String, in sources: [WatchedSource]) -> Bool {
         guard let source = sources.first(where: { $0.sourceId == sourceId }) else { return true }
-        return source.isActive
+        guard source.isActive else { return false }
+        return !(source.health == .ok && source.lastFailure == nil)
     }
 }
 

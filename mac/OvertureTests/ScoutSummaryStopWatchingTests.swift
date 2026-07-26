@@ -43,7 +43,7 @@ struct ScoutSummaryStopWatchingTests {
 
         WatchlistMutations.stopWatching(protestra, context: ctx, feedback: ActionFeedback())
 
-        let shown = ScoutSummaryRow.stillWatched(results, in: [protestra, neos])
+        let shown = ScoutSummaryRow.stillWorthShowing(results, in: [protestra, neos])
         #expect(shown.map(\.sourceId) == ["neofuturists"])
     }
 
@@ -59,7 +59,7 @@ struct ScoutSummaryStopWatchingTests {
 
         WatchlistMutations.stopWatching(protestra, context: ctx, feedback: ActionFeedback())
 
-        let shown = ScoutSummaryRow.stillWatched(results, in: [protestra, neos])
+        let shown = ScoutSummaryRow.stillWorthShowing(results, in: [protestra, neos])
         #expect(ScoutSummaryCopy.failuresHeading(shown.count) == "One source couldn't be checked.")
     }
 
@@ -74,11 +74,11 @@ struct ScoutSummaryStopWatchingTests {
         let feedback = ActionFeedback()
 
         WatchlistMutations.stopWatching(protestra, context: ctx, feedback: feedback)
-        #expect(ScoutSummaryRow.stillWatched(results, in: [protestra]).isEmpty)
+        #expect(ScoutSummaryRow.stillWorthShowing(results, in: [protestra]).isEmpty)
 
         try #require(feedback.action).perform()
 
-        #expect(ScoutSummaryRow.stillWatched(results, in: [protestra]).map(\.sourceId) == ["protestra"])
+        #expect(ScoutSummaryRow.stillWorthShowing(results, in: [protestra]).map(\.sourceId) == ["protestra"])
     }
 
     // A result with no live watchlist row of its own is not a removal, and must not vanish: an unmatched
@@ -86,7 +86,7 @@ struct ScoutSummaryStopWatchingTests {
     // failure nobody could then act on.
     @Test func aResultWithNoLiveSourceIsStillShown() throws {
         let results = [failed("orphan", "An org we no longer have a row for")]
-        #expect(ScoutSummaryRow.stillWatched(results, in: []).map(\.sourceId) == ["orphan"])
+        #expect(ScoutSummaryRow.stillWorthShowing(results, in: []).map(\.sourceId) == ["orphan"])
     }
 
     // A source that went inactive for the OTHER reason (the org asked not to be contacted) is also gone
@@ -99,7 +99,7 @@ struct ScoutSummaryStopWatchingTests {
         s.inactiveReason = .orgRefusal
         try ctx.save()
 
-        #expect(ScoutSummaryRow.stillWatched([failed("refused", "An org that asked us to stop")],
+        #expect(ScoutSummaryRow.stillWorthShowing([failed("refused", "An org that asked us to stop")],
                                              in: [s]).isEmpty)
     }
 
@@ -116,7 +116,7 @@ struct ScoutSummaryStopWatchingTests {
 
         WatchlistMutations.stopWatching(cell, context: ctx, feedback: ActionFeedback())
 
-        #expect(ScoutSummaryRow.stillWatched(fixed, in: [cell, bargemusic]) == ["bargemusic"])
+        #expect(ScoutSummaryRow.stillWorthShowing(fixed, in: [cell, bargemusic]) == ["bargemusic"])
     }
 
     // MARK: - Where the control is offered
