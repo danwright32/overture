@@ -310,8 +310,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 "Agent logged an error: open agent logs"
     `App/MenuBarStatus.swift`
-"All \(count) leave your queue, filed as \(reason.label)."
-    `Domain/BulkDismiss.swift`
 "All caught up"
     `Domain/PrepStatus.swift`
 "All set"
@@ -1480,6 +1478,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "These organizations asked not to be contacted. Overture no longer watches them, and will not draft to them."
     `Domain/SourceGrade.swift`
+"They all leave your queue, filed as \(reason.label)."
+    `Domain/BulkDismiss.swift`
 "They declined"
     `Domain/Inquiry.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
