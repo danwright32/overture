@@ -30,8 +30,8 @@ struct ReachedOutRowArchiveJumpGuardTests {
                 "QueueView doesn't declare an onOpenInArchive callback for the reached-out row to call (#683).")
     }
 
-    // Must reuse the existing archiveJumpKey/showArchive pair (the #236/#308 mechanism already
-    // driving search picks and OmniFocus deep links), not a second one.
+    // Must reuse the one way Archive opens (the #236/#308 mechanism already driving search picks and
+    // OmniFocus deep links, gathered into openArchive by #1580), not a second one.
     @Test func rootViewWiresTheCallbackToTheExistingArchiveJumpMechanism() {
         #expect(!rootView.isEmpty)
         guard let callSite = rootView.range(of: "QueueView(deepLinkedKey:") else {
@@ -41,9 +41,7 @@ struct ReachedOutRowArchiveJumpGuardTests {
         let wiring = rootView[callSite.lowerBound...].prefix(600)
         #expect(wiring.contains("onOpenInArchive:"),
                 "RootView doesn't wire onOpenInArchive at the QueueView call site (#683).")
-        #expect(wiring.contains("archiveJumpKey = "),
-                "onOpenInArchive should set archiveJumpKey, reusing the existing jump mechanism (#683).")
-        #expect(wiring.contains("showArchive = true"),
-                "onOpenInArchive should set showArchive, reusing the existing jump mechanism (#683).")
+        #expect(wiring.contains("openArchive(key: key, recipientId: recipientId)"),
+                "onOpenInArchive should go through openArchive, reusing the existing jump mechanism (#683).")
     }
 }

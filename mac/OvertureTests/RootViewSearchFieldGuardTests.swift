@@ -27,7 +27,7 @@ struct RootViewSearchFieldGuardTests {
             return
         }
         let body = rootView[bodyRange.lowerBound...].prefix(1200)
-        #expect(body.contains("ShowSearchField(query: $searchQuery, allItems: searchableItems)"))
+        #expect(body.contains("ShowSearchField(query: $searchQuery, allItems: searchableItems"))
         #expect(body.contains("queueContent"))
     }
 }

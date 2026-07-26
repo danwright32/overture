@@ -100,6 +100,9 @@ struct RootView: View {
     // #685: which contact on the jumped-to show to highlight (nil when the jump only identifies
     // the show, e.g. a plain search pick or the toolbar Archive button).
     @State private var archiveJumpRecipientId: String?
+    // #1580: the query Archive opens already searching, carried over from a queue search that found
+    // nothing so Dan does not retype it. Empty every other way Archive opens.
+    @State private var archiveOpeningQuery: String = ""
     @State private var searchQuery: String = ""
     @State private var showPatterns = false
     @State private var showFollowUps = false
@@ -156,39 +159,55 @@ struct RootView: View {
 
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
 
-    private var searchableItems: [QueueItem] { allProspects.map(QueueItem.init) }
+    private var reachedOutKeys: Set<String> {
+        Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
+    }
 
-    // Whether picking a global search result, or an OmniFocus follow-up tap (#628), should jump
-    // into the Queue (#236's existing deep link mechanism) or open Archive with that row forced
-    // into view instead. A show no stage will render never appears in the Queue, so it routes to
-    // Archive instead of silently landing nowhere.
+    // Every show Overture has ever tracked. Not what the search bar above the Queue offers (see
+    // searchableItems); it is what Archive holds, counted so an empty search can say the show is there.
+    private var allItems: [QueueItem] { allProspects.map(QueueItem.init) }
+
+    // #1580: what the persistent bar above the Queue can find, which is exactly the shows a stage will
+    // render. Dan asked for the split: "search should only allow me to search for shows in the queue.
+    // Archive can have its own search." It used to be every prospect the store held, dismissed ones
+    // included, so roughly half of what it surfaced took him out of the Queue the moment he picked it.
+    //
+    // Scoped by StageNavigation.stagedKeys, the same predicate the stage lists render from, so a pick
+    // can only ever land on a row he can see.
+    private var searchableItems: [QueueItem] {
+        let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys, geo: geo)
+        return allItems.filter { scope.contains($0.id) }
+    }
+
+    // Whether a deep-linked show (an OmniFocus follow-up tap, #628, or a search pick) should jump into
+    // the Queue (#236's existing deep link mechanism) or open Archive with that row forced into view
+    // instead. A show no stage will render never appears in the Queue, so it routes to Archive rather
+    // than silently landing nowhere.
     //
     // #1567: asked through StageNavigation, the same predicate the focused list renders from, rather
     // than a second date filter of its own. A show Dan can SEE in his Scout list is now always
-    // reachable from search, and a show no stage renders never opens the Queue on an empty list.
-    private func handleSearchSelection(_ item: QueueItem) {
-        let reachedOutKeys = Set(ReachedOutQueue.active(from: nonDismissedProspects, now: Date()).map(\.prospect.naturalKey))
-        if StageNavigation.opensInQueue(key: item.id, in: nonDismissedProspects,
+    // reachable, and a show no stage renders never opens the Queue on an empty list.
+    //
+    // #1580: one copy, not two. A search pick is now always in scope and so always takes the Queue
+    // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
+    private func routeDeepLink(toKey key: String) {
+        if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
                                         reachedOutKeys: reachedOutKeys, geo: geo) {
-            deepLinkedKey = item.id
+            deepLinkedKey = key
         } else {
-            archiveJumpKey = item.id
-            archiveJumpRecipientId = nil
-            showArchive = true
+            openArchive(key: key)
         }
     }
 
-    // Same routing as handleSearchSelection, but starting from a natural key (from an OmniFocus
-    // deep link) instead of an already-resolved QueueItem. A key with no matching prospect at all
-    // (shouldn't happen in practice) is treated the same as unreachable.
-    private func routeDeepLink(toKey key: String) {
-        guard let item = searchableItems.first(where: { $0.id == key }) else {
-            archiveJumpKey = key
-            archiveJumpRecipientId = nil
-            showArchive = true
-            return
-        }
-        handleSearchSelection(item)
+    // #1580: every way Archive opens, in one place. Five callers each set the same three pieces of
+    // state by hand before, which was survivable while they all cleared them; adding a fourth piece
+    // (the opening query) to five call sites is how one of them ends up carrying a stale one.
+    // Defaulted, so "open Archive" with nothing to say clears all three.
+    private func openArchive(key: String? = nil, recipientId: String? = nil, query: String = "") {
+        archiveJumpKey = key
+        archiveJumpRecipientId = recipientId
+        archiveOpeningQuery = query
+        showArchive = true
     }
 
     private var canStartPrep: Bool {
@@ -218,9 +237,11 @@ struct RootView: View {
         // Archive's own body works correctly. This still reads as "persistent" per the design
         // (always visible above the Queue, not tucked into a menu), just not toolbar-hosted.
         VStack(spacing: 0) {
-            ShowSearchField(query: $searchQuery, allItems: searchableItems) { result in
-                handleSearchSelection(result)
-            }
+            ShowSearchField(query: $searchQuery, allItems: searchableItems,
+                            placeholder: "Search the queue",
+                            onSelect: { result in routeDeepLink(toKey: result.id) },
+                            archiveItems: allItems,
+                            onSearchArchive: { query in openArchive(query: query) })
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
             Divider()
             queueContent
@@ -235,9 +256,7 @@ struct RootView: View {
                       showFollowUps = true
                   },
                   onOpenInArchive: { key, recipientId in
-                      archiveJumpKey = key
-                      archiveJumpRecipientId = recipientId
-                      showArchive = true
+                      openArchive(key: key, recipientId: recipientId)
                   },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
@@ -381,9 +400,7 @@ struct RootView: View {
                 }
                 ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        archiveJumpKey = nil
-                        archiveJumpRecipientId = nil
-                        showArchive = true
+                        openArchive()
                     } label: {
                         ToolbarHoverLabel(title: "Archive", systemImage: "archivebox")
                     }
@@ -702,16 +719,14 @@ struct RootView: View {
             }
             .sheet(isPresented: $showArchive) {
                 ArchiveView(initialHighlightKey: archiveJumpKey, initialHighlightRecipientId: archiveJumpRecipientId,
-                           onConnectGmail: connectGmail)
+                           initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showPatterns) { OutcomePatternsView() }
             .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
             .sheet(isPresented: $showFollowUps) {
                 FollowUpsView(onOpenInArchive: { key, recipientId in
                     showFollowUps = false
-                    archiveJumpKey = key
-                    archiveJumpRecipientId = recipientId
-                    showArchive = true
+                    openArchive(key: key, recipientId: recipientId)
                 }, initialHighlightRecipientId: followUpsHighlightRecipientId,
                 onHighlightConsumed: { followUpsHighlightRecipientId = nil })
             }

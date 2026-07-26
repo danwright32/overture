@@ -35,7 +35,9 @@ struct ArchiveViewSearchRevealGuardTests {
             Issue.record("onAppear block not found")
             return
         }
-        let body = archiveView[onAppearRange.lowerBound...].prefix(200)
+        // #1580: onAppear also seeds the carried-over query and its status chips first, so the window
+        // read here is wider than the jump alone.
+        let body = archiveView[onAppearRange.lowerBound...].prefix(400)
         // #685: onAppear also threads the initial recipient to highlight through to reveal(_:).
         #expect(body.contains("reveal(key, recipientId: initialHighlightRecipientId)"))
     }

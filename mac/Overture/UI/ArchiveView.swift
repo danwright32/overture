@@ -38,7 +38,7 @@ struct ArchiveView: View {
 
     @Query private var prospects: [Prospect]
 
-    @State private var activeStatuses: Set<ArchiveStatus> = [.new, .active]
+    @State private var activeStatuses: Set<ArchiveStatus> = ArchiveOpening.defaultStatuses
     @State private var query: String = ""
     @State private var highlightedKey: String?
     // #685: the specific contact (if any) the jump targeted, so a multi-recipient show highlights
@@ -59,6 +59,11 @@ struct ArchiveView: View {
 
     var initialHighlightKey: String? = nil
     var initialHighlightRecipientId: String? = nil
+    // #1580: a search the queue's own bar could not answer, handed over rather than retyped. The shows
+    // that bar can no longer find all sit outside the two status chips Archive normally opens on, so
+    // ArchiveOpening widens them: otherwise the jump lands on an empty list right after saying there
+    // were three matches.
+    var initialQuery: String = ""
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
@@ -93,6 +98,8 @@ struct ArchiveView: View {
             onConnectGmail: onConnectGmail
         )
         .onAppear {
+            query = initialQuery
+            activeStatuses = ArchiveOpening.statuses(forQuery: initialQuery)
             guard let key = initialHighlightKey else { return }
             reveal(key, recipientId: initialHighlightRecipientId)
         }
