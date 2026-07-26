@@ -61,15 +61,28 @@ struct WentByRetirementTests {
         #expect(september.status == .new)
     }
 
-    // The same rule the Scout pill (#861), the ingest guard (#798) and the reconcile all use: judged on
-    // the run's LAST night. A run that opened in the past but is still playing tonight is still a lead,
-    // and retiring it would throw away a show Dan could still shoot.
-    @Test func aRunStillPlayingTonightIsStillALead() throws {
+    // #1540, REVERSING what this test used to assert: a run that OPENED on an earlier day is retired,
+    // even though it plays for another eight nights. Dan's ruling (2026-07-26) is that a client's need
+    // for photos is over once they have opened, so an untriaged opened run is not a lead he will ever
+    // work. He chose archiving it over leaving it in the store as `new`, so that the one rule behind the
+    // Scout pill, the triage list and this sweep stays one rule, with no invisible class in between.
+    @Test func aRunThatOpenedOnAnEarlierDayIsRetired() throws {
         let ctx = try context()
         let running = show(ctx, "run", date: "2026-07-09", runEnd: "2026-07-20")
 
+        #expect(WentByRetirement.run(in: ctx, today: today) == 1)
+        #expect(running.status == .dismissed)
+        #expect(running.dismissReason == .wentBy)
+    }
+
+    // The other side of Dan's cut, and the reason it is `days < 0` and not `days < 1`: a run OPENING
+    // tonight has not started. It is still his to decide on, and the sweep must not take it.
+    @Test func aRunOpeningTonightIsStillHisToDecide() throws {
+        let ctx = try context()
+        let opening = show(ctx, "opens-tonight", date: today, runEnd: "2026-07-20")
+
         #expect(WentByRetirement.run(in: ctx, today: today) == 0)
-        #expect(running.status == .new)
+        #expect(opening.status == .new)
     }
 
     // An undated show is NOT past. "Date to be confirmed" is a normal state on an org's season page, and
@@ -142,11 +155,13 @@ struct WentByRetirementTests {
 
     // MARK: - The rule is shared, so the two halves cannot disagree
 
-    // The Scout pill's "still waiting on Dan" and this retirement's "already went by" are the same
+    // The Scout pill's "still waiting on Dan" and this retirement's "no longer his to work" are the same
     // question. If they ever answered it differently, a show could be retired while still being counted,
-    // or counted while already retired. They are one predicate (Prospect.hasGoneBy), and this pins it:
-    // for every untriaged show, exactly one of the two claims it. Note "today" belongs to Dan, not to
-    // the retirement: a show playing tonight has not gone by.
+    // or counted while already retired. They are one predicate (Prospect.hasOpened), and this pins it:
+    // for every untriaged show, exactly one of the two claims it, with nothing in between. #1540 moved
+    // that predicate to the OPENING night, which is why `still-running` now sits with `past` rather than
+    // with the shows waiting on him. Note "today" belongs to Dan, not to the sweep: a show opening
+    // tonight has not started.
     @Test func everyUntriagedShowIsEitherWaitingOnDanOrRetired() throws {
         let ctx = try context()
         show(ctx, "past", date: "2026-06-27")
@@ -157,10 +172,23 @@ struct WentByRetirementTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         let waiting = Set(StageNavigation.naturalKeys(for: .scout, in: all, today: today))
-        let goneBy = Set(all.filter { $0.hasGoneBy(today: today) }.map(\.naturalKey))
+        let opened = Set(all.filter { $0.hasOpened(today: today) }.map(\.naturalKey))
 
-        #expect(goneBy == Set(["past"]))
-        #expect(waiting.isDisjoint(with: goneBy), "a show cannot be both waiting on Dan and already gone")
-        #expect(waiting.union(goneBy) == Set(all.map(\.naturalKey)), "every untriaged show is one or the other")
+        #expect(opened == Set(["past", "still-running"]))
+        #expect(waiting.isDisjoint(with: opened), "a show cannot be both waiting on Dan and already open")
+        #expect(waiting.union(opened) == Set(all.map(\.naturalKey)), "every untriaged show is one or the other")
+    }
+
+    // #1540 + #863: the sweep and the triage LIST are separate code (a SwiftData predicate here, a pure
+    // array filter in QueueModel), and a pill's number is a promise about the rows the list will render.
+    // So assert them against each other on the exact row the reversal turns on, rather than trusting that
+    // two hand-written date checks say the same thing.
+    @Test func theSweepAndTheTriageListAgreeAboutAnOpenedRun() throws {
+        let ctx = try context()
+        let running = show(ctx, "run", date: "2026-07-09", runEnd: "2026-07-20")
+
+        #expect(QueueModel.toSendQueue([QueueItem(running)], reachedOutKeys: [], today: today).isEmpty)
+        #expect(running.hasOpened(today: today))
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [running], today: today).isEmpty)
     }
 }

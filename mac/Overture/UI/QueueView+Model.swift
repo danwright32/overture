@@ -630,9 +630,10 @@ enum QueueModel {
         return EasternDate.daysUntil(from: today, to: performanceDate)
     }
 
-    // #1122: `underway` is a run whose opening night has passed but whose closing night has not, so it is
-    // still a live, pitchable show. Distinct from `past` (the whole run is over) and from the ordinary
-    // upcoming urgencies (it has already started).
+    // #1122: `underway` is a run whose opening night has passed but whose closing night has not. Distinct
+    // from `past` (the whole run is over) and from the ordinary upcoming urgencies (it has already
+    // started). #1540: it is no longer a PITCHABLE state, and no untriaged row can be in it any more; it
+    // survives only to label a run Dan had already kept when it opened, which keeps working.
     enum Urgency { case past, tooSoon, imminent, soon, ahead, unknown, booked, underway }
     struct Timing: Equatable { let label: String; let urgency: Urgency
         static func == (l: Timing, r: Timing) -> Bool { l.label == r.label && l.urgency == r.urgency } }
@@ -648,10 +649,11 @@ enum QueueModel {
         guard let days = daysUntil(performanceDate: performanceDate, today: today) else {
             return Timing(label: "Date TBD", urgency: .unknown)
         }
-        // The opening night is behind us but the closing-night check above let the run through, so it is
-        // underway and still bookable. The row shows the full date range beside this, so the label only
-        // has to say the run has started and can still be pitched (Dan's big note on #1122).
-        if days < 0 { return Timing(label: "Run underway, still bookable", urgency: .underway) }
+        // The opening night is behind us but the closing-night check above let the run through, so the run
+        // is underway. #1540: this row can now only be one Dan already KEPT (triage drops an opened run),
+        // and he ruled that nothing may call such a run bookable, which the label used to. The row shows
+        // the full date range beside this, so all this has to add is that today falls inside it.
+        if days < 0 { return Timing(label: "Run underway", urgency: .underway) }
         if days == 0 { return Timing(label: "Performs today, too close to book", urgency: .tooSoon) }
         if days <= tooCloseDays {
             return Timing(label: "In \(days) day\(days == 1 ? "" : "s"), likely too close to book", urgency: .tooSoon)
@@ -706,14 +708,14 @@ enum QueueModel {
                 bookable.append(item)
                 continue
             }
-            // #1122: judged by the run's CLOSING night for the past check (a run still running tonight
-            // stays visible, consistent with the scout import guard), but by the OPENING night for the
-            // far-future check (a run that has not started and opens beyond the lead-time window is still
-            // too far out). A single-night show has runEndDate nil, so its closing night IS its date and
-            // this collapses to the old `days < 0` behaviour.
-            let lastNight = EasternDate.runLastNight(runEndDate: item.runEndDate,
-                                                     performanceDate: item.performanceDate)
-            if EasternDate.runHasPassed(lastNight: lastNight, today: today) { continue }
+            // #1540, reversing #1122: both edges of the window are judged by the run's OPENING night. A
+            // run that has already started leaves triage (Dan will not pitch a client who has opened),
+            // and a run that opens beyond the lead-time window is still too far out. Asked through
+            // Prospect.hasOpened's twin so the pill's count and this list cannot answer it differently.
+            //
+            // Stage lists (Prep, Review, Reached out) never come through here, so a run Dan kept before
+            // it opened keeps working: hiding work already in flight would read as deletion (#1014/#901).
+            if EasternDate.runHasOpened(openingNight: item.performanceDate, today: today) { continue }
             guard let days = daysUntil(performanceDate: item.performanceDate, today: today) else {
                 bookable.append(item)
                 continue

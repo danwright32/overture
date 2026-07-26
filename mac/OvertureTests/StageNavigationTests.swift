@@ -154,13 +154,16 @@ struct PastShowsLeaveTheScoutQueueTests {
         #expect(keys == ["september"])
     }
 
-    // A multi-night run that OPENED in the past but is still running tonight is not gone. Judged on its
-    // last night, the same rule the ingest guard (#798) and the reconcile both use, so there is one
-    // answer to "is this show over" and not three.
-    @Test func aRunStillRunningTonightIsStillWaitingOnHim() {
+    // #1540, REVERSING what this test used to assert: a run that opened on an earlier day is no longer
+    // waiting on Dan, even though it plays for another eight nights. He ruled that a client's need for
+    // photos ends once they have opened, so the pill must not count one, and the triage list drops it on
+    // the same predicate (Prospect.hasOpened). A run opening TONIGHT is still his to decide on.
+    @Test func aRunThatOpenedOnAnEarlierDayIsNoLongerWaitingOnHim() {
         let running = show("run", date: "2026-07-09", runEnd: "2026-07-20")
+        let openingTonight = show("tonight", date: today, runEnd: "2026-07-20")
 
-        #expect(StageNavigation.naturalKeys(for: .scout, in: [running], today: today) == ["run"])
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [running, openingTonight], today: today)
+                == ["tonight"])
     }
 
     // An undated show cannot be judged past, and "date to be confirmed" is a normal state on an org's

@@ -628,14 +628,18 @@ struct ProspectRowView: View {
 
     private var keepDismissControls: some View {
         HStack(spacing: OVSpacing.xs) {
-            // #864: a show Overture retired because its last night passed is NOT a cut Dan made, and it
-            // offers no Restore. Restoring it would put it back as undecided, and the next launch would
-            // retire it again for the same unchangeable reason: a button that quietly undoes itself. The
-            // date has passed; there is nothing to put it back into.
+            // #864: a show Overture retired because its date went by is NOT a cut Dan made, and it offers
+            // no Restore. Restoring it would put it back as undecided, and the next launch would retire it
+            // again for the same unchangeable reason: a button that quietly undoes itself. The date has
+            // passed; there is nothing to put it back into.
+            //
+            // #1540: the help text used to say the performance HAPPENED, which is now false for the rows
+            // this sweep takes most often: a run that opened days ago and plays for weeks yet. It says
+            // "opened" instead, which is true of a one-night show that has been and gone as well.
             if item.dismissReason == .wentBy {
                 Label("Went by", systemImage: "clock.arrow.circlepath")
                     .ovPill(.neutral)
-                    .help("This performance happened before you triaged it, so it is no longer waiting on you")
+                    .help("This show opened before you triaged it, so it is no longer waiting on you")
             } else if item.status == .dismissed, let onRestore {
                 Label("Dismissed", systemImage: "archivebox")
                     .ovPill(.neutral)

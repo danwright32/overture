@@ -469,12 +469,22 @@ struct RowDraftTraceBadgeTests {
     }
 }
 
-// #1122: a multi-night run is judged by its CLOSING night, never its opening one (the rule
-// EasternDate.runLastNight already states and the scout import guard already honors). A run that opened
-// last week but runs through next week is still a live, pitchable show. Two queue surfaces keyed on the
-// opening night instead and broke that: the timing label called the whole run "Performance passed", and
-// queueOrder dropped it out of To Send entirely, the moment its first night went by.
-@Suite("A multi-night run is judged by its closing night (#1122)")
+// #1540, REVERSING #1122: the triage queue's near edge is the run's OPENING night, not its closing one.
+//
+// #1122 had moved it the other way, on the premise that a run which opened last week but plays through
+// next week is still a live, pitchable show. Dan's ruling on 2026-07-26 killed that premise: "if a run
+// has started I don't want to see it in the scout queue. If a run started yesterday they probably don't
+// need photos anymore." The client's need for photos is effectively over once they have opened.
+//
+// The cut is `days < 0`, not `days < 1`, and that distinction is Dan's, made after being shown both
+// readings of his own words: a show whose opening night is TONIGHT has not started, so it stays and keeps
+// reading "Performs today, too close to book". Only a run that opened on an EARLIER day goes.
+//
+// Scoped to TRIAGE. The stage lists (Prep, Review, Reached out) bypass queueOrder entirely, so a run Dan
+// kept before it opened keeps working: hiding work already in flight would read as deletion (#1014/#901).
+// Those rows still need a label, so `.underway` survives, but Dan's second ruling the same day was that
+// nothing in the app may call an opened run BOOKABLE.
+@Suite("The triage queue's near edge is the run's opening night (#1540)")
 struct MultiDateRunQueueTests {
     private func run(_ open: String?, _ close: String?, key: String = "run") -> QueueItem {
         var q = item(performanceDate: open, key: key)
@@ -484,14 +494,15 @@ struct MultiDateRunQueueTests {
 
     // MARK: - The timing label (surface 1)
 
-    // Opening night is behind us, the closing night is still ahead: the run is underway and still
-    // bookable, NOT "Performance passed". The row already shows the full date range beside this label, so
-    // the label's job is to say the run has started and can still be pitched.
-    @Test func aRunUnderwayReadsAsBookableNotPassed() {
+    // The label a kept, opened run still carries in its stage list. It says the run has started, and it
+    // must NOT claim the run is bookable: Dan's whole ruling is that it is not.
+    @Test func anOpenedRunReadsAsStartedAndNeverAsBookable() {
         let t = QueueModel.outreachTiming(performanceDate: "2026-07-17", runEndDate: "2026-07-25",
                                           today: "2026-07-20")
         #expect(t.urgency == .underway)
         #expect(t.label != "Performance passed")
+        #expect(!t.label.lowercased().contains("bookable"),
+                "#1540: an opened run is not bookable, so no label may say it is (was \"\(t.label)\")")
     }
 
     // Once the CLOSING night is behind us the whole run really has passed.
@@ -524,9 +535,26 @@ struct MultiDateRunQueueTests {
 
     // MARK: - The To Send queue (surface 2)
 
-    // The run whose opening night passed but which is still running stays in the queue.
-    @Test func aRunStillRunningStaysInToSend() {
+    // #1540: the run opened three days ago and plays for another five. It is gone from triage.
+    @Test func aRunThatOpenedOnAnEarlierDayLeavesTheQueue() {
         let result = QueueModel.queueOrder([run("2026-07-17", "2026-07-25")], today: "2026-07-20")
+        #expect(result.isEmpty)
+    }
+
+    // Dan's line: only a run that has STARTED goes. Tonight's opening has not started, so it stays, with
+    // the timing line it has always had. Both halves asserted together because the pair IS the ruling.
+    @Test func aShowOpeningTonightStaysAndStillReadsTooClose() {
+        let result = QueueModel.queueOrder([run("2026-07-20", "2026-07-28")], today: "2026-07-20")
+        #expect(result.count == 1)
+        let t = QueueModel.outreachTiming(performanceDate: "2026-07-20", runEndDate: "2026-07-28",
+                                          today: "2026-07-20")
+        #expect(t.label == "Performs today, too close to book")
+        #expect(t.urgency == .tooSoon)
+    }
+
+    // A single-night show opening tomorrow is the nearest thing triage still offers.
+    @Test func aShowOpeningTomorrowStays() {
+        let result = QueueModel.queueOrder([run("2026-07-21", nil)], today: "2026-07-20")
         #expect(result.count == 1)
     }
 
@@ -543,11 +571,17 @@ struct MultiDateRunQueueTests {
         #expect(result.isEmpty)
     }
 
-    // A single-night past show is still dropped (unchanged), so the closing-night rule didn't loosen the
-    // ordinary case.
+    // A single-night past show is still dropped (unchanged): the ordinary case never moved.
     @Test func aSingleNightPastShowIsStillDropped() {
         let result = QueueModel.queueOrder([run("2026-07-17", nil)], today: "2026-07-20")
         #expect(result.isEmpty)
+    }
+
+    // An UNDATED show keeps its bypass. "Date to be confirmed" is a normal listing state on a season page,
+    // and a show with no opening night has not opened: dropping it would silently lose a real lead (#798).
+    @Test func anUndatedShowStillBypassesTheNearEdge() {
+        let result = QueueModel.queueOrder([run(nil, nil)], today: "2026-07-20")
+        #expect(result.count == 1)
     }
 }
 
