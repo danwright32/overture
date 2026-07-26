@@ -152,6 +152,109 @@ struct SourceScheduleTests {
         #expect(SourceSchedule.waitingToRead(deferred: [quiet]).isEmpty)
     }
 
+    // MARK: - #1546: a retry owed is not a page with something on it
+
+    // A source whose last read FAILED and whose bytes have not moved since. `ScoutExtractIngest.fail()`
+    // sets hasUnreadChanges on every failed read, deliberately, and for a no_dated_content failure nothing
+    // ever clears it, so this row's flag is pinned on forever.
+    private func stuckOnAFailedRead(_ id: String, lastManualRead: Date? = nil,
+                                    failure: SourceFailure = .verdict(.noDatedContent)) -> WatchedSource {
+        let s = source(id, lastManualRead: lastManualRead, hasUnreadChanges: true)
+        s.lastFailure = failure
+        s.pendingContentHash = "same-bytes"
+        s.lastObservedContentHash = "same-bytes"
+        return s
+    }
+
+    // The live harm. `manualReadOrder` sorted on the raw flag, so a page that failed and cannot succeed
+    // sorted AHEAD of a venue that genuinely posted a new season, on every press, forever. That order is
+    // what ScoutReadBudget's "read the first batch" slices, so the dead page was eating a slot in the batch
+    // Dan agreed to pay for.
+    @Test func aRetryOwedOnUnchangedBytesDoesNotOutrankAGenuineChange() {
+        let stuck = stuckOnAFailedRead("a-stuck")
+        let genuinelyChanged = source("z-changed", hasUnreadChanges: true)
+
+        let plan = SourceSchedule.plan(sources: [stuck, genuinelyChanged], depth: .readChanged,
+                                       budget: 20, now: now)
+
+        #expect(plan.fetch.map(\.sourceId) == ["z-changed", "a-stuck"])
+    }
+
+    // It is DEMOTED, not dropped. #1217 re-reads a still broken source on a run Dan started, on the
+    // assumption he fixed the cause between presses, and that is untouched here: the stuck source still
+    // outranks a quiet one, which has nothing to read at all.
+    @Test func aRetryOwedStillOutranksASourceWithNothingToRead() {
+        let stuck = stuckOnAFailedRead("z-stuck")
+        let quiet = source("a-quiet", hasUnreadChanges: false)
+
+        let plan = SourceSchedule.plan(sources: [stuck, quiet], depth: .readChanged, budget: 20, now: now)
+
+        #expect(plan.fetch.map(\.sourceId) == ["z-stuck", "a-quiet"])
+    }
+
+    // The whole point of deciding this on the BYTES rather than on the failure. The org fixes their page
+    // and posts a season: the hash the free daily pass now sees no longer matches the bytes the failed read
+    // was handed, so this is real unread content again and goes straight back to the front. Nothing has to
+    // notice or reset anything for that to happen.
+    @Test func aPageThatMovedSinceItsFailedReadIsARealChangeAgain() {
+        let moved = stuckOnAFailedRead("z-moved")
+        moved.lastObservedContentHash = "new-bytes"
+        let quiet = source("a-quiet", hasUnreadChanges: false)
+
+        #expect(moved.unreadIsOnlyAnOwedRetry == false)
+        let plan = SourceSchedule.plan(sources: [quiet, moved], depth: .readChanged, budget: 20, now: now)
+        #expect(plan.fetch.map(\.sourceId) == ["z-moved", "a-quiet"])
+    }
+
+    // A source that has never been read at all is not owed a retry, it is genuinely unread, and it keeps
+    // its place at the front. Its failure is nil, which is the first thing the rule asks about.
+    @Test func aNeverReadSourceIsRealBacklogNotARetry() {
+        let brandNew = source("z-new", hasUnreadChanges: true)
+
+        #expect(brandNew.unreadIsOnlyAnOwedRetry == false)
+        #expect(brandNew.isCarryingUnreadListings)
+    }
+
+    // The count half. A stuck source is not WAITING to be read: reading it again reproduces the same
+    // failure. Counting it kept the popup's "N venues are still waiting" off zero however many times Dan
+    // pressed Run again, which is the never converging count #1431 fixed arriving through another door.
+    @Test func aRetryOwedOnUnchangedBytesIsNotCountedAsWaitingToRead() {
+        let stuck = stuckOnAFailedRead("stuck")
+        let changed = source("changed", hasUnreadChanges: true)
+
+        #expect(SourceSchedule.waitingToRead(deferred: [stuck, changed]).map(\.sourceId) == ["changed"])
+        #expect(SourceSchedule.waitingToRead(deferred: [stuck]).isEmpty)
+    }
+
+    // The failure path across REPEATED presses, which is the shape the bug actually had: not one bad run,
+    // but the same bad run forever. Two presses, the page still failing and still serving the same bytes,
+    // and the genuine change must be first both times and the waiting count empty both times.
+    @Test func aStillFailingSourceNeverReclaimsTheFrontAcrossRepeatedPresses() {
+        let stuck = stuckOnAFailedRead("a-stuck")
+        let changed = source("z-changed", hasUnreadChanges: true)
+
+        for press in 1...2 {
+            let plan = SourceSchedule.plan(sources: [stuck, changed], depth: .readChanged,
+                                           budget: 20, now: now)
+            #expect(plan.fetch.map(\.sourceId) == ["z-changed", "a-stuck"], "press \(press)")
+            #expect(SourceSchedule.waitingToRead(deferred: plan.fetch).map(\.sourceId) == ["z-changed"],
+                    "press \(press)")
+            // The press ends the way a real one does for a page with nothing dated on it: it fails again,
+            // re-setting the flag and leaving the bytes exactly where they were.
+            stuck.hasUnreadChanges = true
+            stuck.lastFailure = .verdict(.noDatedContent)
+        }
+    }
+
+    // A fetch that never landed is owed a retry too, and for the same reason: nobody has seen new listings
+    // here, so it is not backlog. It is still shown as failing, which is where a broken source belongs.
+    @Test func aSourceThatCouldNotBeFetchedIsAlsoARetryNotBacklog() {
+        let unreachable = stuckOnAFailedRead("unreachable", failure: .fetch(.unreachable))
+
+        #expect(unreachable.unreadIsOnlyAnOwedRetry)
+        #expect(SourceSchedule.waitingToRead(deferred: [unreachable]).isEmpty)
+    }
+
     // MARK: - Watching is free. Reading is not. (Dan's 4th decision, 2026-07-12)
 
     // The daily automatic run fetches and hashes every source, so a dead source is noticed within a

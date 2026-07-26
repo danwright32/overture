@@ -25,7 +25,18 @@ enum SourceConfirmation {
     // A nil on either side is never stale: no bytes to anchor to (confirmEmpty returns .noHash on its
     // own), or a row from before this field was recorded, where over-warning would be worse than silence.
     static func readIsStaleForConfirm(anchorHash: String?, lastSeenHash: String?) -> Bool {
-        guard let anchorHash, let lastSeenHash else { return false }
-        return anchorHash != lastSeenHash
+        pageMovedSinceRead(readHash: anchorHash, lastSeenHash: lastSeenHash)
+    }
+
+    // #1546: the same question with the confirm taken out of it. Has the live page moved past the bytes we
+    // last READ? Two callers now ask it for different reasons (a confirm that would not stick above, and
+    // telling a retry owed from real unread listings in WatchedSource), so it is stated once rather than
+    // compared by hand in two places that could drift on the nil rule.
+    //
+    // A nil on either side is never a move: nothing read to compare against, or a row from before these
+    // fields were recorded. Both callers want the same conservative answer there.
+    static func pageMovedSinceRead(readHash: String?, lastSeenHash: String?) -> Bool {
+        guard let readHash, let lastSeenHash else { return false }
+        return readHash != lastSeenHash
     }
 }

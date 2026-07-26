@@ -112,6 +112,20 @@ struct SourcesSheetSaysEachThingOnceTests {
         #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure) == false)
     }
 
+    // #1545: Dan's Sour Grapes Productions row said "Checked 23 hours ago", "New listings, not read yet.
+    // Run a scout to read them.", and "That page has no dated listings on it." all at once. The middle line
+    // is false and no scout can make it go away: `ScoutExtractIngest.fail()` sets the flag on every failed
+    // read and only a successful read or a Confirm empty can clear it, so it is pinned on forever here.
+    // Same reasoning as notRead and unreadable above, and sharper: this is the ONE failure that offers both
+    // buttons, so the honest next step is "Fix the address" or "This page is right", never "run a scout".
+    @Test func aPageWithNoDatedListingsDoesNotSayToRunAScoutThatCannotHelp() {
+        let waiting = source(checked: hoursAgo(23), succeeded: hoursAgo(72), unread: true)
+        waiting.lastFailure = .verdict(.noDatedContent)
+
+        let state = SourceReadState.of(waiting)
+        #expect(state.isWorthShowing(lastCheckedAt: waiting.lastCheckedAt, failure: waiting.lastFailure) == false)
+    }
+
     // The guard and its wiring are two claims (#887): the rule above is only true on screen if the sheet
     // actually hands the failure to it. Without the argument, `notRead` defaults away and the line comes
     // back, with every domain test still green.
