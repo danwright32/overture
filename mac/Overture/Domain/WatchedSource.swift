@@ -110,6 +110,18 @@ final class WatchedSource {
     // rows migrate cleanly and simply carry no observation until their next check.
     var lastObservedContentHash: String? = nil
 
+    // #1544: the most recent successful fetch of this source came back over an UNENCRYPTED connection,
+    // because its https handshake is broken and Dan stored a cleartext address (SourceFetcher's fallback,
+    // allowed for a named host only). Worth a stored column rather than a derived guess: a page fetched in
+    // the clear is one anyone on the network between here and that server could have altered in flight, and
+    // it feeds FeedReconcile, where a source's silence cancels shows. Dan should be able to see which of
+    // his sources are in that category rather than have it be silent.
+    //
+    // Written on EVERY successful fetch, including the free daily watch pass, so it describes the latest
+    // state rather than freezing at whenever the last paid read happened, and clears itself the day the
+    // site fixes its certificate. Defaulted, so existing rows migrate cleanly.
+    var lastFetchWasInsecure: Bool = false
+
     // The three UserDefaults keys of the #150/#152 self-heal machinery, per source. A merged
     // multi-source feed count must never feed a shared baseline: one healthy source's big season would
     // mask another source's dead scraper, which is the exact failure this whole model exists to make
@@ -251,6 +263,13 @@ final class WatchedSource {
         SourceReadability.noteIsInformationalOnly(readable: lastReadableCount,
                                                   unreadable: lastUnreadableCount,
                                                   baseline: baselineFeedCount)
+    }
+
+    // #1544: what the row says about an unencrypted fetch, decided beside the data and never in the view
+    // (#863). Nil is the overwhelmingly common case and costs the row nothing.
+    var insecureFetchNote: String? {
+        guard lastFetchWasInsecure else { return nil }
+        return "Read over an unencrypted connection, because this site's secure one is broken."
     }
 
     // #986: has this source EVER said where one of its shows is? A high-water mark, derived rather than

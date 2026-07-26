@@ -77,6 +77,11 @@ struct FetchedPage: Equatable, Sendable {
     // browser does. Worth knowing per source: rendering is seconds and a whole WebKit instance, so a
     // source that always needs it is a source that costs more.
     var wasRendered: Bool = false
+    // #1544: this page came back over an UNENCRYPTED connection, because the site's https handshake is
+    // broken and Dan's stored address was cleartext. Anyone on the network between here and that server
+    // could have altered it in flight, and it feeds FeedReconcile, where a source's silence cancels shows.
+    // So it is carried rather than shrugged off, and said out loud on the source's row.
+    var wasReadInsecurely: Bool = false
     // Set when the page Dan gave us had nothing readable on it and we followed its TICKET LINK to the
     // page that did. Dan must be told: he pasted his ensemble's site and got a listing off Lincoln
     // Center's, and silently swapping the page under him would be exactly the kind of quiet cleverness
@@ -154,6 +159,20 @@ enum SourceFetcher {
     // Asking for https instead cannot regress anything: a cleartext fetch cannot succeed today, so no
     // source that works now is affected. It also catches the next http link Dan pastes as a lead, which
     // would otherwise fail the same misleading way.
+    // #1544: the hosts Overture may read over an UNENCRYPTED connection, and only after its https
+    // handshake has actually failed (see `fetch`). Dan's decision, 2026-07-26, taken deliberately over the
+    // alternative of opening cleartext everywhere and letting the code below be the only gate: macOS keeps
+    // enforcing encryption for every other source on the watchlist, so a bug here cannot expose them.
+    //
+    // This list is HALF of the permission. The other half is the matching NSExceptionDomains entry in
+    // Info.plist, without which the OS refuses the request whatever this says. Adding a host means editing
+    // both, and `CleartextFallbackTests` fails if the two ever name different sets, because a permission
+    // granted in two places that can drift is exactly the trap #887 named.
+    //
+    // dinumihailescu.com: answers plain http with 200 and 37KB of HTML; its https endpoint sends a fatal
+    // TLS alert as soon as a client offers ALPN, which every real client does (evidence in #1543).
+    static let cleartextFallbackHosts: Set<String> = ["dinumihailescu.com"]
+
     static func secured(_ url: URL) -> URL {
         guard url.scheme?.lowercased() == "http",
               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -207,9 +226,21 @@ enum SourceFetcher {
             return try await feed(target, sourceName, sourceLocation)
         }
 
-        let landing = try await fetchSinglePage(secured(url), session: session, render: render,
+        // #1544: the cleartext fallback, and it lives HERE rather than inside fetchSinglePage on purpose.
+        // Everything below this line (the month stitch) and inside that function (the ticket-link hop, the
+        // sibling probe) follows an address the APP derived from a page, not one Dan supplied. Those must
+        // never go out unencrypted, and putting the fallback on the entry point is what makes that
+        // structural rather than a rule somebody has to remember.
+        let landing: FetchedPage
+        do {
+            landing = try await fetchSinglePage(secured(url), session: session, render: render,
                                                 allowTicketLinkHop: allowTicketLinkHop,
                                                 allowSiblingProbe: allowSiblingProbe)
+        } catch let tlsFailure as SourceFetchError where mayReadInTheClear(tlsFailure, storedAt: url) {
+            landing = try await readInTheClear(url, after: tlsFailure, session: session, render: render,
+                                               allowTicketLinkHop: allowTicketLinkHop,
+                                               allowSiblingProbe: allowSiblingProbe)
+        }
 
         // Not asked to paginate, or we are no longer on the page Dan gave us. A ticket-link hop means we
         // are reading somebody else's page (a venue's) on behalf of one org's lead, and walking THAT
@@ -237,6 +268,57 @@ enum SourceFetcher {
                                session: session, render: render, now: now)
         out.monthsUnreachable = index.unreachableMonths
         return out
+    }
+
+    // #1544: may this failure, on this address, be retried without encryption? Three conditions, and all
+    // three have to hold.
+    //
+    //   1. The failure was the HANDSHAKE, nothing else. A timeout or a dead domain means the site did not
+    //      answer at all, so dropping encryption buys nothing and would make this a general "try harder"
+    //      path, which is how a safety valve becomes a habit.
+    //   2. Dan STORED this address as cleartext. Overture never downgrades an https address he saved,
+    //      whatever happens to its certificate, so a site that quietly breaks its TLS one day cannot be
+    //      silently demoted to an unencrypted read. The only cleartext requests it ever makes are to
+    //      addresses he typed as cleartext himself.
+    //   3. The host is named in the app's transport policy. Without the matching Info.plist entry macOS
+    //      refuses the request anyway, so checking here is not belt-and-braces: it stops a pointless
+    //      request whose OS-level refusal would then be reported as a second, misleading failure.
+    //
+    // Subdomains match, mirroring NSIncludesSubdomains in the plist, so the two gates agree on what a
+    // named host covers rather than one being quietly broader than the other.
+    private static func mayReadInTheClear(_ failure: SourceFetchError, storedAt url: URL) -> Bool {
+        guard failure == .secureConnectionFailed,
+              url.scheme?.lowercased() == "http",
+              let host = url.host?.lowercased()
+        else { return false }
+        return cleartextFallbackHosts.contains(host)
+            || cleartextFallbackHosts.contains { host.hasSuffix(".\($0)") }
+    }
+
+    // The one retry. Never a loop: this calls fetchSinglePage directly, which has no fallback of its own.
+    //
+    // When the retry ALSO fails, which error survives is deliberate. A transport failure on the cleartext
+    // attempt says nothing the handshake failure did not already say, so the original (#1543's honest
+    // "the site is up, its secure connection is broken") is what Dan reads. Anything else means the server
+    // actually ANSWERED, and a 404 or a PDF is real news about the address, so that wins instead. What
+    // must never happen either way is a silent success: a fallback that swallowed the second failure would
+    // report an empty page as a healthy read, which is the lie this whole file is built to prevent.
+    private static func readInTheClear(_ url: URL, after tlsFailure: SourceFetchError,
+                                       session: URLSession, render: ((URL) async throws -> String)?,
+                                       allowTicketLinkHop: Bool,
+                                       allowSiblingProbe: Bool) async throws -> FetchedPage {
+        do {
+            var page = try await fetchSinglePage(url, session: session, render: render,
+                                                 allowTicketLinkHop: allowTicketLinkHop,
+                                                 allowSiblingProbe: allowSiblingProbe)
+            page.wasReadInsecurely = true
+            return page
+        } catch let retryFailure as SourceFetchError {
+            switch retryFailure {
+            case .unreachable, .secureConnectionFailed: throw tlsFailure
+            default: throw retryFailure
+            }
+        }
     }
 
     // Reads each month of the calendar and joins them into ONE document with ONE hash.
