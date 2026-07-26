@@ -95,6 +95,9 @@ final class ReconcileScheduler {
         // #1456: watch whether Downbeat's feed is still MOVING, on this same free tick, so the dry-pipe
         // nudge advances daily without a scout.
         observeFeedFreshness(now: now)
+        // #1566: retire the shows that opened since the last tick, so the queue stops offering a run Dan
+        // will not pitch just because the app has not been relaunched since it opened.
+        let retirement = retireShowsThatOpened(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
@@ -122,7 +125,8 @@ final class ReconcileScheduler {
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings,
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,
-                                saveFailed: bookingResult.saveFailed || replyCheckSaveFailed)
+                                saveFailed: bookingResult.saveFailed || replyCheckSaveFailed
+                                    || retirement.saveFailed)   // #1566
     }
 
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
@@ -187,6 +191,29 @@ final class ReconcileScheduler {
             + inquiries.map { $0 as any BookingMatchable }
         let n = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)
+        guard n > 0 else { return (0, false) }
+        do {
+            try context.save()
+            return (n, false)
+        } catch {
+            return (n, true)
+        }
+    }
+
+    // #1566: retire the untriaged shows that have opened since the last tick.
+    //
+    // #864 put this at launch, which was enough while the line fell on a run's CLOSING night. #1540 moved
+    // it to the OPENING night, a line every show in the queue crosses on its own opening day, so these
+    // rows are now minted by the calendar turning over rather than by a show finishing. Dan leaves
+    // Overture open for days, so launch-only left a run he has said he will not pitch sitting in triage
+    // until he next relaunched. Same trigger family as the booking pass and the conflict re-check above:
+    // launch, the 30-minute timer, and every export change.
+    //
+    // Judged against the tick's own `now`, like every other pass here, and it reports a save failure
+    // instead of swallowing it (#499): a retirement that never reached disk would come straight back.
+    @discardableResult
+    func retireShowsThatOpened(now: Date) -> (count: Int, saveFailed: Bool) {
+        let n = WentByRetirement.run(in: context, today: QueueModel.easternToday(now))
         guard n > 0 else { return (0, false) }
         do {
             try context.save()
