@@ -106,7 +106,9 @@ struct ConflictSweepTests {
                           export: (bookings: [], blockedDates: []), into: ctx)
 
         #expect(p.hasUnclearedConflict)
-        #expect(p.conflictNote == "You blocked Nov 14 (Vacation).")   // the first night he would miss
+        // #1501: Nov 14 is the first night he would miss, and it is INSIDE the run rather than its opening
+        // night, so the line leads with that instead of reading as a statement about Nov 12.
+        #expect(p.conflictNote == "A later night of this run is out: you blocked Nov 14 (Vacation).")
     }
 
     // Dan's own decision is not undone by an unrelated edit. He waved this show through; blocking a

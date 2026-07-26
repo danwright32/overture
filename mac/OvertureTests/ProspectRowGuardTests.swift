@@ -160,13 +160,21 @@ struct ProspectRowRestoreGuardTests {
     // over `keepDismissControls`), gated on hasUnclearedConflict, tappable to clear. The guard pins the
     // placement, because a badge that drifts back down into the metadata is invisible again.
     @Test func theUnavailableBadgeSitsInTheActionsColumn() {
-        guard let actionsRange = prospectRow.range(of: "private var actions: some View {") else {
+        // #1501: reads the WHOLE property (the #569 helper this file's other guards use) rather than the
+        // first 1500 characters after its declaration. That window silently depended on how much comment sat
+        // inside the property: adding two lines of it pushed `keepDismissControls` out of range and failed a
+        // guard about placement for a reason that had nothing to do with placement.
+        guard let body = SourceGuardHelper.propertyBody("private var actions: some View {",
+                                                        in: prospectRow) else {
             Issue.record("actions view not found")
             return
         }
-        let body = String(prospectRow[actionsRange.lowerBound...].prefix(1500))
         #expect(body.contains("item.hasUnclearedConflict"))
-        #expect(body.contains("Unavailable"))
+        // #1501: pins that the badge takes its LABEL from the shared decision, not the literal word it used
+        // to hard-code. The words themselves are now behaviour, tested in ConflictScopeTests, which is where
+        // a copy assertion belongs: a source-text guard that pins a view's private string breaks the moment
+        // that string correctly moves somewhere testable, which is what #1451 ran into.
+        #expect(body.contains("pillLabel"))
         #expect(body.contains("I can shoot this anyway"))
         #expect(body.contains("keepDismissControls"))   // badge stacked above the Keep/Dismiss row
     }

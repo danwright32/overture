@@ -602,7 +602,9 @@ struct ProspectRowView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
-                        Text("Unavailable")
+                        // #1501: the label, and the sentence below it, come off ONE decision (ConflictScope,
+                        // which carries the reasoning). "Unavailable" overstated a run Dan can still book.
+                        Text(QueueModel.conflictScope(item)?.pillLabel ?? ConflictScope.thisNight.pillLabel)
                         Image(systemName: "chevron.down").font(.system(size: 9))
                     }
                     .font(OVType.meta.weight(.semibold))

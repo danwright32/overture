@@ -485,10 +485,21 @@ final class Prospect {
     // of the send (a conflict can turn up AFTER the draft exists, which a prep-only gate would miss).
     var hasUnclearedConflict: Bool { conflictOpen }
 
+    // #1501: which night of this show's run the clash is on. Read off the stored key and this show's own
+    // date, so the pill and the sentence below are two renderings of ONE decision rather than two rules.
+    var conflictScope: ConflictScope? {
+        ConflictScope.of(blockedDate: conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
+                         performanceDate: performanceDate)
+    }
+
     // What Dan reads on the row: "You blocked Nov 14 (Vacation)." / "You're already shooting X on Nov 14."
     // Composed from the key, never stored, so it can never be a stale quotation of older copy.
+    //
+    // #1501: and framed by WHICH night of the run is blocked, because under a date-group header the old
+    // sentence read as a claim about that header's date even when the clash was a week later.
     var conflictNote: String? {
-        conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.reason
+        guard let day = conflictKey.flatMap({ BlockedCalendar.Day(key: $0) }) else { return nil }
+        return day.reason(scope: conflictScope ?? .thisNight)
     }
 
     // The scout's write, every run. The ONLY thing that sets a conflict.

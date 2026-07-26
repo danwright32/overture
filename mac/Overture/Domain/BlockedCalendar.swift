@@ -37,8 +37,34 @@ struct BlockedCalendar: Equatable, Sendable {
 
         // What Dan reads on the flagged show. Composed here rather than stored on the prospect, so a
         // wording change never leaves old prospects quoting the old sentence back at him.
-        var reason: String {
+        var reason: String { reason(scope: .thisNight) }
+
+        // #1501: the same fact, framed for WHICH night of the run is the problem.
+        //
+        // `.thisNight` is the sentence Dan has always read, unchanged. `.laterInTheRun` leads with the fact
+        // the card was missing, because that is what stops the eye binding the date to the group header
+        // above it: under a `FRI Jul 24` header, "You're already shooting X on Jul 31" reads as a statement
+        // about Jul 24 and makes the quiet cards beside it look broken.
+        //
+        // It says "a later night", never "one night". The stored conflict key holds ONE day (`conflict`
+        // below returns the earliest blocked night via `.min`), so Overture does not know whether one night
+        // of the run is out or three, and claiming a count would be false about Dan's calendar the first
+        // time two were. That is the same class of error as copying the line onto every card in the date
+        // group, which is what #1501 was asked for and declined.
+        func reason(scope: ConflictScope) -> String {
             let day = EasternDate.dayLabel(date) ?? date
+            switch scope {
+            case .thisNight:     return tonight(day)
+            case .laterInTheRun: return laterInTheRun(day)
+            }
+        }
+
+        // Each case's sentence written out IN FULL, in both frames, rather than one clause slotted into two
+        // templates. That is the standing rule in this codebase (SourceReadability states it, and #1032 is
+        // its reason), and it is not merely style here: `docs/copy-inventory.md` is generated from these
+        // literals and is supposed to be every sentence Overture can say. Assembling from a fragment made
+        // the four sentences Dan reads most often stop appearing in it at all.
+        private func tonight(_ day: String) -> String {
             switch kind {
             case .bookedShoot:
                 guard let name, !name.isEmpty else { return "You're already shooting on \(day)." }
@@ -46,6 +72,21 @@ struct BlockedCalendar: Equatable, Sendable {
             case .dayOff:
                 guard let name, !name.isEmpty else { return "You blocked \(day)." }
                 return "You blocked \(day) (\(name))."
+            }
+        }
+
+        private func laterInTheRun(_ day: String) -> String {
+            switch kind {
+            case .bookedShoot:
+                guard let name, !name.isEmpty else {
+                    return "A later night of this run is out: you're already shooting on \(day)."
+                }
+                return "A later night of this run is out: you're already shooting \(name) on \(day)."
+            case .dayOff:
+                guard let name, !name.isEmpty else {
+                    return "A later night of this run is out: you blocked \(day)."
+                }
+                return "A later night of this run is out: you blocked \(day) (\(name))."
             }
         }
 

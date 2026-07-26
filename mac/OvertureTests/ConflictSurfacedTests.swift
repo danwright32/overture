@@ -110,7 +110,12 @@ struct ConflictSurfacedTests {
         let p = try #require(stored(ctx).first)
         #expect(p.runEndDate == "2099-09-20")          // it really was collapsed into one run
         #expect(p.hasUnclearedConflict)
-        #expect(p.conflictNote == "You're already shooting Nguyen Recital on Sep 20.")
+        // #1501: the clash is on night 2, not the night this card groups under, and the sentence now says
+        // so before naming the night. Under a date-group header the old wording read as a claim about THAT
+        // date, which made the quiet cards beside it look like they had lost their flag.
+        #expect(p.conflictNote
+                == "A later night of this run is out: you're already shooting Nguyen Recital on Sep 20.")
+        #expect(p.conflictScope == .laterInTheRun)
     }
 
     // MARK: - Dan's decision survives, and a CHANGED conflict does not inherit it (#718's pattern)
