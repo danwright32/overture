@@ -26,6 +26,39 @@ struct PrepProgressTakeoverTests {
         #expect(view.timeout == RunTimeouts.prep)
     }
 
+    // A reachability check is NOT a Prep run wearing a different title, and sharing Prep's 3-minute
+    // ceiling made the app accuse a healthy one of being stuck. The first real check ever run took 7m51s
+    // for three shows and was reported as stalled at 3:38, on screen, while it was working normally.
+    // A check reads pages and hunts contacts per show, so it belongs with the other heavy detached runs.
+    //
+    // This is the WARNING window only. The double-run guard (PrepQueueService.markerStaleAfter) stays at
+    // 3 minutes deliberately: the runner touches its marker every 60s while alive, so a long batch never
+    // goes stale and the guard already holds. Lengthening it would only make a genuinely DEAD check look
+    // alive for 10 minutes.
+    @Test func theProbingPhaseGetsItsOwnLongerTimeoutNotPreps() {
+        let probing = RunProgressView(phase: .probing, since: nil)
+        #expect(probing.timeout == RunTimeouts.reachabilityProbe)
+        #expect(probing.timeout > RunTimeouts.prep)
+        // And prepping is untouched, so a normal Prep still surfaces a stall at the old window.
+        #expect(RunProgressView(phase: .prepping, since: nil).timeout == RunTimeouts.prep)
+    }
+
+    // The failure this exists to prevent, stated as behaviour rather than as a constant: the exact run
+    // Dan watched (7m51s) must not read as stalled at any point while it was alive.
+    @Test func aHealthyEightMinuteCheckIsNeverCalledStuck() {
+        let started = Date(timeIntervalSince1970: 0)
+        let view = RunProgressView(phase: .probing, since: started)
+        func stalledAt(_ seconds: TimeInterval) -> Bool {
+            if case .stalled = RunProgress.liveness(since: started,
+                                                    now: started.addingTimeInterval(seconds),
+                                                    timeout: view.timeout) { return true }
+            return false
+        }
+        #expect(!stalledAt(218))        // 3:38, the moment the real run was accused
+        #expect(!stalledAt(471))        // 7:51, when it actually finished
+        #expect(stalledAt(11 * 60))     // past the window it DOES stall: a longer leash, not a removed one
+    }
+
     @Test func livePreppingReadsTheRunsProgressCount() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

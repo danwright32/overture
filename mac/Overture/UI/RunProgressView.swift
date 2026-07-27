@@ -68,7 +68,10 @@ struct RunProgressView: View {
         switch phase {
         case .scouting: return RunTimeouts.scout
         case .reading:  return RunTimeouts.scoutExtract
-        case .prepping, .probing: return RunTimeouts.prep
+        case .prepping: return RunTimeouts.prep
+        // #1597: a check is not a Prep run with a different title. It shared Prep's 3-minute ceiling and
+        // so reported the first real one (7m51s, working fine) as stuck at 3:38 on screen.
+        case .probing:  return RunTimeouts.reachabilityProbe
         }
     }
 
