@@ -46,6 +46,11 @@ echo "==> scripts/check-health-recorder-drift.sh"
 echo "==> scripts/check-detached-runner-scope.sh"
 "${REPO_ROOT}/scripts/check-detached-runner-scope.sh"
 
+# The app launches its runners with /bin/sh, so they must PARSE there. `bash -n` is not enough and
+# missing that shipped a runner that died on its first real run.
+echo "==> scripts/check-runner-posix.sh"
+"${REPO_ROOT}/scripts/check-runner-posix.sh"
+
 # Lists every LIVE-STORE-CLAIM tag (a doc/comment count measured against Dan's live SwiftData store,
 # e.g. "0 of 26 distinct venue strings contain a city") with its last-verified date, and warns
 # (advisory only) on a stale one or a claim that looks measured but carries no tag at all (#1063). The
