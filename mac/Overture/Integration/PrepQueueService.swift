@@ -178,6 +178,11 @@ enum PrepQueueService {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where toStamp.contains(p.naturalKey) {
             p.reachabilityProbedAt = now
+            // #1596 Phase 3: the pre-guard default. This runs BEFORE the probe-safe ingest, so the venue
+            // and press guards have not classified anything yet and this writer cannot tell a sendable
+            // address from a front desk. It records the floor; the ingest upgrades it when contacts
+            // landed. A run that found nothing never reaches the ingest, so this value is the answer.
+            p.reachabilityResult = .noEmailFound
         }
         try? context.save()
         // Fail loud rather than silently settling a partial run: an incomplete check is the thing Dan most

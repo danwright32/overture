@@ -86,9 +86,20 @@ enum PrepImporter {
             // draft/status/reprep logic below can touch a probe row.
             if isProbe {
                 p.reachabilityProbedAt = now
-                if let contacts = r.contacts, !contacts.isEmpty, !p.recipientsEditedByDan {
+                if p.recipientsEditedByDan {
+                    // #1596 Phase 3: Dan curated this row's recipients by hand, so the ingest below must
+                    // never run and clobber them. That skip used to mean the result was never upgraded
+                    // either, leaving the row reading "no email found" while carrying a contact he typed
+                    // in himself, which is the strongest possible evidence there IS somebody to email.
+                    // Classify from what is already on the row instead, and leave his contacts alone.
+                    p.reachabilityResult = p.reachabilityResultFromRecipients
+                } else if let contacts = r.contacts, !contacts.isEmpty {
                     ingestContacts(contacts, into: p, context: context)
                     applyPerformerMatch(contacts, to: p, clients: clients, history: history)
+                    // Only now have the venue and press guards run, so this is the first point at which
+                    // found can be told from weak. This is the authoritative writer for a probe that
+                    // landed contacts; markProbed's floor stands for one that did not.
+                    p.reachabilityResult = p.reachabilityResultFromRecipients
                 }
                 continue
             }

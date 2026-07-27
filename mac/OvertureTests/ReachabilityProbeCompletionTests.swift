@@ -182,6 +182,81 @@ struct ReachabilityProbeCompletionTests {
         #expect(wasProbe == false)
     }
 
+    // #1596 Phase 3, the hole the plan named. When Dan has hand-entered a recipient, the importer SKIPS
+    // that row entirely so a re-run can never clobber his work. That skip means the guards never run and
+    // the result is never upgraded, so the row would keep whatever the settle wrote first, which is
+    // "no email found", about a show carrying a contact Dan typed in himself. His own contact is the
+    // strongest possible evidence there is somebody to email.
+    @Test func aHandEditedRowIsClassifiedFromItsOwnContactsNotTheProbe() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let p = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first!
+        p.recipientsEditedByDan = true
+        p.recipients.append(Recipient(id: "manual-1", email: "someone@example.org",
+                                      name: "Someone Dan Knows", role: "Producer",
+                                      provenance: .manual))
+        try? ctx.save()
+
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        // The probe reached the show and found nobody.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .emailFound)
+        #expect(after?.recipients.first?.email == "someone@example.org")   // his contact untouched
+    }
+
+    @Test func aProbeThatFoundNothingRecordsNoEmailFound() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .noEmailFound)
+    }
+
+    @Test func aProbeThatFoundASendableContactRecordsEmailFound() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [PrepContact(name: "Jane", role: "Mgr",
+                                                             email: "jane@aurora.org",
+                                                             method: "named_decision_maker",
+                                                             confidence: "high", formUrl: nil,
+                                                             provenance: "act")], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .emailFound)
+    }
+
     private func freshDefaults() -> UserDefaults {
         let d = UserDefaults(suiteName: "probe-\(UUID().uuidString)")!
         return d

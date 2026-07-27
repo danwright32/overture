@@ -35,14 +35,29 @@ enum Reachability {
         return now.timeIntervalSince(probedAt) > probeFreshness
     }
 
-    static func badge(probed: Bool, hasSendableEmail: Bool, hasWeakContactEmail: Bool = false,
-                      probeIsStale: Bool = false,
+    // #1596 Phase 3: what a check CONCLUDED, stored on the row rather than re-derived from its recipients
+    // every time it draws. Deliberately NOT reusing `Badge`, whose `.none` means "render nothing"; a nil
+    // result here means "no check has ever run", and two meanings for one token inside one feature is how
+    // the #863 class of bug starts.
+    enum ProbeResult: String, Equatable, Sendable, CaseIterable {
+        case emailFound = "email_found"
+        case weakContactOnly = "weak_contact_only"
+        case noEmailFound = "no_email_found"
+    }
+
+    // nil means no check has ever run, which is a different thing from a check that came back empty. The
+    // old signature could not tell those apart: it asked whether the row currently has a sendable
+    // recipient, so a checked-and-empty show and a never-checked show both answered "no".
+    static func badge(result: ProbeResult?, probeIsStale: Bool = false,
                       presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
-        if probed {
+        if let result {
             // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
             if probeIsStale { return .staleProbe }
-            if hasSendableEmail { return .emailFound }
-            return hasWeakContactEmail ? .weakContactOnly : .noEmailFound
+            switch result {
+            case .emailFound: return .emailFound
+            case .weakContactOnly: return .weakContactOnly
+            case .noEmailFound: return .noEmailFound
+            }
         }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
         case .hardToReach: return .hardToReach
