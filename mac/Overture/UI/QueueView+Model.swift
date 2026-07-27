@@ -847,6 +847,41 @@ enum QueueModel {
         return showGroupScrollID(group.id)
     }
 
+    // #1597: everything a multi-date reachability check needs, from the dates Dan ticked. Pure, and out
+    // of the view on purpose: the bar and its confirm both read this, and logic living in a SwiftUI body
+    // cannot be tested at all, so the arithmetic Dan spends money against would have had no test.
+    //
+    // Returns nil when nothing is selected. `candidateKeys` is what the run is asked to check, which is
+    // every still-open, not-recently-answered show on those dates: the whole selection, no exceptions.
+    static func probeSelection(dates: Set<String>, in rows: [QueueItem], among all: [QueueItem],
+                               today: String, now: Date = Date(),
+                               promoted: Set<String> = []) -> (ProbeSelection.Summary, [String])? {
+        guard !dates.isEmpty else { return nil }
+        let groups = groupByDate(rows).filter { dates.contains($0.id) }
+        guard !groups.isEmpty else { return nil }
+        let selected = groups.flatMap(\.items)
+        let candidateKeys = Set(groups.flatMap { reachabilityProbeCandidateKeys($0.items, now: now, today: today) })
+        // Open shows on those dates that were answered recently: free, and named in the confirm rather
+        // than quietly dropped, because a count that omits rows stops being a promise about what is there.
+        let answered = selected.filter { i in
+            !candidateKeys.contains(i.id)
+                && OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
+                                          isBooked: i.isBooked, sentAt: i.sentAt, today: today)
+        }.count
+        let asShow: (QueueItem) -> ProbeBatch.Show = {
+            ProbeBatch.Show(key: $0.id, presenter: $0.presenter, venue: $0.venue)
+        }
+        let summary = ProbeSelection.summarize(
+            dateCount: groups.count,
+            candidates: selected.filter { candidateKeys.contains($0.id) }.map(asShow),
+            alreadyAnswered: answered,
+            // The producer gate is judged against the WHOLE queue, never just the ticked dates: judged
+            // against one night, every producer looks like a single-venue house and nothing amortises.
+            among: all.map(asShow),
+            promoted: promoted)
+        return (summary, candidateKeys.sorted())
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
