@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **866 sentences**, from 295 source files.
+Every sentence Overture can say to Dan: **881 sentences**, from 296 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -64,10 +64,13 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (41)
+## The same sentence, said in more than one place (44)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
+- " a one-off hunt."
+  - `Domain/ProbeSelection.swift`
+  - `Domain/ProbeSelection.swift`
 - "## Observed tendencies"
   - `Domain/VoiceGuidanceGuard.swift`
   - `Domain/VoiceNotesProtector.swift`
@@ -206,6 +209,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/FollowUp.swift`
   - `UI/FollowUpsView.swift`
   - `UI/QueueView.swift`
+- "show is"
+  - `Domain/ProbeSelection.swift`
+  - `Domain/ProbeSelection.swift`
+- "shows are"
+  - `Domain/ProbeSelection.swift`
+  - `Domain/ProbeSelection.swift`
 - "the contact"
   - `App/ActionFeedback.swift`
   - `App/ActionFeedback.swift`
@@ -222,8 +231,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HistoryMatch.swift`
 " Try again, and if it keeps happening the page may be one it can't make sense of."
     `UI/LeadIntakeModel.swift`
+" a one-off hunt."
+    `Domain/ProbeSelection.swift`
 " and find new contacts"
     `App/ActionFeedback.swift`
+" checked recently and are not looked up again."
+    `Domain/ProbeSelection.swift`
+" you picked."
+    `Domain/ProbeSelection.swift`
 "## Dan's notes"
     `Domain/VoiceNotesProtector.swift`
 "## Dan's notes (authoritative, never auto-edited)\n\nWrite any voice guidance you want every draft to follow. This section is yours; Prep runs never change it.\n\n## Observed tendencies (auto-generated; regenerated each run)\n\n_Nothing learned yet. This fills in after you've edited and sent some drafts._"
@@ -241,6 +256,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Persistence/PrepImporter.swift`
 "1 ignored client"
     `Domain/ClientCoverage.swift`
+"1 named producer answers for several of them; \(s.performerHuntCount) "
+    `Domain/ProbeSelection.swift`
 "1 new show waiting for you"
     `Domain/SourceYield.swift`
 "1 source needs"
@@ -566,6 +583,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Event passed, send a closing note"
     `Domain/ConversationReminder.swift`
+"Every one is a one-off hunt, so none of them share an answer."
+    `Domain/ProbeSelection.swift`
 "Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing."
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
@@ -1014,6 +1033,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
+"Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a week cannot be "
+    `Domain/ProbeSelection.swift`
 "Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
     `UI/ProspectRowView.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
@@ -1374,6 +1395,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
     `Domain/WatchlistEditing.swift`
+"That is \(s.researchCount) lookups, about $\(String(format: "%.0f", s.estimatedUSD)). "
+    `Domain/ProbeSelection.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
 "That link isn't a web page (it served \(type ?? "an unknown type"))."
@@ -1505,6 +1528,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
+"This looks up a real contact for every still-open show on the "
+    `Domain/ProbeSelection.swift`
 "This looks up a real contact for the still-open show on \(dateLabel), so you can tell whether it's still emailable before you keep it. It spends a little on that lookup, only for the show you check here."
     `Domain/Reachability.swift`
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
@@ -1749,6 +1774,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
     `Domain/ScoutWarningCopy.swift`
+"\(lookups), \(money): shows by the same producer share one."
+    `Domain/ProbeSelection.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
@@ -1813,6 +1840,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
+"\(s.organisationCount) named producers answer for several shows each; "
+    `Domain/ProbeSelection.swift`
 "\(sends) of \(experimentCallThreshold) sends toward a reliable read"
     `Domain/ExperimentReport.swift`
 "\(sends) sends in, enough for the rate to mean something"
@@ -1934,8 +1963,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "send failed"
     `Integration/GmailSender.swift`
+"show is"
+    `Domain/ProbeSelection.swift`
+"show was"
+    `Domain/ProbeSelection.swift`
+"shows are"
+    `Domain/ProbeSelection.swift`
+"shows were"
+    `Domain/ProbeSelection.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
+"spent on one click. Select fewer dates and run them in batches."
+    `Domain/ProbeSelection.swift`
 "stern auditorium / perelman stage"
     `Domain/VenueDisplay.swift`
 "ten are kept."
