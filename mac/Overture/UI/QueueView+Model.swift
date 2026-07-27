@@ -854,8 +854,13 @@ enum QueueModel {
     // Returns nil when nothing is selected. `candidateKeys` is what the run is asked to check, which is
     // every still-open, not-recently-answered show on those dates: the whole selection, no exceptions.
     static func probeSelection(dates: Set<String>, in rows: [QueueItem], among all: [QueueItem],
-                               today: String, now: Date = Date(),
+                               today: String, stage: StageFocus?, now: Date = Date(),
                                promoted: Set<String> = []) -> (ProbeSelection.Summary, [String])? {
+        // The bar belongs to Scout, because the checkboxes do. Ticking dates and switching stage left it
+        // pinned at the top offering to start a run against a selection Dan could neither see nor change
+        // (his walk of the Debug build, 2026-07-27). The selection itself survives the trip: hiding is
+        // not discarding, and losing his ticks for glancing at another stage would be the worse bug.
+        guard stage == .scout else { return nil }
         guard !dates.isEmpty else { return nil }
         let groups = groupByDate(rows).filter { dates.contains($0.id) }
         guard !groups.isEmpty else { return nil }

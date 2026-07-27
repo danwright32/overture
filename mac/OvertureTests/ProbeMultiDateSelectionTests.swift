@@ -33,12 +33,12 @@ struct ProbeMultiDateSelectionTests {
     }
 
     @Test func nothingSelectedMeansNoBarAtAll() {
-        #expect(QueueModel.probeSelection(dates: [], in: rows, among: rows, today: today) == nil)
+        #expect(QueueModel.probeSelection(dates: [], in: rows, among: rows, today: today, stage: .scout) == nil)
     }
 
     @Test func tickingTwoNightsChecksEveryShowOnThem() throws {
         let (summary, keys) = try #require(
-            QueueModel.probeSelection(dates: ["2026-09-12", "2026-09-13"], in: rows, among: rows, today: today))
+            QueueModel.probeSelection(dates: ["2026-09-12", "2026-09-13"], in: rows, among: rows, today: today, stage: .scout))
         #expect(summary.dateCount == 2)
         #expect(summary.showCount == 3)
         // Dan's rule: every show on a selected date, no exceptions.
@@ -51,7 +51,7 @@ struct ProbeMultiDateSelectionTests {
 
     @Test func tickingOneNightLeavesTheOtherAlone() throws {
         let (summary, keys) = try #require(
-            QueueModel.probeSelection(dates: ["2026-09-12"], in: rows, among: rows, today: today))
+            QueueModel.probeSelection(dates: ["2026-09-12"], in: rows, among: rows, today: today, stage: .scout))
         #expect(summary.dateCount == 1)
         #expect(keys.sorted() == ["a", "b"])
         #expect(summary.showCount == 2)
@@ -64,7 +64,7 @@ struct ProbeMultiDateSelectionTests {
         withAnswered.append(item("d", date: "2026-09-12", presenter: "Someone Else",
                                  venue: "Joe's Pub", probed: true))
         let (summary, keys) = try #require(
-            QueueModel.probeSelection(dates: ["2026-09-12"], in: withAnswered, among: withAnswered, today: today))
+            QueueModel.probeSelection(dates: ["2026-09-12"], in: withAnswered, among: withAnswered, today: today, stage: .scout))
         #expect(!keys.contains("d"))
         #expect(summary.alreadyAnsweredCount == 1)
         #expect(summary.researchCount == 2)
@@ -74,7 +74,7 @@ struct ProbeMultiDateSelectionTests {
     // A date whose shows are all settled contributes nothing, so a stale tick cannot inflate the total.
     @Test func aDateWithNothingLeftToCheckAddsNothing() throws {
         let settled = [item("x", date: "2026-09-20", presenter: "Done Co", venue: "A Room", status: .dismissed)]
-        let result = QueueModel.probeSelection(dates: ["2026-09-20"], in: settled, among: settled, today: today)
+        let result = QueueModel.probeSelection(dates: ["2026-09-20"], in: settled, among: settled, today: today, stage: .scout)
         let summary = try #require(result?.0)
         #expect(summary.showCount == 0)
         #expect(summary.isEmpty)
@@ -83,14 +83,14 @@ struct ProbeMultiDateSelectionTests {
     // A tick on a date that is no longer on screen (Dan kept everything on it, so the group is gone)
     // must not resurrect it or crash the bar.
     @Test func aTickedDateThatNoLongerExistsIsIgnored() {
-        #expect(QueueModel.probeSelection(dates: ["2026-12-25"], in: rows, among: rows, today: today) == nil)
+        #expect(QueueModel.probeSelection(dates: ["2026-12-25"], in: rows, among: rows, today: today, stage: .scout) == nil)
     }
 
     // The producer gate is judged against the WHOLE queue, not the ticked dates. Ticking only the night
     // where FRIGID plays one room must still recognise it as a producer, or nothing ever amortises.
     @Test func theGateStillSeesTheWholeQueueWhenOneNightIsTicked() throws {
         let (summary, _) = try #require(
-            QueueModel.probeSelection(dates: ["2026-09-13"], in: rows, among: rows, today: today))
+            QueueModel.probeSelection(dates: ["2026-09-13"], in: rows, among: rows, today: today, stage: .scout))
         #expect(summary.organisationCount == 1)
         #expect(summary.researchCount == 1)
     }
@@ -103,8 +103,41 @@ struct ProbeMultiDateSelectionTests {
         }
         let dates = Set(many.compactMap(\.performanceDate))
         let (summary, _) = try #require(
-            QueueModel.probeSelection(dates: dates, in: many, among: many, today: today))
+            QueueModel.probeSelection(dates: dates, in: many, among: many, today: today, stage: .scout))
         #expect(summary.researchCount == 45)
         #expect(summary.overCeiling)
+    }
+
+    // #1597 follow-up (Dan, walking the Debug build): the bar must not outlive the stage that produced
+    // it. Ticking dates on Scout and switching to Review left a bar reading "2 dates, 4 shows" pinned at
+    // the top while the checkboxes that made it were nowhere on screen, offering to start a run against a
+    // selection he could neither see nor change.
+    //
+    // The selection itself SURVIVES the trip: hiding is not discarding, and losing his ticks because he
+    // glanced at another stage would be worse than the bug.
+    @Test func theBarBelongsToScoutAndDoesNotFollowHimToOtherStages() {
+        let dates: Set<String> = ["2026-09-12"]
+        #expect(QueueModel.probeSelection(dates: dates, in: rows, among: rows,
+                                          today: today, stage: .scout) != nil)
+        for elsewhere: StageFocus in [.prep, .review, .reachedOut, .followUps] {
+            #expect(QueueModel.probeSelection(dates: dates, in: rows, among: rows,
+                                              today: today, stage: elsewhere) == nil,
+                    "the bar should not appear on \(elsewhere)")
+        }
+        // The #308 away-leads list has no stage at all, and no checkboxes either.
+        #expect(QueueModel.probeSelection(dates: dates, in: rows, among: rows,
+                                          today: today, stage: nil) == nil)
+    }
+
+    // #1597 follow-up: the bar promises a wait computed from ten lookups at a time. The runner is what
+    // decides how many actually run at a time. Nothing connected those two numbers, so a future edit to
+    // either one would leave the bar quoting a wait the run cannot keep, silently and only on real runs.
+    @Test func theAppsConcurrencyAssumptionMatchesWhatTheRunnerActuallyDoes() {
+        let runner = SourceGuardHelper.source("scripts/prep-run.sh")
+        #expect(!runner.isEmpty)
+        // Stated as a Comment literal, because #expect's second argument is a Comment and a built-up
+        // String will not convert.
+        #expect(runner.contains("OVERTURE_PREP_MAX_PARALLEL:-\(ProbeSelection.maxConcurrentLookups)}"),
+                "prep-run.sh's default parallelism must match ProbeSelection.maxConcurrentLookups, or the estimated wait is a promise the run cannot keep")
     }
 }

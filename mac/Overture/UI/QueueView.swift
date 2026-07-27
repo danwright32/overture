@@ -248,7 +248,7 @@ struct QueueView: View {
 
     private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
         QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
-                                  among: items, today: today)
+                                  among: items, today: today, stage: focusedStage)
     }
 
     @ViewBuilder private func probeSelectionBar(_ data: RenderData) -> some View {
