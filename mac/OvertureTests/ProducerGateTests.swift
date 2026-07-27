@@ -16,10 +16,74 @@ struct ProducerGateTests {
     @Test("a presenter appearing at several venues, never itself a venue, qualifies")
     func multiVenuePresenterQualifies() {
         let shows = [
+            show("Tenet Vocal Artists", at: "Church of the Ascension"),
+            show("Tenet Vocal Artists", at: "House of the Redeemer"),
+        ]
+        #expect(ProducerGate.qualifies("Tenet Vocal Artists", among: shows))
+    }
+
+    // #1620. Dan, reading the Phase 5 design: "I'm never going to use an @carnegiehall email." He is
+    // right, and this test used to assert the opposite. Carnegie Hall Presents is Carnegie Hall
+    // presenting in its own building: Stern, Zankel, Weill and Resnick are four rooms inside one house,
+    // which the venue-count arm read as a well travelled producer, and the room-name arm let through
+    // because the string carries the word "Presents" and so is not spelled like any venue.
+    //
+    // Whichever way the name is dressed, an organisation that carries a venue's name IS that venue, and
+    // its address is the house's. 25 rows on the live store, the gate's single biggest admission.
+    @Test("a presenter whose name CONTAINS a venue's name is that venue's own brand, and is refused")
+    func aVenuesOwnPresentingBrandIsExcluded() {
+        let shows = [
+            show("Carnegie Hall Presents", at: "Stern Auditorium / Perelman Stage"),
             show("Carnegie Hall Presents", at: "Zankel Hall"),
             show("Carnegie Hall Presents", at: "Bryant Park"),
+            // The one row that names the building itself: on the live store it comes from a chorus
+            // renting the hall, not from Carnegie's own listing, so the gate has to reach it sideways.
+            show("The Masterwork Chorus", at: "Carnegie Hall"),
         ]
-        #expect(ProducerGate.qualifies("Carnegie Hall Presents", among: shows))
+        #expect(ProducerGate.qualifies("Carnegie Hall Presents", among: shows) == false)
+    }
+
+    // The containment arm must match whole words, or a short venue name would swallow unrelated
+    // organisations that merely share a syllable.
+    @Test("containment matches a whole venue name, not a fragment of a longer word")
+    func containmentDoesNotMatchAFragment() {
+        let shows = [
+            show("Parkside Chamber Players", at: "Church of the Ascension"),
+            show("Parkside Chamber Players", at: "House of the Redeemer"),
+            show("Somebody Else", at: "Bryant Park"),
+        ]
+        #expect(ProducerGate.qualifies("Parkside Chamber Players", among: shows))
+    }
+
+    // #1620, the second hole in the same place: one venue spelled two ways counted as two, so a company
+    // that only ever plays one room cleared the venue count. Hudson Classical Theater Company plays the
+    // Soldiers' and Sailors' Monument, written with and without its leading "the", and nothing else.
+    @Test("a parenthetical or a leading 'the' does not make one venue into two")
+    func spellingVariantsAreOneVenue() {
+        let monument = [
+            show("Hudson Classical Theater Company", at: "The Soldiers' and Sailors' Monument"),
+            show("Hudson Classical Theater Company", at: "Soldiers' and Sailors' Monument"),
+        ]
+        #expect(ProducerGate.qualifies("Hudson Classical Theater Company", among: monument) == false)
+
+        let church = [
+            show("A Chorus", at: "The Church of St. Mary the Virgin"),
+            show("A Chorus", at: "The Church of St. Mary the Virgin (Times Square)"),
+        ]
+        #expect(ProducerGate.qualifies("A Chorus", among: church) == false)
+    }
+
+    // ...and the fold must not go so far that two genuinely different venues merge, which would let a
+    // single-room house qualify. Young New Yorkers' Chorus survives on these two real churches.
+    @Test("the fold keeps genuinely distinct venues distinct")
+    func distinctVenuesSurviveTheFold() {
+        let shows = [
+            show("Young New Yorkers' Chorus", at: "The Church of St. Mary the Virgin (Times Square)"),
+            show("Young New Yorkers' Chorus", at: "The Church of St. Mary the Virgin"),
+            show("Young New Yorkers' Chorus", at: "St. Paul's Episcopal Church (Carroll Gardens)"),
+            show("Young New Yorkers' Chorus", at: "St. Paul's Episcopal Church"),
+        ]
+        #expect(ProducerGate.qualifies("Young New Yorkers' Chorus", among: shows))
     }
 
     // Abrons Arts Center is the case that proves the venue count alone is not enough. In the live store
@@ -39,6 +103,10 @@ struct ProducerGateTests {
     // Nothing in the store separates the Metropolitan Opera (produces its own work at its own house)
     // from FRIGID New York (rents its room to 40 companies): both are many different shows at one venue.
     // So the automatic rule excludes both, and Dan promotes the real producers by hand, once each.
+    //
+    // #1620: the Met is now refused twice over, by the venue count AND by the containment arm ("
+    // metropolitan opera" sits inside "metropolitan opera house"), so this pins that a promotion clears
+    // both. Containment is evidence about names; his explicit judgment about the organisation beats it.
     @Test("Dan can promote a single-venue producer the automatic rule excludes")
     func promotionAdmitsASingleVenueProducer() {
         let shows = [
@@ -63,20 +131,44 @@ struct ProducerGateTests {
                                        promoted: ["the green room 42"]) == false)
     }
 
-    // LIVE-STORE-CLAIM verified=2026-07-26 measure="presenter and venue pairs per organisation, and whether the folded presenter name is also a folded venue key, over all 714 prospects"
-    // FROZEN FIXTURE. Presenter and venue pairs taken verbatim from Dan's live store on 2026-07-26. These
-    // pin behaviour rather than drive it: they exist so a later edit to VenueNormalization or to either
-    // arm cannot silently re-admit a room or drop a producer, which is invisible from inside the code and
-    // costs real money and real bookings when it goes wrong.
+    // LIVE-STORE-CLAIM verified=2026-07-27 measure="presenter and venue pairs per organisation, whether the folded presenter name is or contains a folded venue key, and distinct venues per presenter under the gate's own fold, over all 714 prospects"
+    // FROZEN FIXTURE. Presenter and venue pairs taken verbatim from Dan's live store, on 2026-07-26 and
+    // extended on 2026-07-27 (#1620). These pin behaviour rather than drive it: they exist so a later edit
+    // to VenueNormalization or to any arm cannot silently re-admit a room or drop a producer, which is
+    // invisible from inside the code and costs real money and real bookings when it goes wrong.
+    //
+    // #1620 note on why this fixture missed a house for a day: it carried Carnegie Hall Presents WITHOUT
+    // any row naming "Carnegie Hall" as a venue, so the shape that makes the containment arm bite was
+    // never reproduced here and the gate looked correct. A sample has to include the rows that make the
+    // rule bite, not only the rows it already sorts correctly.
     private static let liveStoreSample: [ProducerGate.Show] = [
-        // Producers: several genuinely distinct venues, name never used as a venue.
-        .init(presenter: "Carnegie Hall Presents", venue: "Stern Auditorium / Perelman Stage"),
-        .init(presenter: "Carnegie Hall Presents", venue: "Bryant Park"),
-        .init(presenter: "Carnegie Hall Presents", venue: "Historic Richmond Town"),
+        // Producers: several genuinely distinct venues, name neither used as nor contained in a venue.
         .init(presenter: "Young Concert Artists", venue: "Merkin Hall"),
         .init(presenter: "Young Concert Artists", venue: "Zankel Hall"),
         .init(presenter: "Tenet Vocal Artists", venue: "St Ann and the Holy Trinity"),
         .init(presenter: "Tenet Vocal Artists", venue: "Church of the Ascension"),
+        .init(presenter: "Young New Yorkers' Chorus", venue: "The Church of St. Mary the Virgin"),
+        .init(presenter: "Young New Yorkers' Chorus", venue: "The Church of St. Mary the Virgin (Times Square)"),
+        .init(presenter: "Young New Yorkers' Chorus", venue: "St. Paul's Episcopal Church (Carroll Gardens)"),
+
+        // #1620 houses presenting under their own brand: the name CONTAINS a venue in the set. Carnegie
+        // Hall Presents plays four rooms inside its own building plus the free Citywide programme
+        // outdoors, so the venue count reads as a well travelled producer.
+        .init(presenter: "Carnegie Hall Presents", venue: "Stern Auditorium / Perelman Stage"),
+        .init(presenter: "Carnegie Hall Presents", venue: "Bryant Park"),
+        .init(presenter: "Carnegie Hall Presents", venue: "Historic Richmond Town"),
+        .init(presenter: "Museum of Chinese in America and Chinese Theatre Works", venue: "Museum of Chinese in America"),
+        .init(presenter: "Museum of Chinese in America and Chinese Theatre Works", venue: "Open Door Senior Center"),
+        // The only rows on the live store that name the building itself belong to two ensembles renting
+        // it. Without these the containment arm has nothing to match, which is how #1620 hid.
+        .init(presenter: "The Masterwork Chorus", venue: "Carnegie Hall"),
+        .init(presenter: "The Masterwork Chorus", venue: "Chatham United Methodist Church"),
+        .init(presenter: "New York Philharmonic", venue: "Carnegie Hall"),
+        .init(presenter: "New York Philharmonic", venue: "Wu Tsai Theater"),
+
+        // #1620: one venue spelled two ways. Hudson Classical plays a single monument and nothing else.
+        .init(presenter: "Hudson Classical Theater Company", venue: "The Soldiers' and Sailors' Monument"),
+        .init(presenter: "Hudson Classical Theater Company", venue: "Soldiers' and Sailors' Monument"),
 
         // Houses: the name is itself a venue somewhere in the set.
         .init(presenter: "The Green Room 42", venue: "The Green Room 42"),
@@ -99,7 +191,8 @@ struct ProducerGateTests {
     ]
 
     @Test("frozen fixture: real producers are admitted", arguments: [
-        "Carnegie Hall Presents", "Young Concert Artists", "Tenet Vocal Artists",
+        "Young Concert Artists", "Tenet Vocal Artists", "Young New Yorkers' Chorus",
+        "The Masterwork Chorus", "New York Philharmonic",
     ])
     func liveStoreProducersQualify(_ presenter: String) {
         #expect(ProducerGate.qualifies(presenter, among: Self.liveStoreSample))
@@ -108,9 +201,21 @@ struct ProducerGateTests {
     @Test("frozen fixture: houses are never admitted", arguments: [
         "The Green Room 42", "The Cutting Room", "Jalopy Theatre", "Merkin Hall",
         "SoHo Playhouse", "54 Below", "Abrons Arts Center",
+        // #1620: a house presenting under its own brand, and a company that plays one room spelled twice.
+        "Carnegie Hall Presents", "Museum of Chinese in America and Chinese Theatre Works",
+        "Hudson Classical Theater Company",
     ])
     func liveStoreHousesAreExcluded(_ presenter: String) {
         #expect(ProducerGate.qualifies(presenter, among: Self.liveStoreSample) == false)
+    }
+
+    // #1620: an ensemble that RENTS a house keeps its own answer. The Masterwork Chorus plays Carnegie
+    // Hall once and its home church four times; the containment arm must read the direction of the
+    // relationship, not merely that the two strings appear together.
+    @Test("renting a house does not make an ensemble that house")
+    func rentingAHouseDoesNotDisqualify() {
+        #expect(ProducerGate.qualifies("The Masterwork Chorus", among: Self.liveStoreSample))
+        #expect(ProducerGate.qualifies("New York Philharmonic", among: Self.liveStoreSample))
     }
 
     // The correction that prompted this gate. The plan-council plan shipped a room-name test alone, which
