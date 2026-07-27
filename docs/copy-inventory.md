@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **886 sentences**, from 299 source files.
+Every sentence Overture can say to Dan: **884 sentences**, from 300 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -22,6 +22,7 @@ What is not, and why:
 
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
+- `Domain/CatchAllFitReasonMigration.swift`: the retired sentence, named only so this pass can find and clear it
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
@@ -466,8 +467,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Contact form"
     `Domain/Inquiry.swift`
     `UI/DraftReviewView.swift`
-"Contact: keep to prep"
-    `UI/QueueView+Model.swift`
 "Contact: pending Prep run"
     `UI/QueueView+Model.swift`
 "Contains an em dash"
@@ -1609,8 +1608,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
-"Unclear producer; needs a closer look before pitching."
-    `Domain/EventClassifier.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
     `Domain/QueueUndoStack.swift`
 "Unknown contact"

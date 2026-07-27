@@ -128,8 +128,10 @@ struct QueueCopyTests {
 
     // "Pending Prep run" asserts this show is IN the Prep queue. That is a claim about what the app will
     // do next, and it has to agree with the eligibility rule that actually decides it.
+    // #1534 (Phase 7.2): the not-kept half is retired. "Contact: keep to prep" restated the Keep button
+    // an inch away, on every untriaged card, while looking like a fact about the show's contact.
     @Test func theContactLineSaysWhetherPrepWillPickThisUp() {
         #expect(QueueModel.contactPrepNote(isKept: true) == "Contact: pending Prep run")
-        #expect(QueueModel.contactPrepNote(isKept: false) == "Contact: keep to prep")
+        #expect(QueueModel.contactPrepNote(isKept: false) == nil)
     }
 }

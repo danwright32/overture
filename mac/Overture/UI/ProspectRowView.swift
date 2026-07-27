@@ -604,28 +604,33 @@ struct ProspectRowView: View {
         }
     }
 
+    // #1600 Phase 7.2: the strip draws only when it has something in it. With "Contact: keep to prep"
+    // retired, the 145 untriaged rows carrying neither link would otherwise draw an empty padded row.
     @ViewBuilder private var links: some View {
-        HStack(spacing: OVSpacing.md) {
-            // #358: .tint(OVColor.forest) below does not recolor a Link's own text on macOS (tint
-            // affects control accents, not text color), so the default bright system blue clashed
-            // with the forest/gold palette and made these secondary reference links read as more
-            // important than they are. Each link needs its own explicit override.
-            if let s = item.sourceListingURL, let url = URL(string: s) {
-                Link("Source listing", destination: url)
-                    .foregroundStyle(OVColor.forest)
+        let refs = QueueModel.rowReferenceLinks(item)
+        if QueueModel.rowHasReferenceLinks(item) {
+            HStack(spacing: OVSpacing.md) {
+                // #358: .tint(OVColor.forest) below does not recolor a Link's own text on macOS (tint
+                // affects control accents, not text color), so the default bright system blue clashed
+                // with the forest/gold palette and made these secondary reference links read as more
+                // important than they are. Each link needs its own explicit override.
+                if let listing = refs.listing {
+                    Link("Source listing", destination: listing)
+                        .foregroundStyle(OVColor.forest)
+                }
+                if let website = refs.website {
+                    Link("Group website", destination: website)
+                        .foregroundStyle(OVColor.forest)
+                }
+                if let note = refs.note {
+                    Text(note)
+                        .foregroundStyle(OVColor.inkFaint)
+                }
             }
-            if let w = item.websiteURL, let url = URL(string: w) {
-                Link("Group website", destination: url)
-                    .foregroundStyle(OVColor.forest)
-            }
-            if !item.hasDraft && !item.isBooked {
-                Text(QueueModel.contactPrepNote(isKept: item.isKept))
-                    .foregroundStyle(OVColor.inkFaint)
-            }
+            .font(.system(size: 12))
+            .tint(OVColor.forest)
+            .padding(.top, 2)
         }
-        .font(.system(size: 12))
-        .tint(OVColor.forest)
-        .padding(.top, 2)
     }
 
     // #901 (Dan's walk, 2026-07-14): the "Unavailable" badge sits UP HERE, by Keep/Dismiss, and it is
