@@ -84,4 +84,18 @@ struct ProspectRowViewReachabilityTests {
                                status: .approved, sentAt: Date(timeIntervalSince1970: 1_780_000_000)))
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
+
+    // Dan's call after the first real check (2026-07-27): the reachability answer belongs directly under
+    // Keep and Dismiss, not buried in the tag stack on the left. It is the fact he is deciding ON, so it
+    // should sit with the controls he decides WITH, not among the classification pills.
+    @Test func theReachabilityBadgeSitsWithTheKeepAndDismissControls() throws {
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: nil,
+                               probed: true, hasEmail: true))
+        guard let keep = t.firstIndex(of: "Keep"),
+              let badge = t.firstIndex(where: { $0.contains(ReachabilityCopy.emailFoundBadge) }) else {
+            Issue.record("expected both the Keep control and the reachability badge to render")
+            return
+        }
+        #expect(badge > keep)
+    }
 }
