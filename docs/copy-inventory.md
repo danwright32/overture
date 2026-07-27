@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **882 sentences**, from 296 source files.
+Every sentence Overture can say to Dan: **885 sentences**, from 296 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1035,7 +1035,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
-"Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a week cannot be "
+"Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
     `Domain/ProbeSelection.swift`
 "Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
     `UI/ProspectRowView.swift`
@@ -1397,7 +1397,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
     `Domain/WatchlistEditing.swift`
-"That is \(s.researchCount) lookups, about $\(String(format: "%.0f", s.estimatedUSD)). "
+"That is \(s.researchCount) lookups, \(durationLabel(s.estimatedSeconds)). "
     `Domain/ProbeSelection.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
@@ -1776,7 +1776,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
     `Domain/ScoutWarningCopy.swift`
-"\(lookups), \(money): shows by the same producer share one."
+"\(lookups), \(wait): shows by the same producer share one."
     `Domain/ProbeSelection.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
@@ -1893,6 +1893,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceGuidanceGuard.swift`
 "a past client"
     `UI/QueueView+Model.swift`
+"about 1 minute"
+    `Domain/ProbeSelection.swift`
+"about \(minutes) minutes"
+    `Domain/ProbeSelection.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
 "at \(venue) on \(dateLabel)"
@@ -1905,6 +1909,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "bryant park"
     `Domain/VenueDisplay.swift`
+"cannot go on one click. Select fewer dates and run them in batches."
+    `Domain/ProbeSelection.swift`
 "couldn't save, try again"
     `Domain/PrepRunSummary.swift`
 "delivery failed"
@@ -1975,8 +1981,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
-"spent on one click. Select fewer dates and run them in batches."
-    `Domain/ProbeSelection.swift`
 "stern auditorium / perelman stage"
     `Domain/VenueDisplay.swift`
 "ten are kept."
@@ -2014,6 +2018,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "turns up"
     `Domain/SuppressionReport.swift`
+"under a minute"
+    `Domain/ProbeSelection.swift`
 "voice guidance leaked a name, quarantined"
     `Domain/PrepRunSummary.swift`
 "wants to book"

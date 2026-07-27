@@ -25,7 +25,34 @@ struct ProbeSelectionTests {
         #expect(s.showCount == 3)
         #expect(s.researchCount == 1)
         #expect(s.organisationCount == 1)
-        #expect(s.estimatedUSD == 1.36)
+        // One lookup is one round, so the wait is one lookup long.
+        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
+    }
+
+    // Dan runs this on a Max plan, where the tool's dollar figure is an API-equivalent number and not a
+    // bill he ever receives. Showing money implied a charge that does not exist; what he actually spends
+    // is time and his rolling usage window, so that is what the estimate is in.
+    @Test func theEstimateIsTimeAndNamesNoMoney() {
+        let s = ProbeSelection.summarize(dateCount: 3, candidates: frigid, alreadyAnswered: 0, among: frigid)
+        #expect(!ProbeSelectionCopy.costLine(s).contains("$"))
+        #expect(ProbeSelectionCopy.costLine(s).contains("minute"))
+        let over = ProbeSelection.summarize(
+            dateCount: 7, candidates: (0..<41).map { show("k\($0)", "Solo \($0)", "Room \($0)") },
+            alreadyAnswered: 0, among: (0..<41).map { show("k\($0)", "Solo \($0)", "Room \($0)") })
+        #expect(!ProbeSelectionCopy.overCeilingMessage(over).contains("$"))
+    }
+
+    // Lookups run up to ten at a time, so the wait is the number of ROUNDS, not the number of lookups.
+    // Estimating it as the sum would tell Dan a 4-minute check takes 100 minutes and he would never run it.
+    @Test func theWaitIsTheRoundsNotTheSumBecauseLookupsOverlap() {
+        let ten = (0..<10).map { show("k\($0)", "Solo \($0)", "Room \($0)") }
+        let s10 = ProbeSelection.summarize(dateCount: 1, candidates: ten, alreadyAnswered: 0, among: ten)
+        #expect(s10.researchCount == 10)
+        #expect(s10.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)   // one full round
+
+        let eleven = (0..<11).map { show("k\($0)", "Solo \($0)", "Room \($0)") }
+        let s11 = ProbeSelection.summarize(dateCount: 2, candidates: eleven, alreadyAnswered: 0, among: eleven)
+        #expect(s11.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup * 2)   // spills to a second
     }
 
     // A night of one-off productions shares nothing, so it costs per show. This is the expensive case,
@@ -38,7 +65,9 @@ struct ProbeSelectionTests {
         #expect(s.researchCount == 3)
         #expect(s.performerHuntCount == 3)
         #expect(s.organisationCount == 0)
-        #expect(s.estimatedUSD == 4.08)   // exactly what the first real check actually cost for three
+        // Three lookups fit in one round, so this is the ~3 minutes the first real check took, not the
+        // 8 minutes it took when they ran one after another.
+        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
     }
 
     // THE BRAKE. A week is roughly ninety dollars, and the confirm for it looks exactly like the confirm
@@ -89,7 +118,7 @@ struct ProbeSelectionTests {
         let one = [show("a", "Solo Co", "The Tank")]
         let s = ProbeSelection.summarize(dateCount: 1, candidates: one, alreadyAnswered: 0, among: one)
         #expect(ProbeSelectionCopy.selectionSummary(s) == "1 date, 1 show")
-        #expect(ProbeSelectionCopy.costLine(s) == "1 lookup, about $1.36.")
+        #expect(ProbeSelectionCopy.costLine(s) == "1 lookup, about 3 minutes.")
     }
 
     // The saving is only mentioned when there is one. On a night where every show is its own hunt,
@@ -106,7 +135,7 @@ struct ProbeSelectionTests {
     @Test func anEmptySelectionKnowsItIsEmpty() {
         let s = ProbeSelection.summarize(dateCount: 0, candidates: [], alreadyAnswered: 0, among: [])
         #expect(s.isEmpty)
-        #expect(s.estimatedUSD == 0)
+        #expect(s.estimatedSeconds == 0)
         #expect(!s.overCeiling)
     }
 

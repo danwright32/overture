@@ -3,28 +3,36 @@ import Foundation
 // #1597 (milestone 32 Phase 4.4 to 4.6): what Dan is about to spend, and whether he is allowed to.
 //
 // Selecting dates is the moment a reachability check stops being a small opt-in action and becomes a
-// real spending decision: measured at about $1.36 per research (2026-07-27, $4.08 for three shows), one
-// tick on a week is roughly a $90 click. So the selection carries its own arithmetic, and the running
-// bar and the confirm sheet both read THIS, never their own counts, so the number he is shown while
-// choosing and the number he approves can never disagree.
+// real commitment. The running bar and the confirm sheet both read THIS, never their own counts, so the
+// figure he is shown while choosing and the figure he approves can never disagree.
+//
+// The estimate is TIME, and deliberately not money. The tool reports a dollar cost, but Dan runs this on
+// a Max plan where that figure is an API-equivalent number and not a bill he ever receives; putting it on
+// screen implied a charge that does not exist (his call, 2026-07-27: "we are not using the api"). What a
+// check actually spends is his time and his rolling usage window, so that is what the bar says.
 enum ProbeSelection {
 
-    // The measured price of researching one entry. Deliberately a single named constant rather than a
-    // number inlined in copy: when a second measurement lands it changes in one place, and every
-    // sentence quoting money changes with it.
+    // How long one lookup takes. Measured 2026-07-27: the first real check took 471 seconds for three
+    // shows run one after another, so about 157 seconds each. A single named constant, so a second
+    // measurement changes every sentence quoting a wait at once.
     //
     // One sample, on three Carnegie-affiliated organisations, which are unusually well documented. A
-    // night of small indie productions could cost more (more searching before giving up) or less (gives
-    // up sooner). Treat the estimate as an order of magnitude, which is all a brake needs.
-    static let measuredUSDPerResearch = 1.36
+    // night of small indie productions could take longer (more searching before giving up) or less
+    // (gives up sooner). An order of magnitude, which is all this needs to be.
+    static let measuredSecondsPerLookup: TimeInterval = 157
+
+    // Lookups run concurrently, so the wait is the number of ROUNDS, not the number of lookups. MUST
+    // match OVERTURE_PREP_MAX_PARALLEL default in mac/scripts/prep-run.sh: if this is higher than the
+    // runner's real cap the bar promises a wait the run cannot keep.
+    static let maxConcurrentLookups = 10
 
     // The ceiling. Above this, the check is REFUSED rather than warned about.
     //
-    // A warning is the wrong instrument here: the failure mode is one tick on a week going through
-    // because the confirm looked like the confirm he has clicked through a dozen times, and by the time
-    // he sees the number it has been spent. Sized to let a few nights pass freely (40 researches is
-    // about four typical nights) while stopping a week, which is roughly 90 dollars, from happening by
-    // accident. Dan can always run the nights in batches.
+    // A warning is the wrong instrument: the failure mode is one tick on a week going through because
+    // the confirm looked like the confirm he has clicked through a dozen times, and by then the usage
+    // window is gone. Sized to let a few nights pass freely (40 lookups is about four typical nights,
+    // roughly eleven minutes) while stopping a whole week from being committed by accident. Nothing is
+    // lost by refusing: the same dates run fine in two batches.
     static let maxResearchesPerRun = 40
 
     struct Summary: Equatable {
@@ -38,7 +46,8 @@ enum ProbeSelection {
         let performerHuntCount: Int
         // Selected shows already answered recently, which cost nothing and are not re-researched.
         let alreadyAnsweredCount: Int
-        let estimatedUSD: Double
+        // Wall clock, not work: lookups overlap, so this is rounds times one lookup.
+        let estimatedSeconds: TimeInterval
         // True when the run is refused. Never a warning: see maxResearchesPerRun.
         let overCeiling: Bool
 
@@ -60,16 +69,24 @@ enum ProbeSelection {
             organisationCount: plan.organisationCount,
             performerHuntCount: plan.performerHuntCount,
             alreadyAnsweredCount: alreadyAnswered,
-            estimatedUSD: (Double(researches) * measuredUSDPerResearch * 100).rounded() / 100,
+            estimatedSeconds: estimatedSeconds(forLookups: researches),
             overCeiling: researches > maxResearchesPerRun)
+    }
+
+    // Rounds, never the sum. Estimating the sum would tell Dan a four-minute check takes an hour and a
+    // half, and he would never run it.
+    static func estimatedSeconds(forLookups lookups: Int) -> TimeInterval {
+        guard lookups > 0 else { return 0 }
+        let rounds = (lookups + maxConcurrentLookups - 1) / maxConcurrentLookups
+        return Double(rounds) * measuredSecondsPerLookup
     }
 }
 
 // The sentences. Kept beside the arithmetic so a number and the words around it are changed together.
 enum ProbeSelectionCopy {
 
-    // The running bar, while Dan is ticking dates. Says what is selected and what it will cost, because
-    // the cost is the thing he cannot work out for himself and the thing he most needs before clicking.
+    // The running bar, while Dan is ticking dates. Says what is selected and how long it will take,
+    // because the wait is the thing he cannot work out for himself and most needs before clicking.
     static func selectionSummary(_ s: ProbeSelection.Summary) -> String {
         let dates = s.dateCount == 1 ? "1 date" : "\(s.dateCount) dates"
         let shows = s.showCount == 1 ? "1 show" : "\(s.showCount) shows"
@@ -80,11 +97,17 @@ enum ProbeSelectionCopy {
     // every show is its own hunt and "40 shows, 40 lookups" would be a second telling of the first half.
     static func costLine(_ s: ProbeSelection.Summary) -> String {
         let lookups = s.researchCount == 1 ? "1 lookup" : "\(s.researchCount) lookups"
-        let money = String(format: "about $%.2f", s.estimatedUSD)
+        let wait = durationLabel(s.estimatedSeconds)
         if s.researchCount < s.showCount {
-            return "\(lookups), \(money): shows by the same producer share one."
+            return "\(lookups), \(wait): shows by the same producer share one."
         }
-        return "\(lookups), \(money)."
+        return "\(lookups), \(wait)."
+    }
+
+    static func durationLabel(_ seconds: TimeInterval) -> String {
+        if seconds < 60 { return "under a minute" }
+        let minutes = Int((seconds / 60).rounded())
+        return minutes == 1 ? "about 1 minute" : "about \(minutes) minutes"
     }
 
     static let clearSelection = "Clear"
@@ -92,9 +115,9 @@ enum ProbeSelectionCopy {
     // The refusal. Says the number, why there is a limit at all, and the way forward, so it is an
     // instruction rather than a wall.
     static func overCeilingMessage(_ s: ProbeSelection.Summary) -> String {
-        "That is \(s.researchCount) lookups, about $\(String(format: "%.0f", s.estimatedUSD)). "
-            + "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a week cannot be "
-            + "spent on one click. Select fewer dates and run them in batches."
+        "That is \(s.researchCount) lookups, \(durationLabel(s.estimatedSeconds)). "
+            + "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
+            + "cannot go on one click. Select fewer dates and run them in batches."
     }
 
     // The confirm title is the SAME question whether one date or seven produced the list, so it is
