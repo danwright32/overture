@@ -124,4 +124,65 @@ struct ProspectRowViewReachabilityTests {
         #expect(textsInButtonRow.contains("Keep"))
         #expect(!textsInButtonRow.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
     }
+
+    // #1597 follow-up (Dan, walking the Debug build): "can we also put the email directly under this
+    // indicator when there is one... any and all emails including weak cases. I should see all of them."
+    //
+    // The badge says an address exists; it never says WHICH. That is the thing he needs while triaging,
+    // because "info@thevenue.com" and "anna@annapierre.com" are the same badge and completely different
+    // decisions. ALL of them, not just the primary: a self-produced show with two named performers found
+    // two people, and showing one silently hides the other.
+    private func withContacts(_ emails: [String], result: Reachability.ProbeResult) -> QueueItem {
+        var i = item(presenter: "Aurora Strings", sourceListingURL: nil, probed: true)
+        i.reachabilityResult = result
+        i.contacts = emails.enumerated().map { idx, email in
+            RecipientSnapshot(id: "r\(idx)", name: nil, email: email, role: nil, provenance: .act,
+                              sendState: .pending, replied: false, lastReplyText: nil,
+                              resolution: nil, bounced: false, outcomeSource: .auto)
+        }
+        i.hasPendingRecipient = (result == .emailFound)
+        return i
+    }
+
+    @Test func aFoundAddressIsShownUnderTheBadge() throws {
+        let t = try texts(withContacts(["hello@auroratrio.com"], result: .emailFound))
+        #expect(t.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
+        #expect(t.contains("hello@auroratrio.com"))
+    }
+
+    // Every one of them. Showing only the first would hide the second performer on exactly the shows
+    // where finding both was the hard part (#366).
+    @Test func everyAddressIsShownNotJustTheFirst() throws {
+        let t = try texts(withContacts(["anna@annapierre.com", "marc@marcduval.com"], result: .emailFound))
+        #expect(t.contains("anna@annapierre.com"))
+        #expect(t.contains("marc@marcduval.com"))
+    }
+
+    // The weak case too, and this is where it earns the most: the gold badge says an address exists but
+    // is not really sendable, and seeing that it is the venue's front desk is what makes that judgment
+    // legible instead of something Dan has to take on trust.
+    @Test func aWeakAddressIsShownToo() throws {
+        let t = try texts(withContacts(["info@thevenue.com"], result: .weakContactOnly))
+        #expect(t.contains { $0.contains(ReachabilityCopy.weakContactOnlyBadge) })
+        #expect(t.contains("info@thevenue.com"))
+    }
+
+    // Nothing found means nothing to show, and certainly no empty line pretending to be an address.
+    @Test func aRowWithNoAddressShowsNoAddressLine() throws {
+        let t = try texts(withContacts([], result: .noEmailFound))
+        #expect(t.contains { $0.contains(ReachabilityCopy.noEmailFoundBadge) })
+        #expect(!t.contains { $0.contains("@") })
+    }
+
+    // A contact carrying no email at all (a contact FORM, which Overture does record) must not render as
+    // a blank line under the badge.
+    @Test func aContactWithNoEmailDoesNotRenderAnEmptyLine() throws {
+        var i = withContacts([], result: .emailFound)
+        i.contacts = [RecipientSnapshot(id: "r0", name: "Booking", email: nil, role: nil, provenance: .act,
+                                        sendState: .pending, replied: false, lastReplyText: nil,
+                                        resolution: nil, bounced: false, outcomeSource: .auto)]
+        let view = ProspectRowView(item: i, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        let t = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!t.contains(""))
+    }
 }

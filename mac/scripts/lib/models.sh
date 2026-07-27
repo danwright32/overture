@@ -18,6 +18,18 @@
 # tell what wrote a draft rather than merely sensing that something changed.
 OVERTURE_MODEL_DRAFTING="opus"
 
+# The reachability CHECK (#1597). Deliberately NOT the drafting model, which is what it used to inherit.
+#
+# Measured 2026-07-27 with scripts/eval-prep-runbook.sh against all 8 contact-rule fixtures rather than
+# assumed: sonnet obeyed every rule (7/8 on the first pass, and that one failure was a formatting hiccup
+# which passed on retry) at roughly half the cost per lookup, about 0.95 against 1.90. Haiku scored 4/8
+# and dropped a REQUIRED PERFORMER on the stale-site fixture, which is the rule this whole feature rests
+# on, so it is not a candidate at any saving.
+#
+# This moves only the half that FINDS a contact. The half that writes an email reaching a stranger in
+# Dan's voice stays on the pinned drafting model above.
+OVERTURE_MODEL_REACHABILITY="sonnet"
+
 # The extraction run. It was assumed to be the cheap-fast-model case: a strict output schema, no
 # judgment, just read a page for its listings. That assumption was wrong, and haiku rode on it.
 #
@@ -84,14 +96,22 @@ record_model() {
 # envelope, and a silent 0.00 there would read as "that was free" and get used to size a 66-show batch.
 # So a reading that could not be taken is written as `recorded: false` with NO usd figure at all, and the
 # app says "cost not recorded" rather than showing a number nobody measured.
+# #1597: takes ONE OR MORE event files, because a chunked run is up to 10 concurrent claudes and each
+# emits its own stream. The total is their sum; the duration is the LONGEST, since they overlap.
+#
+# A run where any stream reported nothing is `recorded: false` with no `usd` at all, and its partial
+# figure is carried under `partialUsd` instead. That distinction is load-bearing rather than pedantic:
+# the batch ceiling is sized from this number, so a partial total presented as the real one would let
+# through several times the spend Dan agreed to, and it would look perfectly plausible.
 record_run_cost() {
-  local results="$1" events="$2"
+  local results="$1"
+  shift
   [[ -f "${results}" ]] || return 0
   command -v node >/dev/null 2>&1 || return 0
   node -e '
     (function () {
     const fs = require("fs");
-    const [file, events] = process.argv.slice(1);
+    const [file, ...eventFiles] = process.argv.slice(1);
     let json;
     try {
       json = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -100,30 +120,52 @@ record_run_cost() {
       // own path. Overwriting it would destroy the evidence of what went wrong.
       return;
     }
-    let envelope = null;
-    try {
-      const lines = fs.readFileSync(events, "utf8").split("\n");
-      // Walk backwards: the result envelope is last, and a killed run leaves a half-written line after
-      // whatever it had already flushed.
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        let parsed;
-        try { parsed = JSON.parse(line); } catch (e) { continue; }
-        if (parsed && parsed.type === "result" && typeof parsed.total_cost_usd === "number") {
-          envelope = parsed;
-          break;
+    const envelopeIn = (events) => {
+      try {
+        const lines = fs.readFileSync(events, "utf8").split("\n");
+        // Walk backwards: the result envelope is last, and a killed run leaves a half-written line after
+        // whatever it had already flushed.
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          let parsed;
+          try { parsed = JSON.parse(line); } catch (e) { continue; }
+          if (parsed && parsed.type === "result" && typeof parsed.total_cost_usd === "number") {
+            return parsed;
+          }
         }
+      } catch (e) {
+        // No event file at all. Counts as a stream that did not report, which is the honest answer.
       }
-    } catch (e) {
-      // No event file at all. Falls through to recorded: false, which is the honest answer.
+      return null;
+    };
+
+    const envelopes = eventFiles.map(envelopeIn).filter(Boolean);
+    // Float addition on money: round to cents so a sum of ten streams cannot present itself as
+    // 3.7500000000000004 in a figure Dan reads.
+    const usd = Math.round(envelopes.reduce((a, e) => a + e.total_cost_usd, 0) * 1e6) / 1e6;
+    // The longest, never the sum: the streams ran at the same time.
+    const durationMs = envelopes.reduce((a, e) => Math.max(a, e.duration_ms || 0), 0);
+    const complete = eventFiles.length > 0 && envelopes.length === eventFiles.length;
+
+    if (complete) {
+      json.runCost = { recorded: true, usd, durationMs, streams: eventFiles.length };
+    } else {
+      // No `usd` key at all on the incomplete path, so nothing downstream can read a partial total as
+      // the real one by reaching for the field it always reads.
+      json.runCost = {
+        recorded: false,
+        streams: eventFiles.length,
+        streamsRecorded: envelopes.length,
+      };
+      if (envelopes.length > 0) {
+        json.runCost.partialUsd = usd;
+        json.runCost.partialDurationMs = durationMs;
+      }
     }
-    json.runCost = envelope
-      ? { recorded: true, usd: envelope.total_cost_usd, durationMs: envelope.duration_ms }
-      : { recorded: false };
     fs.writeFileSync(file, JSON.stringify(json, null, 2));
     })();
-  ' "${results}" "${events}" || true
+  ' "${results}" "$@" || true
 }
 
 # #1593 (milestone 32 Phase 0.1): the other half of the cost reading. Asking claude for

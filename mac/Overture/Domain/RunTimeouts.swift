@@ -13,6 +13,17 @@ enum RunTimeouts {
     // so it gets the longest leash before the marker is considered stale.
     static let replyClassify: TimeInterval = 10 * 60
 
+    // Reachability check (#1597): a DETACHED run that researches a contact for every show on the dates
+    // Dan picked, following each organisation's own site until it finds an address or gives up. The first
+    // real one took 7m51s for THREE shows, and because it shared `prep` above it was reported on screen as
+    // stuck at 3:38 while working normally. Sized with the other heavy detached runs (replyClassify,
+    // scoutExtract) rather than with Prep, whose ceiling was drawn for a different shape of work.
+    //
+    // This is the visible stall WARNING only. PrepQueueService.markerStaleAfter, which frees the
+    // double-run guard, deliberately stays at `prep`: the runner touches its marker every 60s while alive,
+    // so a long batch never goes stale, and lengthening that would only make a DEAD run look alive longer.
+    static let reachabilityProbe: TimeInterval = 10 * 60
+
     // Reply drafter, per recipient: from "Draft a reply" stamped to a draft landing. Shorter than the
     // classify marker because Dan is watching this one and a stranded request should surface sooner.
     static let replyDraft: TimeInterval = 5 * 60

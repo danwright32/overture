@@ -213,6 +213,53 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
+# #1597: a chunked run is up to 10 concurrent claudes, so the cost arrives as several event streams and
+# the total is their SUM. Getting this wrong is not a cosmetic reporting bug: Dan sizes the batch ceiling
+# from this figure, so reading only one stream of four would tell him a week costs a quarter of what it
+# does, and the brake would let through four times the spend he agreed to.
+printf '%s' '{"version":6,"results":[]}' > "${TMP}/cost-chunked.json"
+printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":1.50,"duration_ms":100000}' \
+  > "${TMP}/events-chunk-1.jsonl"
+printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":2.25,"duration_ms":240000}' \
+  > "${TMP}/events-chunk-2.jsonl"
+record_run_cost "${TMP}/cost-chunked.json" "${TMP}/events-chunk-1.jsonl" "${TMP}/events-chunk-2.jsonl"
+assert_contains "a chunked run sums the cost of every stream" \
+  "$(cat "${TMP}/cost-chunked.json")" '"usd": 3.75'
+# Chunks run CONCURRENTLY, so the run's wall clock is the longest chunk, never the sum. Adding them
+# would claim a 4-minute run took 5m40s, making the parallel path look like the slow thing it replaced.
+assert_contains "the duration is the longest stream, not the sum, because chunks overlap" \
+  "$(cat "${TMP}/cost-chunked.json")" '"durationMs": 240000'
+assert_contains "a complete chunked reading is marked recorded" \
+  "$(cat "${TMP}/cost-chunked.json")" '"recorded": true'
+
+# THE FAILURE THAT MATTERS. One chunk died and left no envelope. The surviving chunks' cost is real, but
+# it is NOT the run's cost, and presenting it as the total is exactly how a brake gets sized too loose.
+printf '%s' '{"version":6,"results":[]}' > "${TMP}/cost-partial.json"
+record_run_cost "${TMP}/cost-partial.json" "${TMP}/events-chunk-1.jsonl" "${TMP}/no-such-chunk.jsonl"
+assert_contains "a run where one chunk reported nothing is NOT marked recorded" \
+  "$(cat "${TMP}/cost-partial.json")" '"recorded": false'
+if [[ "$(cat "${TMP}/cost-partial.json")" == *'"usd":'* ]]; then
+  echo "FAIL - a partial reading must not present itself as the run's usd cost"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a partial reading writes no usd figure that could be mistaken for the total"
+fi
+assert_contains "a partial reading still says how much it DID see, under its own name" \
+  "$(cat "${TMP}/cost-partial.json")" '"partialUsd": 1.5'
+assert_contains "and says how many streams reported" \
+  "$(cat "${TMP}/cost-partial.json")" '"streamsRecorded": 1'
+assert_contains "out of how many there were" \
+  "$(cat "${TMP}/cost-partial.json")" '"streams": 2'
+
+# The single-stream call is unchanged, so every existing caller keeps working untouched.
+printf '%s' '{"version":6,"results":[]}' > "${TMP}/cost-single.json"
+record_run_cost "${TMP}/cost-single.json" "${TMP}/events-chunk-2.jsonl"
+assert_contains "a single-stream run still records its cost exactly as before" \
+  "$(cat "${TMP}/cost-single.json")" '"usd": 2.25'
+assert_contains "and is still marked recorded" \
+  "$(cat "${TMP}/cost-single.json")" '"recorded": true'
+
+
 # --- tee_run_events (#1593, milestone 32 Phase 0.1) --------------------------------------------------
 #
 # Capturing the cost means asking claude for --output-format stream-json, whose raw JSON is unreadable.

@@ -438,6 +438,39 @@ struct ProspectRowView: View {
         }
     }
 
+    // #1597 follow-up (Dan's walk of the Debug build): the badge says an address exists but never which
+    // one, and that is the thing he actually needs while triaging. "info@thevenue.com" and
+    // "anna@annapierre.com" wear the same badge and are completely different decisions.
+    //
+    // ALL of them, his call, including the weak ones: on a self-produced show two named performers may
+    // both have been found, and showing only the first silently hides the second, which is exactly the
+    // case where finding both was the hard part (#366). Weak addresses show too, because seeing that the
+    // only thing found was the venue front desk is what makes that verdict legible instead of something
+    // he has to take on trust.
+    //
+    // Styled as the row's meta line (the city and date), his spec, so it reads as a quiet fact about the
+    // show rather than as another control competing with Keep and Dismiss.
+    @ViewBuilder private var reachabilityAddresses: some View {
+        let emails = item.contacts.compactMap { c -> String? in
+            guard let e = c.email?.trimmingCharacters(in: .whitespacesAndNewlines), !e.isEmpty else { return nil }
+            return e
+        }
+        if !emails.isEmpty {
+            VStack(alignment: .trailing, spacing: 1) {
+                ForEach(emails, id: \.self) { email in
+                    Text(email)
+                        .font(OVType.meta)
+                        .foregroundStyle(OVColor.inkSoft)
+                        .textSelection(.enabled)
+                        // Wrap rather than truncate: an address Dan cannot read in full is no better than
+                        // no address, and this column is narrow.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+    }
+
     private func reachabilityNote(icon: String, text: String, tone: OVPillTone, help: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 12, weight: .semibold))
@@ -630,6 +663,7 @@ struct ProspectRowView: View {
             // right-justifies under those buttons instead of widening their row (which is what put it
             // beside Dismiss twice and left the cards uneven).
             reachabilityFlag
+            reachabilityAddresses
         }
     }
 

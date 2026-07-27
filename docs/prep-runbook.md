@@ -15,7 +15,7 @@ before this was codified.
   (`PrepQueue` version `5`: `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`, `experimentArmInstruction`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -24,6 +24,8 @@ before this was codified.
   under the show-date rule below. `experimentArmInstruction` (v5, #5) is the opener archetype this
   item MUST use when it belongs to an active A/B experiment; absent (the normal case, no active
   experiment) means use the normal #362 rotation. See "Opener archetype" in §2 for its precedence.
+  `alsoAnswersFor` (v6, #1597) is a list of OTHER `naturalKey`s this one item answers for; absent
+  (the normal case) means the item stands alone. See "One answer, several shows" below.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
   optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
@@ -63,6 +65,21 @@ before this was codified.
 **The `naturalKey` is an OPAQUE TOKEN.** Copy it from the queue item into the result
 byte-for-byte. NEVER rebuild it from group/date/venue: that is the silent-mismatch
 trap. The human-readable fields are for research only.
+
+### One answer, several shows (`alsoAnswersFor`, v6, #1597)
+
+When a queue item carries `alsoAnswersFor`, the app has already proved that every key listed there is
+a show by the SAME producer, and that this producer is not a room that rents itself out. Research the
+contact ONCE, then write that same `contacts[]` into a separate result entry for the item's own
+`naturalKey` AND for every key in `alsoAnswersFor`. Copy each key byte-for-byte from the list, exactly
+as with the item's own key; never rebuild one and never merge several shows into a single result entry.
+
+Do not re-research per key, and do not skip the extra entries: a reachability check costs real money
+per research, and Dan is owed an answer for every show he selected. A key you leave out of the results
+is reported to him as unchecked, which is correct but wasteful, so emit them all.
+
+Never invent an `alsoAnswersFor` grouping yourself. Two shows sharing a venue, a title, or a
+performer are NOT the same producer, and the app is the only thing that may decide this.
 
 Canonical samples of the queue, results, and progress files (the cross-language contract
 guard, #157 / #354) live in `fixtures/prep-queue/`, `fixtures/prep-results/`, and

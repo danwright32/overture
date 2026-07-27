@@ -101,19 +101,22 @@ split_queue_into_chunks() {
 # Does NOT synthesize a result for a source no chunk reported: that is results-guard's job at the end,
 # against the FULL queue, where a not_read backstop belongs. Here a still-missing source is simply not
 # present yet, which is the honest state mid-run.
+# #1597: the id field and results version are parameters, so the reachability check reuses this exact
+# merge instead of carrying a near-identical copy that would drift. Defaults are scout-extract's, so
+# every existing call site is unchanged.
 merge_chunk_results() {
-  local queue="$1" out_dir="$2" results="$3"
+  local queue="$1" out_dir="$2" results="$3" id_field="${4:-sourceId}" out_version="${5:-1}"
   command -v node >/dev/null 2>&1 || return 0
 
   node -e '
     const fs = require("fs"), path = require("path");
-    const [queuePath, outDir, resultsPath] = process.argv.slice(1);
+    const [queuePath, outDir, resultsPath, idField, versionRaw] = process.argv.slice(1);
 
     const read = (p) => { try { return fs.readFileSync(p, "utf8"); } catch { return null; } };
     const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 
     const queue = parse(read(queuePath) ?? "");
-    const order = (Array.isArray(queue?.items) ? queue.items : []).map((i) => i.sourceId);
+    const order = (Array.isArray(queue?.items) ? queue.items : []).map((i) => i[idField]);
 
     let files = [];
     try {
@@ -133,7 +136,7 @@ merge_chunk_results() {
         newestGeneratedAt = parsed.generatedAt;
       }
       for (const r of parsed.results) {
-        if (r && r.sourceId && !byId.has(r.sourceId)) byId.set(r.sourceId, r);
+        if (r && r[idField] && !byId.has(r[idField])) byId.set(r[idField], r);
       }
     }
 
@@ -153,10 +156,10 @@ merge_chunk_results() {
     }
 
     const out = {
-      version: 1,
+      version: parseInt(versionRaw, 10) || 1,
       generatedAt: newestGeneratedAt ?? new Date().toISOString(),
       results: ordered,
     };
     fs.writeFileSync(resultsPath, JSON.stringify(out, null, 2));
-  ' "${queue}" "${out_dir}" "${results}" 2>/dev/null || true
+  ' "${queue}" "${out_dir}" "${results}" "${id_field}" "${out_version}" 2>/dev/null || true
 }

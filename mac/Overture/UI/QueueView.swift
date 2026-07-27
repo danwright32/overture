@@ -124,12 +124,24 @@ struct QueueView: View {
     var onStartPrep: () -> Void = {}
     var onProbeReachability: (Set<String>) -> Void = { _ in }   // #1308 Layer 2
 
+    // #1597: the dates Dan has ticked for one multi-date reachability check, by date-group id. Session
+    // state, deliberately not persisted: a selection is a thing he is assembling right now, and one
+    // surviving a relaunch would be a spending decision made days ago and forgotten.
+    @State private var selectedProbeDates: Set<String> = []
+    // #1597: the refusal, when a selection is past the ceiling. Held so the bar can show it in place
+    // rather than a sheet appearing after he has already committed to the click.
+    @State private var probeCeilingMessage: String?
+
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
     @State private var pendingProbe: ProbeConfirm?
     private struct ProbeConfirm: Identifiable {
         let id = UUID()
         let keys: [String]
         let dateLabel: String
+        // #1597: set only for a multi-date selection, whose sentences come from ProbeSelectionCopy.
+        // Absent means the single-date wording, unchanged.
+        var title: String? = nil
+        var message: String? = nil
     }
 
     private var items: [QueueItem] { QueueModel.items(from: prospects) }
@@ -224,8 +236,95 @@ struct QueueView: View {
         var id: String { "\(dateLabel)|\(reason.rawValue)" }
     }
 
+    // #1597: everything the selection bar and its confirm need, computed ONCE from the ticked dates.
+    // Both read this, so the total Dan watches while choosing is the total he approves.
+    // The rows the Scout stage is currently showing, derived the same way focusedSection derives them,
+    // so a ticked date means exactly the shows under that heading and nothing else.
+    private func scoutRows(_ data: RenderData) -> [QueueItem] {
+        let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
+                                                     in: prospects, today: today, now: Date(), geo: geo))
+        return data.items.filter { wanted.contains($0.id) }
+    }
+
+    private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
+        QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
+                                  among: items, today: today, stage: focusedStage)
+    }
+
+    @ViewBuilder private func probeSelectionBar(_ data: RenderData) -> some View {
+        if let (summary, keys) = probeSummary(data), !summary.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: OVSpacing.sm) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ProbeSelectionCopy.selectionSummary(summary))
+                            .font(OVType.meta.weight(.semibold))
+                            .foregroundStyle(OVColor.ink)
+                        Text(ProbeSelectionCopy.costLine(summary))
+                            .font(OVType.meta)
+                            .foregroundStyle(OVColor.inkSoft)
+                    }
+                    Spacer(minLength: OVSpacing.sm)
+                    Button(ProbeSelectionCopy.clearSelection) {
+                        selectedProbeDates = []
+                        probeCeilingMessage = nil
+                    }
+                    .buttonStyle(.plain)
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.inkSoft)
+                    Button {
+                        guard !prepRunning else { return }
+                        // The brake. Refused here, in place, rather than in a confirm that looks exactly
+                        // like the one he has clicked through a dozen times.
+                        if summary.overCeiling {
+                            probeCeilingMessage = ProbeSelectionCopy.overCeilingMessage(summary)
+                            return
+                        }
+                        probeCeilingMessage = nil
+                        pendingProbe = ProbeConfirm(
+                            keys: keys, dateLabel: "",
+                            title: ProbeSelectionCopy.multiDateTitle(summary),
+                            message: ProbeSelectionCopy.multiDateMessage(summary))
+                    } label: {
+                        Text(ReachabilityProbeCopy.controlLabel)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(prepRunning ? OVColor.onForest.opacity(0.5) : OVColor.onForest)
+                            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
+                            .background(Capsule().fill(OVColor.forest.opacity(prepRunning ? 0.4 : 1)))
+                    }
+                    .buttonStyle(.plain)
+                    .help(prepRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
+                }
+                if let refusal = probeCeilingMessage {
+                    Text(refusal)
+                        .font(OVType.meta)
+                        .foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, OVSpacing.xl)
+            .padding(.vertical, OVSpacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Opaque, because it now floats OVER the rows rather than sitting above them: anything
+            // translucent here would show the content sliding underneath and read as a rendering fault.
+            .background(OVColor.canvas)
+            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
     private func mainContent(_ data: RenderData) -> some View {
         queueScroll(data)
+            // #1597: pinned at the TOP, under the toolbar, per Dan's call. Not at the bottom: it would
+            // sit under ActionFeedbackBanner's Undo pill, and a running total he cannot see while
+            // scrolling a long date list is not a running total.
+            //
+            // An OVERLAY, not a sibling above the scroll. As a sibling it took its height out of the
+            // scroll view, so the first tick shrank the scroll area and the whole page jumped under his
+            // cursor mid-click (his walk of the Debug build, 2026-07-27). An overlay floats over the
+            // content and leaves the scroll geometry untouched, which is exactly why the acknowledgment
+            // banner is attached the same way.
+            .overlay(alignment: .top) { probeSelectionBar(data) }
             .background(OVColor.canvas)
             // #1219/#1249: confirm an Approve or a per-row Re-prep that lands on a date already holding a
             // pitch. First-party branded sheet (SelfBookingConfirmSheet), not a stock system dialog.
@@ -239,11 +338,16 @@ struct QueueView: View {
             // first-party branded sheet; the copy states the honest cost (free for shows Dan keeps).
             .sheet(item: $pendingProbe) { pending in
                 SelfBookingConfirmSheet(
-                    title: ReachabilityProbeCopy.confirmTitle(count: pending.keys.count),
-                    message: ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel,
-                                                                  count: pending.keys.count),
+                    title: pending.title ?? ReachabilityProbeCopy.confirmTitle(count: pending.keys.count),
+                    message: pending.message
+                        ?? ReachabilityProbeCopy.confirmMessage(dateLabel: pending.dateLabel,
+                                                                count: pending.keys.count),
                     proceedLabel: ReachabilityProbeCopy.confirmProceed,
-                    onProceed: { onProbeReachability(Set(pending.keys)); pendingProbe = nil },
+                    onProceed: {
+                        onProbeReachability(Set(pending.keys))
+                        selectedProbeDates = []
+                        pendingProbe = nil
+                    },
                     onCancel: { pendingProbe = nil })
             }
             // #1500: confirm a whole night before it goes. The count is the point: Dan has to know exactly
@@ -464,6 +568,27 @@ struct QueueView: View {
                 // candidates, so Dan can see which are emailable before he keeps one and dismisses the rest.
                 // A standalone view (testable, #863) that reports the candidate keys up so the confirm sheet
                 // opens at the QueueView level.
+                // #1597: tick the date to add it to a multi-date check. Scout only, and only where there
+                // is something still to check, so it never appears on a date whose Check button is absent.
+                if focusedStage == .scout, !QueueModel.reachabilityProbeCandidateKeys(group.items).isEmpty {
+                    Button {
+                        if selectedProbeDates.contains(group.id) {
+                            selectedProbeDates.remove(group.id)
+                        } else {
+                            selectedProbeDates.insert(group.id)
+                        }
+                        // The refusal is about a selection that no longer exists the moment it changes.
+                        probeCeilingMessage = nil
+                    } label: {
+                        Image(systemName: selectedProbeDates.contains(group.id)
+                              ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 12))
+                            .foregroundStyle(selectedProbeDates.contains(group.id)
+                                             ? OVColor.forest : OVColor.inkSoft)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Include this date in one reachability check")
+                }
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
                     isRunning: prepRunning,

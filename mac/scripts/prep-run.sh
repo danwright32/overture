@@ -38,6 +38,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # idle-sleep timeout or a lid close cannot suspend or kill it mid draft. Shared with the other two
 # detached runners; released in the EXIT trap and, crash-safe, by caffeinate's own -w on this pid.
 . "$(dirname "$0")/lib/sleep-guard.sh"
+# #1597: the split/merge used to run a reachability check as up to 10 concurrent claudes. The SAME two
+# functions scout-extract has used since #1028, parameterised for this queue's `naturalKey` and results
+# version rather than copied, so a fix to either one lands in both runners.
+. "$(dirname "$0")/lib/scout-parallel.sh"
 open_run_log "prep-run.log"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
@@ -56,6 +60,31 @@ RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
 # log stays human-readable; this file is the machine copy nobody reads by hand.
 EVENTS="$SUPPORT/prep-run-events.jsonl"
 MARKER="$SUPPORT/prep-running"
+
+# #1597: a reachability CHECK is chunked; a normal Prep run is not, and the difference is not a
+# performance preference. The prompt's once-per-run voice-learning step rewrites
+# overture-voice-guidance.md, and several claudes doing that at the same time would race on one file.
+# A check never drafts, so it does not need that step at all: the chunked prompt omits it, which
+# removes the race rather than trying to coordinate around it.
+#
+# The probe marker is the app's own authoritative "this run is a check" signal (the same file
+# settleReachabilityProbe reads), so the two can never disagree about which kind of run this is.
+PROBE_MARKER="$SUPPORT/reachability-probe-run.json"
+IS_PROBE=0
+[ -f "$PROBE_MARKER" ] && IS_PROBE=1
+CHUNKDIR="$SUPPORT/prep-chunks"
+# Wipe before anything reads it: a leftover chunk-results file from a previous, larger check must never
+# be merged into this run as if it were this run's work. Assume-it-runs-twice.
+rm -rf "$CHUNKDIR" 2>/dev/null || true
+rm -f "$SUPPORT"/prep-run.chunk-*.log "$SUPPORT"/prep-run-events.chunk-*.jsonl 2>/dev/null || true
+MAX_PARALLEL="${OVERTURE_PREP_MAX_PARALLEL:-10}"
+# #1597: a CHECK finds contacts and never drafts, so it runs on the cheaper model the eval measured as
+# rule-clean. A normal Prep run writes emails in Dan's voice and stays on the pinned drafting model.
+if [ "$IS_PROBE" = "1" ]; then
+  RUN_MODEL="${OVERTURE_MODEL_REACHABILITY}"
+else
+  RUN_MODEL="${OVERTURE_MODEL_DRAFTING}"
+fi
 
 # #1038: the cooperative-cancel sentinel Overture writes to stop this run, and the file the heartbeat
 # reads to know which claude process to stop when it sees the sentinel. The heartbeat is forked before
@@ -76,7 +105,9 @@ require_queue "$QUEUE" "prep"
 # #354: seed a fresh progress file every run (never trust a leftover one from a prior run) so
 # the app's "N of M" display starts correct even before any result has landed.
 JQ="$(command -v jq 2>/dev/null || echo /usr/bin/jq)"
-TOTAL="$("$JQ" '.items | length' "$QUEUE" 2>/dev/null || echo 0)"
+# #1597: SHOWS, not queue entries, matching update_progress_from_results. A grouped item answers for the
+# keys in its alsoAnswersFor, so the item count would seed "0 of 4" for a check Dan started on six shows.
+TOTAL="$("$JQ" '[.items[] | 1 + ((.alsoAnswersFor // []) | length)] | add // 0' "$QUEUE" 2>/dev/null || echo 0)"
 printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 
 # Heartbeat: keep the marker fresh while genuinely working so a long multi-prospect batch is never
@@ -107,6 +138,10 @@ MARKER_INTERVAL=60
     if marker_due "$since_marker" "$MARKER_INTERVAL"; then
       since_marker=0
       touch "$MARKER" 2>/dev/null || exit
+      # #1597: fold whatever the chunks have written so far into the one results file the app polls,
+      # BEFORE deriving the count from it, so "N of M" climbs during a chunked run exactly as it does
+      # during a sequential one. A no-op when there are no chunk files (every normal Prep run).
+      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" naturalKey 6
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
     fi
   done ) &
@@ -142,6 +177,23 @@ and nothing else to that file. This run is DETACHED: nobody can answer you, so n
 decide and record the decision in the result. Do the web research needed to find real, verifiable contacts.
 "
 
+# #1597: the prompt for a reachability CHECK. Deliberately not the Prep prompt with a flag: it omits the
+# once-per-run voice-learning step entirely, because a check never drafts (so the step buys nothing) and
+# because up to ten concurrent chunks each rewriting overture-voice-guidance.md would race on one file.
+# Removing the step removes the race, rather than trying to coordinate ten writers around it.
+PROBE_PROMPT="You are the Overture reachability check. Follow $RUNBOOK exactly, the contact-finding
+half only. Read the work-list at $QUEUE and for every item find the contact (waterfall, strict
+verification). Do NOT draft any email and do NOT emit a draft field on any result: every item is
+contacts_only. Copy each item's naturalKey verbatim. If an item carries alsoAnswersFor, research its
+contact ONCE and write that same contacts list into a separate result entry for the item's own
+naturalKey AND for every key listed there, copying each key byte-for-byte. Immediately after finishing
+EACH item, rewrite $RESULTS with the complete PrepResults JSON covering EVERY item you have finished so
+far, not just this one. Do this after every single item, not only at the end: the app derives its live
+'N of M' progress from this file's own entry count. Write the complete PrepResults JSON to $RESULTS and
+nothing else to that file. This run is DETACHED: nobody can answer you, so never stop to ask, decide and
+record the decision in the result. Do the web research needed to find real, verifiable contacts.
+"
+
 resolve_claude
 
 # Headless Claude Code run. Read, Write, WebSearch, WebFetch, Bash and Skill (the six tools this run's
@@ -173,24 +225,138 @@ CLAUDE_STATUS=0
 #
 # The reader is started FIRST so opening the pipe for writing does not block, and claude stays the
 # directly backgrounded process, so `$!` is still ITS pid and the #1038 cooperative cancel keeps working.
-EVENTS_FIFO="$SUPPORT/prep-run-events.fifo"
-rm -f "$EVENTS_FIFO"
-mkfifo "$EVENTS_FIFO" || echo "prep: could not create the event pipe; cost will not be recorded" >&2
-tee_run_events "$EVENTS" < "$EVENTS_FIFO" &
-TEE_PID=$!
 
-"$CLAUDE" -p "$PROMPT" \
-  --model "${OVERTURE_MODEL_DRAFTING}" \
-  --output-format stream-json --verbose \
-  $PREP_SCOPE > "$EVENTS_FIFO" &
-CLAUDE_PID=$!
-printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
-wait "$CLAUDE_PID" || CLAUDE_STATUS=$?
-CLAUDE_PID=""   # reaped; nothing left for the trap to kill
-# claude's exit closes the write end, so the reader sees EOF and finishes on its own. Waited for so the
-# event file is complete before the cost is read out of it below.
-wait "$TEE_PID" 2>/dev/null || true
-rm -f "$EVENTS_FIFO"
+# run_one_claude <prompt> <events-file> <fifo-path> [log-file]
+#
+# One claude, its stdout captured through a named pipe so the raw stream is parseable for cost while a
+# readable trickle still reaches a log. Factored out because the chunked path needs the identical dance
+# up to 10 times over, and two copies of a pipe-and-reap sequence is exactly where the two would drift.
+# Prints nothing; sets CLAUDE_ONE_PID for the caller to record and wait on.
+run_one_claude() {
+  _prompt="$1"; _events="$2"; _fifo="$3"; _log="${4:-}"
+  rm -f "$_fifo"
+  mkfifo "$_fifo" || echo "prep: could not create the event pipe; cost will not be recorded" >&2
+  if [ -n "$_log" ]; then
+    tee_run_events "$_events" < "$_fifo" >> "$_log" 2>&1 &
+  else
+    tee_run_events "$_events" < "$_fifo" &
+  fi
+  _tee_pid=$!
+  # shellcheck disable=SC2086  # $PREP_SCOPE MUST word-split into --allowedTools <list> --permission-mode <mode>
+  "$CLAUDE" -p "$_prompt" \
+    --model "${RUN_MODEL}" \
+    --output-format stream-json --verbose \
+    $PREP_SCOPE > "$_fifo" &
+  CLAUDE_ONE_PID=$!
+  CLAUDE_ONE_TEE_PID=$_tee_pid
+  CLAUDE_ONE_FIFO=$_fifo
+}
+
+# reap_one_claude <pid> <tee-pid> <fifo>: wait for claude, then for the reader (claude's exit closes the
+# write end, so the reader sees EOF), then remove the pipe. Sets REAPED_STATUS.
+#
+# Sets a variable rather than echoing its result, and MUST NOT be called in a command substitution:
+# that is a subshell, and a subshell cannot `wait` on a process belonging to its parent. Written the
+# echoing way first, `wait` returned instantly without waiting for anything, so the script raced past a
+# claude that was still working, read an empty event stream, and recorded no cost at all for the run.
+reap_one_claude() {
+  REAPED_STATUS=0
+  wait "$1" || REAPED_STATUS=$?
+  wait "$2" 2>/dev/null || true
+  rm -f "$3"
+}
+
+EVENTS_FIFO="$SUPPORT/prep-run-events.fifo"
+
+if [ "$IS_PROBE" = "1" ]; then
+  # #1597: a reachability check runs as up to MAX_PARALLEL concurrent claudes, one per chunk of the
+  # work-list. The shows are wholly independent (each is its own contact hunt), so this cuts wall clock
+  # roughly in proportion to the chunk count: the first real check took 7m51s for three shows
+  # sequentially, and three concurrent chunks finish in about the time of the slowest single show.
+  #
+  # split_queue_into_chunks never makes an empty chunk, so a night with fewer shows than the cap simply
+  # gets one claude per show. The cap is a ceiling, not a target: it exists because each claude is a live
+  # web-fetching process, and past ten at once the plan's rate limit and this Mac both start to suffer,
+  # at which point retries make a parallel run slower than the sequential one it replaced.
+  mkdir -p "$CHUNKDIR" 2>/dev/null || true
+  CHUNK_COUNT="$(split_queue_into_chunks "$QUEUE" "$MAX_PARALLEL" "$CHUNKDIR")"
+else
+  CHUNK_COUNT=0
+fi
+
+if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
+  echo "prep: reachability check split into $CHUNK_COUNT chunk(s), running concurrently"
+  CHUNK_PIDS=""
+  CHUNK_TEE_PIDS=""
+  # The event files are accumulated as POSITIONAL PARAMETERS, not as a space-separated string.
+  #
+  # A string was the first shape, and it silently broke cost capture on the very first real chunked run:
+  # the support directory is "~/Library/Application Support/Overture", so unquoted word-splitting cut
+  # every path in half at that space. record_run_cost was handed 8 arguments that were not files instead
+  # of 4 that were, found no cost envelope in any of them, and honestly reported "not recorded" for a run
+  # that had reported its cost perfectly. `set --` is the only way a POSIX shell can carry a list of
+  # paths that may contain spaces.
+  set --
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    CHUNK_LOG="$SUPPORT/prep-run.chunk-$k.log"
+    CHUNK_EVENTS="$SUPPORT/prep-run-events.chunk-$k.jsonl"
+    : > "$CHUNK_LOG"
+    # Only the two paths change per chunk: each claude reads its own slice and writes its own results
+    # file, never a shared one, which concurrent incremental rewrites would clobber.
+    CHUNK_PROMPT="${PROBE_PROMPT//$QUEUE/$CHUNKDIR/chunk-queue-$k.json}"
+    CHUNK_PROMPT="${CHUNK_PROMPT//$RESULTS/$CHUNKDIR/chunk-results-$k.json}"
+    run_one_claude "$CHUNK_PROMPT" "$CHUNK_EVENTS" "$SUPPORT/prep-events-chunk-$k.fifo" "$CHUNK_LOG"
+    CHUNK_PIDS="$CHUNK_PIDS $CLAUDE_ONE_PID"
+    CHUNK_TEE_PIDS="$CHUNK_TEE_PIDS $CLAUDE_ONE_TEE_PID"
+    set -- "$@" "$CHUNK_EVENTS"
+    k=$((k + 1))
+  done
+  # #1038: the heartbeat was forked before these launched, so it cannot see CHUNK_PIDS. The pid file is
+  # how a Cancel reaches exactly these processes; it already word-splits, so several pids need no change
+  # on the heartbeat side.
+  printf '%s' "$CHUNK_PIDS" > "$CLAUDE_PID_FILE"
+  CLAUDE_PID="$CHUNK_PIDS"   # so the EXIT trap kills every chunk, not just one
+
+  # Wait for every chunk, capturing each status so one failure is recorded without hiding the others.
+  # The first non-zero becomes the run's status. Written as `||` so a chunk exiting non-zero cannot trip
+  # `set -e` and take down the merge, which is what carries home the work the OTHER chunks completed.
+  for pid in $CHUNK_PIDS; do
+    st=0
+    wait "$pid" || st=$?
+    if [ "$st" != "0" ] && [ "$CLAUDE_STATUS" = "0" ]; then CLAUDE_STATUS="$st"; fi
+  done
+  for tpid in $CHUNK_TEE_PIDS; do wait "$tpid" 2>/dev/null || true; done
+  # The pipe paths are REBUILT from the chunk number, never carried in a space-separated string. Held as
+  # a string they word-split inside "Application Support" and every removal missed, leaving a named pipe
+  # behind for each chunk. The PID lists above are safe as strings only because a PID has no spaces.
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    rm -f "$SUPPORT/prep-events-chunk-$k.fifo"
+    k=$((k + 1))
+  done
+  CLAUDE_PID=""   # all reaped; nothing left for the trap to kill
+
+  # Fold each chunk's log tail into the main log, so the reason a chunk failed travels with the run.
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    echo "--- chunk $k log tail ---"
+    tail -n 4 "$SUPPORT/prep-run.chunk-$k.log" 2>/dev/null || true
+    k=$((k + 1))
+  done
+
+  # The final merge, now every chunk has exited, so $RESULTS reflects the last writes each chunk made
+  # between the previous heartbeat tick and finishing.
+  merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" naturalKey 6
+else
+  run_one_claude "$PROMPT" "$EVENTS" "$EVENTS_FIFO"
+  CLAUDE_PID="$CLAUDE_ONE_PID"
+  printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
+  reap_one_claude "$CLAUDE_ONE_PID" "$CLAUDE_ONE_TEE_PID" "$CLAUDE_ONE_FIFO"
+  CLAUDE_STATUS="$REAPED_STATUS"
+  CLAUDE_PID=""   # reaped; nothing left for the trap to kill
+  set -- "$EVENTS"
+fi
 
 # #1023: one last derive now that claude has exited, so the count reflects whatever landed between the
 # previous heartbeat tick and the process actually finishing, rather than sitting stale.
@@ -203,12 +369,13 @@ update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
 quarantine_unreadable_results "$RESULTS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
-record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
+record_model "$RESULTS" "${RUN_MODEL}"
 
 # #1593: and what it cost, from the final result envelope in the event stream. A run that died or was
 # cancelled leaves no envelope, and that is recorded as "not recorded" rather than as zero, so a batch
 # ceiling can never be sized against a number nobody measured.
-record_run_cost "$RESULTS" "$EVENTS"
+# Quoted "$@", so a path containing a space stays ONE argument.
+record_run_cost "$RESULTS" "$@"
 
 echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
 exit "$CLAUDE_STATUS"

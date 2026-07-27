@@ -145,6 +145,44 @@ else
 fi
 assert_equals "and the progress file is left untouched without node" "1" "$(field "${PROGRESS}" completed)"
 
+# #1597: a reachability check's queue no longer holds one item per show. A producer's shows collapse to
+# ONE item that answers for the rest (alsoAnswersFor), so counting queue entries would tell Dan a check
+# he started on six shows was "4 of 4" while two more were still landing. The total is the number of
+# SHOWS the run will answer for, which is also exactly what the results file ends up holding.
+cat > "${TMP}/grouped-queue.json" <<'EOF'
+{"version":6,"generatedAt":"now","items":[
+  {"naturalKey":"k1","alsoAnswersFor":["k1b","k1c"]},
+  {"naturalKey":"k2"}
+]}
+EOF
+cat > "${TMP}/grouped-results.json" <<'EOF'
+{"version":6,"generatedAt":"now","results":[{"naturalKey":"k1"},{"naturalKey":"k1b"}]}
+EOF
+update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/grouped-results.json" "${TMP}/grouped-progress.json"
+assert_equals "the total counts the shows a grouped queue answers for, not its item count" \
+  "4" "$(field "${TMP}/grouped-progress.json" total)"
+assert_equals "and completed still counts what has actually landed" \
+  "2" "$(field "${TMP}/grouped-progress.json" completed)"
+
+# All four home, and it reads as finished rather than capping at the old item count.
+cat > "${TMP}/grouped-results.json" <<'EOF'
+{"version":6,"generatedAt":"now","results":[{"naturalKey":"k1"},{"naturalKey":"k1b"},{"naturalKey":"k1c"},{"naturalKey":"k2"}]}
+EOF
+update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/grouped-results.json" "${TMP}/grouped-progress.json"
+assert_equals "a fully answered grouped run reads as complete" \
+  "4" "$(field "${TMP}/grouped-progress.json" completed)"
+
+# An ungrouped queue (every normal Prep run, and every scout-extract run) is unchanged.
+cat > "${TMP}/plain-queue.json" <<'EOF'
+{"version":6,"generatedAt":"now","items":[{"naturalKey":"a"},{"naturalKey":"b"},{"naturalKey":"c"}]}
+EOF
+cat > "${TMP}/plain-results.json" <<'EOF'
+{"version":6,"generatedAt":"now","results":[{"naturalKey":"a"}]}
+EOF
+update_progress_from_results "${TMP}/plain-queue.json" "${TMP}/plain-results.json" "${TMP}/plain-progress.json"
+assert_equals "a queue with no grouping counts its items exactly as before" \
+  "3" "$(field "${TMP}/plain-progress.json" total)"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

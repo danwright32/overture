@@ -57,8 +57,13 @@ fail() {
 # The prompt region, BOUNDED. The closing quote sits on a line of its own in every runner precisely so
 # this range terminates. Before #856 it did not, and this whole guard was silently reading each script's
 # CODE as if it were prompt text: it reported a safety it had never established.
+# #1597: takes the VARIABLE NAME too, because prep-run.sh now carries a second prompt (PROBE_PROMPT, the
+# reachability check, which omits the voice step so ten concurrent chunks cannot race on one file). Left
+# hard-coded to PROMPT, this guard would have silently skipped it, which is precisely the #855 gap: for
+# months only the scout prompt was ever checked, while prep and reply-classify were built the same way
+# and nobody had looked at what they arrive as.
 prompt_region() {
-  sed -n '/^PROMPT=/,/^"$/p' "${SCRIPT_DIR}/$1"
+  sed -n "/^$2=/,/^\"$/p" "${SCRIPT_DIR}/$1"
 }
 
 # What the model receives: the prompt after bash has finished with it. The runner's own variables are
@@ -66,15 +71,26 @@ prompt_region() {
 expanded_prompt() {
   ( set +u
     RUNBOOK=RB; QUEUE=Q; RESULTS=R; PROGRESS=P; VOICE=V; HISTORY=H; SUPPORT=S
-    eval "$(prompt_region "$1")" 2>/dev/null
-    printf '%s' "${PROMPT}" )
+    eval "$(prompt_region "$1" "$2")" 2>/dev/null
+    eval "printf '%s' \"\${$2}\"" )
 }
 
 # Each runner's load-bearing rules: the sentences that, if bash ate them, would cost Dan something real
 # and cost it silently. Tab-separated, so a rule can contain spaces and commas.
 rules_for() {
   case "$1" in
-    scout-extract-run.sh)
+    prep-run.sh:PROBE_PROMPT)
+      # #1597: the reachability check. It never drafts, so the rules that matter are the ones that keep it
+      # from spending twice on one producer and the ones that keep a show from silently going unanswered.
+      printf '%s\n' \
+        "the never-draft rule	Do NOT draft any email" \
+        "the incremental-write rule	Immediately after finishing EACH item" \
+        "the never-stop-and-ask rule	never stop to ask" \
+        "the rule that a naturalKey is echoed, never rebuilt	Copy each item's naturalKey verbatim" \
+        "the grouping rule that stops it paying per show	research its contact ONCE" \
+        "the rule that every covered show still gets its own answer	for every key listed there"
+      ;;
+    scout-extract-run.sh:PROMPT)
       # #847: the rules that would have saved the twenty shows.
       printf '%s\n' \
         "the ALWAYS-write rule	ALWAYS have written" \
@@ -86,7 +102,7 @@ rules_for() {
         "the rule that a sourceId is echoed, never rebuilt	Copy each item's sourceId VERBATIM" \
         "its final sentence, intact	one short line on anything that made this hard"
       ;;
-    prep-run.sh)
+    prep-run.sh:PROMPT)
       # This run writes the emails that reach strangers in Dan's voice. Every rule here is either his
       # voice or a leak guard, and both fail silently: there is no error, only worse drafts.
       printf '%s\n' \
@@ -100,7 +116,7 @@ rules_for() {
         "the #1023 incremental-write rule	Immediately after finishing EACH item, rewrite" \
         "its final sentence, intact	real, verifiable contacts."
       ;;
-    reply-classify-run.sh)
+    reply-classify-run.sh:PROMPT)
       # #872: this run answers a real person who wrote back to Dan, and until then it had NO voice skill
       # and no voice rules: it was inventing his voice from the phrase "in Dan's voice".
       printf '%s\n' \
@@ -173,9 +189,12 @@ assert_no_dashes() {
   fi
 }
 
-for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
-  echo "--- ${script}"
-  region="$(prompt_region "${script}")"
+for target in prep-run.sh:PROMPT prep-run.sh:PROBE_PROMPT \
+              reply-classify-run.sh:PROMPT scout-extract-run.sh:PROMPT; do
+  script="${target%%:*}"
+  var="${target##*:}"
+  echo "--- ${script} (${var})"
+  region="$(prompt_region "${script}" "${var}")"
 
   # The bound itself. If a prompt does not close on a line of its own, the sed range runs to end of file
   # and every check below reads the script's own code as prompt text.
@@ -202,7 +221,7 @@ for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
 
   # The real test, and the strongest: what the model RECEIVES. Every check above can pass while bash
   # quietly rewrites the sentence on its way out.
-  expanded="$(expanded_prompt "${script}" 2>/dev/null)"
+  expanded="$(expanded_prompt "${script}" "${var}" 2>/dev/null)"
   if [[ -z "${expanded}" ]]; then
     fail "${script}: the prompt expands to NOTHING" "bash destroyed it entirely; the model would get an empty run"
     continue
@@ -221,7 +240,7 @@ for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
       fail "${script}: the model does NOT receive ${desc}" \
            "bash rewrote the prompt on its way out. Check for backticks, \$( ), or raw double quotes."
     fi
-  done < <(rules_for "${script}")
+  done < <(rules_for "${target}")
 
   assert_tools_can_obey_the_prompt "${script}"
   assert_no_dashes "${SCRIPT_DIR}/${script}" "${script}'s prompt"
