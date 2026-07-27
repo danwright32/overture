@@ -64,36 +64,15 @@ struct ReachabilityProbeCandidateTests {
         #expect(QueueModel.reachabilityProbeCandidateKeys([fresh], now: withinWindow) == [])
     }
 
-    // #1595: `showsReachabilityProbeControl` is GONE. The control now renders wherever there is at least
-    // one candidate, on every Scout date, because a lone promising show on a quiet night is exactly the
-    // case Dan could not check before (#1585). What survives is the HEADLINE choice, which is all
-    // `usesStaleRecheckHeadline` decides now: it no longer gates whether the control appears, only which
-    // of two sentences it carries. A lone never-probed show gets NO headline at all, by Dan's call
-    // (2026-07-26): on a one-show night there is nothing to compare, so the sentence has no work to do.
-    @Test func aLoneStaleShowUsesTheRecheckHeadline() {
-        let probedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        let afterWindow = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
-        let withinWindow = probedAt.addingTimeInterval(1)
-        var stale = item("s"); stale.reachabilityProbedAt = probedAt
-
-        #expect(QueueModel.usesStaleRecheckHeadline([stale], now: afterWindow) == true)
-
-        // A lone never-probed show is still a candidate (the control shows), but it is not a re-check, so
-        // it must not be told to "re-check" something that was never checked.
-        #expect(QueueModel.usesStaleRecheckHeadline([item("a")], now: afterWindow) == false)
-        #expect(QueueModel.reachabilityProbeCandidateKeys([item("a")], now: afterWindow) == ["a"])
-
-        // A lone freshly probed show has its answer, so it is not a candidate and nothing renders.
-        #expect(QueueModel.usesStaleRecheckHeadline([stale], now: withinWindow) == false)
-        #expect(QueueModel.reachabilityProbeCandidateKeys([stale], now: withinWindow) == [])
-
-        // Two open candidates is the comparison case, not a lone re-check.
-        #expect(QueueModel.usesStaleRecheckHeadline([item("a"), item("b")], now: afterWindow) == false)
-
-        // A booked sibling on the same date is not a candidate, so a lone stale show beside it still counts
-        // as a lone re-check, not a comparison.
-        var staleBesideBooked = item("s2"); staleBesideBooked.reachabilityProbedAt = probedAt
-        #expect(QueueModel.usesStaleRecheckHeadline([staleBesideBooked, item("x", booked: true)],
-                                                    now: afterWindow) == true)
+    // #1595, then Dan's walk (2026-07-27): both the visibility rule and the headline selector are gone.
+    // The control renders wherever there is a candidate and shows nothing but its button, so all that is
+    // left to assert here is candidacy itself. A stale result still surfaces on the ROW badge, tested in
+    // ReachabilityTests.
+    // A booked sibling on the date is not a candidate, so it neither adds to the count nor keeps the
+    // control alive on a date whose only open show has been answered.
+    @Test func aBookedSiblingIsNotACandidate() {
+        #expect(QueueModel.reachabilityProbeCandidateKeys(
+            [item("a"), item("x", booked: true)],
+            now: Date(timeIntervalSince1970: 1_780_000_100)) == ["a"])
     }
 }

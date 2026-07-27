@@ -58,6 +58,24 @@ struct ReachabilityProbeControlTests {
     // triages, and it demanded a second show before it would offer to check anything. Between them the
     // control had never appeared once (#1585). It now renders on any date holding a candidate.
 
+    // Dan's call after walking the Debug build (2026-07-27): the callout was too heavy on every date. No
+    // green box, no envelope icon, no sentence, no dismiss X. Just the Check reachability button, right
+    // aligned. The stale case loses nothing by this: the ROW already carries its own amber "Reachability
+    // may be out of date" badge, so the callout was saying it a second time (#843).
+    @Test func rendersNothingButTheButton() throws {
+        var stale = item("s"); stale.reachabilityProbedAt = Date(timeIntervalSince1970: 1_000_000)
+        for items in [[item("a")], [item("a"), item("b"), item("c")], [stale]] {
+            let view = ReachabilityProbeControl(items: items, dateLabel: "Sep 12",
+                                                isRunning: false, onTap: { _, _ in })
+            // Empty strings are SwiftUI's own (the idle .help tooltip), not anything Dan reads, so the
+            // assertion is about VISIBLE copy: the button label and nothing else.
+            let texts = try view.inspect().findAll(ViewType.Text.self)
+                .map { try $0.string() }.filter { !$0.isEmpty }
+            #expect(texts == [ReachabilityProbeCopy.controlLabel])
+            #expect(try view.inspect().findAll(ViewType.Image.self).isEmpty)
+        }
+    }
+
     @Test func rendersOnASingleShowDate() throws {
         let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
                                             isRunning: false, onTap: { _, _ in })
@@ -84,46 +102,14 @@ struct ReachabilityProbeControlTests {
         }
     }
 
-    // #1334: a single show whose earlier probe has gone stale still renders the callout, but with the
-    // re-check headline (not the "N shows compete" comparison framing), and the Check button to run it.
-    // The probe date is long past, so it is stale against the wall clock the view reads whenever this runs.
-    @Test func aLoneStaleShowRendersTheRecheckCallout() throws {
+    // #1334 asked this to render a re-check SENTENCE. Dan removed every sentence from the control
+    // (2026-07-27), so what matters now is that a lone stale show still gets its button: its row badge
+    // tells him the earlier answer aged out, and this is the control that acts on that.
+    @Test func aLoneStaleShowStillGetsTheButton() throws {
         var stale = item("s"); stale.reachabilityProbedAt = Date(timeIntervalSince1970: 1_000_000)
         let view = ReachabilityProbeControl(items: [stale], dateLabel: "Sep 12",
                                             isRunning: false, onTap: { _, _ in })
-
-        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains { $0.lowercased().contains("re-check") })      // action-framed re-check headline
-        #expect(!texts.contains { $0.contains("compete") })                   // not the comparison headline
-        _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)   // Check button present
-    }
-
-    // #1334: the lone re-check copy leads with the action (the row's own badge already states the stale
-    // condition, #843) and reads for ONE show (not "these 1 shows"); the comparison copy for two or more is
-    // unchanged.
-    @Test func theLoneRecheckCopyReadsForOneShow() {
-        #expect(ReachabilityProbeCopy.staleRecheckHeadline.lowercased().contains("re-check"))
-        #expect(!ReachabilityProbeCopy.staleRecheckHeadline.lowercased().contains("out of date"))
-        #expect(ReachabilityProbeCopy.confirmTitle(count: 1) == "Check reachability for this show?")
-        #expect(ReachabilityProbeCopy.confirmTitle(count: 3) == "Check reachability for these 3 shows?")
-    }
-
-    // #1336: the control is a proactive first-party CALLOUT, not a passive button Dan must remember. It
-    // names how many shows compete for the date so he checks which are emailable before he keeps one.
-    @Test func theCalloutHeadlineNamesTheCountAndTheAsk() {
-        let headline = ReachabilityProbeCopy.calloutHeadline(count: 3)
-        #expect(headline.contains("3"))
-        #expect(headline.lowercased().contains("email"))
-    }
-
-    // #1595: the comparison headline is only ever used for two or more, so it never has to read for one.
-    // Dropping the old 2-or-more gate without this would have printed "1 shows compete for this date" on
-    // 54 of Dan's 169 dates. The single-show case renders no headline at all, asserted above.
-    @Test func theComparisonHeadlineIsNeverAskedToReadForOneShow() throws {
-        let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
-                                            isRunning: false, onTap: { _, _ in })
-        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(!texts.contains { $0.contains("1 shows") })
+        _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
     }
 
     @Test func showsAProactiveCalloutNamingTheCompetingCount() throws {
@@ -131,31 +117,11 @@ struct ReachabilityProbeControlTests {
             items: [item("a"), item("b"), item("c")],   // 3 still-open candidates
             dateLabel: "Sep 12", isRunning: false, onTap: { _, _ in })
 
-        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains { $0.contains("3 shows") })
         _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)   // Check button present
     }
 
-    // #1336: a session dismiss (the X) waves the callout off for that date without checking.
-    @Test func aDismissedDateHidesTheCallout() throws {
-        let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: false,
-            isDismissed: true, onDismiss: {}, onTap: { _, _ in })
-        #expect(throws: (any Error).self) {
-            try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
-        }
-    }
-
-    @Test func tappingDismissReportsUp() throws {
-        var dismissed = false
-        let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: false,
-            isDismissed: false, onDismiss: { dismissed = true }, onTap: { _, _ in })
-
-        let x = try view.inspect().find(ViewType.Button.self, where: {
-            (try? $0.accessibilityIdentifier()) == "dismiss-reachability-callout"
-        })
-        try x.tap()
-        #expect(dismissed == true)
-    }
+    // #1336's session dismiss (the X) is GONE, and with it aDismissedDateHidesTheCallout and
+    // tappingDismissReportsUp. Dan cut the X when he walked the build (2026-07-27): with the callout
+    // reduced to a bare button there is nothing to wave off, and a control that hides itself is worse than
+    // one that is quiet. The date resolving out of candidacy is what makes it disappear now.
 }

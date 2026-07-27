@@ -1042,21 +1042,9 @@ enum QueueModel {
         }.map(\.id)
     }
 
-    // #1595: this is a HEADLINE SELECTOR, not a gate. It used to be half of the rule deciding whether the
-    // control appeared at all; that rule is gone, because the control now appears on every date holding a
-    // candidate. What survives is the question it answers: is this a lone show that was already checked
-    // once and has gone stale (so the honest sentence is "re-check"), or a lone show nobody has ever
-    // checked (so there is no sentence at all, by Dan's call 2026-07-26: on a one-show night there is
-    // nothing to compare and the line would only restate the row).
-    //
-    // Body unchanged from #1334. Because a candidate is only ever unprobed or stale, the single candidate
-    // is stale exactly when it carries a probe date.
-    static func usesStaleRecheckHeadline(_ items: [QueueItem], now: Date = Date()) -> Bool {
-        let candidates = reachabilityProbeCandidateKeys(items, now: now)
-        guard candidates.count == 1, let key = candidates.first,
-              let candidate = items.first(where: { $0.id == key }) else { return false }
-        return candidate.reachabilityProbedAt != nil
-    }
+    // #1595, then Dan's walk (2026-07-27): `usesStaleRecheckHeadline` (formerly isLoneStaleRecheck) is
+    // GONE along with both callout headlines. It chose between two sentences the control no longer shows.
+    // A stale result still announces itself where it belongs, on the ROW, via Reachability.Badge.staleProbe.
 
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
         if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
