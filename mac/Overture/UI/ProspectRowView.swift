@@ -113,7 +113,6 @@ struct ProspectRowView: View {
                     relatedRunNote
                     linkedEngagementNote
                     confidenceFlag
-                    reachabilityFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -623,6 +622,14 @@ struct ProspectRowView: View {
                     .frame(maxWidth: 220, alignment: .trailing)
             }
             keepDismissControls
+            // Dan's call after the first real check (2026-07-27): the reachability answer sits DIRECTLY
+            // BENEATH Keep and Dismiss. It used to live in the classification pills on the left, among
+            // "Self-produced" and "Likely uncovered", which describe what the show IS. This one is
+            // different in kind: it is the fact he is deciding ON, so it belongs with the controls he
+            // decides WITH. Here, in the trailing VStack that already holds the button row, it
+            // right-justifies under those buttons instead of widening their row (which is what put it
+            // beside Dismiss twice and left the cards uneven).
+            reachabilityFlag
         }
     }
 

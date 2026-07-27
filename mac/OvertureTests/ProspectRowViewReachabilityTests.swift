@@ -84,4 +84,44 @@ struct ProspectRowViewReachabilityTests {
                                status: .approved, sentAt: Date(timeIntervalSince1970: 1_780_000_000)))
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
+
+    // Dan's call after the first real check (2026-07-27): the reachability answer belongs directly under
+    // Keep and Dismiss, not buried in the tag stack on the left. It is the fact he is deciding ON, so it
+    // should sit with the controls he decides WITH, not among the classification pills.
+    @Test func theReachabilityBadgeSitsWithTheKeepAndDismissControls() throws {
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: nil,
+                               probed: true, hasEmail: true))
+        guard let keep = t.firstIndex(of: "Keep"),
+              let badge = t.firstIndex(where: { $0.contains(ReachabilityCopy.emailFoundBadge) }) else {
+            Issue.record("expected both the Keep control and the reachability badge to render")
+            return
+        }
+        #expect(badge > keep)
+    }
+
+    // The test that would have caught it. `theReachabilityBadgeSitsWithTheKeepAndDismissControls` above
+    // asserts ORDER, and order is not placement: it passed on all three attempts where the badge landed
+    // INSIDE the Keep/Dismiss row, rendering beside Dismiss and widening it. ViewInspector flattens the
+    // tree, so "after Keep" is equally true of a horizontal sibling and a vertical one.
+    //
+    // This one pins the structure instead: find the row that holds Keep, and assert the badge is NOT in it.
+    @Test func theReachabilityBadgeIsNotInsideTheKeepAndDismissRow() throws {
+        let item = item(presenter: "Aurora Strings", sourceListingURL: nil, probed: true, hasEmail: true)
+        let view = ProspectRowView(item: item, today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
+        // findAll, not find: `find` returns the OUTERMOST match, which is the whole row (left column plus
+        // actions) and therefore contains the badge no matter where it sits. The button row is the
+        // innermost HStack holding Keep, so take the candidate with the fewest text descendants.
+        let candidates = try view.inspect().findAll(ViewType.HStack.self).filter { row in
+            ((try? row.findAll(ViewType.Text.self).contains { try $0.string() == "Keep" }) ?? false)
+        }
+        guard let buttonRow = candidates.min(by: {
+            (try? $0.findAll(ViewType.Text.self).count) ?? 0 < (try? $1.findAll(ViewType.Text.self).count) ?? 0
+        }) else {
+            Issue.record("expected an HStack containing the Keep control")
+            return
+        }
+        let textsInButtonRow = try buttonRow.findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(textsInButtonRow.contains("Keep"))
+        #expect(!textsInButtonRow.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
+    }
 }
