@@ -65,4 +65,45 @@ struct LaunchMigrationsTests {
             throw error
         }
     }
+
+    // #1590: SameNightTitleVariantMerge working and SameNightTitleVariantMerge being RUN are two separate
+    // claims, and only the second one reaches Dan's queue. These two rows are the live FRIGID pair: their
+    // folded natural keys still differ (the titles differ by real words, which is why the key fold cannot
+    // touch them), so nothing except the new pass can collapse them. Verified through a reopened store,
+    // so it also proves the delete was saved rather than left in an unsaved context.
+    @Test func launchCollapsesTwoBillingsOfOneNightIntoOneCard() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-1590-launch-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
+
+            let context = ModelContext(try openContainer(at: storeURL))
+            for title in ["FRIGID Nightcap", "FRIGID Nightcap: FUTURE TENSE"] {
+                let p = makeProspect(title)
+                p.groupName = title
+                p.performanceDate = "2026-07-31"
+                p.venue = "Under St Marks"
+                p.naturalKey = Prospect.makeNaturalKey(groupName: title,
+                                                       performanceDate: "2026-07-31",
+                                                       venue: "Under St Marks")
+                context.insert(p)
+            }
+            try context.save()
+            #expect(try context.fetch(FetchDescriptor<Prospect>()).count == 2, "two cards before launch")
+
+            #expect(LaunchMigrations.run(in: context))
+
+            let reContext = ModelContext(try openContainer(at: storeURL))
+            let remaining = try reContext.fetch(FetchDescriptor<Prospect>())
+            #expect(remaining.count == 1, "one night, one room, one show, one card")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
 }

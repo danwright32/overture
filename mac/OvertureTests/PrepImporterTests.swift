@@ -202,6 +202,30 @@ struct PrepImporterTests {
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
     }
 
+    // #1590: the natural key is the opaque token a detached prep or reachability run is handed and echoes
+    // back, matched here by exact equality. Folding the title half re-keys stored rows at launch, so a run
+    // that was in flight ACROSS that launch comes back quoting a key nothing carries any more. That has to
+    // be reported, never swallowed: a reachability answer costs real money and real minutes, and a silent
+    // drop would look exactly like a run that found nothing.
+    @Test func aResultEchoingThePreFoldKeyIsReportedNotSilentlyDropped() throws {
+        let ctx = ModelContext(try container())
+        let title = "Christine Andreas: S'Wonderful..."
+        let live = keptProspect(ctx, group: title, date: "2026-07-31", venue: "54 Below")
+
+        // Exactly what makeNaturalKey produced for this show BEFORE the title fold existed.
+        let preFold = "christine andreas: s'wonderful...|2026-07-31|54 below"
+        #expect(preFold != live, "the fold has to actually change this key, or the test proves nothing")
+
+        let results = PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: preFold, draft: PrepDraft(subject: "x", body: "y", variant: nil))
+        ])
+        let outcome = PrepImporter.ingest(results, into: ctx)
+
+        #expect(outcome.matched == 0)
+        #expect(outcome.unmatchedKeys == [preFold],
+                "PrepRunSummary turns this into \"1 didn't match\"; without it the answer vanishes")
+    }
+
     @Test func reIngestDoesNotClobberAHandEditedDraft() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Indianapolis Children's Choir", date: "2026-06-24", venue: "Stern Auditorium / Perelman Stage")

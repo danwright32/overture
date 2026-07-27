@@ -59,6 +59,13 @@ enum LaunchMigrations {
         // the only step here that could throw against the unique index and take the shared save below
         // down with it.
         DriftedRunMerge.run(in: context)
+        // #1590: collapse one show BILLED two ways on the same night in the same room, which the natural
+        // key cannot reach (its title fold is a canonical function, and these titles differ by real
+        // words). Runs after the re-key above so it sees the folded keys, and deliberately every launch
+        // rather than once: a source keeps republishing its variants. Deletes rows, so like the two passes
+        // above it leans on the launch backup, refuses any group where two rows carry outreach history,
+        // and keeps the row holding a paid reachability answer over one that was never checked.
+        SameNightTitleVariantMerge.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show

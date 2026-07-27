@@ -60,8 +60,17 @@ enum RunGrouping {
     // show returning after a break something he is still asked about.
     static let sameShowGapDays = 56
 
+    // #1590: the venue bucket folds through VenueNormalization, the SAME reduction the natural key uses.
+    // It used to be a bare lowercase, so grouping and identity disagreed about which shows are even at
+    // the same place: a source that sometimes appends its street address ("The Cutting Room" versus "The
+    // Cutting Room, 44 East 32nd Street, New York, NY", both live in the store) split one show's nights
+    // into two buckets that could never be compared. Reusing the key's own fold rather than adding a
+    // second one is the point; a venue reduction that two parts of the app spell differently is exactly
+    // how the duplicates got in.
     private static func canon(_ s: String?) -> String {
-        (s ?? "").lowercased().replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        VenueNormalization.normalizeForKey(s ?? "")
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
     }
 

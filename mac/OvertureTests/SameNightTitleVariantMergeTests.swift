@@ -1,0 +1,203 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import Overture
+
+// #1590 part two. The natural-key title fold (TitleNormalization) collapses one show whose titles differ
+// only by punctuation, because a canonical fold is a FUNCTION and can feed a unique key. It cannot touch
+// the other half of the live duplication: one show BILLED two ways on the same night, where the titles
+// differ by real words ("FRIGID Nightcap" versus "FRIGID Nightcap: FUTURE TENSE"). That is a similarity
+// judgment, so it lives here, in a pass that deletes rows under the same safety rules #1064 and #1559 use.
+//
+// LIVE-STORE-CLAIM verified=2026-07-27 measure="same-night same-venue groups whose titles are a confident name match but differ by real words, and the duplicate cards they cost"
+// Measured on the live store 2026-07-27: 7 such groups, 8 duplicate cards, on top of the fold's 10.
+@MainActor
+@Suite("Same-night title variant merge (#1590)")
+struct SameNightTitleVariantMergeTests {
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self, DayOff.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    @discardableResult
+    private func insert(_ ctx: ModelContext, _ group: String, date: String?, venue: String,
+                        ingestedAt: TimeInterval = 1_000,
+                        configure: (Prospect) -> Void = { _ in }) -> Prospect {
+        let p = Prospect(naturalKey: "\(group)|\(date ?? "")|\(venue)", groupName: group,
+                         discipline: "music", venue: venue, performanceDate: date,
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .new,
+                         ingestedAt: Date(timeIntervalSince1970: ingestedAt))
+        configure(p)
+        ctx.insert(p)
+        try? ctx.save()
+        return p
+    }
+
+    private func all(_ ctx: ModelContext) -> [Prospect] {
+        (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+    }
+
+    // The live shape: one show, two billings, one night, one room.
+    @Test func oneShowBilledTwoWaysOnOneNightCollapsesToOneCard() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        #expect(all(ctx).count == 1)
+    }
+
+    // The venue half uses the SAME fold as the key, so a row carrying the street address still counts as
+    // the same room. Both spellings are live in the store for this venue.
+    @Test func theVenueHalfIsFoldedSoAnAddressSpellingStillMatches() throws {
+        let ctx = try context()
+        insert(ctx, "Fleetwood Mac: Stripped", date: "2026-09-23", venue: "The Cutting Room")
+        insert(ctx, "Fleetwood Mac: Stripped (Broadway Sings)", date: "2026-09-23",
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY", ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(all(ctx).count == 1)
+    }
+
+    // Three billings of one burlesque night, the widest live group.
+    @Test func threeBillingsOfOneNightCollapseToOneCard() throws {
+        let ctx = try context()
+        insert(ctx, "Sins and Stardust Burlesque: Tribute to the Ruby", date: "2026-08-31",
+               venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "Sins and Stardust Burlesque: August 31st", date: "2026-08-31",
+               venue: "Under St Marks, 94 St Marks Pl, New York, NY 10009", ingestedAt: 2_000)
+        insert(ctx, "Sins and Stardust Burlesque: Tribute to the 80s", date: "2026-08-31",
+               venue: "Under St Marks", ingestedAt: 3_000)
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 2)
+        #expect(all(ctx).count == 1)
+    }
+
+    // The guard that matters most. The Green Room 42 genuinely books two different shows most nights,
+    // right through the live store, and those are two real cards Dan has to see.
+    @Test func twoDifferentActsOnOneNightAreNeverMerged() throws {
+        let ctx = try context()
+        insert(ctx, "Bite Me", date: "2026-07-29", venue: "The Green Room 42")
+        insert(ctx, "A Tom Lehrer Cabaret", date: "2026-07-29", venue: "The Green Room 42",
+               ingestedAt: 2_000)
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 0)
+        #expect(all(ctx).count == 2)
+    }
+
+    // Two nights of one show are a RUN, not a duplicate. This pass is same-night only; widening it to a
+    // date range would delete the second night of a run Dan can still shoot.
+    @Test func thesameShowOnTwoDifferentNightsIsLeftAlone() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks")
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-08-01", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(all(ctx).count == 2)
+    }
+
+    // An undated listing has no night to share, so it can never be a same-night duplicate.
+    @Test func undatedRowsAreNeverMerged() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: nil, venue: "Under St Marks")
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: nil, venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(all(ctx).count == 2)
+    }
+
+    // Failure path, same rule as #1064 and #1559: when two rows both carry real outreach history, merging
+    // would move a sent email onto the wrong show. Leave both, delete nothing, count the conflict.
+    @Test func twoBillingsThatBothCarryHistoryAreLeftAloneAndCounted() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks") {
+            $0.sentAt = Date(timeIntervalSince1970: 9_000)
+        }
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000) { $0.draftBody = "a draft Dan has already read" }
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0)
+        #expect(all(ctx).count == 2)
+    }
+
+    // The row holding Dan's own decision survives, whichever order the rows arrived in.
+    @Test func theRowCarryingDansDecisionIsTheSurvivor() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000) { $0.confidenceReviewedByDan = true }
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(all(ctx).map(\.groupName) == ["FRIGID Nightcap: FUTURE TENSE"])
+    }
+
+    // A reachability check costs real money and real minutes. A probe that came back "no email found"
+    // leaves no recipients behind, so it does not read as outreach history, and a naive merge would
+    // delete the row that HOLDS the paid answer and keep the unprobed one, silently re-offering the
+    // check. The probed row survives.
+    // The probed row is deliberately the LATER-ingested one here, so the fallback survivor rule (oldest
+    // wins) would pick the unprobed row and throw the answer away. Only the probe rule saves it, which is
+    // what makes this test able to fail.
+    @Test func aProbedRowOutranksAnUnprobedOneSoNoPaidAnswerIsThrownAway() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000) {
+            $0.reachabilityProbedAt = Date(timeIntervalSince1970: 8_000)
+            $0.reachabilityResult = .noEmailFound
+        }
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let remaining = all(ctx)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.reachabilityProbedAt != nil,
+                "the paid answer must outlive the merge")
+    }
+
+    // Idempotent: a second pass over an already-collapsed store is a no-op. This runs at every launch,
+    // so a pass that could keep deleting would eat the queue one launch at a time.
+    @Test func asecondPassChangesNothing() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks")
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+        let second = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(second.duplicatesDeleted == 0)
+        #expect(second.conflictsDeferred == 0)
+        #expect(all(ctx).count == 1)
+    }
+}

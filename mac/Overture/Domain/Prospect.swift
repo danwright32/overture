@@ -941,10 +941,15 @@ final class Prospect {
     // inserting a second prospect row for the same show. canonicalize still lowercases, folds unicode
     // whitespace, and decodes HTML entities on top. Existing stored rows carry their OLD, unfolded keys
     // until NaturalKeyVenueMigration re-keys them at launch.
+    // #1590: the TITLE is now folded too, through TitleNormalization, so a source that respells one
+    // show's title (an accent, an em dash for a hyphen, an ellipsis character for three dots, brackets
+    // for an exclamation mark, a stray comma) stops minting a second row for the same night. The fold
+    // runs AFTER canonicalize, never before: canonicalize is what decodes "&amp;", and stripping
+    // punctuation first would leave "amp" behind and split the rows #25 taught this key to join.
     static func makeNaturalKey(groupName: String, performanceDate: String?, venue: String?) -> String {
         let normalizedVenue = venue.map(VenueNormalization.normalizeForKey)
-        return [groupName, performanceDate ?? "", normalizedVenue ?? ""]
-            .map(canonicalize)
+        let foldedTitle = TitleNormalization.normalizeForKey(canonicalize(groupName))
+        return [foldedTitle, canonicalize(performanceDate ?? ""), canonicalize(normalizedVenue ?? "")]
             .joined(separator: "|")
     }
 
