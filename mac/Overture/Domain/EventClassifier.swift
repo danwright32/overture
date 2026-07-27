@@ -127,6 +127,13 @@ enum EventClassifier {
         if production == .selfProduced {
             return "Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."
         }
-        return "Unclear producer; needs a closer look before pitching."
+        // #1600 (milestone 32 Phase 7.1): the catch-all sentence is GONE, and nothing replaces it. It
+        // was the final fallback of this chain, so it carried every show that is neither agency-routed
+        // nor self-produced: 499 rows on the live store, three quarters of the queue. Dan read it as
+        // "Overture doesn't know who the producer is", which it never meant, and measured on the same
+        // store it was accidentally right on 233 rows and flatly wrong on 176, with nothing on the card
+        // to tell those apart. The row already hides an empty reason, so this collapses the line with no
+        // new copy and no new render arm. CatchAllFitReasonMigration clears the rows already carrying it.
+        return ""
     }
 }

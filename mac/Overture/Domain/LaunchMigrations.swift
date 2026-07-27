@@ -38,6 +38,10 @@ enum LaunchMigrations {
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)
+        // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
+        // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it
+        // the sentence would linger for weeks on whichever rows the hash-gated scout has not re-emitted.
+        CatchAllFitReasonMigration.run(in: context)
         // #1064: re-key existing prospects with the new venue normalization so a bare venue name and the
         // same venue with its street address appended stop keying as two separate rows for one show.
         // Idempotent (a re-keyed row already equals its folded key); merges only provably-empty duplicates

@@ -550,8 +550,31 @@ enum QueueModel {
     }
 
     // "Pending Prep run" asserts this show is IN the Prep queue: a claim about what the app does next.
-    static func contactPrepNote(isKept: Bool) -> String {
-        isKept ? "Contact: pending Prep run" : "Contact: keep to prep"
+    //
+    // #1534 (milestone 32 Phase 7.2): the not-kept half is GONE and returns nil. "Contact: keep to prep"
+    // restated the Keep button sitting inches away, on every untriaged card, while pretending to be a
+    // fact about the show's contact. What Dan actually wanted to read there was whether a contact had
+    // been found, which the reachability badge now answers.
+    static func contactPrepNote(isKept: Bool) -> String? {
+        isKept ? "Contact: pending Prep run" : nil
+    }
+
+    // #1600 Phase 7.2: what the row's reference strip actually has to show. Decided here rather than in
+    // the view (#863) so the EMPTY case is reachable by a test: 145 untriaged rows on the live store
+    // carry neither link, and with the note above gone they would otherwise draw an empty padded strip.
+    static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?, note: String?) {
+        let note = (item.hasDraft || item.isBooked) ? nil : contactPrepNote(isKept: item.isKept)
+        return (url(item.sourceListingURL), url(item.websiteURL), note)
+    }
+
+    static func rowHasReferenceLinks(_ item: QueueItem) -> Bool {
+        let links = rowReferenceLinks(item)
+        return links.listing != nil || links.website != nil || links.note != nil
+    }
+
+    private static func url(_ raw: String?) -> URL? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return URL(string: raw)
     }
     // Plain-language label for the AI's non-binding reply-intent hint (#420 C6).
     static func replyIntentLabel(_ raw: String) -> String {
