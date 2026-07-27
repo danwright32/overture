@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **868 sentences**, from 293 source files.
+Every sentence Overture can say to Dan: **866 sentences**, from 294 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -536,8 +536,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "Dismiss them"
     `Domain/BulkDismiss.swift`
-"Dismiss this date's reachability nudge"
-    `UI/QueueView.swift`
 "Do not contact"
     `UI/ProspectRowView.swift`
 "Don't learn from this email"
@@ -926,6 +924,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutRunSummary.swift`
 "Nothing new to triage"
     `Domain/StageEmptyState.swift`
+"Nothing on this date still needs a reachability check."
+    `Integration/PrepQueueService.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
 "Nothing to act on. Leads you've emailed show up here for a gentle follow-up, active conversations for a re-touch, and they drop off the moment they reply, book, or you close them out."
@@ -1075,8 +1075,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Quit Overture"
     `App/MenuBarContent.swift`
-"Re-check this show's reachability before you decide."
-    `Domain/Reachability.swift`
 "Re-prep kept"
     `App/RootView.swift`
 "Re-prep queued"
@@ -1715,8 +1713,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffShortfall.swift`
 "\(count) ignored clients"
     `Domain/ClientCoverage.swift`
-"\(count) shows compete for this date. See which you can actually email before you keep one."
-    `Domain/Reachability.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"

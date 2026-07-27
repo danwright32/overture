@@ -110,19 +110,11 @@ enum ReachabilityCopy {
 // copy-inventory shows the whole sentence Dan reads.
 enum ReachabilityProbeCopy {
     static let controlLabel = "Check reachability"
-    // #1336: the callout's visible headline, so the reachability check surfaces itself when several shows
-    // compete for a date instead of waiting on Dan to remember a passive button. Names the count so the
-    // stakes are concrete. Replaces the old hover-only controlHelp, now that the ask is always visible.
-    static func calloutHeadline(count: Int) -> String {
-        "\(count) shows compete for this date. See which you can actually email before you keep one."
-    }
-    // #1334: the callout headline when a single show's earlier reachability check has gone stale and there is
-    // no sibling to compare, only a re-check to offer. Leads with the ACTION (the button the callout uniquely
-    // makes visible), because the row's own "Reachability may be out of date" badge already states the stale
-    // condition beside it (#843: two surfaces on one screen must not restate each other). Distinct from the
-    // "N shows compete" comparison framing.
-    static let staleRecheckHeadline =
-        "Re-check this show's reachability before you decide."
+    // #1595, then Dan's walk of the Debug build (2026-07-27): the callout had TWO headlines, one naming how
+    // many shows compete for the date and one telling him to re-check a stale result. Both are gone with the
+    // rest of the callout chrome. The control sits on all 169 of his dates, so a sentence there is noise on
+    // 169 rows to earn its keep on one; and the stale sentence was a second telling of what the row's own
+    // "Reachability may be out of date" badge already says beside it (#843).
     // #1323: shown while a Prep or another probe already holds the single run slot, so the greyed-out
     // control explains itself instead of failing after the tap.
     static let controlBusyHelp =

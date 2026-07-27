@@ -22,10 +22,15 @@ struct ReachabilityProbeCandidateTests {
         return i
     }
 
+    // #1595 / #1587: candidacy now comes from the shared OpenForDecision predicate, so this list and the
+    // Scout list Dan triages cannot answer "is he still deciding" differently. Two changes from #1308:
+    // a KEPT show is no longer a candidate (it is past the keep-or-dismiss moment, and Prep is about to
+    // find its contact anyway), and a run that has already OPENED is no longer a candidate (the Scout list
+    // drops it, so paying to research it would be money on a show Overture refuses to display).
     @Test func onlyStillOpenUnprobedShowsAreCandidates() {
         let items = [
             item("a"),                              // new, open -> candidate
-            item("b", status: .queued),             // kept, no draft -> candidate
+            item("b", status: .queued),             // KEPT: past the decision -> no longer a candidate
             item("c", status: .drafted),            // already being pursued -> no
             item("d", sent: true),                  // already pitched -> no
             item("e", booked: true),                // booked -> no
@@ -33,7 +38,15 @@ struct ReachabilityProbeCandidateTests {
         ]
         // `now` just after f's probe, so f is still fresh (not stale) and stays excluded.
         let now = Date(timeIntervalSince1970: 1_780_000_100)
-        #expect(QueueModel.reachabilityProbeCandidateKeys(items, now: now) == ["a", "b"])
+        #expect(QueueModel.reachabilityProbeCandidateKeys(items, now: now, today: "2026-09-01") == ["a"])
+    }
+
+    @Test func aRunThatHasAlreadyOpenedIsNotACandidate() {
+        // The show opens on 2026-09-12; today is after it, so the run is underway and Dan will not pitch
+        // it. The Scout list already drops it (#1540); this rule used to keep offering to pay for it.
+        #expect(QueueModel.reachabilityProbeCandidateKeys([item("a")],
+                                                          now: Date(timeIntervalSince1970: 1_780_000_100),
+                                                          today: "2026-09-20") == [])
     }
 
     // #1332: a probe result that has aged past the freshness window shows Dan a "worth re-checking" badge
@@ -51,44 +64,15 @@ struct ReachabilityProbeCandidateTests {
         #expect(QueueModel.reachabilityProbeCandidateKeys([fresh], now: withinWindow) == [])
     }
 
-    @Test func theControlNeedsAtLeastTwoCandidates() {
-        #expect(QueueModel.showsReachabilityProbeControl([item("a")]) == false)          // only one
-        #expect(QueueModel.showsReachabilityProbeControl([item("a"), item("b")]) == true) // two
-        #expect(QueueModel.showsReachabilityProbeControl([item("a", status: .drafted)]) == false)
-    }
-
-    // #1334: a single show whose earlier probe has gone STALE still needs a re-check affordance, even with no
-    // sibling to compare, because its "Reachability may be out of date" badge tells Dan to run the check
-    // again. So the control shows for a lone stale show. A lone NEVER-probed show still shows nothing (the
-    // value of a FIRST probe is comparing several; Overture does not spend on one in isolation), and a lone
-    // FRESHLY probed show is not a candidate at all.
-    @Test func aLoneStaleShowSurfacesTheRecheckControl() {
-        let probedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        let afterWindow = probedAt.addingTimeInterval(Reachability.probeFreshness + 1)
-        let withinWindow = probedAt.addingTimeInterval(1)
-        var stale = item("s"); stale.reachabilityProbedAt = probedAt
-
-        #expect(QueueModel.isLoneStaleRecheck([stale], now: afterWindow) == true)
-        #expect(QueueModel.showsReachabilityProbeControl([stale], now: afterWindow) == true)
-
-        // A lone never-probed show stays silent: no first probe in isolation.
-        #expect(QueueModel.isLoneStaleRecheck([item("a")], now: afterWindow) == false)
-        #expect(QueueModel.showsReachabilityProbeControl([item("a")], now: afterWindow) == false)
-
-        // A lone freshly probed show is not a candidate, so there is nothing to re-check yet.
-        #expect(QueueModel.isLoneStaleRecheck([stale], now: withinWindow) == false)
-        #expect(QueueModel.showsReachabilityProbeControl([stale], now: withinWindow) == false)
-
-        // Two open candidates is the comparison case, not a lone re-check.
-        #expect(QueueModel.isLoneStaleRecheck([item("a"), item("b")], now: afterWindow) == false)
-        #expect(QueueModel.showsReachabilityProbeControl([item("a"), item("b")], now: afterWindow) == true)
-
-        // A booked sibling on the same date is not a candidate, so a lone stale show beside it still counts
-        // as a lone re-check, not a comparison.
-        var staleBesideBooked = item("s2"); staleBesideBooked.reachabilityProbedAt = probedAt
-        #expect(QueueModel.showsReachabilityProbeControl([staleBesideBooked, item("x", booked: true)],
-                                                         now: afterWindow) == true)
-        #expect(QueueModel.isLoneStaleRecheck([staleBesideBooked, item("x", booked: true)],
-                                              now: afterWindow) == true)
+    // #1595, then Dan's walk (2026-07-27): both the visibility rule and the headline selector are gone.
+    // The control renders wherever there is a candidate and shows nothing but its button, so all that is
+    // left to assert here is candidacy itself. A stale result still surfaces on the ROW badge, tested in
+    // ReachabilityTests.
+    // A booked sibling on the date is not a candidate, so it neither adds to the count nor keeps the
+    // control alive on a date whose only open show has been answered.
+    @Test func aBookedSiblingIsNotACandidate() {
+        #expect(QueueModel.reachabilityProbeCandidateKeys(
+            [item("a"), item("x", booked: true)],
+            now: Date(timeIntervalSince1970: 1_780_000_100)) == ["a"])
     }
 }
