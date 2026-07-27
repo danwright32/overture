@@ -19,6 +19,9 @@ enum AppSchema {
         Experiment.self,
         Inquiry.self,   // #1435: hire inquiries. A new INDEPENDENT entity, zero relationships to any
                         // existing model and no new columns on one, so the migration is purely additive.
+        OrgReachabilityAnswer.self,   // #1598: the organisation answer ledger. Independent for the same
+                                      // reason, so a dismissed or re-keyed prospect can never take an
+                                      // answer Dan paid for with it.
     ]
 
     static var schema: Schema { Schema(models) }

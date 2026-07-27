@@ -37,6 +37,9 @@ struct ArchiveView: View {
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924
 
     @Query private var prospects: [Prospect]
+    // #1598 Phase 5: the organisation answer ledger, so an archived row reads the same as it does in the
+    // queue. Unlike QueueView this query is already the WHOLE store, so it doubles as the gate's corpus.
+    @Query private var orgAnswers: [OrgReachabilityAnswer]
 
     @State private var activeStatuses: Set<ArchiveStatus> = ArchiveOpening.defaultStatuses
     @State private var query: String = ""
@@ -67,7 +70,7 @@ struct ArchiveView: View {
     var onConnectGmail: () -> Void = {}
 
     private var today: String { QueueModel.easternToday() }
-    private var items: [QueueItem] { QueueModel.items(from: prospects) }
+    private var items: [QueueItem] { QueueModel.items(from: prospects, answers: orgAnswers) }
 
     private var filtered: [QueueItem] {
         items

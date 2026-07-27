@@ -433,8 +433,14 @@ struct ProspectRowView: View {
             reachabilityNote(icon: "clock.arrow.circlepath", text: ReachabilityCopy.staleProbeBadge,
                              tone: .neutral, help: ReachabilityCopy.staleProbeHelp)
         case .emailFound:
+            // #1598 Phase 5: an answer inherited from another show by the same organisation looks exactly
+            // like one paid for here, Dan's call. The ONLY difference is the hover text, which says where
+            // it came from, so the card never quietly implies this particular show was researched.
             reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
-                             tone: .confirmed, help: ReachabilityCopy.emailFoundHelp)
+                             tone: .confirmed,
+                             help: item.inheritedReachability.map {
+                                 ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
+                             } ?? ReachabilityCopy.emailFoundHelp)
         }
     }
 
@@ -451,10 +457,9 @@ struct ProspectRowView: View {
     // Styled as the row's meta line (the city and date), his spec, so it reads as a quiet fact about the
     // show rather than as another control competing with Keep and Dismiss.
     @ViewBuilder private var reachabilityAddresses: some View {
-        let emails = item.contacts.compactMap { c -> String? in
-            guard let e = c.email?.trimmingCharacters(in: .whitespacesAndNewlines), !e.isEmpty else { return nil }
-            return e
-        }
+        // #1598 Phase 5: which addresses (this show's own, or the organisation's when it has none) is a
+        // rule, not a rendering detail, so it lives on the item where a test can reach it.
+        let emails = item.displayedContactEmails
         if !emails.isEmpty {
             VStack(alignment: .trailing, spacing: 1) {
                 ForEach(emails, id: \.self) { email in

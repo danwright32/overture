@@ -302,7 +302,32 @@ enum DebugStaging {
         a.reachabilityResult = a.reachabilityResultFromRecipients
         b.reachabilityResult = b.reachabilityResultFromRecipients
 
-        return [a, b]
+        // #1598 Phase 5: a third show, by an organisation that has ALREADY been checked on another show,
+        // so the inherited state can be walked without a real check and without spending anything. C is
+        // never probed itself; it must come up wearing "Email found" with the organisation's address
+        // under it, and the Check control must not offer to research it.
+        //
+        // Two shows at two different venues, because one show at one venue is a single-room presenter and
+        // the producer gate would refuse it, exactly as it refuses The Green Room 42.
+        let orgName = "Meridian Vocal Consort (debug)"
+        let c = makeShow(keyTag: "c", group: "Vespers (debug)", venue: "Church of the Ascension")
+        let d = makeShow(keyTag: "d", group: "Compline (debug)", venue: "House of the Redeemer")
+        for show in [c, d] {
+            show.presenter = orgName
+            // Never checked itself: the whole point is that the answer arrives from the organisation.
+            show.reachabilityProbedAt = nil
+            show.reachabilityResult = nil
+        }
+        let orgEmail = "hello@meridian.example"
+        if let orgKey = OrgKey.stored(for: orgName) {
+            context.insert(OrgReachabilityAnswer(orgKey: orgKey, result: .emailFound,
+                                                 probedAt: now.addingTimeInterval(-10 * 86_400),
+                                                 sourceNaturalKey: "debug-of-reach-paid-\(stamp)",
+                                                 sourceGroupName: "Matins (debug)",
+                                                 presenterName: orgName, foundEmails: [orgEmail]))
+        }
+
+        return [a, b, c, d]
     }
 
     // A plain-ASCII HTML signature in Dan's brand colors, clean enough to pass GmailSignatureHealth so it
@@ -317,6 +342,10 @@ enum DebugStaging {
     static func clearDebugLeads(in context: ModelContext) {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where p.naturalKey.hasPrefix("debug-of-") { context.delete(p) }
+        // #1598: and the organisation answer staged alongside them. Clearing the shows but leaving the
+        // ledger row would leave a debug organisation quietly answering for real shows forever.
+        let answers = (try? context.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
+        for a in answers where a.sourceNaturalKey.hasPrefix("debug-of-") { context.delete(a) }
     }
 }
 #endif

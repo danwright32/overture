@@ -48,7 +48,13 @@ enum Reachability {
     // nil means no check has ever run, which is a different thing from a check that came back empty. The
     // old signature could not tell those apart: it asked whether the row currently has a sendable
     // recipient, so a checked-and-empty show and a never-checked show both answered "no".
+    // #1598 Phase 5: `inherited` is an answer paid for on a DIFFERENT show by the same organisation, and
+    // it renders IDENTICALLY to one paid for here (Dan's call, 2026-07-27); only the hover text says
+    // where it came from. A sixth badge state would be the #843 shape: a second line telling him nothing
+    // the first did not. It is consulted only when this show has no answer of its own, and only ever
+    // carries a positive, because OrgAnswerLedger refuses to fan out anything else.
     static func badge(result: ProbeResult?, probeIsStale: Bool = false,
+                      inherited: ProbeResult? = nil,
                       presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
         if let result {
             // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
@@ -59,6 +65,9 @@ enum Reachability {
             case .noEmailFound: return .noEmailFound
             }
         }
+        // Freshness was already judged when the ledger was built, against the ORIGINAL check's date, so
+        // it is not re-derived here: one decision, in one place.
+        if inherited == .emailFound { return .emailFound }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
         case .hardToReach: return .hardToReach
         case .likelyReachable, .unclear: return .none
@@ -105,6 +114,13 @@ enum ReachabilityCopy {
     // #1308 Layer 2 Phase 2: the firm result once a probe has run.
     static let emailFoundBadge = "Email found"
     static let emailFoundHelp = "A reachability check found a contact you can email for this show."
+
+    // #1598 Phase 5: the same badge, on a show whose answer was paid for on a different show by the same
+    // organisation. The provenance lives here and nowhere else on the card, so a reused answer never
+    // reads as a claim that this particular show was researched.
+    static func inheritedEmailFoundHelp(organisation: String) -> String {
+        "A reachability check on another \(organisation) show found this contact, so this show didn't need checking again."
+    }
     static let noEmailFoundBadge = "No email found"
     static let noEmailFoundHelp =
         "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."

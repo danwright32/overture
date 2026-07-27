@@ -23,6 +23,15 @@ struct QueueView: View {
     )
     private var prospects: [Prospect]
 
+    // #1598 Phase 5: the organisation answer ledger, and EVERY prospect including the dismissed ones the
+    // query above filters out. Both are @Query on the #990/#991 excluded-towns precedent, so a check
+    // settling re-renders every sibling show in the same frame instead of waiting for the next rebuild,
+    // and so the producer gate is judged against the whole store: built from the filtered list, a show
+    // Dan dismisses could silently change which organisations qualify and evaporate an answer he paid
+    // for, with nothing on screen to say so.
+    @Query private var orgAnswers: [OrgReachabilityAnswer]
+    @Query private var allProspects: [Prospect]
+
     // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
     // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
     @Query private var inquiries: [Inquiry]
@@ -144,7 +153,9 @@ struct QueueView: View {
         var message: String? = nil
     }
 
-    private var items: [QueueItem] { QueueModel.items(from: prospects) }
+    private var items: [QueueItem] {
+        QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects)
+    }
 
     private var today: String { QueueModel.easternToday() }
 

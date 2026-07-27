@@ -192,8 +192,12 @@ enum PrepQueueService {
     // PrepImporter.consumeIfNew skips the ingest entirely when the file has already been consumed (a
     // re-settle, or a relaunch after ingest but before the marker cleared), and in that case this is the
     // only writer that runs at all.
+    // Returns the keys it actually stamped, so the organisation ledger (#1598) records an answer for
+    // exactly the shows this run answered and there is ONE definition of "answered" rather than two that
+    // can drift.
+    @discardableResult
     static func markProbed(keys: Set<String>, answeredIn resultsURL: URL,
-                           in context: ModelContext, now: Date) {
+                           in context: ModelContext, now: Date) -> Set<String> {
         let answered = PrepImporter.answeredKeys(at: resultsURL)
         let toStamp = keys.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -214,6 +218,7 @@ enum PrepQueueService {
                   toStamp.count, keys.count, keys.count - toStamp.count)
             // copy-inventory:ignore-end
         }
+        return toStamp
     }
 
     // #1308 Layer 2: settle a finished detached run. A probe and a real Prep share the runner and results
@@ -228,9 +233,14 @@ enum PrepQueueService {
                                         into context: ModelContext, now: Date,
                                         defaults: UserDefaults = .standard) -> Bool {
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return false }
-        markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now)
+        let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now)
         _ = PrepImporter.consumeIfNew(at: resultsURL, into: context, defaults: defaults,
                                       ingest: { try PrepImporter.ingestFile(at: $0, into: $1, isProbe: true, now: now) })
+        // #1598 Phase 5: record what this check concluded about each ANSWERED show's organisation, so a
+        // sibling show never has to be paid for again. Deliberately last: only now have the venue and
+        // press guards run, so a real contact can be told from a front desk, and only the shows the run
+        // genuinely answered are in hand.
+        OrgAnswerRecording.record(answeredKeys: answered, in: context, now: now)
         ReachabilityProbeMarker.clear(at: markerURL)
         return true
     }
