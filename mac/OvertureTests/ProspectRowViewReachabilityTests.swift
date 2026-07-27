@@ -21,7 +21,12 @@ struct ProspectRowViewReachabilityTests {
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
         i.presenter = presenter
         i.sentAt = sentAt
-        if probed { i.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000) }
+        if probed {
+            i.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000)
+            // #1596 Phase 3: the badge reads the stored result, which the writers set once where the venue
+            // and press guards have run. A row with a probe date and no result reads as never checked.
+            i.reachabilityResult = hasEmail ? .emailFound : .noEmailFound
+        }
         i.hasPendingRecipient = hasEmail
         return i
     }

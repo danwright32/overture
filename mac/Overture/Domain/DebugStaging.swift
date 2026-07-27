@@ -295,6 +295,13 @@ enum DebugStaging {
         venueContact.looksLikeVenue = true
         b.setRecipients([venueContact])
 
+        // #1596 Phase 3: stage the stored RESULT too, not just the timestamp. The badge reads the stored
+        // answer now, so a staged row carrying a probe date and no result would render as never checked,
+        // and Debug is the only build anyone walks the UI in. Derived the same way the real writers derive
+        // it, so the staged rows cannot show a state the guards would never produce.
+        a.reachabilityResult = a.reachabilityResultFromRecipients
+        b.reachabilityResult = b.reachabilityResultFromRecipients
+
         return [a, b]
     }
 

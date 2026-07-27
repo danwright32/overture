@@ -115,6 +115,29 @@ final class Prospect {
     // say "email found"/"no email found" firmly instead of falling back to the free heuristic forever.
     // Defaulted so existing records migrate cleanly.
     var reachabilityProbedAt: Date? = nil
+    // #1596 (milestone 32 Phase 3): what the check CONCLUDED, stored rather than re-derived from
+    // `recipients` on every render. Raw string so the schema stays additive and a value written by a
+    // future version decodes here without a migration. nil means no check has ever run, which is a
+    // different thing from a check that came back empty. See Reachability.ProbeResult.
+    var reachabilityResultRaw: String? = nil
+    // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
+    // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
+    // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
+    // guard is real but not sendable, which is `weakContactOnly` rather than `noEmailFound` (#1324).
+    var reachabilityResultFromRecipients: Reachability.ProbeResult {
+        if recipients.contains(where: \.isSendablePending) { return .emailFound }
+        let weak = recipients.contains { r in
+            r.email?.isEmpty == false
+                && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
+                    || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
+        }
+        return weak ? .weakContactOnly : .noEmailFound
+    }
+
+    var reachabilityResult: Reachability.ProbeResult? {
+        get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
+        set { reachabilityResultRaw = newValue?.rawValue }
+    }
 
     var draftSubject: String? = nil
     var draftBody: String? = nil

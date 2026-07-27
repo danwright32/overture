@@ -67,14 +67,19 @@ struct QueueItemSnapshotTests {
         venue.looksLikeVenue = true          // held by the venue guard: not sendable, but a real address
         p.setRecipients([venue])
 
+        // #1596 Phase 3: the writers classify once, where the guards have run, and store the answer.
+        p.reachabilityResult = p.reachabilityResultFromRecipients
         #expect(QueueItem(p).hasPendingRecipient == false)            // the venue contact is not sendable
         #expect(QueueItem(p).hasWeakContactEmail == true)             // but a weak email does exist
         #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // so the badge is honest about it
 
-        // Dismissing the venue guess makes the same address sendable, so the badge firms up.
+        // #1596 Phase 3 CHANGES this. Dismissing the venue guess makes the same address sendable, but the
+        // badge no longer moves on its own, because it reports what a CHECK concluded rather than what the
+        // row's recipients currently look like. The row's own send surface updates immediately; the
+        // reachability badge waits for a re-check. Tracked as an open risk on the plan (#1592).
         venue.looksLikeVenueDismissed = true
-        #expect(QueueItem(p).hasPendingRecipient == true)
-        #expect(QueueItem(p).reachabilityBadge() == .emailFound)
+        #expect(QueueItem(p).hasPendingRecipient == true)             // sendability is live
+        #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // the stored answer is not
     }
 
     // #1325: a probe result is fresh only within Reachability.probeFreshness. Past that window the firm
@@ -92,6 +97,7 @@ struct QueueItemSnapshotTests {
         ctx.insert(p)
         let act = Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)
         p.setRecipients([act])
+        p.reachabilityResult = p.reachabilityResultFromRecipients
 
         // Fresh: the firm result.
         #expect(QueueItem(p).reachabilityBadge(now: probedAt.addingTimeInterval(1)) == .emailFound)
@@ -125,6 +131,7 @@ struct QueueItemSnapshotTests {
         let sendable = makeProspect()
         sendable.reachabilityProbedAt = probedAt
         sendable.setRecipients([Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)])
+        sendable.reachabilityResult = sendable.reachabilityResultFromRecipients
         #expect(QueueItem(sendable).reachabilityBadge(now: fresh) == .emailFound)
         #expect(QueueItem(sendable).isBestReachableContact(now: fresh) == true)
         // Stale: the earlier answer may have moved, so it is not crowned.
@@ -137,6 +144,7 @@ struct QueueItemSnapshotTests {
                               provenance: .act)
         venue.looksLikeVenue = true
         weak.setRecipients([venue])
+        weak.reachabilityResult = weak.reachabilityResultFromRecipients
         #expect(QueueItem(weak).reachabilityBadge(now: fresh) == .weakContactOnly)
         #expect(QueueItem(weak).isBestReachableContact(now: fresh) == false)
 

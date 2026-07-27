@@ -71,48 +71,12 @@ struct ReachabilityTests {
                                     websiteURL: "https://www.facebook.com/aurorastrings") == .hardToReach)
     }
 
-    // #1308 Layer 2 Phase 2: once a probe has run, the badge shows the FIRM answer (email found / not
-    // found) instead of the free heuristic. Before a probe, it falls back to the heuristic (only the hard
-    // cases surface; a named presenter with no proven site stays silent, over-promising nothing).
-    @Test func aProbedShowShowsTheFirmResult() {
-        #expect(Reachability.badge(probed: true, hasSendableEmail: true,
-                                   presenter: nil, sourceListingURL: "https://instagram.com/x",
-                                   websiteURL: nil) == .emailFound)
-        #expect(Reachability.badge(probed: true, hasSendableEmail: false,
-                                   presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
-                                   websiteURL: nil) == .noEmailFound)
-    }
-
-    // #1324: a probe can find only a WEAK contact (a venue front desk or a press inbox). That address is
-    // real but held back by the venue/press guard, so it is not sendable-pending. Reporting "No email
-    // found" is misleading (an email exists); the badge says "Weak contact only" instead. A sendable
-    // contact still wins, and a probe that found nothing at all still says "No email found".
-    @Test func aProbedShowWithOnlyAWeakContactSaysWeakContactOnly() {
-        #expect(Reachability.badge(probed: true, hasSendableEmail: false, hasWeakContactEmail: true,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .weakContactOnly)
-        #expect(Reachability.badge(probed: true, hasSendableEmail: true, hasWeakContactEmail: true,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .emailFound)   // a sendable contact wins
-        #expect(Reachability.badge(probed: true, hasSendableEmail: false, hasWeakContactEmail: false,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .noEmailFound)  // nothing at all
-    }
-
-    // #1325: a probe result is trusted only for a window (reachabilityProbedAt within probeFreshness).
-    // Past it the org may have moved, so the firm answer (found OR not found) becomes a distinct "worth
-    // re-checking" badge rather than a stale firm claim that could mislead a keep/dismiss.
-    @Test func aStaleProbeResultRevertsToAWorthRecheckingBadge() {
-        #expect(Reachability.badge(probed: true, hasSendableEmail: true, probeIsStale: true,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .staleProbe)
-        #expect(Reachability.badge(probed: true, hasSendableEmail: false, probeIsStale: true,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .staleProbe)   // a stale "not found" is re-check too
-        #expect(Reachability.badge(probed: true, hasSendableEmail: true, probeIsStale: false,
-                                   presenter: "Aurora Strings", sourceListingURL: nil,
-                                   websiteURL: nil) == .emailFound)   // fresh: still the firm result
-    }
+    // #1596 Phase 3 rewrites what used to be three tests here (aProbedShowShowsTheFirmResult,
+    // aProbedShowWithOnlyAWeakContactSaysWeakContactOnly, aStaleProbeResultRevertsToAWorthRecheckingBadge).
+    // They passed the badge the row's LIVE recipient state and asked it to classify. It now reads the
+    // stored conclusion instead, so classification happens once, where the venue and press guards have
+    // actually run, rather than on every render where they have not. The cases they covered are asserted
+    // against the new signature further down.
 
     @Test func probeStalenessRespectsTheFreshnessWindow() {
         let probedAt = Date(timeIntervalSince1970: 1_000_000)
@@ -124,11 +88,44 @@ struct ReachabilityTests {
     }
 
     @Test func anUnprobedShowFallsBackToTheHeuristic() {
-        #expect(Reachability.badge(probed: false, hasSendableEmail: false,
+        #expect(Reachability.badge(result: nil,
                                    presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x",
                                    websiteURL: nil) == .hardToReach)
-        #expect(Reachability.badge(probed: false, hasSendableEmail: false,
+        #expect(Reachability.badge(result: nil,
                                    presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
                                    websiteURL: nil) == Reachability.Badge.none)   // named presenter, no proof: silent
+    }
+
+    // #1596 (milestone 32 Phase 3): the badge reads the STORED result of a check, not a live derivation
+    // from the row's recipients. Deriving it every time a row draws was wrong three ways: it costs a
+    // main-thread fault on a long list (#1121), it silently changes when Dan edits a contact by hand, and
+    // it cannot tell "we checked and found nobody" from "we never checked".
+    @Test("a stored result decides the badge")
+    func storedResultDecidesTheBadge() {
+        #expect(Reachability.badge(result: .emailFound, presenter: "Some Org",
+                                   sourceListingURL: nil, websiteURL: nil) == .emailFound)
+        #expect(Reachability.badge(result: .weakContactOnly, presenter: "Some Org",
+                                   sourceListingURL: nil, websiteURL: nil) == .weakContactOnly)
+        #expect(Reachability.badge(result: .noEmailFound, presenter: "Some Org",
+                                   sourceListingURL: nil, websiteURL: nil) == .noEmailFound)
+    }
+
+    // No stored result means no check has ever run, so the row falls back to the free heuristic. This is
+    // the distinction the old derivation could not make: a show with no recipients looked identical
+    // whether it had been checked and come back empty or never been looked at.
+    @Test("no stored result falls back to the free heuristic")
+    func noStoredResultFallsBackToTheHeuristic() {
+        #expect(Reachability.badge(result: nil, presenter: "Some Org",
+                                   sourceListingURL: nil, websiteURL: nil) == .none)
+        #expect(Reachability.badge(result: nil, presenter: nil,
+                                   sourceListingURL: nil, websiteURL: nil) == .hardToReach)
+    }
+
+    @Test("a stale result overrides every stored answer")
+    func staleOverridesTheStoredAnswer() {
+        for stored in [Reachability.ProbeResult.emailFound, .weakContactOnly, .noEmailFound] {
+            #expect(Reachability.badge(result: stored, probeIsStale: true, presenter: "Some Org",
+                                       sourceListingURL: nil, websiteURL: nil) == .staleProbe)
+        }
     }
 }

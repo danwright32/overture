@@ -20,6 +20,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
+    var reachabilityResult: Reachability.ProbeResult? = nil
     // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
     // this and the discipline, never stored, so a rule change re-decides every row at once.
     var location: String? = nil
@@ -170,8 +171,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // The view calls it with the default; tests pass a fixed `now`.
     func reachabilityBadge(now: Date = Date()) -> Reachability.Badge {
         guard sentAt == nil && !isBooked else { return .none }
-        return Reachability.badge(probed: reachabilityProbedAt != nil, hasSendableEmail: hasPendingRecipient,
-                                  hasWeakContactEmail: hasWeakContactEmail,
+        return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
                                   presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
@@ -1184,6 +1184,7 @@ extension QueueItem {
             websiteURL: p.websiteURL,
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
+            reachabilityResult: p.reachabilityResult,
             location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,
