@@ -419,6 +419,21 @@ enum PrepImporter {
     //
     // A run whose save FAILED is never marked consumed. Nothing Dan can see actually landed, so the retry
     // on the next launch is the only thing that rescues that run's work.
+    // #1594: which shows a finished run actually ANSWERED, read straight off the results file. A key here
+    // means the runner reached that show and reported back, whether or not it found anybody; a key absent
+    // means the run never got to it (a cancel, a crash, an API failure partway through).
+    //
+    // Deliberately independent of consumeIfNew, which skips the ingest once a file has been consumed. The
+    // reachability settle needs this answer even on a re-settle, when no ingest runs at all.
+    //
+    // An unreadable or unparsable file yields the empty set, which is the honest reading: nothing can be
+    // shown to have been answered, so nothing is stamped and every show stays re-checkable.
+    static func answeredKeys(at url: URL) -> Set<String> {
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode(PrepResults.self, from: data) else { return [] }
+        return Set(decoded.results.map(\.naturalKey))
+    }
+
     @MainActor
     @discardableResult
     static func consumeIfNew(at url: URL = defaultURL,

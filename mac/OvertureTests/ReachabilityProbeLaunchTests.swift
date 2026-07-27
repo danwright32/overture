@@ -83,17 +83,31 @@ struct ReachabilityProbeLaunchTests {
         }
     }
 
-    // The completion behavior: every probed show is marked probed, whether or not the run found a contact,
-    // so a total-miss probe never leaves a badge stuck on the heuristic.
-    @Test func markProbedStampsEveryProbedShow() throws {
+    // #1594: the completion behavior. A show is marked probed when the run ANSWERED it, found a contact or
+    // not, so the badge resolves instead of sticking on the heuristic. A show the run was asked about but
+    // never reached is left alone: stamping it would say "No email found" about a show nobody looked at,
+    // and hold it out of a re-check for the 90-day freshness window.
+    //
+    // This test used to assert the opposite (markProbedStampsEveryProbedShow), which is the defect.
+    @Test func markProbedStampsOnlyTheShowsTheRunAnswered() throws {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let b = newProspect(ctx, group: "Boreal Brass")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let resultsURL = dir.appendingPathComponent("results.json")
+        // The run reached Aurora and reported no contacts. It never reached Boreal.
+        try JSONEncoder().encode(PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [], draft: nil)
+        ])).write(to: resultsURL)
 
-        PrepQueueService.markProbed(keys: [a, b], in: ctx, now: now)
+        PrepQueueService.markProbed(keys: [a, b], answeredIn: resultsURL, in: ctx, now: now)
 
-        let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        #expect(all.allSatisfy { $0.reachabilityProbedAt == now })
+        let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        let pb = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == b })).first
+        #expect(pa?.reachabilityProbedAt == now)
+        #expect(pb?.reachabilityProbedAt == nil)
     }
 }

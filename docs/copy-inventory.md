@@ -56,6 +56,7 @@ What is not, and why:
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: an outbound API request scoped by a header, not the app's voice (#915)
+- `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: an outbound fetch's headers for the venue page hop, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: a search marker for the widget's JS assignment, not the app's voice (#915)
