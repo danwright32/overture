@@ -58,26 +58,117 @@ struct ReachabilityProbeCompletionTests {
         let pb = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == b })).first
         #expect(pa?.reachabilityProbedAt == now)
         #expect(pa?.recipients.first?.email == "jane@aurora.org")   // found contact stored
-        #expect(pb?.reachabilityProbedAt == now)                    // probed even with no result for it
+        // #1594: b is NOT in the results file, so the run never reached it. Stamping it would put "No
+        // email found" on a show nobody looked at, and lock it out of a re-check for 90 days.
+        #expect(pb?.reachabilityProbedAt == nil)
         #expect(pa?.status == .new)                                 // never drafted
         #expect(try ReachabilityProbeMarker.read(from: markerURL) == nil)   // marker cleared
     }
 
-    @Test func aTotalMissStillMarksEveryShowProbed() throws {
+    // #1594 splits what used to be one test called aTotalMissStillMarksEveryShowProbed. It asserted that
+    // an empty run marks its shows anyway, which conflated two situations that must not look alike: the
+    // runner checked a show and found nobody (a real answer, worth keeping for 90 days), and the run died
+    // before reaching it (no answer at all). Told apart by evidence in the results file, never by the
+    // marker, because the marker only records what the run was ASKED to do.
+
+    @Test func aShowTheRunnerCheckedAndFoundNothingIsMarkedProbed() throws {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
         let markerURL = d.appendingPathComponent("probe-run.json")
-        let resultsURL = d.appendingPathComponent("results.json")   // never written: an empty run
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        // The runner reached this show and reported back with no contacts. That is a real negative.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(pa?.reachabilityProbedAt == now)
+    }
+
+    @Test func aRunThatDiedBeforeWritingResultsMarksNothing() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")   // never written: the run died
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
 
         let wasProbe = PrepQueueService.settleReachabilityProbe(
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
-        #expect(wasProbe == true)
+        #expect(wasProbe == true)   // still a probe, and the marker still clears
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
-        #expect(pa?.reachabilityProbedAt == now)
+        #expect(pa?.reachabilityProbedAt == nil)
+    }
+
+    // #1594 1.1: the cancel and crash cases at real scale. A five show selection, the run stops after two.
+    @Test func aCancelledRunLeavesTheShowsItNeverReachedUnprobed() throws {
+        let ctx = ModelContext(try container())
+        let keys = ["Aurora Strings", "Boreal Brass", "Cinder Quartet", "Delta Winds", "Ember Voices"]
+            .map { newProspect(ctx, group: $0) }
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: Set(keys), startedAt: "s"), to: markerURL)
+        // The cancel landed after two shows had been researched and written.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: keys[0], contacts: [PrepContact(name: "Jane", role: "Mgr",
+                                                                   email: "jane@aurora.org",
+                                                                   method: "named_decision_maker",
+                                                                   confidence: "high", formUrl: nil,
+                                                                   provenance: "act")], draft: nil),
+            PrepResult(naturalKey: keys[1], contacts: [], draft: nil),
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        let stamped = all.filter { $0.reachabilityProbedAt != nil }.map(\.naturalKey).sorted()
+        #expect(stamped == [keys[0], keys[1]].sorted())
+        let unreached = all.filter { keys[2...].contains($0.naturalKey) }
+        #expect(unreached.count == 3)
+        #expect(unreached.allSatisfy { $0.reachabilityProbedAt == nil })
+    }
+
+    // #1594 1.2: the re-settle path. PrepImporter.consumeIfNew SKIPS the ingest when the results file has
+    // already been consumed, so on a relaunch after ingest but before the marker cleared, the stamping is
+    // the only writer that runs at all. It therefore has to read the results file directly rather than
+    // wait to be told what landed.
+    @Test func aReSettleStampsOnlyTheKeysTheResultsFileHolds() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let b = newProspect(ctx, group: "Boreal Brass")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let defaults = freshDefaults()
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [], draft: nil)
+        ]))
+        // First settle consumes the file.
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
+        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+                                                     into: ctx, now: now, defaults: defaults)
+        // The marker is written again, as a relaunch mid-settle would leave it.
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
+        let later = now.addingTimeInterval(60)
+        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+                                                     into: ctx, now: later, defaults: defaults)
+
+        let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        let pb = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == b })).first
+        #expect(pa?.reachabilityProbedAt != nil)
+        #expect(pb?.reachabilityProbedAt == nil)
     }
 
     @Test func noMarkerMeansNotAProbe() throws {

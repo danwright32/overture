@@ -150,15 +150,41 @@ enum PrepQueueService {
         return queue.items.count
     }
 
-    // #1308 Layer 2: mark every probed show probed on completion, whether or not the run found a contact,
-    // so the Review badge resolves to email-found/not-found instead of sticking on the free heuristic. Runs
-    // BEFORE the probe-safe ingest overlays any found contacts.
-    static func markProbed(keys: Set<String>, in context: ModelContext, now: Date) {
+    // #1308 Layer 2: mark a probed show probed on completion, whether or not the run found a contact, so
+    // the badge resolves to email-found/not-found instead of sticking on the free heuristic. Runs BEFORE
+    // the probe-safe ingest overlays any found contacts.
+    //
+    // #1594: it stamps only the shows the run ACTUALLY ANSWERED, which is the intersection of what the run
+    // was asked to do (the marker) with what came back (the results file). The marker alone is a record of
+    // intent, so stamping from it labelled every show in a cancelled or crashed run "No email found" and,
+    // because the badge trusts a stamp for 90 days, locked those shows out of a re-check for three months.
+    // At one date that was 2 or 3 shows; after multi-date selection it is a whole week.
+    //
+    // The two cases that must never look alike are told apart by evidence in the file: a key PRESENT with
+    // no contacts is the runner reporting "I looked, there is nobody", a real answer worth keeping; a key
+    // ABSENT was never reached. Nothing about that judgment can come from the marker.
+    //
+    // The results file is read HERE rather than being handed in by the importer on purpose:
+    // PrepImporter.consumeIfNew skips the ingest entirely when the file has already been consumed (a
+    // re-settle, or a relaunch after ingest but before the marker cleared), and in that case this is the
+    // only writer that runs at all.
+    static func markProbed(keys: Set<String>, answeredIn resultsURL: URL,
+                           in context: ModelContext, now: Date) {
+        let answered = PrepImporter.answeredKeys(at: resultsURL)
+        let toStamp = keys.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        for p in all where keys.contains(p.naturalKey) {
+        for p in all where toStamp.contains(p.naturalKey) {
             p.reachabilityProbedAt = now
         }
         try? context.save()
+        // Fail loud rather than silently settling a partial run: an incomplete check is the thing Dan most
+        // needs to know about, because the shows it missed look identical to shows it never had to visit.
+        if toStamp.count < keys.count {
+            // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
+            NSLog("reachability probe settled with %d of %d shows answered; %d were never reached and stay unchecked",
+                  toStamp.count, keys.count, keys.count - toStamp.count)
+            // copy-inventory:ignore-end
+        }
     }
 
     // #1308 Layer 2: settle a finished detached run. A probe and a real Prep share the runner and results
@@ -173,7 +199,7 @@ enum PrepQueueService {
                                         into context: ModelContext, now: Date,
                                         defaults: UserDefaults = .standard) -> Bool {
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return false }
-        markProbed(keys: marker.keys, in: context, now: now)
+        markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now)
         _ = PrepImporter.consumeIfNew(at: resultsURL, into: context, defaults: defaults,
                                       ingest: { try PrepImporter.ingestFile(at: $0, into: $1, isProbe: true, now: now) })
         ReachabilityProbeMarker.clear(at: markerURL)
