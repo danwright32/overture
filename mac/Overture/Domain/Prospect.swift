@@ -131,7 +131,25 @@ final class Prospect {
                 && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
                     || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
         }
-        return weak ? .weakContactOnly : .noEmailFound
+        if weak { return .weakContactOnly }
+        // #1626: no address anywhere, but the act publishes a form on its own site. Ranked below the
+        // address states deliberately: those are about whether an address exists at all, and leaving
+        // their order untouched keeps #1324's tested behaviour exactly as it was. The combination (a
+        // venue address AND the act's own form) was not observed in the 2026-07-27 run and is not
+        // re-ranked on speculation.
+        return usableContactFormURLs.isEmpty ? .noEmailFound : .contactFormOnly
+    }
+
+    // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
+    // Instagram or another login-walled page is a dead end (his rule, 2026-07-27), judged through the
+    // one shared social-host list rather than a second copy of it.
+    var usableContactFormURLs: [String] {
+        recipients.compactMap { r -> String? in
+            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
+                  let url = URL(string: raw), url.scheme != nil else { return nil }
+            return raw
+        }
     }
 
     var reachabilityResult: Reachability.ProbeResult? {

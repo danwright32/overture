@@ -22,7 +22,11 @@ enum Reachability {
     // #1325: `staleProbe` is a probe whose result is older than the freshness window. The org may have
     // moved since, so the firm answer becomes a distinct "worth re-checking" state instead of a stale
     // firm claim.
-    enum Badge: Equatable { case none, hardToReach, noEmailFound, weakContactOnly, staleProbe, emailFound }
+    // #1626: `contactFormOnly` is a real way through, not a near miss, so it is its own state rather
+    // than a shade of "no email". The row prints the link beside it.
+    enum Badge: Equatable {
+        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly, staleProbe, emailFound
+    }
 
     // #1325: how long a probe result is trusted before it reads as possibly out of date (~90 days,
     // roughly the pitch horizon). Past this the badge asks Dan to re-check rather than trusting the old
@@ -39,9 +43,16 @@ enum Reachability {
     // every time it draws. Deliberately NOT reusing `Badge`, whose `.none` means "render nothing"; a nil
     // result here means "no check has ever run", and two meanings for one token inside one feature is how
     // the #863 class of bug starts.
+    // #1626: `contactFormOnly` is a show with no email whose act takes messages through a form on its
+    // OWN site. Measured on the first real multi-date run (#1603): the check identified the act on 14 of
+    // 14 shows, and 6 of those published only a form or an Instagram. Every one was stored with the link
+    // and rendered "No email found", so Dan was told to give up on shows he could have written to.
+    // Dan's rule (2026-07-27): a form on the act's own site counts and he fills it in by hand; an
+    // Instagram or other social DM does not and stays a dead end.
     enum ProbeResult: String, Equatable, Sendable, CaseIterable {
         case emailFound = "email_found"
         case weakContactOnly = "weak_contact_only"
+        case contactFormOnly = "contact_form_only"
         case noEmailFound = "no_email_found"
     }
 
@@ -62,6 +73,7 @@ enum Reachability {
             switch result {
             case .emailFound: return .emailFound
             case .weakContactOnly: return .weakContactOnly
+            case .contactFormOnly: return .contactFormOnly
             case .noEmailFound: return .noEmailFound
             }
         }
@@ -91,7 +103,10 @@ enum Reachability {
     }
 
     // Reuses LeadIntake's verified login-walled-host list (#1004) so the two never drift.
-    private static func isSocialOnly(_ urlString: String) -> Bool {
+    // #1626 made it internal rather than adding a second list: the question "is this link a social page
+    // behind a login" is now asked in two places (the free heuristic here, and whether a contact form is
+    // one Dan will actually use), and two lists would eventually disagree about Instagram.
+    static func isSocialOnly(_ urlString: String) -> Bool {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
         return LeadIntake.knownUnreadableHost(url) != nil
     }
@@ -124,6 +139,12 @@ enum ReachabilityCopy {
     static let noEmailFoundBadge = "No email found"
     static let noEmailFoundHelp =
         "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
+
+    // #1626: no email, but the act takes messages through a form on its own site. A way through that
+    // costs Dan a few minutes rather than a send, so it says what he would have to do.
+    static let contactFormOnlyBadge = "Contact form only"
+    static let contactFormOnlyHelp =
+        "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
 
     // #1324: a probe found an address, but only the venue's front desk or a press inbox, not the
     // presenter's own. Real, but weak: worth naming honestly rather than calling it no email at all.

@@ -427,6 +427,11 @@ struct ProspectRowView: View {
             // but only a weak (venue/press) one.
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
                              tone: .pending, help: ReachabilityCopy.weakContactOnlyHelp)
+        case .contactFormOnly:
+            // #1626: gold, which Dan reserves for what he can act on. There IS a way through here; it
+            // just costs him a few minutes at their site instead of a send.
+            reachabilityNote(icon: "square.and.pencil", text: ReachabilityCopy.contactFormOnlyBadge,
+                             tone: .pending, help: ReachabilityCopy.contactFormOnlyHelp)
         case .staleProbe:
             // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
             // has aged out, so it asks for a re-check rather than asserting reachable or not.
@@ -472,6 +477,24 @@ struct ProspectRowView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.trailing)
                 }
+            }
+        } else {
+            // #1626: no address, but a form on the act's own site. The link goes exactly where the
+            // address would have gone, because it answers the same question ("how do I reach them"),
+            // and it is a real link so Dan can go straight there rather than copying a name into a
+            // search box.
+            // Labelled with the SITE, not with the words "contact form": the pill directly above already
+            // says that, and what Dan needs from this line is the same thing the address line gives him,
+            // WHO he would be writing to. "jakebergmagic.com" and "shop.copeland.band" are different
+            // decisions in the way "info@thevenue.com" and "anna@annapierre.com" are.
+            ForEach(item.displayedContactForms, id: \.self) { url in
+                Link(destination: url) {
+                    Text(QueueModel.contactFormSiteLabel(url))
+                        .underline()
+                }
+                .font(OVType.meta)
+                .foregroundStyle(OVColor.forest)
+                .multilineTextAlignment(.trailing)
             }
         }
     }
