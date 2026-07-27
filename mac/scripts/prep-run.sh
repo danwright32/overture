@@ -52,6 +52,9 @@ QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
 PROGRESS="$SUPPORT/overture-prep-progress.json"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
+# #1593: the raw stream-json events, kept beside the run log so the cost can be read after the run. The
+# log stays human-readable; this file is the machine copy nobody reads by hand.
+EVENTS="$SUPPORT/prep-run-events.jsonl"
 MARKER="$SUPPORT/prep-running"
 
 # #1038: the cooperative-cancel sentinel Overture writes to stop this run, and the file the heartbeat
@@ -157,9 +160,16 @@ cd "$PROJECT_DIR"
 # the signal from a cancel) cannot trip `set -e` and take the whole script down on the failure path.
 CLAUDE_STATUS=0
 # shellcheck disable=SC2086  # $PREP_SCOPE MUST word-split into --allowedTools <list> --permission-mode <mode>
+#
+# #1593: --output-format stream-json --verbose is what makes the run's cost readable afterwards. Its
+# stdout is raw JSON, so it goes through tee_run_events: the raw stream to $EVENTS for parsing, a
+# readable trickle to this log so a run that takes minutes still looks alive. Written as process
+# substitution deliberately, so `$!` is still CLAUDE's pid and the #1038 cooperative cancel keeps
+# working; a pipeline here would have handed the trap the wrong process.
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_DRAFTING}" \
-  $PREP_SCOPE &
+  --output-format stream-json --verbose \
+  $PREP_SCOPE > >(tee_run_events "$EVENTS") &
 CLAUDE_PID=$!
 printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
 wait "$CLAUDE_PID" || CLAUDE_STATUS=$?
@@ -177,6 +187,11 @@ quarantine_unreadable_results "$RESULTS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
 record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
+
+# #1593: and what it cost, from the final result envelope in the event stream. A run that died or was
+# cancelled leaves no envelope, and that is recorded as "not recorded" rather than as zero, so a batch
+# ceiling can never be sized against a number nobody measured.
+record_run_cost "$RESULTS" "$EVENTS"
 
 echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
 exit "$CLAUDE_STATUS"

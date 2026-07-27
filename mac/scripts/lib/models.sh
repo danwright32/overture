@@ -75,3 +75,79 @@ record_model() {
     }
   ' "${results}" "${model}" || true
 }
+
+# #1593 (milestone 32 Phase 0.1): stamp what the run COST, from the final `result` envelope claude emits
+# under --output-format stream-json. Dan asked to measure a real run before deciding how many nights he
+# can select at once, and there is nowhere else that number exists.
+#
+# The failure path is the point. A run that died, was cancelled, or was killed mid-write leaves no result
+# envelope, and a silent 0.00 there would read as "that was free" and get used to size a 66-show batch.
+# So a reading that could not be taken is written as `recorded: false` with NO usd figure at all, and the
+# app says "cost not recorded" rather than showing a number nobody measured.
+record_run_cost() {
+  local results="$1" events="$2"
+  [[ -f "${results}" ]] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  node -e '
+    (function () {
+    const fs = require("fs");
+    const [file, events] = process.argv.slice(1);
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (e) {
+      // Same rule as record_model: an unparsable results file is the run having failed, reported on its
+      // own path. Overwriting it would destroy the evidence of what went wrong.
+      return;
+    }
+    let envelope = null;
+    try {
+      const lines = fs.readFileSync(events, "utf8").split("\n");
+      // Walk backwards: the result envelope is last, and a killed run leaves a half-written line after
+      // whatever it had already flushed.
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        let parsed;
+        try { parsed = JSON.parse(line); } catch (e) { continue; }
+        if (parsed && parsed.type === "result" && typeof parsed.total_cost_usd === "number") {
+          envelope = parsed;
+          break;
+        }
+      }
+    } catch (e) {
+      // No event file at all. Falls through to recorded: false, which is the honest answer.
+    }
+    json.runCost = envelope
+      ? { recorded: true, usd: envelope.total_cost_usd, durationMs: envelope.duration_ms }
+      : { recorded: false };
+    fs.writeFileSync(file, JSON.stringify(json, null, 2));
+    })();
+  ' "${results}" "${events}" || true
+}
+
+# #1593 (milestone 32 Phase 0.1): the other half of the cost reading. Asking claude for
+# --output-format stream-json is what makes the cost knowable, and it also makes its stdout raw JSON.
+# The run log is the only human trace of a run that takes minutes, so the raw stream is captured to its
+# own file for parsing while a readable trickle keeps reaching the log.
+#
+# Deliberately no per-line JSON parser: a line that is NOT valid JSON is passed through verbatim, because
+# a claude that failed prints a plain error and that error is the single most important thing the log can
+# carry. A parser that only understood events would swallow it.
+tee_run_events() {
+  local events="$1" line type
+  : > "${events}"
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    printf '%s\n' "${line}" >> "${events}"
+    if [[ "${line}" == \{* ]]; then
+      if [[ "${line}" =~ \"type\"[[:space:]]*:[[:space:]]*\"([a-z_]+)\" ]]; then
+        type="${BASH_REMATCH[1]}"
+      else
+        type="event"
+      fi
+      printf '  ... %s\n' "${type}"
+    else
+      printf '%s\n' "${line}"
+    fi
+  done
+}

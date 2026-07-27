@@ -144,6 +144,115 @@ fi
 assert_equals "and the results file survives a machine with no node" \
   "${nonode_before}" "$(cat "${TMP}/nonode.json")"
 
+# --- record_run_cost (#1593, milestone 32 Phase 0.1) -------------------------------------------------
+#
+# Dan asked to see what a reachability check actually costs before deciding how many nights he can select
+# at once. The number comes from the final `result` envelope claude emits under --output-format
+# stream-json. The failure path is the one that matters: an event file that is missing, truncated, or
+# unparseable must say so, because a silent 0.00 would read as "that was free" and he would size a
+# 66-show batch against a number that was never measured.
+
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-ok.json"
+{
+  printf '%s\n' '{"type":"system","subtype":"init"}'
+  printf '%s\n' '{"type":"assistant","message":{"content":"working"}}'
+  printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":1.2345,"duration_ms":241000}'
+} > "${TMP}/events-ok.jsonl"
+record_run_cost "${TMP}/cost-ok.json" "${TMP}/events-ok.jsonl"
+assert_contains "a complete event stream records the dollar cost" \
+  "$(cat "${TMP}/cost-ok.json")" '"usd": 1.2345'
+assert_contains "and records the duration" \
+  "$(cat "${TMP}/cost-ok.json")" '"durationMs": 241000'
+assert_contains "and marks the reading as recorded" \
+  "$(cat "${TMP}/cost-ok.json")" '"recorded": true'
+
+# Failure path one: the event file never appeared, because claude died before writing anything.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-missing.json"
+record_run_cost "${TMP}/cost-missing.json" "${TMP}/no-such-events.jsonl"
+assert_contains "a missing event file is recorded as NOT recorded, never as zero" \
+  "$(cat "${TMP}/cost-missing.json")" '"recorded": false'
+if [[ "$(cat "${TMP}/cost-missing.json")" == *'"usd"'* ]]; then
+  echo "FAIL - a missing event file must not write a usd figure at all"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and writes no usd figure that could be read as free"
+fi
+
+# Failure path two: the run was killed mid-write, so the last line is half a JSON object and there is no
+# result envelope. This is what a cancel or a crash actually leaves behind.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-truncated.json"
+{
+  printf '%s\n' '{"type":"system","subtype":"init"}'
+  printf '%s' '{"type":"result","subtype":"success","total_cost_'
+} > "${TMP}/events-truncated.jsonl"
+record_run_cost "${TMP}/cost-truncated.json" "${TMP}/events-truncated.jsonl"
+assert_contains "a truncated event stream is recorded as NOT recorded" \
+  "$(cat "${TMP}/cost-truncated.json")" '"recorded": false'
+
+# Failure path three: a well-formed stream that simply never reached a result envelope.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-noresult.json"
+printf '%s\n' '{"type":"assistant","message":{"content":"still going"}}' > "${TMP}/events-noresult.jsonl"
+record_run_cost "${TMP}/cost-noresult.json" "${TMP}/events-noresult.jsonl"
+assert_contains "an event stream with no result envelope is recorded as NOT recorded" \
+  "$(cat "${TMP}/cost-noresult.json")" '"recorded": false'
+
+# The same rule record_model already follows: an unparsable RESULTS file is evidence of a failed run and
+# must be left exactly as it was.
+printf '%s' 'this is not json {' > "${TMP}/cost-garbage.json"
+cost_before="$(cat "${TMP}/cost-garbage.json")"
+record_run_cost "${TMP}/cost-garbage.json" "${TMP}/events-ok.jsonl" || true
+assert_equals "an unparsable results file is left exactly as it was" \
+  "${cost_before}" "$(cat "${TMP}/cost-garbage.json")"
+
+# And no node means no stamp, never a failed run.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-nonode.json"
+if PATH="/nonexistent" record_run_cost "${TMP}/cost-nonode.json" "${TMP}/events-ok.jsonl"; then
+  echo "ok - no node on PATH degrades to no cost trace, never to a failed run"
+else
+  echo "FAIL - record_run_cost must not fail the run when node is unavailable"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# --- tee_run_events (#1593, milestone 32 Phase 0.1) --------------------------------------------------
+#
+# Capturing the cost means asking claude for --output-format stream-json, whose raw JSON is unreadable.
+# The run log is the ONLY human trace of a run that takes minutes, and the project rule is that working,
+# still-alive and failed must stay visibly distinct. So the raw stream goes to its own file for parsing
+# while a readable trickle keeps flowing to the log. Losing that trickle would silently remove the
+# still-alive signal, which is why it is asserted here and not left to a careful reading of the diff.
+
+{
+  printf '%s\n' '{"type":"system","subtype":"init","model":"opus"}'
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Looking up contacts"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":0.42,"duration_ms":1000}'
+} > "${TMP}/stream-in.jsonl"
+
+trickle="$(tee_run_events "${TMP}/stream-out.jsonl" < "${TMP}/stream-in.jsonl")"
+
+assert_equals "every raw event line is captured verbatim for parsing" \
+  "$(cat "${TMP}/stream-in.jsonl")" "$(cat "${TMP}/stream-out.jsonl")"
+
+if [[ -n "${trickle}" ]]; then
+  echo "ok - the run log still receives a still-alive trickle"
+else
+  echo "FAIL - tee_run_events emitted nothing, so a long run would look dead in the log"
+  FAILURES=$((FAILURES + 1))
+fi
+
+if [[ "${trickle}" == *'{"type":"assistant"'* ]]; then
+  echo "FAIL - the trickle is raw JSON, which is not a human-readable progress signal"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and the trickle is not raw JSON"
+fi
+
+# A stream that is not JSON at all (claude failed and printed an error) must still reach the log rather
+# than being swallowed by a parser that only understands events.
+printf '%s\n' 'error: could not reach the API' > "${TMP}/stream-bad.jsonl"
+bad_trickle="$(tee_run_events "${TMP}/stream-bad-out.jsonl" < "${TMP}/stream-bad.jsonl")"
+assert_contains "a non-JSON line still reaches the log instead of vanishing" \
+  "${bad_trickle}" "could not reach the API"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
