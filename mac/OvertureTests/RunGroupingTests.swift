@@ -133,4 +133,30 @@ struct RunGroupingTests {
         #expect(out.count == 2)
         #expect(out.allSatisfy { !$0.partOfRelatedRun })
     }
+
+    // #1590: this bucketed by the RAW lowercased venue while the natural key folded it through
+    // VenueNormalization, so the two disagreed about which shows are even at the same place. A source
+    // that sometimes appends its street address ("The Cutting Room" versus "The Cutting Room, 44 East
+    // 32nd Street, New York, NY", both live in the store) put one show's nights in two different
+    // buckets, and they could never be compared, let alone grouped. Same fold as the key now.
+    @Test func oneVenueSpelledTwoWaysIsOneBucket() {
+        let out = RunGrouping.group([
+            row("Thurston Howell", "2026-08-01", venue: "The Cutting Room"),
+            row("Thurston Howell", "2026-08-02", venue: "The Cutting Room, 44 East 32nd Street, New York, NY"),
+        ])
+        #expect(out.count == 1)
+        #expect(out[0].runEndDate == "2026-08-02")
+        #expect(out[0].memberIds.count == 2)
+    }
+
+    // The same fold, on one NIGHT rather than a run: the exact live shape from #1590, where the second
+    // row is the same open mic under a respelled title. Grouping has to see them as one show at one place.
+    @Test func sameNightSameVenueTwoSpellingsOfOneTitleIsOneRun() {
+        let out = RunGrouping.group([
+            row("Jalopy Open Mic Every Wednesday", "2026-07-29", venue: "Jalopy Theatre"),
+            row("Jalopy Open Mic Every Wednesday", "2026-07-29", venue: "Jalopy Theatre, Red Hook, Brooklyn, NY"),
+        ])
+        #expect(out.count == 1)
+        #expect(out[0].memberIds.count == 2)
+    }
 }

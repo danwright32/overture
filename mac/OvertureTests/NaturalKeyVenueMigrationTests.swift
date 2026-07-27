@@ -209,4 +209,49 @@ struct NaturalKeyVenueMigrationTests {
         #expect(all.count == 1)
         #expect(all[0].naturalKey == foldedKey(group, date, "The Players Theatre"))
     }
+
+    // #1590: the title fold has to reach the rows ALREADY stored, not only the next scout. This pass
+    // recomputes every row's key at launch, so folding the title half means it now reconciles a
+    // title-variant pair too, with no new migration and no second copy of the merge rules. These are the
+    // live pairs, quoted from the 2026-07-27 measurement.
+    @Test func aStoredTitleVariantPairCollapsesToOneRow() throws {
+        let ctx = try context()
+        let date = "2026-07-29", venue = "Jalopy Theatre"
+        insert(ctx, key: "legacy-bang-key", group: "Jalopy Open Mic Every Wednesday!", date: date,
+               venue: venue, ingestedAt: Date(timeIntervalSince1970: 1_000))
+        insert(ctx, key: "legacy-bracket-key", group: "Jalopy Open Mic (Every Wednesday)", date: date,
+               venue: "Jalopy Theatre, Red Hook, Brooklyn, NY",
+               ingestedAt: Date(timeIntervalSince1970: 2_000))
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let remaining = allProspects(ctx)
+        #expect(remaining.count == 1, "one open mic, one card")
+        #expect(remaining.first?.naturalKey ==
+                foldedKey("Jalopy Open Mic Every Wednesday!", date, venue))
+    }
+
+    // The failure path, and the one that must never regress: when BOTH title variants carry real outreach
+    // history, merging them would move a sent email onto the wrong show. The pass has to leave every row
+    // exactly as it found it, delete nothing, and record the conflict rather than resolving it blind.
+    @Test func twoTitleVariantsThatBothCarryHistoryAreLeftAloneAndCounted() throws {
+        let ctx = try context()
+        let date = "2026-07-31", venue = "54 Below"
+        insert(ctx, key: "legacy-dots-key", group: "Christine Andreas: S'Wonderful...", date: date,
+               venue: venue) { $0.draftBody = "a draft Dan has already seen" }
+        insert(ctx, key: "legacy-ellipsis-key", group: "Christine Andreas: S'Wonderful\u{2026}",
+               date: date, venue: venue) { $0.sentAt = Date(timeIntervalSince1970: 5_000) }
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0, "nothing carrying outreach history is ever dropped")
+        let remaining = allProspects(ctx)
+        #expect(remaining.count == 2)
+        #expect(Set(remaining.map(\.naturalKey)) == ["legacy-dots-key", "legacy-ellipsis-key"],
+                "both keep their old keys, so neither row moves under Dan while he is mid-conversation")
+    }
 }
