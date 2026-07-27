@@ -468,7 +468,7 @@ struct QueueView: View {
                 // A standalone view (testable, #863) that reports the candidate keys up so the confirm sheet
                 // opens at the QueueView level.
                 ReachabilityProbeControl(
-                    items: group.items, dateLabel: group.monthDay, isScout: focusedStage == .scout,
+                    items: group.items, dateLabel: group.monthDay,
                     isRunning: prepRunning,
                     isDismissed: dismissedProbeDates.contains(group.monthDay),
                     onDismiss: { dismissedProbeDates.insert(group.monthDay) },
@@ -1012,7 +1012,6 @@ struct QueueView: View {
 struct ReachabilityProbeControl: View {
     let items: [QueueItem]
     let dateLabel: String
-    let isScout: Bool
     // #1323: a probe and a normal Prep share the single detached-run slot, so the Check action greys out
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
@@ -1023,16 +1022,25 @@ struct ReachabilityProbeControl: View {
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
     var body: some View {
-        if !isScout && !isDismissed && QueueModel.showsReachabilityProbeControl(items) {
-            let count = QueueModel.reachabilityProbeCandidateKeys(items).count
-            // #1334: a lone stale show gets the re-check headline; two or more get the comparison framing.
-            let isLoneRecheck = QueueModel.isLoneStaleRecheck(items)
+        // #1595: renders wherever there is at least one candidate, on every Scout date. The old rule hid
+        // it on Scout entirely and demanded two or more shows, which meant it had never once appeared
+        // where Dan triages (#1585), and a promising lone show on a quiet night could never be checked.
+        let count = QueueModel.reachabilityProbeCandidateKeys(items).count
+        if count >= 1 && !isDismissed {
+            // Two headline states, not three. A lone stale show is told to re-check; two or more get the
+            // comparison framing that is the whole point of checking a contested night. A lone show nobody
+            // has checked gets NO sentence (Dan, 2026-07-26): there is nothing to compare, so a line there
+            // would only restate the row it sits under.
+            let isLoneRecheck = QueueModel.usesStaleRecheckHeadline(items)
+            let headline: String? = isLoneRecheck ? ReachabilityProbeCopy.staleRecheckHeadline
+                : (count >= 2 ? ReachabilityProbeCopy.calloutHeadline(count: count) : nil)
             HStack(spacing: OVSpacing.sm) {
                 Image(systemName: "envelope.badge").foregroundStyle(OVColor.forest)
-                Text(isLoneRecheck ? ReachabilityProbeCopy.staleRecheckHeadline
-                                   : ReachabilityProbeCopy.calloutHeadline(count: count))
-                    .font(.system(size: 11, weight: .medium)).foregroundStyle(OVColor.ink)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let headline {
+                    Text(headline)
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(OVColor.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer(minLength: OVSpacing.sm)
                 Button {
                     guard !isRunning else { return }

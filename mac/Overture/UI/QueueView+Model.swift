@@ -1023,28 +1023,35 @@ enum QueueModel {
     // #1332: an unprobed show OR one whose probe has gone STALE (#1325) is a candidate. Without the stale
     // arm the "Reachability may be out of date" badge would tell Dan to re-check a show the control never
     // includes. `now` decides staleness; the view passes the wall clock, tests inject it.
-    static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date()) -> [String] {
+    // #1595 / #1587: candidacy is now the SHARED OpenForDecision predicate plus "has no fresh answer yet".
+    // It used to spell out its own status test, which admitted kept shows and never asked whether the run
+    // had already opened, so it disagreed with the Scout list Dan actually triages and would offer to
+    // spend real money on a show the queue refuses to display.
+    //
+    // NOTE on geography: `GeoRefusals.hidesFromQueue` is applied upstream by StageNavigation for every
+    // stage list, so a Scout row reaching here is already geo-filtered. It is not re-applied here because
+    // QueueItem carries no `location`. The one path that bypasses the stage filter is the #308 away-alert
+    // leads list; closing that needs a field on QueueItem and is tracked separately.
+    static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date(),
+                                               today: String = QueueModel.easternToday()) -> [String] {
         items.filter { i in
-            !i.isBooked && i.sentAt == nil
-                && (i.status == .new || i.status == .queued)
+            OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
+                                   isBooked: i.isBooked, sentAt: i.sentAt, today: today)
                 && (i.reachabilityProbedAt == nil
                     || Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now))
         }.map(\.id)
     }
 
-    // The date-header "Check reachability" control appears when two or more candidates share the date (the
-    // whole value of a FIRST probe is comparing several shows before Dan commits to one), OR when a single
-    // already-probed show has gone stale and asks to be re-checked (#1334): its "Reachability may be out of
-    // date" badge tells Dan to run the check again, so the control has to include it even with no sibling to
-    // compare. A lone NEVER-probed show still shows nothing.
-    static func showsReachabilityProbeControl(_ items: [QueueItem], now: Date = Date()) -> Bool {
-        reachabilityProbeCandidateKeys(items, now: now).count >= 2 || isLoneStaleRecheck(items, now: now)
-    }
-
-    // #1334: exactly one candidate on the date, and it is a STALE re-check (already probed, then aged past
-    // the freshness window) rather than a never-probed show. Because a candidate is only ever unprobed or
-    // stale, the single candidate is stale exactly when it carries a probe date.
-    static func isLoneStaleRecheck(_ items: [QueueItem], now: Date = Date()) -> Bool {
+    // #1595: this is a HEADLINE SELECTOR, not a gate. It used to be half of the rule deciding whether the
+    // control appeared at all; that rule is gone, because the control now appears on every date holding a
+    // candidate. What survives is the question it answers: is this a lone show that was already checked
+    // once and has gone stale (so the honest sentence is "re-check"), or a lone show nobody has ever
+    // checked (so there is no sentence at all, by Dan's call 2026-07-26: on a one-show night there is
+    // nothing to compare and the line would only restate the row).
+    //
+    // Body unchanged from #1334. Because a candidate is only ever unprobed or stale, the single candidate
+    // is stale exactly when it carries a probe date.
+    static func usesStaleRecheckHeadline(_ items: [QueueItem], now: Date = Date()) -> Bool {
         let candidates = reachabilityProbeCandidateKeys(items, now: now)
         guard candidates.count == 1, let key = candidates.first,
               let candidate = items.first(where: { $0.id == key }) else { return false }

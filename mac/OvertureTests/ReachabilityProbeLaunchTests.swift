@@ -70,7 +70,7 @@ struct ReachabilityProbeLaunchTests {
         }
     }
 
-    @Test func launchWithNoMatchingKeysThrowsNothingToPrep() throws {
+    @Test func launchWithNoMatchingKeysRefuses() throws {
         let ctx = ModelContext(try container())
         _ = newProspect(ctx, group: "Aurora Strings")
         let dir = tmp()
@@ -81,6 +81,25 @@ struct ReachabilityProbeLaunchTests {
                 markerURL: dir.appendingPathComponent("m"),
                 probeRunURL: dir.appendingPathComponent("p.json"), launch: {})
         }
+    }
+
+    // #1595: a probe over untriaged Scout shows that finds nothing to check must not say "No kept
+    // prospects need prepping. Keep some prospects first." Dan is not prepping and has kept nothing; the
+    // sentence describes a different feature and would send him looking for a button that is not the
+    // problem.
+    @Test func aProbeWithNothingToCheckDoesNotTalkAboutPrepping() throws {
+        let ctx = ModelContext(try container())
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let thrown = #expect(throws: PrepQueueService.PrepLaunchError.self) {
+            try PrepQueueService.startReachabilityProbe(
+                keys: ["no-such-key"], from: ctx, now: Date(timeIntervalSince1970: 0),
+                queueURL: dir.appendingPathComponent("q.json"),
+                markerURL: dir.appendingPathComponent("m"),
+                probeRunURL: dir.appendingPathComponent("p.json"), launch: {})
+        }
+        let message = (thrown?.errorDescription ?? "").lowercased()
+        #expect(!message.contains("prep"))
+        #expect(message.contains("check"))
     }
 
     // #1594: the completion behavior. A show is marked probed when the run ANSWERED it, found a contact or

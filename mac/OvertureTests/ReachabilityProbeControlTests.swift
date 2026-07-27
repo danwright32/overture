@@ -22,7 +22,7 @@ struct ReachabilityProbeControlTests {
         var tapped: (keys: [String], label: String)?
         let view = ReachabilityProbeControl(
             items: [item("a"), item("b"), item("c", status: .drafted)],   // c is past keep/dismiss
-            dateLabel: "Sep 12", isScout: false, isRunning: false,
+            dateLabel: "Sep 12", isRunning: false,
             onTap: { keys, label in tapped = (keys, label) })
 
         let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
@@ -37,7 +37,7 @@ struct ReachabilityProbeControlTests {
     // up front with a reason instead, the way other run-gated controls behave.
     @Test func disabledWhileARunIsInProgress() throws {
         let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: true,
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: true,
             onTap: { _, _ in })
 
         let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
@@ -46,24 +46,39 @@ struct ReachabilityProbeControlTests {
 
     @Test func enabledWhenNoRunIsInProgress() throws {
         let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: false,
             onTap: { _, _ in })
 
         let button = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         #expect(try button.isDisabled() == false)
     }
 
-    @Test func hiddenOnTheScoutStage() throws {
-        let view = ReachabilityProbeControl(items: [item("a"), item("b")], dateLabel: "Sep 12",
-                                            isScout: true, isRunning: false, onTap: { _, _ in })
-        #expect(throws: (any Error).self) {
-            try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
-        }
+    // #1595 replaces what used to be hiddenOnTheScoutStage and hiddenWithFewerThanTwoCandidates. Both
+    // asserted exactly the behaviour that made this feature unreachable: it was blocked on the stage Dan
+    // triages, and it demanded a second show before it would offer to check anything. Between them the
+    // control had never appeared once (#1585). It now renders on any date holding a candidate.
+
+    @Test func rendersOnASingleShowDate() throws {
+        let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
+                                            isRunning: false, onTap: { _, _ in })
+        _ = try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
     }
 
-    @Test func hiddenWithFewerThanTwoCandidates() throws {
+    // Dan's call (2026-07-26): a lone show nobody has checked gets the button and NO sentence. There is
+    // nothing to compare on a one-show night, so a headline would only restate the row beneath it, and it
+    // must never say "re-check" about a show that was never checked.
+    @Test func aLoneNeverProbedShowGetsNoHeadline() throws {
         let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
-                                            isScout: false, isRunning: false, onTap: { _, _ in })
+                                            isRunning: false, onTap: { _, _ in })
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.lowercased().contains("re-check") })
+        #expect(!texts.contains { $0.contains("compete") })
+        #expect(!texts.contains { $0.contains("1 show") })
+    }
+
+    @Test func hiddenWhenNoShowOnTheDateIsStillOpen() throws {
+        let view = ReachabilityProbeControl(items: [item("a", status: .drafted)], dateLabel: "Sep 12",
+                                            isRunning: false, onTap: { _, _ in })
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
         }
@@ -75,7 +90,7 @@ struct ReachabilityProbeControlTests {
     @Test func aLoneStaleShowRendersTheRecheckCallout() throws {
         var stale = item("s"); stale.reachabilityProbedAt = Date(timeIntervalSince1970: 1_000_000)
         let view = ReachabilityProbeControl(items: [stale], dateLabel: "Sep 12",
-                                            isScout: false, isRunning: false, onTap: { _, _ in })
+                                            isRunning: false, onTap: { _, _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.lowercased().contains("re-check") })      // action-framed re-check headline
@@ -101,10 +116,20 @@ struct ReachabilityProbeControlTests {
         #expect(headline.lowercased().contains("email"))
     }
 
+    // #1595: the comparison headline is only ever used for two or more, so it never has to read for one.
+    // Dropping the old 2-or-more gate without this would have printed "1 shows compete for this date" on
+    // 54 of Dan's 169 dates. The single-show case renders no headline at all, asserted above.
+    @Test func theComparisonHeadlineIsNeverAskedToReadForOneShow() throws {
+        let view = ReachabilityProbeControl(items: [item("a")], dateLabel: "Sep 12",
+                                            isRunning: false, onTap: { _, _ in })
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains("1 shows") })
+    }
+
     @Test func showsAProactiveCalloutNamingTheCompetingCount() throws {
         let view = ReachabilityProbeControl(
             items: [item("a"), item("b"), item("c")],   // 3 still-open candidates
-            dateLabel: "Sep 12", isScout: false, isRunning: false, onTap: { _, _ in })
+            dateLabel: "Sep 12", isRunning: false, onTap: { _, _ in })
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.contains("3 shows") })
@@ -114,7 +139,7 @@ struct ReachabilityProbeControlTests {
     // #1336: a session dismiss (the X) waves the callout off for that date without checking.
     @Test func aDismissedDateHidesTheCallout() throws {
         let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: false,
             isDismissed: true, onDismiss: {}, onTap: { _, _ in })
         #expect(throws: (any Error).self) {
             try view.inspect().find(button: ReachabilityProbeCopy.controlLabel)
@@ -124,7 +149,7 @@ struct ReachabilityProbeControlTests {
     @Test func tappingDismissReportsUp() throws {
         var dismissed = false
         let view = ReachabilityProbeControl(
-            items: [item("a"), item("b")], dateLabel: "Sep 12", isScout: false, isRunning: false,
+            items: [item("a"), item("b")], dateLabel: "Sep 12", isRunning: false,
             isDismissed: false, onDismiss: { dismissed = true }, onTap: { _, _ in })
 
         let x = try view.inspect().find(ViewType.Button.self, where: {

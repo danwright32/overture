@@ -120,7 +120,10 @@ enum PrepQueueService {
 
         let stamp = ISO8601DateFormatter().string(from: now)
         let queue = buildProbeQueue(from: context, generatedAt: stamp, keys: keys)
-        guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
+        // #1595: the probe's OWN error. This path is reached from Scout, over untriaged shows Dan has kept
+        // nothing from, so the Prep wording ("No kept prospects need prepping. Keep some prospects first.")
+        // describes a different feature and would send him looking for a button that is not the problem.
+        guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToCheck }
 
         // Atomic lock acquire, identical to startPrep (#480): clear a stale marker, then exclusive-create.
         try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -208,6 +211,7 @@ enum PrepQueueService {
 
     enum PrepLaunchError: LocalizedError {
         case nothingToPrep
+        case nothingToCheck
         case runnerUnavailable
         case alreadyRunning
 
@@ -215,6 +219,8 @@ enum PrepQueueService {
             switch self {
             case .nothingToPrep:
                 return "No kept prospects need prepping. Keep some prospects first."
+            case .nothingToCheck:
+                return "Nothing on this date still needs a reachability check."
             case .runnerUnavailable:
                 return "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
             case .alreadyRunning:
