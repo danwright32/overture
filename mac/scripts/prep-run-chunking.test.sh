@@ -59,9 +59,11 @@ mkdir -p "${SUPPORT}" "${TMP}/home/.local/bin"
 cat > "${TMP}/home/.local/bin/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=""
+model=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -p) prompt="$2"; shift 2 ;;
+    --model) model="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -72,6 +74,7 @@ queue="$(printf '%s' "$flat" | sed -n 's|.*work-list at \(.*\.json\),\{0,1\} and
 results="$(printf '%s' "$flat" | sed -n 's|.*rewrite \(.*\.json\) with the complete.*|\1|p' | head -1)"
 printf '%s\n' "$queue" > "${STUB_LOG_DIR}/queue.$$"
 printf '%s\n' "$flat" > "${STUB_LOG_DIR}/prompt.$$"
+printf '%s\n' "$model" > "${STUB_LOG_DIR}/model.$$"
 node -e '
   const fs = require("fs");
   const [q, out] = process.argv.slice(1);
@@ -166,6 +169,17 @@ assert_equals "and no chunk was told to draft anything" \
 assert_equals "every chunk was told how to answer for the shows a grouped item covers" \
   "4" "$(grep -l 'alsoAnswersFor' "${STUB_LOG_DIR}"/prompt.* 2>/dev/null | wc -l | tr -d ' ')"
 
+# #1597 follow-up: a reachability CHECK runs on sonnet, not on the drafting model.
+#
+# Measured 2026-07-27 with scripts/eval-prep-runbook.sh against all 8 contact-rule fixtures: sonnet
+# obeyed every rule (7/8 first pass, and the one failure was a formatting hiccup that passed on retry)
+# at about half the cost per lookup. Haiku scored 4/8 and DROPPED A REQUIRED PERFORMER, which is the
+# rule the whole feature rests on, so it is not a candidate at any price.
+assert_equals "every chunk of a reachability check runs on sonnet" \
+  "4" "$(grep -lx 'sonnet' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_equals "and no chunk of a check runs on the expensive drafting model" \
+  "0" "$(grep -lx 'opus' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
+
 # The in-flight marker and the pid file must both be cleaned up, or the next run sees a run in progress.
 assert_equals "the in-flight marker is gone, so the next check is not refused as already running" \
   "absent" "$([ -e "${SUPPORT}/prep-running" ] && echo present || echo absent)"
@@ -177,7 +191,7 @@ assert_equals "no named pipe is left behind" \
 # the single-stream cost exactly as before. Chunking a normal Prep would race the voice guidance file.
 # ---------------------------------------------------------------------------
 rm -f "${SUPPORT}/reachability-probe-run.json" "${RESULTS}"
-rm -f "${STUB_LOG_DIR}"/queue.* "${STUB_LOG_DIR}"/prompt.*
+rm -f "${STUB_LOG_DIR}"/queue.* "${STUB_LOG_DIR}"/prompt.* "${STUB_LOG_DIR}"/model.*
 HOME="${TMP}/home" /bin/sh "${SCRIPT_DIR}/prep-run.sh" >/dev/null 2>&1
 
 assert_equals "a normal Prep run still launches exactly one claude" \
@@ -188,6 +202,10 @@ assert_contains "and records its single-stream cost exactly as before" \
   "$(cat "${RESULTS}")" '"usd": 1.25'
 assert_equals "and IS still told to do the once-per-run voice step, which only chunking removes" \
   "1" "$(grep -l 'voice-feedback' "${STUB_LOG_DIR}"/prompt.* 2>/dev/null | wc -l | tr -d ' ')"
+# The half that writes emails reaching strangers in Dan's name is NOT moved off opus. Only the
+# contact-finding check is, and only because it was measured.
+assert_equals "a normal Prep run still drafts on opus" \
+  "1" "$(grep -lx 'opus' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
 
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then

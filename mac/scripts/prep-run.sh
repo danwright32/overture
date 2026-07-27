@@ -78,6 +78,13 @@ CHUNKDIR="$SUPPORT/prep-chunks"
 rm -rf "$CHUNKDIR" 2>/dev/null || true
 rm -f "$SUPPORT"/prep-run.chunk-*.log "$SUPPORT"/prep-run-events.chunk-*.jsonl 2>/dev/null || true
 MAX_PARALLEL="${OVERTURE_PREP_MAX_PARALLEL:-10}"
+# #1597: a CHECK finds contacts and never drafts, so it runs on the cheaper model the eval measured as
+# rule-clean. A normal Prep run writes emails in Dan's voice and stays on the pinned drafting model.
+if [ "$IS_PROBE" = "1" ]; then
+  RUN_MODEL="${OVERTURE_MODEL_REACHABILITY}"
+else
+  RUN_MODEL="${OVERTURE_MODEL_DRAFTING}"
+fi
 
 # #1038: the cooperative-cancel sentinel Overture writes to stop this run, and the file the heartbeat
 # reads to know which claude process to stop when it sees the sentinel. The heartbeat is forked before
@@ -237,7 +244,7 @@ run_one_claude() {
   _tee_pid=$!
   # shellcheck disable=SC2086  # $PREP_SCOPE MUST word-split into --allowedTools <list> --permission-mode <mode>
   "$CLAUDE" -p "$_prompt" \
-    --model "${OVERTURE_MODEL_DRAFTING}" \
+    --model "${RUN_MODEL}" \
     --output-format stream-json --verbose \
     $PREP_SCOPE > "$_fifo" &
   CLAUDE_ONE_PID=$!
@@ -362,7 +369,7 @@ update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
 quarantine_unreadable_results "$RESULTS"
 
 # #804: stamp what actually wrote this, so a draft can be traced to the model behind it.
-record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
+record_model "$RESULTS" "${RUN_MODEL}"
 
 # #1593: and what it cost, from the final result envelope in the event stream. A run that died or was
 # cancelled leaves no envelope, and that is recorded as "not recorded" rather than as zero, so a batch

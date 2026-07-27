@@ -18,6 +18,18 @@
 # tell what wrote a draft rather than merely sensing that something changed.
 OVERTURE_MODEL_DRAFTING="opus"
 
+# The reachability CHECK (#1597). Deliberately NOT the drafting model, which is what it used to inherit.
+#
+# Measured 2026-07-27 with scripts/eval-prep-runbook.sh against all 8 contact-rule fixtures rather than
+# assumed: sonnet obeyed every rule (7/8 on the first pass, and that one failure was a formatting hiccup
+# which passed on retry) at roughly half the cost per lookup, about 0.95 against 1.90. Haiku scored 4/8
+# and dropped a REQUIRED PERFORMER on the stale-site fixture, which is the rule this whole feature rests
+# on, so it is not a candidate at any saving.
+#
+# This moves only the half that FINDS a contact. The half that writes an email reaching a stranger in
+# Dan's voice stays on the pinned drafting model above.
+OVERTURE_MODEL_REACHABILITY="sonnet"
+
 # The extraction run. It was assumed to be the cheap-fast-model case: a strict output schema, no
 # judgment, just read a page for its listings. That assumption was wrong, and haiku rode on it.
 #
