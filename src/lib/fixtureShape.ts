@@ -58,11 +58,12 @@ const OPENER_ARCHETYPE = ["reason-first", "credential-first", "observation-first
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-5, additive: production at v2+ #586, reprepMode at v3+ #367,
-// runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5)
+// overture-prep-queue.json (versions 1-6, additive: production at v2+ #586, reprepMode at v3+ #367,
+// runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
+// alsoAnswersFor at v6+ #1597)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const items = requireArray(root.items, file, "items");
@@ -72,6 +73,10 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // #5 v5: the opener archetype an A/B experiment item must use (one of OPENER_ARCHETYPE), forbidden on
   // older versions so an accidental stamp on a v1-v4 queue is caught rather than silently ignored.
   const experimentFieldAllowed = version >= 5;
+  // #1597 v6: the other shows one research pass answers for. Forbidden on older versions so a stamp on a
+  // v1-v5 queue is caught rather than silently ignored by a runner that predates the rule and would then
+  // leave every covered show unanswered.
+  const groupFieldAllowed = version >= 6;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -102,6 +107,17 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.experimentArmInstruction !== undefined) {
       fail(file, `items[${i}].experimentArmInstruction must not be present before version 5`);
+    }
+    if (groupFieldAllowed) {
+      if (o.alsoAnswersFor !== undefined) {
+        const keys = requireArray(o.alsoAnswersFor, file, `items[${i}].alsoAnswersFor`);
+        keys.forEach((k, j) => requireString(k, file, `items[${i}].alsoAnswersFor[${j}]`));
+        if (keys.includes(o.naturalKey)) {
+          fail(file, `items[${i}].alsoAnswersFor must not repeat the item's own naturalKey`);
+        }
+      }
+    } else if (o.alsoAnswersFor !== undefined) {
+      fail(file, `items[${i}].alsoAnswersFor must not be present before version 6`);
     }
   });
 }

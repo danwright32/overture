@@ -77,8 +77,18 @@ enum PrepQueueService {
     // `needsPrep`/the prep pill are left completely untouched.
     static func buildProbeQueue(from context: ModelContext, generatedAt: String, keys: Set<String>) -> PrepQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #1597 Phase 4.3: pay once per producer, not once per show. Judged against the WHOLE store, not
+        // just Dan's selection, or one night's ticks would make every producer look like a single-venue
+        // house and nothing would amortise. A room that rents itself out never groups (ProducerGate).
+        let plan = ProbeBatch.plan(selecting: keys,
+                                   among: all.map { ProbeBatch.Show(key: $0.naturalKey,
+                                                                    presenter: $0.presenter,
+                                                                    venue: $0.venue) })
+        let running = Set(plan.keysToRun)
+        var covered: [String: [String]] = [:]
+        for (show, representative) in plan.coveredBy { covered[representative, default: []].append(show) }
         let items: [PrepQueueItem] = all
-            .filter { keys.contains($0.naturalKey) }
+            .filter { running.contains($0.naturalKey) }
             .map { p in
                 PrepQueueItem(
                     naturalKey: p.naturalKey,
@@ -94,7 +104,11 @@ enum PrepQueueService {
                     production: p.production,
                     // Contacts-only: find the contact, never draft. The importer's code gate enforces the
                     // no-draft rule regardless, but the runner should not spend on drafting either.
-                    reprepMode: "contacts_only")
+                    reprepMode: "contacts_only",
+                    // Sorted so the same selection always produces byte-identical JSON: a set's iteration
+                    // order is not stable, and an unstable queue file makes two identical runs look
+                    // different in the diff and in any fixture comparison.
+                    alsoAnswersFor: covered[p.naturalKey]?.sorted())
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
     }
@@ -139,9 +153,16 @@ enum PrepQueueService {
             let data = try PrepQueueBuilder.encode(queue)
             try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: queueURL, options: .atomic)
-            // Record which shows this probe covers, so completion can mark them probed even on an empty run.
+            // Record which shows this probe covers, so completion can mark them probed even on an empty
+            // run. #1597: that is every show Dan SELECTED, which is more than the run researches: a
+            // grouped item answers for the shows in its `alsoAnswersFor` too, and those must settle. The
+            // intersection with what actually came back still governs (#1594), so a run that ignored the
+            // grouping leaves those shows unchecked and says so in the log rather than silently marking
+            // them "no email found".
             try ReachabilityProbeMarker.write(
-                ReachabilityProbeMarker(keys: Set(queue.items.map(\.naturalKey)), startedAt: stamp),
+                ReachabilityProbeMarker(
+                    keys: Set(queue.items.flatMap { [$0.naturalKey] + ($0.alsoAnswersFor ?? []) }),
+                    startedAt: stamp),
                 to: probeRunURL)
             try launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)

@@ -40,10 +40,24 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // active experiment) means the drafter uses the normal #362 rotation. The runbook gives this field
     // PRECEDENCE over the rotation, so an experiment item genuinely randomizes what is produced.
     var experimentArmInstruction: String? = nil
+    // v6 (#1597): the OTHER shows this one item answers for. Set only on a reachability check, and only
+    // when ProducerGate has proved the presenter is a producer rather than a room that rents itself out.
+    //
+    // A check costs about $1.36 a show, so researching the same producer once per show is the single
+    // largest waste in a multi-date run: a week hands over Carnegie Hall Presents eight times. Instead the
+    // run researches the producer ONCE and reports the same contact under each key listed here, which
+    // keeps Dan's "every show on the date, no exceptions" rule intact while paying once.
+    //
+    // Carrying the group in the QUEUE rather than fanning the answer out in the app afterwards is
+    // deliberate: the results file then holds a normal entry per show and the existing import path
+    // settles all of them with no second contact-copying code path to keep in step with the first.
+    // A run that ignores this field leaves those shows unanswered and they are simply offered again,
+    // which is why it fails safe.
+    var alsoAnswersFor: [String]? = nil
 }
 
 enum PrepQueueBuilder {
-    static let version = 5
+    static let version = 6
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false

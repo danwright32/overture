@@ -32,7 +32,7 @@ describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
   it("covers exactly the known prep-queue files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"]);
   });
 
   for (const file of files) {
@@ -56,6 +56,30 @@ describe("prep-queue fixture shapes", () => {
     const mutated = readJson("prep-queue", "v5.json") as { items: Array<Record<string, unknown>> };
     mutated.items[0].experimentArmInstruction = "made-up-shape";
     expect(() => assertPrepQueueShape(mutated, "v5.json", 5)).toThrow(/experimentArmInstruction/);
+  });
+
+  // #1597: alsoAnswersFor is a v6 addition. A runner reading an older queue does not know the rule, so
+  // silently accepting the field there would mean every covered show came back unanswered.
+  it("rejects a v6 grouping field appearing in a v5 fixture", () => {
+    const mutated = readJson("prep-queue", "v5.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].alsoAnswersFor = ["some-other-key"];
+    expect(() => assertPrepQueueShape(mutated, "v5.json", 5)).toThrow(/alsoAnswersFor.*before version 6/);
+  });
+
+  it("rejects a grouping list holding anything but strings", () => {
+    const mutated = readJson("prep-queue", "v6.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].alsoAnswersFor = ["fine", 7];
+    expect(() => assertPrepQueueShape(mutated, "v6.json", 6)).toThrow(/alsoAnswersFor\[1\]/);
+  });
+
+  // An item listing itself would make the run emit two result entries under one key, which the importer
+  // would apply twice. The app never builds one, so a fixture holding one is a real defect.
+  it("rejects an item that lists its own key among the shows it answers for", () => {
+    const mutated = readJson("prep-queue", "v6.json") as {
+      items: Array<Record<string, unknown>>;
+    };
+    mutated.items[0].alsoAnswersFor = [mutated.items[0].naturalKey as string];
+    expect(() => assertPrepQueueShape(mutated, "v6.json", 6)).toThrow(/must not repeat/);
   });
 
   it("rejects a v4 run field appearing in a v3 fixture", () => {

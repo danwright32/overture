@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion5() {
+    @Test func theBuilderNowStampsVersion6() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
-        #expect(q.version == 5)
+        #expect(q.version == 6)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -136,6 +136,27 @@ struct PrepQueueContractTests {
         #expect(decoded.items[0].experimentArmInstruction == "credential-first")
         // The second item is not under an experiment: the field is absent.
         #expect(decoded.items[1].experimentArmInstruction == nil)
+    }
+
+    // v6 (#1597): a reachability check's item gains `alsoAnswersFor`, the other shows one research pass
+    // answers for, so a producer is researched once rather than once per show (about $1.36 each). Additive,
+    // so v1-v5 fixtures still decode with it absent (nil).
+    @Test func theV6FixtureCarriesTheShowsOneAnswerCovers() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v6.json"))
+        #expect(decoded.version == 6)
+        #expect(decoded.items[0].alsoAnswersFor == ["aurora-strings|2026-03-11|merkin-hall",
+                                                    "aurora-strings|2026-03-12|the-town-hall"])
+        // The second item stands alone (a one-off hunt, or a normal Prep item): the field is absent.
+        #expect(decoded.items[1].alsoAnswersFor == nil)
+    }
+
+    // Every older fixture must still decode, because the field is additive and an old queue file left on
+    // disk by a previous version must not become unreadable.
+    @Test func everyEarlierFixtureStillDecodesWithNoCoveredShows() throws {
+        for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"] {
+            let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
+            #expect(decoded.items.allSatisfy { $0.alsoAnswersFor == nil }, "\(name) should carry no group")
+        }
     }
 
     // MARK: - Negative paths (#747)
