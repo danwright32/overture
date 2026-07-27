@@ -163,17 +163,34 @@ CLAUDE_STATUS=0
 #
 # #1593: --output-format stream-json --verbose is what makes the run's cost readable afterwards. Its
 # stdout is raw JSON, so it goes through tee_run_events: the raw stream to $EVENTS for parsing, a
-# readable trickle to this log so a run that takes minutes still looks alive. Written as process
-# substitution deliberately, so `$!` is still CLAUDE's pid and the #1038 cooperative cancel keeps
-# working; a pipeline here would have handed the trap the wrong process.
+# readable trickle to this log so a run that takes minutes still looks alive.
+#
+# Through a NAMED PIPE, not process substitution. This script declares `#!/bin/sh` and the app launches
+# it with /bin/sh (DetachedRunner), which on macOS is bash in POSIX mode, where `> >(...)` does not
+# exist. The first real reachability check died instantly on exactly that: "syntax error near unexpected
+# token `>`", caught by nothing because `bash -n` accepts it and no test ran the script through the shell
+# that launches it. scripts/check-runner-posix.sh now does.
+#
+# The reader is started FIRST so opening the pipe for writing does not block, and claude stays the
+# directly backgrounded process, so `$!` is still ITS pid and the #1038 cooperative cancel keeps working.
+EVENTS_FIFO="$SUPPORT/prep-run-events.fifo"
+rm -f "$EVENTS_FIFO"
+mkfifo "$EVENTS_FIFO" || echo "prep: could not create the event pipe; cost will not be recorded" >&2
+tee_run_events "$EVENTS" < "$EVENTS_FIFO" &
+TEE_PID=$!
+
 "$CLAUDE" -p "$PROMPT" \
   --model "${OVERTURE_MODEL_DRAFTING}" \
   --output-format stream-json --verbose \
-  $PREP_SCOPE > >(tee_run_events "$EVENTS") &
+  $PREP_SCOPE > "$EVENTS_FIFO" &
 CLAUDE_PID=$!
 printf '%s' "$CLAUDE_PID" > "$CLAUDE_PID_FILE"
 wait "$CLAUDE_PID" || CLAUDE_STATUS=$?
 CLAUDE_PID=""   # reaped; nothing left for the trap to kill
+# claude's exit closes the write end, so the reader sees EOF and finishes on its own. Waited for so the
+# event file is complete before the cost is read out of it below.
+wait "$TEE_PID" 2>/dev/null || true
+rm -f "$EVENTS_FIFO"
 
 # #1023: one last derive now that claude has exited, so the count reflects whatever landed between the
 # previous heartbeat tick and the process actually finishing, rather than sitting stale.
