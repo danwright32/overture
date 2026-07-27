@@ -696,11 +696,13 @@ struct ProspectRowView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
-            // Dan's call after the first real check (2026-07-27): the reachability answer sits directly
-            // under Keep and Dismiss. It used to live in the classification pills on the left, among
-            // "Self-produced" and "Likely uncovered", which describe what the show IS. This one is
-            // different in kind: it is the fact he is deciding ON, so it belongs beside the controls he
-            // decides WITH. Rendered last in this column so the buttons stay at the top of the card.
+            // Dan's call after the first real check (2026-07-27), refined once he saw it land in the wrong
+            // place: the reachability answer sits DIRECTLY BENEATH Keep and Dismiss, not beside them. It
+            // used to live in the classification pills on the left, among "Self-produced" and "Likely
+            // uncovered", which describe what the show IS. This one is different in kind: it is the fact he
+            // is deciding ON, so it belongs with the controls he decides WITH. A sibling of the button
+            // ROW inside the trailing VStack, so it right-justifies under them rather than widening the
+            // row, which made the cards uneven.
             reachabilityFlag
         }
     }
