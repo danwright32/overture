@@ -192,6 +192,20 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return own.isEmpty ? (inheritedReachability?.emails ?? []) : own
     }
 
+    // #1626: the contact forms the row offers as a link, when there is no address to print. Only forms
+    // on the act's own site: an Instagram is a dead end Dan will not use, so putting it on the card
+    // would hand him a control he cannot act on. Same rule as Prospect.usableContactFormURLs, and
+    // decided here rather than in the view so the exclusion is testable.
+    var displayedContactForms: [URL] {
+        guard displayedContactEmails.isEmpty else { return [] }
+        return contacts.compactMap { c -> URL? in
+            guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
+                  let url = URL(string: raw), url.scheme != nil else { return nil }
+            return url
+        }
+    }
+
     // #1338: after a reachability probe, a still-open show that found a SENDABLE contact is a "best reachable
     // contact" the row highlights, so the answer to "which of these can I actually email" is obvious among a
     // date's competing shows rather than assembled from per-row badges. It is exactly the emailFound badge, so
@@ -1201,6 +1215,16 @@ enum QueueModel {
     // #939: QueueView and ArchiveView both build their rows from `prospects` this same way, so the
     // cross-venue engagement link (computed across the WHOLE array, not one prospect at a time) lives
     // here where it is testable, rather than inline in either view (the #863 lesson).
+    // #1626: how a contact form is labelled on the row, which is by the SITE it lives on. The pill above
+    // it already says "Contact form only", so repeating that here would be the #843 shape; what this line
+    // owes Dan is the same thing the address line owes him, who he would be writing to. Kept out of the
+    // view so the trimming is testable.
+    static func contactFormSiteLabel(_ url: URL) -> String {
+        var host = url.host ?? url.absoluteString
+        if host.hasPrefix("www.") { host.removeFirst(4) }
+        return host
+    }
+
     // #1598 Phase 5: `answers` is the stored organisation ledger and `corpus` is EVERY prospect in the
     // store, dismissed rows included. The corpus is separate from `prospects` on purpose: the queue's own
     // @Query filters dismissed shows out, and judging the producer gate against that filtered list would

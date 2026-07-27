@@ -38,6 +38,9 @@ enum LaunchMigrations {
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)
+        // #1626: a show already checked before "contact form only" existed reads as a dead end while
+        // holding a usable form link. Upgrades that one verdict and nothing else. Idempotent.
+        ContactFormResultMigration.run(in: context)
         // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it
         // the sentence would linger for weeks on whichever rows the hash-gated scout has not re-emitted.

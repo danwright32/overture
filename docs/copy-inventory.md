@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **884 sentences**, from 300 source files.
+Every sentence Overture can say to Dan: **886 sentences**, from 301 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -467,6 +467,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Contact form"
     `Domain/Inquiry.swift`
     `UI/DraftReviewView.swift`
+"Contact form only"
+    `Domain/Reachability.swift`
 "Contact: pending Prep run"
     `UI/QueueView+Model.swift`
 "Contains an em dash"
@@ -1427,6 +1429,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
     `Domain/DetachedRunOutcome.swift`
+"The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
+    `Domain/Reachability.swift`
 "The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this."
     `App/RootView.swift`
 "The calendar reader ran but produced nothing this run."
