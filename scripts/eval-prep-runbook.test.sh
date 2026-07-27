@@ -146,6 +146,55 @@ _eval_failed_names=""
 update_failures_file
 check "update_failures_file empties the record when all prior failures now pass" '[[ -z "$(read_failures)" ]]'
 
+# --- the model override (#1597) -----------------------------------------------------------------------
+#
+# The harness must be able to score a DIFFERENT model tier against the same fixtures. That is how
+# "would sonnet or haiku still obey the strict contact rules" was answered with evidence rather than
+# opinion: sonnet passed every rule, haiku dropped a required performer, and the decision to halve the
+# cost per lookup rests on that measurement being real.
+#
+# Two claims, and the SECOND matters more. The override must work, and it must not leak: the drafting
+# model is pinned on purpose (mac/scripts/lib/models.sh, Dan accepted his voice shifting with each new
+# Opus in exchange for the improvement). Were the override a default on that constant, a stray
+# environment variable would quietly change which model writes the emails that reach strangers in his
+# name, with no error and no symptom. Still a no-spend test: nothing here invokes claude.
+echo "the eval model override:"
+
+REPO_ROOT_FOR_MODELS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODELS_SH="${REPO_ROOT_FOR_MODELS}/mac/scripts/lib/models.sh"
+
+resolved_model() {
+  # Resolve exactly as the harness does, in a subshell, with whatever env the caller set.
+  bash -c '. "'"${MODELS_SH}"'" >/dev/null 2>&1; printf "%s" "${OVERTURE_EVAL_MODEL:-${OVERTURE_MODEL_DRAFTING:-opus}}"'
+}
+
+check "the override chooses the model the eval runs" \
+  '[[ "$(OVERTURE_EVAL_MODEL=sonnet resolved_model)" == "sonnet" ]]'
+check "another tier passes through too, not just the first one tried" \
+  '[[ "$(OVERTURE_EVAL_MODEL=haiku resolved_model)" == "haiku" ]]'
+check "with no override it falls back to the pinned drafting model, so a baseline really is a baseline" \
+  '[[ "$(env -u OVERTURE_EVAL_MODEL bash -c "$(declare -f resolved_model); resolved_model")" == "opus" ]]'
+
+# THE LEAK TEST. Setting the eval override must not reach the constant the real runners read: prep-run.sh,
+# reply-classify-run.sh and scout-extract-run.sh all source models.sh.
+leaked_drafting() {
+  bash -c '. "'"${MODELS_SH}"'" >/dev/null 2>&1; printf "%s" "${OVERTURE_MODEL_DRAFTING}"'
+}
+check "the eval override does NOT bleed into the real drafting model" \
+  '[[ "$(OVERTURE_EVAL_MODEL=haiku leaked_drafting)" == "opus" ]]'
+# And the constant is not overridable by its own name either, which is the other route to the same accident.
+check "the drafting model stays pinned even when its own name is set in the environment" \
+  '[[ "$(OVERTURE_MODEL_DRAFTING=haiku leaked_drafting)" == "opus" ]]'
+
+# The harness must actually USE the resolved value; a correct variable nobody passes to claude is a
+# guard that reads as solved while every eval silently runs on opus.
+EVAL_SH="${REPO_ROOT_FOR_MODELS}/scripts/eval-prep-runbook.sh"
+check "the harness passes the resolved model to claude, not the pinned constant" \
+  'grep -q -- "--model \"\${_eval_model}\"" "${EVAL_SH}"'
+check "and no longer hard-passes the drafting constant" \
+  '! grep -q -- "--model \"\${OVERTURE_MODEL_DRAFTING}\"" "${EVAL_SH}"'
+
+
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
   exit 0

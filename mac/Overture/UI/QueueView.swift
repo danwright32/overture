@@ -304,20 +304,28 @@ struct QueueView: View {
             .padding(.horizontal, OVSpacing.xl)
             .padding(.vertical, OVSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(OVColor.surfaceSunk)
+            // Opaque, because it now floats OVER the rows rather than sitting above them: anything
+            // translucent here would show the content sliding underneath and read as a rendering fault.
+            .background(OVColor.canvas)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
     private func mainContent(_ data: RenderData) -> some View {
-        VStack(spacing: 0) {
-            // #1597: pinned ABOVE the scroll, under the toolbar, per Dan's call. Not at the bottom: it
-            // would sit under ActionFeedbackBanner's Undo pill, and a running total he cannot see while
+        queueScroll(data)
+            // #1597: pinned at the TOP, under the toolbar, per Dan's call. Not at the bottom: it would
+            // sit under ActionFeedbackBanner's Undo pill, and a running total he cannot see while
             // scrolling a long date list is not a running total.
-            probeSelectionBar(data)
-            queueScroll(data)
-        }
-        .background(OVColor.canvas)
+            //
+            // An OVERLAY, not a sibling above the scroll. As a sibling it took its height out of the
+            // scroll view, so the first tick shrank the scroll area and the whole page jumped under his
+            // cursor mid-click (his walk of the Debug build, 2026-07-27). An overlay floats over the
+            // content and leaves the scroll geometry untouched, which is exactly why the acknowledgment
+            // banner is attached the same way.
+            .overlay(alignment: .top) { probeSelectionBar(data) }
+            .background(OVColor.canvas)
             // #1219/#1249: confirm an Approve or a per-row Re-prep that lands on a date already holding a
             // pitch. First-party branded sheet (SelfBookingConfirmSheet), not a stock system dialog.
             .sheet(item: $pendingSelfBookingGuard) { pending in

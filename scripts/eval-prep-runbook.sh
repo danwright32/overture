@@ -17,6 +17,12 @@ set -euo pipefail
 # IT COSTS TOKENS. Run it by hand before shipping a runbook edit. It must NEVER run in CI or on every
 # edit, which is why the real run is gated behind an explicit --yes and it is wired into nothing.
 #
+# MODEL: defaults to the drafting model this run really uses. Override with OVERTURE_EVAL_MODEL to score
+# a DIFFERENT tier against the same fixtures, which is how the question "would sonnet or haiku still obey
+# the strict contact rules" gets answered with evidence instead of opinion. Deliberately its own variable
+# rather than a default on OVERTURE_MODEL_DRAFTING: that one is pinned on purpose (see models.sh), and
+# making it env-overridable would let a stray variable quietly change what writes Dan's real emails.
+#
 # Usage:
 #   scripts/eval-prep-runbook.sh                 # show this help and the cost warning; spends nothing
 #   scripts/eval-prep-runbook.sh --list          # list the fixtures; spends nothing
@@ -94,6 +100,8 @@ PROMPT
 # capture the caller's locals.
 _eval_claude=""
 _eval_scope=""
+# See the MODEL note in the header: a dedicated override, so production drafting stays pinned.
+_eval_model="${OVERTURE_EVAL_MODEL:-${OVERTURE_MODEL_DRAFTING:-opus}}"
 _eval_tmp=""
 _eval_failures=0
 _eval_total=0
@@ -114,7 +122,7 @@ score_one_fixture() {
   prompt="$(build_prompt "${fixture}")"
   out="${_eval_tmp}/${name}.out"
   # shellcheck disable=SC2086  # $_eval_scope MUST word-split into --allowedTools <list> --permission-mode <mode>
-  if ! "${_eval_claude}" -p "${prompt}" --model "${OVERTURE_MODEL_DRAFTING}" ${_eval_scope} </dev/null > "${out}" 2>"${_eval_tmp}/${name}.err"; then
+  if ! "${_eval_claude}" -p "${prompt}" --model "${_eval_model}" ${_eval_scope} </dev/null > "${out}" 2>"${_eval_tmp}/${name}.err"; then
     echo "FAIL  ${name} (claude run errored; see ${_eval_tmp}/${name}.err)"
     _eval_failures=$((_eval_failures + 1))
     _eval_failed_names="${_eval_failed_names}${name}"$'\n'

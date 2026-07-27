@@ -46,7 +46,11 @@ command -v node >/dev/null 2>&1 || { echo "skip - node unavailable"; exit 0; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
-SUPPORT="${TMP}/support"
+SUPPORT="${TMP}/Application Support/Overture"
+# A space in the path ON PURPOSE: Dan's real support directory is "Application Support",
+# and passing the per-chunk event files as an unquoted string cut every path in half there,
+# so a run that reported its cost perfectly was recorded as "not recorded". Under a
+# space-free temp dir that bug is completely invisible.
 mkdir -p "${SUPPORT}" "${TMP}/home/.local/bin"
 
 # The stub claude. It reads its own -p prompt to learn which queue slice it was given and where to write,
@@ -62,8 +66,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 flat="$(printf '%s' "$prompt" | tr '\n' ' ')"
-queue="$(printf '%s' "$flat" | sed -n 's|.*work-list at \([^ ]*\.json\).*|\1|p' | head -1)"
-results="$(printf '%s' "$flat" | sed -n 's|.*rewrite \([^ ]*\.json\) with the complete.*|\1|p' | head -1)"
+# Anchored on the words AROUND the path, not on "no spaces", because the real support directory is
+# "Application Support" and a path here legitimately contains one.
+queue="$(printf '%s' "$flat" | sed -n 's|.*work-list at \(.*\.json\),\{0,1\} and for every.*|\1|p' | head -1)"
+results="$(printf '%s' "$flat" | sed -n 's|.*rewrite \(.*\.json\) with the complete.*|\1|p' | head -1)"
 printf '%s\n' "$queue" > "${STUB_LOG_DIR}/queue.$$"
 printf '%s\n' "$flat" > "${STUB_LOG_DIR}/prompt.$$"
 node -e '
@@ -139,6 +145,11 @@ assert_contains "the cost is marked recorded, so a ceiling may be sized from it"
 assert_contains "and it says how many streams it read" "$(cat "${RESULTS}")" '"streams": 4'
 assert_contains "the duration is the longest chunk, not the sum of the four" \
   "$(cat "${RESULTS}")" '"durationMs": 60000'
+# The exact regression: four chunks, four event files, all four read. Anything less means the paths were
+# mangled on the way in, and the figure the spending brake is sized from would be silently wrong.
+assert_contains "every chunk's event file was found despite the space in the path" \
+  "$(cat "${RESULTS}")" '"streams": 4'
+
 
 # The progress file the toolbar reads must reflect the merged total, not one chunk's share.
 assert_contains "progress counts every show, so the toolbar does not stall at one chunk's worth" \

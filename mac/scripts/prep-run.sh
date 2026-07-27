@@ -281,8 +281,15 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   echo "prep: reachability check split into $CHUNK_COUNT chunk(s), running concurrently"
   CHUNK_PIDS=""
   CHUNK_TEE_PIDS=""
-  CHUNK_FIFOS=""
-  EVENT_FILES=""
+  # The event files are accumulated as POSITIONAL PARAMETERS, not as a space-separated string.
+  #
+  # A string was the first shape, and it silently broke cost capture on the very first real chunked run:
+  # the support directory is "~/Library/Application Support/Overture", so unquoted word-splitting cut
+  # every path in half at that space. record_run_cost was handed 8 arguments that were not files instead
+  # of 4 that were, found no cost envelope in any of them, and honestly reported "not recorded" for a run
+  # that had reported its cost perfectly. `set --` is the only way a POSIX shell can carry a list of
+  # paths that may contain spaces.
+  set --
   k=1
   while [ "$k" -le "$CHUNK_COUNT" ]; do
     CHUNK_LOG="$SUPPORT/prep-run.chunk-$k.log"
@@ -295,8 +302,7 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
     run_one_claude "$CHUNK_PROMPT" "$CHUNK_EVENTS" "$SUPPORT/prep-events-chunk-$k.fifo" "$CHUNK_LOG"
     CHUNK_PIDS="$CHUNK_PIDS $CLAUDE_ONE_PID"
     CHUNK_TEE_PIDS="$CHUNK_TEE_PIDS $CLAUDE_ONE_TEE_PID"
-    CHUNK_FIFOS="$CHUNK_FIFOS $CLAUDE_ONE_FIFO"
-    EVENT_FILES="$EVENT_FILES $CHUNK_EVENTS"
+    set -- "$@" "$CHUNK_EVENTS"
     k=$((k + 1))
   done
   # #1038: the heartbeat was forked before these launched, so it cannot see CHUNK_PIDS. The pid file is
@@ -314,7 +320,14 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
     if [ "$st" != "0" ] && [ "$CLAUDE_STATUS" = "0" ]; then CLAUDE_STATUS="$st"; fi
   done
   for tpid in $CHUNK_TEE_PIDS; do wait "$tpid" 2>/dev/null || true; done
-  for f in $CHUNK_FIFOS; do rm -f "$f"; done
+  # The pipe paths are REBUILT from the chunk number, never carried in a space-separated string. Held as
+  # a string they word-split inside "Application Support" and every removal missed, leaving a named pipe
+  # behind for each chunk. The PID lists above are safe as strings only because a PID has no spaces.
+  k=1
+  while [ "$k" -le "$CHUNK_COUNT" ]; do
+    rm -f "$SUPPORT/prep-events-chunk-$k.fifo"
+    k=$((k + 1))
+  done
   CLAUDE_PID=""   # all reaped; nothing left for the trap to kill
 
   # Fold each chunk's log tail into the main log, so the reason a chunk failed travels with the run.
@@ -335,7 +348,7 @@ else
   reap_one_claude "$CLAUDE_ONE_PID" "$CLAUDE_ONE_TEE_PID" "$CLAUDE_ONE_FIFO"
   CLAUDE_STATUS="$REAPED_STATUS"
   CLAUDE_PID=""   # reaped; nothing left for the trap to kill
-  EVENT_FILES="$EVENTS"
+  set -- "$EVENTS"
 fi
 
 # #1023: one last derive now that claude has exited, so the count reflects whatever landed between the
@@ -354,8 +367,8 @@ record_model "$RESULTS" "${OVERTURE_MODEL_DRAFTING}"
 # #1593: and what it cost, from the final result envelope in the event stream. A run that died or was
 # cancelled leaves no envelope, and that is recorded as "not recorded" rather than as zero, so a batch
 # ceiling can never be sized against a number nobody measured.
-# shellcheck disable=SC2086  # $EVENT_FILES is a deliberate space-separated list, one per chunk
-record_run_cost "$RESULTS" $EVENT_FILES
+# Quoted "$@", so a path containing a space stays ONE argument.
+record_run_cost "$RESULTS" "$@"
 
 echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
 exit "$CLAUDE_STATUS"

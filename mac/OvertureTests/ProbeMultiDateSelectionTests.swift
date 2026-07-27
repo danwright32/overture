@@ -140,4 +140,24 @@ struct ProbeMultiDateSelectionTests {
         #expect(runner.contains("OVERTURE_PREP_MAX_PARALLEL:-\(ProbeSelection.maxConcurrentLookups)}"),
                 "prep-run.sh's default parallelism must match ProbeSelection.maxConcurrentLookups, or the estimated wait is a promise the run cannot keep")
     }
+
+    // #1597 follow-up (Dan, walking the Debug build): ticking the first date made the whole page jump
+    // under his cursor. The bar was a SIBLING above the scroll view, so the moment it appeared it took
+    // its own height out of the scroll area and shoved every row down mid-click.
+    //
+    // A source guard, deliberately, and the weakest kind of test in this file. Scroll geometry is not
+    // something any test here can observe: nothing can assert "the rows did not move". What it CAN pin is
+    // the one structural fact that caused it, so a future edit cannot quietly put the bar back in a stack
+    // above the scroll. Whether it actually looks right is still only answerable by opening the app.
+    @Test func theSelectionBarFloatsOverTheScrollRatherThanPushingItDown() {
+        let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(!queue.isEmpty)
+        #expect(queue.contains(".overlay(alignment: .top) { probeSelectionBar(data) }"),
+                "the bar must be an overlay: as a sibling above the scroll it changes the scroll's height and the page jumps when it appears")
+        // And the thing it replaced must be gone, or both could coexist and the jump would return.
+        #expect(!queue.contains("""
+            probeSelectionBar(data)
+            queueScroll(data)
+        """))
+    }
 }
