@@ -21,6 +21,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
     var reachabilityResult: Reachability.ProbeResult? = nil
+    // #1598 Phase 5: an answer paid for on a DIFFERENT show by the same organisation. Folded in once per
+    // render by QueueModel.items(from:ledger:) (the EngagementLink.group precedent), never looked up per
+    // row, because deciding it needs the whole store and a card must not carry that cost. nil is the
+    // common case: no answer, or an organisation the producer gate refuses.
+    var inheritedReachability: OrgAnswerLedger.Inherited? = nil
     // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
     // this and the discipline, never stored, so a rule change re-decides every row at once.
     var location: String? = nil
@@ -173,7 +178,18 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         guard sentAt == nil && !isBooked else { return .none }
         return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
+                                  inherited: inheritedReachability?.result,
                                   presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
+    }
+
+    // #1598 Phase 5: the addresses the row prints under its badge. A show researched itself shows ITS
+    // contacts; only a show with none falls back to the organisation's. Mixing the two would put an
+    // address on the card that no check on this show ever produced. Decided here (testable, #863) rather
+    // than in the view, which used to read `contacts` directly.
+    var displayedContactEmails: [String] {
+        let own = contacts.compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return own.isEmpty ? (inheritedReachability?.emails ?? []) : own
     }
 
     // #1338: after a reachability probe, a still-open show that found a SENDABLE contact is a "best reachable
@@ -1072,11 +1088,15 @@ enum QueueModel {
     // stage list, so a Scout row reaching here is already geo-filtered. It is not re-applied here because
     // QueueItem carries no `location`. The one path that bypasses the stage filter is the #308 away-alert
     // leads list; closing that needs a field on QueueItem and is tracked separately.
+    // #1598 Phase 5: a show already carrying an INHERITED answer is not a candidate either. This is where
+    // the saving actually lands (59 lookups on the live store as measured 2026-07-27), and without it the
+    // card would contradict itself: "Email found" sitting beside a button offering to go and find one.
     static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date(),
                                                today: String = QueueModel.easternToday()) -> [String] {
         items.filter { i in
             OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
                                    isBooked: i.isBooked, sentAt: i.sentAt, today: today)
+                && i.inheritedReachability == nil
                 && (i.reachabilityProbedAt == nil
                     || Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now))
         }.map(\.id)
@@ -1158,13 +1178,40 @@ enum QueueModel {
     // #939: QueueView and ArchiveView both build their rows from `prospects` this same way, so the
     // cross-venue engagement link (computed across the WHOLE array, not one prospect at a time) lives
     // here where it is testable, rather than inline in either view (the #863 lesson).
-    static func items(from prospects: [Prospect]) -> [QueueItem] {
+    // #1598 Phase 5: `answers` is the stored organisation ledger and `corpus` is EVERY prospect in the
+    // store, dismissed rows included. The corpus is separate from `prospects` on purpose: the queue's own
+    // @Query filters dismissed shows out, and judging the producer gate against that filtered list would
+    // let a triage decision quietly change which organisations qualify (see OrgAnswerLedger). Both
+    // default to empty so the many call sites that only want rows (Archive's own list, tests) are
+    // unaffected and simply inherit nothing.
+    static func items(from prospects: [Prospect],
+                      answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
+                      now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
+        let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects, now: now)
         return prospects.map {
             var item = QueueItem($0)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
+            item.inheritedReachability = inherited[$0.naturalKey]
             return item
         }
+    }
+
+    // The SwiftData-to-value boundary, kept here so OrgAnswerLedger itself stays free of the store and
+    // its rules stay unit-testable.
+    private static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
+                                         now: Date) -> [String: OrgAnswerLedger.Inherited] {
+        guard !answers.isEmpty else { return [:] }
+        let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
+            guard let result = row.result else { return nil }
+            return OrgAnswerLedger.Answer(orgKey: row.orgKey, result: result, probedAt: row.probedAt,
+                                          presenterName: row.presenterName, emails: row.foundEmails)
+        }
+        let shows = corpus.map {
+            OrgAnswerLedger.Show(key: $0.naturalKey, presenter: $0.presenter, venue: $0.venue,
+                                 hasOwnAnswer: $0.reachabilityProbedAt != nil)
+        }
+        return OrgAnswerLedger.inherited(from: flat, shows: shows, now: now)
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays

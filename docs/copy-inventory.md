@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **885 sentences**, from 296 source files.
+Every sentence Overture can say to Dan: **886 sentences**, from 299 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -31,6 +31,7 @@ What is not, and why:
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
@@ -289,6 +290,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "A reachability check found a contact you can email for this show."
     `Domain/Reachability.swift`
 "A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
+    `Domain/Reachability.swift`
+"A reachability check on another \(organisation) show found this contact, so this show didn't need checking again."
     `Domain/Reachability.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`

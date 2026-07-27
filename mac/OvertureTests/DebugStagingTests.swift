@@ -65,8 +65,11 @@ struct DebugStagingTests {
     // #325: a self-addressed lead so the real approve -> send path can be verified end to end
     // without risking a real email to a prospect.
     private func makeInMemoryContext() throws -> ModelContext {
-        let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        // #1598: the ledger is in the schema because staging now writes one, and a container without it
+        // would silently drop that write rather than fail.
+        let container = try ModelContainer(
+            for: Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         return ModelContext(container)
     }
 
@@ -125,14 +128,56 @@ struct DebugStagingTests {
 
         let shows = DebugStaging.stageReachabilityCompetition(in: ctx, now: now)
 
-        #expect(shows.count == 2)
-        #expect(shows[0].performanceDate == shows[1].performanceDate)   // same date: a genuine competition
-        #expect(shows.allSatisfy { $0.status == .new })                 // both still open
+        // #1598 adds two more: a pair by one organisation, neither checked itself, so the INHERITED
+        // state can be walked in Debug without spending anything on a real check.
+        #expect(shows.count == 4)
+        #expect(Set(shows.map(\.performanceDate)).count == 1)           // same date: a genuine competition
+        #expect(shows.allSatisfy { $0.status == .new })                 // all still open
         // One is a best (sendable) reachable contact, highlighted; the other is not.
-        let flags = shows.map { QueueItem($0).isBestReachableContact(now: now.addingTimeInterval(60)) }
+        let flags = shows.prefix(2).map { QueueItem($0).isBestReachableContact(now: now.addingTimeInterval(60)) }
         #expect(flags.contains(true))
         #expect(flags.contains(false))
         #expect(shows.allSatisfy { $0.naturalKey.hasPrefix("debug-of-") })
+    }
+
+    // #1598: the staged inherited row is the only way to SEE this feature before a real check has ever
+    // run for an organisation, so it is pinned: never probed itself, yet reading "Email found" with the
+    // organisation's address, and no longer offered for a paid check.
+    @Test @MainActor func stagesAnInheritedOrganisationAnswer() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let shows = DebugStaging.stageReachabilityCompetition(in: ctx, now: now)
+        try ctx.save()
+        let answers = try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>())
+        let inheritors = shows.filter { $0.reachabilityProbedAt == nil }
+
+        #expect(answers.count == 1)
+        #expect(inheritors.count == 2)
+
+        let items = QueueModel.items(from: shows, answers: answers, corpus: shows, now: now)
+        let inherited = items.filter { $0.reachabilityProbedAt == nil }
+        #expect(inherited.count == 2)
+        #expect(inherited.allSatisfy { $0.reachabilityBadge(now: now) == .emailFound })
+        #expect(inherited.allSatisfy { $0.displayedContactEmails == ["hello@meridian.example"] })
+        let candidates = QueueModel.reachabilityProbeCandidateKeys(items, now: now,
+                                                                   today: "2026-01-01")
+        #expect(inherited.allSatisfy { !candidates.contains($0.id) })
+    }
+
+    // #1598: clearing the debug leads takes the staged organisation answer with them. Left behind, a
+    // debug organisation would go on answering for real shows.
+    @Test @MainActor func clearingDebugLeadsAlsoClearsTheStagedOrganisationAnswer() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageReachabilityCompetition(in: ctx, now: Date())
+        try ctx.save()
+        #expect(try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>()).count == 1)
+
+        DebugStaging.clearDebugLeads(in: ctx)
+        try ctx.save()
+
+        #expect(try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>()).isEmpty)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)
     }
 
     @Test @MainActor func selfSendLeadEntersTheSendQueueOnceApproved() throws {
