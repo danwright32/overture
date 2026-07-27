@@ -279,7 +279,16 @@ for script in prep-run.sh reply-classify-run.sh scout-extract-run.sh; do
   assert_contains "${script} sources the shared guard" "${body}" 'lib/results-guard.sh'
   # #856/#868: under set -e a dead claude took the whole script down at that line, before anything could
   # notice what had been lost. The status has to be CAPTURED for any guard to run at all.
-  assert_contains "${script} captures claude's exit status instead of dying on it" "${body}" 'CLAUDE_STATUS=$?'
+  #
+  # #1597: prep-run.sh now captures it one level down, inside reap_one_claude (`|| REAPED_STATUS=$?`),
+  # because the chunked path reaps up to ten of them. Both spellings are the same claim, so either
+  # satisfies this; what must never appear is a bare invocation whose failure trips set -e.
+  if [[ "${body}" == *'CLAUDE_STATUS=$?'* || "${body}" == *'REAPED_STATUS=$?'* ]]; then
+    echo "ok - ${script} captures claude's exit status instead of dying on it"
+  else
+    echo "FAIL - ${script} captures claude's exit status instead of dying on it"
+    FAILURES=$((FAILURES + 1))
+  fi
 done
 
 # The two runners get DIFFERENT guarantees, on purpose, because their results mean different things.

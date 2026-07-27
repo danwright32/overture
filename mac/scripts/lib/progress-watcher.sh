@@ -11,7 +11,8 @@
 
 # update_progress_from_results <queue> <results> <progress>
 #
-# `total` is the number of items the queue actually asked for; `completed` is how many of those the
+# `total` is the number of SHOWS the queue asked for (an item plus every key its `alsoAnswersFor`
+# covers, which for an ungrouped queue is simply the item count); `completed` is how many of those the
 # results file currently carries (capped at total, never over 100%, since a stray extra entry must
 # never read as more done than was ever asked for). Called repeatedly while a run is alive (the
 # runner's own heartbeat loop), so this only ever needs to reflect what is on disk RIGHT NOW; it is
@@ -34,7 +35,14 @@ update_progress_from_results() {
       const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 
       const queue = parse(read(queuePath) ?? "");
-      const total = (queue?.items ?? []).length;
+      // #1597: SHOWS, not queue entries. A reachability check collapses the shows of one producer into
+      // a single item that answers for the rest via alsoAnswersFor, so counting entries would have told
+      // Dan a check he started on six shows was 4 of 4 while two were still landing. No other queue
+      // carries that field, so this stays the old item count for scout-extract and for a normal Prep run.
+      // NO APOSTROPHES in this comment: it lives inside a single-quoted shell string (see #853).
+      const items = queue?.items ?? [];
+      const total = items.reduce(
+        (n, i) => n + 1 + (Array.isArray(i?.alsoAnswersFor) ? i.alsoAnswersFor.length : 0), 0);
       if (!total) return;   // the queue is missing, unparsable, or empty: nothing to derive
 
       const results = parse(read(resultsPath) ?? "");

@@ -252,6 +252,73 @@ assert_equals "the other dead-chunk source too" "not_read" "$(result_field "${RE
 assert_contains "the not_read note carries the reason from the run log" "$(result_field "${RESULTS}" s3 note)" "API error 529"
 assert_equals "the guard reports that sources were missing, so the runner can fail loud" "1" "${RESULTS_MISSING_SOURCES}"
 
+# ---------------------------------------------------------------------------
+# #1597: the reachability check reuses this same merge. Its queue keys items by `naturalKey`, not
+# `sourceId`, and its results file is version 6, so both are parameters now. A near-identical copy of
+# this function for Prep would be a second thing to keep in step with the first, and the drift would be
+# invisible until a real run silently lost a show.
+# ---------------------------------------------------------------------------
+echo
+echo "--- the prep-shaped merge (#1597) ---"
+
+PREPTMP="$(mktemp -d)"
+
+cat > "${PREPTMP}/prep-queue.json" <<'EOF'
+{"version":6,"generatedAt":"2026-07-27T00:00:00Z","items":[
+  {"naturalKey":"a|2026-09-12|hall","groupName":"A","discipline":"theater","priorRelationship":"none"},
+  {"naturalKey":"b|2026-09-13|hall","groupName":"B","discipline":"theater","priorRelationship":"none"},
+  {"naturalKey":"c|2026-09-14|hall","groupName":"C","discipline":"theater","priorRelationship":"none"}
+]}
+EOF
+
+mkdir -p "${PREPTMP}/chunks"
+cat > "${PREPTMP}/chunks/chunk-results-1.json" <<'EOF'
+{"version":6,"generatedAt":"2026-07-27T00:05:00Z","results":[
+  {"naturalKey":"c|2026-09-14|hall","contacts":[{"email":"c@example.org"}]}
+]}
+EOF
+cat > "${PREPTMP}/chunks/chunk-results-2.json" <<'EOF'
+{"version":6,"generatedAt":"2026-07-27T00:06:00Z","results":[
+  {"naturalKey":"a|2026-09-12|hall","contacts":[{"email":"a@example.org"}]}
+]}
+EOF
+
+prep_keys() {
+  node -e 'const r=require(process.argv[1]);console.log(r.results.map(x=>x.naturalKey).join(" "))' \
+    "${PREPTMP}/prep-results.json" 2>/dev/null
+}
+
+merge_chunk_results "${PREPTMP}/prep-queue.json" "${PREPTMP}/chunks" \
+  "${PREPTMP}/prep-results.json" naturalKey 6
+
+assert_contains "the merged prep results carry the prep version, not the scout one" \
+  "$(cat "${PREPTMP}/prep-results.json" 2>/dev/null)" '"version": 6'
+# Queue order, not chunk-file order: chunk 1 held the LAST show and chunk 2 the first.
+assert_equals "the merged prep results are in queue order, keyed by naturalKey" \
+  "a|2026-09-12|hall c|2026-09-14|hall" "$(prep_keys)"
+# The show no chunk reported is simply absent, never invented as an empty answer. Marking it "checked,
+# nobody home" would lock it out of a re-check for 90 days on evidence nobody ever gathered.
+assert_equals "a show no chunk answered is left out rather than invented" \
+  "absent" \
+  "$(node -e 'const r=require(process.argv[1]);console.log(r.results.some(x=>x.naturalKey==="b|2026-09-13|hall")?"present":"absent")' "${PREPTMP}/prep-results.json" 2>/dev/null)"
+
+# A chunk caught mid-rewrite must not zero the file: the app polls it and the progress count is its length.
+printf '{"version":6,"resul' > "${PREPTMP}/chunks/chunk-results-3.json"
+merge_chunk_results "${PREPTMP}/prep-queue.json" "${PREPTMP}/chunks" \
+  "${PREPTMP}/prep-results.json" naturalKey 6
+assert_equals "a half-written chunk is skipped, and the good results survive" \
+  "a|2026-09-12|hall c|2026-09-14|hall" "$(prep_keys)"
+
+# Nothing parseable at all leaves the previous file untouched rather than writing an empty one, which
+# would read as a run that finished and found nobody.
+rm -f "${PREPTMP}/chunks"/chunk-results-1.json "${PREPTMP}/chunks"/chunk-results-2.json
+merge_chunk_results "${PREPTMP}/prep-queue.json" "${PREPTMP}/chunks" \
+  "${PREPTMP}/prep-results.json" naturalKey 6
+assert_equals "with every chunk gone the last good results are left alone, not emptied" \
+  "a|2026-09-12|hall c|2026-09-14|hall" "$(prep_keys)"
+
+rm -rf "${PREPTMP}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "scout-parallel.test.sh: all assertions passed"
