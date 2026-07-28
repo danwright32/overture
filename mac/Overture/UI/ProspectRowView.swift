@@ -418,31 +418,31 @@ struct ProspectRowView: View {
             EmptyView()
         case .hardToReach:
             reachabilityNote(icon: "envelope", text: ReachabilityCopy.hardToReachBadge,
-                             tone: .neutral, help: ReachabilityCopy.hardToReachHelp)
+                             tone: Reachability.tone(for: .hardToReach), help: ReachabilityCopy.hardToReachHelp)
         case .noEmailFound:
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.noEmailFoundBadge,
-                             tone: .warning, help: ReachabilityCopy.noEmailFoundHelp)
+                             tone: Reachability.tone(for: .noEmailFound), help: ReachabilityCopy.noEmailFoundHelp)
         case .weakContactOnly:
             // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
             // but only a weak (venue/press) one.
             reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
-                             tone: .pending, help: ReachabilityCopy.weakContactOnlyHelp)
+                             tone: Reachability.tone(for: .weakContactOnly), help: ReachabilityCopy.weakContactOnlyHelp)
         case .contactFormOnly:
             // #1626: gold, which Dan reserves for what he can act on. There IS a way through here; it
             // just costs him a few minutes at their site instead of a send.
             reachabilityNote(icon: "square.and.pencil", text: ReachabilityCopy.contactFormOnlyBadge,
-                             tone: .pending, help: ReachabilityCopy.contactFormOnlyHelp)
+                             tone: Reachability.tone(for: .contactFormOnly), help: ReachabilityCopy.contactFormOnlyHelp)
         case .staleProbe:
             // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
             // has aged out, so it asks for a re-check rather than asserting reachable or not.
             reachabilityNote(icon: "clock.arrow.circlepath", text: ReachabilityCopy.staleProbeBadge,
-                             tone: .neutral, help: ReachabilityCopy.staleProbeHelp)
+                             tone: Reachability.tone(for: .staleProbe), help: ReachabilityCopy.staleProbeHelp)
         case .emailFound:
             // #1598 Phase 5: an answer inherited from another show by the same organisation looks exactly
             // like one paid for here, Dan's call. The ONLY difference is the hover text, which says where
             // it came from, so the card never quietly implies this particular show was researched.
             reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
-                             tone: .confirmed,
+                             tone: Reachability.tone(for: .emailFound),
                              help: item.inheritedReachability.map {
                                  ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
                              } ?? ReachabilityCopy.emailFoundHelp)
@@ -473,15 +473,21 @@ struct ProspectRowView: View {
                     // belongs to this act. Per address, because a show can find two performers and confirm
                     // only one. Drawn in the same quiet meta styling as the address it qualifies, so it
                     // reads as a caveat on that line rather than as another control.
+                    // Dan's walk, 2026-07-28: the mark used to TRAIL the address, so on a show with two
+                    // contacts the marked one's address sat further left than the unmarked one above it
+                    // and the column read as misaligned (Katherine Young: BIOMES, which has exactly that
+                    // pair). Leading the mark instead keeps every address flush to the same right edge,
+                    // whether or not it carries a caveat, and it still reads as a qualifier on the
+                    // address it precedes.
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(email)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .textSelection(.enabled)
                         if unverifiedEmails.contains(email) {
                             Text(ReachabilityCopy.unverifiedContactMark)
                                 .foregroundStyle(OVColor.rust)
                                 .help(ReachabilityCopy.unverifiedContactHelp)
                         }
+                        Text(email)
+                            .foregroundStyle(OVColor.inkSoft)
+                            .textSelection(.enabled)
                     }
                     .font(OVType.meta)
                     // Wrap rather than truncate: an address Dan cannot read in full is no better than
@@ -505,17 +511,19 @@ struct ProspectRowView: View {
                 // landed (a Bay Area magician's booking form on an off Broadway show, a Florida rock
                 // band's merch site on a Red Hook folk room), and the pill above says only that a form
                 // exists, never whether it reaches the right people.
+                // Mark leads here too, for the alignment reason above: the link stays flush right
+                // whether or not it carries a caveat.
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Link(destination: url) {
-                        Text(QueueModel.contactFormSiteLabel(url))
-                            .underline()
-                    }
-                    .foregroundStyle(OVColor.forest)
                     if unverifiedForms.contains(url) {
                         Text(ReachabilityCopy.unverifiedContactMark)
                             .foregroundStyle(OVColor.rust)
                             .help(ReachabilityCopy.unverifiedContactHelp)
                     }
+                    Link(destination: url) {
+                        Text(QueueModel.contactFormSiteLabel(url))
+                            .underline()
+                    }
+                    .foregroundStyle(OVColor.forest)
                 }
                 .font(OVType.meta)
                 .multilineTextAlignment(.trailing)
