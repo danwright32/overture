@@ -24,13 +24,16 @@ earlier TypeScript reference pipeline once it was confirmed unused and drifting)
 
 2. **Classify.** `EventClassifier.swift` rule-classifies every event, assigning the
    ranker's inputs from the fit rules in `PLAN.md` section 4 (summarized below).
-   Genuinely ambiguous events are marked `.uncertain` rather than guessed at; they still
-   get inserted as prospects, and the review queue (`QueueView`) surfaces any prospect
-   where `confidence == uncertain && !confidenceReviewedByDan` for Dan to correct by
-   hand via `ClassificationOverride.swift`. There is no automated re-judge pass; an
-   earlier Claude-Code-assisted file hand-off for this existed only in the retired
-   TypeScript mirror and was confirmed never actually used in practice. The rules
-   summary, also useful when manually reviewing an uncertain event:
+   Every event gets inserted as a prospect on whatever the rules could read; an
+   unreadable `production` lands as `unknown`, which scores a neutral 0.
+   Ambiguous events used to be marked `.uncertain` and flagged in the queue for Dan to
+   settle by hand; #1533 retired that flag, since it was derived from production and
+   profile alone (never the genre it named), it was true of three quarters of the queue,
+   and the production type is not a fact Dan researches. The genre stays correctable by
+   hand from the row's genre line via `ClassificationOverride.swift`; nothing prompts for
+   it. There is no automated re-judge pass; an earlier Claude-Code-assisted file hand-off
+   for this existed only in the retired TypeScript mirror and was confirmed never actually
+   used in practice. The rules summary:
    - `production`: `agency` when presenter is a tour operator / management / a
      "International Competition Winners" or "Rising Stars" showcase rental; `self`
      when the presenter is the performing group itself (a choir, school, ensemble,

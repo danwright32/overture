@@ -7,16 +7,19 @@ import Foundation
 // them. Same file, same shape, same risk.
 enum ScoutRunSummary {
 
-    // What it FOUND first, then what is new, then what it is unsure about. A zero is left out rather
-    // than shown as "0 new": a summary padded with zeroes is a summary Dan learns to skim, and the
-    // counts that matter are the non-zero ones.
+    // What it FOUND first, then what is new. A zero is left out rather than shown as "0 new": a summary
+    // padded with zeroes is a summary Dan learns to skim, and the counts that matter are the non-zero ones.
     //
     // "0 found" is deliberately NOT left out. A scout that found nothing has to say so, or a run that
     // did nothing looks exactly like a run that never happened.
+    //
+    // #1533 dropped the third part, "N unsure". It counted the classifications the rules called uncertain,
+    // which on the live store was three quarters of every run, and it pointed at a badge that has now been
+    // retired: a count of something Dan can neither act on nor read anywhere else is noise in a line whose
+    // whole job is to be scannable.
     static func summary(for outcome: ScoutService.Outcome) -> String {
         var parts = ["\(outcome.found) found"]
         if outcome.inserted > 0 { parts.append("\(outcome.inserted) new") }
-        if outcome.uncertain > 0 { parts.append("\(outcome.uncertain) unsure") }
         return parts.joined(separator: " · ")
     }
 

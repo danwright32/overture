@@ -1,8 +1,12 @@
 import Foundation
 
-// Pure helper: rebuilds a Ranker.Candidate from a Prospect's stored string fields and
-// re-scores it. Used when Dan corrects a wrong discipline or production classification.
-// nil discipline/production means "use the prospect's current value"; non-nil substitutes.
+// Pure helper: rebuilds a Ranker.Candidate from a Prospect's stored string fields and re-scores it.
+// Used when Dan corrects a wrong genre, and by the scout and the Prep importer to re-derive a score
+// from whatever the prospect now holds.
+//
+// #1533 removed the "substitute this dimension" parameters. Every caller wrote the corrected value onto
+// the prospect first and then scored it, so the substitution arm was only ever passed nil in the app;
+// scoring straight from the row leaves one path instead of two that could disagree.
 //
 // Any persisted Prospect is reachable (unreachable events are never inserted), so the
 // rebuilt Candidate always uses reachable: true.
@@ -14,9 +18,9 @@ import Foundation
 //   Coverage          -> .unknown
 //   Discipline        -> .other
 enum ClassificationOverride {
-    static func candidate(from p: Prospect, discipline: Discipline?, production: Production?) -> Candidate {
-        let resolvedDiscipline = discipline ?? Discipline(rawValue: p.discipline) ?? .other
-        let resolvedProduction = production ?? Production(rawValue: p.production) ?? .unknown
+    static func candidate(from p: Prospect) -> Candidate {
+        let resolvedDiscipline = Discipline(rawValue: p.discipline) ?? .other
+        let resolvedProduction = Production(rawValue: p.production) ?? .unknown
         let priorRelationship = PriorRelationship(rawValue: p.priorRelationship) ?? .none
         let profile = Profile(rawValue: p.profile) ?? .neutral
         let coverage = Coverage(rawValue: p.coverage) ?? .unknown
@@ -33,20 +37,21 @@ enum ClassificationOverride {
         )
     }
 
-    static func rescored(_ p: Prospect, discipline: Discipline?, production: Production?) -> FitResult {
-        Ranker.scoreFit(candidate(from: p, discipline: discipline, production: production))
+    static func rescored(_ p: Prospect) -> FitResult {
+        Ranker.scoreFit(candidate(from: p))
     }
 
-    // Applies Dan's classification correction to a prospect in place.
-    // Non-nil discipline/production replace the stored raw value; nil leaves it unchanged.
-    // Sets both override flags (classificationOverriddenByDan and confidenceReviewedByDan),
-    // then recomputes fitScore and tier. Does NOT save the context; caller owns that.
-    static func correct(_ p: Prospect, discipline: Discipline?, production: Production?, now: Date) {
-        if let d = discipline { p.discipline = d.rawValue }
-        if let pr = production { p.production = pr.rawValue }
+    // Applies Dan's genre correction to a prospect in place: writes the discipline, sets the override
+    // flag so no later scout reverts it, then recomputes fitScore and tier. Does NOT save the context;
+    // caller owns that.
+    //
+    // #1533: production is deliberately NOT a parameter. It stays exactly as the scout guessed, and the
+    // re-score reads it back off the prospect, so an agency row keeps its 2 point penalty through a genre
+    // correction instead of being silently re-ranked as if its production were unknown.
+    static func correct(_ p: Prospect, discipline: Discipline, now: Date) {
+        p.discipline = discipline.rawValue
         p.classificationOverriddenByDan = true
-        p.confidenceReviewedByDan = true
-        let result = rescored(p, discipline: nil, production: nil)
+        let result = rescored(p)
         p.fitScore = result.score
         p.tier = result.tier.rawValue
     }

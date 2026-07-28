@@ -26,7 +26,7 @@ enum ScoutExtractIngest {
                        today: String = QueueModel.easternToday(),
                        now: Date = Date(),
                        into context: ModelContext) -> ScoutService.Outcome {
-        var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
         for result in results.results {
             // A source id the app never queued resolves to NOTHING. The results file is written by a

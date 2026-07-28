@@ -1,102 +1,74 @@
 import Testing
 import Foundation
 
-// First-use QA polish (#341): the "unsure call" indicator's icon read as a bare system
-// glyph rather than an intentional, first-class treatment. View-only change with no
-// behavioral surface, held in place with a source guard rather than a runtime assertion.
-@Suite("Unsure-call indicator reads as a deliberate treatment, not a system glyph")
+// #1533: the row no longer PROMPTS about a classification. The amber "Not sure of the genre or type"
+// badge is gone (it named a genre the confidence never measured, and asked for a production type Dan
+// does not research), and with it the #348 popover that Keep used to pull up on three quarters of the
+// queue. What remains is a correction he reaches for only when he disagrees: the genre line in the
+// header, which STATES the genre, opens a one-picker editor.
+//
+// These are source guards, not behavioral assertions: the wiring lives in a SwiftUI view body, where a
+// test can neither tap the control nor read what it rendered. The behavior underneath is proven in
+// ClassificationResolutionTests and ClassificationOverrideTests.
+@Suite("The row corrects a genre without prompting for one (#1533)")
 struct ProspectRowGuardTests {
-    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
-        SourceGuardHelper.source(relativeFromMac, file: file)
+    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
+
+    @Test func theUnsureBadgeAndItsCopyAreGone() {
+        #expect(!prospectRow.isEmpty)
+        #expect(!prospectRow.contains("Not sure of the genre or type"))
+        #expect(!prospectRow.contains("questionmark.circle.fill"))
+        #expect(!prospectRow.contains("isClassificationUncertain"))
     }
 
-    @Test func unsureCallIconIsNoLongerTheBareDiamondGlyph() {  // #341
-        let prospectRow = source("Overture/UI/ProspectRowView.swift")
-        #expect(!prospectRow.isEmpty)
-        #expect(!prospectRow.contains("questionmark.diamond.fill"))
+    // The crux of #1533, and the thing a well-meaning later edit is most likely to undo: Keep must not
+    // reopen a classification editor. It did on every unconfirmed guess, which was 431 of the 556
+    // undecided rows on the live store.
+    @Test func keepDoesNotOpenAnEditor() {
+        guard let keepRange = prospectRow.range(of: "onKeep()") else {
+            Issue.record("Keep action not found")
+            return
+        }
+        let around = prospectRow[..<keepRange.lowerBound].suffix(400)
+        #expect(!around.contains("showGenreEditor"))
     }
 
-    @Test func unsureCallIconUsesADeliberateHierarchicalTreatment() {  // #341
-        let prospectRow = source("Overture/UI/ProspectRowView.swift")
-        #expect(!prospectRow.isEmpty)
-        #expect(prospectRow.contains("questionmark.circle.fill"))
-        #expect(prospectRow.contains(".symbolRenderingMode(.hierarchical)"))
+    // The genre line is the control, so a correction stays reachable now that the badge which used to
+    // host the editor is gone.
+    @Test func theGenreLineOpensTheEditor() {
+        guard let labelRange = prospectRow.range(of: "QueueModel.disciplineLabel(item.discipline).uppercased()") else {
+            Issue.record("Genre line not found in the header")
+            return
+        }
+        let around = prospectRow[..<labelRange.lowerBound].suffix(400)
+        #expect(around.contains("showGenreEditor = true"))
+        #expect(prospectRow.contains(".popover(isPresented: $showGenreEditor)"))
     }
 }
 
-// #349/#1363: genre and production type are two independent classifications (a show has both, they
-// are never alternatives). The confirm editor must present BOTH at once, as two separate pickers, so
-// Dan can set either or both in one pass. #1363 replaced the old one-dimension-at-a-time menu, which
-// dismissed itself on the first pick and locked him out of the second dimension.
-@Suite("Confirm editor presents genre and production type together")
-struct UnsureCallMenuGuardTests {
-    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
-        SourceGuardHelper.source(relativeFromMac, file: file)
-    }
+// #1533: the editor carries the GENRE alone. A production-type picker here would put back the question
+// Dan told us he will not answer, and every Discipline case must be offered or a show whose real genre
+// is missing from the list could not be corrected at all.
+@Suite("The genre editor offers every genre and nothing else")
+struct GenreEditorGuardTests {
+    private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
 
-    private var prospectRow: String { source("Overture/UI/ProspectRowView.swift") }
-
-    @Test func genreAndProductionAreSeparatePickers() {
+    @Test func everyGenreIsOffered() {
         #expect(!prospectRow.isEmpty)
-        #expect(prospectRow.contains("Picker(\"Genre\""))
-        #expect(prospectRow.contains("Picker(\"Production type\""))
+        #expect(prospectRow.contains("Discipline.allCases"))
     }
 
-    // The discipline choices belong inside the Genre picker, the production choices inside the
-    // Production type picker.
-    @Test func disciplineChoicesAreInsideTheGenrePicker() {
-        guard let genreRange = prospectRow.range(of: "Picker(\"Genre\"") else {
-            Issue.record("Genre picker not found")
-            return
-        }
-        let after = prospectRow[genreRange.upperBound...].prefix(300)
-        #expect(after.contains("Discipline.allCases"))
+    @Test func thereIsNoProductionTypePicker() {
+        #expect(!prospectRow.contains("Production type"))
+        #expect(!prospectRow.contains("Agency/presented"))
     }
 
-    @Test func productionChoicesAreInsideTheProductionPicker() {
-        guard let productionRange = prospectRow.range(of: "Picker(\"Production type\"") else {
-            Issue.record("Production type picker not found")
-            return
-        }
-        let after = prospectRow[productionRange.upperBound...].prefix(300)
-        #expect(after.contains("Self-produced"))
-        #expect(after.contains("Agency/presented"))
-    }
-}
-
-// #348: keeping a prospect whose classification is still unconfirmed surfaces the confirm/fix
-// choices right away (a popover, since a native Menu can't be opened programmatically), instead
-// of silently carrying the unconfirmed guess forward. Dan's call: don't block the keep itself.
-@Suite("Keeping an unconfirmed prospect surfaces classification confirm")
-struct AutoConfirmClassificationGuardTests {
-    private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
-        SourceGuardHelper.source(relativeFromMac, file: file)
-    }
-
-    private var prospectRow: String { source("Overture/UI/ProspectRowView.swift") }
-
-    @Test func keepChecksUncertaintyBeforeShowingTheConfirmPopover() {
-        #expect(!prospectRow.isEmpty)
-        #expect(prospectRow.contains("showConfirmClassification"))
-        #expect(prospectRow.contains("item.isClassificationUncertain"))
-    }
-
-    @Test func aPopoverIsWiredToThatState() {
-        #expect(prospectRow.contains(".popover(isPresented: $showConfirmClassification)"))
-    }
-
-    // #1363: the editor resolves one Confirm through ClassificationResolution: an unchanged guess
-    // accepts it (onMarkReviewed, no override), a change corrects only what changed (onCorrect). Both
-    // paths must be wired, or the editor could silently drop one. The resolve LOGIC itself is proven
-    // behaviorally in ClassificationResolutionTests; this only pins that the view calls it and routes
-    // both outcomes.
-    @Test func theEditorRoutesBothAcceptAndCorrectThroughTheResolver() {
+    // An unchanged pick must write nothing. Setting the override flag on a Save that changed nothing
+    // would tell every later scout to stop refreshing a genre Dan never actually corrected.
+    @Test func saveRoutesThroughTheResolverSoAnUnchangedPickWritesNothing() {
         #expect(prospectRow.contains("ClassificationResolution.resolve"))
-        #expect(prospectRow.contains("case .acceptAsIs"))
-        #expect(prospectRow.contains("onMarkReviewed()"))
-        #expect(prospectRow.contains("case let .correct("))
-        #expect(prospectRow.contains("onCorrect("))
-        #expect(prospectRow.contains("Button(\"Confirm\")"))
+        #expect(prospectRow.contains("case let .correct(discipline)"))
+        #expect(prospectRow.contains("Button(\"Save\")"))
     }
 }
 

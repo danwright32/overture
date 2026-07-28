@@ -1,38 +1,37 @@
 import Testing
 @testable import Overture
 
-// The one Confirm interaction on the classification editor (#1363) carries BOTH genre and
-// production. This pure resolver decides, from the scout's current guess and Dan's selection,
-// whether he accepted the guess as-is (mark reviewed, no override) or corrected a dimension
-// (write only the changed one, so classificationOverriddenByDan reflects a real change). It
-// keeps that decision out of the SwiftUI view, where it could not be tested (#863).
-@Suite("Classification editor resolution (#1363)")
+// #1533: the editor now carries the GENRE alone. Production type left with the badge that used to
+// prompt for it: Dan does not research self-produced versus agency-presented, so the app stopped
+// asking. This pure resolver decides, from the scout's stored genre and Dan's pick, whether anything
+// needs writing at all. It keeps that decision out of the SwiftUI view, where it could not be tested.
+@Suite("Genre editor resolution (#1533)")
 struct ClassificationResolutionTests {
-    @Test func selectingTheSameGuessAcceptsItAsIs() {
-        let r = ClassificationResolution.resolve(
-            currentDiscipline: "music", currentProduction: "agency",
-            selectedDiscipline: .music, selectedProduction: .agency)
-        #expect(r == .acceptAsIs)
+    @Test func pickingTheGenreAlreadyStoredWritesNothing() {
+        #expect(ClassificationResolution.resolve(currentDiscipline: "music", selectedDiscipline: .music)
+                == .unchanged)
     }
 
-    @Test func changingOnlyGenreCorrectsGenreAlone() {
-        let r = ClassificationResolution.resolve(
-            currentDiscipline: "music", currentProduction: "agency",
-            selectedDiscipline: .dance, selectedProduction: .agency)
-        #expect(r == .correct(discipline: .dance, production: nil))
+    @Test func pickingADifferentGenreCorrectsIt() {
+        #expect(ClassificationResolution.resolve(currentDiscipline: "music", selectedDiscipline: .dance)
+                == .correct(discipline: .dance))
     }
 
-    @Test func changingOnlyProductionCorrectsProductionAlone() {
-        let r = ClassificationResolution.resolve(
-            currentDiscipline: "music", currentProduction: "agency",
-            selectedDiscipline: .music, selectedProduction: .selfProduced)
-        #expect(r == .correct(discipline: nil, production: .selfProduced))
+    // The unreadable-genre case, 318 of the 556 undecided rows on the live store: the scout found no
+    // genre word and stored `other`. Correcting that is the whole reason this editor survived #1533.
+    @Test func namingAGenreTheScoutCouldNotReadCorrectsIt() {
+        #expect(ClassificationResolution.resolve(currentDiscipline: "other", selectedDiscipline: .theater)
+                == .correct(discipline: .theater))
     }
 
-    @Test func changingBothCorrectsBothInOnePass() {
-        let r = ClassificationResolution.resolve(
-            currentDiscipline: "music", currentProduction: "unknown",
-            selectedDiscipline: .opera, selectedProduction: .selfProduced)
-        #expect(r == .correct(discipline: .opera, production: .selfProduced))
+    // A stored value no enum case matches (the legacy "choral" DisciplineMigration retires, or an empty
+    // string) must NOT read as unchanged. The editor shows such a row as "Performance" (`.other`), so
+    // confirming that has to WRITE `other`, or the picker would show one thing while the store kept
+    // another, with no way left to reconcile them.
+    @Test func anUnreadableStoredGenreIsCorrectedRatherThanTreatedAsUnchanged() {
+        #expect(ClassificationResolution.resolve(currentDiscipline: "choral", selectedDiscipline: .other)
+                == .correct(discipline: .other))
+        #expect(ClassificationResolution.resolve(currentDiscipline: "", selectedDiscipline: .other)
+                == .correct(discipline: .other))
     }
 }

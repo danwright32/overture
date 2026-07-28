@@ -343,14 +343,6 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func markConfidenceReviewed(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.confidenceReviewedByDan = true
-        if context.saveOrWarn(org: item.groupName, feedback: feedback) {
-            feedback.acknowledge(ActionAck.confidenceConfirmed(org: item.groupName))
-        }
-    }
-
     // #367/#1143: re-prep this one show. It applies the requested mode's flags, saves, and then actually
     // LAUNCHES a Prep run scoped to just this show (reusing PrepQueueService.startPrep, the same detached
     // path "Prep kept" uses), rather than only flagging it for some future run Dan has to remember to
@@ -425,10 +417,10 @@ enum ProspectMutations {
         }
     }
 
-    static func correctClassification(_ item: QueueItem, discipline: Discipline?, production: Production?,
+    static func correctClassification(_ item: QueueItem, discipline: Discipline,
                                       prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        ClassificationOverride.correct(model, discipline: discipline, production: production, now: Date())
+        ClassificationOverride.correct(model, discipline: discipline, now: Date())
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
         }

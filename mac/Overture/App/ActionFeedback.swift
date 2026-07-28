@@ -195,11 +195,9 @@ enum ActionAck {
         "Couldn't save what happened sending to \(org): check Gmail to see if it went out."
     }
 
-    // #487: the unsure-call chip clears itself, so confirming or correcting it needs its own ack.
-    static func confidenceConfirmed(org: String) -> String {
-        "Confirmed \(org)'s classification"
-    }
-
+    // #487: a genre correction changes nothing else visible on the row, so it needs its own ack to
+    // show it landed. (#1533 retired its sibling, the "Confirmed" ack: there is no longer anything to
+    // confirm, only a genre to correct.)
     static func classificationCorrected(org: String) -> String {
         "Updated \(org)'s classification"
     }

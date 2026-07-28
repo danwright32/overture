@@ -73,8 +73,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var blockedContactCount: Int = 0
     var sendError: String? = nil
     var lostReason: String? = nil
-    var classificationConfidence: String = Confidence.confident.rawValue
-    var confidenceReviewedByDan: Bool = false
     var classificationOverriddenByDan: Bool = false
     // #1274: true once Dan has manually renamed this show, so the row can offer "reset to scout name".
     var groupNameOverriddenByDan: Bool = false
@@ -129,11 +127,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var reprepContactsRequested: Bool = false
     // #733: when a Prep run last served this prospect, for the re-prep cooldown warning.
     var reprepLastServedAt: Date? = nil
-
-    // Show the "unsure" mark only for a rules-guessed classification Dan hasn't reviewed (#32).
-    var isClassificationUncertain: Bool {
-        classificationConfidence == Confidence.uncertain.rawValue && !confidenceReviewedByDan
-    }
 
     // True when Downbeat or Gmail auto-detected a booking (#114); Dan must confirm before it locks.
     var isAutoBooked: Bool {
@@ -1436,8 +1429,6 @@ extension QueueItem {
             blockedContactCount: p.blockedContactCount,
             sendError: p.sendError,
             lostReason: p.lostReason,
-            classificationConfidence: p.classificationConfidence,
-            confidenceReviewedByDan: p.confidenceReviewedByDan,
             classificationOverriddenByDan: p.classificationOverriddenByDan,
             groupNameOverriddenByDan: p.groupNameOverriddenByDan,
             bookingSuggested: p.bookingSuggested,

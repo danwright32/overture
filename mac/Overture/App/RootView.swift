@@ -1450,7 +1450,7 @@ struct RootView: View {
         guard gen == scoutGeneration else { return }
         let readingElapsed = readingStartedAt.map { Date().timeIntervalSince($0) }
         readingStartedAt = nil
-        let emptyNative = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        let emptyNative = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         switch read {
         case .ingested(let o):
             recordReadingRun(elapsed: readingElapsed)

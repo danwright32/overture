@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **891 sentences**, from 304 source files.
+Every sentence Overture can say to Dan: **886 sentences**, from 304 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -454,10 +454,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Confirm bookings (\(count))"
     `UI/QueueView+Model.swift`
-"Confirm classification"
-    `UI/ProspectRowView.swift`
-"Confirmed \(org)'s classification"
-    `App/ActionFeedback.swift`
 "Connect Gmail"
     `App/RootView.swift`
     `UI/OnboardingView.swift`
@@ -927,10 +923,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStatus.swift`
 "Not sent yet"
     `UI/QueueView+Model.swift`
-"Not sure"
-    `UI/ProspectRowView.swift`
-"Not sure of the genre or type, tap to confirm or fix"
-    `UI/ProspectRowView.swift`
 "Not the venue"
     `UI/DraftReviewView.swift`
 "Not treated as a returning client."
@@ -1100,8 +1092,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
-"Production type"
-    `UI/ProspectRowView.swift`
 "Put this prospect back in the queue as undecided"
     `UI/ProspectRowView.swift`
 "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
@@ -1307,6 +1297,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Set a state"
     `UI/ConversationStateMenu.swift`
     `UI/FollowUpsView.swift`
+"Set this show's genre"
+    `UI/ProspectRowView.swift`
 "Set up Overture"
     `App/AppDelegate.swift`
     `UI/OnboardingView.swift`
@@ -1511,8 +1503,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
-"The scout's rules weren't sure how to classify this one. Set the genre and production type, then confirm."
-    `UI/ProspectRowView.swift`
 "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
     `Integration/ScoutExtractService.swift`
 "The show on \(dateLabel) is dismissed as \(reason.label)"

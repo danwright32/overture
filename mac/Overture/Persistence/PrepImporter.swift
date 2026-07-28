@@ -369,7 +369,7 @@ enum PrepImporter {
 
             // rescored() reads priorRelationship straight off the prospect (it takes no relationship
             // argument), so priorRelationship MUST already be assigned above before this call.
-            let refit = ClassificationOverride.rescored(p, discipline: nil, production: nil)
+            let refit = ClassificationOverride.rescored(p)
             p.fitScore = refit.score
             p.tier = refit.tier.rawValue
             return   // one correction per prospect; the first confident performer wins

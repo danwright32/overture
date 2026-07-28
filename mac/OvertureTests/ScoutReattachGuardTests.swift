@@ -46,10 +46,10 @@ struct ScoutReattachGuardTests {
     // surfaces only what the read itself produced. A read that came back with a failed source must still
     // reach Dan; a clean read must leave nothing to pop.
     @Test func aReattachSurfacesTheReadsOwnFailureAndNothingFromAnAbsentNativeHalf() {
-        var extract = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        var extract = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         extract.sources = [ScoutService.SourceResult(sourceId: "kaufman", orgName: "Kaufman Music Center",
                                                      state: .failed(.verdict(.unreadable)))]
-        let empty = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        let empty = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
         let withFailure = ScoutWarnings.from(native: empty, extract: extract, finishedEmpty: nil)
         #expect(withFailure.failedSources.map(\.sourceId) == ["kaufman"])
@@ -65,7 +65,7 @@ struct ScoutReattachGuardTests {
     // and wrote nothing), and it must say so rather than looking like every calendar happening to be
     // quiet, exactly as a freshly-started run does.
     @Test func aReattachedReadThatFinishedEmptyStillSurfacesThatFailure() {
-        let empty = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        let empty = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         let warnings = ScoutWarnings.from(native: empty, extract: nil,
                                           finishedEmpty: "The reader finished without producing anything.")
         #expect(!warnings.isEmpty)

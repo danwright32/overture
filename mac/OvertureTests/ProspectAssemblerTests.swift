@@ -15,7 +15,7 @@ private func classification(
     discipline: Discipline = .music
 ) -> EventClassification {
     EventClassification(discipline: discipline, reachable: reachable, production: production,
-                        profile: profile, coverage: coverage, fitReason: "reason", confidence: .confident)
+                        profile: profile, coverage: coverage, fitReason: "reason")
 }
 
 private func verdict(relationship: PriorRelationship = .none, suppressed: Bool = false) -> MatchVerdict {

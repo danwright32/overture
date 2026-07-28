@@ -19,7 +19,6 @@ struct ClassifierDeadZoneTests {
         #expect(c.profile == .weak)
         #expect(c.coverage == .likelyUncovered)
         #expect(c.discipline == .music)
-        #expect(c.confidence == .confident)
     }
 
     @Test func risingStarsShowcaseIsAgencyWeak() {
@@ -41,7 +40,6 @@ struct ClassifierStrongTests {
         #expect(c.profile == .strong)
         #expect(c.discipline == .music)
         #expect(c.coverage == .likelyUncovered)
-        #expect(c.confidence == .confident)
     }
 
     @Test func culturalTheaterPieceIsSelfTheater() {
@@ -121,13 +119,18 @@ struct ClassifierMiscTests {
         #expect(c.discipline == .music)
     }
 
-    @Test func establishedOrchestraFlaggedUncertain() {
+    @Test func establishedOrchestraReadsAsSelfProduced() {
         let c = EventClassifier.classify(ev(title: "Orchestra of St. Luke's", presenter: "Orchestra of St. Luke's", venue: "Zankel Hall"))
         #expect(c.production == .selfProduced)
-        #expect(c.confidence == .uncertain)
     }
 
-    @Test func unknownPresenterIsUncertain() {
-        #expect(EventClassifier.classify(ev(title: "Gala Concert", presenter: nil)).confidence == .uncertain)
+    // #1533: a presenter the page never named leaves the production UNKNOWN, and that is the end of it.
+    // It used to raise a badge asking Dan to settle it by hand, on 431 of the 556 undecided rows. The
+    // classifier still says honestly that it does not know, and `.unknown` scores a neutral 0, so an
+    // unanswered production neither promotes nor buries the show.
+    @Test func aNamelessPresenterLeavesProductionUnknownAndScoresItNeutral() {
+        let c = EventClassifier.classify(ev(title: "Gala Concert", presenter: nil))
+        #expect(c.production == .unknown)
+        #expect(Ranker.productionPoints(c.production) == 0)
     }
 }
