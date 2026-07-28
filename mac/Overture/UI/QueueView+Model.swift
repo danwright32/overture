@@ -633,6 +633,7 @@ enum QueueModel {
         isKept ? "Contact: pending Prep run" : nil
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="untriaged rows carrying neither a source listing URL nor a group website"
     // #1600 Phase 7.2: what the row's reference strip actually has to show. Decided here rather than in
     // the view (#863) so the EMPTY case is reachable by a test: 145 untriaged rows on the live store
     // carry neither link, and with the note above gone they would otherwise draw an empty padded strip.
@@ -1198,6 +1199,7 @@ enum QueueModel {
     // The asymmetry is deliberate and comes straight from GeoRefusals (#970): a POSITIVE placement out of
     // range excludes, and anything Overture cannot read is kept. Most rows carry no location at all, and a
     // gate that treated silence as refusal would quietly stop offering checks on almost the whole queue.
+    // LIVE-STORE-CLAIM verified=2026-07-27 measure="paid lookups saved by not offering a check on a show that already carries an inherited organisation answer"
     // #1598 Phase 5: a show already carrying an INHERITED answer is not a candidate either. This is where
     // the saving actually lands (59 lookups on the live store as measured 2026-07-27), and without it the
     // card would contradict itself: "Email found" sitting beside a button offering to go and find one.

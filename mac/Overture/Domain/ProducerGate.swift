@@ -70,12 +70,14 @@ enum ProducerGate {
 
     // A name that CONTAINS, or IS CONTAINED IN, a venue somewhere in the set is that venue's own brand.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="rows presented by Carnegie Hall Presents, the gate's single biggest admission before #1620"
     // #1620: equality alone missed the commonest form a house takes, its own presenting brand. Carnegie
     // Hall Presents is Carnegie Hall; Stern, Zankel, Weill and Resnick are four rooms inside that one
     // building, so the venue count read a house as a well travelled producer and the name never matched
     // "Carnegie Hall" exactly. 25 rows on the live store, and Dan will not write to an @carnegiehall
     // address: "I'm never going to use an @carnegiehall email."
     //
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="presenters the reverse containment arm refuses, each named inside a venue string in the store"
     // The reverse direction catches the other spelling of the same relationship, a presenter named for
     // the building inside a venue string that names the room ("Weill Recital Hall at Carnegie Hall").
     // Measured on the live store: it refuses The 52nd Street Project, Spit&Vigor and the Royal

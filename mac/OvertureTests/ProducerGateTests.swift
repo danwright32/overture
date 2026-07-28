@@ -3,6 +3,7 @@ import Testing
 
 // #1593 (milestone 32 Phase 0.2): the gate that decides whether one reachability answer may be reused
 // across every show from the same presenter. Getting this wrong in the permissive direction is the worst
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="the real presenters these cases are drawn from, and whether each is also a venue somewhere in the store"
 // outcome the feature can produce: one organisation's contact stamped onto shows it has nothing to do
 // with, with nothing on the card to reveal it. So the tests below pin the EXCLUSIONS at least as hard as
 // the admissions, on real presenters measured in the live store on 2026-07-26.
@@ -28,6 +29,7 @@ struct ProducerGateTests {
     // which the venue-count arm read as a well travelled producer, and the room-name arm let through
     // because the string carries the word "Presents" and so is not spelled like any venue.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="rows presented by Carnegie Hall Presents"
     // Whichever way the name is dressed, an organisation that carries a venue's name IS that venue, and
     // its address is the house's. 25 rows on the live store, the gate's single biggest admission.
     @Test("a presenter whose name CONTAINS a venue's name is that venue's own brand, and is refused")

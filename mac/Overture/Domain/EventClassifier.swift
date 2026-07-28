@@ -129,6 +129,7 @@ enum EventClassifier {
         if production == .selfProduced {
             return "Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."
         }
+        // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason before Phase 7 cleared them, and how many named a room versus a real producer"
         // #1600 (milestone 32 Phase 7.1): the catch-all sentence is GONE, and nothing replaces it. It
         // was the final fallback of this chain, so it carried every show that is neither agency-routed
         // nor self-produced: 499 rows on the live store, three quarters of the queue. Dan read it as

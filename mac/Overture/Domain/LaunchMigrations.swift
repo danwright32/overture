@@ -42,6 +42,7 @@ enum LaunchMigrations {
         // #1626: a show already checked before "contact form only" existed reads as a dead end while
         // holding a usable form link. Upgrades that one verdict and nothing else. Idempotent.
         ContactFormResultMigration.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason when Phase 7 shipped the clearing migration"
         // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it
         // the sentence would linger for weeks on whichever rows the hash-gated scout has not re-emitted.
@@ -82,6 +83,7 @@ enum LaunchMigrations {
     // #1601: this used to be an inline `catch { return false }`, and AppDelegate discarded the false, so
     // a failed launch save was invisible TWICE: the error never logged, the outcome never read.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-27 measure="duplicate title-variant rows the #1590 pass deleted on its first run"
     // That was survivable while the launch pass only backfilled fields. #1590 ended it by adding a pass
     // that DELETES rows (17 of them on the live store's first run). If the save fails, those deletes
     // evaporate, the duplicates return, and the only symptom is a feature that looks like it was never
