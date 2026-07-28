@@ -623,28 +623,25 @@ enum QueueModel {
             : "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
     }
 
-    // "Pending Prep run" asserts this show is IN the Prep queue: a claim about what the app does next.
-    //
-    // #1534 (milestone 32 Phase 7.2): the not-kept half is GONE and returns nil. "Contact: keep to prep"
-    // restated the Keep button sitting inches away, on every untriaged card, while pretending to be a
-    // fact about the show's contact. What Dan actually wanted to read there was whether a contact had
-    // been found, which the reachability badge now answers.
-    static func contactPrepNote(isKept: Bool) -> String? {
-        isKept ? "Contact: pending Prep run" : nil
-    }
-
     // LIVE-STORE-CLAIM verified=2026-07-28 measure="untriaged rows carrying neither a source listing URL nor a group website"
     // #1600 Phase 7.2: what the row's reference strip actually has to show. Decided here rather than in
     // the view (#863) so the EMPTY case is reachable by a test: 145 untriaged rows on the live store
-    // carry neither link, and with the note above gone they would otherwise draw an empty padded strip.
-    static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?, note: String?) {
-        let note = (item.hasDraft || item.isBooked) ? nil : contactPrepNote(isKept: item.isKept)
-        return (url(item.sourceListingURL), url(item.websiteURL), note)
+    // carry neither link, and they would otherwise draw an empty padded strip.
+    //
+    // #1534: links, and nothing else. This used to carry a third member, "Contact: pending Prep run",
+    // shown on a kept show with no draft. It was a status claim keyed on isKept, and isKept is not what
+    // decides whether Prep will pick a show up: PrepQueueBuilder.needsPrepEligible is, and it refuses a
+    // show with an open date conflict. So the line promised a Prep run on shows Prep was refusing, and
+    // promised a contact hunt on shows whose contact a reachability probe had already found. It also had
+    // no one left to tell: a kept, undrafted show only ever appears inside the Prep stage list, whose
+    // heading already says these are the shows waiting for a Prep run.
+    static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?) {
+        (url(item.sourceListingURL), url(item.websiteURL))
     }
 
     static func rowHasReferenceLinks(_ item: QueueItem) -> Bool {
         let links = rowReferenceLinks(item)
-        return links.listing != nil || links.website != nil || links.note != nil
+        return links.listing != nil || links.website != nil
     }
 
     private static func url(_ raw: String?) -> URL? {

@@ -632,8 +632,9 @@ struct ProspectRowView: View {
         }
     }
 
-    // #1600 Phase 7.2: the strip draws only when it has something in it. With "Contact: keep to prep"
-    // retired, the 145 untriaged rows carrying neither link would otherwise draw an empty padded row.
+    // #1600 Phase 7.2 / #1534: the strip draws only when it has something in it. Both of the status
+    // lines that used to sit in here beside the links are retired, so the 145 untriaged rows carrying
+    // neither link would otherwise draw an empty padded row.
     @ViewBuilder private var links: some View {
         let refs = QueueModel.rowReferenceLinks(item)
         if QueueModel.rowHasReferenceLinks(item) {
@@ -649,10 +650,6 @@ struct ProspectRowView: View {
                 if let website = refs.website {
                     Link("Group website", destination: website)
                         .foregroundStyle(OVColor.forest)
-                }
-                if let note = refs.note {
-                    Text(note)
-                        .foregroundStyle(OVColor.inkFaint)
                 }
             }
             .font(.system(size: 12))
