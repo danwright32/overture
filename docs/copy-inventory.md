@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **885 sentences**, from 304 source files.
+Every sentence Overture can say to Dan: **886 sentences**, from 304 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1114,6 +1114,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryReplySheet.swift`
 "Reach out now"
     `Domain/ReachedOutQueue.swift`
+"Reachability checked"
+    `Domain/Reachability.swift`
 "Reachability may be out of date"
     `Domain/Reachability.swift`
 "Reached out"

@@ -1203,15 +1203,47 @@ enum QueueModel {
     static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date(),
                                                today: String = QueueModel.easternToday(),
                                                geo: GeoRefusals = .none) -> [String] {
-        items.filter { i in
-            OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
-                                   isBooked: i.isBooked, sentAt: i.sentAt, today: today)
-                && !geo.hidesFromQueue(location: i.location,
-                                       discipline: Discipline(rawValue: i.discipline) ?? .other)
-                && i.inheritedReachability == nil
-                && (i.reachabilityProbedAt == nil
-                    || Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now))
-        }.map(\.id)
+        items.filter { probeIsWorthOffering($0, today: today, geo: geo)
+                        && !hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
+    }
+
+    // A show a paid check could still be about: Dan has not decided yet, and it is somewhere he travels.
+    // Split out for #1617, which needs the SAME two questions to tell a date that is finished apart from
+    // one that is bare for a reason nobody checked. Asked twice in two spellings they could disagree, and
+    // the marker would then claim a date had been checked because the candidacy rule had dropped it for
+    // some entirely different reason.
+    private static func probeIsWorthOffering(_ i: QueueItem, today: String, geo: GeoRefusals) -> Bool {
+        OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
+                               isBooked: i.isBooked, sentAt: i.sentAt, today: today)
+            && !geo.hidesFromQueue(location: i.location,
+                                   discipline: Discipline(rawValue: i.discipline) ?? .other)
+    }
+
+    // An answer this row can show right now: its own check while it is still fresh (#1332), or the
+    // organisation's, inherited from a check paid for on another of its shows (#1598 Phase 5).
+    private static func hasFreshReachabilityAnswer(_ i: QueueItem, now: Date) -> Bool {
+        if i.inheritedReachability != nil { return true }
+        return i.reachabilityProbedAt != nil
+            && !Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now)
+    }
+
+    // #1617: this date has nothing left to check BECAUSE its shows have been answered, which is a
+    // different thing from having nothing to check at all. Dan met the second on his walk of the Debug
+    // build (2026-07-31): a Scout date drew a bare heading, no button and no tick box, and he read the
+    // feature as broken rather than that date as finished.
+    //
+    // False only when nothing on the date was ever the check's business: a night whose shows are all past
+    // the keep-or-dismiss moment, or somewhere he has refused to travel, was never checked and must not
+    // say it was. Those headings stay bare, which is honest; the marker is a claim, so it is made only
+    // where an answer actually exists.
+    static func dateReachabilityIsFullyChecked(_ items: [QueueItem], now: Date = Date(),
+                                               today: String = QueueModel.easternToday(),
+                                               geo: GeoRefusals = .none) -> Bool {
+        guard reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo).isEmpty else {
+            return false
+        }
+        return items.contains { probeIsWorthOffering($0, today: today, geo: geo)
+                                 && hasFreshReachabilityAnswer($0, now: now) }
     }
 
     // #1595, then Dan's walk (2026-07-27): `usesStaleRecheckHeadline` (formerly isLoneStaleRecheck) is

@@ -231,6 +231,11 @@ enum ReachabilityProbeCopy {
     static let controlBusyHelp =
         "A run is already in progress. This will be available once it finishes."
 
+    // #1617: what a date says once every open show on it has an answer. It takes the button's own slot,
+    // so Dan reads it exactly where he went looking for the control, and it names reachability rather
+    // than saying a bare "Checked" that leaves the date line claiming nothing in particular.
+    static let dateCheckedMarker = "Reachability checked"
+
     // #1334: reads for a single show (a lone stale re-check) as well as several, rather than "these 1 shows".
     static func confirmTitle(count: Int) -> String {
         count == 1 ? "Check reachability for this show?" : "Check reachability for these \(count) shows?"
