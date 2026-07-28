@@ -55,6 +55,30 @@ struct GroupNameMatchTests {
         #expect(GroupNameMatch.isPossible("Brooklyn Youth Chorus", "Vienna Boys Choir") == false)
     }
 
+    // #1693: the fuzzy gate reads the WHOLE name, never the subtitle-stripped one. The strip is a
+    // rule for booking-sheet names shaped "Presenter - Program", where the suffix is the throwaway
+    // half. A scraped listing shaped "Series: Act" is the other way round, and stripping it deletes
+    // the only part that says who is playing, leaving the series brand behind to match on. On the
+    // live store that put ONE dismissed Madison Square Park show on all 18 Carnegie Hall cards:
+    // "carnegie hall citywide" against "carnegie hall presents" is 2 shared of 4, landing exactly on
+    // the 0.5 gate. Unstripped it is 2 of 6, and the act's name is back in the comparison where it
+    // belongs. isConfident keeps the strip, so #105's booking-sheet match is untouched.
+    @Test func fuzzyMatchNeverScoresASubtitleStrippedName() {
+        #expect(GroupNameMatch.isPossible("Carnegie Hall Presents",
+                                          "Carnegie Hall Citywide: Ivalas Quartet") == false)
+    }
+
+    // #1693 guard: the three possible matches that were live on the store when the Carnegie flag was
+    // found, none of which is a false positive, all of which must survive the change above. Written
+    // from the real rows (36, 180, 494) rather than invented pairs, because the risk of tightening a
+    // fuzzy gate is silently killing the true positives along with the false ones.
+    @Test func theRealPossibleMatchesStillFire() {
+        #expect(GroupNameMatch.isPossible("Irvine School of Music", "Bay Ridge School of Music") == true)
+        #expect(GroupNameMatch.isPossible("Tenet Vocal Artists & Philadelphia Bach Collective",
+                                          "TENET Vocal Artists") == true)
+        #expect(GroupNameMatch.isPossible("The Chain", "The Pushover (Chain Theatre)") == true)
+    }
+
     // #1351: a single-token acronym confidently matches a multi-token name when its letters ARE that
     // name's word-initials, one letter per word, in order. A Downbeat client filed as "NYYS" must
     // recognise its watched source "New York Youth Symphony" so it auto-arms the client horizon.
@@ -204,6 +228,38 @@ struct HistoryMatchTests {
             presenter: "Merkin Concert Hall",
             clients: [], history: history)
         #expect(v.relationship == .warm)
+    }
+
+    // #1693: the exact shape that flagged 18 Carnegie Hall cards. The record is Overture's OWN
+    // dismissal: a Madison Square Park show Dan swiped away as a date conflict, which LocalHistory
+    // files as "declined" and so puts into the history every scout matches against. Its name carries
+    // the act after a colon; the show being scouted carries the hall's own brand in its presenter.
+    // Nothing here is a real relationship, so nothing may be flagged.
+    @Test func aColonSeparatedActDoesNotFlagEveryShowSharingItsSeriesBrand() {
+        let history = [HistoryRecord(groupName: "Carnegie Hall Citywide: Ivalas Quartet", status: "declined")]
+        let v = HistoryMatch.matchRelationship(
+            name: "NYO2",
+            presenter: "Carnegie Hall Presents",
+            venue: "Stern Auditorium / Perelman Stage",
+            clients: [], history: history)
+        #expect(v.relationship == .none)
+        #expect(v.possible == nil)
+    }
+
+    // #1693 guard, the other direction: a real fuzzy match reached through the PRESENTER still has to
+    // fire. Row 36 on the live store, a client near-miss worth Dan's glance.
+    @Test func aGenuineFuzzyClientMatchOnThePresenterStillFlags() {
+        let bayRidge = [DownbeatClient(id: "c3", displayName: "Bay Ridge School of Music", shortName: nil,
+                                       email: "a@b.org", contractEmail: "a@b.org", phoneNumber: nil,
+                                       isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
+                                       notes: nil, hostingSite: "pixieset")]
+        let v = HistoryMatch.matchRelationship(
+            name: "Irvine School of Music Student Recital",
+            presenter: "Irvine School of Music",
+            venue: "Weill Recital Hall",
+            clients: bayRidge, history: [])
+        #expect(v.possible?.source == "downbeat_client")
+        #expect(v.possible?.name == "Bay Ridge School of Music")
     }
 
     // Precision: a presenter that only shares a generic word with an unrelated past org must not
