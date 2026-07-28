@@ -246,6 +246,42 @@ struct HistoryMatchTests {
         #expect(v.possible == nil)
     }
 
+    // #1702: the other half of #1693. When a hall presents its own season the presenter field holds the
+    // BUILDING's name, and #995 already ruled that a shared hall is not the group. The venue field cannot
+    // catch it, because these rows say "Zankel Hall" and "Stern Auditorium", never "Carnegie Hall"; the
+    // giveaway is that the presenter reads as a venue somewhere in the store. Without this, a record named
+    // simply "Carnegie Hall Citywide" scores 2 shared tokens of 4 against "Carnegie Hall Presents", lands
+    // on the 0.5 gate, and asks the same question on all 18 Carnegie shows again.
+    @Test func aPresenterThatIsTheBuildingsOwnBrandCannotRaiseAMaybe() {
+        let shows = [ProducerGate.Show(presenter: "Carnegie Hall Presents", venue: "Zankel Hall"),
+                     ProducerGate.Show(presenter: "Some Ensemble", venue: "Carnegie Hall")]
+        let history = [HistoryRecord(groupName: "Carnegie Hall Citywide", status: "declined")]
+        let v = HistoryMatch.matchRelationship(
+            name: "NYO2", presenter: "Carnegie Hall Presents", venue: "Zankel Hall",
+            clients: [], history: history,
+            venueBrands: ProducerGate.VenueBrands(shows: shows))
+        #expect(v.possible == nil)
+    }
+
+    // #1702 precision: the exclusion is for the FUZZY bucket alone. Chain Theatre is a room AND one of
+    // Dan's 30 Downbeat clients, and three shows in the live store are recognised as his past client
+    // through the presenter field only (two are billed "Summer One-Act Festival", which carries no part
+    // of the name). Excluding a venue-brand presenter from confident matching too would read all three
+    // cold, which is the exact failure the matcher exists to prevent.
+    @Test func aClientThatIsAlsoARoomStillMatchesConfidently() {
+        let chain = [DownbeatClient(id: "c4", displayName: "Chain Theatre", shortName: nil,
+                                    email: "a@b.org", contractEmail: "a@b.org", phoneNumber: nil,
+                                    isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
+                                    notes: nil, hostingSite: "pixieset")]
+        let shows = [ProducerGate.Show(presenter: "Chain Theatre", venue: "Chain Theatre")]
+        let v = HistoryMatch.matchRelationship(
+            name: "Summer One-Act Festival", presenter: "Chain Theatre", venue: "Chain Theatre",
+            clients: chain, history: [],
+            venueBrands: ProducerGate.VenueBrands(shows: shows))
+        #expect(v.relationship == .booked)
+        #expect(v.matchedClientName == "Chain Theatre")
+    }
+
     // #1693 guard, the other direction: a real fuzzy match reached through the PRESENTER still has to
     // fire. Row 36 on the live store, a client near-miss worth Dan's glance.
     @Test func aGenuineFuzzyClientMatchOnThePresenterStillFlags() {
