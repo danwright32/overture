@@ -62,6 +62,7 @@ struct ClassifierMiscTests {
         #expect(EventClassifier.classify(ev(title: "Wind Ensemble Showcase")).discipline == .band)
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-16 measure="live rows tagged music while music was the classifier's fallback"
     // #970 Phase 0. The fallback used to be `.music`, so "no idea" and "this is music" were the same
     // answer. That made `music` 119 of 128 live rows and left `.other` unreachable, which matters now
     // that discipline picks the geographic gate: music takes the strict five-borough rule, everything

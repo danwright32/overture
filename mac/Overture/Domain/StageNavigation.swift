@@ -71,6 +71,7 @@ enum StageNavigation {
     // #1567: whether the Queue will show Dan this lead at all, which is what a global search pick and an
     // OmniFocus follow-up tap need to know before choosing between the Queue and Archive.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-26 measure="untriaged shows the deep-link filter and the stage lists disagreed about"
     // It is `stage(containing:)`, the SAME call the focused list renders from, because that is the only
     // honest answer: a stage list IS the Queue's content. This used to be QueueModel.isReachableForDeepLink,
     // a second filter (the 90-day window, the untouched-and-gone rule) that no stage list applies, so the
@@ -91,6 +92,7 @@ enum StageNavigation {
     // apart from the ones already pitched. Reached-out leads stay out, as they always have: that line is
     // about work still to send, and Reached out has its own pill and its own per-recipient rows.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-26 measure="the masthead total against the sum of the stage pills beneath it, over untriaged shows"
     // Counted through the same `matches` predicate as the pill beneath it, so the masthead can no longer
     // read lower than the pills it sits above (452 against 589 on the live store). One pass over the
     // prospects, in the style of `counts` above, so a prospect's recipients fault at most once (#1121).

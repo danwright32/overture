@@ -17,6 +17,7 @@ struct ClassificationResolutionTests {
                 == .correct(discipline: .dance))
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="undecided rows stored as the catch-all genre, against all undecided rows"
     // The unreadable-genre case, 318 of the 556 undecided rows on the live store: the scout found no
     // genre word and stored `other`. Correcting that is the whole reason this editor survived #1533.
     @Test func namingAGenreTheScoutCouldNotReadCorrectsIt() {

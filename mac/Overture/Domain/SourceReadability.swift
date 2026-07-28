@@ -189,6 +189,7 @@ enum SourceReadability {
     // #1498 took `structuralGaps` out of the signature rather than leaving it unread: the answer no longer
     // depends on it, and a parameter a function ignores is a lie about what decides the outcome.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-25 measure="sources in the attention badge the day #1498 was filed, and whether a tolerated unread page was among them"
     // The attention badge is a SEPARATE question and deliberately not this one. SourceAttention.needsALook
     // asks FeedReconcile directly for the unread-pages forfeit, so a tolerated note has never counted toward
     // it; measured on the live store the day #1498 was filed, the three sources in the badge were all real

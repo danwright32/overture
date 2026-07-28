@@ -148,6 +148,7 @@ struct NaturalKeyVenueMigrationTests {
     // A lone row that carries an embedded address (no duplicate twin) is simply re-keyed to its folded
     // form, so a future scout of the bare spelling dedupes against it. Nothing is deleted.
     // #1498: the shape this migration could not see until the key stopped carrying the trailing location.
+    // LIVE-STORE-CLAIM verified=2026-07-25 measure="pairs of rows split by a venue spelling variant, every one untriaged with no outreach"
     // Measured on the live store 2026-07-25: 29 pairs exactly like this one, every row untriaged with no
     // recipients and nothing sent, so Dan was triaging the same night twice. The two Jalopy spellings are
     // the live case verbatim.

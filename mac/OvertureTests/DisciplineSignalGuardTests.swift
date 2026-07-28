@@ -4,6 +4,7 @@ import Foundation
 
 // #981: guard the classifier's discipline word lists against silently going stale.
 //
+// LIVE-STORE-CLAIM verified=2026-07-17 measure="live rows tagged music, and how many came from a real genre signal"
 // Every discipline in EventClassifier.detectDiscipline is detected by a hand-written regex word
 // list, and until #981 nothing measured those lists against real data. #970 Phase 0 found the
 // music list had only ever known choir words while the function fell back to `.music`, so "no
@@ -78,6 +79,7 @@ struct DisciplineSignalGuardTests {
     // does not. Under #970 that matters: discipline picks the geographic gate, so a stale non-music list
     // quietly files a show under the wrong rule.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-17 measure="prospects in the live store behind the corpus coverage floors"
     // The floors are the honest real coverage found in the live store (313 prospects) for #1079, not
     // aspirations. The store holds few real dance/opera/band/comedy rows, so those floors are low by
     // necessity: opera is the thinnest at 2 (all the real opera rows there are). See

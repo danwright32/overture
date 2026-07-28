@@ -8,6 +8,7 @@ import SwiftData
 // from the raw items and applied none of it, so the number and the list beneath it were answering the
 // same question two ways.
 //
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="untriaged shows placed outside the range Dan will travel"
 // Measured on the live store 2026-07-26: 4 of 588 untriaged shows (Baltimore, Harrogate in the UK,
 // North Adams MA, San Rafael CA). None were town refusals, which is why this stayed invisible: the
 // #1238 sweep dismisses a refused town's shows outright, and Dan has exactly one refused town. What it

@@ -8,6 +8,7 @@ import UserNotifications
 // save, returned false, and AppDelegate threw that boolean away. The error was never logged either, so a
 // failed launch save was invisible TWICE and every migration silently did nothing.
 //
+// LIVE-STORE-CLAIM verified=2026-07-27 measure="duplicate title-variant rows the #1590 pass deleted on its first run"
 // That was survivable while the launch pass only backfilled fields. It stopped being survivable in
 // #1590, which added a pass that DELETES rows: on the live store its first run removes 17 duplicate
 // cards. If that save fails, the deletes evaporate, the duplicates come back, and the only symptom is a

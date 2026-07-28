@@ -63,6 +63,7 @@ struct VenueNormalizationTests {
         #expect(comma == noComma)
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-25 measure="shows fragmented into extra queue rows by a venue spelling variant"
     // #1498: the same venue written with and without its trailing location or parent building is ONE
     // venue, and until now was two shows. Measured on the live store 2026-07-25: 34 shows had fragmented
     // into 71 queue rows, "Jalopy Theatre" and "Jalopy Theatre, Red Hook, Brooklyn, NY" among them, so

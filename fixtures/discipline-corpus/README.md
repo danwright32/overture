@@ -56,8 +56,10 @@ list rots: a handful of rows sliding to `.other` barely moves the whole-corpus n
 seeds each thin list with real live-store rows and adds a second assertion,
 `eachDisciplineIsExercisedByRealTitles`, that classifies every corpus row with the real classifier
 and requires a per-discipline floor. A single non-music list going stale now trips the guard even
-when the aggregate share does not. The floors are the honest coverage found in the live store (313
-prospects at the time of #1079), not aspirations:
+when the aggregate share does not.
+<!-- LIVE-STORE-CLAIM verified=2026-07-17 measure="real rows per discipline in the live store, which set the corpus coverage floors" -->
+The floors are the honest coverage found in the live store (313 prospects at the time of #1079), not
+aspirations:
 
 - music: 14
 - theater: 10
@@ -66,9 +68,10 @@ prospects at the time of #1079), not aspirations:
 - comedy: 4
 - opera: 2
 
-Opera is the thinnest, at 2, because those are all the real opera rows the store holds. Dance,
-band, and comedy sit at 4 each for the same reason: the live store simply has few real rows for
-them. These floors are minimums, so adding more real titles later is free, but any drop (a list
+Opera is the thinnest, at 2, because those are all the real opera rows the store holds.
+<!-- LIVE-STORE-CLAIM verified=2026-07-17 measure="live rows available for band and comedy, which is why their floors sit at 4" -->
+Dance, band, and comedy sit at 4 each for the same reason: the live store simply has few real rows
+for them. These floors are minimums, so adding more real titles later is free, but any drop (a list
 going dark, or coverage lost from the corpus) fails the assertion and is visible in the diff. The
 assertion uses the real classifier and never restates a word list, so it cannot become a test
 compared against its own definition.
