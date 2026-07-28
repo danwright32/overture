@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import Overture
 
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="rows of a recurring show at one venue that drew as separate cards"
 // #1558: the duplicate cards Dan can actually SEE. Measured on the live store 2026-07-26: 36 rows across
 // 10 shows, worst `The New York Neo-Futurists: The Infinite Wrench` at Asylum NYC with TWELVE cards for
 // one weekly show. None of them carry a feed production id, so #1528's fix cannot reach them, and unlike

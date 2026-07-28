@@ -14,6 +14,7 @@ import Foundation
 // Conservative where it must be: it never expands a LEADING "St" that means "Saint" (see
 // foldStreetSuffixes).
 //
+// LIVE-STORE-CLAIM verified=2026-07-25 measure="shows split across venue spelling variants once the no-collision assumption broke"
 // #1498 changed one of #1064's calls. This originally KEPT a trailing city or state, on the reasoning
 // that dropping it could merge two same-named venues in different towns, and recorded that the audit had
 // seen no collisions. That last part stopped being true: by 2026-07-25 the live store held 34 shows split
@@ -35,6 +36,7 @@ enum VenueNormalization {
     // WHERE the venue is or what it sits inside, never which venue it is, and a source that sometimes
     // appends it and sometimes does not was splitting one show into several.
     //
+    // LIVE-STORE-CLAIM verified=2026-07-25 measure="shows fragmented into extra queue rows by a venue spelling variant"
     // Measured on the live store 2026-07-25: 34 shows had fragmented into 71 queue rows, so Dan was
     // triaging the same night more than once. Every collapse this makes there is a correct one (three
     // spellings of Chatham United Methodist Church, "Jalopy Theatre" with and without Red Hook, Weill
@@ -55,6 +57,7 @@ enum VenueNormalization {
         return firstClause.isEmpty ? raw : firstClause
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-17 measure="whether every real street-address clause in the live store's venue strings starts with a digit"
     // A source page can bake the street address directly into the venue string. The heuristic (shared
     // with VenueDisplay, previously private there): split on commas, always keep the first clause (the
     // venue's own name, even if it starts with a digit like "54 Below"), then keep walking clauses only

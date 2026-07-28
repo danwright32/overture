@@ -187,6 +187,7 @@ struct QueueView: View {
         // pitched. #1134 removed the filter chips, so this is the whole to-send queue, unfiltered but
         // for Dan's standing town refusals.
         //
+        // LIVE-STORE-CLAIM verified=2026-07-26 measure="the masthead total against the stage pills beneath it, over untriaged shows"
         // #1567: counted through StageNavigation, the same predicate as the pills directly beneath it,
         // so the line can no longer state a smaller backlog than the pills it sits above. It used to run
         // through queueOrder's own 90-day window and untouched-and-gone rule, neither of which any stage

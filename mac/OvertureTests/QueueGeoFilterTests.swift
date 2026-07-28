@@ -50,6 +50,7 @@ struct QueueGeoFilterHideTests {
 
 @Suite("Queue geo filter: what it must never hide")
 struct QueueGeoFilterKeepTests {
+    // LIVE-STORE-CLAIM verified=2026-07-16 measure="live rows carrying no location at all"
     // Dan's spec #5. A show whose page named no place is KEPT. This is the single most important
     // assertion in the feature: every one of his 128 live rows has no location today, so if unknown
     // hid anything, shipping this would empty his queue.

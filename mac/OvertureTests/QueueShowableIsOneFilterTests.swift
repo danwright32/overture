@@ -5,6 +5,7 @@ import SwiftData
 
 // #1567: "is this show showable in the Queue" was answered in two places that disagreed.
 //
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="untriaged shows the deep-link filter and the stage lists disagreed about"
 // The issue read it as the Scout PILL over-counting against its own list. It does not: the stage list
 // is built from StageNavigation.focusedKeys (QueueView filters the raw items by them), so the pill's
 // number and the rows a tap lands on have always matched. The divergence was between the stage lists
@@ -171,6 +172,7 @@ struct QueueShowableIsOneFilterTests {
 
     // MARK: - The masthead
 
+    // LIVE-STORE-CLAIM verified=2026-07-26 measure="the masthead total against the pill beneath it, over untriaged shows"
     // The masthead's "N in the queue" now counts exactly the shows the stages hold, so it can no longer
     // read lower than the pill sitting directly beneath it. On the live store that was 452 against 589.
     @Test func theMastheadCountsExactlyTheShowsTheStagesRender() throws {

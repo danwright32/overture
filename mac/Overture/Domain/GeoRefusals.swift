@@ -4,6 +4,7 @@ import Foundation
 // somewhere he would shoot" can be asked on the one predicate every queue surface already goes
 // through (StageNavigation), instead of only on the masthead's own path.
 //
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="untriaged shows the masthead's geo gate and the stage list disagreed about"
 // It exists because the gate had two homes and they disagreed. The masthead ran its shows through
 // QueueModel.filter with these two sets; the stage list Dan actually triages was built from the raw
 // items and applied nothing, so the number and the list under it counted different shows (4 of 588 on

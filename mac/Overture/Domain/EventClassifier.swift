@@ -38,6 +38,7 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     var venueNotPublished: Bool?
 }
 
+// LIVE-STORE-CLAIM verified=2026-07-28 measure="undecided rows the retired confidence sentence was true of, against all undecided rows"
 // #1533: this used to carry a `confidence` too, and the queue showed it as "Not sure of the genre or
 // type, tap to confirm or fix". It was derived from production and profile ALONE, so it never measured
 // the genre it named, and it was true of 431 of the 556 undecided rows on the live store while having

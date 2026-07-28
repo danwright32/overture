@@ -10,6 +10,7 @@ import SwiftData
 // Susie Mosher` plays sixteen Tuesdays spread across 106 days; Overture checks all 106, so a shoot on any
 // Wednesday in October flags a show that does not play Wednesdays.
 //
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="runs flagged against one booked shoot, and which night actually clashed"
 // Measured on the live store 2026-07-26, all three flagged against the same booked shoot on FRIDAY
 // 2026-07-31: `The Lineup with Susie Mosher` (106 day span, opens and closes on a Tuesday, does not play
 // that Friday), `Max Davidson: Strangers` (107 days), and `Hungry Women` (39 days). Nine further runs
