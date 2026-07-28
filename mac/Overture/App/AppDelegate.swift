@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // migrates before the reconciler (and any later per-recipient send) can read the new model.
         // #479: LaunchMigrations saves explicitly right after they run, so a short-lived launch can't
         // lose the writes to autosave timing.
+        // #1601: a failed save inside here now reports itself (logged, plus a first-party notification),
+        // rather than returning a false that this call site discarded. Reporting lives with the failure
+        // so every caller gets it, instead of each one having to remember.
         LaunchMigrations.run(in: container.mainContext)
         let scheduler = ReconcileScheduler(context: container.mainContext)
         scheduler.start()
