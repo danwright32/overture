@@ -1172,8 +1172,18 @@ enum ScoutService {
 
     // Venue equality for the re-key guards: a missing venue on both sides still counts as "the same
     // venue" (it is the same absence of information, which is the pre-#797 behavior for that case).
+    //
+    // #1686: compared through the SAME fold the natural key uses, not a raw lowercase. These guards exist
+    // for the case where a title has drifted and the show must be recognised by its listing, its date and
+    // its room instead, which is precisely when the room is also liable to be respelled by the same
+    // extract run. A raw compare meant one variance defeated the guard designed for the other: three of
+    // the four YNYC pairs on the live store carry the IDENTICAL season-page URL on both rows, so this
+    // should have caught every one of them and instead inserted a second card.
     private static func sameVenue(_ a: String?, _ b: String?) -> Bool {
-        let canon: (String?) -> String = { ($0 ?? "").lowercased().trimmingCharacters(in: .whitespaces) }
+        let canon: (String?) -> String = { raw in
+            guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
+            return VenueNormalization.normalizeForKey(raw)
+        }
         return canon(a) == canon(b)
     }
 

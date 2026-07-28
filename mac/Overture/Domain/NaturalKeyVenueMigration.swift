@@ -74,11 +74,29 @@ enum NaturalKeyVenueMigration {
                 continue
             }
 
-            // At most one row carries history. It (or, if all are pristine, the earliest-ingested row)
+            // At most one row carries history. It (or, if all are pristine, the most recently SEEN row)
             // survives and takes the folded key; every other row here is provably empty, so deleting it
             // drops no outreach record. Delete the losers FIRST, then assign the survivor's key, so the
             // UNIQUE index is never asked to hold two rows on the same key even transiently.
-            let survivor = withHistory.first ?? members.min(by: { $0.ingestedAt < $1.ingestedAt })!
+            //
+            // LIVE-STORE-CLAIM verified=2026-07-28 measure="the duplicate pairs a parenthetical venue split, and which row of each carries the current client match"
+            // #1686: which pristine row survives is not a coin toss, because the two disagree. A row is
+            // re-matched and re-scored only when a sweep finds it BY KEY, so the row whose key split
+            // stopped being found and still carries whatever the rules said the day it was ingested. On
+            // the live store that row reads "no prior relationship, score 7" from two days before #1216
+            // taught the matcher to read the presenter field, while its twin reads "booked, score 27"
+            // against a real Downbeat client. `ingestedAt` is rewritten on every re-scout, so it means
+            // LAST SEEN, and keeping the earliest kept exactly the stale row: one card, saying he has
+            // never worked with a group he has. The freshest wins instead.
+            let survivor = withHistory.first ?? members.max(by: { $0.ingestedAt < $1.ingestedAt })!
+            // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
+            // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
+            // whenever the duplicate happened to appear.
+            let firstSightings = members.compactMap(\.firstSeenAt)
+            if let earliest = firstSightings.min(),
+               survivor.firstSeenAt == nil || earliest < survivor.firstSeenAt! {
+                survivor.firstSeenAt = earliest
+            }
             for loser in members where loser !== survivor {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1

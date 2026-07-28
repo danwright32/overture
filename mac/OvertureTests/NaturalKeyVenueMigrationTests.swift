@@ -67,6 +67,52 @@ struct NaturalKeyVenueMigrationTests {
         #expect(all.contains { $0.naturalKey == otherKey })   // unrelated show survived untouched
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="the duplicate pairs a parenthetical venue split, and which row of each carries the current client match"
+    // #1686: which of two PRISTINE duplicates survives is not a coin toss, because the rows disagree.
+    // A row is only re-matched and re-scored when a sweep finds it BY KEY, so the row whose key split
+    // stopped being found and silently kept whatever the rules said the day it was ingested. On the live
+    // store row 163 still reads "no prior relationship, score 7" from 2026-07-17, two days before #1216
+    // taught the matcher to read the presenter field; its twin, seen on 2026-07-26, reads "booked, score
+    // 27" against the Downbeat client Young New Yorkers Chorus. Both are correct arithmetic on different
+    // facts, and only one of them is current.
+    //
+    // `ingestedAt` is rewritten on every re-scout (ScoutService "existing.ingestedAt = Date()"), so it
+    // means LAST SEEN. Keeping the earliest therefore kept exactly the stale row and deleted the correct
+    // one, leaving one card that actively lies about the relationship. The freshest row survives instead,
+    // and inherits the earliest firstSeenAt in the group so the funnel's opening node is not lost.
+    @Test func theFreshestOfTwoPristineDuplicatesSurvivesAndKeepsTheEarliestFirstSighting() throws {
+        let ctx = try context()
+        let group = "Summer Community Sings", date = "2026-08-04"
+        let stale = Date(timeIntervalSince1970: 1_000)
+        let fresh = Date(timeIntervalSince1970: 2_000)
+
+        insert(ctx, key: "legacy-parenthetical-key", group: group, date: date,
+               venue: "St. Paul's Episcopal Church (Carroll Gardens)", ingestedAt: stale) {
+            $0.fitScore = 7
+            $0.priorRelationship = "none"
+            $0.firstSeenAt = stale
+        }
+        insert(ctx, key: foldedKey(group, date, "St. Paul's Episcopal Church"), group: group, date: date,
+               venue: "St. Paul's Episcopal Church", ingestedAt: fresh) {
+            $0.fitScore = 27
+            $0.priorRelationship = "booked"
+            $0.matchedClientName = "Young New Yorkers Chorus"
+            $0.firstSeenAt = fresh
+        }
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        let all = allProspects(ctx)
+        #expect(all.count == 1)
+        let survivor = try #require(all.first)
+        #expect(survivor.fitScore == 27)
+        #expect(survivor.priorRelationship == "booked")
+        #expect(survivor.matchedClientName == "Young New Yorkers Chorus")
+        #expect(survivor.firstSeenAt == stale, "the show was first seen on the earlier date, not the merge date")
+    }
+
     // When exactly one of the colliding rows carries outreach history, that row survives (with its
     // history), the pristine duplicate is deleted, and the survivor takes the folded key.
     @Test func theRowWithHistorySurvivesAndKeepsItsHistory() throws {
@@ -157,17 +203,21 @@ struct NaturalKeyVenueMigrationTests {
         let group = "Bruce Molsky & Darol Anger", date = "2026-07-25"
         let folded = foldedKey(group, date, "Jalopy Theatre")
 
-        let older = insert(ctx, key: "old-bare", group: group, date: date, venue: "Jalopy Theatre",
-                           ingestedAt: Date(timeIntervalSince1970: 100))
-        insert(ctx, key: "old-with-location", group: group, date: date,
-               venue: "Jalopy Theatre, Red Hook, Brooklyn, NY",
-               ingestedAt: Date(timeIntervalSince1970: 200))
+        insert(ctx, key: "old-bare", group: group, date: date, venue: "Jalopy Theatre",
+               ingestedAt: Date(timeIntervalSince1970: 100))
+        let freshest = insert(ctx, key: "old-with-location", group: group, date: date,
+                              venue: "Jalopy Theatre, Red Hook, Brooklyn, NY",
+                              ingestedAt: Date(timeIntervalSince1970: 200))
 
         let summary = NaturalKeyVenueMigration.run(in: ctx)
 
         let remaining = allProspects(ctx)
         #expect(remaining.count == 1, "one show must be one row")
-        #expect(remaining.first === older, "the earliest-ingested row survives when both are pristine")
+        // #1686 changed this deliberately: it used to be the earliest-ingested row. `ingestedAt` is
+        // rewritten on every re-scout, so the earliest is the row that STOPPED being found by key, and
+        // it carries whatever the matching and scoring rules said on the day it went stale. Keeping it
+        // deletes the row that holds the current verdict.
+        #expect(remaining.first === freshest, "the most recently seen row survives when both are pristine")
         #expect(remaining.first?.naturalKey == folded)
         #expect(summary.duplicatesDeleted == 1)
     }
