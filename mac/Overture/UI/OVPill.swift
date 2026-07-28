@@ -12,6 +12,17 @@ import SwiftUI
 enum OVPillTone {
     case warning     // rust: a problem, a caution, a "no"
     case pending     // gold: waiting on something, a soft maybe
+    // #1628: dim gold. Found something, but cannot stand behind it. Deliberately the same HUE as
+    // `pending` rather than a new signal colour, so it reads as a quieter member of the found-something
+    // family. It exists because the four tones above had no slot between "act on this" and "nothing
+    // here": `confirmed` is nominally that slot and is unusable on the dark forest background, which is
+    // what made "Email found" the faintest badge on the card until #1645. Dan reached it after rejecting
+    // rust for this state: "unverified email looks like no email, too similar."
+    //
+    // NOTE the tone names describe SEMANTICS while these badges are now assigned by PRIORITY (how much
+    // Dan would act on the row). #1646 tracks reconciling the vocabulary; until then, read the assignment
+    // at the call site rather than trusting the name here.
+    case tentative
     case confirmed   // forest: done, found, a "yes"
     case neutral     // ink: a fact that is neither good nor bad (e.g. "went by")
 
@@ -19,6 +30,7 @@ enum OVPillTone {
         switch self {
         case .warning: return OVColor.rust
         case .pending: return OVColor.gold
+        case .tentative: return OVColor.goldDim
         case .confirmed: return OVColor.forest
         case .neutral: return OVColor.inkFaint
         }

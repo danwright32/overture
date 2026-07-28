@@ -54,24 +54,38 @@ struct ReachabilityBadgeToneTests {
         #expect(dismiss > later)
     }
 
-    // Dan's call, 2026-07-28, on seeing "Unverified email found" wearing the same gold as a verified
-    // find: an address he would want to CHECK before writing must not be painted as his most actionable
-    // row. It steps down to rust, which reads as "attention needed before you act" and is the same tier
-    // as "No email found" (both need a look before he does anything), while staying above the muted tier
-    // where a contact form sits, because an unverified address is still an address.
-    @Test func anUnverifiedFindStepsDownFromAVerifiedOne() {
-        #expect(Reachability.tone(for: .emailFound, onlyUnverified: true) == .warning)
+    // Dan's call, 2026-07-28, arrived at over two rounds of looking at the real cards.
+    //
+    // First it was gold, the same as a verified find, and he said an address he would want to CHECK
+    // before writing must not be painted as his most actionable row. So it went to rust. Looking at THAT,
+    // his verdict: "unverified email looks like no email. too similar." Rust made it distinct from a
+    // verified find and indistinguishable from a failure, which is worse.
+    //
+    // The palette had no free slot between the two, because forest, nominally the fourth tone, is
+    // unusable on this background (it is what made "Email found" the faintest badge in the first place).
+    // So this state gets its own dim gold: found-something stays in the gold family, found-nothing stays
+    // rust, and the three read as three weights. He chose it from a rendered comparison of the options.
+    @Test func anUnverifiedFindHasItsOwnTone() {
+        #expect(Reachability.tone(for: .emailFound, onlyUnverified: true) == .tentative)
         #expect(Reachability.tone(for: .emailFound, onlyUnverified: false) == .pending)
     }
 
-    // The full ordering it has to sit inside, so a later edit cannot flatten the three tiers together.
-    @Test func aVerifiedFindOutranksAnUnverifiedOneWhichOutranksAForm() {
-        let rank: [OVPillTone: Int] = [.pending: 3, .warning: 2, .confirmed: 1, .neutral: 0]
-        let verified = rank[Reachability.tone(for: .emailFound)]!
-        let unverified = rank[Reachability.tone(for: .emailFound, onlyUnverified: true)]!
-        let form = rank[Reachability.tone(for: .contactFormOnly)]!
-        #expect(verified > unverified)
-        #expect(unverified > form)
+    // The requirement stated as what Dan actually asked for, rather than as an invented prominence
+    // ranking: these three states must all LOOK different. A found-but-doubtful address must not read as
+    // a verified one, and it must not read as nothing found.
+    @Test func theThreeContactOutcomesAreAllVisuallyDistinct() {
+        let verified = Reachability.tone(for: .emailFound)
+        let unverified = Reachability.tone(for: .emailFound, onlyUnverified: true)
+        let nothing = Reachability.tone(for: .noEmailFound)
+        #expect(verified != unverified, "a doubtful address must not look like a solid one")
+        #expect(unverified != nothing, "Dan, 2026-07-28: unverified email looks like no email, too similar")
+        #expect(verified != nothing)
+    }
+
+    // A verified find is still the loudest thing on the row, and a form is still the quietest.
+    @Test func aVerifiedFindIsLoudestAndAFormIsQuietest() {
+        #expect(Reachability.tone(for: .emailFound) == .pending)
+        #expect(Reachability.tone(for: .contactFormOnly) == .neutral)
     }
 
     // `onlyUnverified` describes the ADDRESSES a check found, so it can only ever change the

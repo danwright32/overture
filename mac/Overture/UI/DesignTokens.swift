@@ -47,6 +47,15 @@ enum OVColor {
     )
     static let goldBright = Color(.sRGB, red: 0.870, green: 0.690, blue: 0.310, opacity: 1)
 
+    // #1628: gold at lower intensity, for a state that found something but could not stand behind it.
+    // Deliberately the SAME hue as `gold` rather than a new colour: it has to read as a dimmer member of
+    // the found-something family, not as a fourth signal. Dan arrived at needing this after seeing the
+    // alternative, rust, and saying "unverified email looks like no email, too similar".
+    static let goldDim = dynamic(
+        light: NSColor(srgbRed: 0.560, green: 0.404, blue: 0.094, alpha: 1),
+        dark: NSColor(srgbRed: 0.659, green: 0.510, blue: 0.227, alpha: 1)
+    )
+
     static let line = dynamic(
         light: NSColor(srgbRed: 0.882, green: 0.863, blue: 0.812, alpha: 1),
         dark: NSColor(srgbRed: 0.176, green: 0.243, blue: 0.196, alpha: 1)

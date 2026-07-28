@@ -47,17 +47,20 @@ enum Reachability {
     // Lives here rather than in the view's switch so the decision is testable at all: a SwiftUI body is
     // not, and this is exactly the "#885, keep the decision out of the view" pattern the copy follows.
     // `onlyUnverified` describes the ADDRESSES a check found (#1628): true when it found one or more and
-    // NONE of them was read off a page naming the act. Dan's call, 2026-07-28, on seeing "Unverified
-    // email found" wearing the same gold as a verified find: an address he would want to CHECK before
-    // writing must not be painted as his most actionable row. It steps down to rust, the same tier as
-    // "No email found", because both mean "look at this before you do anything", while staying above the
-    // muted tier where a contact form sits, because an unverified address is still an address.
+    // NONE of them was read off a page naming the act.
+    //
+    // Dan's call, 2026-07-28, arrived at over two rounds of looking at real cards. It was first gold, the
+    // same as a verified find, and he said an address he would want to CHECK before writing must not be
+    // painted as his most actionable row. So it went to rust. Looking at that: "unverified email looks
+    // like no email. too similar." Rust made it distinct from a verified find and indistinguishable from
+    // a failure, which is worse. It now has its own dim gold, so found-something stays in the gold
+    // family, found-nothing stays rust, and the three read as three weights.
     //
     // It can only ever change the email-found badge; every other state ignores it, since a form or a
     // front desk carries no claim about verified addresses either way.
     static func tone(for badge: Badge, onlyUnverified: Bool = false) -> OVPillTone {
         switch badge {
-        case .emailFound: return onlyUnverified ? .warning : .pending
+        case .emailFound: return onlyUnverified ? .tentative : .pending
         case .noEmailFound: return .warning
         case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .none: return .neutral
         }
