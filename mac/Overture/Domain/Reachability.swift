@@ -46,9 +46,18 @@ enum Reachability {
     //
     // Lives here rather than in the view's switch so the decision is testable at all: a SwiftUI body is
     // not, and this is exactly the "#885, keep the decision out of the view" pattern the copy follows.
-    static func tone(for badge: Badge) -> OVPillTone {
+    // `onlyUnverified` describes the ADDRESSES a check found (#1628): true when it found one or more and
+    // NONE of them was read off a page naming the act. Dan's call, 2026-07-28, on seeing "Unverified
+    // email found" wearing the same gold as a verified find: an address he would want to CHECK before
+    // writing must not be painted as his most actionable row. It steps down to rust, the same tier as
+    // "No email found", because both mean "look at this before you do anything", while staying above the
+    // muted tier where a contact form sits, because an unverified address is still an address.
+    //
+    // It can only ever change the email-found badge; every other state ignores it, since a form or a
+    // front desk carries no claim about verified addresses either way.
+    static func tone(for badge: Badge, onlyUnverified: Bool = false) -> OVPillTone {
         switch badge {
-        case .emailFound: return .pending
+        case .emailFound: return onlyUnverified ? .warning : .pending
         case .noEmailFound: return .warning
         case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .none: return .neutral
         }
@@ -189,8 +198,15 @@ enum ReachabilityCopy {
     // Only used when NOTHING found was verified. One address read off a page naming the act is enough to
     // write to, so a weaker sibling beside it earns no warning.
     static let unverifiedEmailFoundBadge = "Unverified email found"
-    static let unverifiedContactHelp =
-        "Overture didn't verify this one belongs to this act. Only an address read off a page naming them counts as verified; a generic inbox, a contact form, or an inferred address doesn't. It may still be right, so it's worth a look before you write."
+    // Speaks for EVERY address on the row, not one caveat beside a single line, and has to read for one
+    // address as well as several. It no longer mentions contact forms, which never reach this badge.
+    //
+    // The sentence it replaces was written for the retired per-address caveat and said "this one". When
+    // that caveat went, the sentence was orphaned: it stayed in the code, nothing referenced it, and
+    // hovering the new badge explained the wrong thing entirely. Caught only by re-reading the copy in
+    // the place that now produces it, which is exactly the cold read this project requires.
+    static let unverifiedEmailFoundHelp =
+        "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
 
     // #1325: the earlier probe result has aged past the freshness window, so it may no longer be true.
     static let staleProbeBadge = "Reachability may be out of date"

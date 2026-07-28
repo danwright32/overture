@@ -448,10 +448,16 @@ struct ProspectRowView: View {
                              text: item.onlyUnverifiedEmailsFound
                                  ? ReachabilityCopy.unverifiedEmailFoundBadge
                                  : ReachabilityCopy.emailFoundBadge,
-                             tone: Reachability.tone(for: .emailFound),
-                             help: item.inheritedReachability.map {
-                                 ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
-                             } ?? ReachabilityCopy.emailFoundHelp)
+                             tone: Reachability.tone(for: .emailFound,
+                                                     onlyUnverified: item.onlyUnverifiedEmailsFound),
+                             // The hover has to follow the WORDING. When the badge says nothing found
+                             // was verified, the explanation must say what that means; leaving the plain
+                             // "a check found a contact you can email" there explains the wrong thing.
+                             help: item.onlyUnverifiedEmailsFound
+                                 ? ReachabilityCopy.unverifiedEmailFoundHelp
+                                 : item.inheritedReachability.map {
+                                     ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
+                                 } ?? ReachabilityCopy.emailFoundHelp)
         }
     }
 

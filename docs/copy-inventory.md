@@ -941,6 +941,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
     `UI/DaysOffView.swift`
+"Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
+    `Domain/Reachability.swift`
 "Nothing here right now"
     `Domain/StageEmptyState.swift`
 "Nothing in the queue matches \"\(query)\""
@@ -1033,8 +1035,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
-"Overture didn't verify this one belongs to this act. Only an address read off a page naming them counts as verified; a generic inbox, a contact form, or an inferred address doesn't. It may still be right, so it's worth a look before you write."
-    `Domain/Reachability.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
