@@ -259,7 +259,8 @@ struct QueueView: View {
 
     private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
         QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
-                                  among: items, today: today, stage: focusedStage)
+                                  among: items, today: today, stage: focusedStage,
+                                  geo: geo)
     }
 
     @ViewBuilder private func probeSelectionBar(_ data: RenderData) -> some View {
@@ -581,7 +582,7 @@ struct QueueView: View {
                 // opens at the QueueView level.
                 // #1597: tick the date to add it to a multi-date check. Scout only, and only where there
                 // is something still to check, so it never appears on a date whose Check button is absent.
-                if focusedStage == .scout, !QueueModel.reachabilityProbeCandidateKeys(group.items).isEmpty {
+                if focusedStage == .scout, !QueueModel.reachabilityProbeCandidateKeys(group.items, geo: geo).isEmpty {
                     Button {
                         if selectedProbeDates.contains(group.id) {
                             selectedProbeDates.remove(group.id)
@@ -602,6 +603,7 @@ struct QueueView: View {
                 }
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
+                    geo: geo,
                     isRunning: prepRunning,
                     onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
@@ -1148,13 +1150,16 @@ struct QueueView: View {
 struct ReachabilityProbeControl: View {
     let items: [QueueItem]
     let dateLabel: String
+    // #1609: Dan's geography refusals, so the control never offers a PAID check on a show somewhere he
+    // has refused to travel. Defaulted to none so a preview or a test that does not care is unchanged.
+    var geo: GeoRefusals = .none
     // #1323: a probe and a normal Prep share the single detached-run slot, so the Check action greys out
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
 
     var body: some View {
-        let keys = QueueModel.reachabilityProbeCandidateKeys(items)
+        let keys = QueueModel.reachabilityProbeCandidateKeys(items, geo: geo)
         if !keys.isEmpty {
             HStack(spacing: 0) {
                 Spacer(minLength: OVSpacing.sm)
