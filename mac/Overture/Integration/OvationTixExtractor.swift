@@ -16,13 +16,16 @@ final class OvationTixExtractor: SourceExtractor {
     // publishes no venue anywhere, and the org's own name is not proof its shows are in its own room.
     private let venue: String?
     private let location: String?
+    // #1680: internal, not private, so the registry's wiring is assertable without a network call (L3).
+    let sourceURL: URL?
 
     init(fetchEvents: @escaping @Sendable () async throws -> [OvationTixCalendar.OTEvent],
-         presenter: String, venue: String?, location: String?) {
+         presenter: String, venue: String?, location: String?, sourceURL: URL? = nil) {
         self.fetchEvents = fetchEvents
         self.presenter = presenter
         self.venue = venue
         self.location = location
+        self.sourceURL = sourceURL
     }
 
     // The live reader. A failed fetch throws (never an empty list, which the reconcile would read as "every
@@ -30,7 +33,7 @@ final class OvationTixExtractor: SourceExtractor {
     convenience init(url: URL, presenter: String, venue: String?, location: String?,
                      now: Date = Date(), session: URLSession = .shared) {
         self.init(fetchEvents: { try await OvationTixCalendar.liveEvents(url: url, now: now, session: session) },
-                  presenter: presenter, venue: venue, location: location)
+                  presenter: presenter, venue: venue, location: location, sourceURL: url)
     }
 
     // A structured feed can only ever be "here are the upcoming events" or "there are none", so the verdict
@@ -38,6 +41,7 @@ final class OvationTixExtractor: SourceExtractor {
     func extract() async throws -> ExtractedListing {
         let events = try await fetchEvents()
         return ExtractedListing.fromStructuredFeed(
-            OvationTixCalendar.extractedEvents(from: events, presenter: presenter, venue: venue, location: location))
+            OvationTixCalendar.extractedEvents(from: events, presenter: presenter, venue: venue,
+                                               location: location, sourceURL: sourceURL))
     }
 }

@@ -36,7 +36,7 @@ enum SourceExtractorRegistry {
                     guard let url else { throw SourceFetchError.unreachable }
                     return try await VenueTixCalendar.liveEvents(url: url)
                 },
-                presenter: source.orgName, venue: venue, location: location)
+                presenter: source.orgName, venue: venue, location: location, sourceURL: url)
         case .squarespaceFeed:
             // #1503: the org's own events page, read from its JSON view. The org presents; each show
             // keeps whichever venue the feed names, so nothing is threaded in here but the org name and
@@ -60,7 +60,7 @@ enum SourceExtractorRegistry {
                     guard let url else { throw SourceFetchError.unreachable }
                     return try await OvationTixCalendar.liveEvents(url: url)
                 },
-                presenter: source.orgName, venue: venue, location: location)
+                presenter: source.orgName, venue: venue, location: location, sourceURL: url)
         }
     }
 }

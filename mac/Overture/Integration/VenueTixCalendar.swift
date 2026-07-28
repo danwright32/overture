@@ -13,6 +13,9 @@ enum VenueTixCalendar {
         var superTitle: String?
         var subTitle: String?
         var date: Date
+        // #1680: the feed's own per-event id. With seriesId it addresses the venue's own page for this
+        // exact night (/showdetails/{seriesId}/{eventId}, the route the venue's own listing cards use).
+        var eventId: String? = nil
         // #1174: the feed's own production id, shared by every night of one show. Nil when the feed names
         // none. It is the authoritative "these dates are one production" signal (it does not depend on
         // titles matching or nights being close together, so a weekly residency still reads as one show).
@@ -42,6 +45,7 @@ enum VenueTixCalendar {
         var superTitle: String?
         var subTitle: String?
         var dateTime: Double?   // epoch MILLISECONDS
+        var eventId: SeriesID?  // #1680: same tolerant decode as seriesId, for the same reason
         var seriesId: SeriesID?
     }
 
@@ -65,6 +69,7 @@ enum VenueTixCalendar {
                            superTitle: item.superTitle,
                            subTitle: item.subTitle,
                            date: Date(timeIntervalSince1970: ms / 1000),
+                           eventId: item.eventId.flatMap { $0.value },
                            seriesId: item.seriesId.flatMap { $0.value })
         }
         // #1171: the feed answered with items but NONE parsed, so its shape has changed (a renamed date
@@ -194,15 +199,28 @@ enum VenueTixCalendar {
     // rule the synthesized-HTML path used before the extractor echoed it back.
     // #1529: who PRESENTS and which ROOM are two different claims (see OvationTixCalendar for the case that
     // taught it). The venue is nil unless somebody with the standing to say so has said so.
+    // #1680: the venue's own page for this exact night, when the feed gives both ids. The route is the one
+    // the venue's own listing cards push to (`/showdetails/{seriesId}/{eventId}`), read off the live site
+    // rather than guessed. Built against the SOURCE's host, since every VenueTix venue is its own subdomain
+    // and the feed is a shared cloud function that names none.
+    static func eventURL(for event: VTEvent, sourceURL: URL?) -> String? {
+        guard let sourceURL, let host = sourceURL.host,
+              let seriesId = event.seriesId, !seriesId.isEmpty,
+              let eventId = event.eventId, !eventId.isEmpty else { return nil }
+        return "https://\(host)/showdetails/\(seriesId)/\(eventId)"
+    }
+
     static func extractedEvents(from events: [VTEvent], presenter: String, venue: String?,
-                                location: String?) -> [ExtractedEvent] {
+                                location: String?, sourceURL: URL? = nil) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
                            presenter: presenter,
                            venue: venue,
                            performanceDate: dayFormatter.string(from: e.date),
-                           sourceUrl: nil,
+                           // Dan's call (2026-07-28): a row with no per-event link falls back to the
+                           // source's own calendar rather than to nothing. The card labels the two apart.
+                           sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,
                            seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil })
         }

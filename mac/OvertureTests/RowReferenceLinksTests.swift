@@ -11,7 +11,13 @@ import Foundation
 struct RowReferenceLinksTests {
 
     private func item(listing: String? = nil, website: String? = nil,
-                      status: ReviewStatus = .new) -> QueueItem {
+                      status: ReviewStatus = .new, sources: [String] = []) -> QueueItem {
+        var built = builtItem(listing: listing, website: website, status: status)
+        built.runSourceURLs = sources
+        return built
+    }
+
+    private func builtItem(listing: String?, website: String?, status: ReviewStatus) -> QueueItem {
         QueueItem(id: "k", groupName: "An Evening of Song", discipline: "music",
                   venue: "A Hall", performanceDate: "2026-09-12",
                   sourceListingURL: listing, websiteURL: website,
@@ -23,6 +29,34 @@ struct RowReferenceLinksTests {
 
     @Test func anUntriagedShowWithNeitherLinkShowsNoStripAtAll() {
         #expect(QueueModel.rowHasReferenceLinks(item()) == false)
+    }
+
+    // #1680, Dan's call (2026-07-28): a row that could not produce a per-event link falls back to the
+    // source's own calendar rather than to nothing, and the card says which kind of link it is, so he knows
+    // before clicking whether it takes him to the show or just to the venue's listings. A link labelled as
+    // the show's page that lands on a calendar of forty other shows is worse than an honest calendar link.
+    @Test func aListingThatIsJustTheSourcesOwnCalendarIsLabelledAsOne() {
+        let perEvent = item(listing: "https://thegreenroom42.venuetix.com/showdetails/s1/a1",
+                            sources: ["https://thegreenroom42.venuetix.com/"])
+        let calendarOnly = item(listing: "https://thegreenroom42.venuetix.com/",
+                                sources: ["https://thegreenroom42.venuetix.com/"])
+
+        #expect(QueueModel.listingLinkLabel(perEvent) == "Source listing")
+        #expect(QueueModel.listingLinkLabel(calendarOnly) == "Venue calendar")
+    }
+
+    // A trailing slash is not a different page. Without this the fallback link, which is the source URL
+    // verbatim, would read as a per-event link the moment the two spellings differed by one character.
+    @Test func theCalendarComparisonIgnoresATrailingSlash() {
+        let calendarOnly = item(listing: "https://ci.ovationtix.com/35583",
+                                sources: ["https://ci.ovationtix.com/35583/"])
+        #expect(QueueModel.listingLinkLabel(calendarOnly) == "Venue calendar")
+    }
+
+    // A row from the AI read path names the page it was actually read from, which is not the source's own
+    // listings URL, so it keeps the ordinary label.
+    @Test func aRowWithNoRecordedSourceUrlsStillReadsAsAnEventPage() {
+        #expect(QueueModel.listingLinkLabel(item(listing: "https://org.example/events/night")) == "Source listing")
     }
 
     // #1534: the strip carries LINKS and nothing else. A kept show used to add "Contact: pending Prep

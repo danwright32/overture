@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **896 sentences**, from 306 source files.
+Every sentence Overture can say to Dan: **897 sentences**, from 306 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -68,7 +68,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (44)
+## The same sentence, said in more than one place (45)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -183,6 +183,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Skipped towns"
   - `App/RootView.swift`
   - `UI/ExcludedTownsView.swift`
+- "Source listing"
+  - `UI/QueueView+Model.swift`
+  - `UI/QueueView+Model.swift`
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
@@ -1368,7 +1371,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Something went wrong"
     `App/RootView.swift`
 "Source listing"
-    `UI/ProspectRowView.swift`
+    `UI/QueueView+Model.swift`
 "Sources you stopped watching."
     `Domain/SourceGrade.swift`
 "Start a new experiment"
@@ -1644,6 +1647,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Venue TBD"
     `Domain/VenueDisplay.swift`
+"Venue calendar"
+    `UI/QueueView+Model.swift`
 "Verbal yes, not booked"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`

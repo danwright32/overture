@@ -187,7 +187,10 @@ struct ReferenceLinkColorGuardTests {
         #expect(!prospectRow.isEmpty)
         let linksBody = SourceGuardHelper.propertyBody("private var links: some View {", in: prospectRow)
         #expect(linksBody != nil)
-        #expect(linksBody?.contains("Link(\"Source listing\"") == true)
+        // #1680: the listing link's LABEL is now computed (it says whether the link goes to the show or
+        // only to the venue's calendar), so this pins the link itself rather than the literal text. The
+        // wording is pinned where wording belongs, in QueueModel.listingLinkLabel's own tests.
+        #expect(linksBody?.contains("Link(QueueModel.listingLinkLabel(item)") == true)
         #expect(linksBody?.contains("Link(\"Group website\"") == true)
         // Two links, each with its own override: a shared .tint() further down the modifier
         // chain doesn't reach either Link's own text color.

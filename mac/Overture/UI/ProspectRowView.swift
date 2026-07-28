@@ -651,7 +651,8 @@ struct ProspectRowView: View {
                 // with the forest/gold palette and made these secondary reference links read as more
                 // important than they are. Each link needs its own explicit override.
                 if let listing = refs.listing {
-                    Link("Source listing", destination: listing)
+                    // #1680: the label says whether this goes to the show or only to the venue's calendar.
+                    Link(QueueModel.listingLinkLabel(item), destination: listing)
                         .foregroundStyle(OVColor.forest)
                 }
                 if let website = refs.website {
