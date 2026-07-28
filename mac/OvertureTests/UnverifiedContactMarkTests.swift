@@ -3,22 +3,26 @@ import Foundation
 import SwiftData
 @testable import Overture
 
-// #1628: the reachability badge says WHAT was found and never HOW SURE the check was, so a guess and a
-// verified find wear the same card. The runbook's own rule makes `low` precise: `high` is allowed ONLY
-// for an address actually READ from a real page (and carries the citation URL the badge links to),
-// `medium` is a generic inbox, and `low` is inferred, pattern-guessed, or a bare name match with no page
-// tying that person to THIS performance. So `low` means "this may be the wrong act entirely".
+// #1628: the reachability badge said WHAT was found and never HOW SURE the check was, so a guess and a
+// verified find wore the same card. Two rows from the 2026-07-27 run, both stored `low`: "Mind Games"
+// (SoHo Playhouse, an off Broadway show) returned a booking form for a San Francisco Bay Area magician,
+// and "Copeland" (Jalopy Theatre, a Red Hook folk room) returned the merch site of the Florida rock band.
 //
-// Two real rows from the 2026-07-27 run, both stored `low`, both presented exactly like a contact taken
-// off the act's own site: "Mind Games" (SoHo Playhouse, an off Broadway show with no listing page at all)
-// returned a booking form for a San Francisco Bay Area magician, and "Copeland" (Jalopy Theatre, a
-// roughly 100 seat Red Hook folk room) returned the merch site of the Florida rock band.
+// FIRST ATTEMPT, RETIRED. A per-address "not verified" caveat printed beside every unverified contact.
+// It went through three layouts (trailing the address, leading it, then its own grid column) and each one
+// broke the address column differently, the last by making long addresses wrap. Dan's call, 2026-07-28:
+// drop the per-address caveat entirely, he can already tell a generic inbox by looking at it, and say it
+// ONCE in the badge instead.
+//
+// THE RULE NOW. When a check found an address but NOTHING it found was verified, the badge itself says
+// so. If even one contact was verified, the badge stays plain, because he has something solid to write
+// to and the weaker sibling beside it is not worth a warning.
 //
 // LIVE-STORE-CLAIM verified=2026-07-27 measure="stored recipients by contactConfidence"
-// Measured on the live store 2026-07-27: 10 of 29 stored contacts are `low`, so a third of what the card
-// presents as a find is a guess. None carries a nil confidence.
+// Measured on the live store 2026-07-27: 10 of 29 stored contacts are `low` and 8 are `medium`, so only
+// 11 are an address read off a page naming the act. None carries a nil confidence.
 @MainActor
-@Suite("Unverified contact mark (#1628)")
+@Suite("Unverified contacts are named once, in the badge (#1628)")
 struct UnverifiedContactMarkTests {
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -50,95 +54,85 @@ struct UnverifiedContactMarkTests {
         return QueueItem(p)
     }
 
-    @Test func aGuessedAddressIsMarkedUnverified() throws {
+    @Test func aGuessedAddressIsStillIdentified() throws {
         let i = item(ModelContext(try container()), [contact(email: "jake@jakebergmagic.example", .low)])
         #expect(i.unverifiedContactEmails == ["jake@jakebergmagic.example"])
     }
 
-    // The other side of the same claim: an address READ off a real page must NOT be marked, or the mark
-    // is noise on every row and Dan stops seeing it.
-    @Test func anAddressReadOffARealPageIsNotMarked() throws {
+    @Test func anAddressReadOffARealPageIsNotFlagged() throws {
         let i = item(ModelContext(try container()), [contact(email: "mark@groovmarketing.example", .high)])
         #expect(i.unverifiedContactEmails.isEmpty)
     }
 
-    // DAN'S CALL, 2026-07-27, made with the measurement in front of him. The stored confidence turns out
-    // to be a near-mechanical restatement of the contact METHOD: across all 29 stored contacts, every
-    // form or DM is `low` (9 of 9), every generic inbox is `medium` (8 of 8), and a named person is
-    // `high` except once. So it cannot separate a form on the right act's site (marcribler.com, which
-    // #1626 confirmed) from one on the wrong act's (shop.copeland.band), and a mark driven by it flags
-    // both the same. Told that, Dan chose to mark everything that is not a verified address anyway: a
-    // generic inbox and a contact form ARE weaker than an address read off the act's own page, and he
-    // would rather see that on every one of them than have the distinction go unsaid.
-    //
-    // So "verified" means exactly what the runbook allows `high` for: an address actually READ from a
-    // real page, corroborated against this performance for a named performer. Everything else is marked.
-    @Test func aGenericInboxIsMarkedToo() throws {
+    // A generic inbox counts as unverified: nothing established it belongs to this act. Dan's call,
+    // 2026-07-28, taken with the measurement in front of him showing confidence largely restates the
+    // contact type.
+    @Test func aGenericInboxCountsAsUnverified() throws {
         let i = item(ModelContext(try container()), [contact(email: "info@sohoplayhouse.example", .medium)])
         #expect(i.unverifiedContactEmails == ["info@sohoplayhouse.example"])
     }
 
-    // Fails closed. No confidence recorded means nothing established this address, so it reads as not
-    // verified rather than silently as a find. Cannot happen from the live path today (all 29 stored
-    // contacts carry one), which is exactly why it costs nothing to be safe here.
-    @Test func anAddressWithNoConfidenceRecordedIsMarked() throws {
+    // Fails closed: no confidence recorded means nothing established the address.
+    @Test func anAddressWithNoConfidenceRecordedCountsAsUnverified() throws {
         let i = item(ModelContext(try container()), [contact(email: "mystery@example.com", nil)])
         #expect(i.unverifiedContactEmails == ["mystery@example.com"])
     }
 
-    // One show, two performers found, one verified and one not. The mark is per contact, which is the
-    // whole reason it lives on the address line rather than on the row's badge.
-    @Test func onlyTheUnverifiedOneOfTwoContactsIsMarked() throws {
+    // THE RULE DAN ASKED FOR. Everything found is a guess, so the badge says so.
+    @Test func theBadgeSaysUnverifiedWhenNothingFoundWasVerified() throws {
+        let i = item(ModelContext(try container()), [contact(email: "a@example.com", .low),
+                                                     contact(email: "b@example.com", .medium)])
+        #expect(i.onlyUnverifiedEmailsFound)
+    }
+
+    // AND THE OTHER HALF, which is what stops it crying wolf: one solid address is enough, so a weaker
+    // sibling beside it earns no warning. His words: "it wouldn't say that if we found one unverified
+    // and one verified."
+    @Test func theBadgeStaysPlainWhenEvenOneContactWasVerified() throws {
         let i = item(ModelContext(try container()), [contact(email: "anna@annapierre.example", .high),
                                                      contact(email: "j.reed@gmail.example", .low)])
-        #expect(i.unverifiedContactEmails == ["j.reed@gmail.example"])
+        #expect(!i.onlyUnverifiedEmailsFound)
     }
 
-    // The Copeland and Jake Berg shape: no address at all, a form on a site that may belong to a
-    // completely different act. The "Contact form only" badge says there is a way through; it says
-    // nothing about whether it reaches the right people.
-    @Test func aGuessedContactFormIsMarkedUnverified() throws {
-        let i = item(ModelContext(try container()), [contact(form: "https://shop.copeland.example", .low)])
-        #expect(i.unverifiedContactForms.map(\.absoluteString) == ["https://shop.copeland.example"])
+    @Test func theBadgeStaysPlainWhenEverythingWasVerified() throws {
+        let i = item(ModelContext(try container()), [contact(email: "mark@groovmarketing.example", .high)])
+        #expect(!i.onlyUnverifiedEmailsFound)
     }
 
-    @Test func aVerifiedContactFormIsNotMarked() throws {
-        let i = item(ModelContext(try container()),
-                     [contact(form: "https://marcribler.example/contact", .high)])
-        #expect(i.unverifiedContactForms.isEmpty)
+    // A show with no address at all must not claim an unverified one was found; its badge is a different
+    // state entirely ("No email found" or "Contact form only").
+    @Test func aShowWithNoAddressMakesNoClaim() throws {
+        let i = item(ModelContext(try container()), [])
+        #expect(!i.onlyUnverifiedEmailsFound)
     }
 
     // An address inherited from another show by the same organisation (#1598 Phase 5) carries no
-    // confidence: the org ledger stores the addresses and not how sure each one was. Marking it would
-    // assert something no check ever measured, which is the opposite of the honesty this adds, so an
-    // inherited address is left unmarked and the gap is filed rather than guessed at.
-    @Test func anInheritedAddressIsNeverMarkedBecauseTheLedgerStoresNoConfidence() throws {
+    // confidence, because the org ledger stores the addresses and not how sure each one was. Claiming it
+    // is unverified would assert something no check measured, so an inherited answer stays plain.
+    @Test func anInheritedAddressIsNeverCalledUnverified() throws {
         var i = item(ModelContext(try container()), [])
         i.inheritedReachability = OrgAnswerLedger.Inherited(result: .emailFound,
                                                            probedAt: Date(timeIntervalSince1970: 1_000),
                                                            organisation: "TENET Vocal Artists",
                                                            emails: ["hello@tenet.example"])
         #expect(i.displayedContactEmails == ["hello@tenet.example"])
-        #expect(i.unverifiedContactEmails.isEmpty)
+        #expect(!i.onlyUnverifiedEmailsFound)
     }
 
-    @Test func theMarkSaysWhatTheCheckActuallyMeasured() {
-        #expect(ReachabilityCopy.unverifiedContactMark == "not verified")
+    @Test func theBadgeWordingSaysWhatWasActuallyEstablished() {
+        #expect(ReachabilityCopy.unverifiedEmailFoundBadge == "Unverified email found")
     }
 
-    // The mark being CORRECT and the mark being DRAWN are two separate claims, and only the second one
-    // reaches Dan. A SwiftUI body cannot be asserted on directly, so this pins the wiring at the source,
-    // the same guard shape InheritedReachabilityWiringGuardTests uses for #1598.
-    @Test func theRowActuallyDrawsTheMark() throws {
+    // The per-address caveat is GONE from the row, which is the point of this change: it is what made
+    // long addresses wrap. The row must not reintroduce it.
+    @Test func theRowNoLongerPrintsAPerAddressCaveat() throws {
         let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()          // OvertureTests
-            .deletingLastPathComponent()          // mac
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("Overture/UI/ProspectRowView.swift"), encoding: .utf8)
-        #expect(source.contains("unverifiedContactEmails"),
-                "the address line must ask the model which addresses are unverified")
-        #expect(source.contains("unverifiedContactForms"),
-                "the form link must ask the same question")
-        #expect(source.contains("ReachabilityCopy.unverifiedContactMark"),
-                "the words come from the copy inventory, not from the view")
+        #expect(!source.contains("unverifiedContactMark"),
+                "the per-address caveat was retired; it belongs in the badge now")
+        #expect(source.contains("unverifiedEmailFoundBadge"),
+                "the badge must carry the wording instead")
     }
 }

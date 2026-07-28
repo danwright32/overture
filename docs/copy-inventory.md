@@ -1624,6 +1624,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/QueueUndoStack.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
+"Unverified email found"
+    `Domain/Reachability.swift`
 "Updated \(org)'s address."
     `UI/SourceFixConfirmActions.swift`
 "Updated \(org)'s classification"
@@ -1971,8 +1973,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
     `UI/FollowUpsView.swift`
     `UI/QueueView.swift`
-"not verified"
-    `Domain/Reachability.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
 "read it."

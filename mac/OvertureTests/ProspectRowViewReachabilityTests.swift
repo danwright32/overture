@@ -132,13 +132,19 @@ struct ProspectRowViewReachabilityTests {
     // because "info@thevenue.com" and "anna@annapierre.com" are the same badge and completely different
     // decisions. ALL of them, not just the primary: a self-produced show with two named performers found
     // two people, and showing one silently hides the other.
-    private func withContacts(_ emails: [String], result: Reachability.ProbeResult) -> QueueItem {
+    // #1628: `confidence` defaults to `.high` so these fixtures exercise the PLAIN badge. Left at nil (or
+    // anything below high) the row now reads "Unverified email found", which is a different assertion and
+    // has its own test below.
+    private func withContacts(_ emails: [String], result: Reachability.ProbeResult,
+                              confidence: ContactConfidence? = .high) -> QueueItem {
         var i = item(presenter: "Aurora Strings", sourceListingURL: nil, probed: true)
         i.reachabilityResult = result
         i.contacts = emails.enumerated().map { idx, email in
-            RecipientSnapshot(id: "r\(idx)", name: nil, email: email, role: nil, provenance: .act,
-                              sendState: .pending, replied: false, lastReplyText: nil,
-                              resolution: nil, bounced: false, outcomeSource: .auto)
+            var r = RecipientSnapshot(id: "r\(idx)", name: nil, email: email, role: nil, provenance: .act,
+                                      sendState: .pending, replied: false, lastReplyText: nil,
+                                      resolution: nil, bounced: false, outcomeSource: .auto)
+            r.contactConfidence = confidence
+            return r
         }
         i.hasPendingRecipient = (result == .emailFound)
         return i
@@ -148,6 +154,29 @@ struct ProspectRowViewReachabilityTests {
         let t = try texts(withContacts(["hello@auroratrio.com"], result: .emailFound))
         #expect(t.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
         #expect(t.contains("hello@auroratrio.com"))
+    }
+
+    // #1628, Dan's call 2026-07-28: when NOTHING found was verified the badge says so itself, instead of
+    // a caveat printed beside every address (which broke the address column three layouts running).
+    @Test func theBadgeNamesAnUnverifiedFindWhenNothingWasVerified() throws {
+        let t = try texts(withContacts(["info@somevenue.example"], result: .emailFound, confidence: .medium))
+        #expect(t.contains { $0.contains(ReachabilityCopy.unverifiedEmailFoundBadge) })
+        #expect(t.contains("info@somevenue.example"), "the address is still printed, just once and plainly")
+    }
+
+    // One solid address is enough: a weaker sibling beside it must not drag the badge down, or it cries
+    // wolf on a show Dan can act on.
+    @Test func oneVerifiedContactKeepsThePlainBadge() throws {
+        var i = withContacts(["anna@annapierre.example"], result: .emailFound, confidence: .high)
+        var weak = i.contacts[0]
+        weak = RecipientSnapshot(id: "r1", name: nil, email: "info@venue.example", role: nil,
+                                 provenance: .act, sendState: .pending, replied: false,
+                                 lastReplyText: nil, resolution: nil, bounced: false, outcomeSource: .auto)
+        weak.contactConfidence = .low
+        i.contacts.append(weak)
+        let t = try texts(i)
+        #expect(t.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
+        #expect(!t.contains { $0.contains(ReachabilityCopy.unverifiedEmailFoundBadge) })
     }
 
     // Every one of them. Showing only the first would hide the second performer on exactly the shows
