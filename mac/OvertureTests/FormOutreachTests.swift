@@ -1,0 +1,124 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import Overture
+
+// #1630: Dan pitches a form-only show by hand, through the act's own contact form, and tells Overture
+// he did. That outreach is real but Gmail never touched it, so there is no thread to watch and no
+// message id to prove it. These tests pin what the record does and, just as importantly, what it must
+// never cause: a nudge Overture cannot send, a "reply tracking broken" alarm about a thing working as
+// designed, or a show that quietly leaves every stage.
+@MainActor
+@Suite("Form outreach")
+struct FormOutreachTests {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    // A form-only show exactly as it reaches Review today: drafted, with one act contact carrying a
+    // form on its own site and no address anywhere. This is the #1626 shape.
+    @discardableResult
+    private func formOnlyDrafted(_ ctx: ModelContext, group: String = "Aurora Strings",
+                                 formURL: String = "https://aurorastrings.example/contact") -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-01", venue: "Jalopy")
+        let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Jalopy",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted, ingestedAt: Date(timeIntervalSince1970: 1))
+        p.draftSubject = "Photographing Aurora Strings at Jalopy."
+        p.draftBody = "I photograph performing arts in New York."
+        ctx.insert(p)
+        let r = Recipient(id: Recipient.makeId(email: nil, formURL: formURL)!, email: nil,
+                          name: "Jake Berg", provenance: .act,
+                          contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: formURL)
+        p.setRecipients([r])
+        try? ctx.save()
+        return p
+    }
+
+    // The record mirrors what a real send stamps (SendService.deliver): this contact is sent, the show
+    // carries its first-send rollup, and it is contacted. Without the rollup the show would read as
+    // never pitched everywhere the ~20 lead-level readers ask.
+    @Test func recordingAFormOutreachStampsTheContactAndTheShow() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let r = p.recipients[0]
+        let now = Date(timeIntervalSince1970: 1_000_000)
+
+        #expect(p.recordFormOutreach(r, now: now))
+
+        #expect(r.outreachChannel == .contactForm)
+        #expect(r.formOutreachRecordedAt == now)
+        #expect(r.sendState == .sent)
+        #expect(r.sentAt == now)
+        #expect(p.sentAt == now)
+        #expect(p.status == .contacted)
+    }
+
+    // L37, history is stamped at write time. `contactFormURL` is scout-owned and rewritten by every
+    // re-ingest (PrepImporter), so reading the submitted URL back off it would later describe a page
+    // Dan never used. The record keeps the one he actually submitted.
+    @Test func theRecordKeepsTheFormURLDanSubmittedEvenAfterAReIngestRewritesTheContact() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let r = p.recipients[0]
+
+        p.recordFormOutreach(r, now: Date(timeIntervalSince1970: 1_000_000),
+                             formURL: "https://aurorastrings.example/contact")
+        // What a later Prep run does to this row (PrepImporter: `r.contactFormURL = c.formUrl ?? ...`).
+        r.contactFormURL = "https://aurorastrings.example/booking-enquiries"
+
+        #expect(r.formOutreachURL == "https://aurorastrings.example/contact")
+    }
+
+    // The defect this issue must not ship (L45, #1691; the #792 failure mode). Recording the outreach
+    // takes the show out of Review, and it is in no Scout, Prep or Send state either, so if Reached out
+    // refuses it too the show matches NO stage: still in the store, gone from the product, with a live
+    // pitch outstanding. `reachedOutKeys` is derived from ReachedOutQueue itself rather than handed in,
+    // so this proves the real wiring and not a convenient argument.
+    @Test func aShowPitchedThroughAFormIsStillSomewhereDanCanReachIt() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        p.recordFormOutreach(p.recipients[0], now: now, formURL: "https://aurorastrings.example/contact")
+
+        let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: [p], now: now).map { $0.prospect.naturalKey })
+        let stage = StageNavigation.stage(containing: p.naturalKey, in: [p],
+                                          reachedOutKeys: reachedOutKeys, today: "2026-07-28", now: now)
+
+        #expect(stage == .reachedOut)
+    }
+
+    // The follow-up sequencer emails a nudge onto the original thread. A form outreach has neither an
+    // address nor a thread, so a nudge for it cannot be sent at all: offering one puts a button in the
+    // Follow-ups list that can only fail, about a pitch that is fine. It rides the decide clock below
+    // instead.
+    @Test func aFormOutreachIsNeverOfferedAFollowUpNudge() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        p.recordFormOutreach(p.recipients[0], now: now, formURL: "https://aurorastrings.example/contact")
+        let wellPastTheGap = now.addingTimeInterval(30 * 86_400)
+
+        #expect(p.recipients[0].isAwaitingFollowUp == false)
+        #expect(FollowUp.dueRecipients(from: [p], now: wellPastTheGap).isEmpty)
+    }
+
+    // ...and it still has to be somewhere, so it keeps its own clock: after the same gap a first email
+    // follow-up uses (Dan's call, 2026-07-28), Overture asks him what happened rather than offering to
+    // send anything.
+    @Test func aFormOutreachComesDueForADecisionAfterTheFollowUpGap() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let r = p.recipients[0]
+        p.recordFormOutreach(r, now: now, formURL: "https://aurorastrings.example/contact")
+
+        let due = ReachedOutQueue.nextReachOut(for: r, of: p, now: now)
+
+        #expect(due == now.addingTimeInterval(TimeInterval(FollowUpConfig().gapDays) * 86_400))
+    }
+}

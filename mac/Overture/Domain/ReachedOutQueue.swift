@@ -12,13 +12,16 @@ enum ReachedOutQueue {
                              followUpConfig: FollowUpConfig = .init(),
                              reminderConfig: ConversationReminderConfig = .init()) -> Date? {
         guard r.sentAt != nil else { return nil }                 // only contacted recipients
-        // #331: a real send always has a contact address; a sent timestamp without one is a
-        // staged/corrupt record that was never actually emailed, so it doesn't belong here.
-        guard let email = r.email, !email.isEmpty else { return nil }
-        // #378: a sent timestamp is not proof of a real send either. Every genuine send (deliver,
-        // and DebugStaging's synthetic stand-in for one) stamps a Gmail message id along with
-        // sentAt; a record with a timestamp but no message id was never actually sent.
-        guard r.gmailMessageId != nil else { return nil }
+        // #331 and #378, now asked through the one shared definition (Recipient.hasProvenOutreach).
+        // Both guards said the same thing in two halves: a sent timestamp is not proof of anything, so
+        // an emailed contact must carry a real address AND the Gmail message id every genuine send
+        // stamps, or it is a staged/corrupt record that was never actually emailed.
+        //
+        // #1630 widened WHAT counts as proof, not how much is demanded: a form outreach Dan recorded by
+        // hand has neither an address nor a message id and is still a real pitch. Spelled out here as
+        // two literal guards it could only ever have meant email, and a show pitched through a form
+        // would have matched no stage at all and vanished from the queue with the pitch still live.
+        guard r.hasProvenOutreach else { return nil }
         let standing = r.standing
         guard standing.isInPlay else { return nil }
 
@@ -27,7 +30,9 @@ enum ReachedOutQueue {
             state: r.conversationState, setAt: r.conversationStateSetAt, remindedAt: r.conversationRemindedAt,
             performanceDate: p.performanceDate, isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
             source: r.conversationStateSource, now: now, config: reminderConfig)
-        return [nextFollowUp(for: r, now: now, config: followUpConfig), reminderDate]
+        return [nextFollowUp(for: r, now: now, config: followUpConfig),
+                nextFormDecision(for: r, config: followUpConfig),
+                reminderDate]
             .compactMap { $0 }
             .min()
     }
@@ -93,6 +98,16 @@ enum ReachedOutQueue {
     // eligibility check (r.isAwaitingFollowUp) rather than reimplementing it: paced by gapDays from
     // the last touch, up to maxFollowUps; nothing once this recipient replied/resolved or the cap is
     // reached. Closed recipients are already excluded by the standing.isInPlay guard in nextReachOut.
+    // #1630: a form outreach's own clock. It is a DECIDE date, not a nudge date: Overture cannot email
+    // this contact and cannot see a reply to them, so the only thing left that moves the show forward is
+    // Dan saying what happened. Paced by the same gap as a first email follow-up (his call, 2026-07-28)
+    // so the product holds one pacing number rather than two. Unlike the nudge track there is no cap: a
+    // capped decide clock would simply stop asking and leave the show sitting in Reached out forever.
+    private static func nextFormDecision(for r: Recipient, config: FollowUpConfig) -> Date? {
+        guard r.outreachChannel == .contactForm, let recordedAt = r.formOutreachRecordedAt else { return nil }
+        return recordedAt.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
+    }
+
     private static func nextFollowUp(for r: Recipient, now: Date, config: FollowUpConfig) -> Date? {
         guard let sentAt = r.sentAt else { return nil }
         guard r.isAwaitingFollowUp else { return nil }
