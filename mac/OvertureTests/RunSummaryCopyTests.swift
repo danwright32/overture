@@ -12,9 +12,8 @@ import Foundation
 struct RunSummaryCopyTests {
 
     private func outcome(found: Int = 0, inserted: Int = 0, updated: Int = 0,
-                         skipped: Int = 0, uncertain: Int = 0) -> ScoutService.Outcome {
-        ScoutService.Outcome(found: found, inserted: inserted, updated: updated,
-                             skipped: skipped, uncertain: uncertain)
+                         skipped: Int = 0) -> ScoutService.Outcome {
+        ScoutService.Outcome(found: found, inserted: inserted, updated: updated, skipped: skipped)
     }
 
     // MARK: - The scout's own summary
@@ -23,15 +22,20 @@ struct RunSummaryCopyTests {
         #expect(ScoutRunSummary.summary(for: outcome(found: 0)) == "0 found")
     }
 
-    @Test func theScoutNamesWhatItFoundThenWhatIsNewThenWhatItIsUnsureAbout() {
-        let line = ScoutRunSummary.summary(for: outcome(found: 9, inserted: 3, uncertain: 2))
+    @Test func theScoutNamesWhatItFoundThenWhatIsNew() {
+        #expect(ScoutRunSummary.summary(for: outcome(found: 9, inserted: 3)) == "9 found · 3 new")
+    }
 
-        #expect(line == "9 found · 3 new · 2 unsure")
+    // #1533: the line used to carry a third part, "N unsure", counting the classifications the rules
+    // called uncertain. That was three quarters of every run, it pointed at a badge that no longer
+    // exists, and Dan could do nothing with it.
+    @Test func theScoutNeverReportsAnUnsureCount() {
+        #expect(!ScoutRunSummary.summary(for: outcome(found: 9, inserted: 3)).contains("unsure"))
     }
 
     // A zero is left out rather than shown as "0 new". A summary padded with zeroes is one Dan skims.
     @Test func aZeroCountIsLeftOutEntirely() {
-        #expect(ScoutRunSummary.summary(for: outcome(found: 4, inserted: 0, uncertain: 0)) == "4 found")
+        #expect(ScoutRunSummary.summary(for: outcome(found: 4, inserted: 0)) == "4 found")
     }
 
     // MARK: - The watched-calendar ingest

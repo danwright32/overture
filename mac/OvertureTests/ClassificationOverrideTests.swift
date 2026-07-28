@@ -17,14 +17,14 @@ struct ClassificationOverrideTests {
     @Test func rescoringWithCorrectedDisciplineChangesFit() {
         // music (baseline, 0 pts) corrected to dance (+3 pts) raises the score.
         let p = prospect(discipline: "music", production: "self")
-        let before = ClassificationOverride.rescored(p, discipline: nil, production: nil)
-        let after = ClassificationOverride.rescored(p, discipline: .dance, production: nil)
-        #expect(after.score > before.score)
+        let before = ClassificationOverride.rescored(p)
+        p.discipline = "dance"
+        #expect(ClassificationOverride.rescored(p).score > before.score)
     }
 
-    @Test func nilArgsUseTheProspectsCurrentValues() {
+    @Test func theCandidateIsBuiltFromTheProspectsOwnValues() {
         let p = prospect(discipline: "dance", production: "self")
-        let r = ClassificationOverride.rescored(p, discipline: nil, production: nil)
+        let r = ClassificationOverride.rescored(p)
         let direct = Ranker.scoreFit(Candidate(reachable: true, priorRelationship: .none,
             production: .selfProduced, profile: .strong, coverage: .likelyUncovered, discipline: .dance))
         #expect(r == direct)
@@ -33,31 +33,31 @@ struct ClassificationOverrideTests {
     @Test func correctingDisciplineSetsFlagsAndRerank() {
         let p = prospect(discipline: "music", production: "self")
         let before = p.fitScore
-        ClassificationOverride.correct(p, discipline: .dance, production: nil, now: Date())
+        ClassificationOverride.correct(p, discipline: .dance, now: Date())
         #expect(p.discipline == "dance")
         #expect(p.classificationOverriddenByDan == true)
-        #expect(p.confidenceReviewedByDan == true)
         #expect(p.fitScore > before)
     }
 
-    @Test func correctingProductionOnlyLeavesDisciplineAlone() {
-        let p = prospect(discipline: "dance", production: "self")
-        ClassificationOverride.correct(p, discipline: nil, production: .agency, now: Date())
-        #expect(p.discipline == "dance")
-        #expect(p.production == "agency")
-        #expect(p.classificationOverriddenByDan == true)
+    // #1533: production type is no longer Dan's to set. A genre correction must leave whatever the
+    // scout guessed exactly as it found it, rather than writing a value he was never asked for.
+    @Test func correctingTheGenreLeavesTheScoutsProductionGuessAlone() {
+        for guess in ["self", "agency", "unknown"] {
+            let p = prospect(discipline: "music", production: guess)
+            ClassificationOverride.correct(p, discipline: .opera, now: Date())
+            #expect(p.discipline == "opera")
+            #expect(p.production == guess)
+        }
     }
 
-    // #1363: the confirm editor sends both genre and production in one call. A single correction must
-    // write both and mark the uncertainty reviewed, so the badge clears in one pass instead of vanishing
-    // after the first of two picks (the bug).
-    @Test func correctingBothDimensionsInOneCallWritesBothAndMarksReviewed() {
-        let p = prospect(discipline: "music", production: "self")
-        p.confidenceReviewedByDan = false
-        ClassificationOverride.correct(p, discipline: .opera, production: .agency, now: Date())
-        #expect(p.discipline == "opera")
-        #expect(p.production == "agency")
-        #expect(p.classificationOverriddenByDan == true)
-        #expect(p.confidenceReviewedByDan == true)
+    // The re-score has to read the UNCHANGED production back off the prospect, or a corrected genre
+    // would silently re-rank the show as if its production were the enum's default. An agency row
+    // carries a 2 point penalty; losing it would float a dead-zone showcase up the queue.
+    @Test func theRescoreKeepsTheProductionPenaltyOnAnAgencyRow() {
+        let agency = prospect(discipline: "music", production: "agency")
+        let selfProduced = prospect(discipline: "music", production: "self")
+        ClassificationOverride.correct(agency, discipline: .opera, now: Date())
+        ClassificationOverride.correct(selfProduced, discipline: .opera, now: Date())
+        #expect(agency.fitScore == selfProduced.fitScore - 4)
     }
 }

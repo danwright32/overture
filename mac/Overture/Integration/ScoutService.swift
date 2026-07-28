@@ -12,7 +12,6 @@ enum ScoutService {
         var inserted: Int
         var updated: Int
         var skipped: Int
-        var uncertain: Int
         // #797: nights folded into a multi-night run rather than upserted on their own. Deliberately
         // NOT counted as `skipped`, which means "decided not to pursue" (a blocked date, a
         // do-not-contact org); a collapsed night was pursued, as part of its run. Kept separate so
@@ -130,7 +129,6 @@ enum ScoutService {
             inserted += other.inserted
             updated += other.updated
             skipped += other.skipped
-            uncertain += other.uncertain
             collapsedIntoRun += other.collapsedIntoRun
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
@@ -287,7 +285,7 @@ enum ScoutService {
             }
         }
 
-        var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
 
         // The native sources (Carnegie, and only Carnegie). Free, synchronous, and fully ingested on
         // every run including the automatic one, so today's behavior is preserved exactly.
@@ -499,7 +497,7 @@ enum ScoutService {
             source?.lastCheckedAt = now
             source?.health = .failing
             source?.lastFailure = failure
-            var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+            var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
             outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure),
                                             listingsURL: source?.listingsURL)]
             return outcome
@@ -901,7 +899,7 @@ enum ScoutService {
         sourceIds: [String] = [],
         into context: ModelContext
     ) -> Outcome {
-        var inserted = 0, updated = 0, skipped = 0, uncertain = 0, collapsedIntoRun = 0
+        var inserted = 0, updated = 0, skipped = 0, collapsedIntoRun = 0
         var suppressedShows: [String] = []      // #802: by org name, folded into one line each below
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
@@ -911,7 +909,6 @@ enum ScoutService {
         var prospects: [AssembledProspect] = []
         for e in events {
             let c = EventClassifier.classify(e)
-            if c.confidence == .uncertain { uncertain += 1 }
             // #384: the venue is what aims a "don't want to shoot this" pass at ONE show rather than
             // at the whole org.
             let verdict = HistoryMatch.matchRelationship(name: e.title, presenter: e.presenter,
@@ -1126,13 +1123,13 @@ enum ScoutService {
             // anything, and letting it reconcile would judge a show absent from a feed that was never
             // actually recorded. Deliberately not merely "safe": there is nothing to reconcile against.
             var outcome = Outcome(found: events.count, inserted: inserted, updated: updated,
-                                  skipped: skipped, uncertain: uncertain,
+                                  skipped: skipped,
                                   collapsedIntoRun: collapsedIntoRun, saveFailed: true)
             outcome.suppressedOrgs = suppressed
             return outcome
         }
         var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
-                              uncertain: uncertain, collapsedIntoRun: collapsedIntoRun)
+                              collapsedIntoRun: collapsedIntoRun)
         outcome.suppressedOrgs = suppressed
         outcome.report = report
         return outcome
@@ -1261,22 +1258,12 @@ enum ScoutService {
             runNights: p.runNights)
         prospect.presenter = p.presenter
         prospect.location = p.location
-        prospect.classificationConfidence = p.confidence
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
         prospect.sourceIds = p.sourceIds        // #771
         prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
-    }
-
-    // #1132: whether a re-scout should clear Dan's plain "confirm" acknowledgement so the row's unsure
-    // badge resurfaces. True ONLY when the fresh guess is uncertain AND he had merely confirmed the prior
-    // guess (reviewed) without correcting it (not overridden). A confident fresh guess has no badge to
-    // resurface; a never-confirmed show already shows the badge; a corrected show is protected. Pure, so
-    // this rule is pinned by ReScoutConfidenceAckTests without a full scout run.
-    nonisolated static func reScoutClearsConfidenceAck(freshConfidence: String, wasReviewed: Bool, wasOverridden: Bool) -> Bool {
-        freshConfidence == Confidence.uncertain.rawValue && wasReviewed && !wasOverridden
     }
 
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
@@ -1304,25 +1291,14 @@ enum ScoutService {
         // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
         // (via ClassificationOverride.rescored) and by the fresh score in p.
         existing.passedOnThisShow = p.passedOnThisShow
-        // #1132: read the prior acknowledgement BEFORE overwriting the confidence, so the decision below
-        // uses the state as Dan last left it.
-        let clearAck = reScoutClearsConfidenceAck(freshConfidence: p.confidence,
-                                                  wasReviewed: existing.confidenceReviewedByDan,
-                                                  wasOverridden: existing.classificationOverriddenByDan)
-        existing.classificationConfidence = p.confidence  // scout-owned; refreshed each run
-        // #901: scout-owned too, and refreshed to whatever is true NOW: a vacation Dan cancelled stops
+        // #901: scout-owned, and refreshed to whatever is true NOW: a vacation Dan cancelled stops
         // flagging the show, and a shoot booked over a week he was merely away re-flags it under a new
         // key, which is a fact he has not seen and so is not covered by anything he cleared.
         existing.setScoutConflict(p.conflictKey)
         // NOTE: never touch conflictClearedKey here; Dan owns that decision (#901).
-        // #1132: confidenceReviewedByDan is Dan's acknowledgement, and normally the scout never touches it.
-        // The ONE exception: a plain "confirm" (reviewed, not corrected) acknowledged the specific guess he
-        // saw, so when a later run re-guesses the show as uncertain again that acknowledgement is stale and
-        // would hide the row's "Unsure call" badge over a fresh guess he hasn't seen. Clear it in exactly
-        // that case so the badge resurfaces. A show he CORRECTED (classificationOverriddenByDan) is kept and
-        // re-scored above, never re-guessed, so it is left protected.
-        if clearAck { existing.confidenceReviewedByDan = false }
-        // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag.
+        // NOTE: never touch classificationOverriddenByDan here; Dan owns that flag. #1533 retired the
+        // classification-confidence pair that used to be refreshed and conditionally cleared here (#1132),
+        // along with the badge whose resurfacing was the only reason either was tracked.
 
         // Two guards run over this prospect, and they are ORTHOGONAL: Dan can correct a prospect's
         // discipline at any time, unrelated to whether a performer match separately corrected its
@@ -1359,7 +1335,7 @@ enum ScoutService {
             // meaningful without reverting his correction. Because rescored() reads priorRelationship
             // straight off `existing`, this one call already reflects a protected performer match, with
             // no combined-rule branch needed. That is what makes the two guards compose.
-            let refit = ClassificationOverride.rescored(existing, discipline: nil, production: nil)
+            let refit = ClassificationOverride.rescored(existing)
             existing.fitScore = refit.score
             existing.tier = refit.tier.rawValue
         } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {

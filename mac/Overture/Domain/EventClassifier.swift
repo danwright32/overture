@@ -2,8 +2,9 @@ import Foundation
 
 // Rule-based event classifier, ported from the engine's classifyEvent.ts. Turns a
 // raw extracted calendar event into the ranker's classification inputs from simple
-// signals (presenter, venue, title keywords). Ambiguous events are flagged
-// `.uncertain` for an optional AI refine pass (issue #30).
+// signals (presenter, venue, title keywords). It used to flag ambiguous events
+// `.uncertain` for an optional AI refine pass (#30); that pass was never built, the
+// round-trip files for it were retired in #493, and the flag itself in #1533.
 
 struct ExtractedEvent: Codable, Equatable, Sendable {
     var title: String
@@ -37,8 +38,14 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     var venueNotPublished: Bool?
 }
 
-enum Confidence: String, Sendable { case confident, uncertain }
-
+// #1533: this used to carry a `confidence` too, and the queue showed it as "Not sure of the genre or
+// type, tap to confirm or fix". It was derived from production and profile ALONE, so it never measured
+// the genre it named, and it was true of 431 of the 556 undecided rows on the live store while having
+// been answered twice in the app's life. Both halves of the sentence were dead ends: the app was not
+// unsure of the genre, and the production type is a fact Dan does not research (it means reading the
+// presenter's site to see who is putting the show on). `.unknown` production already scores a neutral 0,
+// so leaving it unanswered was never a scoring error, and the whole prompt's ranking stake was 16 rows.
+// The genre stays correctable by hand from the row; nothing prompts for it.
 struct EventClassification: Equatable, Sendable {
     var discipline: Discipline
     var reachable: Bool
@@ -46,7 +53,6 @@ struct EventClassification: Equatable, Sendable {
     var profile: Profile
     var coverage: Coverage
     var fitReason: String
-    var confidence: Confidence
 }
 
 enum EventClassifier {
@@ -102,17 +108,13 @@ enum EventClassifier {
 
         let reachable = true
 
-        let confidence: Confidence =
-            (production == .unknown || (production == .selfProduced && profile == .neutral)) ? .uncertain : .confident
-
         return EventClassification(
             discipline: discipline,
             reachable: reachable,
             production: production,
             profile: profile,
             coverage: coverage,
-            fitReason: buildReason(production: production, profile: profile, coverage: coverage, discipline: discipline),
-            confidence: confidence
+            fitReason: buildReason(production: production, profile: profile, coverage: coverage, discipline: discipline)
         )
     }
 

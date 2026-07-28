@@ -13,7 +13,7 @@ import Foundation
 @Suite("Structured end-of-scout warnings (#1027)")
 struct ScoutWarningsTests {
     private func outcome() -> ScoutService.Outcome {
-        ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
     }
 
     private func failed(_ id: String, _ org: String, _ f: SourceFailure) -> ScoutService.SourceResult {
@@ -229,7 +229,7 @@ struct SilentlyEmptyFeedCopyTests {
 
     // The old single-string warning reads the SAME copy, so the two surfaces cannot drift apart.
     @Test func theSingleStringWarningNamesTheCalendarToo() {
-        var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0, uncertain: 0)
+        var outcome = ScoutService.Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
         outcome.sources = [ScoutService.SourceResult(sourceId: "jalopy", orgName: "Jalopy Theatre",
                                                     state: .ingested(found: 0), hadBaseline: true)]
         #expect(outcome.warning == ScoutWarningCopy.silentlyEmptyFeed(orgNames: ["Jalopy Theatre"]))

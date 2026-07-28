@@ -194,7 +194,7 @@ struct PassedShowPenaltyTests {
         p.passedOnThisShow = true
         ctx.insert(p)
 
-        ClassificationOverride.correct(p, discipline: .dance, production: nil, now: Date())
+        ClassificationOverride.correct(p, discipline: .dance, now: Date())
 
         // dance 3 + self 2 + strong 2 + likely_uncovered 2 = 9, minus the 5 for the pass.
         #expect(p.fitScore == 4)

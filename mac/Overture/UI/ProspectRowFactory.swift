@@ -70,9 +70,8 @@ enum ProspectRowFactory {
             // #1038: a run-level cancel (the reply-classify run drafts every queued reply in one pass), so
             // it takes no recipient id: it writes the sentinel the runner checks on its heartbeat.
             onCancelReplyDraft: { ReplyClassifyService.requestCancel() },
-            onMarkConfidenceReviewed: { ProspectMutations.markConfidenceReviewed(item, prospects: prospects, context: context, feedback: feedback) },
-            onCorrectClassification: { d, p in
-                ProspectMutations.correctClassification(item, discipline: d, production: p, prospects: prospects, context: context, feedback: feedback)
+            onCorrectClassification: { d in
+                ProspectMutations.correctClassification(item, discipline: d, prospects: prospects, context: context, feedback: feedback)
             },
             onRename: { name in ProspectMutations.renameGroup(item, to: name, prospects: prospects, context: context, feedback: feedback) },
             onResetGroupName: { ProspectMutations.resetGroupName(item, prospects: prospects, context: context, feedback: feedback) },

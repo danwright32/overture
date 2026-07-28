@@ -91,11 +91,14 @@ final class Prospect {
     var disciplineAtSend: String? = nil
     var productionAtSend: String? = nil
 
-    // The rules classifier's confidence ("confident"/"uncertain"). Scout-owned: refreshed
-    // every run. confidenceReviewedByDan is Dan-owned: once he has eyeballed a guess, the
-    // "unsure" mark stays cleared even across re-scouts (#32). Defaulted so existing
-    // records and the scout's inserts are unaffected.
-    var classificationConfidence: String = Confidence.confident.rawValue
+    // RETAINED STORAGE, read by nothing (#1533). These held the rules classifier's confidence and Dan's
+    // acknowledgement of it, for the "Not sure of the genre or type" badge that #1533 retired. Nothing
+    // writes or reads either one now; they are left on the model deliberately rather than deleted,
+    // because every schema change this app has ever made was ADDITIVE and it carries no MigrationPlan or
+    // VersionedSchema (see AppSchema). Dropping a stored property would be its first subtractive
+    // migration, against a live store whose only safety net is the launch backup, so it gets its own
+    // change with a rehearsal against a store clone first.
+    var classificationConfidence: String = "confident"
     var confidenceReviewedByDan: Bool = false
     // Dan-owned: once he corrects the discipline/production, the scout must not revert
     // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.

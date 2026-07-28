@@ -70,25 +70,6 @@ struct ScoutServiceTests {
         #expect(outcome.inserted == 1)  // only the recital remains
     }
 
-    @Test func reScoutRefreshesConfidenceButKeepsDansReview() throws {
-        let ctx = ModelContext(try container())
-        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
-        let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
-                                          performanceDate: "2026-06-24", venue: "Stern Auditorium / Perelman Stage")
-        let choir = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(choir?.classificationConfidence == Confidence.confident.rawValue) // scout wrote a verdict
-
-        // Dan reviews it, and pretend the scout had flagged it uncertain.
-        choir?.confidenceReviewedByDan = true
-        choir?.classificationConfidence = Confidence.uncertain.rawValue
-        try ctx.save()
-
-        _ = ScoutService.apply(events: liveEvents, clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
-        let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first
-        #expect(refreshed?.confidenceReviewedByDan == true)                          // Dan-owned, preserved
-        #expect(refreshed?.classificationConfidence == Confidence.confident.rawValue) // scout-owned, refreshed
-    }
-
     // #970 Phase 3. The scout reports a location (#985) and the resolver can read one (#989), but the
     // gate runs at QUEUE time against `Prospect.location`, so the string has to actually land on the
     // row. Without this hop the whole feature is a no-op with green tests either side of a gap, which

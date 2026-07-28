@@ -18,7 +18,7 @@ struct SaveOrWarnConsolidationGuardTests {
     private static let queueViewFunctions = [
         "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
-        "markConfidenceReviewed", "correctClassification", "setRecipientConversationState",
+        "correctClassification", "setRecipientConversationState",
         "confirmRecipientConversationState", "remindRecipientLater", "confirmBooking",
         "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]

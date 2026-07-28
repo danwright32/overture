@@ -219,14 +219,8 @@ struct ActionAckTests {
                 == "Couldn't save what happened sending to Aurora Strings: check Gmail to see if it went out.")
     }
 
-    // #487: confirming or correcting an unsure classification changes nothing else visible on
-    // the row once the chip clears, so both need their own acknowledgment copy.
-    @Test("confirming an unsure classification names the org")
-    func confidenceConfirmed() {
-        #expect(ActionAck.confidenceConfirmed(org: "Aurora Strings")
-                == "Confirmed Aurora Strings's classification")
-    }
-
+    // #487: a genre correction changes nothing else visible on the row, so it needs its own
+    // acknowledgment copy to show it landed.
     @Test("correcting a classification names the org")
     func classificationCorrected() {
         #expect(ActionAck.classificationCorrected(org: "Aurora Strings")
@@ -234,13 +228,13 @@ struct ActionAckTests {
     }
 }
 
-// #487: markConfidenceReviewed and correctClassification handle the "Unsure call" menu's
-// confirm/correct actions but didn't route through ActionFeedback like snooze/restore/voice
-// already do, so tapping "This looks right" on a lead whose score doesn't move gave no signal
-// it registered. Both live on QueueView, a SwiftUI View backed by @Environment/@Query, so they
-// can't be invoked directly in a unit test; scan their source bodies instead, the same guard
-// technique SendReceiptSaveGuardTests uses for #477.
-@Suite("Confidence-flag actions acknowledge (#487)")
+// #487: correctClassification handles the genre editor's Save but didn't route through
+// ActionFeedback like snooze/restore/voice already do, so correcting a lead whose score doesn't move
+// gave no signal it registered. It lives on QueueView, a SwiftUI View backed by @Environment/@Query,
+// so it can't be invoked directly in a unit test; scan its source body instead, the same guard
+// technique SendReceiptSaveGuardTests uses for #477. (#1533 retired its sibling markConfidenceReviewed
+// along with the badge that called it.)
+@Suite("Genre correction acknowledges (#487)")
 struct ConfidenceFeedbackGuardTests {
     private func queueViewSource() throws -> String {
         let queueView = URL(fileURLWithPath: #filePath)
@@ -248,12 +242,6 @@ struct ConfidenceFeedbackGuardTests {
             .deletingLastPathComponent()   // mac/
             .appendingPathComponent("Overture/UI/ProspectMutations.swift")
         return try String(contentsOf: queueView, encoding: .utf8)
-    }
-
-    @Test func markConfidenceReviewedAcknowledges() throws {
-        let body = try SourceGuard.functionBody(named: "markConfidenceReviewed", in: try queueViewSource())
-        #expect(body.contains("feedback.acknowledge("),
-                "markConfidenceReviewed must acknowledge via ActionFeedback so confirming a classification is never a silent no-op (#487).")
     }
 
     @Test func correctClassificationAcknowledges() throws {

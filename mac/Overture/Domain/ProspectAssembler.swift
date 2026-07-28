@@ -36,7 +36,6 @@ struct AssembledProspect: Equatable, Sendable {
     var downbeatClientId: String?
     var possibleMatchSource: String?
     var possibleMatchName: String?
-    var confidence: String
     // Did the ORG-name match resolve to a real relationship this run (#750)? Threaded through
     // explicitly rather than inferred from `priorRelationship != "none"`, because ScoutService.apply
     // has to tell "the org matched nothing" apart from "the org matched nothing, but a performer
@@ -117,7 +116,6 @@ enum ProspectAssembler {
             downbeatClientId: verdict.downbeatClientId,
             possibleMatchSource: verdict.possible?.source,
             possibleMatchName: verdict.possible?.name,
-            confidence: c.confidence.rawValue,
             // A confident org match is exactly one that resolved to a real relationship: matchRelationship
             // returns .none for both no-match and a merely-possible (fuzzy) match, neither of which
             // outranks a standing performer-match correction (#750).

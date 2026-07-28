@@ -13,7 +13,7 @@ struct QueueViewUserActionSaveGuardTests {
     private static let guardedFunctions = [
         "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
-        "markConfidenceReviewed", "correctClassification", "setRecipientConversationState",
+        "correctClassification", "setRecipientConversationState",
         "confirmRecipientConversationState", "remindRecipientLater", "confirmBooking",
         "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]

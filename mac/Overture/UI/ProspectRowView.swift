@@ -3,9 +3,8 @@ import SwiftUI
 // One editorial "call sheet" entry. High-fit prospects carry a gold edge; the fit
 // score reads like a grade. Keep and Dismiss act on the local store directly.
 struct ProspectRowView: View {
-    // #348: pulled forward right after Keep on a still-unconfirmed prospect, instead of leaving
-    // an unresolved guess to carry silently forward.
-    @State private var showConfirmClassification = false
+    // #1533: the genre editor, opened from the genre line in the header.
+    @State private var showGenreEditor = false
     // #1274: the manual-rename sheet and its in-progress text.
     @State private var showingRename = false
     @State private var renameDraft = ""
@@ -40,8 +39,7 @@ struct ProspectRowView: View {
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     var onCancelReplyDraft: () -> Void = {}   // #1038: stop the detached reply-classify + drafter run
-    var onMarkConfidenceReviewed: () -> Void = {}
-    var onCorrectClassification: (Discipline?, Production?) -> Void = { _, _ in }
+    var onCorrectClassification: (Discipline) -> Void = { _ in }
     var onRename: (String) -> Void = { _ in }   // #1274: Dan renames a scout-generated name
     var onResetGroupName: () -> Void = {}        // #1274: hand the name back to the scout
     var onConfirmBooking: () -> Void = {}
@@ -112,7 +110,6 @@ struct ProspectRowView: View {
                     tags
                     relatedRunNote
                     linkedEngagementNote
-                    confidenceFlag
                     orgDoNotContactFlag
                     bookingSuggestionFlag
                     alreadyCoveredFlag
@@ -258,10 +255,23 @@ struct ProspectRowView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(QueueModel.disciplineLabel(item.discipline).uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.0)
-                .foregroundStyle(OVColor.gold)
+            // #1533: the genre the scout read, and the place to fix it when it read wrong. The amber
+            // unsure-classification badge that used to host the editor is gone (it claimed to be unsure
+            // of a genre it had never measured, and asked for a production type Dan does not research),
+            // so the correction moved onto the line that STATES the genre. Same shape as the #1274 rename
+            // pencil two lines below: a quiet correction to a scout-owned field, which then survives
+            // every later scout. Nothing prompts; the row only answers when Dan disagrees.
+            Button {
+                showGenreEditor = true
+            } label: {
+                Text(QueueModel.disciplineLabel(item.discipline).uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.0)
+                    .foregroundStyle(OVColor.gold)
+            }
+            .buttonStyle(.plain)
+            .help("Set this show's genre")
+            .popover(isPresented: $showGenreEditor) { genreEditorPopover }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(item.groupName)
                     .font(OVType.groupName)
@@ -382,31 +392,6 @@ struct ProspectRowView: View {
         .padding(.top, 2)
     }
 
-    // A rules-guessed classification Dan hasn't reviewed (#60). Tapping opens the confirm editor
-    // (#1363): both the genre and the production type at once, pre-filled with the scout's guess, so
-    // he can correct either or both in one pass. It clears once he confirms (confidenceReviewedByDan
-    // or classificationOverriddenByDan). The SAME editor is auto-opened right after Keep (#348), which
-    // is why the popover is anchored here on the badge, the one element present in both cases.
-    @ViewBuilder private var confidenceFlag: some View {
-        if item.isClassificationUncertain {
-            Button {
-                showConfirmClassification = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "questionmark.circle.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Not sure of the genre or type, tap to confirm or fix")
-                }
-                .ovPill(.warning)
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .help("The scout's rules weren't sure how to classify this one. Set the genre and production type, then confirm.")
-            .padding(.top, 2)
-            .popover(isPresented: $showConfirmClassification) { confirmClassificationPopover }
-        }
-    }
 
     // #1145/#1308: the reachability note read at Review, so Dan doesn't dismiss a reachable show in favour
     // of one he can't email. Before a probe it is the calm, advisory Layer 1 "Hard to reach" heuristic;
@@ -530,7 +515,7 @@ struct ProspectRowView: View {
     }
 
     // A possible booking that needs Dan's explicit sign-off before it locks (#114).
-    // Gold tone (positive, not a warning), mirroring the confidenceFlag capsule idiom.
+    // Gold tone (positive, not a warning), the capsule idiom the row's other flags share.
     @ViewBuilder private var bookingSuggestionFlag: some View {
         if item.bookingSuggested {
             Menu {
@@ -757,13 +742,12 @@ struct ProspectRowView: View {
                     Label("Kept", systemImage: "checkmark.seal.fill")
                         .ovPill(.confirmed)
                 } else {
+                    // #1533: Keep no longer pulls up a classification editor. #348 opened one here on
+                    // every unconfirmed guess, which was three quarters of the queue, for a question
+                    // (self-produced or agency-presented) Dan does not research. Keeping a show is now
+                    // one click again.
                     Button {
-                        let wasUncertain = item.isClassificationUncertain
                         onKeep()
-                        // #348: surface the confirm editor right after Keep. The popover is anchored on
-                        // the still-visible uncertainty badge (confidenceFlag), not here: this Keep button
-                        // is replaced by the "Kept" pill the instant the keep lands, so it can't host it.
-                        if wasUncertain { showConfirmClassification = true }
                     } label: {
                         Text("Keep").font(OVType.meta).foregroundStyle(OVColor.onForest)
                             .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
@@ -808,66 +792,54 @@ struct ProspectRowView: View {
     // one pass. Confirming an unchanged guess accepts it (marks reviewed, no override); changing either
     // dimension corrects only what changed. The resolve decision lives in ClassificationResolution so it
     // stays testable outside the view (#863).
-    private var confirmClassificationPopover: some View {
-        ClassificationConfirmEditor(
+    private var genreEditorPopover: some View {
+        GenreEditor(
             currentDiscipline: item.discipline,
-            currentProduction: item.production,
-            onMarkReviewed: onMarkConfidenceReviewed,
             onCorrect: onCorrectClassification,
-            onClose: { showConfirmClassification = false }
+            onClose: { showGenreEditor = false }
         )
     }
 }
 
-// The confirm/fix editor for an unconfirmed classification (#1363). Both the genre and production
-// pickers, pre-filled with the scout's guess, and one Confirm button. A separate view so each open
-// starts its picker state fresh from the current guess.
-private struct ClassificationConfirmEditor: View {
+// The genre editor (#1363, rescoped by #1533). One picker, pre-filled with the genre the scout read,
+// and one Save. A separate view so each open starts its picker state fresh from the current value.
+//
+// It carried a production-type picker until #1533. That question is no longer asked: answering it
+// honestly means reading the presenter's site to see who is putting the show on, which Dan does not do,
+// and an unanswered production already scores a neutral 0.
+private struct GenreEditor: View {
     let currentDiscipline: String
-    let currentProduction: String
-    let onMarkReviewed: () -> Void
-    let onCorrect: (Discipline?, Production?) -> Void
+    let onCorrect: (Discipline) -> Void
     let onClose: () -> Void
 
     @State private var selectedDiscipline: Discipline
-    @State private var selectedProduction: Production
 
-    init(currentDiscipline: String, currentProduction: String,
-         onMarkReviewed: @escaping () -> Void,
-         onCorrect: @escaping (Discipline?, Production?) -> Void,
+    init(currentDiscipline: String,
+         onCorrect: @escaping (Discipline) -> Void,
          onClose: @escaping () -> Void) {
         self.currentDiscipline = currentDiscipline
-        self.currentProduction = currentProduction
-        self.onMarkReviewed = onMarkReviewed
         self.onCorrect = onCorrect
         self.onClose = onClose
         _selectedDiscipline = State(initialValue: Discipline(rawValue: currentDiscipline) ?? .other)
-        _selectedProduction = State(initialValue: Production(rawValue: currentProduction) ?? .unknown)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
-            Text("Confirm classification").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-            Picker("Genre", selection: $selectedDiscipline) {
+            Text("Genre").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            Picker("", selection: $selectedDiscipline) {
                 ForEach(Discipline.allCases, id: \.self) { discipline in
                     Text(QueueModel.disciplineLabel(discipline.rawValue)).tag(discipline)
                 }
             }
-            Picker("Production type", selection: $selectedProduction) {
-                Text("Self-produced").tag(Production.selfProduced)
-                Text("Agency/presented").tag(Production.agency)
-                Text("Not sure").tag(Production.unknown)
-            }
+            .labelsHidden()
             HStack {
                 Spacer()
-                Button("Confirm") {
-                    switch ClassificationResolution.resolve(
-                        currentDiscipline: currentDiscipline, currentProduction: currentProduction,
-                        selectedDiscipline: selectedDiscipline, selectedProduction: selectedProduction) {
-                    case .acceptAsIs:
-                        onMarkReviewed()
-                    case let .correct(discipline, production):
-                        onCorrect(discipline, production)
+                Button("Save") {
+                    // The no-change arm writes NOTHING: an override flag set by a Save that changed
+                    // nothing would tell every later scout to stop refreshing a genre Dan never corrected.
+                    if case let .correct(discipline) = ClassificationResolution.resolve(
+                        currentDiscipline: currentDiscipline, selectedDiscipline: selectedDiscipline) {
+                        onCorrect(discipline)
                     }
                     onClose()
                 }
@@ -875,7 +847,7 @@ private struct ClassificationConfirmEditor: View {
             }
         }
         .padding(OVSpacing.lg)
-        .frame(width: 280)
+        .frame(width: 240)
     }
 }
 

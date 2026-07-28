@@ -20,7 +20,7 @@ struct ScoutOutcomeWarningTests {
     private func outcome(found: Int, clientListWarning: String? = nil,
                          sources: [ScoutService.SourceResult] = []) -> ScoutService.Outcome {
         var o = ScoutService.Outcome(found: found, inserted: 0, updated: 0, skipped: 0,
-                                     uncertain: 0, clientListWarning: clientListWarning)
+                                     clientListWarning: clientListWarning)
         o.sources = sources
         return o
     }

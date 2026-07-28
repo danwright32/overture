@@ -150,10 +150,12 @@ This was the TypeScript scout's round trip with a Claude-Code-assisted refine st
 rules left `uncertain`: it wrote `uncertain.json`, a human re-judged that slice via a Claude Code
 session and wrote `refined.json`, and the scout merged the result back in. Retired in #493 after
 confirming it was never actually completed in practice, an `uncertain.json` existed on disk from an
-early manual test run, over two weeks stale, but no `refined.json` was ever produced. The native
-app's queue view already surfaces any prospect with `confidence == uncertain &&
-!confidenceReviewedByDan` for Dan to correct by hand (`ClassificationOverride.swift`), which fully
-covers the same need, so the file hand-off was dropped rather than ported.
+early manual test run, over two weeks stale, but no `refined.json` was ever produced. At the time,
+the native app's queue view surfaced every prospect the rules called uncertain for Dan to correct by
+hand, which covered the same need, so the file hand-off was dropped rather than ported. #1533 then
+retired that flag too (it never measured the genre it named, and the production type it really asked
+about is not something Dan researches). What survives is the by-hand genre correction on the row
+(`ClassificationOverride.swift`); no re-judge pass, automated or assisted, exists in any form.
 
 ### `overture-prep-queue.json` and `overture-prep-results.json`
 
