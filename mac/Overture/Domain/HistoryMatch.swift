@@ -93,6 +93,24 @@ enum HistoryMatch {
         return names
     }
 
+    // #1702: the identities a FUZZY match may be made on, which are the confident ones minus a presenter
+    // that is really the building's own brand.
+    //
+    // #995 already ruled that a shared hall is not the group, and excluded the venue and location as
+    // candidates. When a hall presents its own season the presenter field holds that same name anyway
+    // ("Carnegie Hall Presents"), so the venue walks back in through a field the rule never covered, and
+    // the row's OWN venue cannot catch it: those rows say "Zankel Hall" and "Stern Auditorium".
+    //
+    // It matters far more here than in the confident branch because of what a loose gate does with a name
+    // every show in a building shares: one past record raises the same question on all of them at once
+    // (#1693 put a single dismissed act on 18 Carnegie Hall cards). A confident match on that name is a
+    // different thing, an exact identity, and it stays: Chain Theatre is both a room and one of Dan's
+    // clients, and three of its shows are recognised as his past client through this field alone.
+    private static func fuzzyCandidateNames(_ title: String, _ presenter: String?,
+                                            _ venueBrands: ProducerGate.VenueBrands) -> [String] {
+        candidateNames(title, presenter).filter { !venueBrands.contains($0) }
+    }
+
     // The history status vocabulary the ranker understands. An unrecognized or empty status
     // on a confidently matched record is treated as a neutral cold contact, never a boost.
     private static func relationship(forStatus status: String?) -> PriorRelationship {
@@ -124,10 +142,15 @@ enum HistoryMatch {
         presenter: String? = nil,
         venue: String? = nil,
         clients: [DownbeatClient],
-        history: [HistoryRecord]
+        history: [HistoryRecord],
+        // #1702: which presenter names read as a building's own brand, in the corpus this row came from.
+        // Defaults to none, so a caller with no store in hand behaves exactly as before rather than
+        // silently suppressing matches it has no evidence for.
+        venueBrands: ProducerGate.VenueBrands = .none
     ) -> MatchVerdict {
         // #1216: match the title AND the presenter identity, taking the strongest confident match.
         let names = candidateNames(name, presenter)
+        let fuzzyNames = fuzzyCandidateNames(name, presenter, venueBrands)
         let confidentHistory = history.filter { rec in
             names.contains { GroupNameMatch.isConfident($0, rec.groupName) }
         }
@@ -170,7 +193,7 @@ enum HistoryMatch {
         }
 
         if let possibleClient = clients.first(where: { c in
-            clientNames(c).contains { cn in names.contains { GroupNameMatch.isPossible($0, cn) } }
+            clientNames(c).contains { cn in fuzzyNames.contains { GroupNameMatch.isPossible($0, cn) } }
         }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
@@ -179,7 +202,7 @@ enum HistoryMatch {
         }
 
         if let possibleHistory = history.first(where: { rec in
-            names.contains { GroupNameMatch.isPossible($0, rec.groupName) }
+            fuzzyNames.contains { GroupNameMatch.isPossible($0, rec.groupName) }
         }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,

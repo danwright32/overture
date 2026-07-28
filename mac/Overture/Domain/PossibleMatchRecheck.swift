@@ -52,6 +52,10 @@ enum PossibleMatchRecheck {
         let flagged = all.filter { !($0.possibleMatchName ?? "").isEmpty }
         guard !flagged.isEmpty else { return 0 }
         guard let inputs = loadInputs(all) else { return 0 }
+        // #1702: built once from the whole store, the same corpus the scout judges against, so a presenter
+        // that is really its building's brand cannot raise a fuzzy question here either.
+        let venueBrands = ProducerGate.VenueBrands(
+            shows: all.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
 
         var changed = 0
         for p in flagged {
@@ -61,7 +65,7 @@ enum PossibleMatchRecheck {
             // aimed at one show.
             let verdict = HistoryMatch.matchRelationship(
                 name: p.groupName, presenter: p.presenter, venue: p.venue,
-                clients: inputs.clients, history: inputs.history)
+                clients: inputs.clients, history: inputs.history, venueBrands: venueBrands)
             guard verdict.possible?.source != p.possibleMatchSource
                     || verdict.possible?.name != p.possibleMatchName else { continue }
             p.possibleMatchSource = verdict.possible?.source

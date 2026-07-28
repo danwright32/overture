@@ -57,17 +57,68 @@ enum ProducerGate {
     static func qualifies(_ presenter: String, among shows: [Show],
                           promoted: Set<String> = []) -> Bool {
         guard let presenterKey = key(presenter) else { return false }
-        guard !isLiterallyAVenue(presenterKey, among: shows) else { return false }
+        guard !isVenueBrand(presenterKey, venueKeys: venueKeys(of: shows), promoted: promoted)
+        else { return false }
         if promoted.contains(presenterKey) { return true }
-        guard !namesAVenue(presenterKey, among: shows) else { return false }
         return distinctVenues(presenterKey, among: shows).count >= 2
     }
 
-    // A name spelled exactly like a venue in the set is that room, whatever else it also does.
-    private static func isLiterallyAVenue(_ presenterKey: String, among shows: [Show]) -> Bool {
-        shows.contains { key($0.venue) == presenterKey }
+    // #1702: "this presenter name is really the building's own brand", named once and shared, because a
+    // second copy of this judgment is how the two halves drift apart. The gate above asks it to refuse a
+    // shared reachability answer; HistoryMatch asks it to refuse a fuzzy name match, since a brand every
+    // show in the building shares lets ONE past record raise a question on all of them (#1693 hit 18
+    // Carnegie Hall cards that way).
+    //
+    // Promotion relaxes the containment arm and never the equality arm, exactly as qualifies always did:
+    // a presenter spelled precisely like a room IS the room, and there is no organisation there to
+    // promote. Takes an already-folded key, so callers that fold once for many lookups pay for it once.
+    // Takes the corpus as its FOLDED VENUE KEYS rather than its shows, because both arms only ever ask
+    // about venue strings, and the live store's 700-odd rows carry 114 distinct rooms between them. A
+    // caller asking about many presenters folds the venues once instead of per question.
+    static func isVenueBrand(_ presenterKey: String, venueKeys: Set<String>,
+                             promoted: Set<String> = []) -> Bool {
+        if venueKeys.contains(presenterKey) { return true }
+        if promoted.contains(presenterKey) { return false }
+        return venueKeys.contains { namesTheSameRoom(presenterKey, $0) }
     }
 
+    static func venueKeys(of shows: [Show]) -> Set<String> {
+        Set(shows.compactMap { key($0.venue) })
+    }
+
+    // The same verdict for a whole corpus, computed once. Built for the matcher, which asks it per ROW:
+    // re-walking every show for every row would be several hundred thousand string comparisons on the
+    // live store, and the answer never changes within a run.
+    struct VenueBrands: Equatable, Sendable {
+        private let brandKeys: Set<String>
+
+        // No corpus, no exclusions. The default for every caller that has no store in hand (a unit test,
+        // an importer), so this can never silently start suppressing matches somewhere that never opted in.
+        static let none = VenueBrands(brandKeys: [])
+
+        private init(brandKeys: Set<String>) { self.brandKeys = brandKeys }
+
+        init(shows: [Show], promoted: Set<String> = []) {
+            let venueKeys = ProducerGate.venueKeys(of: shows)
+            var keys = Set<String>()
+            for presenter in Set(shows.compactMap { $0.presenter }) {
+                guard let key = ProducerGate.key(presenter), !keys.contains(key) else { continue }
+                if ProducerGate.isVenueBrand(key, venueKeys: venueKeys, promoted: promoted) {
+                    keys.insert(key)
+                }
+            }
+            brandKeys = keys
+        }
+
+        func contains(_ presenter: String?) -> Bool {
+            guard let presenter, let key = ProducerGate.key(presenter) else { return false }
+            return brandKeys.contains(key)
+        }
+    }
+
+    // Equality is the first arm of isVenueBrand above: a name spelled exactly like a venue in the set is
+    // that room, whatever else it also does.
+    //
     // A name that CONTAINS, or IS CONTAINED IN, a venue somewhere in the set is that venue's own brand.
     //
     // LIVE-STORE-CLAIM verified=2026-07-28 measure="rows presented by Carnegie Hall Presents, the gate's single biggest admission before #1620"
@@ -82,11 +133,8 @@ enum ProducerGate {
     // the building inside a venue string that names the room ("Weill Recital Hall at Carnegie Hall").
     // Measured on the live store: it refuses The 52nd Street Project, Spit&Vigor and the Royal
     // Concertgebouw, each of which runs the room it is named after, and nothing else.
-    private static func namesAVenue(_ presenterKey: String, among shows: [Show]) -> Bool {
-        shows.contains { show in
-            guard let venueKey = key(show.venue) else { return false }
-            return containsAsWords(presenterKey, venueKey) || containsAsWords(venueKey, presenterKey)
-        }
+    private static func namesTheSameRoom(_ presenterKey: String, _ venueKey: String) -> Bool {
+        containsAsWords(presenterKey, venueKey) || containsAsWords(venueKey, presenterKey)
     }
 
     // Whole words only, and never on a single-word name. Both guards are load-bearing: The Cell and The

@@ -901,6 +901,14 @@ enum ScoutService {
     ) -> Outcome {
         var inserted = 0, updated = 0, skipped = 0, collapsedIntoRun = 0
         var suppressedShows: [String] = []      // #802: by org name, folded into one line each below
+        // #1702: which presenter names read as their building's own brand, judged over the store as it
+        // stands and computed ONCE per sweep rather than per event. Read here rather than passed in, so
+        // every caller (the scout, a test, a future one) judges against the real corpus and none of them
+        // can forget to supply it. A brand every show in a hall shares must not be able to raise a fuzzy
+        // "possible match", or one past record asks the same question on every show in the building.
+        let venueBrands = ProducerGate.VenueBrands(
+            shows: ((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
+                .map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
         var seenKeys = Set<String>()
@@ -913,7 +921,8 @@ enum ScoutService {
             // at the whole org.
             let verdict = HistoryMatch.matchRelationship(name: e.title, presenter: e.presenter,
                                                          venue: e.venue,
-                                                         clients: clients, history: history)
+                                                         clients: clients, history: history,
+                                                         venueBrands: venueBrands)
             switch ProspectAssembler.decide(event: e, classification: c, verdict: verdict) {
             case .skip(let reason):
                 skipped += 1
