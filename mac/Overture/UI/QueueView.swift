@@ -1178,6 +1178,17 @@ struct ReachabilityProbeControl: View {
                 .disabled(isRunning)
                 .help(isRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
             }
+        } else if QueueModel.dateReachabilityIsFullyChecked(items, geo: geo) {
+            // #1617: the finished date, in the slot the button held a moment ago. Quiet on purpose (no
+            // capsule, no icon, faint): it is a resting state Dan walks past, not a thing to act on, and
+            // the #1595 cutback of this control was about exactly that. It appears only on a date whose
+            // shows were really answered, so it stays rare rather than joining the 169.
+            HStack(spacing: 0) {
+                Spacer(minLength: OVSpacing.sm)
+                Text(ReachabilityProbeCopy.dateCheckedMarker)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.inkFaint)
+            }
         }
     }
 }
