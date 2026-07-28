@@ -93,6 +93,38 @@ struct ScoutServiceTests {
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).first?.location == "Louisville, KY")
     }
 
+    // #1686: the re-key guard that exists for exactly this case was defeated by the same variance. When a
+    // title has drifted, the show is recognised by its listing URL, its date and its venue instead
+    // (#29/#797), and that venue comparison was a raw lowercase, so one respelling of the room made it
+    // miss and a second row appeared. Three of the live store's four YNYC pairs carry the IDENTICAL
+    // season-page URL on both rows, so this guard should have caught every one of them. It compares
+    // through the same fold the key uses now.
+    @Test func aDriftedTitleIsStillRecognisedWhenTheVenueIsRespelled() throws {
+        let ctx = ModelContext(try container())
+        let first = ExtractedEvent(title: "Summer Community Sings", presenter: "Young New Yorkers' Chorus",
+                                   venue: "St. Paul's Episcopal Church (Carroll Gardens)",
+                                   performanceDate: "2026-06-24",
+                                   sourceUrl: "https://example.com/season")
+        _ = ScoutService.apply(events: [first], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+        #expect(try ctx.fetch(FetchDescriptor<Prospect>()).count == 1)
+
+        // The same night on the same season page, nine days later: the model put the neighbourhood in
+        // `location` this time, and the billing gained words the title fold cannot absorb.
+        let redrawn = ExtractedEvent(title: "Summer Community Sings with the Neighbourhood Choir",
+                                     presenter: "Young New Yorkers' Chorus",
+                                     venue: "St. Paul's Episcopal Church",
+                                     performanceDate: "2026-06-24",
+                                     sourceUrl: "https://example.com/season",
+                                     location: "Carroll Gardens")
+        _ = ScoutService.apply(events: [redrawn], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(all.count == 1, "one night, one room, one card")
+        #expect(all.first?.groupName == "Summer Community Sings with the Neighbourhood Choir")
+    }
+
     // The presenter is half of what the classifier reads, and it used to be thrown away at assemble.
     // That made every classification a one-way door: #980 fixed the classifier and could not be
     // replayed over the existing rows, because the input was gone. Storing it is what makes a future

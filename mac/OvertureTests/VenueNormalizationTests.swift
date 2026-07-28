@@ -12,6 +12,40 @@ struct VenueNormalizationTests {
         Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: venue)
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="stored prospect pairs whose keys differ only by a parenthetical clause in the venue half"
+    // #1686: the neighbourhood in PARENTHESES had no comma to split on, so #1498's reduction never
+    // reached it and one venue stayed two. Five pairs on the live store, ten rows, and Dan sees the
+    // Aug 4 sing twice. The runbook asks for the neighbourhood in `location`, and the extract model
+    // obeys on some days and bakes it into `venue` on others; that variance is permanent (it is a
+    // prompt, not code), so the key is what has to absorb it, exactly as it now absorbs a respelled
+    // title.
+    //
+    // Whatever follows the venue's own name in brackets says WHERE it is or what it is ALSO CALLED,
+    // never which venue it is: the live store's five are two neighbourhoods, one alternate name
+    // ("(MASS MoCA)"), one street address, and one note the model wrote to itself. Every consumer of
+    // this key also carries the date and the group, so dropping it cannot collide two real venues.
+    @Test func aVenueWrittenWithAndWithoutAParentheticalIsOneShow() {
+        // The live pairs, exactly as stored.
+        #expect(key("Summer Community Sings", "2026-08-04", "St. Paul's Episcopal Church (Carroll Gardens)")
+                == key("Summer Community Sings", "2026-08-04", "St. Paul's Episcopal Church"))
+        #expect(key("Holiday Modulations", "2026-12-11", "The Church of St. Mary the Virgin (Times Square)")
+                == key("Holiday Modulations", "2026-12-11", "The Church of St. Mary the Virgin"))
+        // An alternate name in brackets, not a location, folds the same way and for the same reason.
+        #expect(key("Annie Gosfield: Emma", "2026-07-31",
+                    "Massachusetts Museum of Contemporary Art (MASS MoCA)")
+                == key("Annie Gosfield: Emma", "2026-07-31", "Massachusetts Museum of Contemporary Art"))
+        // Two genuinely different rooms are still two shows: the fold drops the bracket, not the name.
+        #expect(key("G", "2026-07-01", "St. Paul's Episcopal Church (Carroll Gardens)")
+                != key("G", "2026-07-01", "St. Peter's Episcopal Church"))
+    }
+
+    // The DISPLAY string is untouched, the same way #1498's comma reduction deliberately left it alone.
+    // A card still reads the venue as the source wrote it, brackets and all; this fold is identity only.
+    @Test func theParentheticalFoldDoesNotChangeWhatACardShows() {
+        #expect(VenueNormalization.strippingEmbeddedAddress("St. Paul's Episcopal Church (Carroll Gardens)")
+                == "St. Paul's Episcopal Church (Carroll Gardens)")
+    }
+
     // The six confirmed duplicate pairs from the audit: the same show, once with a bare venue name and
     // once with the venue's own street address appended. Each pair must now produce ONE natural key.
     @Test func theSixConfirmedDuplicateShapesNowKeyAsOne() {

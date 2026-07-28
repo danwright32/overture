@@ -50,11 +50,29 @@ enum VenueNormalization {
     //
     // Deliberately NOT done inside `strippingEmbeddedAddress`, which VenueDisplay shares: a card should
     // still read "Weill Recital Hall, Carnegie Hall". This reduction is for identity only.
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="stored prospect pairs whose keys differ only by a parenthetical clause in the venue half"
+    // #1686: the same reduction, for a clause in PARENTHESES. It has no comma to split on, so the comma
+    // rule above never reached it and one venue stayed two: five pairs on the live store, ten rows, and
+    // Dan triaging the Aug 4 sing twice at two different scores. The runbook asks the extract model to
+    // put the neighbourhood in `location`; it obeys on some days and bakes it into `venue` on others, and
+    // that variance is permanent because the runbook is a prompt, not code (L27). The key is what has to
+    // absorb it, exactly as its title half now absorbs a respelled title (#1590).
+    //
+    // Whatever sits in those brackets says WHERE the venue is or what it is ALSO CALLED, never which
+    // venue it is. The live store's five are two neighbourhoods ("(Times Square)", "(Carroll Gardens)"),
+    // an alternate name ("(MASS MoCA)"), a street address, and a note the model wrote to itself. Every
+    // consumer of this key also carries the date and the group, so dropping it cannot collide two real
+    // rooms. Applied AFTER the comma reduction, so it only ever sees the venue's own name.
     static func keyName(_ raw: String) -> String {
         let firstClause = raw.split(separator: ",", omittingEmptySubsequences: false)[0]
             .trimmingCharacters(in: .whitespaces)
         // A venue that is nothing but a comma clause keeps its raw form rather than becoming empty.
-        return firstClause.isEmpty ? raw : firstClause
+        guard !firstClause.isEmpty else { return raw }
+        let withoutParenthetical = firstClause
+            .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        // A venue whose name is ENTIRELY a parenthetical keeps its name rather than becoming empty.
+        return withoutParenthetical.isEmpty ? firstClause : withoutParenthetical
     }
 
     // LIVE-STORE-CLAIM verified=2026-07-17 measure="whether every real street-address clause in the live store's venue strings starts with a digit"
