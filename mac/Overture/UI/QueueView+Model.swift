@@ -975,7 +975,10 @@ enum QueueModel {
     // every still-open, not-recently-answered show on those dates: the whole selection, no exceptions.
     static func probeSelection(dates: Set<String>, in rows: [QueueItem], among all: [QueueItem],
                                today: String, stage: StageFocus?, now: Date = Date(),
-                               promoted: Set<String> = []) -> (ProbeSelection.Summary, [String])? {
+                               promoted: Set<String> = [],
+                               // #1609: Dan's geography refusals, so a multi-date confirm can never
+                               // include, count, or charge for a show somewhere he will not travel.
+                               geo: GeoRefusals = .none) -> (ProbeSelection.Summary, [String])? {
         // The bar belongs to Scout, because the checkboxes do. Ticking dates and switching stage left it
         // pinned at the top offering to start a run against a selection Dan could neither see nor change
         // (his walk of the Debug build, 2026-07-27). The selection itself survives the trip: hiding is
@@ -985,7 +988,7 @@ enum QueueModel {
         let groups = groupByDate(rows).filter { dates.contains($0.id) }
         guard !groups.isEmpty else { return nil }
         let selected = groups.flatMap(\.items)
-        let candidateKeys = Set(groups.flatMap { reachabilityProbeCandidateKeys($0.items, now: now, today: today) })
+        let candidateKeys = Set(groups.flatMap { reachabilityProbeCandidateKeys($0.items, now: now, today: today, geo: geo) })
         // Open shows on those dates that were answered recently: free, and named in the confirm rather
         // than quietly dropped, because a count that omits rows stops being a promise about what is there.
         let answered = selected.filter { i in
@@ -1188,18 +1191,31 @@ enum QueueModel {
     // had already opened, so it disagreed with the Scout list Dan actually triages and would offer to
     // spend real money on a show the queue refuses to display.
     //
-    // NOTE on geography: `GeoRefusals.hidesFromQueue` is applied upstream by StageNavigation for every
-    // stage list, so a Scout row reaching here is already geo-filtered. It is not re-applied here because
-    // QueueItem carries no `location`. The one path that bypasses the stage filter is the #308 away-alert
-    // leads list; closing that needs a field on QueueItem and is tracked separately.
+    // #1609: geography is applied HERE, not merely relied on upstream. StageNavigation gates every stage
+    // list (#1570), so a Scout row reaching this rule was already filtered, but that made this safe only
+    // by accident of ordering. The #308 away-alert leads list renders through the same date section with
+    // no stage focus, skips that filter entirely, and its rows are untriaged, so the Check button appeared
+    // on them: a paid Opus lookup on a show Overture refuses to display anywhere else.
+    //
+    // The issue filing this said it first needed a `location` field on QueueItem. That was true when it
+    // was written and is not any more; the field exists and is populated from the prospect, so the gate is
+    // just an application of the same GeoRefusals value the queue's own filter uses. Asking it here means
+    // the two cannot answer differently about a row, which is the #1570 lesson applied one level down.
+    //
+    // The asymmetry is deliberate and comes straight from GeoRefusals (#970): a POSITIVE placement out of
+    // range excludes, and anything Overture cannot read is kept. Most rows carry no location at all, and a
+    // gate that treated silence as refusal would quietly stop offering checks on almost the whole queue.
     // #1598 Phase 5: a show already carrying an INHERITED answer is not a candidate either. This is where
     // the saving actually lands (59 lookups on the live store as measured 2026-07-27), and without it the
     // card would contradict itself: "Email found" sitting beside a button offering to go and find one.
     static func reachabilityProbeCandidateKeys(_ items: [QueueItem], now: Date = Date(),
-                                               today: String = QueueModel.easternToday()) -> [String] {
+                                               today: String = QueueModel.easternToday(),
+                                               geo: GeoRefusals = .none) -> [String] {
         items.filter { i in
             OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
                                    isBooked: i.isBooked, sentAt: i.sentAt, today: today)
+                && !geo.hidesFromQueue(location: i.location,
+                                       discipline: Discipline(rawValue: i.discipline) ?? .other)
                 && i.inheritedReachability == nil
                 && (i.reachabilityProbedAt == nil
                     || Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now))
