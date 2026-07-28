@@ -14,6 +14,10 @@ enum NotificationService {
         case away = "overture.away"
         case omniFocusPermission = "overture.omnifocus.permission"
         case omniFocusFailed = "overture.omnifocus.failed"
+        // #1601: the launch-time migrations failed to save. Carries no custom button, so it needs no
+        // entry in `categories()`; a plain tap falls through `route` to .openApp, which is the right
+        // destination since the fix is to reopen the app.
+        case launchFailed = "overture.launch.failed"
     }
 
     // #301: custom tap-button identifiers (the buttons that appear under a notification). The

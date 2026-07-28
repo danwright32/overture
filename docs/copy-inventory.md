@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **888 sentences**, from 303 source files.
+Every sentence Overture can say to Dan: **890 sentences**, from 303 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -31,6 +31,7 @@ What is not, and why:
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
+- `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
@@ -724,6 +725,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
     `UI/SourcesView.swift`
+"Its start-up tidy-up didn't save, so the queue may still be showing duplicates it meant to merge, or shows that have already gone by. Quit and reopen Overture to try again."
+    `Domain/LaunchMigrations.swift`
 "Just this show"
     `UI/DraftReviewView.swift`
 "Keep 1 show"
@@ -1018,6 +1021,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture couldn't finish starting up"
+    `Domain/LaunchMigrations.swift`
 "Overture couldn't move its data to \(newStoreURL.path): "
     `App/StoreRelocation.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."

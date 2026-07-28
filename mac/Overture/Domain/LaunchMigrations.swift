@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UserNotifications
 
 // #479: the launch-time backfills below used to run inline in AppDelegate against mainContext with no
 // save after them, so their durability depended on an autosave tick landing before quit. Consolidating
@@ -75,11 +76,53 @@ enum LaunchMigrations {
         // #1238: retire shows in a town Dan has blocked (or a built-in seed far-town), so a blocked town's
         // shows stay gone across launches. Mirrors WentByRetirement: Overture's own cut, its own reason.
         ExcludedTownRetirement.run(in: context)
+        return persist(context.save, report: { reportSaveFailure($0) })
+    }
+
+    // #1601: this used to be an inline `catch { return false }`, and AppDelegate discarded the false, so
+    // a failed launch save was invisible TWICE: the error never logged, the outcome never read.
+    //
+    // That was survivable while the launch pass only backfilled fields. #1590 ended it by adding a pass
+    // that DELETES rows (17 of them on the live store's first run). If the save fails, those deletes
+    // evaporate, the duplicates return, and the only symptom is a feature that looks like it was never
+    // built. Nothing is LOST either way, since every pass here is idempotent and simply runs again next
+    // launch, but silence turns a transient failure into a mystery.
+    //
+    // Extracted so the error path can actually be tested: SwiftData's save cannot be made to fail on
+    // demand from a test, so the decision ABOUT the outcome is what gets the seam, rather than the error
+    // path going untested because it is awkward to reach.
+    static func persist(_ save: () throws -> Void, report: (Error) -> Void) -> Bool {
         do {
-            try context.save()
+            try save()
             return true
         } catch {
+            report(error)
             return false
         }
     }
+
+    // Logged AND surfaced. The log is for whoever is diagnosing it; the notification is because a
+    // masthead key needs the window open to be seen, and a resident launch may have no window at all.
+    // Same first-party channel the OmniFocus failures use (#268), never an OS dialog.
+    static func reportSaveFailure(_ error: Error,
+                                  deliver: (UNNotificationRequest) -> Void =
+                                      { UNUserNotificationCenter.current().add($0) }) {
+        // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
+        NSLog("#1601 LaunchMigrations: the launch save failed, so no migration was persisted: %@",
+              String(describing: error))
+        // copy-inventory:ignore-end
+        NotificationService.post(.launchFailed,
+                                 title: LaunchMigrationsCopy.saveFailedTitle,
+                                 body: LaunchMigrationsCopy.saveFailedBody,
+                                 deliver: deliver)
+    }
+}
+
+// #1601: kept out of the view and named, so the copy inventory shows the whole sentence Dan reads (#915).
+enum LaunchMigrationsCopy {
+    static let saveFailedTitle = "Overture couldn't finish starting up"
+    // Says what did not happen, what he may therefore see, and the one thing that retries it. It does
+    // NOT claim anything was lost, because nothing is: every launch pass is idempotent and runs again.
+    static let saveFailedBody =
+        "Its start-up tidy-up didn't save, so the queue may still be showing duplicates it meant to merge, or shows that have already gone by. Quit and reopen Overture to try again."
 }
