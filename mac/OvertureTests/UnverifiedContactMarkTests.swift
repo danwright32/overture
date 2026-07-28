@@ -123,6 +123,29 @@ struct UnverifiedContactMarkTests {
         #expect(ReachabilityCopy.unverifiedEmailFoundBadge == "Unverified email found")
     }
 
+    // The explanation has to actually be REACHABLE from the badge. When the per-address caveat was
+    // retired its help text was orphaned: the sentence stayed in the code, nothing referenced it, and
+    // hovering the new badge explained the wrong thing entirely. Caught only by re-reading the copy in
+    // the place that now produces it, which is the step this project requires and I skipped.
+    @Test func theExplanationIsWiredToTheBadgeThatNeedsIt() throws {
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Overture/UI/ProspectRowView.swift"), encoding: .utf8)
+        #expect(source.contains("unverifiedEmailFoundHelp"),
+                "hovering an unverified find must explain what unverified means")
+    }
+
+    // Reworded for its new job: it now speaks for EVERY address on the row, not one caveat beside a
+    // single line, and it must read for a single address as well as several. It also no longer mentions
+    // contact forms, which never reach this badge.
+    @Test func theExplanationSpeaksForTheWholeRowNotOneAddress() {
+        let help = ReachabilityCopy.unverifiedEmailFoundHelp
+        #expect(!help.contains("this one"), "written for a per-address caveat that no longer exists")
+        #expect(!help.contains("contact form"), "a form never reaches this badge")
+        #expect(help.contains("worth a look before you write"))
+    }
+
     // The per-address caveat is GONE from the row, which is the point of this change: it is what made
     // long addresses wrap. The row must not reintroduce it.
     @Test func theRowNoLongerPrintsAPerAddressCaveat() throws {

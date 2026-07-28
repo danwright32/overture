@@ -53,4 +53,34 @@ struct ReachabilityBadgeToneTests {
         #expect(act > dismiss)
         #expect(dismiss > later)
     }
+
+    // Dan's call, 2026-07-28, on seeing "Unverified email found" wearing the same gold as a verified
+    // find: an address he would want to CHECK before writing must not be painted as his most actionable
+    // row. It steps down to rust, which reads as "attention needed before you act" and is the same tier
+    // as "No email found" (both need a look before he does anything), while staying above the muted tier
+    // where a contact form sits, because an unverified address is still an address.
+    @Test func anUnverifiedFindStepsDownFromAVerifiedOne() {
+        #expect(Reachability.tone(for: .emailFound, onlyUnverified: true) == .warning)
+        #expect(Reachability.tone(for: .emailFound, onlyUnverified: false) == .pending)
+    }
+
+    // The full ordering it has to sit inside, so a later edit cannot flatten the three tiers together.
+    @Test func aVerifiedFindOutranksAnUnverifiedOneWhichOutranksAForm() {
+        let rank: [OVPillTone: Int] = [.pending: 3, .warning: 2, .confirmed: 1, .neutral: 0]
+        let verified = rank[Reachability.tone(for: .emailFound)]!
+        let unverified = rank[Reachability.tone(for: .emailFound, onlyUnverified: true)]!
+        let form = rank[Reachability.tone(for: .contactFormOnly)]!
+        #expect(verified > unverified)
+        #expect(unverified > form)
+    }
+
+    // `onlyUnverified` describes the ADDRESSES a check found, so it can only ever change the
+    // email-found badge. Every other state must ignore it rather than quietly changing colour.
+    @Test func theOtherBadgesIgnoreTheUnverifiedFlag() {
+        for badge in [Reachability.Badge.noEmailFound, .contactFormOnly, .weakContactOnly,
+                      .hardToReach, .staleProbe] {
+            #expect(Reachability.tone(for: badge, onlyUnverified: true)
+                    == Reachability.tone(for: badge))
+        }
+    }
 }
