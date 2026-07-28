@@ -219,4 +219,106 @@ struct FormOutreachTests {
         #expect(formContact.formOutreachRecordedAt != nil)
         #expect(p.sentAt == Date(timeIntervalSince1970: 1_000_000))
     }
+
+    // What Dan pastes into a form has to be the whole pitch, greeting included. The greeting is not in
+    // the stored draft: it was composed inside SendService at the moment of sending and nowhere else, so
+    // copying `draftBody` would have handed him a pitch that opens cold with no name on it. This pins
+    // the two to the same helper: the text on the clipboard IS the text Gmail would have sent.
+    @Test func theCopiedPitchIsExactlyWhatAnEmailWouldHaveSent() async throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let r = p.recipients[0]
+
+        let copied = OutgoingPitch.text(for: r, of: p)
+
+        #expect(copied?.hasPrefix("Hi Jake,") == true)
+        #expect(copied?.contains("I photograph performing arts in New York.") == true)
+
+        // The same recipient, given an address, sent for real: the body Gmail receives is that string.
+        r.email = "jake@aurorastrings.example"
+        p.status = .approved
+        let sender = PitchCapturingSender()
+        _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 1_000_000), sender: sender)
+
+        #expect(sender.last?.body == copied)
+    }
+}
+
+// The control's own state machine, which decides what the Review row offers. Kept out of the SwiftUI
+// view so it can be tested at all (#863).
+@MainActor
+@Suite("Form pitch control")
+struct FormPitchStateTests {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    private func show(_ ctx: ModelContext, email: String? = nil,
+                      formURL: String? = "https://aurorastrings.example/contact") -> Prospect {
+        let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "Jalopy",
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .drafted)
+        p.draftBody = "I photograph performing arts in New York."
+        ctx.insert(p)
+        if let id = Recipient.makeId(email: email, formURL: formURL) {
+            p.setRecipients([Recipient(id: id, email: email, provenance: .act,
+                                       contactMethodRaw: ContactMethod.formOrDM.rawValue,
+                                       contactFormURL: formURL)])
+        }
+        return p
+    }
+
+    @Test func aFormOnlyShowOffersTheCopyAndOpenControl() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        #expect(FormPitch.state(of: p) == .ready(recipientId: p.recipients[0].id,
+                                                 formURL: "https://aurorastrings.example/contact"))
+    }
+
+    // Dan pressed copy and went to the browser. The confirm has to survive him closing the window and
+    // coming back next week, or the row reads as untouched again, which is this issue in miniature.
+    @Test func onceHeHasOpenedTheFormTheRowWaitsOnHisAnswer() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        p.beginFormPitch(p.recipients[0], now: Date(timeIntervalSince1970: 1_000_000))
+        #expect(FormPitch.state(of: p) == .awaitingConfirmation(recipientId: p.recipients[0].id,
+                                                                formURL: "https://aurorastrings.example/contact"))
+    }
+
+    @Test func onceRecordedTheRowSaysSoInsteadOfOfferingTheControlAgain() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        p.recordFormOutreach(p.recipients[0], now: now, formURL: "https://aurorastrings.example/contact")
+        #expect(FormPitch.state(of: p) == .recorded(at: now))
+    }
+
+    // Dan's scope, 2026-07-28: forms only. A show with a working address goes through Overture's own
+    // send path, and this control must never become a way to mark anything at all as pitched.
+    @Test func aShowWithAnEmailNeverOffersTheControl() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, email: "hello@aurorastrings.example", formURL: nil)
+        #expect(FormPitch.state(of: p) == .unavailable)
+    }
+
+    // An Instagram is a verified dead end, not a form (#1626, #1004). The judgment is made once, in
+    // usableContactFormURLs, and this control inherits it rather than re-deciding.
+    @Test func aSocialOnlyContactIsNotAForm() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, formURL: "https://www.instagram.com/heybailay/")
+        #expect(FormPitch.state(of: p) == .unavailable)
+    }
+}
+
+// Records the mail it was handed, so a test can compare the copied pitch against the sent one.
+private final class PitchCapturingSender: MailSender, @unchecked Sendable {
+    var last: OutgoingMail?
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        last = mail
+        return SentReceipt(threadId: "t", messageID: "<m>")
+    }
 }

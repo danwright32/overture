@@ -126,6 +126,12 @@ final class Recipient {
     // inverse (the #752 snapshot shape). A form-only show is normally `.drafted`, but it can be recorded
     // from other states and guessing would quietly move it somewhere Dan did not leave it.
     var formOutreachPriorStatusRaw: String?
+    // When Dan copied the pitch and opened the form. PERSISTED, not view state: he leaves for the
+    // browser and may not come back this session, and a confirm step that evaporates leaves the row
+    // reading untouched again, which is the whole defect this issue exists to fix, only smaller. It also
+    // makes the in-between state honest, "you opened their form and have not said whether you sent it",
+    // instead of collapsing into either end.
+    var formOutreachStartedAt: Date?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
