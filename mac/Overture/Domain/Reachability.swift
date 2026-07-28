@@ -28,6 +28,32 @@ enum Reachability {
         case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly, staleProbe, emailFound
     }
 
+    // Dan's call, 2026-07-28, looking at the real cards: the badges' loudness was the exact INVERSE of
+    // how much he would act on them. "Contact form only" was the loudest thing on the row, "No email
+    // found" next, and "Email found", the one he can act on immediately, was the quietest.
+    //
+    // The cause is structural, not a bad colour pick: forest green on Overture's dark forest background
+    // has almost no contrast, so `.confirmed` is inherently the faintest tone in the app, and the best
+    // news therefore read as the least important. Tone now tracks ACTIONABILITY, which is what his
+    // standing rule already said about gold (reserved for what he can act on):
+    //
+    //   emailFound       gold    an address he can write to right now, the loudest thing on the row
+    //   noEmailFound     rust    still prominent: deciding to drop a show is also acting on it
+    //   contactFormOnly  muted   a real way through, but one that costs him fifteen minutes at their
+    //                            site rather than a send, so it is the last thing he picks up. This
+    //                            REVERSES the gold it was given two days ago in #1626, on his look at it.
+    //   weakContactOnly  muted   same reasoning: a venue front desk is real but not what he acts on first
+    //
+    // Lives here rather than in the view's switch so the decision is testable at all: a SwiftUI body is
+    // not, and this is exactly the "#885, keep the decision out of the view" pattern the copy follows.
+    static func tone(for badge: Badge) -> OVPillTone {
+        switch badge {
+        case .emailFound: return .pending
+        case .noEmailFound: return .warning
+        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .none: return .neutral
+        }
+    }
+
     // #1325: how long a probe result is trusted before it reads as possibly out of date (~90 days,
     // roughly the pitch horizon). Past this the badge asks Dan to re-check rather than trusting the old
     // answer.
