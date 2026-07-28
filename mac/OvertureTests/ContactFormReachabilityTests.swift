@@ -126,6 +126,7 @@ struct ContactFormReachabilityTests {
         #expect(OrgAnswerLedger.inherited(from: [answer], shows: shows, now: now)["free"] == nil)
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-27 measure="rows from the 2026-07-27 probe run stamped no_email_found before the #1626 upgrade pass"
     // The six rows from the 2026-07-27 run are already sitting in the live store stamped
     // `no_email_found`, and the stored verdict is what the badge reads (#1596). Without this pass they
     // would keep reading as dead ends until Dan paid to check them a second time.

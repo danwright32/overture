@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import Overture
 
+// LIVE-STORE-CLAIM verified=2026-07-28 measure="untriaged rows carrying neither a source listing URL nor a group website"
 // #1600 Phase 7.2: the row's reference strip. With "Contact: keep to prep" retired, the strip can now be
 // completely empty, which on the live store is 145 untriaged rows carrying neither a source listing nor
 // a group website. An empty padded strip is a gap in the card with nothing in it, so the emptiness has

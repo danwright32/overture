@@ -5,6 +5,7 @@ import SwiftData
 
 // #1600 (milestone 32 Phase 7.1): retiring the classifier's catch-all fit reason.
 //
+// LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the catch-all fit reason before Phase 7 cleared them, total and untriaged, and how many named a room versus a real producer"
 // "Unclear producer; needs a closer look before pitching." was the final `return` of buildReason's
 // if/else chain, so it carried every show that was neither agency-routed nor self-produced: 499 rows on
 // the live store, 414 of them untriaged, roughly three quarters of the queue. Dan read it as "Overture

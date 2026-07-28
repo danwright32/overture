@@ -6,6 +6,7 @@ import SwiftData
 //
 // The stored verdict is what the badge reads (#1596 Phase 3), so without this pass every show already
 // checked before `contactFormOnly` existed keeps reading as a dead end until Dan pays to check it a
+// LIVE-STORE-CLAIM verified=2026-07-27 measure="rows from the 2026-07-27 probe run stamped no_email_found, and how many hold a usable contact form on the act's own site"
 // second time. On the live store that is the six shows from the 2026-07-27 run, three of which carry a
 // usable form (jakebergmagic.com/contact, shop.copeland.band, marcribler.com/contact).
 //
