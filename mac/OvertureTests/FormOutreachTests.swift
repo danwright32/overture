@@ -284,9 +284,11 @@ struct FormPitchStateTests {
     @Test func onceHeHasOpenedTheFormTheRowWaitsOnHisAnswer() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.beginFormPitch(p.recipients[0], now: Date(timeIntervalSince1970: 1_000_000))
+        let opened = Date(timeIntervalSince1970: 1_000_000)
+        p.beginFormPitch(p.recipients[0], now: opened)
         #expect(FormPitch.state(of: p) == .awaitingConfirmation(recipientId: p.recipients[0].id,
-                                                                formURL: "https://aurorastrings.example/contact"))
+                                                                formURL: "https://aurorastrings.example/contact",
+                                                                startedAt: opened))
     }
 
     @Test func onceRecordedTheRowSaysSoInsteadOfOfferingTheControlAgain() throws {
@@ -311,6 +313,50 @@ struct FormPitchStateTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, formURL: "https://www.instagram.com/heybailay/")
         #expect(FormPitch.state(of: p) == .unavailable)
+    }
+}
+
+// What the two surfaces SAY. Held to the same standard as the rest: a form pitch is not a broken send,
+// and must never read like one.
+@Suite("Form outreach copy")
+struct FormOutreachCopyTests {
+    // The row has to admit the in-between state out loud, and name when it started, or "did you send it"
+    // about something he opened three weeks ago is a question he cannot answer.
+    @Test func theWaitingRowSaysWhenHeOpenedTheFormAndAsksTheOneQuestion() {
+        let started = Date(timeIntervalSince1970: 1_000_000)
+        let line = FormOutreachCopy.awaitingQuestion(startedAt: started,
+                                                     now: started.addingTimeInterval(3 * 86_400))
+        #expect(line.hasPrefix("You opened their form "))
+        #expect(line.hasSuffix(". Did you send it?"))
+        #expect(line.contains("3 days ago"))
+    }
+
+    // ...but not in the moment he pressed the button, when the row re-renders instantly and a relative
+    // time reads "in 0 seconds", which looks like a rendering fault. He was there; he does not need to be
+    // told when. The elapsed time only earns its place once enough has passed for him to have forgotten.
+    @Test func theWaitingRowDoesNotTellHimWhenHeOpenedItIfHeJustDidSo() {
+        let started = Date(timeIntervalSince1970: 1_000_000)
+        #expect(FormOutreachCopy.awaitingQuestion(startedAt: started, now: started) == "Did you send it?")
+        #expect(FormOutreachCopy.awaitingQuestion(startedAt: started,
+                                                  now: started.addingTimeInterval(600)) == "Did you send it?")
+    }
+
+    // #483's "sent, but replies cannot be watched" is a FAILURE Dan should go and check in Gmail. This is
+    // not that: it is working exactly as intended, and saying it the same way would send him hunting for a
+    // problem that does not exist (L11: distinct causes, distinct messages).
+    @Test func theSentLineExplainsTheSilenceWithoutSoundingLikeABrokenSend() {
+        #expect(FormOutreachCopy.sentLine == "Sent through their form. Overture cannot see a reply to this one.")
+    }
+
+    // The Reached-out list's due label offers to reach out again. For a form pitch there is nothing to
+    // send, so the same slot asks for the one thing that does move it forward.
+    @Test func aFormPitchDueForADecisionAsksForOneInsteadOfOfferingToReachOut() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(ReachedOutQueue.timingLabel(next: now, now: now, channel: .contactForm) == "Say what happened")
+        #expect(ReachedOutQueue.timingLabel(next: now, now: now, channel: .email) == "Reach out now")
+        // Not yet due reads the same either way: it is a wait, and the wait is the same length.
+        let inTwoDays = now.addingTimeInterval(2 * 86_400)
+        #expect(ReachedOutQueue.timingLabel(next: inTwoDays, now: now, channel: .contactForm) == "in 2 days")
     }
 }
 

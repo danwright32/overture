@@ -40,6 +40,15 @@ enum ProspectRowFactory {
             onOverrideSalutationReview: { ProspectMutations.overrideSalutationReview(item, prospects: prospects, context: context, feedback: feedback) },
             onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
+            onBeginFormPitch: { rid, formURL in
+                ProspectMutations.beginFormPitch(item, rid, formURL, prospects: prospects, context: context, feedback: feedback)
+            },
+            onRecordFormPitch: { rid in
+                ProspectMutations.recordFormPitch(item, rid, prospects: prospects, context: context, feedback: feedback)
+            },
+            onCancelFormPitch: { rid in
+                ProspectMutations.cancelFormPitch(item, rid, prospects: prospects, context: context, feedback: feedback)
+            },
             onMarkContact: { rid, resolution, bounced in
                 ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
             },

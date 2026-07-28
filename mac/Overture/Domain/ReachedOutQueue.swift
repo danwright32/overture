@@ -81,9 +81,12 @@ enum ReachedOutQueue {
 
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
     // now or overdue reads "Reach out now"; future dates read "in N day(s)" (whole days, rounded up).
-    static func timingLabel(next: Date, now: Date) -> String {
+    // #1630: a form pitch's due label asks for a DECISION, because there is nothing left to send. Same
+    // slot, same threshold, one honest difference at the moment it comes due; the waiting text is
+    // identical either way, since a wait is a wait.
+    static func timingLabel(next: Date, now: Date, channel: OutreachChannel = .email) -> String {
         let seconds = next.timeIntervalSince(now)
-        if seconds <= 0 { return "Reach out now" }
+        if seconds <= 0 { return channel == .contactForm ? "Say what happened" : "Reach out now" }
         let days = Int((seconds / 86_400).rounded(.up))
         return days == 1 ? "in 1 day" : "in \(days) days"
     }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **886 sentences**, from 306 source files.
+Every sentence Overture can say to Dan: **896 sentences**, from 306 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -473,6 +473,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Continue anyway"
     `UI/StoreShrinkNoticeSheet.swift`
+"Copy pitch and open form"
+    `Domain/FormOutreach.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/DraftReviewView.swift`
 "Correct this source's web address, then read it to check"
@@ -535,6 +537,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "Did they mean this show, or the whole organisation?"
     `UI/DraftReviewView.swift`
+"Did you send it?"
+    `Domain/FormOutreach.swift`
+"Didn't send"
+    `Domain/FormOutreach.swift`
 "Direct email"
     `Domain/Inquiry.swift`
 "Discard them"
@@ -687,6 +693,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "I read \(read.count) months of that calendar (\(name(first)) to \(name(last)))."
     `UI/LeadIntakeModel.swift`
+"I sent it"
+    `Domain/FormOutreach.swift`
 "I'll read the ones you fix."
     `UI/ScoutSummaryView.swift`
 "If another Overture window is open, use that one. Otherwise quit and reopen Overture."
@@ -937,6 +945,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Nothing in the queue matches \"\(query)\""
     `Domain/ShowSearch.swift`
+"Nothing is recorded until you confirm you sent it."
+    `UI/DraftReviewView.swift`
 "Nothing matches this filter"
     `Domain/EmptyState.swift`
 "Nothing new"
@@ -1068,6 +1078,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Pick two different styles to compare."
     `UI/ExperimentReportView.swift`
+"Pitch copied for \(org)"
+    `App/ActionFeedback.swift`
 "Possible booking, confirm?"
     `UI/ProspectRowView.swift`
 "Possible match to \(where_): \(name)?"
@@ -1159,6 +1171,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "Reconnect Gmail"
     `UI/SendConfirmAndReconnectAlerts.swift`
+"Recorded. \(org) is now in Reached out."
+    `App/ActionFeedback.swift`
 "Redo Anyway"
     `UI/DraftReviewView.swift`
 "Redo it anyway?"
@@ -1235,6 +1249,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
     `UI/SourcesView.swift`
+"Say what happened"
+    `Domain/ReachedOutQueue.swift`
 "Scout & Prep"
     `App/RootView.swift`
 "Scout progress"
@@ -1292,6 +1308,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryReplySheet.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
+"Sent through their form. Overture cannot see a reply to this one."
+    `Domain/FormOutreach.swift`
 "Sent, waiting to hear back"
     `Domain/InquiryCopy.swift`
 "Set a state"
@@ -1698,6 +1716,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
+"You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
+    `Domain/FormOutreach.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."

@@ -15,6 +15,36 @@ extension Recipient {
     }
 }
 
+// #1630: everything the two surfaces SAY about a form pitch, out of the view bodies (the #885/#863
+// rule). The stakes here are the same as the send screen's: these sentences are the only account Dan
+// gets of an outreach Overture cannot observe.
+enum FormOutreachCopy {
+    static let copyAndOpen = "Copy pitch and open form"
+    static let sentIt = "I sent it"
+    static let didNotSend = "Didn't send"
+
+    // Names when he started, because "did you send it?" about something he opened three weeks ago is a
+    // question he has no way to answer.
+    //
+    // Except in the moment he pressed the button, when the row re-renders instantly and the relative
+    // time renders as "in 0 seconds", which reads as a rendering fault rather than a fact. He was
+    // there; the elapsed time only earns its place once enough of it has passed for him to have
+    // forgotten. Caught by reading the rendered line cold, which is the only thing that catches it.
+    static let elapsedWorthSaying: TimeInterval = 3_600
+
+    static func awaitingQuestion(startedAt: Date, now: Date) -> String {
+        guard now.timeIntervalSince(startedAt) >= elapsedWorthSaying else { return "Did you send it?" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return "You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
+    }
+
+    // Deliberately NOT the #483 wording ("sent, but replies can't be watched"), which names a FAILURE Dan
+    // should go and check in Gmail. Nothing failed here. Saying it the same way would send him hunting a
+    // problem that does not exist (L11).
+    static let sentLine = "Sent through their form. Overture cannot see a reply to this one."
+}
+
 // What the Review row offers for a form-only show, decided here so the SwiftUI row stays dumb and the
 // rule is testable (#863). Four states, deliberately: the middle one (he opened the form and has not
 // said whether he sent it) is a real thing that has happened, and collapsing it into either end is how
@@ -23,7 +53,9 @@ enum FormPitch {
     enum State: Equatable {
         case unavailable
         case ready(recipientId: String, formURL: String)
-        case awaitingConfirmation(recipientId: String, formURL: String)
+        // Carries WHEN he opened the form, because the row has to say so: "did you send it?" about
+        // something opened three weeks ago is a question he cannot answer.
+        case awaitingConfirmation(recipientId: String, formURL: String, startedAt: Date)
         case recorded(at: Date)
     }
 
@@ -46,9 +78,10 @@ enum FormPitch {
               let formURL = target.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return .unavailable
         }
-        return target.formOutreachStartedAt == nil
-            ? .ready(recipientId: target.id, formURL: formURL)
-            : .awaitingConfirmation(recipientId: target.id, formURL: formURL)
+        guard let startedAt = target.formOutreachStartedAt else {
+            return .ready(recipientId: target.id, formURL: formURL)
+        }
+        return .awaitingConfirmation(recipientId: target.id, formURL: formURL, startedAt: startedAt)
     }
 }
 

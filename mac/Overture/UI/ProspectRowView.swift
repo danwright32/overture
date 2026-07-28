@@ -24,6 +24,10 @@ struct ProspectRowView: View {
     var onOverrideSalutationReview: () -> Void = {}
     var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
+    // #1630: the copy-then-confirm control for a form-only show.
+    var onBeginFormPitch: (_ recipientId: String, _ formURL: String) -> Void = { _, _ in }
+    var onRecordFormPitch: (_ recipientId: String) -> Void = { _ in }
+    var onCancelFormPitch: (_ recipientId: String) -> Void = { _ in }
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
     var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
@@ -133,6 +137,9 @@ struct ProspectRowView: View {
                     onOverrideSalutationReview: onOverrideSalutationReview,
                     onOverrideDraftLint: onOverrideDraftLint,
                     onDismissReply: onDismissReply,
+                    onBeginFormPitch: onBeginFormPitch,
+                    onRecordFormPitch: onRecordFormPitch,
+                    onCancelFormPitch: onCancelFormPitch,
                     onMarkContact: onMarkContact,
                     onSetOrgDoNotContact: onSetOrgDoNotContact,
                     onSetRecipientConversationState: onSetRecipientConversationState,
