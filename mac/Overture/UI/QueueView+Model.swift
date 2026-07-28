@@ -196,11 +196,16 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // on the act's own site: an Instagram is a dead end Dan will not use, so putting it on the card
     // would hand him a control he cannot act on. Same rule as Prospect.usableContactFormURLs, and
     // decided here rather than in the view so the exclusion is testable.
+    // #1629: and never the ROOM's own booking form, through the same VenueContactGuard comparison
+    // Prospect.usableContactFormURLs uses. The card and the stored verdict have to agree here: if only
+    // one of them learned the rule, the row would read "No email found" while still offering the room's
+    // form as a link right underneath it.
     var displayedContactForms: [URL] {
         guard displayedContactEmails.isEmpty else { return [] }
         return contacts.compactMap { c -> URL? in
             guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, !Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
                   let url = URL(string: raw), url.scheme != nil else { return nil }
             return url
         }
