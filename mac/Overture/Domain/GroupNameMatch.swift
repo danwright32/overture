@@ -76,7 +76,20 @@ enum GroupNameMatch {
 
     // The fraction guard stops a short name ("New York") confidently matching an
     // unrelated larger one ("New York Theatre Ballet").
-    private static let minContainmentFraction = 0.6
+    static let minContainmentFraction = 0.6
+
+    // #1590 follow-up: the value the SAME-NIGHT dedupe uses instead, and nothing else. Being the same
+    // night at the same venue is already strong evidence that a bare title comparison does not have, so
+    // the title test there can afford to be looser than the one deciding whether a show belongs to a
+    // past client, where a loose match warms a lead off the wrong organisation.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-28 measure="extra same-night groups merged at each containment threshold, over untriaged dated shows"
+    // 0.40 is measured, not picked: over all 558 untriaged dated shows on 2026-07-28 it merges exactly
+    // two more groups than 0.60, and NOTHING is gained below it (0.34, 0.30 and 0.25 all find the same
+    // two), so this is where the curve goes flat. Both are real, and one is Dan's own headline example
+    // from #1590: the third Jalopy open mic card, which survived the first run because its seven word
+    // parenthetical aside left only five shared words out of twelve.
+    static let sameNightContainmentFraction = 0.40
 
     // A single-token acronym is a confident match for a multi-token name when its letters ARE that
     // name's word-initials, one letter per word, in order (#1351). "nyys" <-> New York Youth Symphony.
@@ -96,7 +109,12 @@ enum GroupNameMatch {
         return acronym == initials
     }
 
-    static func isConfident(_ a: String, _ b: String) -> Bool {
+    // #1590 follow-up: `minimumContainment` defaults to the strict shared value, so every existing call
+    // site (repeat-client detection above all) is untouched. Only the same-night dedupe passes a looser
+    // one, and it passes it explicitly so the loosening is visible at the call site rather than hidden
+    // in a default that quietly governs client matching too.
+    static func isConfident(_ a: String, _ b: String,
+                            minimumContainment: Double = minContainmentFraction) -> Bool {
         let ta = tokens(a)
         let tb = tokens(b)
         if ta.isEmpty || tb.isEmpty { return false }
@@ -105,7 +123,7 @@ enum GroupNameMatch {
 
         let (short, long) = ta.count <= tb.count ? (ta, tb) : (tb, ta)
         if short.count < 2 { return false }
-        if Double(short.count) / Double(long.count) < minContainmentFraction { return false }
+        if Double(short.count) / Double(long.count) < minimumContainment { return false }
         return containsTokenRun(long, short)
     }
 

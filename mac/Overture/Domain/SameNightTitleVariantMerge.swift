@@ -95,7 +95,10 @@ enum SameNightTitleVariantMerge {
     private static func clusters(of rows: [Prospect]) -> [[Prospect]] {
         var out: [[Prospect]] = []
         for r in rows {
-            if let i = out.firstIndex(where: { GroupNameMatch.isConfident($0[0].groupName, r.groupName) }) {
+            if let i = out.firstIndex(where: {
+                GroupNameMatch.isConfident($0[0].groupName, r.groupName,
+                                           minimumContainment: GroupNameMatch.sameNightContainmentFraction)
+            }) {
                 out[i].append(r)
             } else {
                 out.append([r])
