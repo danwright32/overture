@@ -22,9 +22,16 @@ enum GroupNameMatch {
     }
 
     static func normalize(_ name: String) -> String {
+        normalize(name, strippingSubtitle: true)
+    }
+
+    // #1693: the same normalization with the subtitle strip made optional, so the fuzzy gate can read a
+    // name WHOLE. Everything else (the org line, "presented by", accents, punctuation, whitespace) is
+    // shared, because those are all canonicalization and none of them can lose an identity.
+    private static func normalize(_ name: String, strippingSubtitle: Bool) -> String {
         var s = orgLine(foldAccents(name))
         s = s.replacingOccurrences(of: #"(?i)^\s*presented by\s+"#, with: "", options: .regularExpression)
-        s = stripProgramSubtitle(s)
+        if strippingSubtitle { s = stripProgramSubtitle(s) }
         s = s.lowercased()
         s = s.replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
@@ -61,6 +68,13 @@ enum GroupNameMatch {
 
     static func tokens(_ name: String) -> [String] {
         normalize(name).split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    }
+
+    // #1693: every token in the name, including any the subtitle strip would drop. Used by the fuzzy
+    // gate alone; see isPossible for why.
+    private static func wholeNameTokens(_ name: String) -> [String] {
+        normalize(name, strippingSubtitle: false)
+            .split(separator: " ").map(String.init).filter { !$0.isEmpty }
     }
 
     // True when `short` appears as a contiguous run of whole tokens inside `long`.
@@ -127,10 +141,29 @@ enum GroupNameMatch {
         return containsTokenRun(long, short)
     }
 
+    // #1693: the fuzzy gate scores the WHOLE name, unlike isConfident above, which keeps the subtitle
+    // strip. The two want opposite things from that strip and it took 18 wrong flags to see it.
+    //
+    // isConfident needs it: a booking-sheet name is "Presenter - Program", the venue lists just the
+    // presenter, and dropping the program is what lets them match (#105). Nothing is lost, because the
+    // presenter that survives IS the identity being matched.
+    //
+    // Here it is the opposite. A scraped listing is often shaped "Series: Act", where the suffix is
+    // the specific half, so stripping deletes the only part that says who is playing and leaves a
+    // series or venue brand to score on. That brand is shared by every show in the building, so ONE
+    // record reaches every card: "Carnegie Hall Citywide: Ivalas Quartet" stripped to "carnegie hall
+    // citywide" is 2 shared tokens of 4 against the presenter "Carnegie Hall Presents", landing exactly
+    // on the gate below, and it flagged all 18 Carnegie Hall shows in the live store against an act Dan
+    // has never worked with. Whole, it is 2 of 6 and does not fire.
+    //
+    // The strip cannot tell those two shapes apart (it is one regex over free text, and both are
+    // "words, separator, words"), so the fix is not a smarter strip: it is that a gate this loose must
+    // never score a name with a piece missing. Reading whole is also strictly the more conservative
+    // direction here, since the extra tokens can only grow the union.
     static func isPossible(_ a: String, _ b: String) -> Bool {
         if isConfident(a, b) { return false }
-        let ta = Set(tokens(a))
-        let tb = Set(tokens(b))
+        let ta = Set(wholeNameTokens(a))
+        let tb = Set(wholeNameTokens(b))
         if ta.isEmpty || tb.isEmpty { return false }
         let shared = ta.intersection(tb).count
         let union = ta.union(tb).count

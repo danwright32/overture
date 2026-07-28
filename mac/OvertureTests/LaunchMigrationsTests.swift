@@ -106,4 +106,56 @@ struct LaunchMigrationsTests {
             throw error
         }
     }
+
+    // #1693: the recheck working and the recheck being RUN are two separate claims, and only the second
+    // one reaches the 18 cards actually carrying the wrong flag. This is the live shape: a Carnegie Hall
+    // show flagged against a Madison Square Park act, in a store where no such record exists any more.
+    //
+    // The clients and history come in through LaunchMigrations' seam rather than off disk, because the
+    // recheck reads two files no test process has: a test run resolves its own handoff directory, which
+    // holds no Downbeat export, so against the real loader this pass no-ops and the test proves nothing.
+    // The first version of this test did exactly that, and said so only when the call was deleted from
+    // LaunchMigrations and the suite stayed green.
+    @Test func launchClearsAPossibleMatchTheMatcherNoLongerMakes() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-1693-launch-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
+
+            let context = ModelContext(try openContainer(at: storeURL))
+            let p = makeProspect("nyo2")
+            p.groupName = "NYO2"
+            p.presenter = "Carnegie Hall Presents"
+            p.venue = "Stern Auditorium / Perelman Stage"
+            p.performanceDate = "2026-07-30"
+            p.priorRelationship = "none"
+            p.possibleMatchSource = "history"
+            p.possibleMatchName = "Carnegie Hall Citywide: Ivalas Quartet"
+            context.insert(p)
+            try context.save()
+
+            // The record the flag names no longer exists anywhere Dan's history can produce it. What DOES
+            // exist is the Madison Square Park dismissal it came from, kept here so the pass is judged
+            // against the real thing rather than an empty history that would clear any flag at all.
+            let history = [HistoryRecord(groupName: "Carnegie Hall Citywide: Ivalas Quartet",
+                                         status: "declined")]
+            #expect(LaunchMigrations.run(in: context,
+                                         possibleMatchInputs: { _ in
+                                             PossibleMatchRecheck.Inputs(clients: [], history: history)
+                                         }))
+
+            let reContext = ModelContext(try openContainer(at: storeURL))
+            let reloaded = try #require(try reContext.fetch(FetchDescriptor<Prospect>()).first)
+            #expect(reloaded.possibleMatchName == nil)
+            #expect(reloaded.possibleMatchSource == nil)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
 }

@@ -193,6 +193,30 @@
       "b": "TENET",
       "confident": false,
       "possible": false
+    },
+    {
+      "a": "Carnegie Hall Presents",
+      "b": "Carnegie Hall Citywide: Ivalas Quartet",
+      "confident": false,
+      "possible": false
+    },
+    {
+      "a": "Irvine School of Music",
+      "b": "Bay Ridge School of Music",
+      "confident": false,
+      "possible": true
+    },
+    {
+      "a": "Tenet Vocal Artists & Philadelphia Bach Collective",
+      "b": "TENET Vocal Artists",
+      "confident": false,
+      "possible": true
+    },
+    {
+      "a": "The Chain",
+      "b": "The Pushover (Chain Theatre)",
+      "confident": false,
+      "possible": true
     }
   ]
 }

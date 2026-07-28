@@ -10,8 +10,16 @@ enum LaunchMigrations {
     // guards itself on its own idempotency check (recipients.isEmpty, a thread still missing, a body
     // still carrying a greeting), so an unsaved write is simply retried whole on the next launch rather
     // than left half-applied.
+    // #1693: `possibleMatchInputs` is a seam, not a knob. The recheck judges against two files that a
+    // test process does not have (a Debug or test run reads its own handoff directory, which holds no
+    // Downbeat export), so with the real loader that pass silently no-ops under test and a wiring test
+    // written against it asserts nothing at all. Found the only way that is ever found: by deleting the
+    // call below and watching the suite stay green.
     @discardableResult
-    static func run(in context: ModelContext) -> Bool {
+    static func run(in context: ModelContext,
+                    possibleMatchInputs: ([Prospect]) -> PossibleMatchRecheck.Inputs? = {
+                        PossibleMatchRecheck.load(prospects: $0)
+                    }) -> Bool {
         // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
         // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
         // every contacted recipient carries its own thread.
@@ -68,6 +76,16 @@ enum LaunchMigrations {
         // above it leans on the launch backup, refuses any group where two rows carry outreach history,
         // and keeps the row holding a paid reachability answer over one that was never checked.
         SameNightTitleVariantMerge.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-07-28 measure="prospect rows carrying a possible-match flag, and how many of those name one record"
+        // #1693: re-run the possible-match verdict over the rows that already carry one (21 on the live
+        // store, 18 of them naming the same wrong record). The flag is STORED and only rewritten when the
+        // hash-gated scout re-emits that row, so tightening the matcher alone would leave the wrong
+        // question sitting on Dan's screen for as long as that source happened not to be re-scouted.
+        // Runs after the merges above so it judges the surviving rows, and every launch rather than once,
+        // because the answer depends on files (the Downbeat export, the booking history) that keep
+        // changing under it. It can only clear or replace a flag on a row that already has one, never
+        // invent one, and it touches nothing at all when either of those files is missing or corrupt.
+        PossibleMatchRecheck.run(in: context, loadInputs: possibleMatchInputs)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show
