@@ -178,6 +178,26 @@ struct ProspectRowRestoreGuardTests {
         #expect(body.contains("I can shoot this anyway"))
         #expect(body.contains("keepDismissControls"))   // badge stacked above the Keep/Dismiss row
     }
+
+    // #1527: the badge's COLOUR and hover text now come off that same decision, the way its label already
+    // did. Pinned by source because the view is not directly invokable: what the colours ARE is measured in
+    // ConflictPillColourTests, and this is the other half, that the view actually asks for them. Without it
+    // the pill could keep a hard-coded rust fill while every colour test passed (#1352's "a guard and its
+    // wiring are two claims").
+    @Test func theConflictBadgeTakesItsColourAndHoverTextFromTheSharedDecision() {   // #1527
+        guard let body = SourceGuardHelper.propertyBody("private var actions: some View {",
+                                                        in: prospectRow) else {
+            Issue.record("actions view not found")
+            return
+        }
+        #expect(body.contains("scope.pillFill"))
+        #expect(body.contains("scope.pillForeground"))
+        #expect(body.contains("scope.pillHelp"))
+        // The defect this issue is about: a fill picked at the call site rather than by the case.
+        #expect(!body.contains("OVColor.rust"),
+                "the conflict badge is hard-coding the failure colour again instead of asking ConflictScope (#1527).")
+        #expect(!body.contains("OVColor.onRust"))
+    }
 }
 
 // #358: the "Source listing" and "Group website" reference links rendered in the default system

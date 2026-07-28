@@ -35,6 +35,27 @@ enum ConflictScope: Equatable, Sendable {
         }
     }
 
+    // #1527: the pill's hover text, off the same two cases as its label. #1501 made the label and the
+    // sentence under it honest about WHICH night is blocked and left this one saying "that night" for both,
+    // so on a run flagged for Jul 31 under a Jul 24 header the hover pointed at the night Dan is free on:
+    // the exact misreading #1501 exists to stop, surviving in the one place that issue did not look.
+    //
+    // The run case borrows the card sentence's own words ("a later night of this run is out"), so the two
+    // things Dan reads about one clash describe it the same way.
+    // Both sentences are written out whole, including the override clause they share, rather than composed
+    // from one interpolated tail. `docs/copy-inventory.md` exists to show a copy change in the words Dan
+    // reads, and it lists what the source literally contains: composing these left the inventory holding
+    // two fragments and a stray "Tap if you can shoot it after all." instead of the two real sentences.
+    // `ConflictPillColourTests.bothHoverTextsOfferTheSameWayOut` is what stops the shared half drifting.
+    var pillHelp: String {
+        switch self {
+        case .thisNight:
+            return "Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
+        case .laterInTheRun:
+            return "Overture won't draft or send this while a later night of this run is out. Tap if you can shoot it after all."
+        }
+    }
+
     // Both cases still hold the show back from a draft and a send. The words got more honest; the gate did
     // not move. It remains `hasUnclearedConflict`, so nothing here can let a pitch through for a run Dan
     // cannot finish, which is the whole reason #901 tests every night of a run rather than its opening one.

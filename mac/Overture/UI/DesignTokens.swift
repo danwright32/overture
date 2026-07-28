@@ -72,9 +72,26 @@ enum OVColor {
     )
 
     static let onForest = Color.white.opacity(0.96)
-    // #901: text on a filled rust badge. Rust is a dark brick in light mode and a lighter terracotta in
-    // dark; white reads on both, where `canvas` would go near-black on the dark-mode fill.
-    static let onRust = Color.white.opacity(0.96)
+
+    // #1527: the label on a filled WARM badge (rust or gold). Both fills are light enough in dark mode that
+    // white text washes out on them, so the dark theme puts a near-black warm ink on the fill instead. The
+    // one value, shared, because a second copy of "the dark text that goes on a warm capsule" would drift.
+    private static let warmFillInk = NSColor(srgbRed: 0.102, green: 0.071, blue: 0.008, alpha: 1)
+
+    // #901: text on a filled rust badge. #1527 split it by theme. The original note here read "white reads
+    // on both", which was a by-eye call and measured 3.45 to 1 against the dark-mode terracotta, under the
+    // 4.5 to 1 that 11pt semibold needs. Light mode keeps white (5.89 to 1 on the darker brick); dark mode
+    // takes the warm ink (5.15 to 1). `ConflictPillColourTests` measures both, so this cannot silently
+    // regress to a single value again.
+    static let onRust = dynamic(
+        light: NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96),
+        dark: warmFillInk
+    )
+
+    // #1527: text on a filled gold badge, which the "Partly booked" pill needed and no token provided. White
+    // measures 3.12 to 1 on the light gold and 2.09 to 1 on the dark, so it is the warm ink in both themes
+    // (5.44 and 8.12 to 1). Its absence is the reason #1522 changed the pill's words but left its colour.
+    static let onGold = Color(nsColor: warmFillInk)
 
     private static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
