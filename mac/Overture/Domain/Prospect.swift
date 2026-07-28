@@ -143,10 +143,18 @@ final class Prospect {
     // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
     // Instagram or another login-walled page is a dead end (his rule, 2026-07-27), judged through the
     // one shared social-host list rather than a second copy of it.
+    //
+    // #1629: and never the ROOM's own booking form, judged through the same VenueContactGuard
+    // comparison the email path has used since #388. Without it a check that returned the host venue's
+    // form gave a card reading "Contact form only" that pointed Dan straight at the room, which is the
+    // oldest standing rule in the product (#368: a room's own address is never a real contact, not even
+    // a named booking person). Excluding it here means the show falls through to `noEmailFound`, the
+    // same answer he would get if the check had returned the room's email address.
     var usableContactFormURLs: [String] {
         recipients.compactMap { r -> String? in
             guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, !Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
                   let url = URL(string: raw), url.scheme != nil else { return nil }
             return raw
         }

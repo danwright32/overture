@@ -9,8 +9,28 @@ enum VenueContactGuard {
     private static let minimumSlugLength = 5
 
     static func looksLikeVenue(email: String?, venue: String?) -> Bool {
-        guard let email, !email.isEmpty, let venue, !venue.isEmpty,
-              let domainCore = secondLevelDomain(of: email) else { return false }
+        guard let email, !email.isEmpty else { return false }
+        return isTheRoomsOwn(domainCore: secondLevelDomain(of: email), venue: venue)
+    }
+
+    // #1629: the same question asked of a contact FORM's link. #1626 made a form on the act's own site
+    // count as a way through and nothing kept the ROOM's own booking form out of that, so a check that
+    // returned the venue's form produced a card pointing Dan straight at the room, against the oldest
+    // standing rule in the product (#368).
+    //
+    // Deliberately the same comparison and not a second copy of it: a rule about "is this the room's
+    // own contact" that is spelled one way for an address and another way for a link is a rule that
+    // will disagree with itself. Only the domain EXTRACTION differs between the two routes.
+    static func looksLikeVenue(formURL: String?, venue: String?) -> Bool {
+        guard let formURL, !formURL.isEmpty else { return false }
+        return isTheRoomsOwn(domainCore: secondLevelDomain(ofURL: formURL), venue: venue)
+    }
+
+    // The venue side of the comparison, shared by both routes: the hall's own name or its
+    // VenueDisplay-resolved parent building, matched EXACTLY against the domain's second-level label,
+    // with a minimum slug length so a short or generic room name cannot swallow an unrelated site.
+    private static func isTheRoomsOwn(domainCore: String?, venue: String?) -> Bool {
+        guard let domainCore, let venue, !venue.isEmpty else { return false }
         let display = VenueDisplay.resolve(venue)
         let candidates = [display.hall, display.parent].compactMap { $0 }.map(slug)
         return candidates.contains { $0.count >= minimumSlugLength && $0 == domainCore }
@@ -20,8 +40,21 @@ enum VenueContactGuard {
     // "mail.carnegiehall.org" alike (the label right before the last dot-separated component).
     private static func secondLevelDomain(of email: String) -> String? {
         guard let at = email.lastIndex(of: "@") else { return nil }
-        let domain = email[email.index(after: at)...].lowercased()
-        let parts = domain.split(separator: ".")
+        return secondLevelDomain(ofHost: String(email[email.index(after: at)...]))
+    }
+
+    // The same label taken from a link's host, so "https://www.carnegiehall.org/contact" reduces to
+    // "carnegiehall" exactly as an address at that domain does. A string that will not parse as a URL
+    // with a host cannot be compared and is never treated as the room's.
+    private static func secondLevelDomain(ofURL raw: String) -> String? {
+        guard let host = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines))?.host else {
+            return nil
+        }
+        return secondLevelDomain(ofHost: host)
+    }
+
+    private static func secondLevelDomain(ofHost host: String) -> String? {
+        let parts = host.lowercased().split(separator: ".")
         guard parts.count >= 2 else { return parts.first.map(String.init) }
         return String(parts[parts.count - 2])
     }
