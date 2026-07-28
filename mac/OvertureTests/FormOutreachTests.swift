@@ -121,4 +121,102 @@ struct FormOutreachTests {
 
         #expect(due == now.addingTimeInterval(TimeInterval(FollowUpConfig().gapDays) * 86_400))
     }
+
+    // Dan's call, 2026-07-28: a hand-recorded pitch is real evidence and counts everywhere an emailed
+    // one counts, but it is weaker evidence than a confirmed send, so a Downbeat match asks instead of
+    // booking silently. Deliberately the same fixture as DownbeatBookingTests.exactMatchAutoBooks, which
+    // DOES auto-book, so the only difference in play is the channel.
+    @Test func aFormPitchCountsAsContactedButItsBookingIsOnlyASuggestion() throws {
+        let ctx = ModelContext(try container())
+        let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
+        let p = Prospect(naturalKey: "Acme Festival Chorus", groupName: "Acme Festival Chorus",
+                         discipline: "choral", venue: "V", performanceDate: "2026-07-01",
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
+        p.downbeatClientId = "C1"
+        p.draftBody = "I photograph performing arts in New York."
+        ctx.insert(p)
+        let form = "https://acmechorus.example/contact"
+        let r = Recipient(id: Recipient.makeId(email: nil, formURL: form)!, email: nil,
+                          provenance: .act, contactMethodRaw: ContactMethod.formOrDM.rawValue,
+                          contactFormURL: form)
+        p.setRecipients([r])
+        p.recordFormOutreach(r, now: sendDay, formURL: form)
+
+        #expect(p.wasProvablyContacted)
+
+        let b = OvertureBooking(id: "B99", clientId: "C1", clientDisplayName: "Acme Festival Chorus",
+                                shootName: "Gala", startDate: "2026-07-01", endDate: "2026-07-01",
+                                venueId: nil, venueName: "V")
+        let count = DownbeatBooking.reconcileBooked(prospects: [p], clients: [], bookings: [b],
+                                                    health: .ok, now: Date(timeIntervalSince1970: 9_999))
+
+        #expect(count == 0)
+        #expect(p.outcome != .booked)
+        #expect(p.bookingSuggested)
+    }
+
+    // Assume it runs twice. A double-tap, or a click on a row that re-rendered, must not restamp the
+    // record: the outreach date is what the decide clock and #16's funnel are measured from, so moving
+    // it silently resets a countdown that is already running.
+    @Test func recordingTheSameFormOutreachTwiceKeepsTheFirstRecord() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let r = p.recipients[0]
+        let first = Date(timeIntervalSince1970: 1_000_000)
+        let laterClick = first.addingTimeInterval(4 * 86_400)
+
+        #expect(p.recordFormOutreach(r, now: first, formURL: "https://aurorastrings.example/contact"))
+        #expect(p.recordFormOutreach(r, now: laterClick, formURL: "https://elsewhere.example/contact") == false)
+
+        #expect(r.formOutreachRecordedAt == first)
+        #expect(r.formOutreachURL == "https://aurorastrings.example/contact")
+        #expect(r.sentAt == first)
+        #expect(p.sentAt == first)
+    }
+
+    // He clicked "Copy pitch and open form", looked at the form, and decided not to send after all. The
+    // record has to come off cleanly, or the show reads as pitched forever on the strength of a misclick.
+    @Test func undoingAFormOutreachPutsTheShowBackWhereItWas() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let r = p.recipients[0]
+        p.recordFormOutreach(r, now: Date(timeIntervalSince1970: 1_000_000),
+                             formURL: "https://aurorastrings.example/contact")
+
+        #expect(p.undoFormOutreach(r))
+
+        #expect(r.formOutreachRecordedAt == nil)
+        #expect(r.formOutreachURL == nil)
+        #expect(r.outreachChannel == .email)
+        #expect(r.sendState == .pending)
+        #expect(r.sentAt == nil)
+        #expect(p.sentAt == nil)
+        #expect(p.wasProvablyContacted == false)
+        #expect(p.status == .drafted)
+    }
+
+    // ...but never once a real email has also gone out on the show. The lead-level rollup (the send
+    // date, the frozen ranking features, the relationship captured at send) belongs to that email, and
+    // clearing it to unwind a form record would silently rewrite the history of a genuine send.
+    @Test func aFormOutreachCannotBeUndoneOnceAnEmailHasAlsoGoneOut() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)
+        let formContact = p.recipients[0]
+        let emailed = Recipient(id: "boss@presenter.example", email: "boss@presenter.example",
+                                provenance: .presenter)
+        p.addRecipient(emailed)
+        p.recordFormOutreach(formContact, now: Date(timeIntervalSince1970: 1_000_000),
+                             formURL: "https://aurorastrings.example/contact")
+        emailed.sendState = .sent
+        emailed.sentAt = Date(timeIntervalSince1970: 2_000_000)
+        emailed.gmailMessageId = "<mid-1@x.org>"
+
+        #expect(p.undoFormOutreach(formContact) == false)
+
+        #expect(formContact.formOutreachRecordedAt != nil)
+        #expect(p.sentAt == Date(timeIntervalSince1970: 1_000_000))
+    }
 }

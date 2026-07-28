@@ -122,6 +122,10 @@ final class Recipient {
     // which is scout-owned and rewritten by every re-ingest (PrepImporter), so the record would
     // otherwise end up naming a page he never used (L37).
     var formOutreachURL: String?
+    // Where the show sat before the record, so undoing it restores exactly that rather than guessing an
+    // inverse (the #752 snapshot shape). A form-only show is normally `.drafted`, but it can be recorded
+    // from other states and guessing would quietly move it somewhere Dan did not leave it.
+    var formOutreachPriorStatusRaw: String?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
