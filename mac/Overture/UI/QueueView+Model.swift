@@ -254,15 +254,23 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         }.filter { !$0.isEmpty })
     }
 
-    // The same rule for the form links, which is where the two live misidentifications actually landed
-    // (a Bay Area magician's booking form on an off Broadway show, a Florida rock band's merch site on a
-    // Red Hook folk room). "Contact form only" says there IS a way through; it says nothing about whether
-    // it reaches the right people.
-    var unverifiedContactForms: Set<URL> {
-        let unverified = Set(contacts.filter(Self.isUnverified).compactMap {
-            $0.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-        })
-        return Set(displayedContactForms.filter { unverified.contains($0.absoluteString) })
+    // #1628, Dan's call 2026-07-28: an address was found, and NOTHING found was verified. The badge says
+    // this once, instead of a caveat printed beside every unverified address (which went through three
+    // layouts and broke the address column each time, the last by making long addresses wrap).
+    //
+    // "ALL" is the load-bearing word, and it is what stops this crying wolf. One address read off a page
+    // naming the act is enough to write to, so a weaker sibling beside it earns no warning. His words:
+    // "it wouldn't say that if we found one unverified and one verified."
+    //
+    // False when nothing was found at all, since those shows wear a different badge entirely, and false
+    // for an answer INHERITED from another show by the same organisation (#1598 Phase 5): the org ledger
+    // stores the addresses and not how sure each one was, so calling it unverified would assert something
+    // no check ever measured.
+    var onlyUnverifiedEmailsFound: Bool {
+        guard !contacts.isEmpty else { return false }
+        let shown = displayedContactEmails
+        guard !shown.isEmpty else { return false }
+        return shown.allSatisfy { unverifiedContactEmails.contains($0) }
     }
 
     // #1338: after a reachability probe, a still-open show that found a SENDABLE contact is a "best reachable

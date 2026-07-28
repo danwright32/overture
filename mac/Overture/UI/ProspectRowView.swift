@@ -441,7 +441,13 @@ struct ProspectRowView: View {
             // #1598 Phase 5: an answer inherited from another show by the same organisation looks exactly
             // like one paid for here, Dan's call. The ONLY difference is the hover text, which says where
             // it came from, so the card never quietly implies this particular show was researched.
-            reachabilityNote(icon: "envelope.open", text: ReachabilityCopy.emailFoundBadge,
+            // #1628, Dan's call 2026-07-28: when NOTHING found was verified, the badge says so itself
+            // rather than a caveat printed beside every address. One verified contact is enough to keep
+            // the plain wording, so a weaker sibling beside it never raises a warning.
+            reachabilityNote(icon: "envelope.open",
+                             text: item.onlyUnverifiedEmailsFound
+                                 ? ReachabilityCopy.unverifiedEmailFoundBadge
+                                 : ReachabilityCopy.emailFoundBadge,
                              tone: Reachability.tone(for: .emailFound),
                              help: item.inheritedReachability.map {
                                  ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
@@ -465,32 +471,24 @@ struct ProspectRowView: View {
         // #1598 Phase 5: which addresses (this show's own, or the organisation's when it has none) is a
         // rule, not a rendering detail, so it lives on the item where a test can reach it.
         let emails = item.displayedContactEmails
-        let unverifiedEmails = item.unverifiedContactEmails
         if !emails.isEmpty {
-            // #1628: the badge above says WHAT was found; this says whether Overture confirmed it belongs
-            // to this act. Per address, because a show can find two performers and confirm only one.
-            //
-            // TWO COLUMNS, Dan's spec after seeing both earlier attempts (2026-07-28). Trailing the mark
-            // pushed the marked row's address left of the unmarked one above it; leading it inside a
-            // right-aligned stack fixed the right edge but left the ADDRESSES starting at different
-            // points, with "not verified" sitting under the address above rather than beside its own.
-            // A Grid gives the caveat its own column, so every address starts at the same x and the mark
-            // hangs to its left, next to the line it actually qualifies.
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 4, verticalSpacing: 1) {
+            // #1628: this column prints the addresses and NOTHING else. A per-address "not verified"
+            // caveat lived here briefly and went through three layouts (trailing the address, leading it,
+            // then its own grid column); every one broke the column, the last by squeezing it until long
+            // addresses wrapped. Dan's call, 2026-07-28: the caveat belongs in the badge above, said once,
+            // and this line goes back to being a plain right-justified list of addresses.
+            VStack(alignment: .trailing, spacing: 1) {
                 ForEach(emails, id: \.self) { email in
-                    GridRow {
-                        unverifiedMark(if: unverifiedEmails.contains(email))
-                        Text(email)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .textSelection(.enabled)
-                            // Wrap rather than truncate: an address Dan cannot read in full is no better
-                            // than no address, and this column is narrow.
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.leading)
-                    }
+                    Text(email)
+                        .font(OVType.meta)
+                        .foregroundStyle(OVColor.inkSoft)
+                        .textSelection(.enabled)
+                        // Wrap rather than truncate: an address Dan cannot read in full is no better than
+                        // no address, and this column is narrow.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
                 }
             }
-            .font(OVType.meta)
         } else {
             // #1626: no address, but a form on the act's own site. The link goes exactly where the
             // address would have gone, because it answers the same question ("how do I reach them"),
@@ -500,39 +498,18 @@ struct ProspectRowView: View {
             // says that, and what Dan needs from this line is the same thing the address line gives him,
             // WHO he would be writing to. "jakebergmagic.com" and "shop.copeland.band" are different
             // decisions in the way "info@thevenue.com" and "anna@annapierre.com" are.
-            let unverifiedForms = item.unverifiedContactForms
-            // #1628: the same caveat on the form link, in the same two-column shape as the addresses
-            // above so a date mixing the two reads as one column rather than two ragged ones. This is
-            // where both live misidentifications landed (a Bay Area magician's booking form on an off
-            // Broadway show, a Florida rock band's merch site on a Red Hook folk room), and the pill
-            // above says only that a form exists, never whether it reaches the right people.
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 4, verticalSpacing: 1) {
-                ForEach(item.displayedContactForms, id: \.self) { url in
-                    GridRow {
-                        unverifiedMark(if: unverifiedForms.contains(url))
-                        Link(destination: url) {
-                            Text(QueueModel.contactFormSiteLabel(url))
-                                .underline()
-                        }
-                        .foregroundStyle(OVColor.forest)
-                    }
+            // #1628: no caveat here either. Every contact form is unverified by definition (the runbook
+            // maps form-or-DM to low confidence unconditionally), so a warning on all of them would say
+            // nothing the "Contact form only" pill above does not already say.
+            ForEach(item.displayedContactForms, id: \.self) { url in
+                Link(destination: url) {
+                    Text(QueueModel.contactFormSiteLabel(url))
+                        .underline()
                 }
+                .font(OVType.meta)
+                .foregroundStyle(OVColor.forest)
+                .multilineTextAlignment(.trailing)
             }
-            .font(OVType.meta)
-        }
-    }
-
-    // #1628: one cell of the contact grid's first column. Always emitted, even when the contact IS
-    // verified, so the column keeps its width and every address in the block starts at the same x
-    // whether or not its neighbours carry a caveat. An `if` here instead would collapse the cell and
-    // reintroduce the ragged edge Dan reported twice.
-    @ViewBuilder private func unverifiedMark(if unverified: Bool) -> some View {
-        if unverified {
-            Text(ReachabilityCopy.unverifiedContactMark)
-                .foregroundStyle(OVColor.rust)
-                .help(ReachabilityCopy.unverifiedContactHelp)
-        } else {
-            Color.clear.frame(width: 0, height: 0)
         }
     }
 

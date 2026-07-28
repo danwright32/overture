@@ -182,14 +182,13 @@ enum ReachabilityCopy {
     // a find. Two words, in the address line's own quiet meta styling, because it qualifies the address
     // rather than competing with Keep and Dismiss.
     //
-    // It says "not verified" and not "low confidence": the stored word is the runbook's vocabulary, and
-    // what Dan needs is the consequence. The hover text carries the rest.
+    // Dan's call, 2026-07-28: said ONCE here rather than beside every address. The per-address caveat it
+    // replaces went through three layouts and broke the address column each time, the last by making a
+    // long address wrap, and he can already tell a generic inbox by looking at it.
     //
-    // The wording claims ONLY the absence of a verified reading, never that the contact is wrong, and it
-    // has to stay that way: the mark goes on every contact that is not an address read off a page naming
-    // the act, which includes a generic inbox and a contact form that may well be perfectly correct. A
-    // sentence asserting the contact was "inferred" would be false on both of those.
-    static let unverifiedContactMark = "not verified"
+    // Only used when NOTHING found was verified. One address read off a page naming the act is enough to
+    // write to, so a weaker sibling beside it earns no warning.
+    static let unverifiedEmailFoundBadge = "Unverified email found"
     static let unverifiedContactHelp =
         "Overture didn't verify this one belongs to this act. Only an address read off a page naming them counts as verified; a generic inbox, a contact form, or an inferred address doesn't. It may still be right, so it's worth a look before you write."
 
