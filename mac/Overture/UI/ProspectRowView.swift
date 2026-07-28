@@ -465,17 +465,29 @@ struct ProspectRowView: View {
         // #1598 Phase 5: which addresses (this show's own, or the organisation's when it has none) is a
         // rule, not a rendering detail, so it lives on the item where a test can reach it.
         let emails = item.displayedContactEmails
+        let unverifiedEmails = item.unverifiedContactEmails
         if !emails.isEmpty {
             VStack(alignment: .trailing, spacing: 1) {
                 ForEach(emails, id: \.self) { email in
-                    Text(email)
-                        .font(OVType.meta)
-                        .foregroundStyle(OVColor.inkSoft)
-                        .textSelection(.enabled)
-                        // Wrap rather than truncate: an address Dan cannot read in full is no better than
-                        // no address, and this column is narrow.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.trailing)
+                    // #1628: the badge above says WHAT was found; this says whether Overture confirmed it
+                    // belongs to this act. Per address, because a show can find two performers and confirm
+                    // only one. Drawn in the same quiet meta styling as the address it qualifies, so it
+                    // reads as a caveat on that line rather than as another control.
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(email)
+                            .foregroundStyle(OVColor.inkSoft)
+                            .textSelection(.enabled)
+                        if unverifiedEmails.contains(email) {
+                            Text(ReachabilityCopy.unverifiedContactMark)
+                                .foregroundStyle(OVColor.rust)
+                                .help(ReachabilityCopy.unverifiedContactHelp)
+                        }
+                    }
+                    .font(OVType.meta)
+                    // Wrap rather than truncate: an address Dan cannot read in full is no better than
+                    // no address, and this column is narrow.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.trailing)
                 }
             }
         } else {
@@ -487,13 +499,25 @@ struct ProspectRowView: View {
             // says that, and what Dan needs from this line is the same thing the address line gives him,
             // WHO he would be writing to. "jakebergmagic.com" and "shop.copeland.band" are different
             // decisions in the way "info@thevenue.com" and "anna@annapierre.com" are.
+            let unverifiedForms = item.unverifiedContactForms
             ForEach(item.displayedContactForms, id: \.self) { url in
-                Link(destination: url) {
-                    Text(QueueModel.contactFormSiteLabel(url))
-                        .underline()
+                // #1628: the same caveat on the form link. This is where both live misidentifications
+                // landed (a Bay Area magician's booking form on an off Broadway show, a Florida rock
+                // band's merch site on a Red Hook folk room), and the pill above says only that a form
+                // exists, never whether it reaches the right people.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Link(destination: url) {
+                        Text(QueueModel.contactFormSiteLabel(url))
+                            .underline()
+                    }
+                    .foregroundStyle(OVColor.forest)
+                    if unverifiedForms.contains(url) {
+                        Text(ReachabilityCopy.unverifiedContactMark)
+                            .foregroundStyle(OVColor.rust)
+                            .help(ReachabilityCopy.unverifiedContactHelp)
+                    }
                 }
                 .font(OVType.meta)
-                .foregroundStyle(OVColor.forest)
                 .multilineTextAlignment(.trailing)
             }
         }

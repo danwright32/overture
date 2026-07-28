@@ -206,6 +206,57 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         }
     }
 
+    // #1628: which of the printed contacts the check was NOT sure about. The badge above says what KIND
+    // of contact was found; this says how sure it was, and only for the ones that are not.
+    //
+    // VERIFIED means exactly what the runbook allows `high` for: an address actually READ from a real
+    // page, and for a named performer, corroborated against THIS performance. Everything else is marked.
+    //
+    // WHY THE THRESHOLD IS THERE AND NOT AT `low`, which is the whole judgment in this change. The stored
+    // confidence looked like an independent measure of certainty and is not: measured across all 29 stored
+    // contacts on 2026-07-27 it is a near-mechanical restatement of the contact METHOD. Every form or DM
+    // is `low` (9 of 9), every generic inbox is `medium` (8 of 8), and a named person is `high` except
+    // once. So it cannot tell a form on the RIGHT act's site (marcribler.com, confirmed by #1626) from
+    // one on the wrong act's (shop.copeland.band, the Florida rock band on a Red Hook folk room bill),
+    // and a mark driven by `low` alone flags both identically.
+    //
+    // Dan's call, 2026-07-27, made with that measurement in front of him: mark everything that is not a
+    // verified address anyway. A generic inbox and a contact form really are weaker than an address read
+    // off the act's own page, and he would rather see that stated on every one of them than have the
+    // distinction go unsaid because the signal is imperfect. The cost is accepted knowingly: the correct
+    // Marc Ribler form wears the same mark as the wrong Copeland one. What would actually separate those
+    // two is the CHECK recording what tied a site to the act, which nothing does today.
+    //
+    // FAILS CLOSED on a missing confidence, which falls out of the same rule: only `high` clears it.
+    //
+    // Per CONTACT, not per row, because a self-produced show can find two performers and verify only one
+    // of them. That is why the mark lives on the address line and not on the row's badge.
+    private static func isUnverified(_ c: RecipientSnapshot) -> Bool {
+        c.contactConfidence != .high
+    }
+
+    // An address INHERITED from another show by the same organisation (#1598 Phase 5) is deliberately
+    // never marked: the org ledger stores the addresses that earned the verdict and not how sure each one
+    // was, so a mark here would assert something no check ever measured. Absence of a warning is not a
+    // claim of verification; asserting one would be. Filed rather than guessed at.
+    var unverifiedContactEmails: Set<String> {
+        guard !contacts.isEmpty else { return [] }
+        return Set(contacts.filter(Self.isUnverified).compactMap {
+            $0.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty })
+    }
+
+    // The same rule for the form links, which is where the two live misidentifications actually landed
+    // (a Bay Area magician's booking form on an off Broadway show, a Florida rock band's merch site on a
+    // Red Hook folk room). "Contact form only" says there IS a way through; it says nothing about whether
+    // it reaches the right people.
+    var unverifiedContactForms: Set<URL> {
+        let unverified = Set(contacts.filter(Self.isUnverified).compactMap {
+            $0.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        })
+        return Set(displayedContactForms.filter { unverified.contains($0.absoluteString) })
+    }
+
     // #1338: after a reachability probe, a still-open show that found a SENDABLE contact is a "best reachable
     // contact" the row highlights, so the answer to "which of these can I actually email" is obvious among a
     // date's competing shows rather than assembled from per-row badges. It is exactly the emailFound badge, so

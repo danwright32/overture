@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **886 sentences**, from 303 source files.
+Every sentence Overture can say to Dan: **888 sentences**, from 303 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1028,6 +1028,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture didn't verify this one belongs to this act. Only an address read off a page naming them counts as verified; a generic inbox, a contact form, or an inferred address doesn't. It may still be right, so it's worth a look before you write."
+    `Domain/Reachability.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
@@ -1964,6 +1966,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
     `UI/FollowUpsView.swift`
     `UI/QueueView.swift`
+"not verified"
+    `Domain/Reachability.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
 "read it."
