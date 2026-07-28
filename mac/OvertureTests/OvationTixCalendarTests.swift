@@ -14,20 +14,30 @@ struct OvationTixCalendarTests {
     // A real slice of SoHo Playhouse's CalendarProductions feed (client 35583), trimmed to the fields the
     // adapter reads. "Hungry Women" plays all three days (a real multi-night run); the last day carries a
     // genuinely hidden production the public calendar suppresses.
+    // #1680: `showtimes` is real and always present; it was trimmed out of this fixture originally because
+    // nothing read it. It is what addresses ONE NIGHT of a run: the feed repeats a production under each of
+    // its dates and gives that date's own performanceId (verified against the live feed, 2026-07-28).
     static let feed = #"""
     [
       {"date":"2026-07-23","productions":[
-        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false},
-        {"productionId":1281174,"name":"The Passion of Mr. Cardboard","supertitle":"","subtitle":"","hidden":false},
-        {"productionId":1277321,"name":"Live From The Afterlife","supertitle":"","subtitle":"","hidden":false}
+        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1280419,"performanceId":11817828,"performanceStartTime":"2026-07-23 19:00"}]},
+        {"productionId":1281174,"name":"The Passion of Mr. Cardboard","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1281174,"performanceId":11817900,"performanceStartTime":"2026-07-23 21:00"}]},
+        {"productionId":1277321,"name":"Live From The Afterlife","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1277321,"performanceId":11817950,"performanceStartTime":"2026-07-23 20:00"}]}
       ]},
       {"date":"2026-07-24","productions":[
-        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false},
-        {"productionId":1276943,"name":"Wisard","supertitle":"","subtitle":"","hidden":false}
+        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1280419,"performanceId":11817821,"performanceStartTime":"2026-07-24 19:00"}]},
+        {"productionId":1276943,"name":"Wisard","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1276943,"performanceId":11817960,"performanceStartTime":"2026-07-24 19:30"}]}
       ]},
       {"date":"2026-07-25","productions":[
-        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false},
-        {"productionId":1283185,"name":"Jena Friedman: Late Show","supertitle":"","subtitle":"","hidden":true}
+        {"productionId":1280419,"name":"Hungry Women","supertitle":"","subtitle":"","hidden":false,
+         "showtimes":[{"productionId":1280419,"performanceId":11817822,"performanceStartTime":"2026-07-25 19:00"}]},
+        {"productionId":1283185,"name":"Jena Friedman: Late Show","supertitle":"","subtitle":"","hidden":true,
+         "showtimes":[{"productionId":1283185,"performanceId":11817999,"performanceStartTime":"2026-07-25 23:00"}]}
       ]}
     ]
     """#

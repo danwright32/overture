@@ -21,6 +21,11 @@ enum OvationTixCalendar {
         // shared `Series:` tag the extractor copies into the event's seriesId, and RunGrouping collapses those
         // dates into one run. Nil when the feed names none.
         var seriesId: String? = nil
+        // #1680: the ids that address the venue's own page for THIS night. `productionId` is the same value
+        // seriesId carries; kept separately because seriesId is deliberately blanked for a single-night show
+        // (so it never wrongly collapses a run) and the link must survive that.
+        var productionId: String? = nil
+        var performanceId: String? = nil
     }
 
     // One day of the calendar: the ISO day plus the productions playing it.
@@ -39,6 +44,14 @@ enum OvationTixCalendar {
         var supertitle: String?
         var subtitle: String?
         var hidden: Bool?
+        // #1680: the performances of this production ON THIS DAY (the feed repeats a production under each
+        // of its dates and lists only that date's showtimes). Optional throughout, so a feed that ever omits
+        // it costs the link and never the row.
+        var showtimes: [Showtime]?
+    }
+
+    private struct Showtime: Decodable {
+        var performanceId: Int?
     }
 
     // yyyy-MM-dd in the current zone. The feed's dates are day-granular (only the day matters downstream for
@@ -80,7 +93,10 @@ enum OvationTixCalendar {
                                       superTitle: nonEmpty(production.supertitle),
                                       subTitle: nonEmpty(production.subtitle),
                                       date: day,
-                                      seriesId: production.productionId.map(String.init)))
+                                      seriesId: production.productionId.map(String.init),
+                                      productionId: production.productionId.map(String.init),
+                                      performanceId: production.showtimes?
+                                          .compactMap(\.performanceId).first.map(String.init)))
             }
         }
         // The feed answered with visible productions but NONE parsed, so its shape has changed. Fail loud
@@ -222,15 +238,28 @@ enum OvationTixCalendar {
     // a way nothing downstream can catch. The presenter is whoever's calendar this is; the venue is nil
     // unless somebody with the standing to say so has said so (Dan pointed at the venue's own feed, or
     // named the room himself). A nil venue drops the row, which is the right answer over a guessed one.
+    // #1680: the venue's own page for this night. The shape is the one already observed in Dan's store for
+    // another OvationTix venue (written there by the AI read path), so it is copied rather than invented.
+    // The performanceId is what distinguishes one night of a run from another; without it every night of a
+    // run would link to the same page, which is the difference between a link and a useful one.
+    static func eventURL(for event: OTEvent, sourceURL: URL?) -> String? {
+        guard let sourceURL, let clientId = clientId(from: sourceURL),
+              let productionId = event.productionId, !productionId.isEmpty else { return nil }
+        let base = "https://ci.ovationtix.com/\(clientId)/production/\(productionId)"
+        guard let performanceId = event.performanceId, !performanceId.isEmpty else { return base }
+        return base + "?performanceId=\(performanceId)"
+    }
+
     static func extractedEvents(from events: [OTEvent], presenter: String, venue: String?,
-                                location: String?) -> [ExtractedEvent] {
+                                location: String?, sourceURL: URL? = nil) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
                            presenter: presenter,
                            venue: venue,
                            performanceDate: dayFormatter.string(from: e.date),
-                           sourceUrl: nil,
+                           // Dan's call (2026-07-28): fall back to the venue's own calendar, never nothing.
+                           sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,
                            seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil })
         }

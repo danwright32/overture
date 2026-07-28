@@ -77,6 +77,32 @@ struct NativeFeedAdapterTests {
         #expect(first.title.contains("sell out") == false)
     }
 
+    // #1680: the feed publishes an eventId and a seriesId for every row, and the venue's own site navigates
+    // its cards to /showdetails/{seriesId}/{eventId} (confirmed against the live site's router, 2026-07-28).
+    // The adapter threw both away and set sourceUrl nil, which is why all 129 untriaged Green Room 42 rows
+    // on the live store have no link back to the page they came from.
+    @Test func venueTixEventsCarryALinkToTheirOwnPage() {
+        let events = try! VenueTixCalendar.parseEvents(Data(VenueTixCalendarTests.feed.utf8))
+        let source = URL(string: "https://thegreenroom42.venuetix.com/")!
+        let mapped = VenueTixCalendar.extractedEvents(from: events, presenter: "The Green Room 42",
+                                                      venue: "The Green Room 42", location: nil,
+                                                      sourceURL: source)
+        #expect(mapped[0].sourceUrl == "https://thegreenroom42.venuetix.com/showdetails/s1/a1")
+        #expect(mapped[1].sourceUrl == "https://thegreenroom42.venuetix.com/showdetails/s2/a2")
+    }
+
+    // Dan's call (2026-07-28): a row that cannot produce a per-event link falls back to the source's own
+    // calendar rather than showing nothing, because "no link" and "no link to THIS show" are different
+    // facts and only one of them leaves him with nowhere to click. The card labels the two differently.
+    @Test func aVenueTixRowWithNoIdsFallsBackToTheVenuesCalendar() {
+        let bare = VenueTixCalendar.VTEvent(title: "Unidentified", superTitle: nil, subTitle: nil,
+                                            date: Date(timeIntervalSince1970: 2_000_000_000), seriesId: nil)
+        let source = URL(string: "https://thegreenroom42.venuetix.com/")!
+        let mapped = VenueTixCalendar.extractedEvents(from: [bare], presenter: "V", venue: "V",
+                                                      location: nil, sourceURL: source)
+        #expect(mapped[0].sourceUrl == "https://thegreenroom42.venuetix.com/")
+    }
+
     // #1174: only a production that runs MORE THAN ONE night in this feed gets a shared seriesId, so those
     // nights collapse into one run downstream; a single-night show keeps a nil id so it still merges by the
     // gap-and-title walk if a sibling appears. This mirrors exactly what the HTML `seriesTags` path produced.
@@ -112,6 +138,51 @@ struct NativeFeedAdapterTests {
         // Carnegie (nil source) and a plain html source both fall through to the injected fallback extractor.
         #expect(SourceExtractorRegistry.extractor(for: nil) == nil)
         #expect(SourceExtractorRegistry.extractor(for: html) == nil)
+    }
+
+    // #1680: SoHo Playhouse's 16 linkless rows. The feed names the production and, under each date, that
+    // date's own performanceId, so one night of a run is addressable. The shape is the one already observed
+    // in Dan's store for another OvationTix venue, written there by the AI path, so it is copied rather
+    // than invented.
+    @Test func ovationTixEventsCarryALinkToTheirOwnNight() {
+        let events = try! OvationTixCalendar.parseEvents(Data(OvationTixCalendarTests.feed.utf8))
+        let source = URL(string: "https://ci.ovationtix.com/35583")!
+        let mapped = OvationTixCalendar.extractedEvents(from: events, presenter: "SoHo Playhouse",
+                                                        venue: "SoHo Playhouse", location: nil,
+                                                        sourceURL: source)
+        let hungryFirstNight = mapped.first { $0.title == "Hungry Women" }
+        #expect(hungryFirstNight?.sourceUrl
+                == "https://ci.ovationtix.com/35583/production/1280419?performanceId=11817828")
+        // The SECOND night of the same run points at its own night, not the first one's.
+        let hungryNights = mapped.filter { $0.title == "Hungry Women" }.compactMap(\.sourceUrl)
+        #expect(Set(hungryNights).count == hungryNights.count)
+    }
+
+    @Test func anOvationTixRowWithNoProductionIdFallsBackToTheVenuesCalendar() {
+        let bare = OvationTixCalendar.OTEvent(title: "Unidentified", superTitle: nil, subTitle: nil,
+                                              date: Date(timeIntervalSince1970: 2_000_000_000), seriesId: nil)
+        let source = URL(string: "https://ci.ovationtix.com/35583")!
+        let mapped = OvationTixCalendar.extractedEvents(from: [bare], presenter: "V", venue: "V",
+                                                        location: nil, sourceURL: source)
+        #expect(mapped[0].sourceUrl == "https://ci.ovationtix.com/35583")
+    }
+
+    @Test func theRegistryHandsTheOvationTixExtractorTheSourcesOwnAddress() {
+        let ovation = WatchedSource(sourceId: "sohoplayhouse", orgName: "SoHo Playhouse",
+                                    listingsURL: "https://ci.ovationtix.com/35583", kind: .ovationTixFeed)
+        let extractor = SourceExtractorRegistry.extractor(for: ovation) as? OvationTixExtractor
+        #expect(extractor?.sourceURL?.absoluteString == "https://ci.ovationtix.com/35583")
+    }
+
+    // #1680: the registry builds the VenueTix extractor through its MEMBERWISE init, not the convenience one
+    // that takes a url, so threading the source URL into the extractor is not enough on its own: the live
+    // path runs through here. Without this the adapter's own tests stay green while every real Green Room 42
+    // card is still linkless, which is exactly how this defect survived (L3, built is not wired).
+    @Test func theRegistryHandsTheVenueTixExtractorTheSourcesOwnAddress() {
+        let venue = WatchedSource(sourceId: "greenroom", orgName: "The Green Room 42",
+                                  listingsURL: "https://thegreenroom42.venuetix.com/", kind: .venueTixFeed)
+        let extractor = SourceExtractorRegistry.extractor(for: venue) as? VenueTixExtractor
+        #expect(extractor?.sourceURL?.absoluteString == "https://thegreenroom42.venuetix.com/")
     }
 
     // MARK: The extractor conformers derive the verdict like any structured feed

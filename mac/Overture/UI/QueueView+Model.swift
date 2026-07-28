@@ -63,6 +63,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
     var hasWeakContactEmail: Bool = false
+    // #1680: the source pages this row was found on, so the card can tell a link to THIS show from a
+    // fallback link to the source's own calendar. Mirrors Prospect.runSourceURLs.
+    var runSourceURLs: [String] = []
     // #1630: what the Review row offers for a show whose only way through is the act's own contact form.
     // Decided in the domain (FormPitch), so the row only renders it.
     var formPitch: FormPitch.State = .unavailable
@@ -640,6 +643,27 @@ enum QueueModel {
     // heading already says these are the shows waiting for a Prep run.
     static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?) {
         (url(item.sourceListingURL), url(item.websiteURL))
+    }
+
+    // #1680: what to call the listing link. A per-event link says "Source listing" as it always has; a link
+    // that is merely the source's own calendar says so, because the two are different promises and Dan
+    // decides whether to click on the strength of the label. Derived rather than stored: the fallback link IS
+    // the source's own address, so the comparison is the fact itself, and it classifies the rows already in
+    // the store without a migration.
+    static func listingLinkLabel(_ item: QueueItem) -> String {
+        guard let listing = item.sourceListingURL else { return "Source listing" }
+        let normalized = canonicalLink(listing)
+        return item.runSourceURLs.contains(where: { canonicalLink($0) == normalized })
+            ? "Venue calendar"
+            : "Source listing"
+    }
+
+    // A trailing slash is not a different page, and the fallback link is the source URL verbatim, so one
+    // character of spelling would otherwise make a calendar link read as this show's own page.
+    private static func canonicalLink(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while s.hasSuffix("/") { s.removeLast() }
+        return s
     }
 
     static func rowHasReferenceLinks(_ item: QueueItem) -> Bool {
@@ -1493,6 +1517,10 @@ extension QueueItem {
             reprepContactsRequested: p.reprepContactsRequested,
             reprepLastServedAt: p.reprepLastServedAt
         )
+        // #1680: assigned after the memberwise init rather than inside it. That call is already at the
+        // Swift type-checker's limit for one expression (adding this as an argument tips it into
+        // "unable to type-check in reasonable time"), and one more field is not worth restructuring it.
+        self.runSourceURLs = p.runSourceURLs
     }
 }
 

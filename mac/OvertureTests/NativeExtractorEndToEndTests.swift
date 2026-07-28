@@ -28,7 +28,8 @@ struct NativeExtractorEndToEndTests {
                 VenueTixCalendar.upcoming(
                     try VenueTixCalendar.parseEvents(Data(VenueTixCalendarTests.feed.utf8)), now: now)
             },
-            presenter: "The Green Room 42", venue: "The Green Room 42", location: "New York, NY")
+            presenter: "The Green Room 42", venue: "The Green Room 42", location: "New York, NY",
+            sourceURL: URL(string: "https://thegreenroom42.venuetix.com/"))
     }
 
     // OPERA America: the real Umbraco feed page injected as the paged POST response, driven through
@@ -82,6 +83,14 @@ struct NativeExtractorEndToEndTests {
         #expect(luigi.performanceDate != nil)         // exact day arithmetic is the adapter test's job, not this one's
 
         #expect(listing.events[1].title == "The Ethel Merman Disco Album Project")
+    }
+
+    // #1680: the capability and its WIRING are two claims. `extractedEvents` can build a per-event link, but
+    // that is worth nothing unless the extractor actually hands it the source URL: without this the live path
+    // keeps passing nil and every Green Room 42 card stays linkless while the adapter's own test is green.
+    @Test func venueTixEventsReachTheListingCarryingTheirOwnPageLink() async throws {
+        let listing = try await venueTixExtractor().extract()
+        #expect(listing.events[0].sourceUrl == "https://thegreenroom42.venuetix.com/showdetails/s1/a1")
     }
 
     // The join reaches the SAME boundary the agent path does: every mapped event survives the ingest guard,
