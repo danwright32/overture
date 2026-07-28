@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **890 sentences**, from 303 source files.
+Every sentence Overture can say to Dan: **891 sentences**, from 304 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1049,8 +1049,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
     `Domain/ProbeSelection.swift`
+"Overture won't draft or send this while a later night of this run is out. Tap if you can shoot it after all."
+    `Domain/ConflictScope.swift`
 "Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
-    `UI/ProspectRowView.swift`
+    `Domain/ConflictScope.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"

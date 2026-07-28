@@ -682,27 +682,35 @@ struct ProspectRowView: View {
     private var actions: some View {
         VStack(alignment: .trailing, spacing: OVSpacing.xs) {
             if item.hasUnclearedConflict, let note = item.conflictNote {
+                // #1501/#1527: the label, the colour, the hover text and the sentence beneath all come off
+                // ONE decision (ConflictScope, which carries the reasoning). "Unavailable" overstated a run
+                // Dan can still book, and rust drew it in the colour this app uses for a failure.
+                //
+                // The fallback is deliberately the LOUD case. An item carrying a conflict whose two dates
+                // cannot be compared is not something to quietly downgrade to the softer pill: it is a show
+                // Overture is refusing to pitch, and it should look like one until it can say otherwise.
+                let scope = QueueModel.conflictScope(item) ?? ConflictScope.thisNight
                 Menu {
                     Button("I can shoot this anyway") { onClearConflict() }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
-                        // #1501: the label, and the sentence below it, come off ONE decision (ConflictScope,
-                        // which carries the reasoning). "Unavailable" overstated a run Dan can still book.
-                        Text(QueueModel.conflictScope(item)?.pillLabel ?? ConflictScope.thisNight.pillLabel)
+                        Text(scope.pillLabel)
                         Image(systemName: "chevron.down").font(.system(size: 9))
                     }
                     .font(OVType.meta.weight(.semibold))
-                    .foregroundStyle(OVColor.onRust)
+                    .foregroundStyle(scope.pillForeground)
                     .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                    .background(Capsule().fill(OVColor.rust))
+                    .background(Capsule().fill(scope.pillFill))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all.")
+                .help(scope.pillHelp)
                 Text(note)
                     .font(OVType.tag)
-                    .foregroundStyle(OVColor.rust)
+                    // The sentence takes the pill's own colour, so the badge and the line explaining it
+                    // read as one thing rather than a gold pill over a rust sentence.
+                    .foregroundStyle(scope.pillFill)
                     .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 220, alignment: .trailing)
