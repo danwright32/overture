@@ -44,7 +44,13 @@ extension Prospect: BookingMatchable {
     var bookingManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var bookingIsBooked: Bool { outcome == .booked }
     var bookingPriorRelationshipBooked: Bool { priorRelationshipAtSend == PriorRelationship.booked.rawValue }
-    var permitsAutoBook: Bool { true }
+    // #1630: an emailed pitch still auto-books, exactly as it always has. A show whose ONLY outreach is
+    // one Dan recorded by hand through a contact form does not: the pitch is real, but the evidence is
+    // his own memory of submitting a form rather than a message Gmail confirmed, and silently booking a
+    // show off that is a stronger claim than the record supports. It still CLAIMS the matched booking
+    // (see the protocol note above), so the match surfaces as a suggestion he confirms rather than
+    // disappearing. Same call as an Inquiry (#1435).
+    var permitsAutoBook: Bool { gmailMessageId != nil }
 
     func markAutoBooked(bookingId: String, now: Date) {
         outcome = .booked

@@ -985,6 +985,12 @@ struct QueueView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
                 Text(r.email ?? r.name ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                // #1630: a form pitch has no address and no thread, so the row has to account for the
+                // silence itself. Said in inkSoft, not rust: nothing is wrong here.
+                if r.outreachChannel == .contactForm {
+                    Text(FormOutreachCopy.sentLine)
+                        .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                }
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
                 // the only signal worth restoring here is the soft-delay hint (#656) the embedded
                 // DraftReviewView used to show before the lightweight row (#661) replaced it.
@@ -1000,9 +1006,12 @@ struct QueueView: View {
                 // #661 follow-up: the old full card highlighted an overdue reach-out in rust rather
                 // than the plain "in N days" color, so that urgency cue survives the lightweight row.
                 let dueNow = ReachedOutQueue.isDueNow(next: pair.next, now: now)
-                Text(ReachedOutQueue.timingLabel(next: pair.next, now: now))
+                Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel))
                     .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
-                if r.replied {
+                // #1630: a form pitch gets the state control unconditionally. Overture cannot detect its
+                // reply, so waiting for `replied` to become true would mean waiting forever, and the one
+                // thing that moves the show forward is Dan saying where it stands.
+                if r.replied || r.outreachChannel == .contactForm {
                     ConversationStateControl(
                         currentState: r.conversationState, stateSource: r.conversationStateSource,
                         onSet: { state in
@@ -1014,7 +1023,9 @@ struct QueueView: View {
                                                                                 prospects: prospects, context: context, feedback: feedback)
                         })
                 }
-                if dueNow {
+                // #1630: never for a form pitch. Follow-ups is the EMAIL nudge screen and does not list it
+                // (isAwaitingFollowUp is false), so the button would land him on a list this show is not in.
+                if dueNow, r.outreachChannel != .contactForm {
                     Button("Send a follow-up") { onShowFollowUpsFor(r.id) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }

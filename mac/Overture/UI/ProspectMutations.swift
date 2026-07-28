@@ -165,6 +165,48 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #1630, step one of the copy-then-confirm control: put the whole pitch on the clipboard (greeting
+    // included, via the same OutgoingPitch the send path composes with), open the act's form, and move
+    // the row into the state that waits on his answer. It records NO outreach: nothing has been sent
+    // yet, and claiming otherwise here is exactly the lie the confirm step exists to prevent.
+    static func beginFormPitch(_ item: QueueItem, _ recipientId: String, _ formURL: String,
+                               prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }),
+              let pitch = OutgoingPitch.text(for: recipient, of: model) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(pitch, forType: .string)
+        model.beginFormPitch(recipient, now: Date())
+        guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
+        if let url = URL(string: formURL), url.scheme != nil {
+            NSWorkspace.shared.open(url)
+        }
+        feedback.acknowledge(ActionAck.formPitchCopied(org: item.groupName))
+    }
+
+    // Step two: he says he sent it. This is the moment the outreach becomes real.
+    static func recordFormPitch(_ item: QueueItem, _ recipientId: String,
+                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }),
+              model.recordFormOutreach(recipient, now: Date(), formURL: recipient.contactFormURL) else { return }
+        guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(ActionAck.formPitchRecorded(org: item.groupName))
+    }
+
+    // ...or he says he didn't, which puts the row back exactly where it was rather than leaving it in a
+    // half state he has to come back to.
+    static func cancelFormPitch(_ item: QueueItem, _ recipientId: String,
+                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        // Covers both directions: backing out before recording, and undoing a record already made.
+        if model.undoFormOutreach(recipient) == false {
+            recipient.formOutreachStartedAt = nil
+        }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #991: Dan refuses a town from a row ("never show me shows in this town"). It adds that row's town
     // to the stored exclude set, which the queue gate reads in union with the seed at queue time, so the
     // refusal re-decides every row at once and this show (and any future one there) drops out. Idempotent

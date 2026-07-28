@@ -330,6 +330,49 @@ enum DebugStaging {
         return [a, b, c, d]
     }
 
+    // #1630: the two ends of the form-pitch control, so both can be walked without submitting anything to
+    // a real act's contact form. One show sits in Review offering "Copy pitch and open form"; the other is
+    // already recorded and past its decide gap, so it appears in Reached out saying what it says.
+    @discardableResult
+    static func stageFormPitchScenario(in context: ModelContext, now: Date) -> [Prospect] {
+        let stamp = Int(now.timeIntervalSince1970)
+        let date = EasternDate.dayString(from: now.addingTimeInterval(25 * 86_400))
+
+        func formOnlyShow(keyTag: String, group: String, venue: String, formURL: String) -> Prospect {
+            let p = Prospect(naturalKey: "debug-of-formpitch-\(keyTag)-\(stamp)", groupName: group,
+                             discipline: "music", venue: venue, performanceDate: date,
+                             sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                             production: "self", profile: "strong", coverage: "likely_uncovered",
+                             fitScore: 7, tier: "high", fitReason: "debug form pitch",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .drafted)
+            p.draftSubject = "Photographs of your \(venue) show"
+            p.draftBody = "I photograph performances around New York and would love to document this one. "
+                + "If a few sample frames from similar performances would be useful, I'm glad to send some."
+            p.reachabilityProbedAt = now
+            context.insert(p)
+            let r = Recipient(id: Recipient.makeId(email: nil, formURL: formURL) ?? formURL, email: nil,
+                              name: "Jamie Rowe (debug)", provenance: .act,
+                              contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: formURL)
+            p.setRecipients([r])
+            p.reachabilityResult = p.reachabilityResultFromRecipients
+            return p
+        }
+
+        // A: untouched, sitting in Review with the control on offer. The form is a real page that is safe
+        // to open and belongs to nobody Dan would ever pitch.
+        let a = formOnlyShow(keyTag: "a", group: "Kestrel Quartet (debug)", venue: "Jalopy Theatre",
+                             formURL: "https://example.com/contact")
+
+        // B: recorded a fortnight ago, so it is in Reached out and already past its decide gap.
+        let b = formOnlyShow(keyTag: "b", group: "Foxglove Trio (debug)", venue: "Barbes",
+                             formURL: "https://example.org/contact")
+        let recordedAt = now.addingTimeInterval(-14 * 86_400)
+        b.recordFormOutreach(b.recipients[0], now: recordedAt, formURL: "https://example.org/contact")
+
+        return [a, b]
+    }
+
     // A plain-ASCII HTML signature in Dan's brand colors, clean enough to pass GmailSignatureHealth so it
     // is actually cached and the #1203 styled preview has something to render.
     static let demoSignatureHTML =

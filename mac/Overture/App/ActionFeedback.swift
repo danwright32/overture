@@ -77,6 +77,17 @@ enum ActionAck {
         excluded ? "Won't learn from \(org)'s email" : "Learning from \(org)'s email again"
     }
 
+    // #1630. A clipboard write is invisible, so without this the button reads as dead. It says ONLY that,
+    // deliberately: the row it fires beside has already changed to ask whether he sent it, and repeating
+    // the instruction here would be the same sentence twice on one screen (#843).
+    static func formPitchCopied(org: String) -> String {
+        "Pitch copied for \(org)"
+    }
+
+    static func formPitchRecorded(org: String) -> String {
+        "Recorded. \(org) is now in Reached out."
+    }
+
     // #925: the no-upcoming-shoots warning, put away for a week. It deliberately does NOT say "done" or
     // "fixed": nothing was fixed, and the second sentence is the whole reason the button is allowed to
     // exist. Hiding a warning he cannot act on is fine. Letting him forget what it meant is not.

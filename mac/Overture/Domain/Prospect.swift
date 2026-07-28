@@ -646,6 +646,26 @@ final class Prospect {
         productionAtSend = production
     }
 
+    // #1630: the exact inverse of the write-once send snapshot above (the two freezes plus
+    // priorRelationshipAtSend), for unwinding a hand-recorded form outreach that never happened. It
+    // lives HERE, beside the freezes, rather than in the undo path, because the recurring defect is
+    // reversing N minus 1 of N fields (L38): a frozen feature added above and forgotten below would
+    // leave a show carrying the ranking snapshot of a pitch that does not exist. Only ever called when
+    // the form record is the show's sole outreach, so there is no genuine send whose history it erases.
+    func unfreezeSendSnapshot() {
+        sentAt = nil
+        priorRelationshipAtSend = nil
+        fitScoreAtSend = nil
+        tierAtSend = nil
+        profileAtSend = nil
+        coverageAtSend = nil
+        disciplineAtSend = nil
+        productionAtSend = nil
+        sentSubject = nil
+        sentBody = nil
+        experimentOpenerEdited = false
+    }
+
     func freezeSentCopy(subject: String, body: String) {
         guard sentBody == nil else { return }
         sentSubject = subject
@@ -944,7 +964,16 @@ final class Prospect {
     // no message id was never actually sent. Outreach stats and booking auto-detection read this,
     // not the bare timestamp, so a future bug that sets `sentAt` without sending can't silently
     // skew a booking rate or auto-book a show that was never pitched.
-    var wasProvablyContacted: Bool { gmailMessageId != nil }
+    //
+    // #1630 widens what counts as proof without weakening how much is demanded: a pitch Dan submitted
+    // through the act's own form and confirmed by hand never touches Gmail, so it can never carry a
+    // message id, and it is still a real pitch. His own assertion is a different KIND of evidence, not
+    // the absence of any. What it is NOT is equally strong, which is why `permitsAutoBook` below reads
+    // the Gmail half on its own.
+    var wasProvablyContacted: Bool { gmailMessageId != nil || hasRecordedFormOutreach }
+
+    // #1630: any contact on this show that Dan pitched through its form and confirmed himself.
+    var hasRecordedFormOutreach: Bool { recipients.contains { $0.formOutreachRecordedAt != nil } }
 
     // The content key two results files agree on for "the same performance". Each
     // part is CANONICALIZED so a scraped name and the same name fetched/decoded

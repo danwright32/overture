@@ -597,6 +597,7 @@ struct RootView: View {
                         Button("Stage warm-register returning-client draft") { debugStageWarmRegisterDraft() }
                         Button("Stage re-prep-queued draft") { debugStageReprepQueuedDraft() }
                         Button("Stage reachability competition (best-contact highlight)") { debugStageReachabilityCompetition() }
+                        Button("Stage form-pitch shows (copy-and-confirm, and one already recorded)") { debugStageFormPitchScenario() }
                         Button("Clear debug leads") { debugClearDebugLeads() }
                     } label: {
                         Label("DEBUG", systemImage: "ladybug")
@@ -958,6 +959,16 @@ struct RootView: View {
         do {
             try context.save()
             status.set("DEBUG: staged \(shows.count) shows competing on one date. The emailable one carries the best-contact highlight")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func debugStageFormPitchScenario() {
+        let shows = DebugStaging.stageFormPitchScenario(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged \(shows.count) form-only shows. One is in Review with 'Copy pitch and open form'; the other is in Reached out, already recorded")
         } catch {
             status.set("DEBUG stage failed: \(error.localizedDescription)")
         }

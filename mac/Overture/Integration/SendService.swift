@@ -59,9 +59,10 @@ enum SendService {
             return false
         }
 
-        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "",
-                                body: Salutation.attnLine(for: recipient)
-                                    + Salutation.greeting(for: recipient) + "\n\n" + effectiveBody)
+        // #1630: composed by OutgoingPitch, which the copy-to-a-contact-form path also reads, so the
+        // text Dan pastes into a form is by construction the text this sends.
+        guard let pitch = OutgoingPitch.text(for: recipient, of: prospect) else { return false }
+        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "", body: pitch)
         do {
             let receipt = try await sender.send(mail)
             recipient.sentAt = now

@@ -20,6 +20,10 @@ struct DraftReviewView: View {
     // #789: Dan's confirmed override of the draft-lint send block, same two-step alert shape.
     var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
+    // #1630: the copy-then-confirm control for a show reachable only through the act's own form.
+    var onBeginFormPitch: (_ recipientId: String, _ formURL: String) -> Void = { _, _ in }
+    var onRecordFormPitch: (_ recipientId: String) -> Void = { _ in }
+    var onCancelFormPitch: (_ recipientId: String) -> Void = { _ in }
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
     // #769: Dan's answer to "was that this show, or the whole org?"
@@ -393,6 +397,39 @@ struct DraftReviewView: View {
                         Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
                     }
                 }
+                Spacer()
+            } else if case let .ready(recipientId, formURL) = item.formPitch {
+                // #1630: this show has no address at all, so Approve is permanently disabled and there is
+                // no other way forward. Dan pitches it by hand; this is the only control that matters here.
+                Button { onBeginFormPitch(recipientId, formURL) } label: {
+                    Label(FormOutreachCopy.copyAndOpen, systemImage: "doc.on.clipboard")
+                        .font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                // Says only what the button does not: nothing is recorded until he confirms.
+                .help("Nothing is recorded until you confirm you sent it.")
+                Button("Edit") {
+                    draftSubject = item.draftSubject ?? ""
+                    draftBody = item.draftBody ?? ""
+                    editing = true
+                }
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                Button("Skip") { onSkip() }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                Spacer()
+            } else if case let .awaitingConfirmation(recipientId, _, startedAt) = item.formPitch {
+                Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date()))
+                    .font(OVType.meta).foregroundStyle(OVColor.ink)
+                Button { onRecordFormPitch(recipientId) } label: {
+                    Text(FormOutreachCopy.sentIt).font(OVType.meta).foregroundStyle(OVColor.onForest)
+                        .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
+                        .background(Capsule().fill(OVColor.forest))
+                }
+                .buttonStyle(.plain)
+                Button(FormOutreachCopy.didNotSend) { onCancelFormPitch(recipientId) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Spacer()
             } else {
                 Button { onApprove() } label: {

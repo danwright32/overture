@@ -108,6 +108,31 @@ final class Recipient {
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
 
+    // #1630: HOW this contact was actually reached. nil means email, the only channel that existed
+    // before this, so every stored record migrates as what it is. `contact_form` means Dan submitted
+    // the act's own form by hand and told Overture he did: real outreach that Gmail never touched, so
+    // it has no thread to watch and no message id. Raw so a future channel decodes here without a
+    // migration.
+    var outreachChannelRaw: String?
+    // When Dan confirmed he sent it. This is the form channel's counterpart to `gmailMessageId`: the
+    // evidence that the outreach actually happened, as opposed to a bare `sentAt` that proves nothing
+    // (#963). nil on every email send.
+    var formOutreachRecordedAt: Date?
+    // The form Dan actually submitted, frozen at that moment. NOT read back off `contactFormURL`,
+    // which is scout-owned and rewritten by every re-ingest (PrepImporter), so the record would
+    // otherwise end up naming a page he never used (L37).
+    var formOutreachURL: String?
+    // Where the show sat before the record, so undoing it restores exactly that rather than guessing an
+    // inverse (the #752 snapshot shape). A form-only show is normally `.drafted`, but it can be recorded
+    // from other states and guessing would quietly move it somewhere Dan did not leave it.
+    var formOutreachPriorStatusRaw: String?
+    // When Dan copied the pitch and opened the form. PERSISTED, not view state: he leaves for the
+    // browser and may not come back this session, and a confirm step that evaporates leaves the row
+    // reading untouched again, which is the whole defect this issue exists to fix, only smaller. It also
+    // makes the in-between state honest, "you opened their form and have not said whether you sent it",
+    // instead of collapsing into either end.
+    var formOutreachStartedAt: Date?
+
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
     // Why sendState == .suppressed (#542). Only meaningful while sendState == .suppressed; nil for
@@ -296,13 +321,30 @@ final class Recipient {
         set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
+    // #1630: this contact was provably reached, whichever way it happened. An emailed contact proves it
+    // with a Gmail message id against a real address (#331/#378: a bare `sentAt` with neither is a
+    // staged or corrupt record that was never actually sent, and that guard is unchanged). A form
+    // contact proves it with Dan's own confirmation, which is a different KIND of evidence, not the
+    // absence of any. The one place that question is answered, so a surface cannot admit an outreach
+    // the next surface refuses.
+    var hasProvenOutreach: Bool {
+        if formOutreachRecordedAt != nil { return true }
+        return gmailMessageId != nil && (email?.isEmpty == false)
+    }
+
     // Sent, no reply, not bounced: the only recipients that receive follow-ups or reminders.
     var isSilent: Bool { sendState == .sent && !replied && !bounced }
 
     // The contacts the follow-up sequencer may nudge (#418 D): silent AND not hand-resolved. A contact
     // Dan marked Closed/Booked (resolution set) or otherwise judged by hand (outcomeSource == .manual)
     // is still "silent" by the raw definition but must never be nudged again.
-    var isAwaitingFollowUp: Bool { isSilent && resolution == nil && outcomeSource != .manual }
+    // #1630: and never a form outreach. A nudge is an EMAIL, sent onto the original thread; a form
+    // contact has neither an address nor a thread, so the whole sequence is unsendable for it. Offering
+    // one would put a button in Follow-ups that can only fail, about a pitch that is perfectly fine. Its
+    // own decide clock (ReachedOutQueue) covers it instead.
+    var isAwaitingFollowUp: Bool {
+        isSilent && resolution == nil && outcomeSource != .manual && outreachChannel == .email
+    }
 
     // #677: this contact replied and nobody has dealt with it yet: replied, no resolution recorded,
     // and it didn't bounce. Was independently recomputed in OmniFocusSync, ReachedOutQueue, and
