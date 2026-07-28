@@ -206,6 +206,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
             guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, !Reachability.isSocialOnly(raw),
                   !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  // #1636: and the press rule, kept in step with the stored verdict for the same reason
+                  // the venue one is.
+                  !PressContactGuard.looksLikePressContact(formURL: raw),
                   let url = URL(string: raw), url.scheme != nil else { return nil }
             return url
         }

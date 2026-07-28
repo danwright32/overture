@@ -155,6 +155,10 @@ final class Prospect {
             guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, !Reachability.isSocialOnly(raw),
                   !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  // #1636: nor a press or media page, the same rule the email path applies to a
+                  // "press@" address (#722/#635). The venue guard above cannot cover this: the live case
+                  // is a press office on a domain that is not this show's room at all.
+                  !PressContactGuard.looksLikePressContact(formURL: raw),
                   let url = URL(string: raw), url.scheme != nil else { return nil }
             return raw
         }
