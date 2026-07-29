@@ -168,6 +168,19 @@ key the run must echo back verbatim, never rebuild. The Prep run is the counterp
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
 
+The results file also carries RUN-LEVEL facts, stamped by the runner script after the run rather
+than written by the model: `model` (#804, which model wrote these drafts), `runCost` (#1593), and
+`webCalls` (#1721, how many times the run actually reached the web, counted from its own event
+stream by `lib/models.sh`'s `record_web_calls`). These sit beside `results`, not inside it, and are
+all OPTIONAL: a file from before any of them existed still decodes and still lands Dan's drafts.
+
+`webCalls` is the first of the three the app actually reads (`PrepResults.WebCalls` ->
+`PrepImporter.Outcome` -> `PrepRunSummary`), so it is documented here; `model` and `runCost` are
+written and, as of #1721, still have no reader. Its `recorded` flag is the field to branch on: when
+a stream did not report, the writer publishes NO `total` at all and carries the figure as
+`partialTotal` instead, so nothing downstream can read a partial count as the real one by reaching
+for the field it always reads. `overCap` is likewise absent when the verdict is not yet knowable.
+
 Queue version 2 (#586, #366 Phase 1) adds an optional `production` (`self` / `agency` / `unknown`,
 from `Prospect.production`/#349) to each item, so the research step knows whether a show is
 self-produced before deciding whether to pursue a named performer directly (#366 Phase 3). Additive;
