@@ -176,18 +176,25 @@ enum EventPlace {
         }
     }
 
+    // #1656: the state a location names, through the SAME token rule `excludableTown` uses, plus one
+    // inference for a borough phrase that names no state at all.
+    //
+    // This used to look for a full state name ANYWHERE in the text, on the reasoning that a spelled-out
+    // name is unambiguous. A name is unambiguous; a name buried inside a longer place name is not. "New
+    // York Mills, MN" is a real Minnesota town with a regional cultural centre, and it read as New York
+    // state while its own "MN" was never considered. "Kansas City, MO" read as Kansas the same way. Worse,
+    // `excludableTown` never shared the flaw (it has always required the state to BE a comma token), so
+    // the two disagreed: the row was kept as a New York show AND offered no way to refuse its town, which
+    // is the same withheld-control defect #1744 was about.
+    //
+    // So the state must be its own comma piece. That alone would lose the bare phrase "New York City",
+    // which names no state and is the whole of #1656, hence the second step: a token that names a borough
+    // IS New York. A real state token always wins over that inference, which is what keeps a Minnesota
+    // town in Minnesota.
     private static func state(in text: String, tokens: [String]) -> String? {
-        // A full state name is unambiguous, so it is worth more than a two-letter token.
-        for (name, code) in stateNames where containsWord(text, name) { return code }
-
-        // A bare two-letter code, but ONLY as its own comma-separated piece or the leading word of one
-        // ("Louisville, KY", "Berlin, BE, 12157"). Scanning the whole string for two letters would
-        // find "in" inside a word and place a show in Indiana.
-        for t in tokens {
-            let head = t.split(separator: " ").first.map(String.init) ?? t
-            if head.count == 2, usStateCodes.contains(head) { return head }
-        }
-        return nil
+        if let named = stateToken(in: tokens)?.code { return named }
+        // No state named anywhere. A borough phrase is still a statement about where this is.
+        return tokens.contains(where: { namesABorough($0) }) ? "ny" : nil
     }
 
     // #991: the town Dan's "never show me shows in this town" action would exclude, taken from a row's

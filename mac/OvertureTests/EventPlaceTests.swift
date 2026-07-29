@@ -196,3 +196,61 @@ struct EventPlaceBoroughPhraseTests {
         #expect(EventPlace.resolve(location: "Brooklyn, OH", discipline: .music).verdict == .outOfRange)
     }
 }
+
+// #1656. The two shows that issue names, by the string the live store actually holds for each.
+//
+// LIVE-STORE-CLAIM verified=2026-07-29 measure="untriaged music shows whose stored location is the phrase New York City"
+// Both are status `new`, both stored `music`, both Manhattan, both upcoming, and both carry the location
+// `New York City` verbatim: "Handel Messiah 2026" on 2026-12-23 and the "KYHS Music Competition Winners'
+// Concert" on 2026-12-05. Music is the only discipline that stays inside the five boroughs, so music is
+// the only genre that can lose a show this way, and these two were being taken off the queue entirely.
+//
+// They come back with NO RE-SCOUT. The gate resolves the stored location string every time the queue is
+// built, so nothing about the rows themselves has to change: the phrase is simply read correctly now.
+@Suite("New York City is the five boroughs (#1656)")
+struct NewYorkCityIsTheBoroughsTests {
+
+    @Test func theTwoLiveShowsAreInsideTheBoroughs() {
+        for show in ["Handel Messiah 2026", "KYHS Music Competition Winners' Concert"] {
+            let r = EventPlace.resolve(location: "New York City", discipline: .music)
+            #expect(r.verdict == .inRange, "\(show)")
+            #expect(r.reason == .insideTheBoroughs, "\(show)")
+        }
+    }
+
+    // The complaint was not about a verdict in the abstract: the shows were GONE from the queue. This is
+    // the predicate every queue surface goes through (#1570), asserted at that level.
+    @Test func neitherShowIsHiddenFromTheQueue() {
+        #expect(GeoRefusals.none.hidesFromQueue(location: "New York City", discipline: .music) == false)
+    }
+
+    // The other whole-borough phrasings a page can write, which must read the same way.
+    @Test func theOtherWholeBoroughPhrasingsReadTheSameWay() {
+        for phrase in ["New York City, NY", "New York City, New York", "Manhattan, New York City"] {
+            #expect(EventPlace.resolve(location: phrase, discipline: .music).verdict == .inRange, "\(phrase)")
+        }
+    }
+
+    // THE LIMIT, and the reason the state match had to be tightened to fix this issue at all.
+    //
+    // "New York Mills, MN" is a real Minnesota town, and it has a regional cultural centre, so a touring
+    // page can genuinely name it. Its own state is right there in the string, and it must win over the
+    // "New York" sitting inside the town's name. A borough phrase only decides the state when NOTHING
+    // else names one.
+    @Test func aTownWhoseNameContainsNewYorkStaysInItsOwnState() {
+        let r = EventPlace.resolve(location: "New York Mills, MN", discipline: .music)
+        #expect(r.verdict == .outOfRange)
+        #expect(r.reason == .outsideTheRegion)
+        // And the two readers agree about it, which they did not before: the gate places it out of the
+        // region, and the town refusal is correctly withheld because the state already excludes it.
+        #expect(EventPlace.excludableTown(from: "New York Mills, MN") == nil)
+    }
+
+    // The same flaw, on the string that shows it is not a one-off: a state name inside a longer town name
+    // was beating the town's actual state code. Both readings are out of range, so nothing was visibly
+    // wrong, which is why it sat there.
+    @Test func aCityNamedAfterAnotherStateStaysInItsOwnState() {
+        #expect(EventPlace.resolve(location: "Kansas City, MO", discipline: .theater).reason
+                == .outsideTheRegion)
+    }
+}
