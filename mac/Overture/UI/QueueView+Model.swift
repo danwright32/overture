@@ -17,6 +17,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1145: the presenting org, read by the free reachability heuristic at Review (no presenter => nothing
     // to email). Defaulted so existing memberwise-init call sites are unaffected.
     var presenter: String? = nil
+    // #1687: the presenting group's name AS THE CARD SHOWS IT, or nil where showing it would only repeat
+    // a line beside it or name the room. Resolved once per queue build by QueueModel.items(from:), for
+    // the same reason inheritedReachability is (deciding it needs the whole store, and a card must not
+    // carry that cost per row). Defaulted so existing memberwise-init call sites are unaffected.
+    var presenterLine: String? = nil
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -732,7 +737,20 @@ enum QueueModel {
     // A confident match is stated plainly; a fuzzy "possible" match is a question.
     static func historyFlag(_ item: QueueItem) -> String? {
         if item.priorRelationship == "booked" {
-            if let name = item.matchedClientName {
+            // #1687: the pill exists to say "you know these people". Once the card names the group in its
+            // own right one line under the title, a pill that also spells the name says it twice on one
+            // card, which is the defect #1687 fixes, not a second instance of it.
+            //
+            // Compared through GroupNameMatch.normalize, which is the fold the MATCHER used to decide
+            // these two are the same client in the first place, so the pill can never disagree with it
+            // about whether it is repeating the line above. The venue-key fold cannot do this job: it
+            // keeps punctuation, and the live store spells this exact pair "Young New Yorkers Chorus"
+            // (the Downbeat record) against "Young New Yorkers' Chorus" (the scouted presenter), which is
+            // Dan's own card. A collaboration billed as "Tenet Vocal Artists & Alkemie" against the client
+            // "TENET Vocal Artists" stays two different strings here, and keeps its pill name, correctly:
+            // the line above is naming something the pill is not.
+            if let name = item.matchedClientName,
+               GroupNameMatch.normalize(name) != GroupNameMatch.normalize(item.presenterLine ?? "") {
                 return "Worked together before (\(name))"
             }
             return "Worked together before"
@@ -857,6 +875,49 @@ enum QueueModel {
     // row read as done at a glance). The header's timing line would then say "Booked" a second time, so on
     // a booked row it shows only the run date and lets the seal own the status.
     static func headerShowsTimingLine(isBooked: Bool) -> Bool { !isBooked }
+
+    // #1687: the name of the group, on every card that has one to give, not only on the ones Dan has
+    // booked before. Dan, on the Aug 4 queue: "I should be able to see who the group is no matter if I've
+    // worked with them or not." Until now `presenter` rode all the way onto the row model and was never
+    // drawn, so the only thing naming an ensemble was the gold past-client pill, which by definition
+    // appears only where he already knows them. That inverted the pill: it exists to say "you know these
+    // people" and was being read as "who is playing".
+    //
+    // It is a RULE and not a field because the presenter is very often the ROOM. Drawn unconditionally it
+    // puts "Jalopy Theatre" directly above "Jalopy Theatre", which is the #843 defect (a second line that
+    // tells him nothing the line beside it did not). Four gates, each measured on the live store
+    // 2026-07-29 against the 547 rows at status = new that carry a presenter at all:
+    //
+    //   - it must differ from the TITLE (275 rows fail this and the venue gate between them),
+    //   - it must differ from this row's own VENUE, folded, so "Jalopy Theatre" and "Jalopy Theatre, Red
+    //     Hook, Brooklyn, NY" count as the same room (the #1498 / #1686 variance),
+    //   - it must not be the building's own BRAND (42 more), which the row alone cannot decide: all 18
+    //     Carnegie rows carry "Carnegie Hall Presents" over a venue spelled "Stern Auditorium", so no
+    //     comparison against this row's venue ever fires. That judgment is #1702's, shared rather than
+    //     copied, and it is INERT without a corpus by design (ProducerGate.VenueBrands.none),
+    //   - and the TITLE must not already name it (15 more), or the card reads "Camerata Nordica" directly
+    //     above "Camerata Nordica Octet".
+    //
+    // 215 of 559 rows draw it today; the rest stay silent.
+    //
+    // Dan chose the BARE NAME over "Presented by X" (2026-07-29), having read that the field mixes the
+    // act with its agency (AGP Agency Inc., The Bowery Presents and Hong Kong Bay Sea Art Co. all survive
+    // the four gates and none of them played a note). So this returns the stored name and nothing else:
+    // no label is wrapped around it anywhere, here or in the view.
+    static func presenterLine(title: String, presenter: String?, venue: String?,
+                              venueBrands: ProducerGate.VenueBrands = .none) -> String? {
+        let name = (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let presenterKey = ProducerGate.key(name) else { return nil }
+        // ProducerGate.key rather than VenueNormalization.normalizeForKey directly: it is that fold plus
+        // the parenthetical and leading-"the" reductions #1620 added, which is the comparison every other
+        // presenter-versus-venue question in the app already uses.
+        guard presenterKey != ProducerGate.key(title) else { return nil }
+        guard presenterKey != ProducerGate.key(venue) else { return nil }
+        guard !venueBrands.contains(name) else { return nil }
+        if let titleKey = ProducerGate.key(title),
+           ProducerGate.containsAsWords(titleKey, presenterKey) { return nil }
+        return name
+    }
 
     // Orders the queue for display: hide past performances and anything beyond the lead-time
     // window, and keep everything else in its normal date position, undated events included
@@ -1414,12 +1475,21 @@ enum QueueModel {
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects, now: now)
+        // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
+        // row. Deciding whether a presenter is really its building's brand walks every presenter in the
+        // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
+        // must not pay on every render. The corpus is deliberately the unfiltered store rather than the
+        // caller's rows, so a dismissal cannot quietly change which names draw.
+        let venueBrands = ProducerGate.VenueBrands(
+            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
         return prospects.map {
             var item = QueueItem($0)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
             // #1648: one staleness evaluation, feeding both the badge and the merit split.
             item.contactRoute = $0.contactRouteForScoring(now: now)
+            item.presenterLine = presenterLine(title: $0.groupName, presenter: $0.presenter,
+                                               venue: $0.venue, venueBrands: venueBrands)
             return item
         }
     }
