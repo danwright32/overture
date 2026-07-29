@@ -798,17 +798,20 @@ struct ProspectRowView: View {
                     // off the presenter line, because a demotion stops that line being drawn and the undo
                     // would vanish with it. Offered only where there is an organisation to correct.
                     if let org = item.correctableOrganisation {
-                        Divider()
-                        Button(QueueModel.producerCorrectionLabel(item.producerStanding,
-                                                                  organisation: org)) {
-                            onCorrectProducer(item.producerStanding == .none ? .demoted : .none)
-                        }
-                        // The opposite direction, shown only when neither is in force. With a correction
-                        // standing, the button above is already the way back, and offering both at once
-                        // would put a state and its reversal side by side as if they were equals.
-                        if item.producerStanding == .none {
-                            Button(QueueModel.producerPromotionLabel(organisation: org)) {
-                                onCorrectProducer(.promoted)
+                        // A Section header rather than a disabled Button: it is a statement, not something
+                        // to click, and a greyed-out button reads as an action Dan is not allowed to take.
+                        Section(QueueModel.producerVerdictLine(item.producerStanding,
+                                                               treatedAsVenue: item.treatedAsVenue)) {
+                            Button(QueueModel.producerCorrectionLabel(item.producerStanding,
+                                                                      organisation: org,
+                                                                      treatedAsVenue: item.treatedAsVenue)) {
+                                // One action, and it always CHANGES something: flip to whichever the row is
+                                // not, or drop the correction and let the gate decide again.
+                                if item.producerStanding != .none {
+                                    onCorrectProducer(ProducerOverrideEditing.Standing.none)
+                                } else {
+                                    onCorrectProducer(item.treatedAsVenue ? .promoted : .demoted)
+                                }
                             }
                         }
                     }

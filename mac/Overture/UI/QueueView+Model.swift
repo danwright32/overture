@@ -27,6 +27,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // looked up in the view: a membership rule stated in a SwiftUI body is one no test can reach (#863).
     var producerStanding: ProducerOverrideEditing.Standing = .none
     var correctableOrganisation: String? = nil
+    // What the verdict IS right now, automatic or corrected. Without it the control could only offer two
+    // opposite corrections and say nothing about which one was already true, which is a menu asking Dan
+    // to choose a state without telling him the state he is in (his walk of the Debug build, 2026-07-29).
+    var treatedAsVenue: Bool = false
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -1152,22 +1156,34 @@ enum QueueModel {
     // about a specific name rather than a rule in the abstract. Kept out of the view with every other
     // sentence the app can say (#915).
     static func producerCorrectionLabel(_ standing: ProducerOverrideEditing.Standing,
-                                        organisation: String) -> String {
+                                        organisation: String,
+                                        treatedAsVenue: Bool) -> String {
         // "Presenter", never "producer": it is Dan's own word for this and the app's own field name
         // ("watch the venue, pitch the presenter"), and the gate's internal vocabulary is not his problem.
-        // A correction in force reads as an ACTION to stop it, rather than a statement with "Undo" bolted
-        // on: "Stop treating" already says the treating is happening, so the state needs no second line.
+        //
+        // Dan's walk of the Debug build, 2026-07-29, on a menu that offered both directions at once:
+        // "these are mutually exclusive? What is it currently being treated as?" He was right, and the
+        // answer was nowhere on screen. "No correction in force" is NOT "no verdict": the gate has always
+        // already decided, and offering both corrections as equals hid which one was true. So the menu now
+        // STATES the verdict (producerVerdictLine) and offers only the single action that changes it.
+        // A correction in force offers the way back to automatic instead.
         switch standing {
-        case .none:     return "Treat \(organisation) as the venue, not the presenter"
-        case .demoted:  return "Stop treating \(organisation) as the venue"
-        case .promoted: return "Stop treating \(organisation) as the presenter"
+        case .none:
+            return treatedAsVenue
+                ? "Treat \(organisation) as the presenter instead"
+                : "Treat \(organisation) as the venue instead"
+        case .demoted, .promoted:
+            return "Go back to deciding \(organisation) automatically"
         }
     }
 
-    // The second offer, shown only where it is not already in force, so the menu never carries both a
-    // correction and its own opposite as equals.
-    static func producerPromotionLabel(organisation: String) -> String {
-        "Treat \(organisation) as the presenter, not the venue"
+    // The state line above the action, naming WHO decided. Dan needs that distinction: a verdict he set
+    // is his to revisit, and one Overture reached is a rule doing its job, and the two invite different
+    // responses to the same wrong answer.
+    static func producerVerdictLine(_ standing: ProducerOverrideEditing.Standing,
+                                    treatedAsVenue: Bool) -> String {
+        let what = treatedAsVenue ? "the venue" : "the presenter"
+        return standing == .none ? "Overture decided: \(what)" : "You set this: \(what)"
     }
 
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
@@ -1540,6 +1556,9 @@ enum QueueModel {
             // correction at all.
             item.correctableOrganisation = ProducerGate.key($0.presenter) == nil ? nil : $0.presenter
             item.producerStanding = producerStanding(of: $0.presenter, overrides: overrides)
+            // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
+            // classification the row is not actually using.
+            item.treatedAsVenue = venueBrands.contains($0.presenter)
             return item
         }
     }

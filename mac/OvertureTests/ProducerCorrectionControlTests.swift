@@ -85,6 +85,60 @@ struct ProducerCorrectionControlTests {
         #expect(ProducerOverrideEditing.overrides(in: ctx).promoted.isEmpty)
     }
 
+    // Dan's walk of the Debug build, 2026-07-29, on a menu that offered both directions at once: "these
+    // are mutually exclusive? What is it currently being treated as?" The answer was nowhere on screen.
+    // "No correction in force" is not "no verdict": the gate has always already decided. So the menu must
+    // STATE the verdict, and it must name who reached it, because a verdict Dan set is his to revisit and
+    // one Overture reached is a rule doing its job.
+    @Test func theMenuStatesTheVerdictAndWhoDecidedIt() {
+        #expect(QueueModel.producerVerdictLine(ProducerOverrideEditing.Standing.none, treatedAsVenue: false)
+                == "Overture decided: the presenter")
+        #expect(QueueModel.producerVerdictLine(ProducerOverrideEditing.Standing.none, treatedAsVenue: true)
+                == "Overture decided: the venue")
+        #expect(QueueModel.producerVerdictLine(.demoted, treatedAsVenue: true) == "You set this: the venue")
+        #expect(QueueModel.producerVerdictLine(.promoted, treatedAsVenue: false)
+                == "You set this: the presenter")
+    }
+
+    // The offered action must always CHANGE the verdict. Offering "treat as the presenter" to a row already
+    // treated as the presenter is a click that does nothing, which is how the first version of this menu
+    // managed to ask Dan to pick a state it was already in.
+    @Test func theOfferedActionIsAlwaysTheOppositeOfTheCurrentVerdict() {
+        let treatedAsPresenter = QueueModel.producerCorrectionLabel(
+            ProducerOverrideEditing.Standing.none, organisation: "Irvine School of Music",
+            treatedAsVenue: false)
+        #expect(treatedAsPresenter == "Treat Irvine School of Music as the venue instead")
+
+        let treatedAsVenue = QueueModel.producerCorrectionLabel(
+            ProducerOverrideEditing.Standing.none, organisation: "FRIGID New York", treatedAsVenue: true)
+        #expect(treatedAsVenue == "Treat FRIGID New York as the presenter instead")
+    }
+
+    // With a correction standing, the only action is the way back, in both directions. There is no second
+    // entry offering the opposite correction: that would put a state beside its own reversal as equals,
+    // which is the shape Dan flagged.
+    @Test(arguments: [ProducerOverrideEditing.Standing.demoted, .promoted])
+    func aStandingCorrectionOffersOnlyTheWayBack(_ standing: ProducerOverrideEditing.Standing) {
+        #expect(QueueModel.producerCorrectionLabel(standing, organisation: "FRIGID New York",
+                                                   treatedAsVenue: standing == .demoted)
+                == "Go back to deciding FRIGID New York automatically")
+    }
+
+    // The verdict the menu states has to be the one the ROW is actually using, or the menu describes a
+    // classification the card is not applying. Read off the same corpus verdict, never recomputed.
+    @Test func theStatedVerdictFollowsTheRowsRealClassification() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "FRIGID New York")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+
+        #expect(QueueModel.items(from: all, corpus: all).first?.treatedAsVenue == false)
+
+        ProducerOverrideEditing.demote("FRIGID New York", into: ctx)
+        #expect(QueueModel.items(from: all, corpus: all,
+                                 overrides: ProducerOverrideEditing.overrides(in: ctx))
+            .first?.treatedAsVenue == true)
+    }
+
     // The control is wired into the row Dan actually triages in, not merely defined. A rule and its wiring
     // are two claims, and the view cannot be built by a running test.
     @Test func theRowAndFactoryReallyOfferTheControl() {
