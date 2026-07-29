@@ -157,14 +157,16 @@ function assertPrepContact(
 // overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it;
 // version 3: adds "performer" to the provenance vocabulary, #587; version 5: adds an optional
 // alreadyCoveredNote fit-risk flag on the result itself, #611; version 6: adds an optional
-// sourceUrl per contact, #363)
+// sourceUrl per contact, #363; version 7: adds an optional emptyReason on the result itself, REQUIRED
+// when contacts is absent, #1722)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
   const overrideBodyAllowed = version >= 4;
+  const emptyReasonAllowed = version >= 7;
   const alreadyCoveredNoteAllowed = version >= 5;
   const sourceUrlAllowed = version >= 6;
   results.forEach((item, i) => {
@@ -180,6 +182,22 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
       optionalString(o.alreadyCoveredNote, file, `results[${i}].alreadyCoveredNote`);
     } else if (o.alreadyCoveredNote !== undefined) {
       fail(file, `results[${i}].alreadyCoveredNote must not be present before version 5`);
+    }
+    // #1722: the reason an entry carries no contacts. The runbook disqualifies a venue or press address
+    // rather than emitting it, so this is the only trace a refusal leaves, and an entry with neither
+    // contacts nor a reason is the shape that made the card claim the search found nothing (L11).
+    if (emptyReasonAllowed) {
+      const EMPTY_REASONS = ["only_venue_contact", "only_press_contact", "nothing_published"];
+      optionalString(o.emptyReason, file, `results[${i}].emptyReason`);
+      if (o.emptyReason !== undefined && !EMPTY_REASONS.includes(o.emptyReason as string)) {
+        fail(file, `results[${i}].emptyReason must be one of ${EMPTY_REASONS.join(", ")}; got ${String(o.emptyReason)}`);
+      }
+      const hasContacts = Array.isArray(o.contacts) && o.contacts.length > 0;
+      if (!hasContacts && o.contact === undefined && o.emptyReason === undefined) {
+        fail(file, `results[${i}] has no contacts, so it must carry an emptyReason saying why`);
+      }
+    } else if (o.emptyReason !== undefined) {
+      fail(file, `results[${i}].emptyReason must not be present before version 7`);
     }
     if (version === 1) {
       if (o.contacts !== undefined) fail(file, `results[${i}].contacts must not be present before version 2`);

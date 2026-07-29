@@ -20,6 +20,10 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   { name: "never-host-venue-target", pattern: /never the host venue \(#366 \/ #368\)/i },
   { name: "venue-address-disqualified", pattern: /belonging to the host venue is DISQUALIFIED/i },
   { name: "press-media-disqualified", pattern: /Never offer a press\/media\/PR address/i },
+  // #1722: an entry with no contacts must say WHY. It is the only trace a refusal leaves, since the two
+  // disqualify rules above forbid ever emitting the address that was refused. Drop this and every empty
+  // answer silently returns to claiming the search found nothing (L11).
+  { name: "empty-answer-carries-a-reason", pattern: /ALSO set `emptyReason` on that same entry/i },
   { name: "carnegie-citywide-press-example", pattern: /publicrelations@carnegiehall\.org/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },

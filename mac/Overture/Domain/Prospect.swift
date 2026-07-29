@@ -123,6 +123,13 @@ final class Prospect {
     // future version decodes here without a migration. nil means no check has ever run, which is a
     // different thing from a check that came back empty. See Reachability.ProbeResult.
     var reachabilityResultRaw: String? = nil
+    // #1722: WHY the check above came back with nothing usable, when the run said. Its own field rather
+    // than a fifth `reachabilityResultRaw` value, deliberately: the verdict really is "no email found",
+    // and a new verdict would reach the fit score, ContactScoreAdjustment, the org ledger and a stored
+    // migration, none of which should move because a sentence got more honest. Raw string for the same
+    // additive reason as the line above; an unrecognised value reads as no reason and falls back to the
+    // old wording rather than becoming a claim the app cannot explain. See Reachability.EmptyReason.
+    var reachabilityEmptyReasonRaw: String? = nil
     // #1648 Phase D: what this show scored immediately BEFORE its contact answer last moved the score,
     // and which answer moved it. Kept so the weights can be retuned later against a clean baseline, which
     // is impossible if the only surviving number is the adjusted one.
@@ -198,6 +205,14 @@ final class Prospect {
     var reachabilityResult: Reachability.ProbeResult? {
         get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
         set { reachabilityResultRaw = newValue?.rawValue }
+    }
+
+    // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the
+    // old sentence, so a newer producer's vocabulary can never put a claim on the card this build cannot
+    // explain.
+    var reachabilityEmptyReason: Reachability.EmptyReason? {
+        get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }
+        set { reachabilityEmptyReasonRaw = newValue?.rawValue }
     }
 
     var draftSubject: String? = nil

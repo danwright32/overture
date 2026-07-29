@@ -26,6 +26,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
     var reachabilityResult: Reachability.ProbeResult? = nil
+    // #1722: why the check came back with nothing usable, so the badge can say what it measured instead
+    // of claiming the search found nothing. Only ever qualifies the noEmailFound badge's wording; it
+    // changes no verdict, no score and no tone.
+    var reachabilityEmptyReason: Reachability.EmptyReason? = nil
     // #1598 Phase 5: an answer paid for on a DIFFERENT show by the same organisation. Folded in once per
     // render by QueueModel.items(from:ledger:) (the EngagementLink.group precedent), never looked up per
     // row, because deciding it needs the whole store and a card must not carry that cost. nil is the
@@ -1569,6 +1573,7 @@ extension QueueItem {
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
             reachabilityResult: p.reachabilityResult,
+            reachabilityEmptyReason: p.reachabilityEmptyReason,
             location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,

@@ -24,17 +24,27 @@ struct PrepResult: Codable, Equatable, Sendable {
     // photographer. Never changes the show's fit score/tier; surfaced to Dan as a dismissible
     // warning so he can deprioritize or skip it himself.
     var alreadyCoveredNote: String?
+    // v7 (#1722): WHY this entry carries no contacts. The runbook DISQUALIFIES a venue or press address
+    // rather than emitting it at low confidence, so an entry with `contacts` absent is the only trace a
+    // refusal leaves, and without this the app cannot tell a check that found the room's own inbox and
+    // refused it from one that found nothing at all. Both read "No email found" before this (L11).
+    //
+    // Optional and additive, so every v6 producer stays valid and no committed fixture changes meaning.
+    // A raw String, not the enum: an unrecognised value from a newer run must decode and then be dropped
+    // by the reader, never fail the whole file and strand Dan's results.
+    var emptyReason: String?
 
     private enum CodingKeys: String, CodingKey {
-        case naturalKey, contacts, contact, draft, alreadyCoveredNote
+        case naturalKey, contacts, contact, draft, alreadyCoveredNote, emptyReason
     }
 
     init(naturalKey: String, contacts: [PrepContact]? = nil, draft: PrepDraft? = nil,
-         alreadyCoveredNote: String? = nil) {
+         alreadyCoveredNote: String? = nil, emptyReason: String? = nil) {
         self.naturalKey = naturalKey
         self.contacts = contacts
         self.draft = draft
         self.alreadyCoveredNote = alreadyCoveredNote
+        self.emptyReason = emptyReason
     }
 
     // v1 carried a single `contact` object; v2 carries `contacts[]`. Decode EITHER, mapping a legacy
@@ -44,6 +54,7 @@ struct PrepResult: Codable, Equatable, Sendable {
         naturalKey = try c.decode(String.self, forKey: .naturalKey)
         draft = try c.decodeIfPresent(PrepDraft.self, forKey: .draft)
         alreadyCoveredNote = try c.decodeIfPresent(String.self, forKey: .alreadyCoveredNote)
+        emptyReason = try c.decodeIfPresent(String.self, forKey: .emptyReason)
         if let many = try c.decodeIfPresent([PrepContact].self, forKey: .contacts) {
             contacts = many
         } else if let one = try c.decodeIfPresent(PrepContact.self, forKey: .contact) {
@@ -60,6 +71,7 @@ struct PrepResult: Codable, Equatable, Sendable {
         try c.encodeIfPresent(contacts, forKey: .contacts)
         try c.encodeIfPresent(draft, forKey: .draft)
         try c.encodeIfPresent(alreadyCoveredNote, forKey: .alreadyCoveredNote)
+        try c.encodeIfPresent(emptyReason, forKey: .emptyReason)
     }
 }
 
@@ -97,7 +109,13 @@ enum PrepResultsDecoder {
     // that broke the results reader when its version bumped (#132):
     // bumping the contract leaves a closed range that still accepts older files, so a format
     // change can't silently make the reader reject the new (or old) shape (#140).
-    static let supportedVersion = 6
+    // #1722 raised this to 7 with the `emptyReason` field, IN THE SAME COMMIT as the fixture, and it must
+    // stay that way. `PrepImporter.answeredKeys` decodes with NO version gate and succeeds on a newer
+    // file, while `ingestFile` comes through here and throws, and `consumeIfNew` swallows that with
+    // `try?`. If the runner ever writes a version this does not know, markProbed stamps every show in the
+    // run with the no-email floor, nothing upgrades it, and the badge locks them out of a re-check for
+    // ~90 days with no error anywhere. That is the #1594 shape.
+    static let supportedVersion = 7
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

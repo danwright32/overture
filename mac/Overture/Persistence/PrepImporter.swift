@@ -93,6 +93,9 @@ enum PrepImporter {
                     // in himself, which is the strongest possible evidence there IS somebody to email.
                     // Classify from what is already on the row instead, and leave his contacts alone.
                     p.reachabilityResult = p.reachabilityResultFromRecipients
+                    // #1722: a contact Dan typed in himself is the strongest possible evidence there IS
+                    // somebody to email, so a refusal sentence from an earlier check must not survive it.
+                    p.reachabilityEmptyReason = nil
                 } else if let contacts = r.contacts, !contacts.isEmpty {
                     ingestContacts(contacts, into: p, context: context)
                     applyPerformerMatch(contacts, to: p, clients: clients, history: history, now: now)
@@ -100,6 +103,19 @@ enum PrepImporter {
                     // found can be told from weak. This is the authoritative writer for a probe that
                     // landed contacts; markProbed's floor stands for one that did not.
                     p.reachabilityResult = p.reachabilityResultFromRecipients
+                    // #1722: this check found something, so any earlier "only the venue's address" is now
+                    // false. Cleared here rather than left to age out, because a stale refusal printed
+                    // over a real address is worse than no sentence at all (L14).
+                    p.reachabilityEmptyReason = nil
+                } else {
+                    // #1722: the run answered this show and had nothing to give. THIS is the branch the
+                    // whole issue is about: before, it wrote nothing at all, markProbed's `no_email_found`
+                    // floor stood, and the card said "No email found" whether the check had found the
+                    // room's own inbox and refused it or found nothing anywhere.
+                    //
+                    // An unrecognised value is dropped rather than stored, so a newer run's vocabulary can
+                    // never put a sentence on the card this build cannot explain.
+                    p.reachabilityEmptyReason = r.emptyReason.flatMap(Reachability.EmptyReason.init(rawValue:))
                 }
                 continue
             }

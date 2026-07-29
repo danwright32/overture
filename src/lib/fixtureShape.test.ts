@@ -93,7 +93,7 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json"]);
   });
 
   for (const file of files) {
@@ -102,6 +102,27 @@ describe("prep-results fixture shapes", () => {
       expect(() => assertPrepResultsShape(readJson("prep-results", file), file, version)).not.toThrow();
     });
   }
+
+  // #1722: the deterministic boundary check the runbook rule needs behind it (LESSONS L27). A rule that
+  // lives only in a prompt is a hope, so an entry that gives up on a show without saying why is refused
+  // here rather than degrading silently to "No email found" on Dan's card.
+  it("rejects a v7 entry that has no contacts and does not say why", () => {
+    const mutated = readJson("prep-results", "v7.json") as { results: Array<Record<string, unknown>> };
+    delete mutated.results[1].emptyReason;
+    expect(() => assertPrepResultsShape(mutated, "v7.json", 7)).toThrow(/must carry an emptyReason/);
+  });
+
+  it("rejects a v7 entry whose reason is not one the app can explain", () => {
+    const mutated = readJson("prep-results", "v7.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[1].emptyReason = "invented_by_a_newer_run";
+    expect(() => assertPrepResultsShape(mutated, "v7.json", 7)).toThrow(/emptyReason must be one of/);
+  });
+
+  it("rejects a v6 file that already carries the v7 emptyReason field", () => {
+    const mutated = readJson("prep-results", "v6.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[0].emptyReason = "only_venue_contact";
+    expect(() => assertPrepResultsShape(mutated, "v6.json", 6)).toThrow(/must not be present before version 7/);
+  });
 
   it("rejects a v1 file that already carries the v2 contacts[] replacement field", () => {
     const mutated = readJson("prep-results", "v1.json") as { results: Array<Record<string, unknown>> };

@@ -21,6 +21,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "carnegie-citywide-press-example",
       "discipline-matched-portfolio-link",
+      "empty-answer-carries-a-reason",
       "grouped-answer-emits-every-key",
       "grouped-answer-never-self-invented",
       "high-confidence-only-when-read",

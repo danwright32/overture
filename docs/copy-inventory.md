@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **907 sentences**, from 309 source files.
+Every sentence Overture can say to Dan: **911 sentences**, from 309 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -298,6 +298,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
     `Domain/Reachability.swift`
 "A reachability check found a contact you can email for this show."
+    `Domain/Reachability.swift`
+"A reachability check found an address for this show, but only a press or PR desk, which is the wrong department to pitch photography to. You can still keep it and add a contact by hand."
+    `Domain/Reachability.swift`
+"A reachability check found an address for this show, but only the venue's own, and a venue's inbox is never who you're pitching. You can still keep it and add a contact by hand."
     `Domain/Reachability.swift`
 "A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
     `Domain/Reachability.swift`
@@ -1016,6 +1020,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "One source couldn't be checked. \(lines[0])"
     `Integration/ScoutService.swift`
+"Only a press address"
+    `Domain/Reachability.swift`
+"Only the venue's address"
+    `Domain/Reachability.swift`
 "Open Overture"
     `App/MenuBarContent.swift`
 "Open Settings"
