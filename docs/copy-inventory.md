@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **898 sentences**, from 307 source files.
+Every sentence Overture can say to Dan: **902 sentences**, from 308 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -234,10 +234,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
+" One other match is flagged the same way."
+    `Domain/PossibleMatchFanOut.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
 " Try again, and if it keeps happening the page may be one it can't make sense of."
     `UI/LeadIntakeModel.swift`
+" \(others) other matches are flagged the same way."
+    `Domain/PossibleMatchFanOut.swift`
 " a one-off hunt."
     `Domain/ProbeSelection.swift`
 " and find new contacts"
@@ -1919,6 +1923,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
+"\(worst.name) is flagged as a possible match on \(worst.count) shows, "
+    `Domain/PossibleMatchFanOut.swift`
 "\n\nLast lines of the run log:\n\(tail)"
     `Domain/DetachedRunOutcome.swift`
     `UI/LeadIntakeModel.swift`
@@ -2061,6 +2067,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "weill recital hall"
     `Domain/VenueDisplay.swift`
+"which usually means the match is wrong."
+    `Domain/PossibleMatchFanOut.swift`
 "your queue"
     `App/ActionFeedback.swift`
 "zankel hall"
