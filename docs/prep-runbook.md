@@ -12,7 +12,8 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `5`: `items[]` each with `naturalKey`, `groupName`, `venue`,
+  (`PrepQueue` version `7`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
@@ -26,6 +27,11 @@ before this was codified.
   experiment) means use the normal #362 rotation. See "Opener archetype" in §2 for its precedence.
   `alsoAnswersFor` (v6, #1597) is a list of OTHER `naturalKey`s this one item answers for; absent
   (the normal case) means the item stands alone. See "One answer, several shows" below.
+  `houses` (v7, #1720) is RUN-LEVEL, beside `items` rather than inside them, because it is one
+  answer about the whole store rather than a fact about any one show: every organisation the app
+  has judged to be the building rather than the act, each as a folded `key` and a readable `name`.
+  It decides which organisations you refuse and which you must go and visit; §1's "The queue names
+  the houses" is the rule, and it applies to every item in the run.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `7`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), and an
@@ -199,9 +205,44 @@ item's `production` field first:
 belonging to the host venue is DISQUALIFIED, not a low-confidence fallback. Treat the
 `venue` value as the host: its own inbox and its staff addresses are off the table
 entirely. Returning a venue address is a wrong result, not a weak one. Better to return
-a form/DM, or no contact at all, than the venue. (Interim source for "what counts as
-the venue": the queue's `venue` field and its domain; a curated venue map will replace
-this, #342.)
+a form/DM, or no contact at all, than the venue. What counts as the venue is the queue's
+`venue` field plus the `houses` list below, never your own reading of who owns the room.
+
+**The queue names the houses; you look them up (#1720).** The queue file carries a run-level
+`houses` list: one entry per organisation the app has already judged to be the BUILDING rather
+than the act, each with a folded `key` and a readable `name`. To look a name up, either match it
+against a `name`, or fold it the same way the keys are folded and match against a `key`. The fold,
+in this order: drop everything after the first comma, drop anything inside brackets, put single
+spaces either side of any slash, expand a street abbreviation that is the LAST word of what is left
+("65th St" becomes "65th Street", while "St Patrick's Church" keeps its "St", because there the
+abbreviation is not the last word), collapse any run of spaces to one, lowercase it, then drop a
+leading "the". Fold every step or not at all: a half-folded name matches nothing, which looks
+exactly like a name that is genuinely not a house. (See also #342, on a curated venue map for the
+same question.)
+
+This list is the app's own answer and it is the ONLY house test you have. Its verdicts come from
+the same rule the rest of Overture uses, including corrections Dan has made by hand, so you must
+**never judge for yourself whether an organisation is really the venue**. Never infer it from a
+shared domain, a shared address, a shared name, or a page saying that one runs the other. Those
+inferences are wrong on real shows: several organisations here serve their listings from a
+house's own domain while playing rooms that house does not own.
+
+- **On the list:** it is the house. Its addresses are DISQUALIFIED exactly as the show's own
+  `venue` is, under the hard venue-disqualify rule above.
+- **NOT on the list:** it is a lead, and you must VISIT it at its own site before you may conclude
+  that no contact exists for this show. Run the waterfall there like any other target.
+  **Naming it in a search query is not visiting it.** Reading about it on the host venue's page
+  is not visiting it either. An organisation named for this show and never fetched is an
+  unfinished lookup, not an empty answer, and must never be reported as one.
+
+An organisation can both own the room and have made the work, and those are two different things. If
+the app has not named it a house, it is a presenter and you pitch it, however much the page reads
+like the building talking about itself.
+
+If `houses` is ABSENT from the queue file (one written before this list existed), fall back to the
+`venue` field alone as the hard rule above describes. An EMPTY list means something different: the
+app looked and named no houses, so nothing is disqualified by this rule and every organisation you
+find is a lead to visit.
 
 **Hard press/media-disqualify rule (#635), unchanged regardless of target.** Any
 address that reads as a press/media/PR contact (e.g. `publicrelations@`, `press@`,
@@ -264,7 +305,9 @@ absent, ALSO set `emptyReason` on that same entry to exactly one of:
 - `only_press_contact`: you found an address, and the only one(s) you found were a
   press/media/PR desk, so the hard press-disqualify rule refused it.
 - `nothing_published`: you looked and this show's act, performers and presenter publish no
-  usable address anywhere you could reach.
+  usable address anywhere you could reach. Only honest once you have actually fetched every
+  organisation named for this show that is not on `houses`; until then the lookup is unfinished
+  and this token would claim more than you measured.
 
 This is the ONLY trace a refusal leaves, because the rules above tell you never to emit a
 venue or press address at any confidence. Without it the app cannot tell a check that found
