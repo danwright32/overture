@@ -123,6 +123,22 @@ final class Prospect {
     // future version decodes here without a migration. nil means no check has ever run, which is a
     // different thing from a check that came back empty. See Reachability.ProbeResult.
     var reachabilityResultRaw: String? = nil
+    // #1648 Phase D: what this show scored immediately BEFORE its contact answer last moved the score,
+    // and which answer moved it. Kept so the weights can be retuned later against a clean baseline, which
+    // is impossible if the only surviving number is the adjusted one.
+    //
+    // Three fields on this model now hold a "score from earlier" and they have DIFFERENT LIFETIMES; do
+    // not merge them. `fitScoreAtSend` freezes once at first send and never moves again.
+    // `performerMatchPreviousFitScore` is transient undo state, cleared by clearPerformerMatch. These
+    // two describe the MOST RECENT contact adjustment and are OVERWRITTEN on every re-check, never
+    // write-once, or a re-check would leave them describing an answer that is no longer the one applied.
+    //
+    // Deliberately NOT stored: the score AFTER the adjustment. It is the value that goes stale the moment
+    // the weights are retuned, which is the exact scenario this record exists to serve, and it is not
+    // recoverable from `fitScore` either, since a genre correction or a performer match can rewrite that
+    // afterwards. The after is derived, never remembered.
+    var fitScoreBeforeContactCheck: Int? = nil
+    var contactRouteAtScore: String? = nil
     // #1648: the contact answer as the RANKER should read it. Identical to the stored result except
     // that an answer past its 90 day expiry reads as `.unchecked`, so a demotion lifts at the same
     // moment the badge reverts to "worth re-checking" and the card and the score can never disagree

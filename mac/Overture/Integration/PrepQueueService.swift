@@ -241,6 +241,18 @@ enum PrepQueueService {
         // press guards run, so a real contact can be told from a front desk, and only the shows the run
         // genuinely answered are in hand.
         OrgAnswerRecording.record(answeredKeys: answered, in: context, now: now)
+        // #1648 Phase E: the ONE place a fresh answer moves the stored score, and it is here for exactly
+        // the reason the two calls above are. markProbed writes a .noEmailFound FLOOR and saves before
+        // the importer upgrades it, so hooking "wherever the result is written" would commit a demotion
+        // on a verdict that was never true and strand it there if the ingest then refused or the app
+        // died. Only now have the venue and press guards run, so a real contact can be told from a front
+        // desk, and only the shows this run genuinely answered are in hand.
+        //
+        // Scoped to `answered` for the same reason OrgAnswerRecording is: a show the run never reached
+        // must not be scored as though it had been.
+        let answeredShows = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        _ = ContactScoreAdjustment.settleAll(answeredShows.filter { answered.contains($0.naturalKey) },
+                                             now: now)
         ReachabilityProbeMarker.clear(at: markerURL)
         return true
     }

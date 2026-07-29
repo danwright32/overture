@@ -85,14 +85,14 @@ struct ProspectRowView: View {
     // defers to it rather than competing on the same colour.
     private var isBookingHighlighted: Bool { item.bookingSuggested || item.isBooked }
 
-    // #1338: a still-open show that found a sendable contact gets a whole-row forest highlight (a leading
-    // accent bar + faint tint), so the emailable shows stand out among a date's competing rows. Deferred when
-    // a booking already owns the row's colour. The decision is the model's (isBestReachableContact, tested).
-    private var showsBestContactAccent: Bool { item.isBestReachableContact() && !isBookingHighlighted }
+    // #1648: the reachability accent bar and tint that used to live here are GONE. The card carried two
+    // competing signals (a gold outline for a high fit, a forest bar for a found contact), so reading a
+    // date meant decoding two schemes at once and a fit-0 show could look more prominent than a fit-9
+    // one. Reachability now feeds the SCORE instead, so the one outline says everything and the signal
+    // survives sorting and filtering, which a border never did.
 
     private var rowFill: Color {
         if isBookingHighlighted { return OVColor.forest.opacity(0.12) }
-        if showsBestContactAccent { return OVColor.forest.opacity(0.06) }
         return OVColor.surface
     }
 
@@ -169,11 +169,6 @@ struct ProspectRowView: View {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(rowFill)
-                // #1338: the leading forest accent bar for a best (sendable) reachable contact. Clipped to
-                // the card's rounded shape so its top and bottom corners follow the row.
-                if showsBestContactAccent {
-                    Rectangle().fill(OVColor.forest).frame(width: 4)
-                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         )

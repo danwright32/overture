@@ -107,7 +107,7 @@ struct ContactFormReachabilityTests {
         item.reachabilityResult = .contactFormOnly
         item.reachabilityProbedAt = Date()
 
-        #expect(item.isBestReachableContact() == false)
+        #expect(item.reachabilityBadge() != .emailFound)
     }
 
     // Only a found EMAIL travels across an organisation (#1598). A form answer stays on its own show

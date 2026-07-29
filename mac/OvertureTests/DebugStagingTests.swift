@@ -133,8 +133,10 @@ struct DebugStagingTests {
         #expect(shows.count == 4)
         #expect(Set(shows.map(\.performanceDate)).count == 1)           // same date: a genuine competition
         #expect(shows.allSatisfy { $0.status == .new })                 // all still open
-        // One is a best (sendable) reachable contact, highlighted; the other is not.
-        let flags = shows.prefix(2).map { QueueItem($0).isBestReachableContact(now: now.addingTimeInterval(60)) }
+        // One found a sendable address and the other did not, so the staged pair still shows the two
+        // contrasting states. #1648 removed the row highlight this used to demo; the badge is the surface
+        // that still distinguishes them.
+        let flags = shows.prefix(2).map { QueueItem($0).reachabilityBadge(now: now.addingTimeInterval(60)) == .emailFound }
         #expect(flags.contains(true))
         #expect(flags.contains(false))
         #expect(shows.allSatisfy { $0.naturalKey.hasPrefix("debug-of-") })
