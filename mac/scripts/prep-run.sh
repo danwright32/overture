@@ -384,5 +384,16 @@ record_model "$RESULTS" "${RUN_MODEL}"
 # Quoted "$@", so a path containing a space stays ONE argument.
 record_run_cost "$RESULTS" "$@"
 
+# #1721: and how many times it actually reached the web, counted from the SAME streams rather than taken
+# on trust from the runbook's hop cap. Runs after record_run_cost and reads the same "$@", so the two
+# numbers describing one run can never be derived from different sets of streams.
+#
+# The default cap is per SHOW and deliberately well clear of normal: Dan's 2026-07-28 run measured 5 to 9
+# web calls per show, and #1720 will make each lookup deeper still by following a named organisation to
+# its own site. A cap that fires on an ordinary run is an alert that cries wolf (L36), so this is set to
+# catch a runaway, not to police a thorough hunt. Overridable so the ceiling can be tightened without a
+# code change once #1720's real depth is measured.
+record_web_calls "$RESULTS" "${OVERTURE_PREP_WEB_CALL_CAP:-15}" "$@"
+
 echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
 exit "$CLAUDE_STATUS"

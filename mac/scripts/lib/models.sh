@@ -103,6 +103,120 @@ record_model() {
 # figure is carried under `partialUsd` instead. That distinction is load-bearing rather than pedantic:
 # the batch ceiling is sized from this number, so a partial total presented as the real one would let
 # through several times the spend Dan agreed to, and it would look perfectly plausible.
+# #1721: how many times the run actually REACHED THE WEB, counted from the event stream rather than
+# asked for in the prompt. The runbook states a hop cap; a rule that lives only in a prompt is a hope
+# (L27), and the stream the runner has written since #1593 had no reader at all until this, so the cap
+# had never once been checked.
+#
+# Counts every ROUTE, not just WebFetch, and that breadth is measured rather than assumed: in Dan's real
+# 2026-07-28 run, chunk 3 reached the web through mcp__playwright__browser_navigate, and prep's scope
+# deliberately allows Bash, so curl is a route too. A counter blind to those reports a small number for a
+# run that made many calls, which is the same false comfort as no counter.
+#
+# The cap is PER ITEM and the allowance scales with how many shows the run covered, because a normal Prep
+# run is a single unchunked stream over many shows with nothing in it marking where one show ends. Asking
+# the model to announce those boundaries would be asking nicely again, so the honest unit is the run.
+#
+#   $1 = results file, rewritten in place
+#   $2 = cap per item
+#   $3.. = the event stream files, one per parallel claude
+record_web_calls() {
+  local results="$1" cap="$2"
+  shift 2
+  [[ -f "${results}" ]] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  node -e '
+    (function () {
+    const fs = require("fs");
+    const [file, capRaw, ...eventFiles] = process.argv.slice(1);
+    const cap = Number(capRaw);
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (e) {
+      // Same rule as record_run_cost: an unparsable results file is the run having failed, reported on
+      // its own path. Overwriting it would destroy the evidence of what went wrong.
+      return;
+    }
+
+    // A Bash command that reaches the network. Deliberately a NAMED heuristic rather than a silent one:
+    // it cannot be exact, so it is listed here where it can be argued with, and it errs toward counting
+    // (an over-count is visible and arguable; an under-count is the failure this whole counter exists to
+    // prevent).
+    const bashReachesWeb = (cmd) =>
+      typeof cmd === "string" && /\b(curl|wget|nc|ssh)\b|https?:\/\//.test(cmd);
+
+    const routeOf = (name, input) => {
+      if (name === "WebFetch") return "fetch";
+      if (name === "WebSearch") return "search";
+      // Any MCP browser tool. Matched on the shape rather than one server name, so a different browser
+      // MCP on this Mac is counted too (a detached run inherits whatever plugins are installed).
+      if (/^mcp__.*browser/.test(name || "")) return "browser";
+      if (name === "Bash" && bashReachesWeb(input && input.command)) return "bash";
+      return null;
+    };
+
+    const countIn = (events) => {
+      const out = { fetch: 0, search: 0, browser: 0, bash: 0 };
+      const lines = fs.readFileSync(events, "utf8").split("\n");
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        let parsed;
+        // A killed run leaves a half-written line; skip it rather than failing the whole count.
+        try { parsed = JSON.parse(line); } catch (e) { continue; }
+        const content = parsed && parsed.message && parsed.message.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (!block || block.type !== "tool_use") continue;
+          const route = routeOf(block.name, block.input);
+          if (route) out[route] += 1;
+        }
+      }
+      return out;
+    };
+
+    const byRoute = { fetch: 0, search: 0, browser: 0, bash: 0 };
+    let reported = 0;
+    for (const f of eventFiles) {
+      let counts;
+      try {
+        counts = countIn(f);
+      } catch (e) {
+        continue;   // a stream that did not report; counted as missing below
+      }
+      reported += 1;
+      for (const k of Object.keys(byRoute)) byRoute[k] += counts[k];
+    }
+
+    const total = Object.values(byRoute).reduce((a, n) => a + n, 0);
+    const items = Array.isArray(json.results) ? json.results.length : 0;
+    const allowance = cap * items;
+    const complete = eventFiles.length > 0 && reported === eventFiles.length;
+
+    if (complete) {
+      json.webCalls = {
+        recorded: true, total, byRoute, items, capPerItem: cap, allowance,
+        overCap: items > 0 && total > allowance,
+        streams: eventFiles.length,
+      };
+    } else {
+      // No `total` key at all on the incomplete path, so nothing downstream can read a partial count as
+      // the real one by reaching for the field it always reads. `overCap` is published ONLY when the
+      // partial count already exceeds the allowance, because that verdict can only get truer.
+      json.webCalls = {
+        recorded: false, byRoute, items, capPerItem: cap, allowance,
+        streams: eventFiles.length, streamsReported: reported,
+        partialTotal: total,
+      };
+      if (items > 0 && total > allowance) json.webCalls.overCap = true;
+    }
+
+    fs.writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
+    })();
+  ' "${results}" "${cap}" "$@"
+}
+
 record_run_cost() {
   local results="$1"
   shift
