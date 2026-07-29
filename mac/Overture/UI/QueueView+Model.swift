@@ -38,6 +38,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // show he turned down as if he never had. Defaulted so existing memberwise-init call sites are
     // unaffected.
     var passedOnThisShow: Bool = false
+    // #1648: the contact answer AS THE RANKER READS IT, resolved once per queue build with the same
+    // `now` that decides the badge's staleness, so the masthead's merit split can never disagree with
+    // the score about whether an answer is still current. Defaulted so existing memberwise-init call
+    // sites are unaffected.
+    var contactRoute: ContactRoute = .unchecked
     let fitScore: Int
     let tier: String
     let fitReason: String
@@ -1422,6 +1427,8 @@ enum QueueModel {
             var item = QueueItem($0)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
+            // #1648: one staleness evaluation, feeding both the badge and the merit split.
+            item.contactRoute = $0.contactRouteForScoring(now: now)
             return item
         }
     }

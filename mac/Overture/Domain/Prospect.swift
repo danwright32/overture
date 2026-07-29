@@ -123,6 +123,18 @@ final class Prospect {
     // future version decodes here without a migration. nil means no check has ever run, which is a
     // different thing from a check that came back empty. See Reachability.ProbeResult.
     var reachabilityResultRaw: String? = nil
+    // #1648: the contact answer as the RANKER should read it. Identical to the stored result except
+    // that an answer past its 90 day expiry reads as `.unchecked`, so a demotion lifts at the same
+    // moment the badge reverts to "worth re-checking" and the card and the score can never disagree
+    // about whether an answer is current. Both read the SAME staleness helper, evaluated at the same
+    // instant, rather than each asking the clock separately.
+    //
+    // It RECOMPUTES rather than restoring the score stored before the check: restoring an integer
+    // would also silently undo any unrelated correction made since (the #1648 Phase A3 mistake).
+    func contactRouteForScoring(now: Date) -> ContactRoute {
+        if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
+        return ContactRoute(probeResult: reachabilityResult)
+    }
     // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
     // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
     // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
@@ -816,7 +828,7 @@ final class Prospect {
     // and an undo stack built on a Void return (#1413) would reverse a no-op into a performer-match
     // correction that never existed.
     @discardableResult
-    func dismissPerformerMatch() -> Bool {
+    func dismissPerformerMatch(now: Date = Date()) -> Bool {
         guard relationshipCorrectedByPerformerMatch else { return false }
         if let relationship = performerMatchPreviousRelationship { priorRelationship = relationship }
         // #1648 Phase A3 (Dan's sign-off): RECOMPUTE from the row rather than restoring the snapshotted
@@ -824,7 +836,7 @@ final class Prospect {
         // back also throws away anything that legitimately changed the score since (a genre correction,
         // and from #1648 onward a contact check). Accepted consequence: the score after a dismiss may
         // differ from the number the row held before the match, when something else changed in between.
-        let refit = ClassificationOverride.rescored(self)
+        let refit = ClassificationOverride.rescored(self, now: now)
         fitScore = refit.score
         tier = refit.tier.rawValue
         matchedClientName = performerMatchPreviousMatchedClientName

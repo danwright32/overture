@@ -99,7 +99,8 @@ struct PassedShowPenaltyTests {
 
     @Test func aPassCostsFivePointsAndNothingElse() {
         let base = Candidate(reachable: true, priorRelationship: .none, production: .selfProduced,
-                             profile: .strong, coverage: .likelyUncovered, discipline: .dance)
+                             profile: .strong, coverage: .likelyUncovered, discipline: .dance,
+                             passedOnThisShow: false, contactRoute: .unchecked)
         var passed = base
         passed.passedOnThisShow = true
 

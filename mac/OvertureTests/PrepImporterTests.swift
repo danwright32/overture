@@ -995,7 +995,8 @@ struct PrepImporterTests {
         let base = Ranker.scoreFit(Candidate(
             reachable: true, priorRelationship: PriorRelationship(rawValue: prior) ?? .none,
             production: Production(rawValue: production) ?? .unknown, profile: .strong,
-            coverage: .likelyUncovered, discipline: .music))
+            coverage: .likelyUncovered, discipline: .music,
+            passedOnThisShow: false, contactRoute: .unchecked))
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: prior,

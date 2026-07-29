@@ -899,6 +899,12 @@ enum ScoutService {
         sourceIds: [String] = [],
         into context: ModelContext
     ) -> Outcome {
+        // #1648: the instant this run scores against, derived from the day it was already given rather
+        // than from a second clock, so pinning `today` in a test pins this too (LESSONS L39). Used only
+        // to decide whether a row's contact answer has aged past its 90 day expiry, where a day's
+        // precision is ample. Falls back to the real clock only if `today` is unparseable, which would
+        // already have broken the upcoming-only guard above it.
+        let scoutNow = EasternDate.date(from: today) ?? Date()
         var inserted = 0, updated = 0, skipped = 0, collapsedIntoRun = 0
         var suppressedShows: [String] = []      // #802: by org name, folded into one line each below
         // #1702: which presenter names read as their building's own brand, judged over the store as it
@@ -1036,7 +1042,7 @@ enum ScoutService {
             let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
             if let existing = (try? context.fetch(descriptor))?.first {
                 // Exact natural-key match: update in place.
-                apply(enriched, to: existing)
+                apply(enriched, to: existing, now: scoutNow)
                 updated += 1
             } else if let byConcert = matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
                                                              openingNight: enriched.performanceDate,
@@ -1050,7 +1056,7 @@ enum ScoutService {
                 // synthetic id is minted only for a mergeSameDateVenue source, so this can NEVER fuse two
                 // genuinely different shows (a normal matinee/evening never gets an id to match on).
                 byConcert.naturalKey = key
-                apply(enriched, to: byConcert)
+                apply(enriched, to: byConcert, now: scoutNow)
                 updated += 1
             } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
                                                       venue: enriched.venue, in: context) {
@@ -1058,7 +1064,7 @@ enum ScoutService {
                 // URLs: re-key to the new opening-night key and update in place so Dan's
                 // keep/dismiss decision survives across run-window shifts (#132).
                 anyMatch.naturalKey = key
-                apply(enriched, to: anyMatch)
+                apply(enriched, to: anyMatch, now: scoutNow)
                 updated += 1
             } else if let drifted = matchByStableSource(url: enriched.sourceListingURL,
                                                        date: enriched.performanceDate,
@@ -1067,7 +1073,7 @@ enum ScoutService {
                 // the venue tweaked the title between runs. Re-key to the new title and
                 // update in place so Dan's keep/dismiss decision survives (#29).
                 drifted.naturalKey = key
-                apply(enriched, to: drifted)
+                apply(enriched, to: drifted, now: scoutNow)
                 updated += 1
             } else {
                 context.insert(make(enriched, key: key))
@@ -1286,7 +1292,11 @@ enum ScoutService {
     }
 
     // Refresh scout-owned fields; never touch status/dismissReason (Dan owns those).
-    private static func apply(_ p: AssembledProspect, to existing: Prospect) {
+    // #1648: `now` is used for ONE thing, deciding whether this row's contact answer has aged past its
+    // 90 day expiry, so the shared re-score at the end reads `.unchecked` for a stale one. Derived from
+    // the `today` the run already threads rather than a second clock, so a test that pins the day pins
+    // this too, and day precision is ample for a 90 day window.
+    private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date) {
         // #1274: track the latest scout-emitted name always, so a "reset to scout name" restores the
         // real current name even for a show Dan renamed several scouts ago. But only write it to the
         // DISPLAY groupName when Dan has not overridden it; once he renames a show, his name stands and
@@ -1377,7 +1387,7 @@ enum ScoutService {
         // scout that re-touches the show, intermittently, because unchanged sources are hash-gated and
         // skipped. Scoring from the row instead makes the write idempotent and keeps the stored score
         // and the stored axes describing the same show.
-        let refit = ClassificationOverride.rescored(existing)
+        let refit = ClassificationOverride.rescored(existing, now: now)
         existing.fitScore = refit.score
         existing.tier = refit.tier.rawValue
         existing.runEndDate = p.runEndDate

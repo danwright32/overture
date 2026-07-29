@@ -22,6 +22,32 @@ enum Discipline: String, Decodable, Sendable, CaseIterable {
 }
 enum Tier: String, Decodable, Sendable { case high, longshot }
 
+// #1648: whether Dan can reach ANYBODY about this show, as a scoring axis. Named for contacts on
+// purpose: `Candidate.reachable` below is a completely different thing (the hard exclusion flag), and
+// two meanings of "reachable" in one file is how a later edit goes wrong quietly.
+//
+// `unchecked` is the common case and must stay scoreless: 536 of the 559 untriaged shows have never
+// been checked, and a show must not be punished for a question nobody asked it. It mirrors
+// Reachability.ProbeResult, whose nil means exactly this.
+enum ContactRoute: String, Decodable, Sendable, CaseIterable {
+    case unchecked
+    case emailFound = "email_found"
+    case contactFormOnly = "contact_form_only"
+    case weakContactOnly = "weak_contact_only"
+    case noEmailFound = "no_email_found"
+
+    // The one mapping from a stored probe result. nil (never checked) is not a verdict.
+    init(probeResult: Reachability.ProbeResult?) {
+        switch probeResult {
+        case .none: self = .unchecked
+        case .some(.emailFound): self = .emailFound
+        case .some(.contactFormOnly): self = .contactFormOnly
+        case .some(.weakContactOnly): self = .weakContactOnly
+        case .some(.noEmailFound): self = .noEmailFound
+        }
+    }
+}
+
 struct Candidate: Decodable, Sendable {
     var reachable: Bool
     var priorRelationship: PriorRelationship
@@ -34,11 +60,17 @@ struct Candidate: Decodable, Sendable {
     // still not want their particular annual show. As a relationship it would just be outranked by
     // "booked" and never apply to the orgs he works with most.
     var passedOnThisShow: Bool = false
+    // #1648: deliberately has NO default, unlike passedOnThisShow above. A default is what let the
+    // masthead's merit split hand-build a Candidate, silently omit an axis, and go on miscounting for
+    // months (#1669). Without one, every Swift construction site is forced to answer, so the same class
+    // of bug cannot recur on this axis. JSON still defaults, see init(from:) below.
+    var contactRoute: ContactRoute
 
     // Spelled out because providing init(from:) below stops Swift synthesising these. A nested enum
     // does not suppress the memberwise init, so every existing Candidate(...) call site is unaffected.
     enum CodingKeys: String, CodingKey {
-        case reachable, priorRelationship, production, profile, coverage, discipline, passedOnThisShow
+        case reachable, priorRelationship, production, profile, coverage, discipline, passedOnThisShow,
+             contactRoute
     }
 }
 
@@ -55,14 +87,16 @@ extension Candidate {
     // `reachable` is not a parameter. Note it is the hard EXCLUSION flag, nothing to do with whether
     // a contact address was found.
     init(rawDiscipline: String, rawProduction: String, rawPriorRelationship: String,
-         rawProfile: String, rawCoverage: String, passedOnThisShow: Bool) {
+         rawProfile: String, rawCoverage: String, passedOnThisShow: Bool,
+         contactRoute: ContactRoute) {
         self.init(reachable: true,
                   priorRelationship: PriorRelationship(rawValue: rawPriorRelationship) ?? .none,
                   production: Production(rawValue: rawProduction) ?? .unknown,
                   profile: Profile(rawValue: rawProfile) ?? .neutral,
                   coverage: Coverage(rawValue: rawCoverage) ?? .unknown,
                   discipline: Discipline(rawValue: rawDiscipline) ?? .other,
-                  passedOnThisShow: passedOnThisShow)
+                  passedOnThisShow: passedOnThisShow,
+                  contactRoute: contactRoute)
     }
 }
 
@@ -79,6 +113,10 @@ extension Candidate {
         coverage = try c.decode(Coverage.self, forKey: .coverage)
         discipline = try c.decode(Discipline.self, forKey: .discipline)
         passedOnThisShow = try c.decodeIfPresent(Bool.self, forKey: .passedOnThisShow) ?? false
+        // #1648 follows #384's precedent exactly: decodeIfPresent, so every ranker fixture written
+        // before this axis existed still decodes and keeps its expected score, rather than throwing on
+        // a missing key. `.unchecked` scores zero, which is what "this case never had an answer" means.
+        contactRoute = try c.decodeIfPresent(ContactRoute.self, forKey: .contactRoute) ?? .unchecked
     }
 }
 
@@ -144,6 +182,29 @@ enum Ranker {
     // as a client's rejection.
     static func passedPoints(_ passed: Bool) -> Int { passed ? -5 : 0 }
 
+    // #1648, Dan's weights (2026-07-28), chosen against the measured live distribution rather than by
+    // feel. Scores pile up on a few values: 58 high rows sit at exactly 8 and 280 longshots at exactly
+    // 0, so a penalty of 4 demotes 86 of 124 high rows and a bump of 5 promotes 403 of 435 longshots.
+    // Both of those cliffs are avoided deliberately.
+    //
+    // A dead end costs the same as a show Dan passed on, which is the honest comparison: both mean this
+    // one is not worth his attention now, neither is a permanent judgment on the org. It carries his
+    // rule ("it's not a high fit if I can't email anybody about it") as far as a score can, dropping an
+    // ordinary strong show out of high fit, while deliberately NOT dislodging a past client whose
+    // details he already holds in Downbeat. He chose the penalty alone over a hard tier floor.
+    //
+    // `unchecked` and `weakContactOnly` both score zero, for different reasons: nobody asked, versus
+    // asked and got a front desk, which is not evidence he can reach the act.
+    static func contactRoutePoints(_ r: ContactRoute) -> Int {
+        switch r {
+        case .emailFound: return 2
+        case .contactFormOnly: return 1
+        case .weakContactOnly: return 0
+        case .noEmailFound: return -5
+        case .unchecked: return 0
+        }
+    }
+
     static func scoreFit(_ c: Candidate) -> FitResult {
         let score = priorPoints(c.priorRelationship)
             + productionPoints(c.production)
@@ -151,6 +212,7 @@ enum Ranker {
             + coveragePoints(c.coverage)
             + disciplinePoints(c.discipline)
             + passedPoints(c.passedOnThisShow)
+            + contactRoutePoints(c.contactRoute)
         let tier: Tier = score >= highTierThreshold ? .high : .longshot
         return FitResult(excluded: !c.reachable, score: score, tier: tier)
     }

@@ -8,10 +8,72 @@ private func candidate(
     production: Production = .unknown,
     profile: Profile = .neutral,
     coverage: Coverage = .unknown,
-    discipline: Discipline = .other
+    discipline: Discipline = .other,
+    contactRoute: ContactRoute = .unchecked
 ) -> Candidate {
     Candidate(reachable: reachable, priorRelationship: prior, production: production,
-              profile: profile, coverage: coverage, discipline: discipline)
+              profile: profile, coverage: coverage, discipline: discipline,
+              passedOnThisShow: false, contactRoute: contactRoute)
+}
+
+// #1648: whether Dan can reach anybody about a show is a scoring axis, not a second decoration on the
+// card. Weights are Dan's, 2026-07-28, chosen against the measured live distribution: scores pile up
+// on a few values (58 high rows sit at exactly 8, 280 longshots at exactly 0), so a penalty of 4 or a
+// bump of 5 crosses a cliff and reshapes the whole queue. These sit deliberately short of both.
+@Suite("Ranker: the contact route axis")
+struct RankerContactRouteTests {
+    @Test func aFoundEmailLiftsAShowAndAFormLiftsItLess() {
+        // other 0 + self 2 + strong 2 + uncovered 2 = 6 before any contact answer.
+        let base = candidate(production: .selfProduced, profile: .strong, coverage: .likelyUncovered)
+        #expect(Ranker.scoreFit(base).score == 6)
+        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong,
+                                          coverage: .likelyUncovered, contactRoute: .emailFound)).score == 8)
+        #expect(Ranker.scoreFit(candidate(production: .selfProduced, profile: .strong,
+                                          coverage: .likelyUncovered, contactRoute: .contactFormOnly)).score == 7)
+    }
+
+    // Something was found, but it is a front desk or a generic inbox. It is not evidence Dan can reach
+    // the act, so it earns nothing rather than a consolation point.
+    @Test func aGenericInboxEarnsNothing() {
+        #expect(Ranker.scoreFit(candidate(contactRoute: .weakContactOnly)).score
+                == Ranker.scoreFit(candidate(contactRoute: .unchecked)).score)
+    }
+
+    // The load-bearing guard. 536 of the 559 untriaged shows have never been checked, and a show must
+    // never be penalised for a question nobody asked it.
+    @Test func aShowNobodyHasCheckedIsNeitherHelpedNorPunished() {
+        let unchecked = candidate(prior: .warm, discipline: .dance, contactRoute: .unchecked)
+        #expect(Ranker.scoreFit(unchecked).score == 13)   // warm 10 + dance 3, nothing added or taken
+        #expect(Ranker.scoreFit(unchecked).tier == .high)
+    }
+
+    // Dan's rule, as far as a score can carry it: "it's not a high fit if I can't email anybody about
+    // it." A dead end costs 5, so an ordinary strong show falls out of high fit on its own.
+    @Test func aDeadEndDropsAnOrdinaryStrongShowOutOfHighFit() {
+        let deadEnd = candidate(production: .selfProduced, profile: .strong, coverage: .likelyUncovered,
+                                discipline: .music, contactRoute: .noEmailFound)
+        // music 1 + self 2 + strong 2 + uncovered 2 = 7, less 5 = 2.
+        #expect(Ranker.scoreFit(deadEnd).score == 2)
+        #expect(Ranker.scoreFit(deadEnd).tier == .longshot)
+    }
+
+    // And the deliberate limit of that rule (Dan's call, 2026-07-28: the penalty alone, no hard tier
+    // floor). The check looks for a PUBLIC address; a past client's details are already in Downbeat, so
+    // a booked show is not thrown out of high fit because the web turned up nothing.
+    @Test func aDeadEndDoesNotThrowAPastClientOutOfHighFit() {
+        let booked = candidate(prior: .booked, production: .selfProduced, profile: .strong,
+                               coverage: .likelyUncovered, discipline: .dance, contactRoute: .noEmailFound)
+        #expect(Ranker.scoreFit(booked).score == 24)   // 29 less 5
+        #expect(Ranker.scoreFit(booked).tier == .high)
+    }
+
+    // The axis must be applied by SUBSTITUTION, never by arithmetic on the stored score, or a row
+    // re-scored twice would drift. Scoring the same candidate repeatedly is the cheapest proof.
+    @Test func scoringTheSameShowTwiceGivesTheSameAnswer() {
+        let c = candidate(discipline: .opera, contactRoute: .emailFound)
+        #expect(Ranker.scoreFit(c).score == Ranker.scoreFit(c).score)
+        #expect(Ranker.scoreFit(c).score == 4)   // opera 2 + email 2
+    }
 }
 
 @Suite("Ranker")
