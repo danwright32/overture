@@ -18,21 +18,21 @@ enum LocalHistory {
             // said no. "dnc" is a status the scout's matcher already knows how to suppress on, so this
             // one line is the whole mechanism.
             if p.orgDoNotContact {
-                return HistoryRecord(groupName: p.groupName, status: "dnc")
+                return HistoryRecord(groupName: p.groupName, status: "dnc", origin: .overtureActivity)
             }
             if p.outcome == .booked {
-                return HistoryRecord(groupName: p.groupName, status: "booked")
+                return HistoryRecord(groupName: p.groupName, status: "booked", origin: .overtureActivity)
             }
             if p.outcome == .lostHard {
-                return HistoryRecord(groupName: p.groupName, status: "lost_hard")
+                return HistoryRecord(groupName: p.groupName, status: "lost_hard", origin: .overtureActivity)
             }
             if p.outcome == .lostSoft {
-                return HistoryRecord(groupName: p.groupName, status: "lost_soft")
+                return HistoryRecord(groupName: p.groupName, status: "lost_soft", origin: .overtureActivity)
             }
             if p.status == .dismissed,
                let reason = DismissReason(rawValue: p.dismissReasonRaw ?? ""),
                schedulingDismissals.contains(reason) {
-                return HistoryRecord(groupName: p.groupName, status: "declined")
+                return HistoryRecord(groupName: p.groupName, status: "declined", origin: .overtureActivity)
             }
             // #384: Dan passed on this show on taste ("Don't want to shoot this"). Recorded WITH its
             // venue, which is the whole point: the penalty is aimed at this org at this venue, so the
@@ -46,15 +46,15 @@ enum LocalHistory {
             if p.status == .dismissed,
                DismissReason(rawValue: p.dismissReasonRaw ?? "") == .dontWantToShoot {
                 return HistoryRecord(groupName: p.groupName, status: "passed",
-                                     email: nil, venue: p.venue)
+                                     origin: .overtureActivity, email: nil, venue: p.venue)
             }
             // Warm = they wrote back. Phase F: derive from a contact replying (the A3 lead rollup is
             // gone); the legacy lead outcome is kept as a fallback for un-backfilled stores.
             if p.outcome == .replied || p.recipients.contains(where: \.replied) {
-                return HistoryRecord(groupName: p.groupName, status: "warm")
+                return HistoryRecord(groupName: p.groupName, status: "warm", origin: .overtureActivity)
             }
             if p.sentAt != nil {
-                return HistoryRecord(groupName: p.groupName, status: "contacted")
+                return HistoryRecord(groupName: p.groupName, status: "contacted", origin: .overtureActivity)
             }
             return nil
         }
@@ -76,7 +76,11 @@ enum LocalHistory {
         guard let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else {
             return ([], true)
         }
-        return (history, false)
+        // #1695: stamped explicitly rather than left to the type's default. This file IS the booking
+        // import, and a record that arrives here mislabelled would be described to Dan in the wrong words
+        // on a card, which is the whole defect. Saying it at the boundary means the default can be changed
+        // later without silently relabelling Dan's realest business.
+        return (history.map { var r = $0; r.origin = .bookingImport; return r }, false)
     }
 
     static func imported(from url: URL = importedURL) -> [HistoryRecord] {
