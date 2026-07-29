@@ -140,7 +140,11 @@ enum ProducerGate {
     // Whole words only, and never on a single-word name. Both guards are load-bearing: The Cell and The
     // Tank fold to the single words "cell" and "tank" on the live store, and a bare substring test would
     // then read a hypothetical Think Tank Theatre as that venue's own brand and refuse it forever.
-    private static func containsAsWords(_ haystack: String, _ needle: String) -> Bool {
+    //
+    // #1687 shares it rather than copying it: the card asks the same question of a different pair (does
+    // this show's TITLE already name its presenter, so drawing the name again would only repeat the line
+    // above), and both guards are load-bearing there too. A second copy is how the two drift.
+    static func containsAsWords(_ haystack: String, _ needle: String) -> Bool {
         guard needle.split(separator: " ").count >= 2, haystack != needle else { return false }
         for range in haystack.ranges(of: needle) {
             let startsAtWord = range.lowerBound == haystack.startIndex

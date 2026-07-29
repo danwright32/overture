@@ -292,6 +292,15 @@ struct ProspectRowView: View {
                 .buttonStyle(.plain)
                 .help("Rename this show")
             }
+            // #1687: who is playing, between the title (the what) and the venue (the where). Dan's
+            // placement, 2026-07-29. Deliberately bare, no "presented by" label wrapped around it: he
+            // chose the name alone. Whether it appears at all is decided in QueueModel (tested), because
+            // showing it unconditionally would name the room on half the queue.
+            if let presenterLine = item.presenterLine {
+                Text(presenterLine)
+                    .font(OVType.body)
+                    .foregroundStyle(OVColor.inkSoft)
+            }
             // #340: give the metadata a calmer hierarchy instead of cramming venue, timing and date
             // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
             // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing
