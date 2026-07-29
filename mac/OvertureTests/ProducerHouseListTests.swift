@@ -185,56 +185,72 @@ struct ProducerHouseListTests {
                 "a street address must never become a house")
     }
 
-    // #1749: EVERY venue string in the store that contains " at ", and what the tail after it may become.
+    // #1749. Dan's rule, 2026-07-29: "if it's x at y, y is usually a venue, no?" It is, and the grammar of
+    // the string was never what decided the outcome. What decides it is whether some ORGANISATION's own
+    // name contains y, because the house list refuses by containment as well as by exact key, so putting y
+    // on it would refuse that organisation too.
     //
-    // LIVE-STORE-CLAIM verified=2026-07-29 measure="every venue string containing \" at \", over all 702 prospects, and whether each tail is a building or part of the venue's own name"
-    // There are eleven, and reading the tail as a building is right on only three of them. The other
-    // tails are the venue's own name or a real producing organisation, and putting one of those on the
-    // house list REFUSES a genuine producer silently, which is the expensive direction: the run stops
-    // pursuing a real lead and nothing on the card says why.
-    //
-    // What separates them is the name BEFORE " at ". A parent building is named that way only when what
-    // precedes it is a room INSIDE a building (Weill Recital Hall, Playhouse Theater, Playhouse Stage,
-    // Merkin Hall). When it is not, the "at" belongs to the venue's own name (Jazz at Lincoln Center,
-    // The Space at Irondale, Synagogue at Sixth & I, Fisher Center at Bard).
-    //
-    // The room words are deliberately words for a room and not for a building or a campus: "center" and
-    // "space" name the whole venue, which is why Fisher Center and The Space are not rooms sitting inside
-    // something else.
-    @Test("every live venue string containing at, and whether its tail is a building")
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="every venue string containing \" at \" over all 702 prospects, and for each tail, every presenter whose own name contains it"
+    // All eleven live " at " venue strings are below, each with the presenters the store actually pairs
+    // with that tail. Judged at the house-list level rather than on the tail alone, because the corpus is
+    // what the decision reads.
+    @Test("every live venue string containing at, judged with the presenters the store pairs with it")
     func theWholeAtCorpusIsJudgedCorrectly() {
-        // (venue string, the building it sits inside, or nil)
-        let corpus: [(String, String?)] = [
-            // A room inside a building. All three of the genuine cases, and the only ones.
-            ("Weill Recital Hall at Carnegie Hall", "Carnegie Hall"),
-            ("Zankel Hall at Carnegie Hall", "Carnegie Hall"),
-            ("Playhouse Theater at Abrons Arts Center", "Abrons Arts Center"),
-            ("Playhouse Stage at Abrons Arts Center", "Abrons Arts Center"),
-            ("Merkin Hall at Kaufman Music Center", "Kaufman Music Center"),
-            // The venue's own name happens to contain "at". Jazz at Lincoln Center produces its own work,
-            // so putting Lincoln Center on the house list would refuse a real producer. The live row is
-            // the Shanghai one, which is out of range anyway, but a New York listing is the same string.
-            ("Jazz at Lincoln Center Shanghai", nil),
-            ("The Space at Irondale", nil),
-            ("Synagogue at Sixth & I", nil),
-            ("Fisher Center at Bard", nil),
+        // (venue string, a presenter whose name contains the tail or nil, the house it should yield or nil)
+        let corpus: [(venue: String, presenter: String?, house: String?)] = [
+            // A room inside a building, and nothing contests the building's name.
+            ("Weill Recital Hall at Carnegie Hall", nil, "carnegie hall"),
+            ("Zankel Hall at Carnegie Hall", nil, "carnegie hall"),
+            ("Merkin Hall at Kaufman Music Center", nil, "kaufman music center"),
+            // y is a venue even though the "at" is part of the venue's own name, which is Dan's point.
+            // Nothing in the corpus claims either name, so both become houses.
+            ("The Space at Irondale", nil, "irondale"),
+            ("Synagogue at Sixth & I", nil, "sixth & i"),
+            // The building's own presenting brand contains the building's name, and refusing that brand is
+            // correct, so it must NOT disqualify the building.
+            ("Weill Recital Hall at Carnegie Hall", "Carnegie Hall Presents", "carnegie hall"),
+            // A separate organisation's name contains the tail, and that organisation produces its own
+            // work, so the tail must not become a house or the producer is refused along with it.
+            ("Jazz at Lincoln Center Shanghai", "Jazz at Lincoln Center Shanghai", nil),
+            // Bard is a single word, and the refusal itself ignores single-word names (otherwise a Think
+            // Tank Theatre would be branded as The Tank). So listing it cannot refuse the Fisher Center,
+            // and it stays a house, which is also what Bard is: a campus that rooms sit inside.
+            ("Fisher Center at Bard", "Fisher Center for the Performing Arts at Bard College", "bard"),
             // An address, excluded since #1723.
-            ("Jalopy's Classroom at 319 Columbia St", nil),
+            ("Jalopy's Classroom at 319 Columbia St", nil, nil),
         ]
-        for (venue, expected) in corpus {
-            #expect(ProducerGate.parentBuilding(of: venue) == expected, "\(venue)")
+        for row in corpus {
+            let shows = [Self.show(row.presenter ?? "Some Ensemble", at: row.venue)]
+            let keys = Set(ProducerGate.houses(shows: shows).map(\.key))
+            if let house = row.house {
+                #expect(keys.contains(house), "\(row.venue) should yield the house \(house)")
+            } else {
+                // The room itself is still a house; what must be absent is the derived tail.
+                #expect(keys.contains { $0 != ProducerGate.key(row.venue) && $0 != ProducerGate.key(row.presenter ?? "") } == false,
+                        "\(row.venue) must derive no building from its own name")
+            }
         }
     }
 
-    // THE KNOWN FALSE POSITIVE, pinned rather than left to be discovered. The 52nd Street Project owns
-    // Five Angels Theater and also produces its own work, so the room word rule accepts it and the
-    // organisation lands on the house list, where it will be refused as a venue brand. It is the one live
-    // string of eleven this rule still gets wrong, and it is recorded here so the number is honest and so
-    // a future tightening has a failing case waiting for it. Dan's promotion override is the escape hatch.
+    // Abrons is the case that shows why an organisation appearing as a presenter in its own right cannot
+    // disqualify it: Abrons Arts Center presents shows AND is the building its Playhouse rooms sit inside,
+    // and it belongs on the list.
+    @Test("a building that also presents under its own name is still a house")
+    func aBuildingThatAlsoPresentsIsStillAHouse() {
+        let shows = [Self.show("Abrons Arts Center", at: "Playhouse Theater at Abrons Arts Center")]
+        #expect(Set(ProducerGate.houses(shows: shows).map(\.key)).contains("abrons arts center"))
+    }
+
+    // THE ONE IT STILL GETS WRONG, pinned rather than left to be discovered. The 52nd Street Project is a
+    // producing company that owns Five Angels Theater, and it appears as a presenter in its own right,
+    // exactly as Abrons does above. One is a producer and one is a house, and nothing about the SHAPE of
+    // the corpus separates them, so this rule keeps the 52nd Street Project on the list wrongly. One live
+    // string of eleven, down from three, recorded so the number stays honest and so a future tightening
+    // has a failing case waiting for it. Dan's promotion override reaches it in the meantime.
     @Test("the one live at-venue this rule still reads wrongly")
     func theRemainingFalsePositiveIsRecorded() {
-        #expect(ProducerGate.parentBuilding(of: "Five Angels Theater at the 52nd Street Project")
-                == "the 52nd Street Project")
+        let shows = [Self.show("52nd Street Project", at: "Five Angels Theater at the 52nd Street Project")]
+        #expect(Set(ProducerGate.houses(shows: shows).map(\.key)).contains("52nd street project"))
     }
 
     // A parent already on the list contributes nothing new, which is what makes this derivation safe to
