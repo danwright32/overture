@@ -1097,7 +1097,7 @@ enum QueueModel {
     // every still-open, not-recently-answered show on those dates: the whole selection, no exceptions.
     static func probeSelection(dates: Set<String>, in rows: [QueueItem], among all: [QueueItem],
                                today: String, stage: StageFocus?, now: Date = Date(),
-                               promoted: Set<String> = [],
+                               overrides: ProducerOverrides = .none,
                                // #1609: Dan's geography refusals, so a multi-date confirm can never
                                // include, count, or charge for a show somewhere he will not travel.
                                geo: GeoRefusals = .none) -> (ProbeSelection.Summary, [String])? {
@@ -1128,7 +1128,7 @@ enum QueueModel {
             // The producer gate is judged against the WHOLE queue, never just the ticked dates: judged
             // against one night, every producer looks like a single-venue house and nothing amortises.
             among: all.map(asShow),
-            promoted: promoted)
+            overrides: overrides)
         return (summary, candidateKeys.sorted())
     }
 
@@ -1476,16 +1476,19 @@ enum QueueModel {
     // unaffected and simply inherit nothing.
     static func items(from prospects: [Prospect],
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
+                      overrides: ProducerOverrides = .none,
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
-        let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects, now: now)
+        let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
+                                         overrides: overrides, now: now)
         // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
         // row. Deciding whether a presenter is really its building's brand walks every presenter in the
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
         // must not pay on every render. The corpus is deliberately the unfiltered store rather than the
         // caller's rows, so a dismissal cannot quietly change which names draw.
         let venueBrands = ProducerGate.VenueBrands(
-            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
+            shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            overrides: overrides)
         return prospects.map {
             var item = QueueItem($0)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
@@ -1501,6 +1504,7 @@ enum QueueModel {
     // The SwiftData-to-value boundary, kept here so OrgAnswerLedger itself stays free of the store and
     // its rules stay unit-testable.
     private static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
+                                         overrides: ProducerOverrides,
                                          now: Date) -> [String: OrgAnswerLedger.Inherited] {
         guard !answers.isEmpty else { return [:] }
         let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
@@ -1512,7 +1516,7 @@ enum QueueModel {
             OrgAnswerLedger.Show(key: $0.naturalKey, presenter: $0.presenter, venue: $0.venue,
                                  hasOwnAnswer: $0.reachabilityProbedAt != nil)
         }
-        return OrgAnswerLedger.inherited(from: flat, shows: shows, now: now)
+        return OrgAnswerLedger.inherited(from: flat, shows: shows, now: now, overrides: overrides)
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays

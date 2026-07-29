@@ -22,6 +22,9 @@ enum AppSchema {
         OrgReachabilityAnswer.self,   // #1598: the organisation answer ledger. Independent for the same
                                       // reason, so a dismissed or re-keyed prospect can never take an
                                       // answer Dan paid for with it.
+        PromotedProducer.self,        // #1719: Dan's own producer/house corrections. Two more independent
+        DemotedHouse.self,            // entities, no relationship to Prospect, so the migration is purely
+                                      // additive and no re-key or sweep can take a correction with it.
     ]
 
     static var schema: Schema { Schema(models) }

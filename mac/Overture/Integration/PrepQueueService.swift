@@ -80,10 +80,14 @@ enum PrepQueueService {
         // #1597 Phase 4.3: pay once per producer, not once per show. Judged against the WHOLE store, not
         // just Dan's selection, or one night's ticks would make every producer look like a single-venue
         // house and nothing would amortise. A room that rents itself out never groups (ProducerGate).
+        // #1719: Dan's own corrections, read from the same store the corpus came from. Without this the
+        // gate ran on its automatic arms alone and a house he had already corrected by hand was still
+        // amortised across its shows.
         let plan = ProbeBatch.plan(selecting: keys,
                                    among: all.map { ProbeBatch.Show(key: $0.naturalKey,
                                                                     presenter: $0.presenter,
-                                                                    venue: $0.venue) })
+                                                                    venue: $0.venue) },
+                                   overrides: ProducerOverrideEditing.overrides(in: context))
         let running = Set(plan.keysToRun)
         var covered: [String: [String]] = [:]
         for (show, representative) in plan.coveredBy { covered[representative, default: []].append(show) }

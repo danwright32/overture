@@ -49,7 +49,7 @@ enum OrgAnswerLedger {
     // answer changes meaning because of an unrelated triage decision, with nothing on screen to say so,
     // and the bug would be invisible for weeks.
     static func inherited(from answers: [Answer], shows: [Show], now: Date,
-                          promoted: Set<String> = []) -> [String: Inherited] {
+                          overrides: ProducerOverrides = .none) -> [String: Inherited] {
         // Only positives, only fresh, and only with an address behind them. A positive with nothing to
         // show cannot claim there is somebody to email.
         var usable: [String: Answer] = [:]
@@ -71,7 +71,7 @@ enum OrgAnswerLedger {
                   let orgKey = OrgKey.stored(for: presenter),
                   let answer = usable[orgKey] else { continue }
             let qualifies = verdictByOrg[orgKey]
-                ?? ProducerGate.qualifies(presenter, among: corpus, promoted: promoted)
+                ?? ProducerGate.qualifies(presenter, among: corpus, overrides: overrides)
             verdictByOrg[orgKey] = qualifies
             guard qualifies else { continue }
             out[show.key] = Inherited(result: answer.result, probedAt: answer.probedAt,

@@ -18,12 +18,12 @@ struct InheritedReachabilityWiringGuardTests {
     @Test func theQueueFeedsTheLedgerAndTheWholeStore() {
         #expect(queueView.contains("@Query private var orgAnswers: [OrgReachabilityAnswer]"))
         #expect(queueView.contains("@Query private var allProspects: [Prospect]"))
-        #expect(queueView.contains("QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects)"))
+        #expect(queueView.contains("QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,"))
     }
 
     @Test func archiveReadsTheLedgerToo() {
         #expect(archiveView.contains("@Query private var orgAnswers: [OrgReachabilityAnswer]"))
-        #expect(archiveView.contains("QueueModel.items(from: prospects, answers: orgAnswers)"))
+        #expect(archiveView.contains("QueueModel.items(from: prospects, answers: orgAnswers,"))
     }
 
     // The address line reads the shared rule rather than `item.contacts` directly, or an inherited row

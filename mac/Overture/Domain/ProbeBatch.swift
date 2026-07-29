@@ -37,7 +37,7 @@ enum ProbeBatch {
     }
 
     static func plan(selecting selected: Set<String>, among all: [Show],
-                     promoted: Set<String> = []) -> Plan {
+                     overrides: ProducerOverrides = .none) -> Plan {
         // The gate is judged against the WHOLE store, never just the selection. Judged against one
         // night's ticks, every producer looks like a single-venue house and nothing amortises, which
         // would throw away the entire saving.
@@ -57,7 +57,7 @@ enum ProbeBatch {
         for show in picked {
             guard let presenter = show.presenter,
                   let orgKey = ProducerGate.key(presenter),
-                  ProducerGate.qualifies(presenter, among: corpus, promoted: promoted) else {
+                  ProducerGate.qualifies(presenter, among: corpus, overrides: overrides) else {
                 // A one-off hunt: its own entry, and it answers for nothing else.
                 keysToRun.append(show.key)
                 performerHuntCount += 1
