@@ -35,6 +35,7 @@ What is not, and why:
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
+- `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)

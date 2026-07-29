@@ -135,8 +135,13 @@ enum ProducerGate {
         // on the live store 2026-07-29: "Kaufman Music Center" exists in no field of any row on its own,
         // only inside the venue "Merkin Hall at Kaufman Music Center", so the list carried the room and
         // not the building, and a run reading "Kaufman Music Center" on a page was told to pitch it.
+        // #1749: unless an organisation's own name contains it, in which case adding it would refuse that
+        // organisation too. The presenters are only in scope here, which is why the check lives at this
+        // level rather than inside `parentBuilding`.
+        let presenters = Array(Set(shows.compactMap { $0.presenter }))
         for venue in shows.compactMap({ $0.venue }) {
             guard let parentKey = key(parentBuilding(of: venue)) else { continue }
+            guard !aProducerNameContains(parentKey, presenters: presenters) else { continue }
             keys.insert(parentKey)
         }
 
@@ -163,37 +168,57 @@ enum ProducerGate {
         // an organisation called "319 Columbia Street". The leading digit is the same tell
         // VenueNormalization.strippingEmbeddedAddress already relies on, measured over the same corpus.
         guard let first = tail.first, !first.isNumber else { return nil }
-        // #1749: and the "at" has to be the one that means "inside", not one that belongs to the venue's
-        // own name. Read the head, not the tail: this is a parent building only when what precedes " at "
-        // names a ROOM.
-        //
-        // LIVE-STORE-CLAIM verified=2026-07-29 measure="every venue string containing \" at \", over all 702 prospects, and whether each tail is a building or part of the venue's own name"
-        // Eleven venue strings contain " at ", and the tail is a genuine building on only three of them
-        // (Carnegie Hall, Abrons Arts Center, Kaufman Music Center). The rest are the venue's own name:
-        // Jazz at Lincoln Center, The Space at Irondale, Synagogue at Sixth & I, Fisher Center at Bard.
-        // Four of those five name real producing organisations, and a producer on the house list is
-        // REFUSED silently, which is the expensive direction (#1749): the run drops a real lead and the
-        // card never says why. Getting it wrong the other way merely leaves a building off the list, which
-        // is the state everything before #1723 was already in.
-        let head = String(name[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
-        guard let lastWord = head.split(separator: " ").last?.lowercased(),
-              roomWords.contains(lastWord) else { return nil }
         return tail
     }
 
-    // #1749: words that name a room INSIDE a building, not a building or a campus. That distinction is the
-    // whole rule: "center" and "space" name a whole venue, which is exactly why "Fisher Center at Bard"
-    // and "The Space at Irondale" are not rooms sitting inside something else, while "Merkin Hall at
-    // Kaufman Music Center" is.
+    // #1749: whether some organisation's OWN name contains this candidate house, which means putting the
+    // candidate on the list would refuse that organisation too (the list refuses by containment as well as
+    // by exact key). Dan's rule, 2026-07-29: "if it's x at y, y is usually a venue, no?" It is, and the
+    // grammar was never what decided the outcome.
     //
-    // Deliberately small and deliberately not fitted to a single case: it is measured against all eleven
-    // live " at " strings (ProducerHouseListTests), keeps all three genuine parents, and rejects four of
-    // the five harmful ones. The fifth, "Five Angels Theater at the 52nd Street Project", is a producing
-    // company that owns its room, and no word test can separate that from a hall inside a building; it is
-    // pinned as a known false positive rather than left unstated, and Dan's promotion override reaches it.
-    private static let roomWords: Set<String> = [
-        "hall", "theater", "theatre", "stage", "auditorium", "room", "studio", "chapel", "playhouse",
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="every venue string containing \" at \" over all 702 prospects, and for each tail, every presenter whose own name contains it"
+    // Eleven venue strings contain " at ". Reading the tail as a building is right on most of them, and the
+    // exceptions are the ones where a PRODUCER's name contains the tail: "Jazz at Lincoln Center Shanghai"
+    // contains Lincoln Center, and "Fisher Center for the Performing Arts at Bard College" contains Bard.
+    // Both produce their own work, and refusing a genuine producer is the expensive direction (#1749): the
+    // run drops a real lead and nothing on the card says why.
+    //
+    // The presenting-word exception is what keeps a house a house. "Carnegie Hall Presents" also contains
+    // "Carnegie Hall", but it is the building's own presenting brand rather than a separate company, and
+    // refusing it is correct and deliberate. So a containing name disqualifies the candidate only when it
+    // is MORE than the candidate plus a word like Presents.
+    //
+    // It reuses `containsAsWords`, the SAME containment test the refusal itself uses, deliberately: a
+    // candidate is worth disqualifying only when listing it could actually refuse an organisation. That
+    // test ignores a single-word name (The Cell and The Tank fold to "cell" and "tank", and a bare
+    // substring test would brand a Think Tank Theatre), so a single-word tail like "bard" cannot refuse
+    // "Fisher Center for the Performing Arts at Bard College" by containment and is therefore safe to
+    // list, which also matches what Bard is: a campus that rooms sit inside.
+    //
+    // THE ONE IT STILL GETS WRONG, stated rather than left to be found: "Five Angels Theater at the 52nd
+    // Street Project". The 52nd Street Project appears as a presenter in its own right and is a producing
+    // company, and so does Abrons Arts Center, which is a house. Nothing about the SHAPE of a corpus
+    // separates those two, so this rule keeps the 52nd Street Project on the list wrongly. It is one live
+    // string of eleven, down from three under the previous reading, and Dan's promotion override reaches it.
+    static func aProducerNameContains(_ candidateKey: String, presenters: [String]) -> Bool {
+        for presenter in presenters {
+            guard let presenterKey = key(presenter), presenterKey != candidateKey,
+                  containsAsWords(presenterKey, candidateKey) else { continue }
+            // More than the candidate plus a presenting word means a separate organisation.
+            let remainder = presenterKey
+                .replacingOccurrences(of: candidateKey, with: " ")
+                .split(separator: " ").map(String.init)
+                .filter { !$0.isEmpty }
+            if remainder.contains(where: { !presentingWords.contains($0) }) { return true }
+        }
+        return false
+    }
+
+    // copy-inventory:ignore-start  Words matched inside an organisation's own name, never said to Dan (#1749)
+    private static let presentingWords: Set<String> = [
+        "presents", "presenting", "presentation", "presentations",
     ]
+    // copy-inventory:ignore-end
 
     // One readable spelling per key, chosen from every venue and presenter string in the corpus. The
     // spelling is the room's OWN name (VenueNormalization.keyName), so a venue string that carries its
