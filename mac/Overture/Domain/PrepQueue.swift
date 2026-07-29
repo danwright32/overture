@@ -10,6 +10,20 @@ struct PrepQueue: Codable, Equatable, Sendable {
     var version: Int
     var generatedAt: String
     var items: [PrepQueueItem]
+    // v7 (#1720): the organisations the app has already judged to be the BUILDING rather than the act,
+    // each as ProducerGate's folded `key` plus one readable `name`. RUN-LEVEL, beside `items` rather than
+    // inside them, because it is one answer about the whole store and not a fact about any one show.
+    //
+    // The run looks a name up here instead of deciding for itself. #1681: it named Henry Street
+    // Settlement, put it in a search query, and reported that no contact existed without ever fetching
+    // henrystreet.org. An organisation NOT on this list must be visited before the run concludes nothing
+    // exists; one ON it is the house, refused exactly as the hard venue-disqualify rule already refuses
+    // the show's own venue.
+    //
+    // Optional, so a queue file written before this phase still decodes. ABSENT and EMPTY mean different
+    // things and the runbook is told so: absent means the file predates the field, empty means the app
+    // looked and named nothing.
+    var houses: [ProducerGate.House]? = nil
 }
 
 struct PrepQueueItem: Codable, Equatable, Sendable {
@@ -57,7 +71,7 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 6
+    static let version = 7
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
@@ -198,8 +212,14 @@ enum PrepQueueBuilder {
         return nil
     }
 
-    static func build(from prospects: [PrepQueueItem], generatedAt: String) -> PrepQueue {
-        PrepQueue(version: version, generatedAt: generatedAt, items: prospects)
+    // `houses` is deliberately NOT defaulted, and it is the only argument here without a default, for the
+    // same reason `needsPrep`'s conflict gate is not: a defaulted empty set is exactly how the producer
+    // gate's promotion override spent months looking wired while every call site quietly passed nothing
+    // (#1679). Required, forgetting it is a compile error rather than a silently house-less run that sends
+    // the model hunting the building's own inbox.
+    static func build(from prospects: [PrepQueueItem], generatedAt: String,
+                      houses: [ProducerGate.House]) -> PrepQueue {
+        PrepQueue(version: version, generatedAt: generatedAt, items: prospects, houses: houses)
     }
 
     static func encode(_ queue: PrepQueue) throws -> Data {

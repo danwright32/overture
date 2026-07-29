@@ -26,6 +26,18 @@ enum PrepQueueService {
             .filter { includedKeys?.contains($0.naturalKey) ?? true }
     }
 
+    // #1720: the houses the run is told about, computed ONCE per queue build from the WHOLE store plus
+    // Dan's own corrections. The whole store rather than the run's own items on purpose: judged against a
+    // single night's selection almost nothing looks like a house, and the run would go hunting the
+    // building's own inbox for want of being told (the same reasoning buildProbeQueue states for the
+    // producer grouping). Read here, where the corpus is read, so neither build path can forget it.
+    static func houses(from context: ModelContext) -> [ProducerGate.House] {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        return ProducerGate.houses(shows: all.map { ProducerGate.Show(presenter: $0.presenter,
+                                                                      venue: $0.venue) },
+                                   overrides: ProducerOverrideEditing.overrides(in: context))
+    }
+
     static func buildQueue(from context: ModelContext, generatedAt: String,
                            includedKeys: Set<String>? = nil,
                            today: String = EasternDate.today()) -> PrepQueue {
@@ -66,7 +78,7 @@ enum PrepQueueService {
                     experimentArmInstruction: p.assignedArm
                 )
             }
-        return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
+        return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }
 
     // #1308 Layer 2: build a reachability PROBE work-list DIRECTLY from Dan's hand-picked keys, bypassing
@@ -114,7 +126,7 @@ enum PrepQueueService {
                     // different in the diff and in any fixture comparison.
                     alsoAnswersFor: covered[p.naturalKey]?.sorted())
             }
-        return PrepQueueBuilder.build(from: items, generatedAt: generatedAt)
+        return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }
 
     // #1308 Layer 2: the probe-run side marker (which shows a live probe is researching). Lives beside the

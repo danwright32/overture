@@ -91,6 +91,80 @@ enum ProducerGate {
         Set(shows.compactMap { key($0.venue) })
     }
 
+    // #1720 (milestone 34 Phase 3): the same verdicts, named and handed OUT of the app, so the Prep run
+    // stops deciding for itself which organisation is the building. The run named Henry Street Settlement,
+    // put it in a search query, and concluded nothing existed without ever fetching henrystreet.org
+    // (#1681); the waterfall had no step for an organisation named in a listing's BODY rather than in a
+    // field, because it had no way to tell one from the house.
+    //
+    // Deliberately NOT a new rule. Every key here comes from a verdict this gate already reaches, and the
+    // runbook is told to look names up rather than judge them, because the English version of this
+    // judgment (compare the org's domain against the host venue's) was refuted on five live rows: Carnegie
+    // Hall Citywide at Madison Square Park, Bryant Park twice and Historic Richmond Town, and NYO2 in
+    // Santo Domingo, all served from carnegiehall.org with a host venue whose domain is not. A second copy
+    // is what #1702 exists to prevent.
+    struct House: Codable, Equatable, Sendable {
+        // The gate's own folded key, for an exact lookup.
+        let key: String
+        // One readable spelling of the same room, for a run comparing against a name it read on a page.
+        // Both, rather than either alone: a folded key asks the run to fold, which it can get wrong, and a
+        // readable name alone cannot collapse two spellings of one room into one entry. A missed match is
+        // the expensive direction (the run visits the house and may offer its address), so it gets two
+        // ways to hit.
+        let name: String
+    }
+
+    // The whole house list for a corpus: every venue string in it, every presenter its own venue-brand
+    // arms refuse, and every house Dan demoted by hand. Sorted by key, so one store always writes one
+    // byte-identical file and two runs differ in the diff only when the store really changed.
+    //
+    // Promotion is inherited from isVenueBrand rather than re-decided: a promoted name that only reached
+    // the list through CONTAINMENT comes off it (the Metropolitan Opera produces its own work at the
+    // Metropolitan Opera House), and one spelled exactly like a room stays on it, because a presenter
+    // spelled precisely like a room IS the room and there is no organisation there to promote.
+    static func houses(shows: [Show], overrides: ProducerOverrides = .none) -> [House] {
+        let venueKeys = venueKeys(of: shows)
+        var keys = venueKeys
+        for presenter in Set(shows.compactMap { $0.presenter }) {
+            guard let presenterKey = key(presenter) else { continue }
+            if isVenueBrand(presenterKey, venueKeys: venueKeys, overrides: overrides) {
+                keys.insert(presenterKey)
+            }
+        }
+        // Dan's own corrections last, and unconditionally: a key he has demoted is a house whatever the
+        // automatic arms concluded, which is the whole point of the override (FRIGID New York rents one
+        // room to 40 companies and is named in no venue string, so nothing else reaches it).
+        keys.formUnion(overrides.demoted)
+
+        let names = readableNames(in: shows)
+        return keys.sorted().map { House(key: $0, name: names[$0] ?? $0) }
+    }
+
+    // One readable spelling per key, chosen from every venue and presenter string in the corpus. The
+    // spelling is the room's OWN name (VenueNormalization.keyName), so a venue string that carries its
+    // parent building names the room and the parent reaches the list on its own rows.
+    //
+    // Shortest wins, ties broken alphabetically, purely so the choice is deterministic: candidates for one
+    // key differ only in case, punctuation and a leading "the", and an order-dependent pick would make two
+    // identical runs write two different files. A key with no spelling left anywhere in the corpus (a
+    // correction Dan made against a store that has since changed) falls back to showing the key itself in
+    // `houses` above, which is honest; dropping it would silently discard his correction.
+    private static func readableNames(in shows: [Show]) -> [String: String] {
+        var names: [String: String] = [:]
+        for raw in shows.flatMap({ [$0.venue, $0.presenter] }).compactMap({ $0 }) {
+            guard let folded = key(raw) else { continue }
+            let candidate = VenueNormalization.keyName(raw)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !candidate.isEmpty else { continue }
+            guard let existing = names[folded] else { names[folded] = candidate; continue }
+            if candidate.count < existing.count
+                || (candidate.count == existing.count && candidate < existing) {
+                names[folded] = candidate
+            }
+        }
+        return names
+    }
+
     // The same verdict for a whole corpus, computed once. Built for the matcher, which asks it per ROW:
     // re-walking every show for every row would be several hundred thousand string comparisons on the
     // live store, and the answer never changes within a run.

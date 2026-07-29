@@ -58,14 +58,36 @@ const OPENER_ARCHETYPE = ["reason-first", "credential-first", "observation-first
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-6, additive: production at v2+ #586, reprepMode at v3+ #367,
+// overture-prep-queue.json (versions 1-7, additive: production at v2+ #586, reprepMode at v3+ #367,
 // runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
-// alsoAnswersFor at v6+ #1597)
+// alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
+  // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
+  // than the act. Beside items, not inside them, because it is one answer about the whole store.
+  if (version >= 7) {
+    if (root.houses !== undefined) {
+      const houses = requireArray(root.houses, file, "houses");
+      houses.forEach((h, i) => {
+        const o = requireObject(h, file, `houses[${i}]`);
+        requireString(o.key, file, `houses[${i}].key`);
+        requireString(o.name, file, `houses[${i}].name`);
+        // The key is what an exact lookup compares against, so it must already be ProducerGate.key's
+        // folded form. A key carrying capitals or a leading "the" was folded by something else and
+        // would simply never match, which is indistinguishable from an empty list: the run would go on
+        // deciding for itself, with the guard green the whole time.
+        const key = o.key as string;
+        if (key !== key.toLowerCase() || key.startsWith("the ") || key.trim() !== key) {
+          fail(file, `houses[${i}].key must be a folded key (lowercased, no leading "the", trimmed)`);
+        }
+      });
+    }
+  } else if (root.houses !== undefined) {
+    fail(file, `houses must not be present before version 7`);
+  }
   const items = requireArray(root.items, file, "items");
   // v4 (#1122): the run's closing night and a passed-opening flag, so the drafter can pitch the whole
   // run and never name a gone opening night.
