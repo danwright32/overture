@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion6() {
-        let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z")
-        #expect(q.version == 6)
+    @Test func theBuilderNowStampsVersion7() {
+        let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
+        #expect(q.version == 7)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -156,6 +156,29 @@ struct PrepQueueContractTests {
         for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json"] {
             let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
             #expect(decoded.items.allSatisfy { $0.alsoAnswersFor == nil }, "\(name) should carry no group")
+        }
+    }
+
+    // v7 (#1720): the queue gains a RUN-LEVEL `houses`, the organisations the app has already judged to be
+    // the building rather than the act. It sits beside `items`, not inside them, because it is one answer
+    // about the whole store rather than a fact about any one show. Each entry carries the gate's folded
+    // `key` and one readable `name`, so a run comparing a name it read on a page can match either.
+    @Test func theV7FixtureCarriesTheHouseList() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v7.json"))
+        #expect(decoded.version == 7)
+        #expect(decoded.houses?.map(\.key) == ["abrons arts center", "carnegie hall presents",
+                                               "under st marks"])
+        #expect(decoded.houses?.map(\.name) == ["Abrons Arts Center", "Carnegie Hall Presents",
+                                                "Under St Marks"])
+    }
+
+    // Additive, so a queue file written before this phase still decodes. An old file left on disk must not
+    // become unreadable, and an ABSENT list is not an empty one: absent means the file predates the field,
+    // which is a different thing from a store that named no houses.
+    @Test func everyEarlierFixtureStillDecodesWithNoHouseList() throws {
+        for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"] {
+            let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
+            #expect(decoded.houses == nil, "\(name) should carry no house list")
         }
     }
 

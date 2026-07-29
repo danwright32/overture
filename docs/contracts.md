@@ -26,7 +26,7 @@ the workflow's runbook is its spec.
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6, 7 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
@@ -199,6 +199,24 @@ normal #362 opener rotation. The runbook (`docs/prep-runbook.md` §2) gives this
 that rotation, so an experiment item genuinely randomizes what is produced. Additive; `v1.json`
 through `v4.json` stay byte-identical and still decode with it absent (nil). (Version 4, #1122, added
 `runEndDate` + `openingNightPassed`; it had no paragraph here before this one.)
+
+Queue version 7 (#1720, milestone 34 Phase 3) adds an optional RUN-LEVEL `houses`, beside `items`
+rather than inside them: the organisations the app has already judged to be the BUILDING rather than
+the act. Each entry is a `key` (`ProducerGate.key`'s folded form, for an exact lookup) and a `name`
+(one readable spelling of the same room, for a run comparing against a name it read on a page). The
+list is `ProducerGate.houses`: every venue string in the store, every presenter its own venue-brand
+arms refuse, and every house Dan demoted by hand (#1719), computed once per build from the WHOLE
+store rather than the run's own items. The READER is `docs/prep-runbook.md` §1, which looks a name up
+here instead of deciding for itself: an organisation NOT on the list is visited before the run
+concludes nothing exists (#1681: it named Henry Street Settlement, searched for it, and reported no
+contact without ever fetching henrystreet.org), and one ON the list is refused exactly as the hard
+venue-disqualify rule already refuses the show's own venue. Deliberately not a second copy of that
+judgment written in English inside the prompt: #1702 centralised it in `ProducerGate` so the two
+halves could not drift, and the English version (compare the org's domain against the host venue's)
+was refuted on five live rows served from carnegiehall.org with a host venue whose domain is not.
+Additive; `v1.json` through `v6.json` stay byte-identical and still decode with it absent. ABSENT and
+EMPTY differ and the runbook is told so: absent means a file written before this phase, empty means
+the app looked and named nothing.
 
 Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
 the run found for the performance: the act plus at most one real presenting org, each labelled with a

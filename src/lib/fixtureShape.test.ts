@@ -32,7 +32,9 @@ describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
   it("covers exactly the known prep-queue files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"]);
+    expect(files.sort()).toEqual([
+      "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+    ]);
   });
 
   for (const file of files) {
@@ -80,6 +82,38 @@ describe("prep-queue fixture shapes", () => {
     };
     mutated.items[0].alsoAnswersFor = [mutated.items[0].naturalKey as string];
     expect(() => assertPrepQueueShape(mutated, "v6.json", 6)).toThrow(/must not repeat/);
+  });
+
+  // #1720: the run-level house list is a v7 addition. A runner reading an older queue has no rule for
+  // it, so a stamp on a v1-v6 file must be caught rather than silently ignored by a run that would then
+  // go on deciding for itself which organisation is the building.
+  it("rejects a v7 house list appearing in a v6 fixture", () => {
+    const mutated = readJson("prep-queue", "v6.json") as Record<string, unknown>;
+    mutated.houses = [{ key: "abrons arts center", name: "Abrons Arts Center" }];
+    expect(() => assertPrepQueueShape(mutated, "v6.json", 6)).toThrow(/houses.*before version 7/);
+  });
+
+  // Both halves are load-bearing and they fail differently. Without the folded key the run has nothing
+  // to match exactly; without the readable name it cannot recognise a spelling it read on a page. A
+  // half-populated entry would quietly weaken the match rather than break it.
+  it("rejects a house entry missing its folded key", () => {
+    const mutated = readJson("prep-queue", "v7.json") as Record<string, unknown>;
+    mutated.houses = [{ name: "Abrons Arts Center" }];
+    expect(() => assertPrepQueueShape(mutated, "v7.json", 7)).toThrow(/houses\[0\]\.key/);
+  });
+
+  it("rejects a house entry missing its readable name", () => {
+    const mutated = readJson("prep-queue", "v7.json") as Record<string, unknown>;
+    mutated.houses = [{ key: "abrons arts center" }];
+    expect(() => assertPrepQueueShape(mutated, "v7.json", 7)).toThrow(/houses\[0\]\.name/);
+  });
+
+  // The key is what an exact lookup compares against, so a key carrying capitals or a leading "the" has
+  // been folded by something other than ProducerGate.key and would simply never match.
+  it("rejects a house key that has not been folded", () => {
+    const mutated = readJson("prep-queue", "v7.json") as Record<string, unknown>;
+    mutated.houses = [{ key: "The Abrons Arts Center", name: "Abrons Arts Center" }];
+    expect(() => assertPrepQueueShape(mutated, "v7.json", 7)).toThrow(/houses\[0\]\.key/);
   });
 
   it("rejects a v4 run field appearing in a v3 fixture", () => {
