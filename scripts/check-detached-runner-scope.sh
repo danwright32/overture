@@ -64,6 +64,15 @@ detached_runner_scope_violations() {
     echo "hardcodes a literal --allowedTools on a \"\$CLAUDE\" -p call site instead of folding through a *_claude_scope function"
   fi
 
+  # #1682: --settings is how the scope turns off every Claude Code plugin installed on the Mac, and it can
+  # only be built from the live plugin list (--settings MERGES enabledPlugins per key, so a stale or empty
+  # hand-written map turns nothing off). A literal one at a call site either disables nothing or overrides
+  # the scope's, and either way the run silently starts carrying whatever plugin hooks are installed that
+  # day. Same hole as the bare allowlist, one flag along.
+  if printf '%s' "${code}" | grep -q -- '--settings'; then
+    echo "hardcodes a literal --settings on a \"\$CLAUDE\" -p call site instead of folding through a *_claude_scope function"
+  fi
+
   if ! printf '%s' "${code}" | grep -Eq "${SCOPE_FOLD_PATTERN}"; then
     echo "invokes \"\$CLAUDE\" -p without calling any *_claude_scope function anywhere in the file"
   fi

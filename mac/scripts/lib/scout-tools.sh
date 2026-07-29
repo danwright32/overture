@@ -48,5 +48,5 @@ SCOUT_EXTRACT_FORBIDDEN_TOOLS="Bash Edit Skill WebSearch"
 # (the runner and its own fixture still call scout_extract_claude_scope exactly as before).
 scout_extract_claude_scope() {
   claude_run_scope "${SCOUT_EXTRACT_ALLOWED_TOOLS}" "${SCOUT_EXTRACT_PERMISSION_MODE}" \
-    "${SCOUT_EXTRACT_FORBIDDEN_TOOLS}" "scout-extract"
+    "${SCOUT_EXTRACT_FORBIDDEN_TOOLS}" "scout-extract" "${1:-}"
 }

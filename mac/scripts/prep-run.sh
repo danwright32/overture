@@ -47,11 +47,6 @@ open_run_log "prep-run.log"
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
 
-# #1097: resolve the scope once and refuse to start if it has drifted unsafe (an auto-approving mode, or
-# Edit smuggled into the allowlist). Fail loud: a detached run that drafts emails reaching strangers in
-# Dan's voice must never fall back to a shell-and-edit posture in silence.
-PREP_SCOPE="$(prep_claude_scope)" || { echo "prep: aborting, unsafe tool scope" >&2; exit 1; }
-
 QUEUE="$SUPPORT/overture-prep-queue.json"
 RESULTS="$SUPPORT/overture-prep-results.json"
 PROGRESS="$SUPPORT/overture-prep-progress.json"
@@ -98,6 +93,20 @@ clear_cancel "$CANCEL"
 rm -f "$CLAUDE_PID_FILE" 2>/dev/null || true
 
 require_queue "$QUEUE" "prep"
+
+# #1682: the scope needs the claude binary, because it asks it which plugins are installed on this Mac in
+# order to name every one of them in the flag that turns them off. So the binary is resolved here rather
+# than just before the launch hundreds of lines below. It stays BELOW require_queue: "there is no
+# work-list" is the more useful thing to find in the log, and it costs nothing to check first.
+resolve_claude
+
+# #1097: resolve the scope once and refuse to start if it has drifted unsafe (an auto-approving mode, or
+# Edit smuggled into the allowlist). #1682 adds the second half: every Claude Code plugin installed on
+# this Mac is turned off for the run, so no plugin's hooks can inject their own instructions into a
+# prompt this repo wrote. Fail loud on either: a detached run that drafts emails reaching strangers in
+# Dan's voice must never fall back to a shell-and-edit posture, or to carrying a stranger's mandatory
+# instructions, in silence.
+PREP_SCOPE="$(prep_claude_scope "$CLAUDE")" || { echo "prep: aborting, unsafe run scope" >&2; exit 1; }
 
 # In-flight marker the app can watch (issue #44); removed on exit no matter what.
 : > "$MARKER"
@@ -193,8 +202,6 @@ far, not just this one. Do this after every single item, not only at the end: th
 nothing else to that file. This run is DETACHED: nobody can answer you, so never stop to ask, decide and
 record the decision in the result. Do the web research needed to find real, verifiable contacts.
 "
-
-resolve_claude
 
 # Headless Claude Code run. Read, Write, WebSearch, WebFetch, Bash and Skill (the six tools this run's
 # job needs); Edit and everything else are denied because $PREP_SCOPE carries --permission-mode manual,

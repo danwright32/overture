@@ -99,6 +99,35 @@ else
 fi
 assert_contains "red: names the bare --allowedTools hole" "${OUT}" "hardcodes a literal --allowedTools"
 
+# RED variant (#1682): a runner that hardcodes its own --settings at the call site. That flag is how the
+# scope turns off every Claude Code plugin installed on the Mac, and it has to be built from the live
+# plugin list; a hand-written one at a call site either turns nothing off (an empty or stale map) or
+# overrides the one the scope emitted, and either way the run silently starts carrying whatever plugin
+# hooks happen to be installed. Same shape as the --allowedTools hole, one flag along.
+RED_HARDCODED_SETTINGS='
+#!/usr/bin/env bash
+set -eu
+. "$(dirname "$0")/lib/claude-run-scope.sh"
+
+FOO_SCOPE="$(foo_claude_scope "$CLAUDE")" || exit 1
+
+# shellcheck disable=SC2086
+"$CLAUDE" -p "$PROMPT" \
+  --model "$OVERTURE_MODEL_FOO" \
+  --settings "{\"enabledPlugins\":{}}" \
+  $FOO_SCOPE &
+CLAUDE_PID=$!
+wait "$CLAUDE_PID"
+'
+run_detect "${RED_HARDCODED_SETTINGS}"
+if [[ "${COUNT}" -ge 1 ]]; then
+  echo "ok - red (hardcoded --settings): a hand-written settings flag at a call site is flagged"
+else
+  echo "FAIL - red (hardcoded --settings): expected at least one violation, got none"
+  FAILURES=$((FAILURES + 1))
+fi
+assert_contains "red (hardcoded --settings): names the hardcoded settings hole" "${OUT}" "hardcodes a literal --settings"
+
 # RED variant: a runner that invokes claude -p but never calls ANY *_claude_scope function at all (no
 # --allowedTools literal either, just an unscoped call) must also be caught: an empty or missing scope
 # is just as unsafe as a hardcoded one, since nothing then adds --permission-mode manual.

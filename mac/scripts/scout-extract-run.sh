@@ -45,12 +45,6 @@ open_run_log "scout-extract-run.log"
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
 
-# #1026: resolve the fail-closed tool scope once, and refuse to start if it has drifted unsafe (an
-# auto-approving permission mode, or a forbidden tool in the allowlist). Both claude launch paths below
-# use this ONE value, so the restriction cannot be right on one and missing on the other. Fail loud: a
-# detached run that reads untrusted pages must never fall back to a shell-capable posture in silence.
-SCOUT_SCOPE="$(scout_extract_claude_scope)" || { echo "scout-extract: aborting, unsafe tool scope" >&2; exit 1; }
-
 QUEUE="$SUPPORT/overture-scout-extract-queue.json"
 RESULTS="$SUPPORT/overture-scout-extract-results.json"
 PROGRESS="$SUPPORT/overture-scout-extract-progress.json"
@@ -79,6 +73,21 @@ rm -f "$CHUNK_PIDS_FILE" 2>/dev/null || true
 MAX_PARALLEL="${SCOUT_EXTRACT_MAX_PARALLEL:-4}"
 
 require_queue "$QUEUE" "scout-extract"
+
+# #1682: the scope needs the claude binary, because it asks it which plugins are installed on this Mac in
+# order to name every one of them in the flag that turns them off. So the binary is resolved here rather
+# than just before the launch a hundred and fifty lines below. It stays BELOW require_queue: "there is no
+# work-list" is the more useful thing to find in the log, and it costs nothing to check first.
+resolve_claude
+
+# #1026: resolve the fail-closed tool scope once, and refuse to start if it has drifted unsafe (an
+# auto-approving permission mode, or a forbidden tool in the allowlist). #1682 adds the second half:
+# every Claude Code plugin installed on this Mac is turned off for the run, so no plugin's hooks can
+# inject their own instructions into a prompt this repo wrote. Both claude launch paths below use this
+# ONE value, so neither restriction can be right on one and missing on the other. Fail loud: a detached
+# run that reads untrusted pages must never fall back to a shell-capable posture, or to carrying a
+# stranger's mandatory instructions, in silence.
+SCOUT_SCOPE="$(scout_extract_claude_scope "$CLAUDE")" || { echo "scout-extract: aborting, unsafe run scope" >&2; exit 1; }
 
 # In-flight marker the app watches; removed on exit no matter what.
 : > "$MARKER"
@@ -213,8 +222,6 @@ file, every time, growing as you go:
 \"events\":[{\"title\":\"...\",\"presenter\":\"...\",\"venue\":\"...\",\"performanceDate\":\"YYYY-MM-DD\",
 \"sourceUrl\":\"...\"}],\"note\":\"one short line on anything that made this hard\"}]}
 "
-
-resolve_claude
 
 # Headless Claude Code run(s). Read (the pinned pages), Write (results + progress), WebFetch (each
 # event's detail page, for the venue and exact date, which the listings page usually lacks). Bash, Edit,

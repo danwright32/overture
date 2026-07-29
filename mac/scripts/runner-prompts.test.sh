@@ -38,13 +38,21 @@ FAILURES=0
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/scout-tools.sh"
 
+# #1682: the scope functions now also turn off every Claude Code plugin installed on this Mac, which they
+# can only do by asking the real claude binary what those are. Resolved the same way the runners resolve
+# it (lib/runner-setup.sh), so this fixture asks for the scope a real run would get. On a machine with no
+# claude installed resolve_claude exits, which is the honest outcome: no runner could launch there either.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/runner-setup.sh"
+resolve_claude
+
 # The claude flags each runner actually launches with, resolved through its own scope function (the same
 # value the runner splices onto the command line), so a check on tool access reflects the real posture.
 effective_scope_for() {
   case "$1" in
-    scout-extract-run.sh) scout_extract_claude_scope ;;
-    prep-run.sh) prep_claude_scope ;;
-    reply-classify-run.sh) reply_classify_claude_scope ;;
+    scout-extract-run.sh) scout_extract_claude_scope "${CLAUDE}" ;;
+    prep-run.sh) prep_claude_scope "${CLAUDE}" ;;
+    reply-classify-run.sh) reply_classify_claude_scope "${CLAUDE}" ;;
   esac
 }
 
@@ -141,11 +149,22 @@ rules_for() {
 # include Skill is not an instruction, it is a wish. The model cannot call the tool, so it does the next
 # best thing and INVENTS the voice, which is indistinguishable from working right up until Dan reads a
 # draft that does not sound like him. The failure is silent by construction, so it has to be caught here.
+#
+# #1682: this guard is also the one that has to prove the plugin lockout did not take Dan's skills with
+# it. Restricting a detached run's settings has already done exactly that once (--setting-sources drops
+# ~/.claude wholesale, brand-voice included), and the damage is invisible: the drafts still arrive, just
+# not in his voice. So it must be asked of the REAL effective scope, built the way the runner builds it.
 assert_tools_can_obey_the_prompt() {
-  local script="$1"
+  local script="$1" var="$2"
   local body region
   body="$(cat "${SCRIPT_DIR}/${script}")"
-  region="$(prompt_region "${script}")"
+  # #1597 gave prompt_region a second argument (the prompt VARIABLE name) and this caller was not
+  # updated, so every call has since asked sed for a range beginning `^=`, matched nothing, and returned
+  # an empty region. An empty region contains no "skill", which took the early return below: this whole
+  # guard reported "asks for no skill, so it needs no Skill tool" for all three runners, including the two
+  # whose prompts name the brand-voice skill in their first paragraph. It was green and it was measuring
+  # nothing.
+  region="$(prompt_region "${script}" "${var}")"
 
   if [[ "${region}" != *"skill"* && "${region}" != *"Skill"* ]]; then
     echo "ok - ${script}: asks for no skill, so it needs no Skill tool"
@@ -242,7 +261,7 @@ for target in prep-run.sh:PROMPT prep-run.sh:PROBE_PROMPT \
     fi
   done < <(rules_for "${target}")
 
-  assert_tools_can_obey_the_prompt "${script}"
+  assert_tools_can_obey_the_prompt "${script}" "${var}"
   assert_no_dashes "${SCRIPT_DIR}/${script}" "${script}'s prompt"
 done
 

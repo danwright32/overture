@@ -46,19 +46,169 @@ assert_not_contains() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/claude-run-scope.sh"
 
+# A stand-in claude binary whose `plugin list --json` prints exactly what a case wants to test, so the
+# plugin half of the scope is driven by a listing this file controls rather than by whatever happens to
+# be installed on the Mac running the suite. That is the whole point of #1682: the list must be DERIVED
+# from the machine, so a fixture that hardcoded Dan's current seven plugins would assert nothing.
+STUB_ROOT="$(mktemp -d)"
+trap 'rm -rf "${STUB_ROOT}"' EXIT
+
+# stub_claude <plugin-list-json> [exit-status]: prints the path to a fresh executable stub.
+#
+# Each call gets its own mktemp directory rather than a counter: this function is always invoked inside a
+# command substitution, which is a subshell, so a counter incremented here never reaches the parent and
+# every stub would overwrite the first one. Written the counting way first, the stub that must FAIL
+# silently replaced the stub that must SUCCEED, and cases that had already passed started failing.
+stub_claude() {
+  local body="$1" status="${2:-0}" dir
+  dir="$(mktemp -d "${STUB_ROOT}/stub.XXXXXX")"
+  {
+    echo '#!/bin/sh'
+    echo "cat <<'STUB_JSON'"
+    printf '%s\n' "${body}"
+    echo 'STUB_JSON'
+    echo "exit ${status}"
+  } > "${dir}/claude"
+  chmod +x "${dir}/claude"
+  printf '%s' "${dir}/claude"
+}
+
+# The shape `claude plugin list --json` really prints, captured from the live command on 2026-07-28,
+# trimmed to the fields this parser reads. Two invented ids, so a scope that echoed the real machine's
+# plugins instead of deriving from this listing fails loudly.
+TWO_PLUGINS='[
+  {
+    "id": "alpha@marketplace-one",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/tmp/alpha",
+    "mcpServers": {
+      "alpha-api": {
+        "type": "http",
+        "url": "https://example.invalid/mcp"
+      }
+    }
+  },
+  {
+    "id": "beta@marketplace-two",
+    "version": "2.0.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/tmp/beta"
+  }
+]'
+
+STUB_TWO="$(stub_claude "${TWO_PLUGINS}")"
+
+# --- the plugin lockout: what #1682 closes -------------------------------------------------------------
+#
+# A detached `claude -p` loads every plugin enabled in ~/.claude, and their SessionStart hooks inject
+# whatever they like into the run. Measured on 2026-07-28: a vercel plugin pushed 54,486 characters of
+# Next.js product documentation into every chunk of a contact hunt, carrying imperatives ("MANDATORY ...
+# You MUST ...") in the same voice this repo's runbooks use. This repo goes to real trouble to control
+# exactly what a detached run is told (#1026, runner-prompts.test.sh, check-detached-runner-scope.sh) and
+# a plugin installed for a different project walked past all of it.
+#
+# The fix has to enumerate: --settings MERGES enabledPlugins per key rather than replacing the object, so
+# an empty map disables nothing (measured, both ways). And the list has to be DERIVED from the machine,
+# because a hardcoded one goes stale silently the next time a plugin is installed.
+
+lockout="$(claude_run_plugin_lockout "${STUB_TWO}" "unit")"
+lockout_status=$?
+[[ "${lockout_status}" -eq 0 ]] || fail "the plugin lockout emits cleanly on a real listing" "returned ${lockout_status}"
+assert_contains "the lockout turns off every plugin the listing names" "${lockout}" \
+  '--settings {"enabledPlugins":{"alpha@marketplace-one":false,"beta@marketplace-two":false}}'
+
+# Derived, not hardcoded: nothing installed on THIS Mac may leak into a scope built from that listing.
+assert_not_contains "the lockout names no plugin the listing did not" "${lockout}" "vercel"
+
+# The same listing on ONE line must read identically. A first cut matched only an id anchored to the start
+# of its own line, which read nothing at all out of compact JSON and would have emitted a map that turned
+# nothing off, reporting success the whole way.
+compact="$(claude_run_plugin_lockout "$(stub_claude '[{"id":"alpha@marketplace-one","enabled":true},{"id":"beta@marketplace-two","enabled":true}]')" "unit")"
+assert_contains "the lockout reads a compact one-line listing the same as a pretty-printed one" "${compact}" \
+  '--settings {"enabledPlugins":{"alpha@marketplace-one":false,"beta@marketplace-two":false}}'
+
+# The runners splice the scope onto the command line by deliberate word-splitting, so a space anywhere in
+# the emitted JSON would break the flag into pieces and hand claude a garbage argument.
+if [[ "${lockout#--settings }" == *" "* ]]; then
+  fail "the lockout's settings JSON must contain no spaces" "emitted: ${lockout}"
+else
+  pass "the lockout's settings JSON contains no spaces, so it survives the runners' word-splitting"
+fi
+
+# Failure path: no claude binary to ask. Refuse loudly rather than emit a scope that turns nothing off.
+out="$(claude_run_plugin_lockout "" "unit" 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the lockout refuses when it is handed no claude binary"
+else
+  fail "the lockout must refuse when handed no claude binary" "status ${st}, emitted: ${out}"
+fi
+
+# Failure path: the listing command itself fails. An unreadable plugin list is NOT "no plugins".
+out="$(claude_run_plugin_lockout "$(stub_claude '' 1)" "unit" 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the lockout refuses when 'claude plugin list --json' fails"
+else
+  fail "the lockout must refuse when the plugin listing fails" "status ${st}, emitted: ${out}"
+fi
+
+# Failure path: the command succeeds but prints something that is not the documented array.
+out="$(claude_run_plugin_lockout "$(stub_claude 'plugin listing unavailable')" "unit" 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the lockout refuses a plugin listing that is not a JSON array"
+else
+  fail "the lockout must refuse a listing that is not a JSON array" "status ${st}, emitted: ${out}"
+fi
+
+# Failure path: the array holds plugins but the field this parser reads has been renamed. This is the one
+# that would otherwise fail SILENTLY, emitting an empty map that disables nothing while reporting success.
+out="$(claude_run_plugin_lockout "$(stub_claude '[{"identifier":"alpha@marketplace-one","enabled":true}]')" "unit" 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the lockout refuses a listing whose entries carry no readable id"
+else
+  fail "the lockout must refuse a listing whose entries carry no readable id" "status ${st}, emitted: ${out}"
+fi
+
+# ...but a genuinely empty listing is a real, honest answer: nothing installed, nothing to turn off.
+empty_lockout="$(claude_run_plugin_lockout "$(stub_claude '[]')" "unit")"
+empty_status=$?
+if [[ "${empty_status}" -eq 0 ]]; then
+  assert_contains "an empty plugin listing still emits the flag, with nothing to disable" "${empty_lockout}" \
+    '--settings {"enabledPlugins":{}}'
+else
+  fail "the lockout must accept an empty plugin listing" "returned ${empty_status}"
+fi
+
 # --- the generic guard, directly -----------------------------------------------------------------------
 
-# Happy path: it emits both flags, in the shape the runners splice onto the claude command line.
-generic="$(claude_run_scope "Read,Write" "manual" "Bash Edit" "unit")"
+# Happy path: it emits all three flags, in the shape the runners splice onto the claude command line.
+generic="$(claude_run_scope "Read,Write" "manual" "Bash Edit" "unit" "${STUB_TWO}")"
 generic_status=$?
 [[ "${generic_status}" -eq 0 ]] || fail "the generic guard emits cleanly on a safe scope" "returned ${generic_status}"
 assert_contains "the generic guard pre-approves exactly the tools it is given" "${generic}" "--allowedTools Read,Write"
 assert_contains "the generic guard carries the permission mode it is given" "${generic}" "--permission-mode manual"
+assert_contains "the generic guard turns off this machine's plugins too (#1682)" "${generic}" '--settings {"enabledPlugins":{'
+
+# Failure path: an unreadable plugin listing must sink the WHOLE scope, not just its own flag. A run that
+# started with the tool boundary intact but every installed plugin still injecting is the #1682 hole.
+out="$(claude_run_scope "Read,Write" "manual" "" "unit" "$(stub_claude '' 1)" 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the generic guard refuses outright when the plugins cannot be turned off"
+else
+  fail "the generic guard must refuse when the plugins cannot be turned off" "status ${st}, emitted: ${out}"
+fi
 
 # Failure path: an empty or auto-approving mode is the whole bug (an allowlist with nothing closing the
 # door behind it), so the guard must refuse and emit nothing.
 for dangerous in auto bypassPermissions dontAsk acceptEdits ""; do
-  out="$(claude_run_scope "Read,Write" "${dangerous}" "" "unit" 2>/dev/null)"
+  out="$(claude_run_scope "Read,Write" "${dangerous}" "" "unit" "${STUB_TWO}" 2>/dev/null)"
   st=$?
   label="${dangerous:-<empty>}"
   if [[ "${st}" -ne 0 && -z "${out}" ]]; then
@@ -71,7 +221,7 @@ done
 # The two fail-closed modes ARE accepted, so the guard is a real distinction and not a blanket refusal
 # that would pass while forbidding everything (green means nothing until you have seen it go red).
 for safe in manual plan; do
-  if claude_run_scope "Read,Write" "${safe}" "" "unit" >/dev/null 2>&1; then
+  if claude_run_scope "Read,Write" "${safe}" "" "unit" "${STUB_TWO}" >/dev/null 2>&1; then
     pass "the generic guard accepts the fail-closed mode '${safe}'"
   else
     fail "the generic guard must accept the fail-closed mode '${safe}'"
@@ -80,7 +230,7 @@ done
 
 # Failure path: a forbidden tool that has crept into the allowlist must be refused, loudly. Matched with
 # commas around both sides so "WebFetch" can never match "WebSearch" nor "Read" a substring of another.
-out="$(claude_run_scope "Read,Write,Edit" "manual" "Bash Edit" "unit" 2>/dev/null)"
+out="$(claude_run_scope "Read,Write,Edit" "manual" "Bash Edit" "unit" "${STUB_TWO}" 2>/dev/null)"
 st=$?
 if [[ "${st}" -ne 0 && -z "${out}" ]]; then
   pass "the generic guard refuses an allowlist that smuggles in a forbidden tool"
@@ -88,7 +238,7 @@ else
   fail "the generic guard must refuse a forbidden tool in the allowlist" "status ${st}, emitted: ${out}"
 fi
 # ...but a forbidden name that is only a SUBSTRING of an allowed tool must NOT trip the guard.
-if claude_run_scope "Read,Write,WebFetch" "manual" "WebSearch" "unit" >/dev/null 2>&1; then
+if claude_run_scope "Read,Write,WebFetch" "manual" "WebSearch" "unit" "${STUB_TWO}" >/dev/null 2>&1; then
   pass "the generic guard does not confuse WebFetch in the allowlist with a forbidden WebSearch"
 else
   fail "the generic guard wrongly refused WebFetch when only WebSearch is forbidden"
@@ -99,22 +249,30 @@ fi
 # Prep DELIBERATELY needs Bash and Skill (it drives research and invokes the dan-wright-brand-voice
 # skill), so this is not a copy of the scout posture. What must stay true is that the mode closes the door
 # on everything ELSE (Edit above all: the 2026-07-17 scout run made 14 Edit calls it was never granted).
-prep="$(prep_claude_scope)"
+prep="$(prep_claude_scope "${STUB_TWO}")"
 prep_status=$?
 [[ "${prep_status}" -eq 0 ]] || fail "the prep scope emits cleanly" "returned ${prep_status}"
 assert_contains "prep pre-approves the six tools its job needs" "${prep}" "--allowedTools Read,Write,WebSearch,WebFetch,Bash,Skill"
 assert_contains "prep carries the fail-closed permission mode" "${prep}" "--permission-mode manual"
 assert_contains "prep can invoke the brand-voice skill its prompt names" "${prep}" "Skill"
+assert_contains "prep turns off every plugin installed on the machine (#1682)" "${prep}" \
+  '--settings {"enabledPlugins":{"alpha@marketplace-one":false,"beta@marketplace-two":false}}'
 # Edit is the tool a run must never regain here; the mode denies it, and it must not sit in the allowlist.
 assert_not_contains "prep does not pre-approve Edit" "${prep}" "Edit"
 # And if a later edit adds Edit to the allowlist, the guard must refuse rather than emit it.
-if PREP_ALLOWED_TOOLS="Read,Write,Edit" prep_claude_scope >/dev/null 2>&1; then
+if PREP_ALLOWED_TOOLS="Read,Write,Edit" prep_claude_scope "${STUB_TWO}" >/dev/null 2>&1; then
   fail "the prep scope must refuse an allowlist that adds Edit"
 else
   pass "the prep scope refuses an allowlist that adds Edit"
 fi
+# A prep run launched without a claude binary to enumerate plugins with must refuse, not run wide open.
+if prep_claude_scope >/dev/null 2>&1; then
+  fail "the prep scope must refuse when it cannot enumerate the machine's plugins"
+else
+  pass "the prep scope refuses when it cannot enumerate the machine's plugins"
+fi
 # And if the mode is ever cleared back to the inherited auto, prep must refuse too.
-if PREP_PERMISSION_MODE="" prep_claude_scope >/dev/null 2>&1; then
+if PREP_PERMISSION_MODE="" prep_claude_scope "${STUB_TWO}" >/dev/null 2>&1; then
   fail "the prep scope must refuse an empty permission mode (it would inherit auto)"
 else
   pass "the prep scope refuses an empty permission mode"
@@ -124,15 +282,17 @@ fi
 #
 # It reads the work-list and the voice guidance, drafts a reply, and writes results. It needs Read, Write
 # and Skill (to invoke the brand-voice skill), and nothing else: no Bash, no Edit, no web access at all.
-reply="$(reply_classify_claude_scope)"
+reply="$(reply_classify_claude_scope "${STUB_TWO}")"
 reply_status=$?
 [[ "${reply_status}" -eq 0 ]] || fail "the reply-classify scope emits cleanly" "returned ${reply_status}"
 assert_contains "reply-classify pre-approves exactly Read, Write and Skill" "${reply}" "--allowedTools Read,Write,Skill"
 assert_contains "reply-classify carries the fail-closed permission mode" "${reply}" "--permission-mode manual"
 assert_contains "reply-classify can invoke the brand-voice skill its prompt names" "${reply}" "Skill"
+assert_contains "reply-classify turns off every plugin installed on the machine (#1682)" "${reply}" \
+  '--settings {"enabledPlugins":{"alpha@marketplace-one":false,"beta@marketplace-two":false}}'
 for never in Bash Edit WebFetch WebSearch; do
   assert_not_contains "reply-classify does not pre-approve ${never}" "${reply}" "${never}"
-  if REPLY_CLASSIFY_ALLOWED_TOOLS="Read,Write,Skill,${never}" reply_classify_claude_scope >/dev/null 2>&1; then
+  if REPLY_CLASSIFY_ALLOWED_TOOLS="Read,Write,Skill,${never}" reply_classify_claude_scope "${STUB_TWO}" >/dev/null 2>&1; then
     fail "the reply-classify scope must refuse an allowlist that adds ${never}"
   else
     pass "the reply-classify scope refuses an allowlist that adds ${never}"
@@ -160,6 +320,25 @@ assert_runner_folds_through_scope() {
          "every claude invocation must fold through ${scope_fn}, or a call site keeps the unrestricted flag"
   else
     pass "${script} hardcodes no --allowedTools flag on any call site"
+  fi
+
+  # #1682: the scope needs the claude binary to enumerate this Mac's plugins with, so each runner must
+  # resolve that binary BEFORE it builds the scope and hand it over. Built is not wired: a runner that
+  # still called its scope function with no argument would refuse and never start at all.
+  local resolve_line scope_line
+  if printf '%s' "${code}" | grep -qF "${scope_fn} \"\$CLAUDE\""; then
+    pass "${script} hands the resolved claude binary to ${scope_fn}"
+  else
+    fail "${script} must call ${scope_fn} \"\$CLAUDE\"" \
+         "without the binary the scope cannot enumerate this Mac's plugins, so it refuses and the run never starts"
+  fi
+  resolve_line="$(printf '%s\n' "${code}" | grep -n '^resolve_claude' | head -1 | cut -d: -f1)"
+  scope_line="$(printf '%s\n' "${code}" | grep -n "${scope_fn} \"\$CLAUDE\"" | head -1 | cut -d: -f1)"
+  if [[ -n "${resolve_line}" && -n "${scope_line}" && "${resolve_line}" -lt "${scope_line}" ]]; then
+    pass "${script} resolves the claude binary before building its scope"
+  else
+    fail "${script} must call resolve_claude before ${scope_fn}" \
+         "resolve_claude at line ${resolve_line:-none}, scope built at line ${scope_line:-none}"
   fi
 
   # Each of these runners launches claude exactly once; that invocation must carry the resolved scope.
