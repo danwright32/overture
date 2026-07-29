@@ -314,10 +314,17 @@ struct ProspectRowView: View {
             Text(venueInfo.nameLine)
                 .font(OVType.body)
                 .foregroundStyle(OVColor.inkSoft)
-            if let location = venueInfo.location {
-                Text(location)
+            // #1744: a show whose place is not known says so, instead of rendering exactly like one whose
+            // city was simply left off the card. Those were the same screen before, which is why a
+            // Dominican Republic show and a Manhattan show sat in the queue looking identical (L11), and
+            // it is why Dan went looking for a town refusal on a row that could never offer one.
+            //
+            // Rare by design, and only worth a line because it is rare: measured against the live store
+            // 2026-07-29, the fill places 341 of the 342 rows that used to look like this.
+            if let placeLine = venueInfo.locationLine {
+                Text(placeLine.text)
                     .font(OVType.meta.weight(.regular))
-                    .foregroundStyle(OVColor.inkFaint)
+                    .foregroundStyle(placeLine.isUnknown ? OVColor.inkSoft : OVColor.inkFaint)
             }
             HStack(spacing: 6) {
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))

@@ -345,7 +345,10 @@ alternatives were measured against real data and do not work:
   pages this serves, which frequently name no venue at all (`smokeringquartet.com/gigs` publishes a city
   and never a room).
 - The **title** cannot answer it either, except on Carnegie's NYO tour convention
-  (`NYO Jazz in Beijing, China`), which no other source shares.
+  (`NYO Jazz in Beijing, China`), which no other source shares. #1744 now READS that convention in the
+  app (`EventLocationFill.cityFromTitle`), narrowly: the tail after the last " in " counts only when it
+  is exactly "somewhere, place" and the trailing part is a country or US state `EventPlace` already
+  recognises, so a show called "... in Concert" never becomes a show in a town called Concert.
 
 The run must not normalize it. What pages actually write ranges from `Louisville, KY` to
 `Baltimore, Maryland` to `Harrogate, UK` to a bare `Amsterdam` to `southern Norway` to
@@ -363,6 +366,24 @@ against shared inputs so a change that silently diverges them turns that guard r
 
 Absent means the page named no place, which is common and is NOT an error: an unknown place is a show
 to keep and flag, never one to hide. Unlike `venue`, a missing `location` does not drop the event.
+
+**On the WIRE, absent still means absent. On the stored PROSPECT, it no longer does (#1744).** These used
+to be the same statement, and that was the defect: 342 of 498 untriaged shows reached the queue with a
+blank `location`, so the geography gate never ran on two thirds of the queue and a Dominican Republic show
+and a Manhattan show sat there looking identical. Inventing a location on the wire would still be worse
+than omitting one, so nothing here changes: the run reports the page's words or nothing. The FILL happens
+one layer in, at `ProspectAssembler.decide`, through `EventLocationFill`, which tries in order the page's
+own words, a city and state already baked into the venue string, the Carnegie tour-title convention
+described above (which this document said was readable and nothing read until #1744), and a curated
+venue-to-place table (`VenuePlaces`) shared with the card's city line. It never consults a per-source
+address: Carnegie's own address is 881 7th Ave, so a source-level fallback would stamp "New York, NY" onto
+its Santo Domingo date, and a confident wrong place is the only failure in this area that can hide a real
+show. Measured on the live store 2026-07-29, that chain places 341 of the 342 blank rows.
+
+The wire keeping the page's own answer is load-bearing rather than tidy: `SourcePlacement.placedCount`
+reads the raw `location` off the same events to detect a source that has silently STOPPED reporting
+places (#986), and a pre-filled wire would tell it every source places perfectly and switch that
+detector off.
 
 Additive, and the version bump is **documentation of the shape change, not a behavioral gate**: nothing
 reads `version`, and because `location` is optional a v1 file decodes unchanged and simply carries no

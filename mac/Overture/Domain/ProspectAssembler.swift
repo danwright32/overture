@@ -102,7 +102,16 @@ enum ProspectAssembler {
             // is unreachable in practice and exists only to keep the type non-optional.
             groupName: Prospect.decodeHTMLEntities(ExtractedEventGuard.displayName(for: event) ?? event.title),
             presenter: event.presenter,
-            location: event.location,
+            // #1744: every path into the store passes through here, so this is where a show gets its
+            // place: the page's own words when it published any, and otherwise whatever the venue text,
+            // the tour-title convention or the shared venue table can say for certain (EventLocationFill).
+            //
+            // Deliberately HERE and not upstream on the ExtractedEvent itself. SourcePlacement.placedCount
+            // reads the raw `location` off the same events to measure whether a SOURCE names places, which
+            // is #970's drift detector for a run that has silently stopped reporting them. Filling the
+            // field before that count would tell it every source places perfectly and switch the detector
+            // off, so the wire keeps the page's own answer and only the stored prospect gets the fill.
+            location: EventLocationFill.location(for: event),
             discipline: c.discipline.rawValue,
             venue: event.venue,
             performanceDate: event.performanceDate,

@@ -488,6 +488,28 @@ enum SourceKind: String, Codable, Equatable, Sendable, CaseIterable {
     // assigned by a CONTENT probe (SquarespaceCalendar.isEventsCollection), never by URL.
     case squarespaceFeed = "squarespace_feed"
 
+    // #1744: whether every show this kind of source publishes plays in ONE room, which is what earns the
+    // row an address box in the Sources sheet.
+    //
+    // This replaces a predicate that lived inside SourcesView and read `VenueTixCalendar.handles(url)`,
+    // i.e. "is this a VenueTix host". Its own comment claimed the rest were fine ("every other source's
+    // shows carry their own place"), and that was measurably false: swept across all 68 watched sources on
+    // 2026-07-29, exactly ONE qualified for the box. SoHo Playhouse missed it while being precisely the
+    // case #1175 was built for, a single-venue ticketing feed, because the check named a vendor by host
+    // rather than asking what kind of source it was. A rule in a view is also a rule no test can reach,
+    // and two have already drifted here under a green suite (#863, #885).
+    //
+    // The html case is deliberately NOT here. Whether an org's own events page is single-venue is not
+    // knowable from its kind (Jalopy's page is one room, Carnegie's is thirteen), and #1744 measured that
+    // the answer for those rows comes from the venue each show names rather than from the source: all 342
+    // blank rows named a venue, and the shared venue table plus the two free text rules placed 341 of them.
+    var isSingleVenue: Bool {
+        switch self {
+        case .venueTixFeed, .ovationTixFeed: return true
+        case .algolia, .html, .operaAmericaFeed, .squarespaceFeed: return false
+        }
+    }
+
     // The dispatch rule, in one place so nothing can disagree about which sources cost a paid read. A
     // native source ingests structured events synchronously and free on every run (including the automatic
     // daily one); an html source is fetched, hashed, and read by the paid extract run only when it changes.

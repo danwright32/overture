@@ -1,14 +1,42 @@
 import Foundation
 
-// #342 Phase 1: a curated map enriching known venue names with their parent building and city/state,
-// so a card can show "Stern Auditorium / Perelman Stage, Carnegie Hall" plus "New York, NY" instead
-// of just the hall. Venues not in the map fall through to the hall name alone (today's behavior); the
-// data-layer path for the long tail is deferred to #381. This is the single home for the knowledge
-// (the display layer), deliberately not duplicated into the scout engine.
+// #342 Phase 1: reads a curated table of known venue names for their parent building and city/state, so
+// a card can show "Stern Auditorium / Perelman Stage, Carnegie Hall" plus "New York, NY" instead of just
+// the hall. Venues not in the table fall through to the hall name alone.
+//
+// #1744: the table itself now lives in VenuePlaces, because it stopped being display-only knowledge.
+// This file used to own it and say so ("the single home for the knowledge (the display layer),
+// deliberately not duplicated into the scout engine"), which was exactly the problem: the geography gate
+// never saw a venue, so 342 untriaged shows sat unplaced while the answer for most of them was sitting
+// in this file. One table, two consumers, and this one is still the STRICTER about what it will print.
 struct VenueDisplay: Equatable {
     let hall: String        // the venue's own name (or "Venue TBD" when missing), address stripped
     let parent: String?     // the larger building, e.g. "Carnegie Hall"
     let location: String?   // city/state, e.g. "New York, NY"
+
+    // #1744: what the card says in place of a city when nothing could establish one. It states only what
+    // was actually measured, which is that the city is not known: WHY is not knowable here (the page may
+    // have named no place, or the venue may be a room no table has heard of) and a line claiming either
+    // would be claiming more than its check can see (L11).
+    static let cityUnknown = "City not known"
+
+    // The hall placeholder, named so `locationLine` can recognise it instead of comparing against a
+    // literal spelled out in two places.
+    static let venueTBD = "Venue TBD"
+
+    // The card's second line, or nothing. Decided here rather than in the SwiftUI body: a rule computed
+    // in a view is a rule no test can reach, and two have already drifted in this area under a green
+    // suite (#863, #885). `isUnknown` is what the row styles on, so the absence of a city reads as a
+    // stated condition rather than as a city rendered in the same faint grey as a real one.
+    var locationLine: (text: String, isUnknown: Bool)? {
+        if let location { return (location, false) }
+        // A show with no venue EITHER already reads "Venue TBD" on the line above, which says everything
+        // "City not known" would say underneath it. Saying it twice is the #843 defect, so the second
+        // line appears only where it adds the thing the first line did not: a named room whose city
+        // could not be established.
+        guard hall != VenueDisplay.venueTBD else { return nil }
+        return (VenueDisplay.cityUnknown, true)
+    }
 
     // The hall plus its parent building when known: "Weill Recital Hall, Carnegie Hall".
     var nameLine: String { parent.map { "\(hall), \($0)" } ?? hall }
@@ -21,7 +49,7 @@ struct VenueDisplay: Equatable {
     static func resolve(_ venue: String?, location eventLocation: String? = nil) -> VenueDisplay {
         guard let raw = venue,
               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return VenueDisplay(hall: "Venue TBD", parent: nil, location: nil)
+            return VenueDisplay(hall: venueTBD, parent: nil, location: nil)
         }
         // The displayed hall preserves Dan's own venue text (case and spacing), address stripped, exactly
         // as before. The map LOOKUP, by contrast, goes through VenueNormalization.fold so a slash-spacing
@@ -29,7 +57,7 @@ struct VenueDisplay: Equatable {
         let hall = VenueNormalization.strippingEmbeddedAddress(raw)
         let fallback = safeCityStateLine(eventLocation)
 
-        if let known = map[lookupKey(hall)] {
+        if let known = VenuePlaces.exact(hall) {
             return VenueDisplay(hall: hall, parent: known.parent, location: known.location ?? fallback)
         }
         // #1064: a trailing clause that merely names a known parent building ("..., Carnegie Hall") is not
@@ -38,24 +66,16 @@ struct VenueDisplay: Equatable {
         // back, so the card still reads "Stern Auditorium / Perelman Stage, Carnegie Hall" AND regains its
         // "New York, NY" line. Done only when it actually produces a hit, so a non-map venue keeps its full
         // display string untouched (the Abrons/Fabbri parent clauses below still survive).
-        if let dropped = droppingTrailingKnownParent(hall), let known = map[lookupKey(dropped)] {
+        if let dropped = droppingTrailingKnownParent(hall), let known = VenuePlaces.exact(dropped) {
             return VenueDisplay(hall: VenueNormalization.fold(dropped),
                                 parent: known.parent, location: known.location ?? fallback)
         }
         return VenueDisplay(hall: hall, parent: nil, location: fallback)
     }
 
-    // The curated map is keyed on the folded, normalized form so a slash-spacing or street-suffix variant
-    // of a known venue still resolves.
-    private static func lookupKey(_ s: String) -> String {
-        normalize(VenueNormalization.fold(s))
-    }
-
-    // The set of parent-building names the map knows ("carnegie hall"), pre-normalized. A trailing venue
+    // The set of parent-building names the table knows ("carnegie hall"), pre-normalized. A trailing venue
     // clause matching one of these is dropped before a retry lookup (#1064).
-    private static let knownParents: Set<String> = Set(
-        map.values.compactMap { $0.parent }.map { normalize($0) }
-    )
+    private static let knownParents: Set<String> = VenuePlaces.knownParents
 
     private static func droppingTrailingKnownParent(_ s: String) -> String? {
         let clauses = s.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -99,29 +119,9 @@ struct VenueDisplay: Equatable {
     // Venue-specific normalization. Deliberately NOT GroupNameMatch.normalize, which is an org/
     // presenter normalizer that truncates a name at " - " / ": " and would merge distinct rooms.
     // Here we only case-fold and collapse runs of whitespace, preserving "/", commas, etc.
-    static func normalize(_ s: String) -> String {
-        s.lowercased()
-            .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" })
-            .joined(separator: " ")
-    }
-
-    private struct Entry { let parent: String?; let location: String? }
-    private static let carnegie = Entry(parent: "Carnegie Hall", location: "New York, NY")
-    private static let manhattan = Entry(parent: nil, location: "New York, NY")
-
-    // Keys are pre-normalized (lowercased, single-spaced). Seeded conservatively with venues whose
-    // location is unambiguous; anything uncertain is omitted so it falls through rather than showing
-    // a wrong city. Easy to extend.
-    private static let map: [String: Entry] = [
-        "weill recital hall": carnegie,
-        "zankel hall": carnegie,
-        "stern auditorium / perelman stage": carnegie,
-        "the metropolitan museum of art": manhattan,
-        "the joyce theater": manhattan,
-        "bryant park": manhattan,
-        "madison square park": manhattan,
-        "museum of chinese in america": manhattan,
-        "wave hill": Entry(parent: nil, location: "Bronx, NY"),
-        "brooklyn society for ethical culture": Entry(parent: nil, location: "Brooklyn, NY"),
-    ]
+    //
+    // #1744: the implementation moved to VenuePlaces with the table it keys, so the card and the
+    // geography gate normalize a venue name identically. Kept here as the display layer's own name for
+    // it rather than leaving two copies of four lines.
+    static func normalize(_ s: String) -> String { VenuePlaces.normalize(s) }
 }

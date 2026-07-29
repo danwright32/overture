@@ -159,3 +159,40 @@ struct EventPlaceUnknownTests {
         #expect(EventPlace.resolve(location: "Zzyzx", discipline: .theater).reason == .couldNotPlace)
     }
 }
+
+// #1744. A borough named as part of a larger phrase is still that borough. Until this, the boroughs
+// were matched by EXACT token equality, which was safe while `location` only ever arrived as the
+// page's own words. #1744 fills the gap from the venue instead, and the live store's own venue text
+// includes "downtown Brooklyn, NY", so exact matching would have read a Red Hook folk festival as
+// music outside the five boroughs and hidden it. That is the confident wrong place this whole area
+// exists to avoid, and this change closes it in the one predicate both callers share.
+@Suite("Event place: a borough inside a longer phrase (#1744)")
+struct EventPlaceBoroughPhraseTests {
+
+    // The live-store string. As music (Dan's boroughs-only rule) it has to stay.
+    @Test func aBoroughInsideALongerPhraseIsStillThatBorough() {
+        let r = EventPlace.resolve(location: "downtown Brooklyn, NY", discipline: .music)
+        #expect(r.verdict == .inRange)
+        #expect(r.reason == .insideTheBoroughs)
+    }
+
+    // The same widening must not offer Dan a refusal for a borough he lives on. "Never show me shows
+    // in downtown Brooklyn" would quietly cut real work, so the offer is withheld exactly as it is for
+    // the bare borough name.
+    @Test func noTownRefusalIsOfferedForAPhraseNamingABorough() {
+        #expect(EventPlace.excludableTown(from: "downtown Brooklyn, NY") == nil)
+        #expect(EventPlace.excludableTown(from: "Brooklyn, NY") == nil)
+    }
+
+    // THE LIMIT. A borough name has to appear as a WORD, not as a fragment inside another word, and a
+    // town that merely ends in a borough's name is a different town. Both of these are still refused.
+    @Test func aFragmentInsideAWordIsNotABorough() {
+        #expect(EventPlace.resolve(location: "Brooklynville, NY", discipline: .music).verdict == .outOfRange)
+        #expect(EventPlace.excludableTown(from: "Brooklynville, NY") == "Brooklynville")
+    }
+
+    // And the state still governs: a Brooklyn outside New York is not one of Dan's boroughs.
+    @Test func aBoroughNameInAnotherStateIsNotABorough() {
+        #expect(EventPlace.resolve(location: "Brooklyn, OH", discipline: .music).verdict == .outOfRange)
+    }
+}

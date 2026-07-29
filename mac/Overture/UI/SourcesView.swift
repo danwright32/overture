@@ -439,13 +439,6 @@ struct SourcesView: View {
         }
     }
 
-    // #1175: true only for a single-venue feed whose own data carries no city (VenueTix). A thin predicate
-    // delegating to the adapter's already-tested host check, so the view keeps no routing rule of its own.
-    private func isSingleVenueFeed(_ source: WatchedSource) -> Bool {
-        guard let s = source.listingsURL, let url = URL(string: s) else { return false }
-        return VenueTixCalendar.handles(url)
-    }
-
     // #1175: where Dan supplies a single-venue feed's address. Three states: editing (a field + Save), a
     // saved address (shown, with Edit), or none yet (a prompt, with Add).
     //
@@ -654,16 +647,20 @@ struct SourcesView: View {
                 Text(url).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
             }
 
-            // #1175: a single-venue feed (VenueTix) carries no city in its own data, so its shows resolve
-            // as location-unknown rather than the local venue they are. This is where Dan supplies the
+            // #1175: a single-venue feed carries no city in its own data, so its shows resolve as
+            // location-unknown rather than the local venue they are. This is where Dan supplies the
             // address once; it is then stamped into the synthesized listing so the geography gate places
-            // the shows. Shown only on those rows, since every other source's shows carry their own place.
+            // the shows.
             // #1529: and a source whose own page turned out to be a front for a ticketing feed needs BOTH
             // answers: which room (nothing on that feed says, and the app may not assume) and where it is.
+            // #1744: the row's own kind decides, not its host. This used to ask whether the URL was a
+            // VenueTix one and asserted that "every other source's shows carry their own place", which was
+            // false on 342 of 498 untriaged shows and left SoHo Playhouse, a single-venue OvationTix feed,
+            // with no address box at all.
             if TicketingFeedRead.readsATicketingFeed(source) {
                 venueNameControl(source)
             }
-            if isSingleVenueFeed(source) || TicketingFeedRead.readsATicketingFeed(source) {
+            if source.kind.isSingleVenue || TicketingFeedRead.readsATicketingFeed(source) {
                 venueLocationControl(source, hasSurfacedShows: tally.found > 0)
             }
 

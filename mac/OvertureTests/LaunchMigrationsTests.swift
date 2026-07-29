@@ -107,6 +107,49 @@ struct LaunchMigrationsTests {
         }
     }
 
+    // #1744: LocationBackfill working and LocationBackfill being RUN are two separate claims, and only
+    // the second one reaches the 341 blank rows sitting in Dan's queue. Two rows here, both live shapes:
+    // a Carnegie room the shared table knows, and a Carnegie tour date at a hall it does not, placed by
+    // the title convention. Verified through a reopened store, so it also proves the fill was saved.
+    @Test func launchPlacesTheShowsAlreadyInTheStore() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-1744-launch-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
+
+            let context = ModelContext(try openContainer(at: storeURL))
+            let known = makeProspect("Songmaking 2026")
+            known.groupName = "Songmaking 2026"
+            known.venue = "Weill Recital Hall"
+            known.performanceDate = "2099-05-05"     // #864 must not retire these before we read them
+            context.insert(known)
+            let touring = makeProspect("NYO2 in Santo Domingo, Dominican Republic")
+            touring.groupName = "NYO2 in Santo Domingo, Dominican Republic"
+            touring.venue = "Teatro Nacional Eduardo Brito"
+            touring.performanceDate = "2099-05-06"
+            context.insert(touring)
+            try context.save()
+            #expect(known.location == nil, "blank before launch, as the live rows were")
+
+            #expect(LaunchMigrations.run(in: context))
+
+            let reContext = ModelContext(try openContainer(at: storeURL))
+            let byName = Dictionary(uniqueKeysWithValues:
+                try reContext.fetch(FetchDescriptor<Prospect>()).map { ($0.groupName, $0.location) })
+            #expect(byName["Songmaking 2026"] == "New York, NY")
+            #expect(byName["NYO2 in Santo Domingo, Dominican Republic"]
+                    == "Santo Domingo, Dominican Republic")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
     // #1693: the recheck working and the recheck being RUN are two separate claims, and only the second
     // one reaches the 18 cards actually carrying the wrong flag. This is the live shape: a Carnegie Hall
     // show flagged against a Madison Square Park act, in a store where no such record exists any more.

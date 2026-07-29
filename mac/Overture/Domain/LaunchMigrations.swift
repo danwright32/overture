@@ -86,6 +86,13 @@ enum LaunchMigrations {
         // changing under it. It can only clear or replace a flag on a row that already has one, never
         // invent one, and it touches nothing at all when either of those files is missing or corrupt.
         PossibleMatchRecheck.run(in: context, loadInputs: possibleMatchInputs)
+        // LIVE-STORE-CLAIM verified=2026-07-29 measure="untriaged prospects with a blank `location`, run through the real fill and the real geography gate"
+        // #1744: place the rows already in the store (341 of 342 blank untriaged rows on the live store),
+        // so #970's geography gate stops being a no-op on two thirds of the queue and the town refusal is
+        // offered on rows that were withholding it. Deliberately BEFORE the town retirement below, so a
+        // show this pass places in a town Dan has already refused is cut in the same launch rather than
+        // sitting in the queue until the next one. Idempotent and additive: it fills blanks only.
+        LocationBackfill.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show
