@@ -838,7 +838,9 @@ struct QueueView: View {
     // left the queue, and a fan-out hiding entirely off the current stage is exactly the one nobody finds.
     private var fanOutWarning: String? {
         PossibleMatchFanOut.warningLine(
-            PossibleMatchFanOut.findings(names: prospects.compactMap(\.possibleMatchName)))
+            PossibleMatchFanOut.findings(rows: prospects.compactMap { p in
+                p.possibleMatchName.map { (act: p.groupName, match: $0) }
+            }))
     }
 
     // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus
