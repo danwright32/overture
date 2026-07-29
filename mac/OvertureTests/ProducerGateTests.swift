@@ -102,22 +102,44 @@ struct ProducerGateTests {
         #expect(ProducerGate.qualifies("Abrons Arts Center", among: shows) == false)
     }
 
-    // Nothing in the store separates the Metropolitan Opera (produces its own work at its own house)
-    // from FRIGID New York (rents its room to 40 companies): both are many different shows at one venue.
-    // So the automatic rule excludes both, and Dan promotes the real producers by hand, once each.
+    // Nothing in the store separates the Metropolitan Opera (produces its own work) from FRIGID New York
+    // (rents its room to 38 companies): both are many different shows at one venue. So the automatic rule
+    // excludes both, and Dan promotes the real producers by hand, once each.
     //
-    // #1620: the Met is now refused twice over, by the venue count AND by the containment arm ("
-    // metropolitan opera" sits inside "metropolitan opera house"), so this pins that a promotion clears
-    // both. Containment is evidence about names; his explicit judgment about the organisation beats it.
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="Metropolitan Opera's presenter, venue and distinct venue count over all 702 prospects"
+    // #1719 correction: this fixture used to play the Met at the "Metropolitan Opera House" and its
+    // comment claimed the containment arm therefore bit as well. No such venue is in the store. The Met is
+    // 7 rows at "Lincoln Center for the Performing Arts", which does NOT contain its name, so on Dan's
+    // real data only the VENUE-COUNT arm refuses it and that is what this promotion clears. The invented
+    // venue made the test look like it covered more than it did, which is the same defect the FRIGID
+    // fixture had; see theRulePromotionClearsAContainmentRefusal below for the arm this no longer covers.
     @Test("Dan can promote a single-venue producer the automatic rule excludes")
     func promotionAdmitsASingleVenueProducer() {
         let shows = [
-            show("Metropolitan Opera", at: "Metropolitan Opera House"),
-            show("Metropolitan Opera", at: "Metropolitan Opera House"),
+            show("Metropolitan Opera", at: "Lincoln Center for the Performing Arts"),
+            show("Metropolitan Opera", at: "Lincoln Center for the Performing Arts"),
         ]
         #expect(ProducerGate.qualifies("Metropolitan Opera", among: shows) == false)
         #expect(ProducerGate.qualifies("Metropolitan Opera", among: shows,
                                        overrides: .init(promoted: ["metropolitan opera"])))
+    }
+
+    // The arm the corrected fixture above no longer reaches, pinned on its own and labelled for what it
+    // is: a RULE test, not a live-store one. `isVenueBrand` lets a promotion clear the containment arm on
+    // purpose (#1620), and that behaviour has to stay pinned, but it is named here with a made-up pair
+    // rather than dressed in a real organisation's name.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="every presenter whose folded name contains, or is contained by, one of its own venue strings, over all 702 prospects"
+    // Measured: EVERY containment case in Dan's store today is a genuine house (54 Below, Jalopy Theatre,
+    // The Cutting Room, Abrons Arts Center, SoHo Playhouse, spit&vigor, SFJAZZ, The Players Theatre). Not
+    // one of them is an organisation he would promote. So there is no live example to draw this from, and
+    // saying so is more useful than borrowing a real name that does not have the shape.
+    @Test("as a rule, a promotion clears a containment refusal even with no live case for it")
+    func theRulePromotionClearsAContainmentRefusal() {
+        let venueKeys: Set<String> = ["example opera house"]
+        #expect(ProducerGate.isVenueBrand("example opera", venueKeys: venueKeys))
+        #expect(ProducerGate.isVenueBrand("example opera", venueKeys: venueKeys,
+                                          overrides: .init(promoted: ["example opera"])) == false)
     }
 
     // Promotion overrides the venue count ONLY. Dan's standing rule is that a room's own address is never
