@@ -751,10 +751,36 @@ enum QueueModel {
             return "Cold-contacted before, no booking"
         }
         if let name = item.possibleMatchName {
-            let where_ = item.possibleMatchSource == "downbeat_client" ? "a past client" : "the booking log"
-            return "Possible match to \(where_): \(name)?"
+            return "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
         }
         return nil
+    }
+
+    // #1695: WHICH list the record came from, in Dan's words.
+    //
+    // This used to be one ternary: a client, or else "the booking log". "The booking log" covered both the
+    // booking sheet he imported once AND Overture's own activity, which includes shows he merely swiped
+    // away and never contacted. In #1693 the flag pointed at a date-clash dismissal from the month before
+    // (never sent, no reply, no business of any kind) and called it the booking log, which reads as real
+    // past business. He could not tell what he was being asked without opening the database, and a flag
+    // whose answer requires reading the store is not a flag.
+    //
+    // So each origin says what it actually is, and what happened with it, because a show he dismissed and
+    // a show he booked are the same "history" and could not be less alike as an answer to this question.
+    static func possibleMatchOrigin(_ source: String?) -> String {
+        switch source {
+        case "downbeat_client": return "a past client"
+        case "booking_import": return "your booking log"
+        case "overture_dismissed": return "a show you dismissed in Overture"
+        case "overture_contacted": return "a show you emailed in Overture"
+        case "overture_replied": return "a show that wrote back"
+        case "overture_booked": return "a show you booked in Overture"
+        // Overture's own activity in a state with no better sentence (a lost outcome, a taste pass, a
+        // do-not-contact), plus the legacy "history" value on any row stored before this shipped. The
+        // launch recheck rewrites those on the next launch; until then this says something true rather
+        // than claiming the booking log it might not be.
+        default: return "something Overture has seen before"
+        }
     }
 
     // Today, as a "yyyy-MM-dd" string in New York time (Overture's canonical zone), so

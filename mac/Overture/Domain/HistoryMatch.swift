@@ -8,8 +8,23 @@ import Foundation
 // Minimal booking-history record the matcher needs (group name + status). The local
 // history file the app reads carries these; status is "booked" / "contacted" / "dnc".
 struct HistoryRecord: Codable, Equatable, Sendable {
+    // #1695: WHICH list this record came from. The matcher used to see one merged pile and call all of it
+    // "the booking log" on screen, but the pile is two genuinely different things: the booking sheet Dan
+    // imported once, and Overture's own activity, which includes shows he merely swiped away and never
+    // contacted. In #1693 a flag pointed at a date-clash dismissal and called it the booking log, which
+    // reads as real past business and is exactly the wrong prompt for the question being asked.
+    enum Origin: String, Codable, Equatable, Sendable {
+        case bookingImport      // overture-history.json, imported once from Dan's booking CSV
+        case overtureActivity   // derived live from Overture's own prospects (LocalHistory.records)
+    }
+
     var groupName: String
     var status: String?
+    // Defaulted to the booking import because that is what the imported FILE is, and the file predates
+    // this field so it decodes without one. Overture's own records are stamped explicitly where they are
+    // built, never left to this default: the wrong way round would put the softest words on Dan's realest
+    // business.
+    var origin: Origin = .bookingImport
     // #762: the contact address from the booking sheet, when it had one. Exists so a performer-name
     // match found through the HISTORY can be corroborated the same way one found through the Downbeat
     // client list already is. That is the branch most exposed to hitting a different person of the
@@ -23,10 +38,53 @@ struct HistoryRecord: Codable, Equatable, Sendable {
     var venue: String? = nil
 }
 
+// The imported booking file predates `origin` and says nothing about it, and Swift's synthesized decoder
+// does NOT fall back to a property's default for a missing key: it throws. Left synthesized, every
+// committed history fixture stopped decoding at all, which on a real Mac is the #754 failure mode (an
+// unreadable history file, every repeat client silently reading as a cold lead). Declared in an extension
+// so the memberwise initialiser every construction site uses is still synthesized.
+extension HistoryRecord {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        groupName = try c.decode(String.self, forKey: .groupName)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        email = try c.decodeIfPresent(String.self, forKey: .email)
+        venue = try c.decodeIfPresent(String.self, forKey: .venue)
+        // A file that does not say is the booking import, because that file IS the booking import.
+        origin = try c.decodeIfPresent(Origin.self, forKey: .origin) ?? .bookingImport
+    }
+}
+
 struct PossibleMatch: Equatable, Sendable {
-    var source: String // "downbeat_client" | "history"
+    // #1695: what Dan is being asked to recognise. It is STORED on the prospect (`possibleMatchSource`),
+    // so it is a string rather than a type, and the launch recheck rewrites it: a row carrying the old
+    // "history" value is corrected on the next launch, and reads honestly until then.
+    //
+    // "downbeat_client" | "booking_import" | "overture_dismissed" | "overture_contacted" |
+    // "overture_replied" | "overture_booked" | "overture_other"
+    var source: String
     var ref: String
     var name: String
+
+    // The vocabulary, in ONE place, so the matcher that writes these strings and the copy that reads them
+    // cannot drift into disagreeing about what a value means.
+    static func source(for record: HistoryRecord) -> String {
+        switch record.origin {
+        case .bookingImport:
+            return "booking_import"
+        case .overtureActivity:
+            // What Dan actually did here, because that is the question he is being asked to answer. A show
+            // he swiped away for a date clash and a show he booked are both "history" and could not be
+            // less alike.
+            switch record.status {
+            case "declined": return "overture_dismissed"
+            case "contacted": return "overture_contacted"
+            case "warm": return "overture_replied"
+            case "booked": return "overture_booked"
+            default: return "overture_other"
+            }
+        }
+    }
 }
 
 struct MatchVerdict: Equatable, Sendable {
@@ -206,7 +264,8 @@ enum HistoryMatch {
         }) {
             return MatchVerdict(relationship: .none, suppressed: false,
                                 downbeatClientId: nil, matchedClientName: nil,
-                                possible: PossibleMatch(source: "history", ref: "", name: possibleHistory.groupName),
+                                possible: PossibleMatch(source: PossibleMatch.source(for: possibleHistory),
+                                                        ref: "", name: possibleHistory.groupName),
                                 passedOnThisShow: passedOnThisShow)
         }
 

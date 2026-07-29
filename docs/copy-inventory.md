@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **902 sentences**, from 308 source files.
+Every sentence Overture can say to Dan: **907 sentences**, from 308 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1087,7 +1087,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Possible booking, confirm?"
     `UI/ProspectRowView.swift`
-"Possible match to \(where_): \(name)?"
+"Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
     `UI/QueueView+Model.swift`
 "Prep a show on a date you're already pitching?"
     `Domain/SelfBookingConflict.swift`
@@ -1932,6 +1932,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceGuidanceGuard.swift`
 "a past client"
     `UI/QueueView+Model.swift`
+"a show that wrote back"
+    `UI/QueueView+Model.swift`
+"a show you booked in Overture"
+    `UI/QueueView+Model.swift`
+"a show you dismissed in Overture"
+    `UI/QueueView+Model.swift`
+"a show you emailed in Overture"
+    `UI/QueueView+Model.swift`
 "about 1 minute"
     `Domain/ProbeSelection.swift`
 "about \(minutes) minutes"
@@ -2020,6 +2028,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
+"something Overture has seen before"
+    `UI/QueueView+Model.swift`
 "stern auditorium / perelman stage"
     `Domain/VenueDisplay.swift`
 "ten are kept."
@@ -2034,8 +2044,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "the booking history couldn't be read"
     `Persistence/PrepImporter.swift`
-"the booking log"
-    `UI/QueueView+Model.swift`
 "the contact"
     `App/ActionFeedback.swift`
     `Domain/OmniFocusSync.swift`
@@ -2069,6 +2077,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
+"your booking log"
+    `UI/QueueView+Model.swift`
 "your queue"
     `App/ActionFeedback.swift`
 "zankel hall"
