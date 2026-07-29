@@ -137,51 +137,67 @@ struct ProducerGateTests {
     // a house"; this says "a house despite not looking like one", and without it the gate has no way to
     // be corrected when every automatic arm misses.
     //
-    // LIVE-STORE-CLAIM verified=2026-07-29 measure="FRIGID New York's presenter and venue pairs, and whether its folded name is or is contained in any folded venue key in the store"
-    // FRIGID New York is the measured miss. It rents its rooms to 40 different companies across 33
-    // untriaged rows, so it is a house in every sense Dan cares about, but its name appears in no venue
-    // string (the rooms are called Under St Marks and The Kraine Theater), so the containment arm never
-    // bites, and it runs more than one of them, so the venue count reads it as a well travelled producer.
-    // Both automatic arms are working correctly and both are wrong here, which is exactly why the human
-    // half has to exist.
-    @Test("Dan can demote a house the automatic rule admits")
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="FRIGID New York's presenter, venue, distinct venue count, distinct show names and status, over all 702 prospects"
+    // FRIGID New York is the measured miss, and the shape below is the store's, not an illustration:
+    // 41 rows, 38 distinct shows, 33 of them still untriaged, ALL at a single room, "Under St Marks".
+    // It rents that room out, so it is a house in every sense Dan cares about, and its own name appears
+    // in no venue string, so neither the equality arm nor the containment arm ever bites.
+    //
+    // The first version of this test invented a second room ("The Kraine Theater") so the venue-count arm
+    // would admit FRIGID and the demote would visibly flip `qualifies`. No such venue exists in the store.
+    // That is the trap the frozen fixture below warns about, committed in the same file that warns about
+    // it: a sample has to be the rows that make the rule bite, not a shape arranged so it does.
+    //
+    // What the real single-venue shape means: `qualifies` ALREADY refuses FRIGID, via the venue count, so
+    // no reachability answer is being amortised across those 38 companies today. The live miss is the
+    // SHARED verdict, `isVenueBrand`, which feeds VenueBrands and so the fuzzy possible-match suppression.
+    // Unfixed, one past booking record can raise the same "possible match" question on all 41 rows, which
+    // is exactly the #1693 Carnegie Hall shape that hit 18 cards. That is what demoting FRIGID stops.
+    @Test("a house the arms miss is not a venue brand until Dan says so")
     func demotionRefusesAHouseTheArmsMiss() {
-        let shows = [
-            show("FRIGID New York", at: "Under St Marks"),
-            show("FRIGID New York", at: "The Kraine Theater"),
-        ]
-        // The miss, pinned so the fix is visibly a change of behaviour and not a no-op.
-        #expect(ProducerGate.qualifies("FRIGID New York", among: shows))
-        #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
-                                       overrides: .init(demoted: ["frigid new york"])) == false)
+        let shows = [show("FRIGID New York", at: "Under St Marks")]
+        // The miss itself: no arm recognises the room's own operator as the room.
+        #expect(ProducerGate.isVenueBrand("frigid new york",
+                                          venueKeys: ProducerGate.venueKeys(of: shows)) == false)
+        #expect(ProducerGate.isVenueBrand("frigid new york",
+                                          venueKeys: ProducerGate.venueKeys(of: shows),
+                                          overrides: .init(demoted: ["frigid new york"])))
     }
 
-    // A demoted key is a house for the shared verdict too, not only for the gate. HistoryMatch reads
-    // VenueBrands to refuse a fuzzy name match on a brand every show in the building shares, and a house
-    // Dan named by hand has to reach that surface as well or the two halves disagree about the same
-    // organisation.
+    // The same verdict through the corpus-wide type the matcher actually reads. HistoryMatch and
+    // PossibleMatchRecheck ask VenueBrands, not the gate, so a house Dan named by hand has to reach THIS
+    // surface or his correction changes nothing about the question being asked on all 41 rows.
     @Test("a demoted organisation is a venue brand for the shared corpus verdict")
     func demotionReachesVenueBrands() {
-        let shows = [
-            show("FRIGID New York", at: "Under St Marks"),
-            show("FRIGID New York", at: "The Kraine Theater"),
-        ]
+        let shows = [show("FRIGID New York", at: "Under St Marks")]
         #expect(ProducerGate.VenueBrands(shows: shows).contains("FRIGID New York") == false)
         #expect(ProducerGate.VenueBrands(shows: shows, overrides: .init(demoted: ["frigid new york"]))
             .contains("FRIGID New York"))
+    }
+
+    // On the real single-venue shape the venue count already refuses FRIGID, so a demotion has to be
+    // pinned as refusing it for the RIGHT reason. Promotion is the honest control here: it DOES flip a
+    // single-venue organisation to qualifying, so the pair below shows the two directions genuinely
+    // disagreeing about the same rows rather than both landing on false by accident.
+    @Test("demotion refuses where promotion would admit, on the same single-venue corpus")
+    func theTwoDirectionsDisagreeOnTheSameCorpus() {
+        let shows = [show("FRIGID New York", at: "Under St Marks")]
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows) == false)
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
+                                       overrides: .init(promoted: ["frigid new york"])))
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
+                                       overrides: .init(demoted: ["frigid new york"])) == false)
     }
 
     // Precedence, pinned rather than left to whichever branch happens to run first. The editing layer
     // keeps the two lists mutually exclusive, so this state should never reach the gate from the app;
     // it is pinned anyway because the gate is also called from tests, fixtures and the importer, and
     // because the safe direction is the refusing one (#1593's own rule: fail toward "pay again", never
-    // toward a shared answer).
+    // toward a shared answer). Promotion alone admits this corpus (above), so the false below is the
+    // demotion winning and not the venue count refusing anyway.
     @Test("a key that is somehow both promoted and demoted is refused")
     func demotionBeatsPromotion() {
-        let shows = [
-            show("FRIGID New York", at: "Under St Marks"),
-            show("FRIGID New York", at: "The Kraine Theater"),
-        ]
+        let shows = [show("FRIGID New York", at: "Under St Marks")]
         #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
                                        overrides: .init(promoted: ["frigid new york"],
                                                         demoted: ["frigid new york"])) == false)
