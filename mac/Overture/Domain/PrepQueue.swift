@@ -109,6 +109,20 @@ enum PrepQueueBuilder {
                  hasUnclearedConflict: p.hasUnclearedConflict)
     }
 
+    // #1583/#1691: the same question with the date-clash gate lifted, which is what the `.prepBlocked`
+    // stage needs to ask ("would this show be prep work if Dan were free that night?").
+    //
+    // It goes through `needsPrep` rather than restating the status-and-draft rule, so `.prep` and
+    // `.prepBlocked` cannot drift into disagreeing about which shows are prep work at all. Passing the gate
+    // `false` is not the same as defaulting it: the argument is still spelled out at the one call site that
+    // deliberately ignores it, and every other caller is still forced to supply the real value.
+    static func needsPrepIgnoringConflict(_ p: Prospect) -> Bool {
+        needsPrep(status: p.status, hasDraft: p.hasDraft,
+                 reprepDraftRequested: p.reprepDraftRequested,
+                 reprepContactsRequested: p.reprepContactsRequested,
+                 hasUnclearedConflict: false)
+    }
+
     // #953: whether a kept prospect defaults to INCLUDED when Dan opens a Prep run, decided purely by
     // how far out its performance is. A show inside the calendar horizon (today through today +
     // `monthsAhead` months) defaults checked; one beyond it defaults held (unchecked), so a long

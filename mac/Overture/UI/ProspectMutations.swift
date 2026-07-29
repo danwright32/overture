@@ -252,6 +252,7 @@ enum ProspectMutations {
         let priorStatus = model.status
         let priorReason = model.dismissReasonRaw
         let priorExit = model.dismissedAt
+        let priorClearedConflict = model.conflictClearedKey
         // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
         // any move back into the queue, rather than depending on every caller of this setter to remember.
         if status == .dismissed {
@@ -259,9 +260,20 @@ enum ProspectMutations {
         } else {
             model.clearDismissal(to: status)
         }
+        // #1583: Keep IS Dan's acceptance of a date clash he can already see on the card. He is looking at
+        // the sentence naming the night when he presses it, so asking him a second time, through a separate
+        // control, is a second confirmation of one judgment. (The live store settled how well the separate
+        // control worked: it had never been used once.)
+        //
+        // Gated on `.queued` because that is what Keep sets and nothing else does; approve, unapprove and
+        // skip-draft come through here too and mean nothing about a clash. `clearConflict` is unchanged, so
+        // the acceptance is still recorded against the EXACT clash he saw and a clash that changes under him
+        // blocks again (#718's pattern).
+        if status == .queued { model.clearConflict() }
         if let undo, let undoLabel {
             undo.record(QueueUndoEntry(recording: undoLabel, on: model, priorStatus: priorStatus,
-                                       priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit))
+                                       priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit,
+                                       priorConflictClearedKey: priorClearedConflict))
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -291,11 +303,16 @@ enum ProspectMutations {
             let priorStatus = model.status
             let priorReason = model.dismissReasonRaw
             let priorExit = model.dismissedAt
+            // #1583: a dismiss never touches the accepted clash, so this records the value it is leaving
+            // alone. Passing nil instead would make undoing a bulk dismiss silently re-block every show on
+            // the night that Dan had already waved through.
+            let priorClearedConflict = model.conflictClearedKey
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
             model.markDismissed(reason: reason)
             return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                      priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit)
+                                      priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit,
+                                      priorConflictClearedKey: priorClearedConflict)
         }
         // #1417: nothing is claimed and nothing is made undoable until the write is confirmed. An undo
         // entry for a dismissal that never reached disk would put back rows that never left.

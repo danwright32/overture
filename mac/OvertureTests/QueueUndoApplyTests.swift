@@ -42,7 +42,7 @@ struct QueueUndoApplyTests {
 
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         #expect(entry.naturalKey == p.naturalKey)
         #expect(entry.groupName == "The Music Shop")
@@ -63,7 +63,7 @@ struct QueueUndoApplyTests {
 
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
         #expect(p.status == .contacted)
@@ -88,7 +88,7 @@ struct QueueUndoApplyTests {
         // Dan restores it from the Archive, which clears the exit date...
         DismissedProspects.restore(p)
         let entry = QueueUndoEntry(recording: "Restore", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit)
+                                   priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit, priorConflictClearedKey: nil)
 
         // ...and then takes that back.
         #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
@@ -109,7 +109,7 @@ struct QueueUndoApplyTests {
 
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         // A retirement sweep re-labels the cut between the action and the undo.
         p.markDismissed(reason: .wentBy)
@@ -128,7 +128,7 @@ struct QueueUndoApplyTests {
 
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         p.clearDismissal(to: .contacted)
 
@@ -145,7 +145,7 @@ struct QueueUndoApplyTests {
         let priorStatus = p.status
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         #expect(QueueUndo.apply(entry, to: nil, in: ctx, export: (bookings: [], blockedDates: [])) == false)
     }
@@ -159,7 +159,7 @@ struct QueueUndoApplyTests {
         let priorStatus = p.status
         p.markDismissed(reason: .notInterested)
         let entry = QueueUndoEntry(recording: "Dismiss", on: p, priorStatus: priorStatus,
-                                   priorDismissReasonRaw: nil, priorDismissedAt: nil)
+                                   priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil)
 
         #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
         #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])) == false)

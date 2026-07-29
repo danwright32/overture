@@ -26,7 +26,7 @@ struct QueueUndoStackTests {
     private func dismissal(key: String = "k1", org: String = "The Music Shop",
                            from priorStatus: ReviewStatus = .new) -> QueueUndoEntry {
         QueueUndoEntry(naturalKey: key, groupName: org, actionLabel: "Dismiss",
-                       priorStatus: priorStatus, priorDismissReasonRaw: nil, priorDismissedAt: nil,
+                       priorStatus: priorStatus, priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
                        resultingStatus: .dismissed, resultingDismissReasonRaw: "not_a_fit")
     }
 
@@ -158,7 +158,7 @@ struct QueueUndoStackTests {
         let firstExit = Date(timeIntervalSince1970: 1_780_000_000)
         let entry = QueueUndoEntry(naturalKey: "k", groupName: "Org", actionLabel: "Dismiss",
                                    priorStatus: .dismissed, priorDismissReasonRaw: "too_far",
-                                   priorDismissedAt: firstExit,
+                                   priorDismissedAt: firstExit, priorConflictClearedKey: nil,
                                    resultingStatus: .dismissed, resultingDismissReasonRaw: "not_a_fit")
 
         #expect(entry.priorDismissedAt == firstExit)

@@ -671,39 +671,41 @@ struct ProspectRowView: View {
     // a quiet tinted capsule buried in the left-hand tag stack, which he walked straight past.
     private var actions: some View {
         VStack(alignment: .trailing, spacing: OVSpacing.xs) {
-            if item.hasUnclearedConflict, let note = item.conflictNote {
-                // #1501/#1527: the label, the colour, the hover text and the sentence beneath all come off
-                // ONE decision (ConflictScope, which carries the reasoning). "Unavailable" overstated a run
-                // Dan can still book, and rust drew it in the colour this app uses for a failure.
+            if item.hasConflict, let note = item.conflictNote {
+                // #1583: the "Partly booked" / "Unavailable" pill that used to sit here is gone, and with it
+                // the "I can shoot this anyway" item hidden inside its menu. The pill was two things
+                // pretending to be one control: a badge restating the sentence directly beneath it (both
+                // came off the same ConflictScope decision, so it carried nothing the sentence did not),
+                // and an override buried behind a chevron on something that read as a status. Dan read
+                // "Partly booked" as a claim that he had already booked the show, and the live store showed
+                // the override had never been used once. Keep is the acceptance now.
                 //
-                // The fallback is deliberately the LOUD case. An item carrying a conflict whose two dates
-                // cannot be compared is not something to quietly downgrade to the softer pill: it is a show
-                // Overture is refusing to pitch, and it should look like one until it can say otherwise.
+                // #1583 decision 4: the SENTENCE never goes away. It renders on `hasConflict`, not on the
+                // gate, so accepting the clash stops the blocking and not the telling. He is still busy
+                // that night, and the date header still says so.
+                //
+                // The colour fallback is deliberately the LOUD case. An item carrying a conflict whose two
+                // dates cannot be compared is not something to quietly downgrade to the softer colour.
                 let scope = QueueModel.conflictScope(item) ?? ConflictScope.thisNight
-                Menu {
-                    Button("I can shoot this anyway") { onClearConflict() }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar.badge.exclamationmark")
-                        Text(scope.pillLabel)
-                        Image(systemName: "chevron.down").font(.system(size: 9))
-                    }
-                    .font(OVType.meta.weight(.semibold))
-                    .foregroundStyle(scope.pillForeground)
-                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                    .background(Capsule().fill(scope.pillFill))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help(scope.pillHelp)
                 Text(note)
                     .font(OVType.tag)
-                    // The sentence takes the pill's own colour, so the badge and the line explaining it
-                    // read as one thing rather than a gold pill over a rust sentence.
-                    .foregroundStyle(scope.pillFill)
+                    // The sentence carries the clash's own colour, which is what the retired pill was
+                    // filled with: rust for a night Dan cannot work, gold for a run blocked on a later
+                    // night he can still book around.
+                    .foregroundStyle(scope.noteTint)
                     .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 220, alignment: .trailing)
+                // #1583 decision 5: the ONE surviving accept control, and only for a clash that landed
+                // AFTER the keep. On an untriaged show there is nothing to put here, because Keep is
+                // itself the acceptance; on this card the button reads "Kept", so no click is left that
+                // could mean it. A plain visible button next to the sentence, never a pill and never a
+                // menu: what it does is the whole of what it is.
+                if item.hasUnclearedConflict && item.isKept {
+                    Button("I can shoot this anyway") { onClearConflict() }
+                        .buttonStyle(.link)
+                        .font(OVType.tag)
+                }
             }
             keepDismissControls
             // Dan's call after the first real check (2026-07-27): the reachability answer sits DIRECTLY

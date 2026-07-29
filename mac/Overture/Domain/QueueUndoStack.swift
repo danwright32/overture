@@ -46,6 +46,16 @@ struct QueueUndoEntry: Equatable, Sendable {
         // clear it, or the row loses the record of when it first left the queue (#16 counts on that date).
         let priorDismissedAt: Date?
 
+        // #1583: the date clash Dan had accepted before this action, because Keep now accepts one. Held as
+        // the KEY rather than a "did it accept anything" boolean: a show can already carry an older
+        // acceptance, and restoring `nil` over it would silently throw away a judgment he made earlier.
+        //
+        // Deliberately NOT defaulted anywhere it is recorded, on the same reasoning as `needsPrep`'s own
+        // conflict gate. Defaulted to nil it is silently wrong for every action that does NOT touch the
+        // clash: undoing a dismiss would restore "nothing accepted" over a real acceptance and re-block a
+        // show Dan had waved through, which is invisible from the call site that forgot to pass it.
+        let priorConflictClearedKey: String?
+
         // Where the action LEFT the row. Not restored; this is the precondition.
         let resultingStatus: ReviewStatus
         let resultingDismissReasonRaw: String?
@@ -128,11 +138,13 @@ struct QueueUndoEntry: Equatable, Sendable {
     // The one-show action: the shape every caller but #1500's night uses.
     init(naturalKey: String, groupName: String, actionLabel: String,
          priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorConflictClearedKey: String?,
          resultingStatus: ReviewStatus, resultingDismissReasonRaw: String?) {
         self.init(actionLabel: actionLabel, batchLabel: nil,
                   primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
                                   priorStatus: priorStatus, priorDismissReasonRaw: priorDismissReasonRaw,
                                   priorDismissedAt: priorDismissedAt,
+                                  priorConflictClearedKey: priorConflictClearedKey,
                                   resultingStatus: resultingStatus,
                                   resultingDismissReasonRaw: resultingDismissReasonRaw),
                   otherRows: [])
@@ -163,12 +175,14 @@ extension QueueUndoEntry.Row {
     // #1500: the single place that rule lives, now that two actions record one (one show, or a night).
     @MainActor
     init(recording prospect: Prospect,
-         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?) {
+         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorConflictClearedKey: String?) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
                   priorDismissReasonRaw: priorDismissReasonRaw,
                   priorDismissedAt: priorDismissedAt,
+                  priorConflictClearedKey: priorConflictClearedKey,
                   resultingStatus: prospect.status,
                   resultingDismissReasonRaw: prospect.dismissReasonRaw)
     }
@@ -177,12 +191,15 @@ extension QueueUndoEntry.Row {
 extension QueueUndoEntry {
     @MainActor
     init(recording actionLabel: String, on prospect: Prospect,
-         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?) {
+         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorConflictClearedKey: String?) {
         let row = Row(recording: prospect, priorStatus: priorStatus,
-                      priorDismissReasonRaw: priorDismissReasonRaw, priorDismissedAt: priorDismissedAt)
+                      priorDismissReasonRaw: priorDismissReasonRaw, priorDismissedAt: priorDismissedAt,
+                      priorConflictClearedKey: priorConflictClearedKey)
         self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
                   priorStatus: row.priorStatus, priorDismissReasonRaw: row.priorDismissReasonRaw,
                   priorDismissedAt: row.priorDismissedAt,
+                  priorConflictClearedKey: row.priorConflictClearedKey,
                   resultingStatus: row.resultingStatus,
                   resultingDismissReasonRaw: row.resultingDismissReasonRaw)
     }
@@ -247,6 +264,11 @@ enum QueueUndo {
             prospect.status = row.priorStatus
             prospect.dismissReasonRaw = row.priorDismissReasonRaw
             prospect.dismissedAt = row.priorDismissedAt
+            // #1583: Keep accepts a date clash, so undoing a Keep has to put the clash back. Applied
+            // unconditionally rather than only when the action changed it: the entry holds what was there,
+            // so restoring it is a no-op for every action that never touched it, and there is no "did this
+            // one accept a clash" flag to get wrong.
+            prospect.restoreConflictClearance(row.priorConflictClearedKey)
         }
         return Outcome(restored: applicable.count, total: entry.rows.count)
     }

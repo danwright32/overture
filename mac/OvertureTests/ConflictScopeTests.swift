@@ -93,46 +93,29 @@ struct ConflictScopeTests {
                 == "A later night of this run is out: you blocked Jul 31.")
     }
 
-    // MARK: the pill
+    // MARK: the colour
 
-    // A show Dan genuinely cannot make keeps the loud pill it has always had.
-    @Test func aShowHeCannotMakeStillReadsUnavailable() {
-        #expect(ConflictScope.thisNight.pillLabel == "Unavailable")
+    // #1583 retired the pill (Keep is the acceptance now, so the badge had no job left), and the sentence
+    // beneath it survives. What survives with it is the two-case decision about how loud a clash looks: a
+    // show Dan genuinely cannot make keeps the failure colour, a run he can still book around does not.
+    @Test func aRunWithOneBlockedNightIsNotDrawnAsLoudlyAsAShowHeCannotMake() {
+        #expect(ConflictScope.thisNight.noteTint != ConflictScope.laterInTheRun.noteTint)
     }
 
-    // A run with a blocked night inside it is bookable on its other nights, so it must not read the same as
-    // a show he cannot make at all.
-    @Test func aRunWithOneBlockedNightReadsAsPartlyBooked() {
-        #expect(ConflictScope.laterInTheRun.pillLabel == "Partly booked")
-        #expect(ConflictScope.laterInTheRun.pillLabel != ConflictScope.thisNight.pillLabel)
-    }
-
-    // What the pill does is NOT changed by this issue, and this pins that. Overture still refuses to draft
-    // or send a run with a blocked night in it: that gate is `hasUnclearedConflict` and it is untouched, so
-    // the words got honest without quietly letting a pitch through for a show Dan cannot finish.
-    @Test func bothCasesStillWarnRatherThanReadingAsFine() {
-        for scope in [ConflictScope.thisNight, .laterInTheRun] {
-            #expect(!scope.pillLabel.isEmpty)
-            #expect(scope.isBlocking)
-        }
-    }
-
-    // MARK: the header, the pill and the sentence are ONE decision
+    // MARK: the header and the sentence are ONE decision
 
     // #929 already ruled that a date-group header only claims "Unavailable" when the blocked night IS that
     // date. That was a second copy of this question, written as a field comparison. It now asks the shared
     // rule, so the three things Dan reads at once cannot describe different cases: the Shifters card shows a
     // partly-booked run with a Jul 31 sentence, under a Jul 24 header that stays plain.
-    @Test func theHeaderAndThePillAgreeBecauseTheyAskOneRule() {
+    @Test func theHeaderAndTheSentenceAgreeBecauseTheyAskOneRule() {
         let shifters = item(performance: "2026-07-24", blocked: "2026-07-31")
         let oneNighter = item(performance: "2026-07-24", blocked: "2026-07-24")
 
         #expect(QueueModel.conflictScope(shifters) == .laterInTheRun)
-        #expect(QueueModel.conflictScope(shifters)?.pillLabel == "Partly booked")
         #expect(QueueModel.groupIsUnavailable([shifters]) == false)   // Jul 24 itself is free
 
         #expect(QueueModel.conflictScope(oneNighter) == .thisNight)
-        #expect(QueueModel.conflictScope(oneNighter)?.pillLabel == "Unavailable")
         #expect(QueueModel.groupIsUnavailable([oneNighter]))
     }
 

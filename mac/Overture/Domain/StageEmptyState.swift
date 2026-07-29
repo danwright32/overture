@@ -14,7 +14,11 @@ enum StageEmptyState {
     }
 
     // The stages Dan works, in order, so the pointer sends him to the EARLIEST one holding work.
-    static let pointerOrder: [StageFocus] = [.scout, .prep, .review, .reachedOut]
+    // #1583/#1691: `.prepBlocked` sits right after `.prep`, so an otherwise-empty queue still points Dan at
+    // a show stuck behind a date clash. It is the one focus that cannot resolve itself: everything else in
+    // this list moves on when a run finishes or an email goes out, while a blocked show waits on an answer
+    // only he can give, and it was reachable from nowhere at all before it had a stage.
+    static let pointerOrder: [StageFocus] = [.scout, .prep, .prepBlocked, .review, .reachedOut]
 
     static func message(for stage: StageFocus, counts: [StageFocus: Int], reachedOut: Int) -> Message {
         let detail = pointer(excluding: stage, counts: counts, reachedOut: reachedOut)
@@ -36,6 +40,7 @@ enum StageEmptyState {
         switch target {
         case .scout: return "\(Plural.count(count, "show")) to triage"
         case .prep: return "\(Plural.count(count, "show")) to prep"
+        case .prepBlocked: return "\(Plural.count(count, "show")) held by a date clash"
         case .review: return "\(Plural.count(count, "draft")) to review"
         case .reachedOut: return "\(Plural.count(count, "show")) you've pitched"
         default: return Plural.count(count, "show")
@@ -49,6 +54,7 @@ enum StageEmptyState {
         switch stage {
         case .scout: return "Nothing new to triage"
         case .prep: return "Nothing to prep yet"
+        case .prepBlocked: return "Nothing held by a date clash"
         case .review: return "No drafts to review"
         default: return "Nothing here right now"
         }
@@ -64,6 +70,14 @@ enum StageEmptyState {
         switch stage {
         case .scout: return "New finds land here to keep or dismiss."
         case .prep: return "Keep a show from Scout and it lands here to prep."
+        // Says what puts a show here, which is not something Dan does: he kept it, and a booking landed on
+        // that night afterwards. Without that, an empty stage he never navigated to himself reads as a
+        // stage he is somehow failing to feed.
+        // "a clash with your calendar", not "if you're booked that night": a clash is equally a day off Dan
+        // typed in himself, and calling that a booking would describe his vacation as a shoot. "turns up
+        // later" is the other half, and the load-bearing half: what puts a show here is the TIMING, a clash
+        // arriving after he kept it, not the clash itself.
+        case .prepBlocked: return "A show you kept lands here if a clash with your calendar turns up later."
         case .review: return "Prepped drafts land here to read and approve."
         default: return ""
         }

@@ -29,6 +29,10 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
 struct AgentInputs: Sendable {
     var toTriage: Int        // #370: freshly scouted, undecided (status .new), awaiting keep/dismiss
     var keptToPrep: Int      // kept, no draft yet, waiting on a Prep run
+    // #1583/#1691: kept, no draft, and held back by a date clash that landed AFTER Dan kept it. Its own
+    // number rather than a fold into keptToPrep: the Prep run still refuses these, so counting them as
+    // "ready to prep" would state a backlog the run then does not work through (#863).
+    var prepBlocked: Int = 0
     var prepRunning: Bool
     var toReview: Int        // drafted, awaiting Dan's review/approval
     var readyToSend: Int     // approved, not yet sent
@@ -73,6 +77,7 @@ extension AgentInputs {
         return AgentInputs(
             toTriage: count(.scout),
             keptToPrep: count(.prep),
+            prepBlocked: count(.prepBlocked),
             prepRunning: prepRunning,
             toReview: count(.review) + inquiryCount(.review),   // #1436: un-replied inquiries live here
             readyToSend: count(.sendApproved),
@@ -175,6 +180,19 @@ enum AgentRoster {
             // detail's job here is just to say it is happening now.
             return AgentStatus(name: "Prep", state: .working, detail: "Running now…",
                                focus: .prep, count: i.keptToPrep)
+        }
+        // #1583/#1691: a show Dan kept and a booking then landed on. It outranks the ordinary backlog for
+        // the same reason a send problem outranks an approved email waiting on a click: the routine case
+        // resolves itself (the next Prep run picks those shows up), while this one is stuck until he
+        // answers it, and before this focus existed it was stuck INVISIBLY, in no stage at all.
+        //
+        // A separate focus, never folded into the count above, because the Prep run still refuses these
+        // shows: a number promising work the run will not do is the mismatch #863 exists to prevent.
+        if i.prepBlocked > 0 {
+            let n = i.prepBlocked
+            return AgentStatus(name: "Prep", state: .needsAttention,
+                               detail: "\(n) \(shows(n)) held by a date clash",
+                               focus: .prepBlocked, count: n)
         }
         if i.keptToPrep > 0 {
             return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep",

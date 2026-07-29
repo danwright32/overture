@@ -153,6 +153,18 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var isReprepEligible: Bool { status != .contacted && status != .dismissed }
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }
+
+    // #1583: whether this show clashes with the calendar AT ALL, as opposed to `hasUnclearedConflict`,
+    // which is whether that clash still BLOCKS it. Keep is now the acceptance, so the two diverge the
+    // moment Dan keeps a flagged show, and everything that merely TELLS him about the night (the card's
+    // sentence, the date header) has to read this one rather than the gate. Accepting a clash stops the
+    // blocking, not the telling: he is still busy that night whatever he decided about pitching it.
+    //
+    // Derived from the blocked NIGHT rather than carried as another stored field, and rather than from the
+    // sentence: both come off the conflict key alone, but `conflictScope` already reads the night, so the
+    // date header's two halves ("is there a clash" and "is it on THIS date") ask one field instead of two
+    // that could disagree about a row whose key decoded only partly.
+    var hasConflict: Bool { conflictBlockedDate != nil }
     var hasDraft: Bool { draftBody != nil }
     // Lost: every contact resolved away (derived), or Dan marked the lead lost by hand / closing note.
     // The row shows an editable reason note. (Phase F: derive from the contacts, not only the lead.)
@@ -1181,8 +1193,13 @@ enum QueueModel {
     // is free; that run still shows its own row flag, but painting the opening-night header "Unavailable"
     // would state something untrue. Items in a group share their performanceDate, so comparing each show's
     // blocked night against its own performanceDate is the same as comparing against the group's date.
+    //
+    // #1583: asks `hasConflict`, not `hasUnclearedConflict`. Keep now accepts the clash, so the gate goes
+    // down on the first show Dan keeps, and reading the gate here would take the marker off the header the
+    // moment he said "I can shoot this anyway". That decision is about whether to PITCH the show; the
+    // calendar is blocked either way, and the header's job is to say what the day is.
     static func groupIsUnavailable(_ items: [QueueItem]) -> Bool {
-        items.contains { $0.hasUnclearedConflict && conflictScope($0) == .thisNight }
+        items.contains { $0.hasConflict && conflictScope($0) == .thisNight }
     }
 
     // #1501: which night of a flagged show's run the clash is on, derived from two fields the item already
