@@ -79,7 +79,12 @@ enum OutcomePatterns {
         switch dimension {
         case .production: return p.production
         case .discipline: return p.discipline
-        case .tier: return p.tier
+        // #1670: the tier the pitch actually went out under. The live tier can move after the send (a
+        // genre correction, a performer match, a contact check from #1648), and grouping by it would
+        // bucket a show under a tier it did not have when Dan pitched it, silently mixing two scoring
+        // bases in one report. Falls back to the live tier for a row that has never been sent, which is
+        // the only case where nothing was frozen.
+        case .tier: return p.tierAtSend ?? p.tier
         case .coverage: return p.coverage
         case .profile: return p.profile
         case .venue: return p.venue ?? "No venue"

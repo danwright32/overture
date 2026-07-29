@@ -42,6 +42,35 @@ struct PerformerMatchDismissTests {
         return p
     }
 
+    // #1648 Phase A3 (Dan's sign-off, 2026-07-28): a dismiss must RECOMPUTE the score, not put back
+    // the integer that was snapshotted when the match was applied. The snapshot describes the row as
+    // it was then, and anything that legitimately changed the score in between is thrown away by a
+    // blind restore. Here Dan corrects the genre from music to dance while the match stands; dismissing
+    // the match must keep that correction, not rewind to music's number.
+    //
+    // Accepted consequence: the score after a dismiss may differ from the number the row held before
+    // the match was applied. That is the point.
+    @Test func dismissingAMatchRecomputesAndKeepsACorrectionMadeInBetween() throws {
+        let ctx = ModelContext(try container())
+        let p = correctedProspect(ctx)
+
+        // Dan corrects the genre while the match stands: booked 20 + dance 3 + self 2 + strong 2
+        // + uncovered 2 = 29.
+        ClassificationOverride.correct(p, discipline: .dance, now: Date(timeIntervalSince1970: 2_000))
+        #expect(p.fitScore == 29)
+
+        p.dismissPerformerMatch()
+
+        // The relationship rewinds to what the scout had.
+        #expect(p.priorRelationship == "none")
+        // The score is re-derived from the row as it now stands: dance 3 + self 2 + strong 2
+        // + uncovered 2 = 9. Before Phase A3 this restored 7, the number music earned.
+        #expect(p.fitScore == 9)
+        #expect(p.tier == "high")
+        // Dan's genre correction is untouched by the dismiss.
+        #expect(p.discipline == "dance")
+    }
+
     @Test func dismissingAWrongMatchRestoresExactlyWhatTheScoutHad() throws {
         let ctx = ModelContext(try container())
         let p = correctedProspect(ctx)

@@ -42,6 +42,30 @@ struct Candidate: Decodable, Sendable {
     }
 }
 
+// #1669 / #1648 Phase A2: the ONE place that turns a row's stored strings into a scoreable candidate.
+// Every caller that scores an already-classified row goes through this, so an axis added later cannot
+// be silently forgotten by one of them. It was forgotten once: the masthead's merit split hand-built a
+// Candidate, omitted passedOnThisShow, and so measured a show Dan had turned down as if he never had.
+//
+// String-to-enum defaults when a raw value doesn't match any case:
+//   Production -> .unknown, PriorRelationship -> .none, Profile -> .neutral,
+//   Coverage -> .unknown, Discipline -> .other
+extension Candidate {
+    // Any row that reached the store is reachable (unreachable events are never inserted), so
+    // `reachable` is not a parameter. Note it is the hard EXCLUSION flag, nothing to do with whether
+    // a contact address was found.
+    init(rawDiscipline: String, rawProduction: String, rawPriorRelationship: String,
+         rawProfile: String, rawCoverage: String, passedOnThisShow: Bool) {
+        self.init(reachable: true,
+                  priorRelationship: PriorRelationship(rawValue: rawPriorRelationship) ?? .none,
+                  production: Production(rawValue: rawProduction) ?? .unknown,
+                  profile: Profile(rawValue: rawProfile) ?? .neutral,
+                  coverage: Coverage(rawValue: rawCoverage) ?? .unknown,
+                  discipline: Discipline(rawValue: rawDiscipline) ?? .other,
+                  passedOnThisShow: passedOnThisShow)
+    }
+}
+
 // Decoded in an EXTENSION so the memberwise init survives (declaring init(from:) in the body would
 // suppress it). passedOnThisShow is decodeIfPresent, so every ranker fixture written before #384
 // still decodes rather than throwing on a missing key.

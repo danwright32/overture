@@ -18,23 +18,14 @@ import Foundation
 //   Coverage          -> .unknown
 //   Discipline        -> .other
 enum ClassificationOverride {
+    // #1669: the string-to-enum resolution moved onto Candidate itself so this and the masthead's
+    // merit split share one implementation. #384's note still applies and is now enforced for both:
+    // passedOnThisShow is carried through, or correcting a discipline would silently drop the penalty
+    // on a show Dan already passed on and hand it back its old score.
     static func candidate(from p: Prospect) -> Candidate {
-        let resolvedDiscipline = Discipline(rawValue: p.discipline) ?? .other
-        let resolvedProduction = Production(rawValue: p.production) ?? .unknown
-        let priorRelationship = PriorRelationship(rawValue: p.priorRelationship) ?? .none
-        let profile = Profile(rawValue: p.profile) ?? .neutral
-        let coverage = Coverage(rawValue: p.coverage) ?? .unknown
-        return Candidate(
-            reachable: true,
-            priorRelationship: priorRelationship,
-            production: resolvedProduction,
-            profile: profile,
-            coverage: coverage,
-            discipline: resolvedDiscipline,
-            // #384: carried through, or correcting a discipline would silently drop the penalty on a
-            // show Dan already passed on and hand it back its old score.
-            passedOnThisShow: p.passedOnThisShow
-        )
+        Candidate(rawDiscipline: p.discipline, rawProduction: p.production,
+                  rawPriorRelationship: p.priorRelationship, rawProfile: p.profile,
+                  rawCoverage: p.coverage, passedOnThisShow: p.passedOnThisShow)
     }
 
     static func rescored(_ p: Prospect) -> FitResult {

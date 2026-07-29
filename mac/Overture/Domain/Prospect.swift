@@ -309,9 +309,17 @@ final class Prospect {
     // rather than inheriting a verdict Dan passed on something else (the #611 alreadyCovered shape).
     var performerMatchDismissed: Bool = false
     var performerMatchReviewed: Bool = false
-    // Pre-correction snapshot, so dismissing restores exactly what the scout had scored rather than
-    // guessing at an inverse. Written only when a correction is actually applied.
+    // Pre-correction snapshot, so dismissing restores exactly what the scout had rather than guessing
+    // at an inverse. Written only when a correction is actually applied, and CLEARED by
+    // clearPerformerMatch: transient undo state, never an analytics record. #1648 Phase D adds separate
+    // durable fields for "the score before a contact check" precisely because these have the wrong
+    // lifetime for it; do not reuse them there.
     var performerMatchPreviousRelationship: String? = nil
+    // #1648 Phase A3: these two are no longer READ. dismissPerformerMatch now restores the relationship
+    // and re-scores from the row, because putting a snapshotted number back also discarded any genuine
+    // change made since. They are still written, and kept rather than dropped, so a dismiss remains
+    // auditable and so removing two attributes does not ride along in an unrelated schema change.
+    // Anything that starts reading them again is reintroducing the bug A3 fixed. Tracked for removal.
     var performerMatchPreviousFitScore: Int? = nil
     var performerMatchPreviousTier: String? = nil
     var performerMatchPreviousMatchedClientName: String? = nil
@@ -811,8 +819,14 @@ final class Prospect {
     func dismissPerformerMatch() -> Bool {
         guard relationshipCorrectedByPerformerMatch else { return false }
         if let relationship = performerMatchPreviousRelationship { priorRelationship = relationship }
-        if let score = performerMatchPreviousFitScore { fitScore = score }
-        if let previousTier = performerMatchPreviousTier { tier = previousTier }
+        // #1648 Phase A3 (Dan's sign-off): RECOMPUTE from the row rather than restoring the snapshotted
+        // integers. The snapshot describes the row as it stood when the match was applied, so putting it
+        // back also throws away anything that legitimately changed the score since (a genre correction,
+        // and from #1648 onward a contact check). Accepted consequence: the score after a dismiss may
+        // differ from the number the row held before the match, when something else changed in between.
+        let refit = ClassificationOverride.rescored(self)
+        fitScore = refit.score
+        tier = refit.tier.rawValue
         matchedClientName = performerMatchPreviousMatchedClientName
         downbeatClientId = performerMatchPreviousDownbeatClientId
         relationshipCorrectedByPerformerMatch = false

@@ -33,6 +33,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let production: String
     let profile: String
     let coverage: String
+    // #384 / #1669: Dan already passed on THIS show. A scoring axis like the five above, and carried for
+    // the same reason: the masthead's merit split re-scores the item, and without this it re-scores a
+    // show he turned down as if he never had. Defaulted so existing memberwise-init call sites are
+    // unaffected.
+    var passedOnThisShow: Bool = false
     let fitScore: Int
     let tier: String
     let fitReason: String
@@ -1501,6 +1506,7 @@ extension QueueItem {
             production: p.production,
             profile: p.profile,
             coverage: p.coverage,
+            passedOnThisShow: p.passedOnThisShow,
             fitScore: p.fitScore,
             tier: p.tier,
             fitReason: p.fitReason,
