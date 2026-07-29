@@ -1,0 +1,37 @@
+{
+  "version": 7,
+  "generatedAt": "2026-07-29T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "contacts": [
+        {
+          "name": "Emma Robinson",
+          "role": "Marketing Director",
+          "email": "emma@aurorastrings.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "act",
+          "sourceUrl": "https://www.aurorastrings.example/about/staff"
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Aurora Strings at Carnegie Hall.",
+        "body": "I photograph performing arts in New York and saw Aurora Strings is performing at Carnegie Hall on March 10. I shoot unobtrusive, no-flash documentary coverage and think it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music.",
+        "variant": "reason-first"
+      }
+    },
+    {
+      "naturalKey": "everyday-royalty|2026-09-11|playhouse-theater",
+      "emptyReason": "only_venue_contact"
+    },
+    {
+      "naturalKey": "citywide-quartet|2026-08-14|bryant-park",
+      "emptyReason": "only_press_contact"
+    },
+    {
+      "naturalKey": "unlisted-ensemble|2026-08-20|community-hall",
+      "emptyReason": "nothing_published"
+    }
+  ]
+}

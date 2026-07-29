@@ -27,8 +27,11 @@ before this was codified.
   `alsoAnswersFor` (v6, #1597) is a list of OTHER `naturalKey`s this one item answers for; absent
   (the normal case) means the item stands alone. See "One answer, several shows" below.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `5`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, and an
-  optional `alreadyCoveredNote`, see the already-covered fit-risk flag in §1 below).
+  (`PrepResults` version `7`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), and an
+  optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
+  entry has no contacts" in §1. This number had said `5` since v5 while real runs wrote v6;
+  corrected with the v7 bump in #1722.)
   Each entry in `contacts[]` is one party to email for the performance, carrying a
   `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
@@ -252,6 +255,24 @@ Each contact you emit becomes its own entry in `contacts[]` with its own `proven
 none of the above yields a non-venue contact for a given target, omit that target from
 `contacts[]` rather than reaching for the venue (if that leaves nothing at all, return the
 result with the key echoed and `contacts` absent).
+
+**Say WHY an entry has no contacts (#1722).** Whenever you return a result with `contacts`
+absent, ALSO set `emptyReason` on that same entry to exactly one of:
+
+- `only_venue_contact`: you found an address for this show, and the only one(s) you found
+  belonged to the host venue, so the hard venue-disqualify rule refused it.
+- `only_press_contact`: you found an address, and the only one(s) you found were a
+  press/media/PR desk, so the hard press-disqualify rule refused it.
+- `nothing_published`: you looked and this show's act, performers and presenter publish no
+  usable address anywhere you could reach.
+
+This is the ONLY trace a refusal leaves, because the rules above tell you never to emit a
+venue or press address at any confidence. Without it the app cannot tell a check that found
+the room's own inbox and correctly refused it from one that found nothing at all, and Dan's
+card says "No email found" in both cases, which claims the search came up empty when it came
+up with something. Report what you actually measured. If you genuinely cannot tell which of
+the three applies, omit `emptyReason` rather than guessing: the card then falls back to the
+plain "no email found" wording, which is the honest thing to say when the reason is unknown.
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an
 address actually READ from a real page; set `sourceUrl` to that page's URL (v6, #363:

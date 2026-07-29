@@ -94,6 +94,33 @@ enum Reachability {
         case noEmailFound = "no_email_found"
     }
 
+    // #1722: WHY a check came back with nothing usable. Deliberately NOT a fifth ProbeResult and NOT an
+    // eighth Badge: the verdict really is "no email found", and adding a case would reach the fit score
+    // (#1648 Ranker.contactRoutePoints), ContactScoreAdjustment (which overwrites the pre-check score on
+    // every transition), the organisation ledger, ContactFormResultMigration, a stored-string migration
+    // whose unknown values read as "never checked", and a pill tone the palette has no free slot for.
+    // What was wrong was never the verdict; it was the SENTENCE. So only the sentence varies.
+    //
+    // It has to be EMITTED by the run rather than inferred here: the runbook DISQUALIFIES a venue address
+    // and therefore never sends one, so the app sees an entry with no contacts and, without this, cannot
+    // tell a search that found the room's own inbox and refused it from one that found nothing at all.
+    // Both used to read "No email found", which is LESSONS L11: a message may claim only what its check
+    // actually measured.
+    //
+    // Three values and no more. Each has to earn a DISTINCT sentence Dan can act on differently; a reason
+    // that would render identically to another belongs in that one.
+    enum EmptyReason: String, Equatable, Sendable, CaseIterable {
+        // The check found an address, and it was the room's own. Dan's standing rule is that a venue's
+        // inbox is a wrong result, not a weak one, so it was refused rather than kept at low confidence.
+        case onlyVenueContact = "only_venue_contact"
+        // The check found an address, and it was a press or PR desk: the wrong department to pitch
+        // photography to (#635), refused for the same reason at any confidence.
+        case onlyPressContact = "only_press_contact"
+        // The check looked and this show's people genuinely publish no address anywhere. This is the one
+        // case where today's "No email found" was always true, so it keeps that wording exactly.
+        case nothingPublished = "nothing_published"
+    }
+
     // nil means no check has ever run, which is a different thing from a check that came back empty. The
     // old signature could not tell those apart: it asked whether the row currently has a sendable
     // recipient, so a checked-and-empty show and a never-checked show both answered "no".
@@ -177,6 +204,33 @@ enum ReachabilityCopy {
     static let noEmailFoundBadge = "No email found"
     static let noEmailFoundHelp =
         "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
+
+    // #1722: the same badge, saying what the check actually measured. Dan's call 2026-07-29: the VISIBLE
+    // sentence changes, not just the hover text, because a tooltip fix would leave the untrue claim on
+    // screen, which is the whole complaint. Same rust tone, same icon, same position, so the row says
+    // something truer without getting louder.
+    //
+    // A missing reason falls back to today's wording rather than guessing at a cause. The reason comes
+    // from a prompt (L27), so it WILL sometimes be absent, and with none in hand the app knows only that
+    // nothing usable came back, which is exactly what the old sentence says.
+    static func emptyAnswerBadge(_ reason: Reachability.EmptyReason?) -> String {
+        switch reason {
+        case .onlyVenueContact: return "Only the venue's address"
+        case .onlyPressContact: return "Only a press address"
+        case .nothingPublished, nil: return noEmailFoundBadge
+        }
+    }
+
+    static func emptyAnswerHelp(_ reason: Reachability.EmptyReason?) -> String {
+        switch reason {
+        case .onlyVenueContact:
+            return "A reachability check found an address for this show, but only the venue's own, and a venue's inbox is never who you're pitching. You can still keep it and add a contact by hand."
+        case .onlyPressContact:
+            return "A reachability check found an address for this show, but only a press or PR desk, which is the wrong department to pitch photography to. You can still keep it and add a contact by hand."
+        case .nothingPublished, nil:
+            return noEmailFoundHelp
+        }
+    }
 
     // #1626: no email, but the act takes messages through a form on its own site. A way through that
     // costs Dan a few minutes rather than a send, so it says what he would have to do.

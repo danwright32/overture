@@ -738,9 +738,17 @@ struct PrepImporterTests {
         #expect(decoded.results.count == 1)
         #expect(decoded.results[0].draft?.subject == "s")
 
-        #expect(throws: PrepResultsError.unsupportedVersion(7)) {
-            try PrepResultsDecoder.decode(Data(#"{"version":7,"generatedAt":"x","results":[]}"#.utf8))
+        // #1722 moved the ceiling to 7 (the `emptyReason` field), so the first rejected version is 8.
+        // The boundary is what matters here, not the literal number: a version ABOVE what this build
+        // understands must throw, because `PrepImporter.answeredKeys` decodes the same file with no
+        // version gate at all and would otherwise stamp every show with the no-email floor while this
+        // reader silently refused to upgrade it.
+        #expect(throws: PrepResultsError.unsupportedVersion(8)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":8,"generatedAt":"x","results":[]}"#.utf8))
         }
+        // The version #1722 added decodes, so the ceiling really did move rather than the test being
+        // relaxed around it.
+        #expect(try PrepResultsDecoder.decode(Data(#"{"version":7,"generatedAt":"x","results":[]}"#.utf8)).version == 7)
         // Below the minimum is rejected too — the gate is a closed range, not an exact match (#140).
         #expect(throws: PrepResultsError.unsupportedVersion(0)) {
             try PrepResultsDecoder.decode(Data(#"{"version":0,"generatedAt":"x","results":[]}"#.utf8))

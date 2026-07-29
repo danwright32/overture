@@ -416,8 +416,13 @@ struct ProspectRowView: View {
             reachabilityNote(icon: "envelope", text: ReachabilityCopy.hardToReachBadge,
                              tone: Reachability.tone(for: .hardToReach), help: ReachabilityCopy.hardToReachHelp)
         case .noEmailFound:
-            reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.noEmailFoundBadge,
-                             tone: Reachability.tone(for: .noEmailFound), help: ReachabilityCopy.noEmailFoundHelp)
+            // #1722: same badge, same rust tone, same icon. Only the SENTENCE varies, so a check that
+            // found the room's own address and refused it stops reporting that it found nothing. With no
+            // reason recorded this is byte-identical to what it always said.
+            reachabilityNote(icon: "envelope.badge",
+                             text: ReachabilityCopy.emptyAnswerBadge(item.reachabilityEmptyReason),
+                             tone: Reachability.tone(for: .noEmailFound),
+                             help: ReachabilityCopy.emptyAnswerHelp(item.reachabilityEmptyReason))
         case .weakContactOnly:
             // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
             // but only a weak (venue/press) one.
