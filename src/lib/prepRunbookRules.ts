@@ -25,6 +25,22 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // answer silently returns to claiming the search found nothing (L11).
   { name: "empty-answer-carries-a-reason", pattern: /ALSO set `emptyReason` on that same entry/i },
   { name: "carnegie-citywide-press-example", pattern: /publicrelations@carnegiehall\.org/i },
+  // #1720: the two halves of the house rule, and each fails in its own direction.
+  //
+  // Dropping the LOOKUP rule puts the judgment back inside the prompt, where it drifts from
+  // ProducerGate silently: #1702 centralised it precisely so a second copy could not, and the English
+  // version (compare the org's domain against the host venue's) was refuted on five live rows served
+  // from carnegiehall.org whose host venue's domain is not.
+  //
+  // Dropping the VISIT rule is #1681 returning: the run names an organisation, searches for it, and
+  // reports that no contact exists without ever fetching its site, which reads to Dan as a completed
+  // lookup and is an abandoned one. It is also the expensive direction, since he pays per lookup.
+  // Whitespace-tolerant, like the wrapped rules below: the runbook is prose that gets rewrapped, and a
+  // pattern that only matches one particular line break reports a rule missing when it is still there.
+  { name: "house-list-decides-not-the-run",
+    pattern: /never\s+judge\s+for\s+yourself\s+whether\s+an\s+organisation\s+is\s+really\s+the\s+venue/i },
+  { name: "named-organisation-must-be-visited",
+    pattern: /Naming\s+it\s+in\s+a\s+search\s+query\s+is\s+not\s+visiting\s+it/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },
   { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },

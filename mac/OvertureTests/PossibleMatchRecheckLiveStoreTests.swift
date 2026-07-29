@@ -77,22 +77,38 @@ struct PossibleMatchRecheckLiveStoreTests {
 
             let ctx = ModelContext(try openContainer(at: storeCopy))
             let before = try ctx.fetch(FetchDescriptor<Prospect>())
-            let flaggedBefore = before.filter { !($0.possibleMatchName ?? "").isEmpty }
             let unflaggedKeysBefore = Set(before.filter { ($0.possibleMatchName ?? "").isEmpty }.map(\.naturalKey))
             let relationshipsBefore = Dictionary(before.map { ($0.naturalKey, $0.priorRelationship) },
                                                  uniquingKeysWith: { a, _ in a })
-            #expect(flaggedBefore.contains { $0.possibleMatchName == wrongRecord },
-                    "the live store still carries the flag this issue is about")
+            // Snapshot every flag as a VALUE before the pass mutates the rows in place, so the
+            // honest-reporting check below compares strings rather than re-reading the same objects.
+            let flagsBefore = Dictionary(before.map { ($0.naturalKey, $0.possibleMatchName ?? "") },
+                                         uniquingKeysWith: { a, _ in a })
+            // The pass reads two real files, and if either is missing it correctly declines to judge and
+            // changes nothing. That is indistinguishable from a converged store unless it is asserted, so
+            // this is what proves the run below actually happened against real inputs rather than
+            // no-opping its way through every remaining assertion.
+            #expect(realInputs(before) != nil,
+                    "the Downbeat export and history this pass reads are both present")
 
             let changed = PossibleMatchRecheck.run(in: ctx, loadInputs: realInputs)
             try ctx.save()
 
             let after = try ctx.fetch(FetchDescriptor<Prospect>())
             #expect(after.count == before.count, "no row added or lost")
-            // LIVE-STORE-CLAIM verified=2026-07-28 measure="rows carrying a possible-match flag before this pass, how many it cleared, and how many survived"
-            // Measured on 2026-07-28: 21 flagged, 18 cleared, 3 left. The numbers are not asserted (the
-            // store moves daily); the shape is.
-            #expect(changed > 0)
+            // LIVE-STORE-CLAIM verified=2026-07-29 measure="rows carrying a possible-match flag before this pass, how many it changed, and how many survived"
+            // Measured 2026-07-28, when this was written: 21 flagged, 18 cleared, 3 left. Re-measured
+            // 2026-07-29: 1 flagged and nothing left to clear, because this pass runs on launch and has
+            // since cleared them all on Dan's own store.
+            //
+            // So "it changed something" is no longer assertable, and an earlier version asserting it made
+            // the fix's own success show up as a red suite. What replaces it is stronger anyway: the count
+            // the pass REPORTS must equal the number of flags that actually moved. That holds on a
+            // converged store (nothing moved, nothing reported) and catches both directions of the lie,
+            // a pass reporting work it did not do and one doing work it does not report.
+            let actuallyMoved = after.filter { ($0.possibleMatchName ?? "") != flagsBefore[$0.naturalKey] }
+            #expect(changed == actuallyMoved.count,
+                    "reported \(changed) changed, \(actuallyMoved.count) flags actually moved")
 
             // The defect itself, gone from every row.
             #expect(after.allSatisfy { $0.possibleMatchName != wrongRecord })

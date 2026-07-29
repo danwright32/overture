@@ -25,6 +25,8 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "grouped-answer-emits-every-key",
       "grouped-answer-never-self-invented",
       "high-confidence-only-when-read",
+      "house-list-decides-not-the-run",
+      "named-organisation-must-be-visited",
       "named-performer-never-dropped",
       "never-host-venue-target",
       "no-pattern-guessed-high",

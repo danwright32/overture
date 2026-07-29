@@ -52,12 +52,23 @@ struct ParentheticalVenueMergeLiveStoreTests {
         }
     }
 
-    // LIVE-STORE-CLAIM verified=2026-07-28 measure="stored pairs split by a parenthetical venue, and the fit score and prior relationship each row of the pair carries"
-    // Measured 2026-07-28: five pairs, ten rows, every one untriaged. Four are Young New Yorkers' Chorus
-    // nights scored 7 against 27 (the 7 predates #1216, which taught the matcher to read the presenter,
-    // and the row was never re-matched because its key had split); the fifth is MASS MoCA, scored 1 both
-    // ways. Each pair must become one row, and the row that survives must be the one carrying the current
-    // verdict, not the stale one.
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="stored pairs split by a parenthetical venue, and whether each row of the pair carries outreach history"
+    // Measured 2026-07-28, when this was written: five pairs, ten rows, every one untriaged. Four were
+    // Young New Yorkers' Chorus nights scored 7 against 27 (the 7 predated #1216, which taught the
+    // matcher to read the presenter, and the row was never re-matched because its key had split); the
+    // fifth was MASS MoCA, scored 1 both ways.
+    //
+    // Re-measured 2026-07-29: NONE of them are left. This pass runs on every launch, so it has since
+    // collapsed all five on Dan's own store, and the only doubled nights remaining are the #1639 pairs it
+    // deliberately refuses (two real decisions, one night). That is the fix having worked, so this test no
+    // longer requires a mergeable pair to exist: it asserts the survivor rule WHEN the store holds one,
+    // and the do-no-harm invariants either way. An earlier version required one, which turned the fix's
+    // own success into a red suite.
+    //
+    // The survivor rule itself is not left unproven by that: NaturalKeyVenueMigrationTests pins it
+    // unconditionally on built rows (the freshest of two pristine duplicates survives, the row with
+    // history survives, two rows both carrying history are deferred). What THIS test uniquely proves is
+    // that the pass meets Dan's real 700-odd rows without eating any of them.
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theStoredParentheticalPairsCollapseOntoTheRowThatIsUpToDate() async throws {
         await RealStoreTestLock.shared.acquire()
@@ -85,7 +96,8 @@ struct ParentheticalVenueMergeLiveStoreTests {
             let deferrable = doubledBefore.filter {
                 $0.value.filter(NaturalKeyVenueMigration.hasOutreachHistory).count >= 2
             }
-            #expect(!mergeable.isEmpty, "the duplicates this issue is about are still here")
+            // Deliberately NOT "a mergeable night still exists". On a converged store there is none, and
+            // requiring one would mean this test can only pass while the defect is unfixed.
             // What each mergeable night's rows are worth, so the survivor is checked against the best of
             // them rather than against a number written here by hand.
             let bestScore = mergeable.mapValues { rows in rows.map(\.fitScore).max() ?? 0 }
