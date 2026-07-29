@@ -14,6 +14,27 @@ struct PrepResults: Codable, Equatable, Sendable {
     // Optional, so a results file from before this existed still decodes and still lands Dan's draft. A
     // gap in the record is never a reason to drop his work on the floor.
     var model: String? = nil
+    // #1721: how many times the run actually reached the web, counted by the RUNNER from its own event
+    // stream (lib/models.sh's record_web_calls), never self-reported by the model. The runbook's hop cap
+    // is a sentence in a prompt; this is the measurement.
+    //
+    // Optional for the same reason `model` is: a results file from before this existed still decodes and
+    // still lands Dan's drafts. A gap in the record is never a reason to drop his work on the floor.
+    var webCalls: WebCalls? = nil
+
+    struct WebCalls: Codable, Equatable, Sendable {
+        // False when a stream did not report. On that path the writer publishes NO `total` at all, so
+        // nothing here can read a partial count as the real one by reaching for the field it always
+        // reads. Hence `total` is optional and `recorded` is the thing to branch on.
+        var recorded: Bool
+        var total: Int? = nil
+        var items: Int = 0
+        var capPerItem: Int = 0
+        var allowance: Int = 0
+        // Absent when the count is incomplete AND has not already blown the allowance, because that
+        // verdict genuinely is not knowable yet.
+        var overCap: Bool? = nil
+    }
 }
 
 struct PrepResult: Codable, Equatable, Sendable {

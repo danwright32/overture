@@ -27,6 +27,18 @@ enum PrepRunSummary {
     // What the run is telling him went differently than it should have.
     private static func concernNotes(for outcome: PrepImporter.Outcome) -> [String] {
         var notes: [String] = []
+        // #1721: a run that reached the web far more than expected. Said in LOOKUPS and shows, never in
+        // dollars: Dan is on a Max plan and a dollar figure there is both meaningless and alarming.
+        //
+        // Speaks ONLY when the count is complete AND over the allowance. An incomplete count makes no
+        // claim in either direction, because a partial figure cannot show a run was fine and must not be
+        // reported as its total. Silence on an ordinary run is the point: his measured normal is 5 to 9
+        // lookups per show against a cap of 15, and an alert that fires on a routine run gets ignored
+        // (L36).
+        if let web = outcome.webCalls, web.recorded, web.overCap == true, let total = web.total {
+            let shows = web.items == 1 ? "1 show" : "\(web.items) shows"
+            notes.append("\(total) web lookups for \(shows), more than expected")
+        }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run
         // after run with no explanation, and a show the model chokes on every time is retried forever

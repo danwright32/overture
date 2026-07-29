@@ -300,6 +300,74 @@ bad_trickle="$(tee_run_events "${TMP}/stream-bad-out.jsonl" < "${TMP}/stream-bad
 assert_contains "a non-JSON line still reaches the log instead of vanishing" \
   "${bad_trickle}" "could not reach the API"
 
+# --- #1721: counting the run's REAL web calls -----------------------------------------------------------
+#
+# The runbook states a hop cap. A cap that lives only in a prompt is a hope (L27), and until now nothing
+# read the event stream the runner has written since #1593, so the cap was never once checked.
+#
+# What counts is every ROUTE to the web, not just WebFetch, and that is measured rather than assumed:
+# in Dan's real 2026-07-28 run, chunk 3 reached the web with mcp__playwright__browser_navigate, and the
+# prep scope deliberately allows Bash, so curl is a route too. A counter blind to those reports a small
+# number for a run that made many calls, which is the same false comfort as no counter at all.
+WEBTMP="$(mktemp -d)"
+trap 'rm -rf "${WEBTMP}"' EXIT
+
+# One stream carrying every route, in the real stream-json shape: tool_use blocks inside an assistant
+# message's content array.
+cat > "${WEBTMP}/events.jsonl" <<'EOF'
+{"type":"system","subtype":"init"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://a.example"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"x"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__playwright__browser_navigate","input":{"url":"https://b.example"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"curl -s https://c.example"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls /tmp"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/x"}}]}}
+{"type":"result","total_cost_usd":0.5,"duration_ms":1000}
+EOF
+
+echo '{"version":6,"results":[{"naturalKey":"a"},{"naturalKey":"b"}]}' > "${WEBTMP}/results.json"
+record_web_calls "${WEBTMP}/results.json" 4 "${WEBTMP}/events.jsonl"
+web="$(cat "${WEBTMP}/results.json")"
+
+# Four web calls: WebFetch, WebSearch, the browser navigation and the curl. The plain `ls` and the Read
+# are not web calls and must not inflate the number Dan is judged against.
+assert_contains "counts every route to the web, not just WebFetch" "${web}" '"total": 4'
+assert_contains "a non-network Bash command is not counted as a web call" "${web}" '"bash": 1'
+assert_contains "names the browser route it found" "${web}" '"browser": 1'
+assert_contains "records the count as real when every stream reported" "${web}" '"recorded": true'
+
+# The cap is per ITEM, so a run covering more shows is allowed proportionally more calls. Two items at a
+# cap of 4 is a ceiling of 8, and four calls is comfortably under it.
+assert_contains "judges the total against the cap scaled by how many shows the run covered" \
+  "${web}" '"overCap": false'
+
+# Over the cap: same stream, but a run that covered only ONE show has half the allowance.
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-one.json"
+record_web_calls "${WEBTMP}/results-one.json" 3 "${WEBTMP}/events.jsonl"
+over="$(cat "${WEBTMP}/results-one.json")"
+assert_contains "flags a run that went over its allowance" "${over}" '"overCap": true'
+
+# An unreadable stream must never be quietly scored as zero calls. Same rule record_run_cost already
+# follows for money: a partial figure presented as the real one is worse than no figure, because the
+# number looks perfectly plausible and nothing says it is short.
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-missing.json"
+record_web_calls "${WEBTMP}/results-missing.json" 3 "${WEBTMP}/events.jsonl" "${WEBTMP}/nope.jsonl"
+missing="$(cat "${WEBTMP}/results-missing.json")"
+assert_contains "a stream that did not report is recorded as incomplete" "${missing}" '"recorded": false'
+if [[ "${missing}" == *'"total":'* ]]; then
+  echo "FAIL - an incomplete count still published a 'total' that downstream would read as the real one"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and publishes no 'total' at all, so nothing can read a partial count as the real one"
+fi
+
+# An unparsable results file is the run having failed, reported on its own path. Overwriting it would
+# destroy the evidence, exactly as record_run_cost refuses to.
+printf '%s' 'not json{' > "${WEBTMP}/broken.json"
+record_web_calls "${WEBTMP}/broken.json" 3 "${WEBTMP}/events.jsonl"
+assert_equals "an unparsable results file is left exactly as it was" \
+  'not json{' "$(cat "${WEBTMP}/broken.json")"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

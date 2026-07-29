@@ -12,6 +12,9 @@ enum PrepImporter {
     // since the Prep run is a separate fallible process). skippedEdited: drafts left
     // untouched because Dan had hand-edited them.
     struct Outcome: Equatable, Sendable {
+        // #1721: what the run spent on the web, carried through so the summary can say when a run went
+        // deeper than expected. Optional: an older results file carries no count and claims nothing.
+        var webCalls: PrepResults.WebCalls? = nil
         var matched = 0
         var drafted = 0
         var skippedEdited = 0
@@ -412,6 +415,11 @@ enum PrepImporter {
         // client read as a cold lead, with no symptom Dan could ever have noticed.
         outcome.matchDataWarning = matchDataWarning(clientHealth: loaded.health,
                                                     historyUnreadable: history.unreadable)
+        // #1721: carry the runner's own web-call count through to the summary. Set HERE rather than
+        // inside ingest, beside the other run-level facts, because it describes the run and not any one
+        // prospect. Without this the field would decode and then be dropped, and the note it feeds could
+        // never fire in the app however green its own tests were (L3).
+        outcome.webCalls = results.webCalls
         // #876: what did the app ASK for that never came back? Computed from the queue the app itself
         // wrote (never from anything the run reported about itself), through the shared handoff check
         // (#1020) so Prep and reply-classify cannot word the same rule two ways.
