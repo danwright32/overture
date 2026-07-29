@@ -88,10 +88,10 @@ enum OVColor {
         dark: warmFillInk
     )
 
-    // #1527: text on a filled gold badge, which the "Partly booked" pill needed and no token provided. White
-    // measures 3.12 to 1 on the light gold and 2.09 to 1 on the dark, so it is the warm ink in both themes
-    // (5.44 and 8.12 to 1). Its absence is the reason #1522 changed the pill's words but left its colour.
-    static let onGold = Color(nsColor: warmFillInk)
+    // #1527 added an `onGold` here, for text on a filled gold badge, which the "Partly booked" pill needed
+    // and no token provided. #1583 retired that pill (Keep is the acceptance now, so the badge had nothing
+    // left to do), and nothing else in the app draws text on a gold fill, so the token went with it rather
+    // than resting unused waiting to be picked "by eye" for something it was not measured against.
 
     private static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in

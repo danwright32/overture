@@ -587,8 +587,20 @@ final class Prospect {
     // Undo of the above (the queue offers it in the confirmation banner, like every other reversible
     // action here), which puts the flag back rather than pretending the clash never existed.
     func restoreConflict() {
-        conflictClearedKey = nil
-        conflictOpen = conflictKey != nil
+        restoreConflictClearance(nil)
+    }
+
+    // #1583: put back whatever clearance was on this show BEFORE an action changed it, which since Keep
+    // became the acceptance is not always nil. A show Dan waved through by hand, then dismissed, then kept
+    // again holds an older acceptance that undoing the keep must not silently discard.
+    //
+    // Written as the general form with `restoreConflict` calling it, rather than as a second rule beside it,
+    // so `conflictOpen` still has ONE definition of what it means (a key exists and differs from the cleared
+    // one) rather than one per writer. Safe against a background writer too: if the scout has changed the
+    // clash since, the restored key no longer matches it and the show blocks, which is the honest direction.
+    func restoreConflictClearance(_ key: String?) {
+        conflictClearedKey = key
+        conflictOpen = conflictKey != nil && conflictKey != key
     }
 
     // Apply Dan's edit to the draft (#240 / #119). The FIRST time the edited text meaningfully

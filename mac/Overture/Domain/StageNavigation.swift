@@ -13,6 +13,12 @@ import Foundation
 // what the pill says. One decision, one predicate, one destination.
 enum StageFocus: String, Equatable, Sendable {
     case scout, prep, review
+    // #1583/#1691: kept, undrafted, and held back by a date clash that landed AFTER the keep. Its own focus
+    // rather than a fold into `.prep`, on the same reasoning as the five send focuses: the Prep RUN still
+    // refuses these shows, so counting them under Prep would state a number the run then does not work
+    // through, which is the exact mismatch #863 exists to prevent. Before it existed these shows matched no
+    // focus at all, and the queue is stage-scoped only, so they were rendered nowhere (#1691).
+    case prepBlocked
     case sendApproved, sendBlocked, sendErrors, sendStuck, sendDegraded
     // Not a queue filter: the pill opens FollowUpsView, which lists the due RECIPIENTS itself.
     case followUps
@@ -126,7 +132,7 @@ enum StageNavigation {
     // Every focus that resolves queue keys. `.followUps` is excluded on purpose: it opens FollowUpsView
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [
-        .scout, .prep, .review,
+        .scout, .prep, .prepBlocked, .review,
         .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded
     ]
 
@@ -185,6 +191,13 @@ enum StageNavigation {
             // booked against and the Prep run then refused to draft it. The (Prospect) -> Bool wrapper
             // exists precisely so a new field cannot be forgotten at one of two call sites.
             return PrepQueueBuilder.needsPrepEligible(p)
+
+        case .prepBlocked:
+            // #1583/#1691: the exact complement of `.prep` over ONE rule, so a kept show is in one focus or
+            // the other and never in neither. Spelled out here as "queued and undrafted and conflicted" it
+            // would be a third copy of the eligibility rule, and the copy that forgets the next field added
+            // to it; `needsPrepIgnoringConflict` is the same `needsPrep` with the one gate lifted.
+            return p.hasUnclearedConflict && PrepQueueBuilder.needsPrepIgnoringConflict(p)
 
         case .review:
             return p.status == .drafted

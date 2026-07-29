@@ -141,12 +141,13 @@ struct ProspectRowRestoreGuardTests {
             Issue.record("actions view not found")
             return
         }
-        #expect(body.contains("item.hasUnclearedConflict"))
-        // #1501: pins that the badge takes its LABEL from the shared decision, not the literal word it used
-        // to hard-code. The words themselves are now behaviour, tested in ConflictScopeTests, which is where
-        // a copy assertion belongs: a source-text guard that pins a view's private string breaks the moment
-        // that string correctly moves somewhere testable, which is what #1451 ran into.
-        #expect(body.contains("pillLabel"))
+        // #1583: the SENTENCE renders on `hasConflict`, not on the gate, so accepting a clash stops the
+        // blocking and not the telling. Reading the gate here is the regression this pins: it would take the
+        // clash off the card the instant Dan kept the show, which is the state he most needs to still see.
+        #expect(body.contains("item.hasConflict"))
+        // #1583: the surviving accept control is gated on the show being KEPT already, because on an
+        // untriaged card Keep itself is the acceptance and a second control asks one judgment twice.
+        #expect(body.contains("item.hasUnclearedConflict && item.isKept"))
         #expect(body.contains("I can shoot this anyway"))
         #expect(body.contains("keepDismissControls"))   // badge stacked above the Keep/Dismiss row
     }
@@ -156,15 +157,13 @@ struct ProspectRowRestoreGuardTests {
     // ConflictPillColourTests, and this is the other half, that the view actually asks for them. Without it
     // the pill could keep a hard-coded rust fill while every colour test passed (#1352's "a guard and its
     // wiring are two claims").
-    @Test func theConflictBadgeTakesItsColourAndHoverTextFromTheSharedDecision() {   // #1527
+    @Test func theConflictSentenceTakesItsColourFromTheSharedDecision() {   // #1527/#1583
         guard let body = SourceGuardHelper.propertyBody("private var actions: some View {",
                                                         in: prospectRow) else {
             Issue.record("actions view not found")
             return
         }
-        #expect(body.contains("scope.pillFill"))
-        #expect(body.contains("scope.pillForeground"))
-        #expect(body.contains("scope.pillHelp"))
+        #expect(body.contains("scope.noteTint"))
         // The defect this issue is about: a fill picked at the call site rather than by the case.
         #expect(!body.contains("OVColor.rust"),
                 "the conflict badge is hard-coding the failure colour again instead of asking ConflictScope (#1527).")

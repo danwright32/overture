@@ -109,10 +109,16 @@ struct StagePillCountMatchesNavigationTests {
         }
     }
 
-    // #901: a show Dan cannot work that night is NOT prep work. The Prep run refuses to draft it (no money
-    // is spent on a show that cannot happen), so the Prep pill must not count it and must not send him to
-    // it: a pill that offers work the run will then decline to do is #863 all over again, in a new place.
-    @Test func thePrepPillDoesNotCountAShowTheRunWillRefuseToDraft() throws {
+    // #901: a show Dan cannot work that night is NOT ordinary prep work. The Prep run refuses to draft it
+    // (no money is spent on a show that cannot happen), so the Prep pill must not offer it as work waiting
+    // on a run: a pill that offers work the run will then decline to do is #863 all over again.
+    //
+    // #1583/#1691 fixed the OTHER half of that, which was a bug of its own. The pill used to report zero and
+    // take Dan nowhere, and because the queue is stage-scoped only, a show in no stage is rendered nowhere
+    // in the app at all: the row vanished, taking the control for clearing the clash with it. So the pill
+    // reports these shows under their OWN focus, whose count and destination are the same list, exactly as
+    // the Send pill reports five different problems. Counted apart, reachable, still never drafted.
+    @Test func thePrepPillReportsABlockedShowApartFromTheWorkTheRunWillDo() throws {
         let ctx = try context()
         let kept = show(ctx, "kept-but-booked", status: .queued, hasDraft: false)
         kept.setScoutConflict(BlockedCalendar.Day(date: "2026-09-19", kind: .bookedShoot,
@@ -120,14 +126,17 @@ struct StagePillCountMatchesNavigationTests {
         try ctx.save()
 
         let prep = try pill(ctx, "Prep")
-        #expect(prep.count == 0)                                   // not offered as work
-        #expect(try targets(ctx, prep).isEmpty)                    // and the tap lands nowhere it shouldn't
-        #expect(PrepQueueBuilder.needsPrepEligible(kept) == false)  // because the run won't take it
+        #expect(prep.focus == .prepBlocked)                         // reported as a clash, not as work
+        #expect(prep.count == 1)
+        #expect(try targets(ctx, prep) == ["kept-but-booked"])      // #1691: and the tap actually lands on it
+        #expect(PrepQueueBuilder.needsPrepEligible(kept) == false)  // the run still won't take it
 
-        // And once he overrules the clash, it is ordinary work again, counted and reachable.
+        // And once he overrules the clash, it is ordinary work again, counted and reachable as such.
         kept.clearConflict()
         try ctx.save()
-        #expect(try pill(ctx, "Prep").count == 1)
+        let cleared = try pill(ctx, "Prep")
+        #expect(cleared.focus == .prep)
+        #expect(cleared.count == 1)
     }
 
     // MARK: - Send: five different problems wearing one pill

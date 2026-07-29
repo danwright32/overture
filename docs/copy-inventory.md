@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **897 sentences**, from 307 source files.
+Every sentence Overture can say to Dan: **898 sentences**, from 307 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -305,6 +305,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
+"A show you kept lands here if a clash with your calendar turns up later."
+    `Domain/StageEmptyState.swift`
 "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
     `Domain/ClientCoverage.swift`
 "A source couldn't be checked. Open Sources to fix or confirm it."
@@ -944,6 +946,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
     `Domain/Reachability.swift`
+"Nothing held by a date clash"
+    `Domain/StageEmptyState.swift`
 "Nothing here right now"
     `Domain/StageEmptyState.swift`
 "Nothing in the queue matches \"\(query)\""
@@ -1052,10 +1056,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
     `Domain/ProbeSelection.swift`
-"Overture won't draft or send this while a later night of this run is out. Tap if you can shoot it after all."
-    `Domain/ConflictScope.swift`
-"Overture won't draft or send this while you're unavailable that night. Tap if you can shoot it after all."
-    `Domain/ConflictScope.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -1065,8 +1065,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Owes a reply"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`
-"Partly booked"
-    `Domain/ConflictScope.swift`
 "Paste a link to the show, or to the organization's events page."
     `UI/AddLeadSheet.swift`
 "Paused (booked elsewhere)"
@@ -1743,6 +1741,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
     `App/ActionFeedback.swift`
+"\(Plural.count(count, "show")) held by a date clash"
+    `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) to prep"
@@ -1811,6 +1811,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
+"\(n) \(shows(n)) held by a date clash"
+    `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) with a contact held for a check"
