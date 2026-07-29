@@ -38,27 +38,37 @@ enum PossibleMatchFanOut {
     // learns to skip past.
     static let defaultThreshold = 3
 
-    // The pure count, over the flag names themselves, so the rule can be exercised without a store.
-    // Sorted worst-first, and by name within a tie so the order is stable rather than incidental.
-    static func findings(names: [String], threshold: Int = defaultThreshold) -> [Finding] {
-        var counts: [String: Int] = [:]
-        for name in names {
+    // The pure count, so the rule can be exercised without a store. Sorted worst-first, and by name
+    // within a tie so the order is stable rather than incidental.
+    //
+    // It counts distinct ACTS, not cards. A recurring show is many cards for one act (measured on the live
+    // store 2026-07-28: 13 group names appear on three or more cards, one of them on 15), so counting
+    // cards would let a single perfectly correct fuzzy match on such a group trip the warning, and
+    // Overture would then tell Dan that a right match "usually means the match is wrong". The tell that
+    // something is broken is one record matching many DIFFERENT acts. The same act on many nights is just
+    // a run, and saying so is the difference between a signal and a nuisance.
+    static func findings(rows: [(act: String, match: String)], threshold: Int = defaultThreshold) -> [Finding] {
+        var actsByMatch: [String: Set<String>] = [:]
+        for row in rows {
             // A row carrying no flag is not a name, and neither is an empty one. Counted, they would fan
             // out across the entire store instantly and report a crowd on every launch forever.
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            counts[trimmed, default: 0] += 1
+            let match = row.match.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !match.isEmpty else { continue }
+            actsByMatch[match, default: []].insert(row.act)
         }
-        return counts
-            .filter { $0.value >= threshold }
-            .map { Finding(name: $0.key, count: $0.value) }
+        return actsByMatch
+            .filter { $0.value.count >= threshold }
+            .map { Finding(name: $0.key, count: $0.value.count) }
             .sorted { ($0.count, $1.name) > ($1.count, $0.name) }
     }
 
-    // The same rule over a real store. Reads every prospect and asks nothing else of it.
+    // The same rule over a real store. Reads every prospect and asks nothing else of it. The act is the
+    // prospect's displayed name, which is Dan's own if he renamed it, and that is the identity he means.
     static func findings(in context: ModelContext, threshold: Int = defaultThreshold) -> [Finding] {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        return findings(names: all.compactMap(\.possibleMatchName), threshold: threshold)
+        return findings(rows: all.compactMap { p in
+            p.possibleMatchName.map { (act: p.groupName, match: $0) }
+        }, threshold: threshold)
     }
 
     // The sentence Dan reads, built here rather than in the view so it can be read cold in a test and so

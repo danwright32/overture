@@ -25,8 +25,8 @@ struct PossibleMatchFanOutTests {
     }
 
     @discardableResult
-    private func flagged(_ ctx: ModelContext, key: String, name: String?) -> Prospect {
-        let p = Prospect(naturalKey: key, groupName: "Show \(key)", discipline: "music",
+    private func flagged(_ ctx: ModelContext, key: String, group: String? = nil, name: String?) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: group ?? "Show \(key)", discipline: "music",
                          venue: "A Hall", performanceDate: "2026-10-08", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
@@ -39,7 +39,7 @@ struct PossibleMatchFanOutTests {
     }
 
     // The shape of the real defect: one record, a crowd of cards.
-    @Test func oneNameOnACrowdOfCardsIsReportedWithItsCount() throws {
+    @Test func oneNameOnACrowdOfShowsIsReportedWithItsCount() throws {
         let ctx = try context()
         for i in 1...19 { flagged(ctx, key: "carnegie-\(i)", name: "Carnegie Hall Citywide: Ivalas Quartet") }
 
@@ -48,6 +48,49 @@ struct PossibleMatchFanOutTests {
         #expect(findings.count == 1)
         #expect(findings.first?.name == "Carnegie Hall Citywide: Ivalas Quartet")
         #expect(findings.first?.count == 19)
+    }
+
+    // The false alarm the first cut of this would have raised, measured on the live store on 2026-07-28:
+    // 13 group names appear on 3 or more cards, one of them (The New York Neo-Futurists: The Infinite
+    // Wrench) on 15. A recurring show is MANY cards for ONE act, so counting cards means a single perfectly
+    // correct fuzzy match on such a group trips the warning, and Overture then tells Dan that a right match
+    // "usually means the match is wrong". The tell that something is broken is one record matching many
+    // DIFFERENT acts; the same act on many nights is just a run.
+    @Test func aRecurringShowOnManyNightsCountsOnce() throws {
+        let ctx = try context()
+        for i in 1...15 {
+            flagged(ctx, key: "wrench-\(i)", group: "The New York Neo-Futurists: The Infinite Wrench",
+                    name: "A Plausible Record")
+        }
+
+        #expect(PossibleMatchFanOut.findings(in: ctx).isEmpty)
+    }
+
+    // ...and the real defect still fires, because those 19 Carnegie cards were 19 DIFFERENT acts sharing
+    // one building. This is the assertion that stops the fix above from simply switching the warning off.
+    @Test func oneRecordAcrossManyDifferentActsStillFires() throws {
+        let ctx = try context()
+        for i in 1...19 {
+            flagged(ctx, key: "carnegie-\(i)", group: "Distinct Act \(i)",
+                    name: "Carnegie Hall Citywide: Ivalas Quartet")
+        }
+
+        let findings = PossibleMatchFanOut.findings(in: ctx)
+        #expect(findings.first?.name == "Carnegie Hall Citywide: Ivalas Quartet")
+        #expect(findings.first?.count == 19)
+    }
+
+    // The count Dan reads is acts, not cards, so the sentence cannot promise 19 shows when it means 4 acts
+    // playing them.
+    @Test func theCountReportedIsActsNotCards() throws {
+        let ctx = try context()
+        for act in 1...4 {
+            for night in 1...5 {
+                flagged(ctx, key: "a\(act)-n\(night)", group: "Act \(act)", name: "One Record")
+            }
+        }
+
+        #expect(PossibleMatchFanOut.findings(in: ctx).first?.count == 4)
     }
 
     // The three flags on Dan's real store sit at one card each. If this rule ever reported those, the
@@ -88,7 +131,7 @@ struct PossibleMatchFanOutTests {
     // The sentence lives here rather than in the view, so it can be read cold in a test and so the count
     // it states is provably the count the rule found.
 
-    @Test func theWarningNamesTheRecordAndSaysHowManyCardsAsk() {
+    @Test func theWarningNamesTheRecordAndSaysHowManyShowsAsk() {
         let line = PossibleMatchFanOut.warningLine(
             [.init(name: "Carnegie Hall Citywide: Ivalas Quartet", count: 19)])
 
