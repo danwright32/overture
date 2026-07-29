@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **911 sentences**, from 310 source files.
+Every sentence Overture can say to Dan: **921 sentences**, from 310 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -407,6 +407,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
     `Domain/InquiryCopy.swift`
+"Back to deciding \(organisation) automatically"
+    `App/ActionFeedback.swift`
 "Block days off"
     `UI/BlockDaysSheet.swift`
 "Block some days"
@@ -662,6 +664,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/MailSender.swift`
 "Gmail isn't connected. Use Connect Gmail first."
     `Integration/GmailAuthManager.swift`
+"Go back to deciding \(organisation) automatically"
+    `UI/QueueView+Model.swift`
 "Google did not return a refresh token. Revoke prior access and retry."
     `Integration/GmailAuthManager.swift`
 "Grant these once, here, so Overture can keep working while you're away from your desk."
@@ -1054,6 +1058,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture decided: \(what)"
+    `UI/QueueView+Model.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
@@ -1635,6 +1641,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Towns you've told Overture to skip. Take one back off the list here."
     `App/RootView.swift`
+"Treat \(organisation) as the presenter instead"
+    `UI/QueueView+Model.swift`
+"Treat \(organisation) as the venue instead"
+    `UI/QueueView+Model.swift`
+"Treating \(organisation) as the presenter, so one contact can answer for all its shows"
+    `App/ActionFeedback.swift`
+"Treating \(organisation) as the venue, so its address won't answer for other people's shows"
+    `App/ActionFeedback.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."
@@ -1733,6 +1747,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
     `Domain/FormOutreach.swift`
+"You set this: \(what)"
+    `UI/QueueView+Model.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."
@@ -2063,8 +2079,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "the other one"
     `Domain/ScoutReadBudget.swift`
+"the presenter"
+    `UI/QueueView+Model.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the venue"
+    `UI/QueueView+Model.swift`
 "to confirm"
     `UI/QueueView.swift`
 "too few to tell"

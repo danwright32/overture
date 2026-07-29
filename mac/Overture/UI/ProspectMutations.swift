@@ -239,6 +239,37 @@ enum ProspectMutations {
         }
     }
 
+    // #1719: Dan corrects a producer/house verdict from the row where he can see it is wrong. The gate
+    // decides automatically from the store's own venue names, and both of its arms can miss: an
+    // organisation that rents out the one room it runs looks like a travelled producer, and one that
+    // produces its own work in a room named after it looks like the house.
+    //
+    // `to` is the standing he wants IN FORCE, including .none, which is the way back. Taking the target
+    // state rather than a verb is what lets one call serve the correction and its undo, so the stateful
+    // inline control needs no second path and no management sheet (his choice, 2026-07-29).
+    static func correctProducer(_ item: QueueItem, to standing: ProducerOverrideEditing.Standing,
+                                context: ModelContext, feedback: ActionFeedback) {
+        guard let organisation = item.correctableOrganisation else { return }
+        let previous = item.producerStanding
+        switch standing {
+        case .demoted:  ProducerOverrideEditing.demote(organisation, into: context)
+        case .promoted: ProducerOverrideEditing.promote(organisation, into: context)
+        case .none:     ProducerOverrideEditing.clear(organisation, in: context)
+        }
+        // #1417's rule: acknowledge only what reached disk, or a correction that failed to save reads as
+        // applied and comes back undone on the next launch.
+        guard context.saveOrWarn(org: organisation, feedback: feedback) else { return }
+        let message: String
+        switch standing {
+        case .demoted:  message = ActionAck.treatingAsVenue(organisation: organisation)
+        case .promoted: message = ActionAck.treatingAsProducer(organisation: organisation)
+        case .none:     message = ActionAck.producerCorrectionCleared(organisation: organisation)
+        }
+        feedback.acknowledge(message, action: .init(label: "Undo") {
+            correctProducer(item, to: previous, context: context, feedback: feedback)
+        })
+    }
+
     // #1414: `undo` is optional and defaults to nil so this stays the single status setter for every
     // caller, while only KEEP and DISMISS actually record. setStatus also drives approve, unapprove and
     // skip-draft; recording unconditionally here would quietly make those undoable too, well past the

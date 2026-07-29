@@ -75,6 +75,9 @@ struct ProspectRowView: View {
     var userExcludedTowns: Set<String> = []
     var allowedSeedTowns: Set<String> = []
     var onExcludeTown: () -> Void = {}
+    // #1719: the producer/house correction. Takes the standing Dan wants in force, so the same callback
+    // serves the correction and its undo.
+    var onCorrectProducer: (ProducerOverrideEditing.Standing) -> Void = { _ in }
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, runEndDate: item.runEndDate,
@@ -788,6 +791,29 @@ struct ProspectRowView: View {
                     if let town = item.excludableTown {
                         Divider()
                         Button(QueueModel.excludeTownLabel(town: town)) { onExcludeTown() }
+                    }
+                    // #1719: correcting who really presents this show. It lives in this menu for the same
+                    // reason the town refusal does: it is not a dismiss, it is a correction to how Overture
+                    // decides, and this menu is the row's one always-present home for those. It cannot hang
+                    // off the presenter line, because a demotion stops that line being drawn and the undo
+                    // would vanish with it. Offered only where there is an organisation to correct.
+                    if let org = item.correctableOrganisation {
+                        // A Section header rather than a disabled Button: it is a statement, not something
+                        // to click, and a greyed-out button reads as an action Dan is not allowed to take.
+                        Section(QueueModel.producerVerdictLine(item.producerStanding,
+                                                               treatedAsVenue: item.treatedAsVenue)) {
+                            Button(QueueModel.producerCorrectionLabel(item.producerStanding,
+                                                                      organisation: org,
+                                                                      treatedAsVenue: item.treatedAsVenue)) {
+                                // One action, and it always CHANGES something: flip to whichever the row is
+                                // not, or drop the correction and let the gate decide again.
+                                if item.producerStanding != .none {
+                                    onCorrectProducer(ProducerOverrideEditing.Standing.none)
+                                } else {
+                                    onCorrectProducer(item.treatedAsVenue ? .promoted : .demoted)
+                                }
+                            }
+                        }
                     }
                 } label: {
                     // #1460: the same secondary-action capsule OVCapsuleButton wears, via the shared

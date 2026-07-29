@@ -100,7 +100,10 @@ enum ProspectRowFactory {
             showingTooFar: showingTooFar,
             userExcludedTowns: userExcludedTowns,
             allowedSeedTowns: allowedSeedTowns,
-            onExcludeTown: { ProspectMutations.excludeTown(item, context: context, feedback: feedback) }
+            onExcludeTown: { ProspectMutations.excludeTown(item, context: context, feedback: feedback) },
+            onCorrectProducer: { standing in
+                ProspectMutations.correctProducer(item, to: standing, context: context, feedback: feedback)
+            }
         )
         // #236: tag each row with its key so a deep link can scroll to it, and highlight the target.
         let highlighted = highlightedKey == item.id

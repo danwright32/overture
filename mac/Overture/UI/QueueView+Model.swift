@@ -22,6 +22,15 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // the same reason inheritedReachability is (deciding it needs the whole store, and a card must not
     // carry that cost per row). Defaulted so existing memberwise-init call sites are unaffected.
     var presenterLine: String? = nil
+    // #1719: the producer/house correction in force for this row's organisation, and the organisation the
+    // control acts on. Both resolved once per queue build from the same overrides the gate reads, never
+    // looked up in the view: a membership rule stated in a SwiftUI body is one no test can reach (#863).
+    var producerStanding: ProducerOverrideEditing.Standing = .none
+    var correctableOrganisation: String? = nil
+    // What the verdict IS right now, automatic or corrected. Without it the control could only offer two
+    // opposite corrections and say nothing about which one was already true, which is a menu asking Dan
+    // to choose a state without telling him the state he is in (his walk of the Debug build, 2026-07-29).
+    var treatedAsVenue: Bool = false
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -1132,6 +1141,51 @@ enum QueueModel {
         return (summary, candidateKeys.sorted())
     }
 
+    // #1719: which correction is in force for a presenter, from the overrides already in hand. Mirrors
+    // ProducerOverrideEditing.standing, but reads the loaded sets rather than the store, because the queue
+    // build has them and re-fetching per row would be several hundred pointless round trips.
+    static func producerStanding(of presenter: String?,
+                                 overrides: ProducerOverrides) -> ProducerOverrideEditing.Standing {
+        guard let key = ProducerGate.key(presenter) else { return .none }
+        if overrides.demoted.contains(key) { return .demoted }
+        if overrides.promoted.contains(key) { return .promoted }
+        return .none
+    }
+
+    // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
+    // about a specific name rather than a rule in the abstract. Kept out of the view with every other
+    // sentence the app can say (#915).
+    static func producerCorrectionLabel(_ standing: ProducerOverrideEditing.Standing,
+                                        organisation: String,
+                                        treatedAsVenue: Bool) -> String {
+        // "Presenter", never "producer": it is Dan's own word for this and the app's own field name
+        // ("watch the venue, pitch the presenter"), and the gate's internal vocabulary is not his problem.
+        //
+        // Dan's walk of the Debug build, 2026-07-29, on a menu that offered both directions at once:
+        // "these are mutually exclusive? What is it currently being treated as?" He was right, and the
+        // answer was nowhere on screen. "No correction in force" is NOT "no verdict": the gate has always
+        // already decided, and offering both corrections as equals hid which one was true. So the menu now
+        // STATES the verdict (producerVerdictLine) and offers only the single action that changes it.
+        // A correction in force offers the way back to automatic instead.
+        switch standing {
+        case .none:
+            return treatedAsVenue
+                ? "Treat \(organisation) as the presenter instead"
+                : "Treat \(organisation) as the venue instead"
+        case .demoted, .promoted:
+            return "Go back to deciding \(organisation) automatically"
+        }
+    }
+
+    // The state line above the action, naming WHO decided. Dan needs that distinction: a verdict he set
+    // is his to revisit, and one Overture reached is a rule doing its job, and the two invite different
+    // responses to the same wrong answer.
+    static func producerVerdictLine(_ standing: ProducerOverrideEditing.Standing,
+                                    treatedAsVenue: Bool) -> String {
+        let what = treatedAsVenue ? "the venue" : "the presenter"
+        return standing == .none ? "Overture decided: \(what)" : "You set this: \(what)"
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
@@ -1497,6 +1551,14 @@ enum QueueModel {
             item.contactRoute = $0.contactRouteForScoring(now: now)
             item.presenterLine = presenterLine(title: $0.groupName, presenter: $0.presenter,
                                                venue: $0.venue, venueBrands: venueBrands)
+            // Only an organisation the gate can actually key is correctable. A name that folds away to
+            // nothing would store a key no presenter can ever match, which reads exactly like no
+            // correction at all.
+            item.correctableOrganisation = ProducerGate.key($0.presenter) == nil ? nil : $0.presenter
+            item.producerStanding = producerStanding(of: $0.presenter, overrides: overrides)
+            // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
+            // classification the row is not actually using.
+            item.treatedAsVenue = venueBrands.contains($0.presenter)
             return item
         }
     }
