@@ -43,3 +43,29 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `already-covered-photographer`: an explicit "we have a photographer" statement sets the fit-risk note (#611).
 - `returning-client-booked`: a booked returning client opens warm, with no cold self-introduction and no portfolio/gallery scaffolding (#1215).
 - `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).
+- `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
+
+## What this harness CANNOT test, and why no fixture should pretend otherwise (#1723)
+
+The house rule (#1720) has two halves. Only one of them is testable here.
+
+**Testable: refusing a listed house.** `listed-house-is-refused` carries an optional run-level `houses`
+list, which `scripts/eval-prep-runbook.sh` puts in the prompt when a fixture has one. Everything the
+verdict depends on is inline, so the fixture discriminates: drop the rule and the run emits Harbour Arts
+Centre as a `presenter` contact, which the expectation forbids. It can genuinely go red.
+
+**NOT testable: following the trail to an organisation the run has not visited.** The other half of the
+rule says an organisation NOT on the list must be FETCHED at its own site before the run may conclude no
+contact exists. This harness cannot check that, and the reason is structural rather than a gap to fill
+later: `eval-prep-runbook.sh` passes `"Bash Edit WebFetch WebSearch Skill"` as the FORBIDDEN tool list
+(the third argument of `claude_run_scope`, see `mac/scripts/lib/claude-run-scope.sh`) and hands the run
+all its material inline, deliberately, so the eval is reproducible and carries no real PII. A run that
+cannot fetch anything cannot demonstrate that it followed a trail, and a fixture that supplied the
+destination inline would be handing over the very thing the rule is about.
+
+So a "the run visited the named organisation" fixture would pass on the day it was written and could
+never fail. **Do not add one.** It would read as coverage of the behaviour that actually broke on the
+Abrons night (#1681) while testing nothing at all. The fetching half is covered instead by the
+`RUNBOOK_RULES` presence guard in `src/lib/prepRunbookRules.ts`
+(`named-organisation-must-be-visited`), which proves the instruction is still in the prompt, and by
+reading what a real Prep run actually did.

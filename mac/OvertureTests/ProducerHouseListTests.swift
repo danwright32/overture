@@ -156,6 +156,49 @@ struct ProducerHouseListTests {
         #expect(houses.map(\.name) == ["frigid new york"])
     }
 
+    // #1723: a house named ONLY inside a longer venue string. Measured on the live store 2026-07-29:
+    // "Kaufman Music Center" appears nowhere on its own, in any field, only inside "Merkin Hall at
+    // Kaufman Music Center". So the list carried the whole string and never the building, and a run that
+    // read "Kaufman Music Center" on a page was told it was fair game to pitch. Eleven venue strings name
+    // a parent this way and four parents were missing from the list because of it.
+    @Test("a parent building named inside a venue string is a house in its own right")
+    func aParentBuildingInsideAVenueStringIsAHouse() {
+        let corpus = [Self.show("Some Ensemble", at: "Merkin Hall at Kaufman Music Center")]
+        let houses = ProducerGate.houses(shows: corpus)
+        let byKey = Dictionary(uniqueKeysWithValues: houses.map { ($0.key, $0.name) })
+        // The room itself, as before.
+        #expect(byKey["merkin hall at kaufman music center"] != nil)
+        // And the building it sits inside, which is the new part.
+        #expect(byKey["kaufman music center"] == "Kaufman Music Center")
+    }
+
+    // The same shape with an ADDRESS after "at" rather than a building. "Jalopy's Classroom at 319
+    // Columbia St" is on the live store, and turning that tail into a house would put a street address on
+    // the list, where it can only ever match wrongly. A leading digit is the same tell VenueNormalization
+    // already uses to spot an address clause.
+    @Test("an address after \"at\" is not a house")
+    func anAddressAfterAtIsNotAHouse() {
+        let corpus = [Self.show("Some Ensemble", at: "Jalopy's Classroom at 319 Columbia St")]
+        let keys = Set(ProducerGate.houses(shows: corpus).map(\.key))
+        #expect(keys.contains("jalopy's classroom at 319 columbia street"))
+        #expect(keys.contains { $0.hasPrefix("319") } == false,
+                "a street address must never become a house")
+    }
+
+    // A parent already on the list contributes nothing new, which is what makes this derivation safe to
+    // apply to every venue string rather than a curated few. Both Carnegie rooms name the same building.
+    @Test("deriving a parent that is already a house adds no duplicate")
+    func aParentAlreadyOnTheListIsNotDuplicated() {
+        let corpus = [
+            Self.show("Some Ensemble", at: "Weill Recital Hall at Carnegie Hall"),
+            Self.show("Another Ensemble", at: "Zankel Hall at Carnegie Hall"),
+            Self.show("A Third", at: "Carnegie Hall"),
+        ]
+        let houses = ProducerGate.houses(shows: corpus)
+        #expect(houses.filter { $0.key == "carnegie hall" }.count == 1)
+        #expect(houses.map(\.key).contains("carnegie hall"))
+    }
+
     // The gate's own answer and the list must never disagree: anything the list calls a house is
     // something isVenueBrand refuses, and vice versa. This is the assertion that would catch the list
     // growing a judgment of its own.

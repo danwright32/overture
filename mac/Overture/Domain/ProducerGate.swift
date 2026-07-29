@@ -131,6 +131,15 @@ enum ProducerGate {
                 keys.insert(presenterKey)
             }
         }
+        // #1723: the building a room sits INSIDE, which is a house that may appear nowhere else. Measured
+        // on the live store 2026-07-29: "Kaufman Music Center" exists in no field of any row on its own,
+        // only inside the venue "Merkin Hall at Kaufman Music Center", so the list carried the room and
+        // not the building, and a run reading "Kaufman Music Center" on a page was told to pitch it.
+        for venue in shows.compactMap({ $0.venue }) {
+            guard let parentKey = key(parentBuilding(of: venue)) else { continue }
+            keys.insert(parentKey)
+        }
+
         // Dan's own corrections last, and unconditionally: a key he has demoted is a house whatever the
         // automatic arms concluded, which is the whole point of the override (FRIGID New York rents one
         // room to 40 companies and is named in no venue string, so nothing else reaches it).
@@ -138,6 +147,23 @@ enum ProducerGate {
 
         let names = readableNames(in: shows)
         return keys.sorted().map { House(key: $0, name: names[$0] ?? $0) }
+    }
+
+    // #1723: the parent building a room names itself as sitting inside, or nil when the venue names none.
+    // Returns the raw tail so the caller folds it exactly once, the same way every other key is folded.
+    static func parentBuilding(of venue: String) -> String? {
+        // Only the venue's OWN name, so a trailing city or address clause cannot be mistaken for a
+        // building. Measured 2026-07-29: eleven live venue strings name a parent this way.
+        let name = VenueNormalization.keyName(venue)
+        guard let range = name.range(of: " at ") else { return nil }
+        let tail = String(name[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+        guard !tail.isEmpty else { return nil }
+        // An ADDRESS, not a building. "Jalopy's Classroom at 319 Columbia St" is on the live store, and a
+        // street address on the house list can only ever match wrongly: nothing a run reads off a page is
+        // an organisation called "319 Columbia Street". The leading digit is the same tell
+        // VenueNormalization.strippingEmbeddedAddress already relies on, measured over the same corpus.
+        guard let first = tail.first, !first.isNumber else { return nil }
+        return tail
     }
 
     // One readable spelling per key, chosen from every venue and presenter string in the corpus. The
@@ -151,7 +177,11 @@ enum ProducerGate {
     // `houses` above, which is honest; dropping it would silently discard his correction.
     private static func readableNames(in shows: [Show]) -> [String: String] {
         var names: [String: String] = [:]
-        for raw in shows.flatMap({ [$0.venue, $0.presenter] }).compactMap({ $0 }) {
+        // #1723: a derived parent building needs a spelling too, and its only source is the venue string
+        // it was pulled out of. Without this it would show its own folded key, which is the fallback meant
+        // for a correction whose spelling has left the store, not for a name sitting right there.
+        let parents = shows.compactMap { $0.venue }.compactMap { parentBuilding(of: $0) }
+        for raw in shows.flatMap({ [$0.venue, $0.presenter] }).compactMap({ $0 }) + parents {
             guard let folded = key(raw) else { continue }
             let candidate = VenueNormalization.keyName(raw)
                 .trimmingCharacters(in: .whitespacesAndNewlines)

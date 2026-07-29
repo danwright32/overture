@@ -419,6 +419,7 @@ describe("prep-eval fixtures", () => {
       "already-covered-photographer",
       "carnegie-citywide-press-inbox",
       "host-venue-not-target",
+      "listed-house-is-refused",
       "presenter-not-venue",
       "returning-client-booked",
       "returning-client-warm-lead",
@@ -442,4 +443,30 @@ describe("prep-eval fixtures", () => {
       expect(r.pass).toBe(true);
     });
   }
+
+  // #1723: a fixture that has only ever been shown its own compliant answer has not been seen to fail,
+  // and "each guard must be seen to fail before it is trusted" is the whole point of this phase. This is
+  // the regression the house fixture exists to catch: the run reads "Presented by Harbour Arts Centre",
+  // takes the listing at its word, and emits the building as a presenter contact. That is precisely what
+  // a run does when the house rule is dropped from the prompt, so if this output scored as a pass the
+  // fixture would be decoration.
+  it("listed-house-is-refused: flags a run that pitches the listed house as a presenter", () => {
+    const fixture = fixtures.find((f) => f.name === "listed-house-is-refused");
+    expect(fixture).toBeTruthy();
+    const produced = JSON.parse(JSON.stringify(fixture!.sampleCompliantOutput)) as {
+      results: Array<{ contacts: Array<Record<string, unknown>> }>;
+    };
+    produced.results[0].contacts.push({
+      name: "Nadia Feld",
+      role: "Programming Manager",
+      email: "nadia@harbourarts.example",
+      method: "named_decision_maker",
+      confidence: "high",
+      provenance: "presenter",
+      sourceUrl: "https://harbourarts.example/about/staff",
+    });
+    const r = evaluateFixture(fixture!, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/harbourarts\.example/);
+  });
 });

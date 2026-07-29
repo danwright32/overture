@@ -220,6 +220,15 @@ leading "the". Fold every step or not at all: a half-folded name matches nothing
 exactly like a name that is genuinely not a house. (See also #342, on a curated venue map for the
 same question.)
 
+**A house under a longer or shorter name (#1723).** A house often publishes itself under a fuller name
+than the one the list carries. Treat a name as that house when, after folding both, either one
+contains a listed house's name as whole words. "Jalopy Theatre and School of Music" read on a page is
+the listed "jalopy theatre"; "Weill Recital Hall" is the listed "carnegie hall" when the list carries
+the hall. Two guards on this, and both matter: whole WORDS only, so a name is never matched on a
+fragment inside a longer word, and never match on a house whose name is a single word, because "Bard"
+and "Irondale" are both real houses on this list and a bare substring test would read any
+organisation containing those letters as the building. A single-word house matches only exactly.
+
 This list is the app's own answer and it is the ONLY house test you have. Its verdicts come from
 the same rule the rest of Overture uses, including corrections Dan has made by hand, so you must
 **never judge for yourself whether an organisation is really the venue**. Never infer it from a
