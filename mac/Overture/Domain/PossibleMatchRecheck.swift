@@ -55,7 +55,8 @@ enum PossibleMatchRecheck {
         // #1702: built once from the whole store, the same corpus the scout judges against, so a presenter
         // that is really its building's brand cannot raise a fuzzy question here either.
         let venueBrands = ProducerGate.VenueBrands(
-            shows: all.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
+            shows: all.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            overrides: ProducerOverrideEditing.overrides(in: context))
 
         var changed = 0
         for p in flagged {

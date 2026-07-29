@@ -117,7 +117,7 @@ struct ProducerGateTests {
         ]
         #expect(ProducerGate.qualifies("Metropolitan Opera", among: shows) == false)
         #expect(ProducerGate.qualifies("Metropolitan Opera", among: shows,
-                                       promoted: ["metropolitan opera"]))
+                                       overrides: .init(promoted: ["metropolitan opera"])))
     }
 
     // Promotion overrides the venue count ONLY. Dan's standing rule is that a room's own address is never
@@ -130,7 +130,61 @@ struct ProducerGateTests {
             show("A Visiting Act", at: "The Green Room 42"),
         ]
         #expect(ProducerGate.qualifies("The Green Room 42", among: shows,
-                                       promoted: ["the green room 42"]) == false)
+                                       overrides: .init(promoted: ["the green room 42"])) == false)
+    }
+
+    // #1719 (milestone 34 Phase 2): the OTHER direction. Promotion says "a producer despite looking like
+    // a house"; this says "a house despite not looking like one", and without it the gate has no way to
+    // be corrected when every automatic arm misses.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="FRIGID New York's presenter and venue pairs, and whether its folded name is or is contained in any folded venue key in the store"
+    // FRIGID New York is the measured miss. It rents its rooms to 40 different companies across 33
+    // untriaged rows, so it is a house in every sense Dan cares about, but its name appears in no venue
+    // string (the rooms are called Under St Marks and The Kraine Theater), so the containment arm never
+    // bites, and it runs more than one of them, so the venue count reads it as a well travelled producer.
+    // Both automatic arms are working correctly and both are wrong here, which is exactly why the human
+    // half has to exist.
+    @Test("Dan can demote a house the automatic rule admits")
+    func demotionRefusesAHouseTheArmsMiss() {
+        let shows = [
+            show("FRIGID New York", at: "Under St Marks"),
+            show("FRIGID New York", at: "The Kraine Theater"),
+        ]
+        // The miss, pinned so the fix is visibly a change of behaviour and not a no-op.
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows))
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
+                                       overrides: .init(demoted: ["frigid new york"])) == false)
+    }
+
+    // A demoted key is a house for the shared verdict too, not only for the gate. HistoryMatch reads
+    // VenueBrands to refuse a fuzzy name match on a brand every show in the building shares, and a house
+    // Dan named by hand has to reach that surface as well or the two halves disagree about the same
+    // organisation.
+    @Test("a demoted organisation is a venue brand for the shared corpus verdict")
+    func demotionReachesVenueBrands() {
+        let shows = [
+            show("FRIGID New York", at: "Under St Marks"),
+            show("FRIGID New York", at: "The Kraine Theater"),
+        ]
+        #expect(ProducerGate.VenueBrands(shows: shows).contains("FRIGID New York") == false)
+        #expect(ProducerGate.VenueBrands(shows: shows, overrides: .init(demoted: ["frigid new york"]))
+            .contains("FRIGID New York"))
+    }
+
+    // Precedence, pinned rather than left to whichever branch happens to run first. The editing layer
+    // keeps the two lists mutually exclusive, so this state should never reach the gate from the app;
+    // it is pinned anyway because the gate is also called from tests, fixtures and the importer, and
+    // because the safe direction is the refusing one (#1593's own rule: fail toward "pay again", never
+    // toward a shared answer).
+    @Test("a key that is somehow both promoted and demoted is refused")
+    func demotionBeatsPromotion() {
+        let shows = [
+            show("FRIGID New York", at: "Under St Marks"),
+            show("FRIGID New York", at: "The Kraine Theater"),
+        ]
+        #expect(ProducerGate.qualifies("FRIGID New York", among: shows,
+                                       overrides: .init(promoted: ["frigid new york"],
+                                                        demoted: ["frigid new york"])) == false)
     }
 
     // LIVE-STORE-CLAIM verified=2026-07-27 measure="presenter and venue pairs per organisation, whether the folded presenter name is or contains a folded venue key, and distinct venues per presenter under the gate's own fold, over all 714 prospects"

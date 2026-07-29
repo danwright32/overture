@@ -55,11 +55,11 @@ enum ProducerGate {
     //     escape hatch for that case, so a name overlap must not be the one thing his own judgment
     //     cannot overrule.
     static func qualifies(_ presenter: String, among shows: [Show],
-                          promoted: Set<String> = []) -> Bool {
+                          overrides: ProducerOverrides = .none) -> Bool {
         guard let presenterKey = key(presenter) else { return false }
-        guard !isVenueBrand(presenterKey, venueKeys: venueKeys(of: shows), promoted: promoted)
+        guard !isVenueBrand(presenterKey, venueKeys: venueKeys(of: shows), overrides: overrides)
         else { return false }
-        if promoted.contains(presenterKey) { return true }
+        if overrides.promoted.contains(presenterKey) { return true }
         return distinctVenues(presenterKey, among: shows).count >= 2
     }
 
@@ -76,9 +76,14 @@ enum ProducerGate {
     // about venue strings, and the live store's 700-odd rows carry 114 distinct rooms between them. A
     // caller asking about many presenters folds the venues once instead of per question.
     static func isVenueBrand(_ presenterKey: String, venueKeys: Set<String>,
-                             promoted: Set<String> = []) -> Bool {
+                             overrides: ProducerOverrides = .none) -> Bool {
         if venueKeys.contains(presenterKey) { return true }
-        if promoted.contains(presenterKey) { return false }
+        // #1719: the other direction, and it is tested BEFORE promotion on purpose. A key in both lists
+        // should never reach here (ProducerOverrideEditing keeps them mutually exclusive), but if one
+        // ever does, the refusing answer is the safe one: this gate's standing rule is to fail toward
+        // "no key, pay again" and never toward a shared answer.
+        if overrides.demoted.contains(presenterKey) { return true }
+        if overrides.promoted.contains(presenterKey) { return false }
         return venueKeys.contains { namesTheSameRoom(presenterKey, $0) }
     }
 
@@ -98,12 +103,12 @@ enum ProducerGate {
 
         private init(brandKeys: Set<String>) { self.brandKeys = brandKeys }
 
-        init(shows: [Show], promoted: Set<String> = []) {
+        init(shows: [Show], overrides: ProducerOverrides = .none) {
             let venueKeys = ProducerGate.venueKeys(of: shows)
             var keys = Set<String>()
             for presenter in Set(shows.compactMap { $0.presenter }) {
                 guard let key = ProducerGate.key(presenter), !keys.contains(key) else { continue }
-                if ProducerGate.isVenueBrand(key, venueKeys: venueKeys, promoted: promoted) {
+                if ProducerGate.isVenueBrand(key, venueKeys: venueKeys, overrides: overrides) {
                     keys.insert(key)
                 }
             }

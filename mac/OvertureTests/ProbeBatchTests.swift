@@ -102,7 +102,7 @@ struct ProbeBatchTests {
                       show("b", presenter: "Tiny Co", venue: "The Tank")]
         #expect(ProbeBatch.plan(selecting: ["a", "b"], among: corpus).keysToRun.count == 2)
         let promoted = ProbeBatch.plan(selecting: ["a", "b"], among: corpus,
-                                       promoted: [ProducerGate.key("Tiny Co")!])
+                                       overrides: .init(promoted: [ProducerGate.key("Tiny Co")!]))
         #expect(promoted.keysToRun.count == 1)
         #expect(promoted.organisationCount == 1)
     }

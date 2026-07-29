@@ -31,6 +31,10 @@ struct QueueView: View {
     // for, with nothing on screen to say so.
     @Query private var orgAnswers: [OrgReachabilityAnswer]
     @Query private var allProspects: [Prospect]
+    // #1719: Dan's own producer/house corrections. @Query rather than a context read, so applying one
+    // re-derives the queue immediately instead of at the next relaunch.
+    @Query private var promotedProducers: [PromotedProducer]
+    @Query private var demotedHouses: [DemotedHouse]
 
     // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
     // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
@@ -154,7 +158,9 @@ struct QueueView: View {
     }
 
     private var items: [QueueItem] {
-        QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects)
+        QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
+                         overrides: ProducerOverrides(promotedRows: promotedProducers,
+                                                      demotedRows: demotedHouses))
     }
 
     private var today: String { QueueModel.easternToday() }
@@ -261,6 +267,8 @@ struct QueueView: View {
     private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
         QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
                                   among: items, today: today, stage: focusedStage,
+                                  overrides: ProducerOverrides(promotedRows: promotedProducers,
+                                                               demotedRows: demotedHouses),
                                   geo: geo)
     }
 

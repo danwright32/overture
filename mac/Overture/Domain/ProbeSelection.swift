@@ -59,8 +59,8 @@ enum ProbeSelection {
     // the confirm can say plainly that they cost nothing rather than silently omitting them (a count
     // that quietly drops shows is how a pill stops being a promise about rows).
     static func summarize(dateCount: Int, candidates: [ProbeBatch.Show], alreadyAnswered: Int,
-                          among all: [ProbeBatch.Show], promoted: Set<String> = []) -> Summary {
-        let plan = ProbeBatch.plan(selecting: Set(candidates.map(\.key)), among: all, promoted: promoted)
+                          among all: [ProbeBatch.Show], overrides: ProducerOverrides = .none) -> Summary {
+        let plan = ProbeBatch.plan(selecting: Set(candidates.map(\.key)), among: all, overrides: overrides)
         let researches = plan.keysToRun.count
         return Summary(
             dateCount: dateCount,

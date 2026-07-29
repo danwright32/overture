@@ -912,9 +912,12 @@ enum ScoutService {
         // every caller (the scout, a test, a future one) judges against the real corpus and none of them
         // can forget to supply it. A brand every show in a hall shares must not be able to raise a fuzzy
         // "possible match", or one past record asks the same question on every show in the building.
+        // #1719: and Dan's own corrections alongside the corpus, read here for the same reason the
+        // corpus is: so no caller can forget to supply them.
         let venueBrands = ProducerGate.VenueBrands(
             shows: ((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
-                .map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
+                .map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            overrides: ProducerOverrideEditing.overrides(in: context))
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
         var seenKeys = Set<String>()
