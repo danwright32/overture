@@ -355,16 +355,37 @@ The pinned page and any `.corrupt` results file are swept by the app at launch o
 14 days old (`HandoffCleanup`, #821). Recent ones stay, deliberately: they are the only record of what
 a run actually read and what it produced when something went wrong.
 
-## Tools
+## Tools, and what the run is told
 
-`--allowedTools "Read,Write,WebFetch" --permission-mode manual` (built from `lib/scout-tools.sh`, #1026).
-This run reads files, follows links it was handed, and writes two files, nothing else. `Bash`, `Edit`,
-`Skill` and `WebSearch` are genuinely unreachable, not merely un-listed: `--allowedTools` on its own only
-PRE-APPROVES the three named tools, and a detached `claude -p` inherits `~/.claude` settings where
-`permissions.defaultMode` is `auto`, which auto-approves every other tool too (a 2026-07-17 run made 13
-`Bash` and 14 `Edit` calls with no denials). `--permission-mode manual` overrides that inherited auto, so
-anything outside the allowlist needs an approval the detached run cannot give and is denied. If the scope
-is ever edited into an unsafe posture (an auto-approving mode, or a forbidden tool in the allowlist) the
-runner refuses to start rather than silently regaining a shell. `reply-classify-run.sh` and `prep-run.sh`
-still carry the older `--allowedTools`-only posture (prep deliberately wants `Bash`/`Skill` for the
-brand-voice skill); tightening those the same way is tracked separately.
+`--allowedTools "Read,Write,WebFetch" --permission-mode manual --settings '{"enabledPlugins":{...}}'`,
+built from `lib/scout-tools.sh` and the shared `lib/claude-run-scope.sh` (#1026, #1097, #1682). The same
+guard builds prep's and reply-classify's scopes, each with its own allowlist: prep deliberately gets
+`Bash` and `Skill` (it researches, and it invokes the brand-voice skill), reply-classify gets `Read`,
+`Write` and `Skill`. If any of the three is ever edited into an unsafe posture (an auto-approving mode,
+or a forbidden tool in its allowlist) that runner refuses to start rather than silently regaining a
+shell.
+
+**What the run may DO.** This run reads files, follows links it was handed, and writes two files, nothing
+else. `Bash`, `Edit`, `Skill` and `WebSearch` are genuinely unreachable, not merely un-listed:
+`--allowedTools` on its own only PRE-APPROVES the three named tools, and a detached `claude -p` inherits
+`~/.claude` settings where `permissions.defaultMode` is `auto`, which auto-approves every other tool too
+(a 2026-07-17 run made 13 `Bash` and 14 `Edit` calls with no denials). `--permission-mode manual`
+overrides that inherited auto, so anything outside the allowlist needs an approval the detached run
+cannot give and is denied.
+
+**What the run is TOLD** (#1682). A detached `claude -p` also loads every Claude Code plugin enabled on
+the Mac, and a plugin's `SessionStart`, `UserPromptSubmit` and `PreToolUse` hooks inject text straight
+into a run this repo believes it wrote the whole prompt for. Measured on 2026-07-28 by reading a real
+run's event stream: a Vercel plugin installed for an unrelated project pushed 54,486 characters of
+Next.js product documentation into every chunk of a contact hunt, carrying imperatives in the same voice
+these runbooks use. So the scope also names every installed plugin in an `--settings` flag that turns
+them all off, cutting a trivial run from 53,610 input tokens to 45,139.
+
+That list is DERIVED from `claude plugin list --json` at launch, never written down: `--settings` merges
+`enabledPlugins` per key rather than replacing it, so every plugin has to be named, and a hardcoded list
+would go stale silently the first time one is installed. If the listing cannot be read the runner refuses
+to start, because "the plugins could not be established" and "there are no plugins" must not collapse
+into the same outcome. Dan's own skills in `~/.claude/skills` are NOT plugins and survive this, which
+matters: the brand-voice skill prep and reply-classify draft with lives there, and the tempting
+alternative (`--setting-sources project,local`) drops it, silently changing the voice of mail reaching
+strangers. `mac/scripts/runner-prompts.test.sh` is what holds that line.

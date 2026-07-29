@@ -58,6 +58,19 @@ mkdir -p "${SUPPORT}" "${TMP}/home/.local/bin"
 # records that it ran, so the test can count how many actually launched.
 cat > "${TMP}/home/.local/bin/claude" <<'STUB'
 #!/usr/bin/env bash
+# #1682: before launching anything, the runner asks claude which plugins are installed on the machine so
+# it can name every one of them in a --settings flag that turns them off (an unreadable answer makes the
+# run refuse to start). Answer as the real CLI does, and return BEFORE the bookkeeping below, so this
+# call is not miscounted as a launched claude.
+if [ "${1:-}" = "plugin" ]; then
+  printf '%s\n' '[{"id": "example@marketplace", "version": "1.0.0", "scope": "user", "enabled": true}]'
+  exit 0
+fi
+
+# The whole command line as launched, recorded before the parse below consumes it, so the fixture can
+# assert on the FLAGS a real run is given and not only on its prompt.
+printf '%s\n' "$*" > "${STUB_LOG_DIR}/args.$$"
+
 prompt=""
 model=""
 while [ $# -gt 0 ]; do
@@ -129,6 +142,13 @@ assert_equals "one claude launched per work-list item, not one for the whole run
 
 assert_equals "every chunk got its OWN slice of the queue, never the whole file" \
   "0" "$(grep -l 'overture-prep-queue.json' "${STUB_LOG_DIR}"/queue.* 2>/dev/null | wc -l | tr -d ' ')"
+
+# #1682: end of the wire. The scope function emitting the flag proves nothing on its own; what matters is
+# that EVERY launched claude was actually handed it, on the real command line, in the shell the app uses.
+# The plugin here is the one this fixture's stub reports as installed, so this is the derived list making
+# it all the way through rather than a literal written down somewhere.
+assert_equals "every chunk was launched with this machine's plugins turned off" \
+  "4" "$(grep -lF -- '--settings {"enabledPlugins":{"example@marketplace":false}}' "${STUB_LOG_DIR}"/args.* 2>/dev/null | wc -l | tr -d ' ')"
 
 # The merge is the load-bearing step: four separate chunk-results files become the one file the app reads.
 keys="$(node -e 'const r=require(process.argv[1]);console.log(r.results.map(x=>x.naturalKey).sort().join(","))' \

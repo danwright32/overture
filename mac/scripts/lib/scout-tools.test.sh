@@ -46,8 +46,23 @@ assert_not_contains() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/scout-tools.sh"
 
+# #1682: the scope now also turns off every Claude Code plugin installed on the Mac, so it needs a claude
+# binary to enumerate them with. A stand-in whose `plugin list --json` prints a listing this fixture
+# controls, so the assertion holds whatever is really installed. Same shape as the stub in
+# claude-run-scope.test.sh; each fixture stays self-contained, as every fixture in this repo is.
+STUB_ROOT="$(mktemp -d)"
+trap 'rm -rf "${STUB_ROOT}"' EXIT
+STUB_CLAUDE="${STUB_ROOT}/claude"
+cat > "${STUB_CLAUDE}" <<'STUB'
+#!/bin/sh
+cat <<'STUB_JSON'
+[{"id": "alpha@marketplace-one", "enabled": true}]
+STUB_JSON
+STUB
+chmod +x "${STUB_CLAUDE}"
+
 # --- the happy path: exactly the three tools, and a mode that closes the door on everything else -------
-scope="$(scout_extract_claude_scope)"
+scope="$(scout_extract_claude_scope "${STUB_CLAUDE}")"
 scope_status=$?
 
 if [[ "${scope_status}" -ne 0 ]]; then
@@ -56,6 +71,18 @@ fi
 
 assert_contains "the scope pre-approves the three tools the job needs" "${scope}" "--allowedTools Read,Write,WebFetch"
 assert_contains "the scope carries a permission mode (never relies on the inherited auto)" "${scope}" "--permission-mode manual"
+assert_contains "the scope turns off the machine's plugins, so no plugin hook can inject into the run (#1682)" \
+  "${scope}" '--settings {"enabledPlugins":{"alpha@marketplace-one":false}}'
+
+# Failure path: with no claude binary to enumerate plugins with, the scope must refuse rather than start a
+# run in which every plugin installed for some other project is still loaded and injecting.
+out="$(scout_extract_claude_scope 2>/dev/null)"
+st=$?
+if [[ "${st}" -ne 0 && -z "${out}" ]]; then
+  pass "the scope refuses when it cannot enumerate the machine's plugins"
+else
+  fail "the scope must refuse when it cannot enumerate the machine's plugins" "status ${st}, emitted: ${out}"
+fi
 
 # The whole point: the tools the run must never reach are NOT pre-approved, and (because the mode is not
 # auto) not reachable at all. If any of these ever appears in the emitted scope, the run has regained the
@@ -71,7 +98,7 @@ done
 # of the other approve-everything modes), the scope function must refuse to emit and fail the run rather
 # than silently hand the detached run a shell again.
 for dangerous in auto bypassPermissions dontAsk acceptEdits ""; do
-  out="$(SCOUT_EXTRACT_PERMISSION_MODE="${dangerous}" scout_extract_claude_scope 2>/dev/null)"
+  out="$(SCOUT_EXTRACT_PERMISSION_MODE="${dangerous}" scout_extract_claude_scope "${STUB_CLAUDE}" 2>/dev/null)"
   st=$?
   label="${dangerous:-<empty>}"
   if [[ "${st}" -ne 0 ]]; then
@@ -89,7 +116,7 @@ done
 # The two restrictive modes that DO close the door are accepted, so the guard is a real distinction and
 # not a blanket refusal that would pass while forbidding everything (green means nothing until seen red).
 for safe in manual plan; do
-  if SCOUT_EXTRACT_PERMISSION_MODE="${safe}" scout_extract_claude_scope >/dev/null 2>&1; then
+  if SCOUT_EXTRACT_PERMISSION_MODE="${safe}" scout_extract_claude_scope "${STUB_CLAUDE}" >/dev/null 2>&1; then
     pass "the scope accepts the fail-closed mode '${safe}'"
   else
     fail "the scope must accept the fail-closed mode '${safe}'"
@@ -98,7 +125,7 @@ done
 
 # --- failure path: a forbidden tool sneaking into the allowlist must be REFUSED, loudly ----------------
 for bad_allow in "Read,Write,WebFetch,Bash" "Read,Write,Edit,WebFetch" "Read,Write,WebFetch,Skill"; do
-  out="$(SCOUT_EXTRACT_ALLOWED_TOOLS="${bad_allow}" scout_extract_claude_scope 2>/dev/null)"
+  out="$(SCOUT_EXTRACT_ALLOWED_TOOLS="${bad_allow}" scout_extract_claude_scope "${STUB_CLAUDE}" 2>/dev/null)"
   st=$?
   if [[ "${st}" -ne 0 && -z "${out}" ]]; then
     pass "the scope refuses an allowlist that smuggles in a forbidden tool: ${bad_allow}"
@@ -129,6 +156,24 @@ if printf '%s' "${runner_code}" | grep -q -- '--allowedTools'; then
        "every claude invocation must fold through scout_extract_claude_scope, or a call site keeps the unrestricted flag"
 else
   pass "scout-extract-run.sh hardcodes no --allowedTools flag on any call site; both paths use the scope"
+fi
+
+# #1682: the scope needs the claude binary to enumerate this Mac's plugins with, so the runner must
+# resolve that binary BEFORE it builds the scope and hand it over. Built is not wired: a runner that still
+# called the scope function with no argument would refuse and never start at all.
+if printf '%s' "${runner_code}" | grep -qF 'scout_extract_claude_scope "$CLAUDE"'; then
+  pass "scout-extract-run.sh hands the resolved claude binary to the scope"
+else
+  fail "scout-extract-run.sh must call scout_extract_claude_scope \"\$CLAUDE\"" \
+       "without the binary the scope cannot enumerate this Mac's plugins, so it refuses and the run never starts"
+fi
+resolve_line="$(printf '%s\n' "${runner_code}" | grep -n '^resolve_claude' | head -1 | cut -d: -f1)"
+scope_line="$(printf '%s\n' "${runner_code}" | grep -n 'scout_extract_claude_scope "\$CLAUDE"' | head -1 | cut -d: -f1)"
+if [[ -n "${resolve_line}" && -n "${scope_line}" && "${resolve_line}" -lt "${scope_line}" ]]; then
+  pass "scout-extract-run.sh resolves the claude binary before building its scope"
+else
+  fail "scout-extract-run.sh must call resolve_claude before scout_extract_claude_scope" \
+       "resolve_claude at line ${resolve_line:-none}, scope built at line ${scope_line:-none}"
 fi
 
 # Count the claude invocations and require each to carry the scope, so a third path added later cannot

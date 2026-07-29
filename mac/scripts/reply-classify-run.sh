@@ -43,11 +43,6 @@ open_run_log "reply-classify-run.log"
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
 
-# #1097: resolve the scope once and refuse to start if it has drifted unsafe (an auto-approving mode, or a
-# forbidden tool like Bash or WebFetch in the allowlist). Fail loud: a detached run that drafts replies to
-# real people in Dan's voice must never fall back to a shell-capable posture in silence.
-REPLY_CLASSIFY_SCOPE="$(reply_classify_claude_scope)" || { echo "reply-classify: aborting, unsafe tool scope" >&2; exit 1; }
-
 QUEUE="$SUPPORT/overture-reply-classify-queue.json"
 RESULTS="$SUPPORT/overture-reply-classify-results.json"
 PROGRESS="$SUPPORT/overture-reply-classify-progress.json"
@@ -67,6 +62,20 @@ clear_cancel "$CANCEL"
 rm -f "$CLAUDE_PID_FILE" 2>/dev/null || true
 
 require_queue "$QUEUE" "reply-classify"
+
+# #1682: the scope needs the claude binary, because it asks it which plugins are installed on this Mac in
+# order to name every one of them in the flag that turns them off. So the binary is resolved here rather
+# than just before the launch a hundred lines below. It stays BELOW require_queue: "there is no work-list"
+# is the more useful thing to find in the log, and it costs nothing to check first.
+resolve_claude
+
+# #1097: resolve the scope once and refuse to start if it has drifted unsafe (an auto-approving mode, or a
+# forbidden tool like Bash or WebFetch in the allowlist). #1682 adds the second half: every Claude Code
+# plugin installed on this Mac is turned off for the run, so no plugin's hooks can inject their own
+# instructions into a prompt this repo wrote. Fail loud on either: a detached run that drafts replies to
+# real people in Dan's voice must never fall back to a shell-capable posture, or to carrying a stranger's
+# mandatory instructions, in silence.
+REPLY_CLASSIFY_SCOPE="$(reply_classify_claude_scope "$CLAUDE")" || { echo "reply-classify: aborting, unsafe run scope" >&2; exit 1; }
 
 # In-flight marker the app watches; removed on exit no matter what.
 : > "$MARKER"
@@ -149,8 +158,6 @@ IS the end, and you must never wait until the whole work-list is done to write a
 absent, draft from the skill alone: it is the authority, and the
 guidance file only ever nudges.
 "
-
-resolve_claude
 
 # Headless Claude Code run. Read (the work-list and the voice guidance), Write (the results), and #872:
 # Skill, so this run can invoke dan-wright-brand-voice. Without that tool the prompt's instruction to use
