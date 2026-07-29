@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **922 sentences**, from 310 source files.
+Every sentence Overture can say to Dan: **910 sentences**, from 313 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -37,6 +37,7 @@ What is not, and why:
 - `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
+- `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log to a file, not the app's own voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic + a system activity reason, not the app's voice (#915)
@@ -68,7 +69,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (45)
+## The same sentence, said in more than one place (44)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -83,7 +84,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DaysOffView.swift`
   - `UI/DaysOffView.swift`
 - "Carnegie Hall"
-  - `Domain/VenueDisplay.swift`
   - `Domain/WatchedSourceBackfill.swift`
   - `Integration/ScoutService.swift`
   - `UI/FollowUpsView.swift`
@@ -128,9 +128,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Interested, going quiet"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
-- "New York, NY"
-  - `Domain/VenueDisplay.swift`
-  - `Domain/VenueDisplay.swift`
 - "Not a booking"
   - `UI/ProspectRowView.swift`
   - `UI/ProspectRowView.swift`
@@ -422,10 +419,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Both days are included, so a Friday to Sunday trip is three blocked days."
     `UI/DayOffRangeFields.swift`
-"Bronx, NY"
-    `Domain/VenueDisplay.swift`
-"Brooklyn, NY"
-    `Domain/VenueDisplay.swift`
 "Built-in towns you took back onto the queue. Skip again to undo."
     `UI/ExcludedTownsView.swift`
 "Calendar page"
@@ -433,7 +426,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Cancel prep"
     `App/RootView.swift`
 "Carnegie Hall"
-    `Domain/VenueDisplay.swift`
     `Domain/WatchedSourceBackfill.swift`
     `Integration/ScoutService.swift`
     `UI/FollowUpsView.swift`
@@ -447,6 +439,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
+"City not known"
+    `Domain/VenueDisplay.swift`
 "Clear the search"
     `Domain/SourceSearch.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
@@ -854,8 +848,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Inquiry.swift`
 "Never show me shows in \(town)"
     `UI/QueueView+Model.swift`
-"New York, NY"
-    `Domain/VenueDisplay.swift`
 "New finds land here to keep or dismiss."
     `Domain/StageEmptyState.swift`
 "New listings, not read yet. Run a scout to read them."
@@ -1978,10 +1970,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "book now"
     `Domain/TicketLink.swift`
-"brooklyn society for ethical culture"
-    `Domain/VenueDisplay.swift`
-"bryant park"
-    `Domain/VenueDisplay.swift`
 "cannot go on one click. Select fewer dates and run them in batches."
     `Domain/ProbeSelection.swift`
 "couldn't save, try again"
@@ -2016,14 +2004,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepStatus.swift`
 "low confidence"
     `Domain/ReviewStatus.swift`
-"madison square park"
-    `Domain/VenueDisplay.swift`
 "medium confidence"
     `Domain/ReviewStatus.swift`
 "moves between them in a way I can't follow yet, so I only read the month it "
     `UI/LeadIntakeModel.swift`
-"museum of chinese in america"
-    `Domain/VenueDisplay.swift`
 "no Downbeat client export was found"
     `Persistence/PrepImporter.swift`
 "no code in redirect"
@@ -2056,8 +2040,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "something Overture has seen before"
     `UI/QueueView+Model.swift`
-"stern auditorium / perelman stage"
-    `Domain/VenueDisplay.swift`
 "ten are kept."
     `App/StoreShrinkCheck.swift`
 "the Downbeat client export couldn't be read"
@@ -2073,10 +2055,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "the contact"
     `App/ActionFeedback.swift`
     `Domain/OmniFocusSync.swift`
-"the joyce theater"
-    `Domain/VenueDisplay.swift`
-"the metropolitan museum of art"
-    `Domain/VenueDisplay.swift`
 "the other \(leftover)"
     `Domain/ScoutReadBudget.swift`
 "the other one"
@@ -2101,15 +2079,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "wants to book"
     `UI/QueueView+Model.swift`
-"wave hill"
-    `Domain/VenueDisplay.swift`
-"weill recital hall"
-    `Domain/VenueDisplay.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
 "your booking log"
     `UI/QueueView+Model.swift`
 "your queue"
     `App/ActionFeedback.swift`
-"zankel hall"
-    `Domain/VenueDisplay.swift`

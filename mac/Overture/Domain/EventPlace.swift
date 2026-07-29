@@ -157,7 +157,7 @@ enum EventPlace {
         }
 
         // In NY/NJ/CT. Now the only question left is the discipline split.
-        let inBoroughs = tokens.contains(where: { boroughs.contains($0) }) && state == "ny"
+        let inBoroughs = tokens.contains(where: { namesABorough($0) }) && state == "ny"
         if discipline.staysInTheBoroughs {
             return inBoroughs
                 ? Result(verdict: .inRange, reason: .insideTheBoroughs)
@@ -220,8 +220,51 @@ enum EventPlace {
 
         let city = rawTokens[stateIndex - 1].trimmingCharacters(in: .whitespaces)
         let cityLower = city.lowercased()
-        guard !cityLower.isEmpty, !boroughs.contains(cityLower) else { return nil }
+        guard !cityLower.isEmpty, !namesABorough(cityLower) else { return nil }
         return city
+    }
+
+    // #1744: whether a comma token names one of the five boroughs, by the SAME rule for both callers
+    // above. `resolve` asks it to decide the discipline split; `excludableTown` asks it to withhold the
+    // "never show me shows in this town" offer. Two callers, one predicate, deliberately: a widening
+    // that taught the gate to read a borough and left the refusal offering "never show me shows in
+    // downtown Brooklyn" would quietly cut Dan's own city.
+    //
+    // The borough name has to appear as a WORD. Exact equality was correct while `location` only ever
+    // held a page's own words, and #1744 stopped that being true: it fills the gap from the venue
+    // string, and the live store's own text includes "downtown Brooklyn, NY". Under exact matching that
+    // read as music outside the five boroughs, which would have hidden a real Red Hook folk festival.
+    // Word matching keeps "Brooklynville" out (the letter after the match must not be a letter), and the
+    // caller still requires the state to be New York, so West New York, NJ is not a borough either.
+    private static func namesABorough(_ token: String) -> Bool {
+        boroughs.contains(token) || boroughs.contains(where: { containsWord(token, $0) })
+    }
+
+    // #1744: the state a single comma clause names, as text fit to write back into a location ("NY" from
+    // "NY 11217", "Alabama" from "Alabama"), or nil. Exposed so EventLocationFill reads state names
+    // through THIS vocabulary rather than starting a second list of the United States, which would drift
+    // from the one the gate places shows with.
+    static func stateInClause(_ clause: String) -> String? {
+        let trimmed = clause.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        // A spelled-out state standing as the whole clause.
+        if stateNames[trimmed.lowercased()] != nil { return trimmed }
+        // A two-letter code as the clause's leading word, so a ZIP or a parenthetical after it is
+        // ignored ("NY 11217", "NY (specific venue not named on page)").
+        let head = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        if head.count == 2, usStateCodes.contains(head.lowercased()) { return head.uppercased() }
+        return nil
+    }
+
+    // #1744: whether this text names a country or US state the resolver already knows. It is what keeps
+    // the tour-title rule narrow: the tail of a title counts as a place only when the gate would be able
+    // to place it, so a show called "... in Concert" never becomes a show in a town called Concert.
+    static func namesAKnownPlace(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !t.isEmpty else { return false }
+        if foreignMarkers.contains(t) { return true }
+        if stateNames[t] != nil { return true }
+        return t.count == 2 && usStateCodes.contains(t)
     }
 
     // The index of the comma token that carries the state, and its code, scanned from the END so a
