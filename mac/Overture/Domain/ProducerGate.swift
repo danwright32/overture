@@ -163,8 +163,37 @@ enum ProducerGate {
         // an organisation called "319 Columbia Street". The leading digit is the same tell
         // VenueNormalization.strippingEmbeddedAddress already relies on, measured over the same corpus.
         guard let first = tail.first, !first.isNumber else { return nil }
+        // #1749: and the "at" has to be the one that means "inside", not one that belongs to the venue's
+        // own name. Read the head, not the tail: this is a parent building only when what precedes " at "
+        // names a ROOM.
+        //
+        // LIVE-STORE-CLAIM verified=2026-07-29 measure="every venue string containing \" at \", over all 702 prospects, and whether each tail is a building or part of the venue's own name"
+        // Eleven venue strings contain " at ", and the tail is a genuine building on only three of them
+        // (Carnegie Hall, Abrons Arts Center, Kaufman Music Center). The rest are the venue's own name:
+        // Jazz at Lincoln Center, The Space at Irondale, Synagogue at Sixth & I, Fisher Center at Bard.
+        // Four of those five name real producing organisations, and a producer on the house list is
+        // REFUSED silently, which is the expensive direction (#1749): the run drops a real lead and the
+        // card never says why. Getting it wrong the other way merely leaves a building off the list, which
+        // is the state everything before #1723 was already in.
+        let head = String(name[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+        guard let lastWord = head.split(separator: " ").last?.lowercased(),
+              roomWords.contains(lastWord) else { return nil }
         return tail
     }
+
+    // #1749: words that name a room INSIDE a building, not a building or a campus. That distinction is the
+    // whole rule: "center" and "space" name a whole venue, which is exactly why "Fisher Center at Bard"
+    // and "The Space at Irondale" are not rooms sitting inside something else, while "Merkin Hall at
+    // Kaufman Music Center" is.
+    //
+    // Deliberately small and deliberately not fitted to a single case: it is measured against all eleven
+    // live " at " strings (ProducerHouseListTests), keeps all three genuine parents, and rejects four of
+    // the five harmful ones. The fifth, "Five Angels Theater at the 52nd Street Project", is a producing
+    // company that owns its room, and no word test can separate that from a hall inside a building; it is
+    // pinned as a known false positive rather than left unstated, and Dan's promotion override reaches it.
+    private static let roomWords: Set<String> = [
+        "hall", "theater", "theatre", "stage", "auditorium", "room", "studio", "chapel", "playhouse",
+    ]
 
     // One readable spelling per key, chosen from every venue and presenter string in the corpus. The
     // spelling is the room's OWN name (VenueNormalization.keyName), so a venue string that carries its
