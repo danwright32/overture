@@ -75,6 +75,9 @@ struct ProspectRowView: View {
     var userExcludedTowns: Set<String> = []
     var allowedSeedTowns: Set<String> = []
     var onExcludeTown: () -> Void = {}
+    // #1719: the producer/house correction. Takes the standing Dan wants in force, so the same callback
+    // serves the correction and its undo.
+    var onCorrectProducer: (ProducerOverrideEditing.Standing) -> Void = { _ in }
 
     private var timing: QueueModel.Timing {
         QueueModel.displayTiming(performanceDate: item.performanceDate, runEndDate: item.runEndDate,
@@ -788,6 +791,26 @@ struct ProspectRowView: View {
                     if let town = item.excludableTown {
                         Divider()
                         Button(QueueModel.excludeTownLabel(town: town)) { onExcludeTown() }
+                    }
+                    // #1719: correcting who really presents this show. It lives in this menu for the same
+                    // reason the town refusal does: it is not a dismiss, it is a correction to how Overture
+                    // decides, and this menu is the row's one always-present home for those. It cannot hang
+                    // off the presenter line, because a demotion stops that line being drawn and the undo
+                    // would vanish with it. Offered only where there is an organisation to correct.
+                    if let org = item.correctableOrganisation {
+                        Divider()
+                        Button(QueueModel.producerCorrectionLabel(item.producerStanding,
+                                                                  organisation: org)) {
+                            onCorrectProducer(item.producerStanding == .none ? .demoted : .none)
+                        }
+                        // The opposite direction, shown only when neither is in force. With a correction
+                        // standing, the button above is already the way back, and offering both at once
+                        // would put a state and its reversal side by side as if they were equals.
+                        if item.producerStanding == .none {
+                            Button(QueueModel.producerPromotionLabel(organisation: org)) {
+                                onCorrectProducer(.promoted)
+                            }
+                        }
                     }
                 } label: {
                     // #1460: the same secondary-action capsule OVCapsuleButton wears, via the shared

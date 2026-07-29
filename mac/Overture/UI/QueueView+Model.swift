@@ -22,6 +22,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // the same reason inheritedReachability is (deciding it needs the whole store, and a card must not
     // carry that cost per row). Defaulted so existing memberwise-init call sites are unaffected.
     var presenterLine: String? = nil
+    // #1719: the producer/house correction in force for this row's organisation, and the organisation the
+    // control acts on. Both resolved once per queue build from the same overrides the gate reads, never
+    // looked up in the view: a membership rule stated in a SwiftUI body is one no test can reach (#863).
+    var producerStanding: ProducerOverrideEditing.Standing = .none
+    var correctableOrganisation: String? = nil
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -1132,6 +1137,39 @@ enum QueueModel {
         return (summary, candidateKeys.sorted())
     }
 
+    // #1719: which correction is in force for a presenter, from the overrides already in hand. Mirrors
+    // ProducerOverrideEditing.standing, but reads the loaded sets rather than the store, because the queue
+    // build has them and re-fetching per row would be several hundred pointless round trips.
+    static func producerStanding(of presenter: String?,
+                                 overrides: ProducerOverrides) -> ProducerOverrideEditing.Standing {
+        guard let key = ProducerGate.key(presenter) else { return .none }
+        if overrides.demoted.contains(key) { return .demoted }
+        if overrides.promoted.contains(key) { return .promoted }
+        return .none
+    }
+
+    // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
+    // about a specific name rather than a rule in the abstract. Kept out of the view with every other
+    // sentence the app can say (#915).
+    static func producerCorrectionLabel(_ standing: ProducerOverrideEditing.Standing,
+                                        organisation: String) -> String {
+        // "Presenter", never "producer": it is Dan's own word for this and the app's own field name
+        // ("watch the venue, pitch the presenter"), and the gate's internal vocabulary is not his problem.
+        // A correction in force reads as an ACTION to stop it, rather than a statement with "Undo" bolted
+        // on: "Stop treating" already says the treating is happening, so the state needs no second line.
+        switch standing {
+        case .none:     return "Treat \(organisation) as the venue, not the presenter"
+        case .demoted:  return "Stop treating \(organisation) as the venue"
+        case .promoted: return "Stop treating \(organisation) as the presenter"
+        }
+    }
+
+    // The second offer, shown only where it is not already in force, so the menu never carries both a
+    // correction and its own opposite as equals.
+    static func producerPromotionLabel(organisation: String) -> String {
+        "Treat \(organisation) as the presenter, not the venue"
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
@@ -1497,6 +1535,11 @@ enum QueueModel {
             item.contactRoute = $0.contactRouteForScoring(now: now)
             item.presenterLine = presenterLine(title: $0.groupName, presenter: $0.presenter,
                                                venue: $0.venue, venueBrands: venueBrands)
+            // Only an organisation the gate can actually key is correctable. A name that folds away to
+            // nothing would store a key no presenter can ever match, which reads exactly like no
+            // correction at all.
+            item.correctableOrganisation = ProducerGate.key($0.presenter) == nil ? nil : $0.presenter
+            item.producerStanding = producerStanding(of: $0.presenter, overrides: overrides)
             return item
         }
     }

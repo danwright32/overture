@@ -327,6 +327,20 @@ enum ActionAck {
     // #991: Dan refused a town from a row. Reversible from the banner (the #845 principle): the skip list
     // is the one place that refusal is written down, so a mis-click has to be undoable from where it
     // happened. "again" is honest, the town will not reappear in the queue.
+    // #1719: the producer/house correction, said as what it changes rather than as a rule name. Each
+    // states the standing that is now in force, so the line Dan reads back is the state, not the verb.
+    static func treatingAsVenue(organisation: String) -> String {
+        "Treating \(organisation) as the venue, so its address won't answer for other people's shows"
+    }
+
+    static func treatingAsProducer(organisation: String) -> String {
+        "Treating \(organisation) as the presenter, so one contact can answer for all its shows"
+    }
+
+    static func producerCorrectionCleared(organisation: String) -> String {
+        "Back to deciding \(organisation) automatically"
+    }
+
     static func townExcluded(town: String) -> String {
         "Won't show you shows in \(town) again"
     }

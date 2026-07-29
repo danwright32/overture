@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **911 sentences**, from 310 source files.
+Every sentence Overture can say to Dan: **918 sentences**, from 310 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -407,6 +407,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
     `Domain/InquiryCopy.swift`
+"Back to deciding \(organisation) automatically"
+    `App/ActionFeedback.swift`
 "Block days off"
     `UI/BlockDaysSheet.swift`
 "Block some days"
@@ -1402,6 +1404,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Stop the reply drafting run"
     `UI/DraftReviewView.swift`
+"Stop treating \(organisation) as the presenter"
+    `UI/QueueView+Model.swift`
+"Stop treating \(organisation) as the venue"
+    `UI/QueueView+Model.swift`
 "Stop watching"
     `UI/SourceFixConfirmActions.swift`
 "Stopped at their request"
@@ -1635,6 +1641,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Towns you've told Overture to skip. Take one back off the list here."
     `App/RootView.swift`
+"Treat \(organisation) as the presenter, not the venue"
+    `UI/QueueView+Model.swift`
+"Treat \(organisation) as the venue, not the presenter"
+    `UI/QueueView+Model.swift`
+"Treating \(organisation) as the presenter, so one contact can answer for all its shows"
+    `App/ActionFeedback.swift`
+"Treating \(organisation) as the venue, so its address won't answer for other people's shows"
+    `App/ActionFeedback.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."
