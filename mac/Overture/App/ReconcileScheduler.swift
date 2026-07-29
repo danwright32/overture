@@ -191,7 +191,13 @@ final class ReconcileScheduler {
             + inquiries.map { $0 as any BookingMatchable }
         let n = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients,
                                                 bookings: loaded.bookings, health: loaded.health, now: now)
-        guard n > 0 else { return (0, false) }
+        // #1648: the periodic half of the contact adjustment. An answer past its 90 day expiry has to
+        // give the show its score back, and this pass is where that happens: it already runs on a
+        // schedule with a context and a save, whereas the queue rebuild (where the plan originally put
+        // it) is a pure display calculation running inside view drawing, with no ability to save.
+        // A row therefore self-corrects while the app is open rather than only after a relaunch.
+        let lifted = ContactScoreAdjustment.settleAll(prospects, now: now)
+        guard n > 0 || lifted > 0 else { return (0, false) }
         do {
             try context.save()
             return (n, false)

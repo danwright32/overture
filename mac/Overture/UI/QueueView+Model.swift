@@ -38,6 +38,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // show he turned down as if he never had. Defaulted so existing memberwise-init call sites are
     // unaffected.
     var passedOnThisShow: Bool = false
+    // #1648: the contact answer AS THE RANKER READS IT, resolved once per queue build with the same
+    // `now` that decides the badge's staleness, so the masthead's merit split can never disagree with
+    // the score about whether an answer is still current. Defaulted so existing memberwise-init call
+    // sites are unaffected.
+    var contactRoute: ContactRoute = .unchecked
     let fitScore: Int
     let tier: String
     let fitReason: String
@@ -289,15 +294,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return shown.allSatisfy { unverifiedContactEmails.contains($0) }
     }
 
-    // #1338: after a reachability probe, a still-open show that found a SENDABLE contact is a "best reachable
-    // contact" the row highlights, so the answer to "which of these can I actually email" is obvious among a
-    // date's competing shows rather than assembled from per-row badges. It is exactly the emailFound badge, so
-    // a weak (venue/press) address, no email, a stale result, and a never-probed show are never crowned. It
-    // flags EVERY sendable winner, never picking one; the choice of which to pursue stays Dan's. Decided here
-    // (testable, #863), rendered by the row.
-    func isBestReachableContact(now: Date = Date()) -> Bool {
-        reachabilityBadge(now: now) == .emailFound
-    }
 
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
     // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
@@ -1422,6 +1418,8 @@ enum QueueModel {
             var item = QueueItem($0)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
+            // #1648: one staleness evaluation, feeding both the badge and the merit split.
+            item.contactRoute = $0.contactRouteForScoring(now: now)
             return item
         }
     }

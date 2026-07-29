@@ -17,16 +17,17 @@ struct ClassificationOverrideTests {
     @Test func rescoringWithCorrectedDisciplineChangesFit() {
         // music (baseline, 0 pts) corrected to dance (+3 pts) raises the score.
         let p = prospect(discipline: "music", production: "self")
-        let before = ClassificationOverride.rescored(p)
+        let before = ClassificationOverride.rescored(p, now: Date())
         p.discipline = "dance"
-        #expect(ClassificationOverride.rescored(p).score > before.score)
+        #expect(ClassificationOverride.rescored(p, now: Date()).score > before.score)
     }
 
     @Test func theCandidateIsBuiltFromTheProspectsOwnValues() {
         let p = prospect(discipline: "dance", production: "self")
-        let r = ClassificationOverride.rescored(p)
+        let r = ClassificationOverride.rescored(p, now: Date())
         let direct = Ranker.scoreFit(Candidate(reachable: true, priorRelationship: .none,
-            production: .selfProduced, profile: .strong, coverage: .likelyUncovered, discipline: .dance))
+            production: .selfProduced, profile: .strong, coverage: .likelyUncovered, discipline: .dance,
+            passedOnThisShow: false, contactRoute: .unchecked))
         #expect(r == direct)
     }
 

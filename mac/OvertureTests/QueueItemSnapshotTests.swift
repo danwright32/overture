@@ -133,9 +133,9 @@ struct QueueItemSnapshotTests {
         sendable.setRecipients([Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)])
         sendable.reachabilityResult = sendable.reachabilityResultFromRecipients
         #expect(QueueItem(sendable).reachabilityBadge(now: fresh) == .emailFound)
-        #expect(QueueItem(sendable).isBestReachableContact(now: fresh) == true)
+        #expect(QueueItem(sendable).reachabilityBadge(now: fresh) == .emailFound)
         // Stale: the earlier answer may have moved, so it is not crowned.
-        #expect(QueueItem(sendable).isBestReachableContact(now: stale) == false)
+        #expect(QueueItem(sendable).reachabilityBadge(now: stale) != .emailFound)
 
         // Probed, but only a weak venue/press address: real but not sendable, so not a best contact.
         let weak = makeProspect()
@@ -146,12 +146,12 @@ struct QueueItemSnapshotTests {
         weak.setRecipients([venue])
         weak.reachabilityResult = weak.reachabilityResultFromRecipients
         #expect(QueueItem(weak).reachabilityBadge(now: fresh) == .weakContactOnly)
-        #expect(QueueItem(weak).isBestReachableContact(now: fresh) == false)
+        #expect(QueueItem(weak).reachabilityBadge(now: fresh) != .emailFound)
 
         // A sendable email but NEVER probed: the free heuristic never crowns a best contact.
         let unprobed = makeProspect()
         unprobed.setRecipients([Recipient(id: "b@x.example", email: "b@x.example", name: "B", provenance: .act)])
-        #expect(QueueItem(unprobed).isBestReachableContact(now: fresh) == false)
+        #expect(QueueItem(unprobed).reachabilityBadge(now: fresh) != .emailFound)
     }
 
     // #1311: the queue item exposes whether ANY recipient carries a real address, so the Send surface can

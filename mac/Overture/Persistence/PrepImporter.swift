@@ -95,7 +95,7 @@ enum PrepImporter {
                     p.reachabilityResult = p.reachabilityResultFromRecipients
                 } else if let contacts = r.contacts, !contacts.isEmpty {
                     ingestContacts(contacts, into: p, context: context)
-                    applyPerformerMatch(contacts, to: p, clients: clients, history: history)
+                    applyPerformerMatch(contacts, to: p, clients: clients, history: history, now: now)
                     // Only now have the venue and press guards run, so this is the first point at which
                     // found can be told from weak. This is the authoritative writer for a probe that
                     // landed contacts; markProbed's floor stands for one that did not.
@@ -130,7 +130,7 @@ enum PrepImporter {
                 // performer is a past client has nothing to do with who he chose to email. A
                 // draft-only request carries no fresh contact research to trust, so it stays out.
                 if !draftOnlyRequest {
-                    applyPerformerMatch(contacts, to: p, clients: clients, history: history)
+                    applyPerformerMatch(contacts, to: p, clients: clients, history: history, now: now)
                 }
             }
             if let d = r.draft {
@@ -310,7 +310,8 @@ enum PrepImporter {
     // so they cannot be forgotten here.
     @MainActor
     private static func applyPerformerMatch(_ contacts: [PrepContact], to p: Prospect,
-                                            clients: [DownbeatClient], history: [HistoryRecord]) {
+                                            clients: [DownbeatClient], history: [HistoryRecord],
+                                            now: Date) {
         let production = Production(rawValue: p.production) ?? .unknown
         let current = PriorRelationship(rawValue: p.priorRelationship) ?? .none
 
@@ -369,7 +370,7 @@ enum PrepImporter {
 
             // rescored() reads priorRelationship straight off the prospect (it takes no relationship
             // argument), so priorRelationship MUST already be assigned above before this call.
-            let refit = ClassificationOverride.rescored(p)
+            let refit = ClassificationOverride.rescored(p, now: now)
             p.fitScore = refit.score
             p.tier = refit.tier.rawValue
             return   // one correction per prospect; the first confident performer wins

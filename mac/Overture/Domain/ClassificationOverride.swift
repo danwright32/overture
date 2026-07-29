@@ -22,14 +22,20 @@ enum ClassificationOverride {
     // merit split share one implementation. #384's note still applies and is now enforced for both:
     // passedOnThisShow is carried through, or correcting a discipline would silently drop the penalty
     // on a show Dan already passed on and hand it back its old score.
-    static func candidate(from p: Prospect) -> Candidate {
+    // #1648: `now` decides one thing only, whether the row's contact answer has aged out. It is a
+    // parameter rather than a `Date()` inside, so a test can pin it and so the expiry is evaluated at
+    // the same instant as the badge's, rather than each reading the host clock separately (LESSONS L39).
+    static func candidate(from p: Prospect, now: Date) -> Candidate {
         Candidate(rawDiscipline: p.discipline, rawProduction: p.production,
                   rawPriorRelationship: p.priorRelationship, rawProfile: p.profile,
-                  rawCoverage: p.coverage, passedOnThisShow: p.passedOnThisShow)
+                  rawCoverage: p.coverage, passedOnThisShow: p.passedOnThisShow,
+                  // Read off the row, which is what makes the adjustment idempotent by construction.
+                  // Nothing anywhere adds to or subtracts from a stored score.
+                  contactRoute: p.contactRouteForScoring(now: now))
     }
 
-    static func rescored(_ p: Prospect) -> FitResult {
-        Ranker.scoreFit(candidate(from: p))
+    static func rescored(_ p: Prospect, now: Date) -> FitResult {
+        Ranker.scoreFit(candidate(from: p, now: now))
     }
 
     // Applies Dan's genre correction to a prospect in place: writes the discipline, sets the override
@@ -42,7 +48,7 @@ enum ClassificationOverride {
     static func correct(_ p: Prospect, discipline: Discipline, now: Date) {
         p.discipline = discipline.rawValue
         p.classificationOverriddenByDan = true
-        let result = rescored(p)
+        let result = rescored(p, now: now)
         p.fitScore = result.score
         p.tier = result.tier.rawValue
     }

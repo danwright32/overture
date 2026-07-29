@@ -83,7 +83,12 @@ enum ProspectAssembler {
             profile: c.profile,
             coverage: c.coverage,
             discipline: c.discipline,
-            passedOnThisShow: verdict.passedOnThisShow
+            passedOnThisShow: verdict.passedOnThisShow,
+            // #1648: always unchecked here. This scores an ExtractedEvent, which by definition nobody
+            // has researched contacts for yet; there is no Prospect in scope to carry an answer. A show
+            // already in the store keeps its own, because the scout's Step B re-scores from the ROW
+            // rather than copying this number (#1648 Phase A1).
+            contactRoute: .unchecked
         )
         let fit = Ranker.scoreFit(candidate)
         if fit.excluded { return .skip(.unreachable) }

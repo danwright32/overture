@@ -43,7 +43,8 @@ enum QueuePriorityBreakdown {
         let candidate = Candidate(rawDiscipline: item.discipline, rawProduction: item.production,
                                   rawPriorRelationship: PriorRelationship.none.rawValue,
                                   rawProfile: item.profile, rawCoverage: item.coverage,
-                                  passedOnThisShow: item.passedOnThisShow)
+                                  passedOnThisShow: item.passedOnThisShow,
+                                  contactRoute: item.contactRoute)
         return Ranker.scoreFit(candidate).tier == .high
     }
 }
