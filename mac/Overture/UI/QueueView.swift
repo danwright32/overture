@@ -397,7 +397,7 @@ struct QueueView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visible, items: data.items)
+                    masthead(visible: data.visible, items: data.items, fanOutLine: fanOutWarning)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
                     // default), or the exact away-alert leads (#308) when focusedStage is nil.
@@ -753,7 +753,10 @@ struct QueueView: View {
     // so ProspectRowViewLayoutTests-style tests can call this directly with fake data instead of
     // needing a real populated store, the same prop-threading fix used repeatedly for
     // FollowUpsView/ArchiveView/QueueView's other retrofits this cycle.
-    func masthead(visible: [QueueItem], items: [QueueItem]) -> some View {
+    // #1694: the possible-match fan-out warning, when there is one. Passed IN rather than read from the
+    // store here, so the line the masthead draws can be pinned by a test; there is no default, so a call
+    // site has to decide what it shows rather than inherit silence.
+    func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?) -> some View {
         let summary = QueueModel.summary(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
@@ -792,6 +795,17 @@ struct QueueView: View {
             Text(ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt()).summary(now: Date()))
                 .font(.system(size: 11))
                 .foregroundStyle(OVColor.inkFaint)
+            // #1694: one record flagged as a possible match on a crowd of shows. Rust rather than the
+            // faint ink around it because this is not a status, it is Overture saying a question it is
+            // asking on those cards is probably wrong, and the whole point of surfacing it is that Dan
+            // stops answering it. It renders only when the rule found something, so it is never the
+            // line that is always there.
+            if let fanOutLine {
+                Text(fanOutLine)
+                    .font(.system(size: 11))
+                    .foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             replyRunLine
             agentStrip
         }
@@ -815,6 +829,16 @@ struct QueueView: View {
                 }
             }
         }
+    }
+
+    // #1694: one possible-match record flagged across a crowd of shows, which is the tell that the rule
+    // locked onto something those shows SHARE rather than onto the act (18 Carnegie Hall cards asked the
+    // same wrong question before anyone noticed). Counted over EVERY prospect rather than the queue's
+    // visible rows, for the reason the agent strip counts that way too: a flagged show has usually already
+    // left the queue, and a fan-out hiding entirely off the current stage is exactly the one nobody finds.
+    private var fanOutWarning: String? {
+        PossibleMatchFanOut.warningLine(
+            PossibleMatchFanOut.findings(names: prospects.compactMap(\.possibleMatchName)))
     }
 
     // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus

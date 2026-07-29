@@ -36,7 +36,25 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        #expect(renderedHeight(view.masthead(visible: items, items: items)) > 0)
+        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil)) > 0)
+    }
+
+    // #1694: the fan-out warning is drawn, not merely computed. Dan's call was that the questions stay on
+    // the cards and Overture says separately that one of them looks like a pattern, so "separately" has to
+    // be somewhere he actually looks. Asserted by height, because a masthead that swallowed the line would
+    // otherwise pass every test that only checked the sentence itself.
+    @Test func aFanOutWarningMakesTheMastheadTaller() {
+        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
+        let items = [longshotItem(id: "a"), longshotItem(id: "b")]
+
+        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil))
+        let warned = renderedHeight(view.masthead(
+            visible: items, items: items,
+            fanOutLine: "Carnegie Hall Citywide: Ivalas Quartet is flagged as a possible match on 19 "
+                + "shows, which usually means the match is wrong."))
+
+        #expect(quiet > 0)
+        #expect(warned > quiet)
     }
 
     // #1131: the "Of the N high-fit: ..." breakdown line was removed from the masthead. So a high-fit item
@@ -47,8 +65,8 @@ struct QueueViewMastheadLayoutTests {
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
-        let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit))
-        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit))
+        let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit, fanOutLine: nil))
+        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit, fanOutLine: nil))
 
         #expect(baseline > 0)
         #expect(withHigh == baseline)

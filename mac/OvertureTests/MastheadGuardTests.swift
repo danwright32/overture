@@ -24,7 +24,10 @@ struct MastheadGuardTests {
         // fooled by a resized reintroduction of the same dot.
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        let mastheadBody = SourceGuardHelper.propertyBody("func masthead(visible: [QueueItem], items: [QueueItem]) -> some View {", in: queueView)
+        // The locator is the function's real signature, so a change to it fails this LOUDLY (a nil body)
+        // rather than quietly scoping the check to nothing and passing. #1694 changed the signature and
+        // this is how that was noticed.
+        let mastheadBody = SourceGuardHelper.propertyBody("func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?) -> some View {", in: queueView)
         #expect(mastheadBody != nil)
         #expect(mastheadBody?.contains("Circle()") == false)
     }
