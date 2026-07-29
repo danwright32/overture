@@ -15,10 +15,15 @@ extension ConflictScope {
     // failed: a night Dan cannot work. A run bookable on seven of its eight nights takes gold, the colour
     // Overture already uses for a thing that wants a look rather than a thing that is broken
     // (#1428/#1472/#1498 each moved a case out of the alarm colour on exactly this reasoning).
+    //
+    // `goldText`, not `gold`: this is the one place gold is drawn as TEXT rather than as a fill with dark
+    // ink on it, and plain gold measured 3.24 to 1 on the light-theme card, under the bar text has to clear.
+    // Same signal colour, same meaning, readable. `rust` needs no such variant; it clears the bar as text in
+    // both themes already. See the token's own note, and ConflictNoteColourTests, which measures both.
     var noteTint: Color {
         switch self {
         case .thisNight:     return OVColor.rust
-        case .laterInTheRun: return OVColor.gold
+        case .laterInTheRun: return OVColor.goldText
         }
     }
 }
