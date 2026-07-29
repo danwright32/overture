@@ -1354,21 +1354,32 @@ enum ScoutService {
             // meaningful without reverting his correction. Because rescored() reads priorRelationship
             // straight off `existing`, this one call already reflects a protected performer match, with
             // no combined-rule branch needed. That is what makes the two guards compose.
-            let refit = ClassificationOverride.rescored(existing)
-            existing.fitScore = refit.score
-            existing.tier = refit.tier.rawValue
+            // Nothing to write here: the shared re-score below reads the discipline and production
+            // already on the row, which is exactly what "keep Dan's values" means.
         } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {
-            // Protect the score Prep computed from the performer match; the scout's own fresh score was
-            // derived from an org match that found nothing, so copying it would undo the correction by
-            // the back door while Step A left the relationship looking corrected.
+            // The org match found nothing, so Step A left Prep's performer correction standing. Take the
+            // scout's fresh discipline and production; the correction lives in priorRelationship, which
+            // Step A already resolved on the row, so the shared re-score below picks the fresh genre up
+            // WITHOUT undoing the correction by the back door.
             existing.discipline = p.discipline
             existing.production = p.production
         } else {
             existing.discipline = p.discipline
             existing.production = p.production
-            existing.fitScore = p.fitScore
-            existing.tier = p.tier
         }
+
+        // #1648 Phase A1: ONE scoring expression, reached by every arm above, and it reads the ROW.
+        //
+        // The arms differ only in which classification fields they write; none of them writes a score.
+        // Copying `p.fitScore` here (which the plain arm used to do) means the row's score is whatever
+        // the assembler computed from the extracted event, and the assembler never sees the Prospect.
+        // Any fact that lives only on the row is therefore invisible to it and gets stomped on the next
+        // scout that re-touches the show, intermittently, because unchanged sources are hash-gated and
+        // skipped. Scoring from the row instead makes the write idempotent and keeps the stored score
+        // and the stored axes describing the same show.
+        let refit = ClassificationOverride.rescored(existing)
+        existing.fitScore = refit.score
+        existing.tier = refit.tier.rawValue
         existing.runEndDate = p.runEndDate
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs

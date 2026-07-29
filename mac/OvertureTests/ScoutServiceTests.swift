@@ -193,6 +193,56 @@ struct ScoutServiceTests {
         #expect(refreshed?.classificationOverriddenByDan == true)
     }
 
+    // #1648 Phase A1: every arm of Step B must end in ONE scoring expression that reads the ROW.
+    //
+    // The performer-match arm protects the score Prep computed, and it did so by writing the fresh
+    // discipline and production while leaving fitScore alone. That leaves the row's stored score
+    // describing a discipline the row no longer has: here Prep corrected the relationship to booked
+    // while the show was classified dance, the listing then re-scouts as music, and the score stays
+    // at dance's number. Re-scoring FROM THE ROW is what fixes it, and it cannot undo the correction
+    // by the back door, because Step A has already put the protected relationship on the row and the
+    // re-score reads it from there rather than from the scout's org guess.
+    @Test func aProtectedPerformerMatchIsReScoredFromTheRowNotLeftOnAStaleDiscipline() throws {
+        let ctx = ModelContext(try container())
+        let key = Prospect.makeNaturalKey(groupName: "Indianapolis Children's Choir",
+                                          performanceDate: "2026-06-24",
+                                          venue: "Stern Auditorium / Perelman Stage")
+
+        // Prep corrected the relationship to booked off a performer match, and scored it while the
+        // show was classified dance: booked 20 + dance 3 + self 2 + strong 2 + uncovered 2 = 29.
+        let existing = Prospect(naturalKey: key, groupName: "Indianapolis Children's Choir",
+                                discipline: "dance", venue: "Stern Auditorium / Perelman Stage",
+                                performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                                priorRelationship: "booked", production: "self", profile: "strong",
+                                coverage: "likely_uncovered", fitScore: 29, tier: "high",
+                                fitReason: "performer match", matchedClientName: "ICC",
+                                possibleMatchSource: nil, possibleMatchName: nil)
+        existing.relationshipCorrectedByPerformerMatch = true
+        ctx.insert(existing)
+        try ctx.save()
+
+        // The scout re-reads the listing and the classifier now calls it music. No client list, so the
+        // org match is not confident and Step A leaves the performer correction standing.
+        let choirEvent = ExtractedEvent(title: "Indianapolis Children's Choir",
+                                        presenter: "Indianapolis Children's Choir",
+                                        venue: "Stern Auditorium / Perelman Stage",
+                                        performanceDate: "2026-06-24",
+                                        sourceUrl: "https://example.com/b")
+        _ = ScoutService.apply(events: [choirEvent], clients: [], history: [], blocked: .empty,
+                               today: ScoutTestClock.beforeAllFixtures, into: ctx)
+
+        let refreshed = try ctx.fetch(FetchDescriptor<Prospect>(
+            predicate: #Predicate { $0.naturalKey == key })).first
+        // The correction itself is untouched: that is the whole point of the arm.
+        #expect(refreshed?.priorRelationship == "booked")
+        #expect(refreshed?.relationshipCorrectedByPerformerMatch == true)
+        #expect(refreshed?.discipline == "music")
+        // booked 20 + music 1 + self 2 + strong 2 + uncovered 2 = 27, re-derived from the row.
+        // Before #1648 Phase A1 this stayed 29, the number dance earned.
+        #expect(refreshed?.fitScore == 27)
+        #expect(refreshed?.tier == "high")
+    }
+
     // #1274: Dan renames an ugly scout-generated groupName. The rename must survive the next scout
     // (the guard in apply()), and the anti-duplicate crux: it must NOT change the naturalKey, so the
     // scout's exact-key match keeps firing and no second row is inserted. scoutGroupName is kept

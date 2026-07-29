@@ -35,14 +35,15 @@ enum QueuePriorityBreakdown {
 
     // An item stands on the event's own merit if it still clears high tier with the prior
     // relationship removed; otherwise the relationship is what lifted it.
+    //
+    // #1669: built through the SHARED Candidate builder, with only the relationship substituted. It
+    // used to hand-build one, which is how it came to omit the passed-on penalty and count a show Dan
+    // had turned down as standing on its own merit.
     private static func standsOnMerit(_ item: QueueItem) -> Bool {
-        let candidate = Candidate(
-            reachable: true,
-            priorRelationship: .none,
-            production: Production(rawValue: item.production) ?? .unknown,
-            profile: Profile(rawValue: item.profile) ?? .neutral,
-            coverage: Coverage(rawValue: item.coverage) ?? .unknown,
-            discipline: Discipline(rawValue: item.discipline) ?? .other)
+        let candidate = Candidate(rawDiscipline: item.discipline, rawProduction: item.production,
+                                  rawPriorRelationship: PriorRelationship.none.rawValue,
+                                  rawProfile: item.profile, rawCoverage: item.coverage,
+                                  passedOnThisShow: item.passedOnThisShow)
         return Ranker.scoreFit(candidate).tier == .high
     }
 }

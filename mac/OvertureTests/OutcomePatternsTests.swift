@@ -35,6 +35,24 @@ struct OutcomePatternsTests {
         return p
     }
 
+    // #1670 / #1648 Phase A4: the tier a pitch went out under is the only tier this report can honestly
+    // group by. The live tier can move after the send (a genre correction, a performer match, and from
+    // #1648 onward a contact check), so reading it here buckets a show under a tier it did not have when
+    // Dan actually pitched it, and the report silently mixes two scoring bases with nothing marking the
+    // change. The at-send tier is already frozen on the row; it was simply never read.
+    @Test func groupsSentShowsByTheTierTheyWentOutUnderNotTheTierTheyHoldNow() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "A", production: "self", discipline: "dance", tier: "high",
+                     status: .approved, outcome: .booked)
+        // It went out as a high fit, and something later moved it down.
+        p.tierAtSend = "high"
+        p.tier = "longshot"
+
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        let names = OutcomePatterns.rankedTallies(from: all, by: .tier).map(\.name)
+        #expect(names == ["high"])
+    }
+
     @Test func mapsProspectsToSamplesByChosenDimension() throws {
         let ctx = ModelContext(try container())
         _ = make(ctx, group: "A", production: "self", discipline: "choral", tier: "high",

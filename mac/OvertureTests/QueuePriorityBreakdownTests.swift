@@ -8,10 +8,12 @@ import Testing
 struct QueuePriorityBreakdownTests {
     private func item(prior: String = "none", production: String = "unknown", profile: String = "neutral",
                       coverage: String = "unknown", discipline: String = "music",
+                      passedOnThisShow: Bool = false,
                       tier: String, fitScore: Int) -> QueueItem {
         QueueItem(id: "k", groupName: "G", discipline: discipline, venue: nil, performanceDate: nil,
                   sourceListingURL: nil, websiteURL: nil, priorRelationship: prior, production: production,
-                  profile: profile, coverage: coverage, fitScore: fitScore, tier: tier, fitReason: "r",
+                  profile: profile, coverage: coverage, passedOnThisShow: passedOnThisShow,
+                  fitScore: fitScore, tier: tier, fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)
     }
 
@@ -39,6 +41,21 @@ struct QueuePriorityBreakdownTests {
         let item = item(prior: "booked", production: "self", profile: "strong",
                         coverage: "likely_uncovered", discipline: "dance", tier: "high", fitScore: 29)
         #expect(QueuePriorityBreakdown.summarize([item]).meritDriven == 1)
+    }
+
+    // #1669 / #1648 Phase A2: the merit split hand-built its Candidate and forgot the passed-on
+    // penalty, so a show Dan already turned down was measured as if he never had. Here the event's own
+    // axes come to 9 (self 2 + strong 2 + uncovered 2 + dance 3), which clears the high cutoff of 5,
+    // but Dan passed on it, and -5 puts real merit at 4. Only the warm relationship is holding it in
+    // high, so it belongs on the relationship side of the split.
+    @Test func aShowDanPassedOnDoesNotCountAsStandingOnItsOwnMerit() {
+        let passed = item(prior: "warm", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", discipline: "dance", passedOnThisShow: true,
+                          tier: "high", fitScore: 14)
+        let c = QueuePriorityBreakdown.summarize([passed])
+        #expect(c.high == 1)
+        #expect(c.relationshipDriven == 1)
+        #expect(c.meritDriven == 0)
     }
 
     @Test func emptyQueueIsAllZeros() {
