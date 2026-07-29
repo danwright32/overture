@@ -47,6 +47,22 @@ enum OVColor {
     )
     static let goldBright = Color(.sRGB, red: 0.870, green: 0.690, blue: 0.310, opacity: 1)
 
+    // #1583: gold as TEXT on a card, which is a different question from gold as a FILL and had never been
+    // asked. Every gold surface in this app until now was a capsule with dark ink drawn ON it, and a fill
+    // carries no contrast bar of its own; only its label does. When #1583 retired the clash pill, the
+    // sentence beneath it became the only thing carrying the clash, and plain `gold` as text measured 3.24
+    // to 1 on the light-theme card, well under the 4.5 to 1 that text this size needs.
+    //
+    // Darkened in the LIGHT theme only, which is the half that failed: the dark theme's gold already
+    // measures 7.15 to 1 on the dark card, and lifting it there would only make it glare. Deliberately not
+    // `goldDim`, whose value would pass at 4.84: that token means a specific thing (#1628, found something
+    // but could not stand behind it), and borrowing it for readability would leave the next person changing
+    // one meaning and silently moving the other. `ConflictNoteColourTests` measures both themes.
+    static let goldText = dynamic(
+        light: NSColor(srgbRed: 0.533, green: 0.384, blue: 0.086, alpha: 1),
+        dark: NSColor(srgbRed: 0.831, green: 0.643, blue: 0.282, alpha: 1)
+    )
+
     // #1628: gold at lower intensity, for a state that found something but could not stand behind it.
     // Deliberately the SAME hue as `gold` rather than a new colour: it has to read as a dimmer member of
     // the found-something family, not as a fourth signal. Dan arrived at needing this after seeing the

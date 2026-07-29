@@ -29,7 +29,7 @@ struct ConflictNoteColourTests {
     // THE #1527 fix, and it outlived the pill. A run with one blocked night inside it is bookable on its
     // other nights, so it must not be drawn in the colour this app uses for something that failed.
     @Test func aPartlyBookedRunIsNotDrawnInTheFailureColour() {
-        expectSameColour(ConflictScope.laterInTheRun.noteTint, OVColor.gold)
+        expectSameColour(ConflictScope.laterInTheRun.noteTint, OVColor.goldText)
 
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             #expect(srgb(ConflictScope.laterInTheRun.noteTint, appearance)
@@ -51,24 +51,21 @@ struct ConflictNoteColourTests {
     // The clash SENTENCE, which since #1583 is the only thing on the card carrying the clash, measured
     // against the card it sits on rather than against the capsule it used to sit under.
     //
-    // This records a known gap rather than asserting it away. The rust case clears AA comfortably. The gold
-    // case does NOT: `gold` on `surface` measures about 3.2 to 1 in the light theme, under the 4.5 to 1 that
-    // text this size needs. That is not something #1583 introduced (the sentence has been gold on the card
-    // since #1527) and fixing it means changing a colour Dan looks at, which is his call, not a change to
-    // smuggle into an issue about what Keep means. So the floor is pinned at what is actually on screen
-    // today: the number cannot silently get WORSE while the decision is open, and it names itself when it
-    // moves. Raise this to 4.5 in both themes the moment the tint is settled.
-    @Test func theClashSentenceIsNoLessReadableThanItIsToday() {
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            #expect(contrast(ConflictScope.thisNight.noteTint, on: OVColor.surface, under: appearance) >= 4.5,
-                    "the rust clash sentence fell below AA under \(appearance.rawValue)")
-
-            let gold = contrast(ConflictScope.laterInTheRun.noteTint, on: OVColor.surface, under: appearance)
-            #expect(gold >= 3.2,
-                    """
-                    the gold clash sentence measures \(String(format: "%.2f", gold)) to 1 under \
-                    \(appearance.rawValue), worse than the 3.2 it read when #1583 left it alone.
-                    """)
+    // This is the same bar the retired pill was held to, applied to the thing that replaced it. It caught a
+    // real failure: `gold`, drawn as TEXT on the light-theme card, measured 3.24 to 1, well under the 4.5 to
+    // 1 that text this size needs. Gold had never been asked this question before, because until #1583 the
+    // gold on a clash was a FILL with dark ink on top of it, and a fill has no contrast bar of its own.
+    // `goldText` is the answer: the same signal colour, darkened in the light theme only, where it failed.
+    @Test func theClashSentenceIsReadableOnTheCardInBothThemes() {
+        for scope in [ConflictScope.thisNight, .laterInTheRun] {
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let ratio = contrast(scope.noteTint, on: OVColor.surface, under: appearance)
+                #expect(ratio >= 4.5,
+                        """
+                        the clash sentence measures \(String(format: "%.2f", ratio)) to 1 on the card under \
+                        \(appearance.rawValue), below the 4.5 to 1 that text this size needs.
+                        """)
+            }
         }
     }
 
