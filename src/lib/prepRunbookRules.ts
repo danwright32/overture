@@ -41,6 +41,14 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /never\s+judge\s+for\s+yourself\s+whether\s+an\s+organisation\s+is\s+really\s+the\s+venue/i },
   { name: "named-organisation-must-be-visited",
     pattern: /Naming\s+it\s+in\s+a\s+search\s+query\s+is\s+not\s+visiting\s+it/i },
+  // #1723: a house's fuller name. The store spells it "Jalopy Theatre"; its own site says "Jalopy Theatre
+  // and School of Music", and an exact lookup misses, so the run reads the house as a pitchable presenter.
+  // Measured on the live store: two of the eight verdicts this phase pins failed on exactly this. The
+  // whole-words and two-word guards are load-bearing and mirror ProducerGate.containsAsWords: without
+  // them "Bard" and "Irondale", both real single-word houses, would swallow every organisation whose name
+  // contains those letters.
+  { name: "house-name-matches-a-longer-name",
+    pattern: /contains\s+a\s+listed\s+house's\s+name\s+as\s+whole\s+words/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },
   { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },

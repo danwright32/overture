@@ -1,0 +1,73 @@
+{
+  "name": "listed-house-is-refused",
+  "rule": "An organisation on the queue's `houses` list is the building, and its addresses are disqualified exactly as the show's own venue is (#1720/#1723). The list is the app's answer; the run never re-decides it. This is the ONLY half of the house rule an eval can test, since the run here cannot fetch anything (see README).",
+  "input": {
+    "naturalKey": "lumen-quartet|2026-04-18|bergen-room",
+    "groupName": "Lumen Quartet",
+    "venue": "Bergen Room",
+    "performanceDate": "2026-04-18",
+    "discipline": "music",
+    "websiteURL": "https://lumenquartet.example",
+    "sourceListingURL": "https://harbourarts.example/whats-on/lumen-quartet",
+    "priorRelationship": "cold",
+    "production": "agency"
+  },
+  "houses": [
+    { "key": "harbour arts centre", "name": "Harbour Arts Centre" },
+    { "key": "bergen room", "name": "Bergen Room" }
+  ],
+  "sources": [
+    {
+      "label": "The listing, which names a presenting organisation",
+      "url": "https://harbourarts.example/whats-on/lumen-quartet",
+      "content": "Lumen Quartet play the Bergen Room on April 18, 2026. Presented by Harbour Arts Centre. Programme and general enquiries: info@harbourarts.example."
+    },
+    {
+      "label": "Harbour Arts Centre staff page",
+      "url": "https://harbourarts.example/about/staff",
+      "content": "Harbour Arts Centre. Nadia Feld, Programming Manager, books the season and handles imagery: nadia@harbourarts.example."
+    },
+    {
+      "label": "Lumen Quartet own contact page",
+      "url": "https://lumenquartet.example/contact",
+      "content": "Lumen Quartet. For press, imagery and booking enquiries, our manager is Tomas Reid: tomas@lumenquartet.example."
+    }
+  ],
+  "expected": {
+    "description": "Harbour Arts Centre is on the houses list, so it is the building and not a presenter to pitch, however plainly the listing calls it the presenter. Neither of its addresses may appear at any confidence or under any provenance. The act's own manager is the contact.",
+    "forbiddenEmails": [
+      "info@harbourarts.example",
+      "nadia@harbourarts.example"
+    ],
+    "forbiddenDomains": [
+      "harbourarts.example"
+    ],
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/music"
+  },
+  "sampleCompliantOutput": {
+    "version": 6,
+    "generatedAt": "2026-07-29T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "lumen-quartet|2026-04-18|bergen-room",
+        "contacts": [
+          {
+            "name": "Tomas Reid",
+            "role": "Manager",
+            "email": "tomas@lumenquartet.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://lumenquartet.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Lumen Quartet in the Bergen Room.",
+          "body": "I photograph performing arts in New York and saw Lumen Quartet are playing the Bergen Room on April 18. I shoot unobtrusive, no-flash documentary coverage and it would suit your programme. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Would coverage of this one be useful to you?",
+          "variant": "rate_stated"
+        }
+      }
+    ]
+  }
+}

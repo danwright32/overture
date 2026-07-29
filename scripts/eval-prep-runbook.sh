@@ -73,9 +73,14 @@ fixture_path_for() {
 # material rather than the drift of live sites (and carries no real PII).
 build_prompt() {
   local fixture="$1"
-  local input sources
+  local input sources houses
   input="$(jq '.input' "${fixture}")"
   sources="$(jq -r '.sources[] | "- \(.label) (\(.url // "no url")):\n\(.content)\n"' "${fixture}")"
+  # #1723: the run-level house list, when the fixture carries one. Without this the fixture's `houses`
+  # would sit in the file unread and its test would pass by accident, which is the exact vacuous-pass this
+  # eval exists to avoid. Absent on every fixture that predates the field, and absent from the prompt then,
+  # which is a real state the runbook has a documented fallback for.
+  houses="$(jq -r 'if .houses then "\nHouses named by the app (the run-level `houses` list from the work-list file):\n" + (.houses | tojson) else "" end' "${fixture}")"
   cat <<PROMPT
 You are running a REGRESSION EVAL of the Overture Prep runbook. Apply the rules in the runbook below to
 the SINGLE work-list item, then output ONLY the resulting PrepResults JSON (version 6) for that one item
@@ -87,7 +92,7 @@ Copy the item's naturalKey byte for byte into the result.
 
 Work-list item:
 ${input}
-
+${houses}
 Sources (the only material available to you):
 ${sources}
 
