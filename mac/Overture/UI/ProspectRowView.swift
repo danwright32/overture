@@ -312,6 +312,14 @@ struct ProspectRowView: View {
                     .font(OVType.body)
                     .foregroundStyle(OVColor.inkSoft)
             }
+            // #1731: and where Overture's own verdict is what withheld the name, say that here too, in the
+            // slot the name would have used. Dan asks "why is no presenter named?" while looking at this
+            // card, so answering it on a separate sheet meant the answer never met the question.
+            if let readAsBuilding = item.readAsTheBuildingNote {
+                Text(readAsBuilding)
+                    .font(OVType.body)
+                    .foregroundStyle(OVColor.inkSoft)
+            }
             // #340: give the metadata a calmer hierarchy instead of cramming venue, timing and date
             // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
             // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing

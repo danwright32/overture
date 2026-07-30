@@ -22,8 +22,6 @@ struct OrganisationsView: View {
     @Query private var promoted: [PromotedProducer]
     @Query private var demoted: [DemotedHouse]
 
-    @State private var search = ""
-
     // #1731: the whole derivation, built ONCE, in a value a test can count the builds of. It used to be
     // a computed property here, which SwiftUI re-reads on every access, so it rebuilt once per section and
     // again on every keystroke below. See OrganisationsSheetModel.
@@ -43,26 +41,14 @@ struct OrganisationsView: View {
         return NearMissNames.pairs(in: Array(Set(names)))
     }
 
-    private func matches(_ entries: [OrganisationListing.Entry]) -> [OrganisationListing.Entry] {
-        let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !needle.isEmpty else { return [] }
-        return entries.filter { $0.name.lowercased().contains(needle) }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
             ScrollView {
-                // Built ONCE here and handed down, so a keystroke in the search field filters a list that
-                // already exists instead of rebuilding it.
-                let sheet = model
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                    worthALook(sheet)
-                    treatedAsTheVenue(sheet)
-                    shareOneAnswer(sheet)
+                    worthALook(model)
                     sameNameTwice
-                    lookAnyOneUp(sheet)
                 }
                 .padding(OVSpacing.lg)
             }
@@ -75,10 +61,9 @@ struct OrganisationsView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Presenters").font(.system(size: 15, weight: .semibold)).foregroundStyle(OVColor.ink)
+                Text("Worth a look").font(.system(size: 15, weight: .semibold)).foregroundStyle(OVColor.ink)
                 // Says what the list is FOR, which the one-word title cannot: these verdicts decide whose
-                // name a card prints and what Dan pays to research.
-                Text("Who Overture thinks puts each show on, and who it reads as the building.")
+                Text("Organisations Overture may have read wrongly. Everything else it decided is on the show itself.")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
             }
             Spacer()
@@ -92,10 +77,10 @@ struct OrganisationsView: View {
     private func worthALook(_ sheet: OrganisationsSheetModel) -> some View {
         let shortlist = sheet.shortlist
         return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Worth a look", systemImage: "questionmark.circle", count: shortlist.count)
-            // Earns its place: it says what to DO with the section, which the heading does not, and warns
-            // that these are guesses rather than verdicts.
-            Text("Overture kept these as companies, but their shows sit oddly. Correct one from any of its shows if it looks wrong.")
+            sectionHeading("Kept as companies", systemImage: "questionmark.circle", count: shortlist.count)
+            // Earns its place: it says what to DO, which the heading does not, and warns that these are
+            // guesses rather than verdicts.
+            Text("Their shows sit oddly for a company. Correct one from any of its shows if it looks wrong.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             if shortlist.isEmpty {
@@ -104,37 +89,6 @@ struct OrganisationsView: View {
             } else {
                 ForEach(shortlist) { row(for: $0, detail: OrganisationListing.evidenceLine($0)) }
             }
-        }
-    }
-
-    // MARK: - #1731: the question this sheet was filed to answer
-
-    private func treatedAsTheVenue(_ sheet: OrganisationsSheetModel) -> some View {
-        let buildings = sheet.buildings
-        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Read as the building", systemImage: "building.2", count: buildings.count)
-            Text("Their name is never printed on a card and their address is never used as a contact.")
-                .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(buildings) { entry in
-                row(for: entry, detail: entry.reason.map(OrganisationListing.reasonLine) ?? "")
-            }
-        }
-    }
-
-    // MARK: - where a wrong verdict costs money
-
-    private func shareOneAnswer(_ sheet: OrganisationsSheetModel) -> some View {
-        let producers = sheet.sharing
-        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("One answer covers all their shows", systemImage: "arrow.triangle.branch",
-                           count: producers.count)
-            // The money sentence. This is the only section where being wrong costs a contact answer being
-            // spread across shows it does not belong to, which is what #1593 was built to prevent.
-            Text("So a wrong one here spreads a contact across shows it has nothing to do with.")
-                .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(producers) { row(for: $0, detail: OrganisationListing.evidenceLine($0)) }
         }
     }
 
@@ -161,25 +115,6 @@ struct OrganisationsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 3)
                 }
-            }
-        }
-    }
-
-    // MARK: - everything else, on demand
-
-    private func lookAnyOneUp(_ sheet: OrganisationsSheetModel) -> some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Look one up", systemImage: "magnifyingglass", count: sheet.all.count)
-            // The sections above are the interesting ones; the rest of the store is Overture working
-            // correctly, and listing all of it would bury them. Search is how nothing becomes unreachable.
-            Text("Every organisation Overture knows about, including the ones it read correctly.")
-                .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            OVSearchField(query: $search, placeholder: "Find an organisation",
-                          clearLabel: "Clear the organisation search")
-            ForEach(sheet.matches(search)) { entry in
-                row(for: entry, detail: entry.reason.map(OrganisationListing.reasonLine)
-                    ?? OrganisationListing.evidenceLine(entry))
             }
         }
     }
