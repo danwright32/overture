@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **930 sentences**, from 315 source files.
+Every sentence Overture can say to Dan: **933 sentences**, from 316 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -594,6 +594,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyClassifyProgress.swift`
 "Drafts waiting for you to read, edit, and approve."
     `Domain/AgentRoster.swift`
+"Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names."
+    `UI/OrganisationsView.swift`
 "Edit details..."
     `UI/InquiryRowView.swift`
 "Edit inquiry"
@@ -894,6 +896,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "No matches for \"\(query)\""
     `Domain/ShowSearch.swift`
+"No names look duplicated right now."
+    `UI/OrganisationsView.swift`
 "No new shoots have come through from Downbeat in the last four weeks. If you simply haven't booked, nothing is wrong; if you have, check that Downbeat is still exporting to Overture."
     `Domain/DaysOffAttention.swift`
 "No new shoots have come through from Downbeat in the last four weeks. If you've booked one, check that Downbeat is still exporting to Overture."
@@ -1117,6 +1121,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
     `UI/QueueView+Model.swift`
+"Possibly one name twice"
+    `UI/OrganisationsView.swift`
 "Prep a show on a date you're already pitching?"
     `Domain/SelfBookingConflict.swift`
 "Prep anyway"
