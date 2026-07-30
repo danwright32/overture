@@ -90,12 +90,12 @@ struct ParentheticalVenueMergeLiveStoreTests {
             // case, and this pass refuses it on purpose rather than reconciling two histories blind. The
             // live store holds both today, which is why the assertions below are split rather than a flat
             // "no night is doubled".
-            let mergeable = doubledBefore.filter {
-                $0.value.filter(NaturalKeyVenueMigration.hasOutreachHistory).count < 2
-            }
-            let deferrable = doubledBefore.filter {
-                $0.value.filter(NaturalKeyVenueMigration.hasOutreachHistory).count >= 2
-            }
+            // #1780: both populations are decided by the migration's OWN rule, not by a copy of it kept
+            // here. This test used to ask `hasOutreachHistory(...).count >= 2` directly, and when the rule
+            // narrowed (two rows Dan merely refused for the SAME reason now merge instead of deadlocking
+            // forever) the prediction went stale and reported the fix as a regression.
+            let mergeable = doubledBefore.filter { !NaturalKeyVenueMigration.mustDefer($0.value) }
+            let deferrable = doubledBefore.filter { NaturalKeyVenueMigration.mustDefer($0.value) }
             // Deliberately NOT "a mergeable night still exists". On a converged store there is none, and
             // requiring one would mean this test can only pass while the defect is unfixed.
             // What each mergeable night's rows are worth, so the survivor is checked against the best of
