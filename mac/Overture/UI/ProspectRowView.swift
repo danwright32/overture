@@ -304,6 +304,14 @@ struct ProspectRowView: View {
                     .font(OVType.body)
                     .foregroundStyle(OVColor.inkSoft)
             }
+            // #1788: and where that name was DISCARDED (the listing gave the room's own name), say so in
+            // the same slot rather than leaving a silent blank. Quiet ink, not gold: nothing is wrong,
+            // Overture simply could not tell, and gold is reserved for what Dan can act on right now.
+            if let unidentified = item.unidentifiedPresenterNote {
+                Text(unidentified)
+                    .font(OVType.body)
+                    .foregroundStyle(OVColor.inkSoft)
+            }
             // #340: give the metadata a calmer hierarchy instead of cramming venue, timing and date
             // onto one dot-separated line. Venue is the "where" on its own line; the "when" (date plus
             // the relative timing cue) sits beneath it, smaller and de-emphasized, with the timing

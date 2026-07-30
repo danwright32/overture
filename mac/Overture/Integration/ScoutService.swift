@@ -1288,6 +1288,7 @@ enum ScoutService {
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs,
             runNights: p.runNights)
         prospect.presenter = p.presenter
+        prospect.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
         prospect.location = p.location
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
@@ -1313,6 +1314,7 @@ enum ScoutService {
             existing.groupName = p.groupName
         }
         existing.presenter = p.presenter
+        existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
         existing.location = p.location
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate

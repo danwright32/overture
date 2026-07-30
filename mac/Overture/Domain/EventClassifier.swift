@@ -36,6 +36,16 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     // calendar, so the band's page sat past the 5% tolerance with cancellation detection switched off, for as
     // long as the placeholder existed. The run is the only thing that can see the difference, so it says so.
     var venueNotPublished: Bool?
+    // #1788: the run named a presenter and it was the ROOM, so the boundary drained it
+    // (ExtractedEventGuard.presenterThatIsNotTheRoom). Absent means the ordinary case: the page named
+    // nobody, or it named somebody real.
+    //
+    // The two are opposite facts and are identical in the data once the name is gone. Dan can act on
+    // this one, because a show at a room he knows often has a company he can name himself; he can do
+    // nothing about a page that simply never said. His words on the #1766 post-merge check: "flag the
+    // card for me". Without this the drain is silent, and a silent drop is indistinguishable from a
+    // value that never existed.
+    var presenterWasTheRoom: Bool? = nil
 }
 
 // LIVE-STORE-CLAIM verified=2026-07-28 measure="undecided rows the retired confidence sentence was true of, against all undecided rows"
