@@ -128,6 +128,40 @@ enum OrganisationListing {
     // all 110 others carry one or two rows each, where a correction is worth nothing.
     static let shortlistMinimumRows = 3
 
+    // #1731: the evidence, as ONE sentence Dan reads. It carries the SHAPE and not just three numbers,
+    // because the shape is the whole judgement: many different titles in one room reads as a rented room
+    // (FRIGID New York, 27 shows and 25 titles at Under St Marks), while one title over many dates reads
+    // as a company in its own house (The New York Neo-Futurists, 11 shows of one title at Asylum NYC).
+    // Those two want OPPOSITE corrections, so a line that printed only counts would leave him doing the
+    // reading the sentence exists to do.
+    //
+    // Kept out of the view with every other sentence the app can say (#915), and here rather than beside
+    // the row that draws it so the wording is testable.
+    static func evidenceLine(_ entry: Entry) -> String {
+        let titles = entry.distinctShowCount == 1
+            ? "all the same title"
+            : "\(entry.distinctShowCount) different titles"
+        let rooms = entry.distinctVenueCount == 1
+            ? "all in one room"
+            : "across \(entry.distinctVenueCount) rooms"
+        return "\(entry.rowCount) shows, \(titles), \(rooms)."
+    }
+
+    // Why a name is treated as the building. Each reason invites a different response, which is why they
+    // are three sentences and not one: a verdict Dan set is his to revisit, a name overlap is a rule doing
+    // its job and can be overruled, and an exact room name cannot be overruled at all (#1763), so saying
+    // so is the only honest thing the row can offer there.
+    static func reasonLine(_ reason: Reason) -> String {
+        switch reason {
+        case .spelledExactlyLikeARoom:
+            return "Spelled exactly like a room it plays, so this one can't be changed."
+        case .namedInsideARoom:
+            return "Its name overlaps a room it plays."
+        case .yourOwnCorrection:
+            return "You set this."
+        }
+    }
+
     static func shortlist(shows: [Show], overrides: ProducerOverrides = .none) -> [Entry] {
         build(shows: shows, overrides: overrides).filter {
             $0.verdict == .paidForSeparately

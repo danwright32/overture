@@ -119,6 +119,43 @@ struct OrganisationListingTests {
         ])
         #expect(listing.isEmpty)
     }
+
+    // #1731: the evidence Dan reads, as one sentence per organisation. It has to carry the SHAPE, because
+    // the shape is the whole judgement: many different titles in one room reads as a rented room, one
+    // title over many dates reads as a company in its own house, and the two want opposite corrections.
+    @Test func theEvidenceSentenceCarriesTheShapeNotJustTheNumbers() {
+        var shows: [OrganisationListing.Show] = []
+        for i in 1...9 { shows.append(show("FRIGID New York", at: "Under St Marks", "Fringe Show \(i)")) }
+        for _ in 1...5 { shows.append(show("The New York Neo-Futurists", at: "Asylum NYC", "The Infinite Wrench")) }
+        let listing = OrganisationListing.build(shows: shows)
+        func line(_ name: String) -> String? {
+            listing.first { $0.name == name }.map(OrganisationListing.evidenceLine)
+        }
+        #expect(line("FRIGID New York") == "9 shows, 9 different titles, all in one room.")
+        #expect(line("The New York Neo-Futurists") == "5 shows, all the same title, all in one room.")
+    }
+
+    // A producer that travels says so, because playing several rooms is the thing that distinguishes it.
+    @Test func anOrganisationThatPlaysSeveralRoomsSaysHowMany() {
+        let shows = [
+            show("Young Concert Artists", at: "Merkin Hall", "A Debut"),
+            show("Young Concert Artists", at: "The Cutting Room", "A Second Debut"),
+        ]
+        let entry = OrganisationListing.build(shows: shows).first { $0.name == "Young Concert Artists" }!
+        #expect(OrganisationListing.evidenceLine(entry) == "2 shows, 2 different titles, across 2 rooms.")
+    }
+
+    // Why a name is treated as the building, in Dan's words rather than the gate's. Each reason invites a
+    // different response, which is why they are not collapsed into one sentence (#1719).
+    @Test func eachReasonSaysSomethingDifferent() {
+        #expect(OrganisationListing.reasonLine(.spelledExactlyLikeARoom)
+                == "Spelled exactly like a room it plays, so this one can't be changed.")
+        #expect(OrganisationListing.reasonLine(.namedInsideARoom)
+                == "Its name overlaps a room it plays.")
+        #expect(OrganisationListing.reasonLine(.yourOwnCorrection)
+                == "You set this.")
+    }
+
 }
 
 // The same derivation against a COPY of Dan's real store. The unit tests above pin each rule on
