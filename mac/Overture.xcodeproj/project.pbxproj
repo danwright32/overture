@@ -353,6 +353,7 @@
 		6695178A81669433C52788C1 /* SourcesSheetLeadsWithAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695E761B46754FE15BCDEE3 /* SourcesSheetLeadsWithAttentionTests.swift */; };
 		66DCA29DFB3060D42538781F /* RecurringEventDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20F809CC88D28BBD5747BFA1 /* RecurringEventDate.swift */; };
 		672F198666C05AD59ED455C1 /* AddLeadPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0C08E40DF5F1CBFCF56A73 /* AddLeadPresenterTests.swift */; };
+		673BB2BB4F8F3192BA1F7734 /* GateConsumersAgreeLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E03A7AC75426929E676A5E6 /* GateConsumersAgreeLiveStoreTests.swift */; };
 		67BAC9EE252B0D945385B650 /* ReachedOutRowArchiveJumpGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC2B2CF23A84E8672385828 /* ReachedOutRowArchiveJumpGuardTests.swift */; };
 		67E184928B39813486B7199D /* FollowUpsViewSendStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D059BD9F3A36630FBAD980 /* FollowUpsViewSendStateTests.swift */; };
 		68E06F0CAA40001555E22166 /* OrgReachabilityAnswer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B9B91C91459610A154402F1 /* OrgReachabilityAnswer.swift */; };
@@ -1105,6 +1106,7 @@
 		5D44A4C8F631AB5C94B42847 /* QueueScrollTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueScrollTargetTests.swift; sourceTree = "<group>"; };
 		5D6A768536BCBD7F7BBA2452 /* GmailMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailMessageTests.swift; sourceTree = "<group>"; };
 		5D786A37D92F867863061D6A /* OutcomePatterns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatterns.swift; sourceTree = "<group>"; };
+		5E03A7AC75426929E676A5E6 /* GateConsumersAgreeLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GateConsumersAgreeLiveStoreTests.swift; sourceTree = "<group>"; };
 		5E16C40CCA68AC1B7C4F4472 /* ConversationStagesReachedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStagesReachedTests.swift; sourceTree = "<group>"; };
 		5E7D15D7E6680218D019FE0A /* Experiment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Experiment.swift; sourceTree = "<group>"; };
 		5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveStatusTests.swift; sourceTree = "<group>"; };
@@ -1797,6 +1799,7 @@
 				58091E7E5682F2DC98DF631F /* FollowUpTests.swift */,
 				A698C83EB398046D2D8691AB /* FormOutreachTests.swift */,
 				24707FC2620B27E39C7F7A91 /* FunnelCaptureTests.swift */,
+				5E03A7AC75426929E676A5E6 /* GateConsumersAgreeLiveStoreTests.swift */,
 				2787A4F75772AA074BD37003 /* GmailAuthExpiryTests.swift */,
 				AA8747E85852096E1E10DCA2 /* GmailConnectFailureAlertTests.swift */,
 				66E0002EA23829D5A2B07E14 /* GmailConnectProbeTests.swift */,
@@ -3066,6 +3069,7 @@
 				9EC139EDF24D569452F8A449 /* FollowUpsViewUserActionSaveGuardTests.swift in Sources */,
 				E1A4798C712613437F84B77E /* FormOutreachTests.swift in Sources */,
 				809B937165B622D2A5E92B03 /* FunnelCaptureTests.swift in Sources */,
+				673BB2BB4F8F3192BA1F7734 /* GateConsumersAgreeLiveStoreTests.swift in Sources */,
 				DAC5893A8F90B32F203F4558 /* GmailAuthExpiryTests.swift in Sources */,
 				8A22BF00A0004D69E99D1899 /* GmailConnectFailureAlertTests.swift in Sources */,
 				1A755A935A6BC46DAF48DA6C /* GmailConnectProbeTests.swift in Sources */,
