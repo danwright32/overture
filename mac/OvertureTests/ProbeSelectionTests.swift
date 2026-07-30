@@ -36,10 +36,12 @@ struct ProbeSelectionTests {
         let s = ProbeSelection.summarize(dateCount: 3, candidates: frigid, alreadyAnswered: 0, among: frigid)
         #expect(!ProbeSelectionCopy.costLine(s).contains("$"))
         #expect(ProbeSelectionCopy.costLine(s).contains("minute"))
-        let over = ProbeSelection.summarize(
+        // #1765: and the same holds for a big selection, which used to be refused with its own sentence
+        // and now goes through the ordinary confirm. Money must not creep back in on the large path.
+        let big = ProbeSelection.summarize(
             dateCount: 7, candidates: (0..<41).map { show("k\($0)", "Solo \($0)", "Room \($0)") },
             alreadyAnswered: 0, among: (0..<41).map { show("k\($0)", "Solo \($0)", "Room \($0)") })
-        #expect(!ProbeSelectionCopy.overCeilingMessage(over).contains("$"))
+        #expect(!ProbeSelectionCopy.multiDateMessage(big).contains("$"))
     }
 
     // Lookups run up to ten at a time, so the wait is the number of ROUNDS, not the number of lookups.
@@ -70,33 +72,28 @@ struct ProbeSelectionTests {
         #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
     }
 
-    // THE BRAKE. A week is roughly ninety dollars, and the confirm for it looks exactly like the confirm
-    // for one night. Refused, not warned.
-    @Test func aSelectionPastTheCeilingIsRefused() {
+    // #1765: THE BRAKE IS GONE. A big selection is a decision Dan is allowed to make, and the sheet states
+    // what it costs rather than refusing it. The size-specific behaviour is pinned in
+    // ProbeSelectionRunnableTests; here the only claim is that a large selection still produces an honest
+    // summary and an honest sentence, with no trace of the old refusal in either.
+    @Test func aBigSelectionIsSummarisedHonestlyAndNotRefused() {
         let many = (0..<41).map { show("k\($0)", "Solo Co \($0)", "Room \($0)") }
         let s = ProbeSelection.summarize(dateCount: 7, candidates: many, alreadyAnswered: 0, among: many)
         #expect(s.researchCount == 41)
-        #expect(s.overCeiling)
-        #expect(ProbeSelectionCopy.overCeilingMessage(s).contains("41 lookups"))
-        // The refusal must tell him what to do next, not just say no.
-        #expect(ProbeSelectionCopy.overCeilingMessage(s).contains("Select fewer dates"))
+        let message = ProbeSelectionCopy.multiDateMessage(s)
+        #expect(message.contains("41 lookups"))
+        #expect(!message.contains("Select fewer dates"))
+        #expect(!message.contains("Overture stops at"))
     }
 
-    @Test func aSelectionAtTheCeilingIsAllowed() {
-        let many = (0..<40).map { show("k\($0)", "Solo Co \($0)", "Room \($0)") }
-        let s = ProbeSelection.summarize(dateCount: 4, candidates: many, alreadyAnswered: 0, among: many)
-        #expect(s.researchCount == 40)
-        #expect(!s.overCeiling)
-    }
-
-    // The ceiling counts LOOKUPS, not shows, so a big night of one producer's shows is cheap and must
-    // not be blocked. Blocking it would be the brake punishing exactly the case the dedupe made safe.
-    @Test func aBigNightOfOneProducerIsNotBlocked() {
+    // A big night of one producer's shows is CHEAP: one lookup answers for all sixty. Kept from when a
+    // ceiling counted lookups rather than shows, because the dedupe it proves is what makes such a night
+    // cost three minutes, and that arithmetic is the whole basis of the wait the confirm now quotes.
+    @Test func aBigNightOfOneProducerIsOneLookup() {
         let manyFromOne = (0..<60).map { show("k\($0)", "FRIGID New York", $0 % 2 == 0 ? "Under St Marks" : "The Kraine Theater") }
         let s = ProbeSelection.summarize(dateCount: 5, candidates: manyFromOne, alreadyAnswered: 0, among: manyFromOne)
         #expect(s.showCount == 60)
         #expect(s.researchCount == 1)
-        #expect(!s.overCeiling)
     }
 
     // Shows already answered cost nothing, and must be counted out loud rather than dropped: a number
@@ -136,7 +133,7 @@ struct ProbeSelectionTests {
         let s = ProbeSelection.summarize(dateCount: 0, candidates: [], alreadyAnswered: 0, among: [])
         #expect(s.isEmpty)
         #expect(s.estimatedSeconds == 0)
-        #expect(!s.overCeiling)
+        #expect(ProbeSelection.outcome(for: s) == .nothing)
     }
 
     // The bar and the confirm must be reading the same arithmetic. If they ever diverge, Dan approves a

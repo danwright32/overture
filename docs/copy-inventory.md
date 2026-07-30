@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **930 sentences**, from 318 source files.
+Every sentence Overture can say to Dan: **928 sentences**, from 318 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -863,6 +863,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadState.swift`
 "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
     `Domain/DownbeatExport.swift`
+"No Prep run or other check can start until it finishes."
+    `Domain/ProbeSelection.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
 "No contact found"
@@ -1079,8 +1081,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
-"Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
-    `Domain/ProbeSelection.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -1449,8 +1449,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
     `Domain/WatchlistEditing.swift`
-"That is \(s.researchCount) lookups, \(durationLabel(s.estimatedSeconds)). "
-    `Domain/ProbeSelection.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
 "That link isn't a web page (it served \(type ?? "an unknown type"))."
@@ -2009,8 +2007,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "book now"
     `Domain/TicketLink.swift`
-"cannot go on one click. Select fewer dates and run them in batches."
-    `Domain/ProbeSelection.swift`
 "couldn't save, try again"
     `Domain/PrepRunSummary.swift`
 "delivery failed"

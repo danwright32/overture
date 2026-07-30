@@ -26,14 +26,22 @@ enum ProbeSelection {
     // runner's real cap the bar promises a wait the run cannot keep.
     static let maxConcurrentLookups = 10
 
-    // The ceiling. Above this, the check is REFUSED rather than warned about.
+    // #1765: there is NO ceiling, and the refusal that used to live here is gone.
     //
-    // A warning is the wrong instrument: the failure mode is one tick on a week going through because
-    // the confirm looked like the confirm he has clicked through a dozen times, and by then the usage
-    // window is gone. Sized to let a few nights pass freely (40 lookups is about four typical nights,
-    // roughly eleven minutes) while stopping a whole week from being committed by accident. Nothing is
-    // lost by refusing: the same dates run fine in two batches.
-    static let maxResearchesPerRun = 40
+    // It stopped at 40 lookups so a whole week could not go through on one accidental click. Dan hit it
+    // with a deliberate 19-date, 77-show selection: "I should never be blocked by what I'm trying to do.
+    // If I want to do this, let me."
+    //
+    // The brake could not tell an accident from a decision. A fat-fingered week and a chosen one are the
+    // same shape to the code, so the only person it could ever stop was the one who meant it, while the
+    // bar states the size and the wait before anything is spent and the confirm sheet is where an accident
+    // gets caught. Nothing downstream breaks past 40 either: prep-run.sh already splits the work-list into
+    // up to maxConcurrentLookups chunks and works each one through in order, so 77 lookups run as roughly
+    // 8 rounds, which is exactly the wait the bar quoted. The refusal was asking Dan to do by hand, in two
+    // clicks, the batching the runner already performs (L54).
+    //
+    // This also brings a check in line with what the scout already does for the same problem. A big paid
+    // read is not refused there either: ScoutReadBudget asks past its threshold and lets Dan decide.
 
     struct Summary: Equatable {
         let dateCount: Int
@@ -48,10 +56,13 @@ enum ProbeSelection {
         let alreadyAnsweredCount: Int
         // Wall clock, not work: lookups overlap, so this is rounds times one lookup.
         let estimatedSeconds: TimeInterval
-        // True when the run is refused. Never a warning: see maxResearchesPerRun.
-        let overCeiling: Bool
 
         var isEmpty: Bool { showCount == 0 && alreadyAnsweredCount == 0 }
+
+        // #1765: a run long enough to span more than one round of concurrent lookups. The confirm says
+        // what such a run BLOCKS, because at that length losing the single run slot is a real cost and at
+        // three minutes it is not worth a sentence.
+        var spansSeveralRounds: Bool { researchCount > maxConcurrentLookups }
     }
 
     // `candidateKeys` is what the date control already computes: the still-open, not-recently-answered
@@ -69,8 +80,29 @@ enum ProbeSelection {
             organisationCount: plan.organisationCount,
             performerHuntCount: plan.performerHuntCount,
             alreadyAnsweredCount: alreadyAnswered,
-            estimatedSeconds: estimatedSeconds(forLookups: researches),
-            overCeiling: researches > maxResearchesPerRun)
+            estimatedSeconds: estimatedSeconds(forLookups: researches))
+    }
+
+    // #1765: what clicking Check DOES with a selection. In Domain rather than the button's closure,
+    // because that closure is unreachable by any test (#863) and it is exactly where the decision lived:
+    // an early `return` in QueueView refused a large selection before the confirm sheet Dan would
+    // otherwise see, so nothing could assert whether a given selection was runnable at all.
+    enum Outcome: Equatable {
+        // Nothing selected, or nothing left to check on what is selected: the button does nothing.
+        case nothing
+        // Ask, then run. The sentences come from ProbeSelectionCopy so the bar and the sheet cannot
+        // disagree about what the run costs.
+        //
+        // #1765: this is now the ONLY outcome a non-empty selection can have, whatever its size. There is
+        // deliberately no refusal case to fall into: a selection Dan is not allowed to run is a state this
+        // type can no longer express, so the brake cannot come back by accident.
+        case confirm(title: String, message: String)
+    }
+
+    static func outcome(for s: Summary) -> Outcome {
+        guard !s.isEmpty else { return .nothing }
+        return .confirm(title: ProbeSelectionCopy.multiDateTitle(s),
+                        message: ProbeSelectionCopy.multiDateMessage(s))
     }
 
     // Rounds, never the sum. Estimating the sum would tell Dan a four-minute check takes an hour and a
@@ -112,13 +144,19 @@ enum ProbeSelectionCopy {
 
     static let clearSelection = "Clear"
 
-    // The refusal. Says the number, why there is a limit at all, and the way forward, so it is an
-    // instruction rather than a wall.
-    static func overCeilingMessage(_ s: ProbeSelection.Summary) -> String {
-        "That is \(s.researchCount) lookups, \(durationLabel(s.estimatedSeconds)). "
-            + "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
-            + "cannot go on one click. Select fewer dates and run them in batches."
-    }
+    // #1765: what a long run BLOCKS, which is the one cost neither the title nor the wait figure carries.
+    // A check holds the same single run slot a Prep run does (PrepQueueService throws .alreadyRunning), so
+    // for 21 minutes Dan cannot start either. The minute count tells him how long he waits for THIS; this
+    // tells him what he also cannot do meanwhile, which is new information rather than a second telling
+    // (#843).
+    //
+    // Said only for a run spanning several rounds. At three minutes the slot is not worth a sentence, and
+    // a line that appears on every confirm is one he stops reading (L36).
+    //
+    // Modelled on ScoutReadBudget's ask, which is the same problem already solved: it states how long the
+    // whole set takes and what the alternative leaves behind, and deliberately repeats nothing the buttons
+    // beside it already say.
+    static let blocksOtherRuns = "No Prep run or other check can start until it finishes."
 
     // The confirm title is the SAME question whether one date or seven produced the list, so it is
     // ReachabilityProbeCopy's sentence, not a second copy of it here. Written out again, the two would
@@ -131,6 +169,12 @@ enum ProbeSelectionCopy {
         var parts: [String] = []
         parts.append("This looks up a real contact for every still-open show on the "
                      + (s.dateCount == 1 ? "date" : "\(s.dateCount) dates") + " you picked.")
+        // #1765: the wait comes SECOND, not last. The 40-lookup refusal used to be what stopped Dan walking
+        // into a 21-minute run unaware, and with it gone the sheet has to carry that weight: at this size
+        // the wait is the fact that matters, and it was sitting after the producer-sharing detail where a
+        // confirm he has clicked through a dozen times would never show it to him.
+        parts.append(ProbeSelectionCopy.costLine(s))
+        if s.spansSeveralRounds { parts.append(blocksOtherRuns) }
         // What the money buys, split the way it actually divides: a producer answered once for all its
         // shows, versus a one-off hunt that answers for exactly one.
         if s.organisationCount > 0 && s.performerHuntCount > 0 {
@@ -149,7 +193,6 @@ enum ProbeSelectionCopy {
                          + (s.alreadyAnsweredCount == 1 ? "show was" : "shows were")
                          + " checked recently and are not looked up again.")
         }
-        parts.append(ProbeSelectionCopy.costLine(s))
         return parts.joined(separator: " ")
     }
 }

@@ -141,9 +141,6 @@ struct QueueView: View {
     // state, deliberately not persisted: a selection is a thing he is assembling right now, and one
     // surviving a relaunch would be a spending decision made days ago and forgotten.
     @State private var selectedProbeDates: Set<String> = []
-    // #1597: the refusal, when a selection is past the ceiling. Held so the bar can show it in place
-    // rather than a sheet appearing after he has already committed to the click.
-    @State private var probeCeilingMessage: String?
 
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
     @State private var pendingProbe: ProbeConfirm?
@@ -287,24 +284,23 @@ struct QueueView: View {
                     Spacer(minLength: OVSpacing.sm)
                     Button(ProbeSelectionCopy.clearSelection) {
                         selectedProbeDates = []
-                        probeCeilingMessage = nil
                     }
                     .buttonStyle(.plain)
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.inkSoft)
                     Button {
                         guard !prepRunning else { return }
-                        // The brake. Refused here, in place, rather than in a confirm that looks exactly
-                        // like the one he has clicked through a dozen times.
-                        if summary.overCeiling {
-                            probeCeilingMessage = ProbeSelectionCopy.overCeilingMessage(summary)
-                            return
+                        // #1765: the decision is ProbeSelection's, not this closure's. It used to be an
+                        // early return here that refused a large selection before the confirm sheet, which
+                        // meant the one rule deciding whether Dan could run at all lived where no test
+                        // could reach it (#863).
+                        switch ProbeSelection.outcome(for: summary) {
+                        case .nothing:
+                            break
+                        case .confirm(let title, let message):
+                            pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
+                                                        title: title, message: message)
                         }
-                        probeCeilingMessage = nil
-                        pendingProbe = ProbeConfirm(
-                            keys: keys, dateLabel: "",
-                            title: ProbeSelectionCopy.multiDateTitle(summary),
-                            message: ProbeSelectionCopy.multiDateMessage(summary))
                     } label: {
                         Text(ReachabilityProbeCopy.controlLabel)
                             .font(.system(size: 11, weight: .semibold))
@@ -314,12 +310,6 @@ struct QueueView: View {
                     }
                     .buttonStyle(.plain)
                     .help(prepRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
-                }
-                if let refusal = probeCeilingMessage {
-                    Text(refusal)
-                        .font(OVType.meta)
-                        .foregroundStyle(OVColor.rust)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.horizontal, OVSpacing.xl)
@@ -598,8 +588,6 @@ struct QueueView: View {
                         } else {
                             selectedProbeDates.insert(group.id)
                         }
-                        // The refusal is about a selection that no longer exists the moment it changes.
-                        probeCeilingMessage = nil
                     } label: {
                         Image(systemName: selectedProbeDates.contains(group.id)
                               ? "checkmark.square.fill" : "square")
