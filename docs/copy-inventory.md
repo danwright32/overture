@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **949 sentences**, from 320 source files.
+Every sentence Overture can say to Dan: **952 sentences**, from 320 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1450,6 +1450,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
     `App/ActionFeedback.swift`
+"Stopped working"
+    `Domain/ArchiveStatus.swift`
+"Stopped working this"
+    `Domain/PerformanceStatus.swift`
 "Street, city, state"
     `UI/SourcesView.swift`
 "Sync now"
@@ -1791,6 +1795,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You stopped sending to this contact \(ago(stoodDownAt, now: now))"
     `Domain/FollowUp.swift`
+"You stopped working this"
+    `UI/QueueView+Model.swift`
 "You stopped working this show \(ago(stoodDownAt, now: now))"
     `Domain/FollowUp.swift`
 "You told Overture to read \(name) as the building, not the presenter."

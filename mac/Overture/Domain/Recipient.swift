@@ -49,6 +49,15 @@ enum RecipientResolution: String, Codable, CaseIterable, Sendable {
     case booked
     case declinedSoft = "declined_soft"  // a "no" with the door left open
     case declinedHard = "declined_hard"  // not interested
+    // #1840: DAN stopped working this event. Its own case, not a decline, because the other three all
+    // attribute the outcome to the CONTACT and here nobody declined anything. Reusing `declinedSoft`
+    // would have made every show he walked away from permanently indistinguishable from one where
+    // somebody said no, inside the reporting whose whole job is telling him which pitches work.
+    //
+    // It closes the contact exactly as a decline does (the asking stops, the show reads closed), and it
+    // is the ONE closed state that still raises a post-event closing note, because that note serves the
+    // NEXT event. See ConversationReminder.
+    case stoodDown = "stood_down"
 }
 
 // One party emailed for a performance: an act contact, a presenter, or a manual add. A performance
@@ -520,6 +529,18 @@ final class Recipient {
         guard let stoodDown = closingNoteStoodDownAt else { return false }
         if let repliedAt, repliedAt > stoodDown { return false }
         return true
+    }
+
+    // #1840: a reply is new information, so it takes the stand-down AND the state that stand-down
+    // recorded. A contact who wrote back is not a closed lead, and reporting one against a live
+    // conversation is the kind of quiet wrongness nobody goes looking for.
+    //
+    // Only `.stoodDown` is cleared. A booking or a real decline is a fact about the world that a later
+    // email does not undo, and clearing those would let an inbound message erase Dan's own judgement.
+    func reopenOnReply(at repliedAt: Date) {
+        replied = true
+        self.repliedAt = repliedAt
+        if resolution == .stoodDown { resolution = nil }
     }
 
     func standDownClosingNote(now: Date) { closingNoteStoodDownAt = now }

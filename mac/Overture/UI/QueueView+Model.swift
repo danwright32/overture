@@ -518,6 +518,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
             case .booked: return "Booked"
             case .declinedSoft: return "Closed (not now)"
             case .declinedHard: return "Closed (not interested)"
+            // #1840: says what happened, not what they said. Nobody declined; Dan stopped pitching.
+            case .stoodDown: return "You stopped working this"
             }
         }
         if bounced { return "Bounced" }

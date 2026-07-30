@@ -363,21 +363,15 @@ struct FollowUpsView: View {
     }
 
     private func standDown(prospect: Prospect, recipient: Recipient, scope: StandDownScope) {
-        let now = Date()
-        switch scope {
-        case .contact: recipient.standDownOutreach(now: now)
-        case .show: prospect.standDownOutreach(now: now)
-        }
+        ProspectMutations.standDown(prospect: prospect, recipient: recipient, scope: scope, now: Date())
         guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
         // Undo, because the row this replaces is one click from Send nudge and the decision removes work
         // from a queue. The acknowledgement carries it, which is the shape every surface outside the
         // queue's own Cmd+Z uses.
         feedback.acknowledge(ActionAck.outreachStoodDown(org: prospect.groupName, scope: scope),
                              action: .init(label: "Undo") {
-                                 switch scope {
-                                 case .contact: recipient.resumeOutreach()
-                                 case .show: prospect.resumeOutreach()
-                                 }
+                                 ProspectMutations.resumeStandDown(prospect: prospect,
+                                                                   recipient: recipient, scope: scope)
                                  context.saveOrWarn(org: prospect.groupName, feedback: feedback)
                              })
     }

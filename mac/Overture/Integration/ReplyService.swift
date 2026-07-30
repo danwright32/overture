@@ -35,8 +35,11 @@ enum ReplyService {
                 // Dan dismissed this exact reply as not real (#219): skip it, but a newer reply
                 // (a different id) still flags. Per-recipient dismiss now.
                 if let replyId, replyId == r.dismissedReplyId { continue }
-                r.replied = true
-                r.repliedAt = now
+                // #1840: through the one reopen, so a contact Dan stood down and who then wrote back is
+                // not left recorded as a closed lead. Written as a call rather than two assignments
+                // because the rule ("a reply clears the stand-down, and only the stand-down") has to hold
+                // wherever a reply is recorded, not just here.
+                r.reopenOnReply(at: now)
                 r.lastReplyId = replyId
                 if let full = fetchFullThread(threadId) {
                     r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)

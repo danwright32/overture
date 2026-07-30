@@ -854,6 +854,8 @@ struct DraftReviewView: View {
         case .booked: return OVColor.forest
         case .active: return OVColor.gold
         case .lostDoorOpen: return OVColor.inkSoft
+        // #1840: quiet, like the door-open close. It is a decision Dan made, not a setback to flag at him.
+        case .stoodDown: return OVColor.inkSoft
         case .lostNotInterested: return OVColor.rust
         case .new: return OVColor.inkFaint
         }
