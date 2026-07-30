@@ -27,6 +27,15 @@ const RULES: { name: string; pattern: RegExp }[] = [
   // link, where the detail page names St. Ann & the Holy Trinity Church outright. A city in the listings
   // text is the reason to follow the link, not a substitute for it.
   { name: "city-in-listing-is-not-a-reason-to-skip-the-link", pattern: /only a CITY[\s\S]*?follow the link before/i },
+  // #1766: `presenter` was named in the results shape and defined NOWHERE, so a run had only the word to
+  // go on and either copied the work-list's own orgName (the landlord) or left it blank. Measured on the
+  // live store: 73 open rows carry no presenter and 163 carry one spelled exactly like their own venue,
+  // so roughly a third of the queue points at a building. Lose any of these three and the paid contact
+  // hunt goes back to being aimed at the room.
+  { name: "presenter-is-who-puts-the-show-on", pattern: /the company or artist actually putting the show on/i },
+  { name: "presenter-never-the-venue", pattern: /\*\*Never the venue\.\*\*/i },
+  { name: "presenter-never-the-source-org-name", pattern: /Never the work-list item's own `orgName`/i },
+  { name: "presenter-null-rather-than-guessed", pattern: /If the page names nobody, leave it null/i },
 ];
 
 describe("scout-extract-runbook sourceUrl rule is present (#1276)", () => {

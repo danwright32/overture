@@ -216,6 +216,35 @@ For each item in the work-list:
    `/opportunities/` rows are the concrete case: each links to a `getfeedback.com` recruiting form, while
    the real concert lives at a `dciny.org/events/<slug>/` page.
 
+3d. **Report `presenter`: the company or artist actually putting the show on** (#1766). Until now this
+   field was named in the results shape and defined nowhere, so a run had only the word itself to go on.
+   With no rule to follow it either copied the work-list item's own `orgName` or left the field empty, and
+   on one source it did roughly half of each. Dan, looking at the result: *"why is every under st marks
+   card marked as hard to reach. we should be reaching out to the people actually putting the show on. not
+   under st marks themselves."*
+
+   Read it from the listing's own words: the blurb, a credit line, a "presented by" or "produced by"
+   phrase, or the named act itself. On the real page that prompted this, the block reads *"Italian Abroad:
+   Culture in Translation is an intimate evening of piano, stories, and song ... **pianist Ivan Dalia**
+   explores what happens when traditions travel"*. The producer was in the bytes already read. It was not
+   missing; it was dropped.
+
+   Three things it is NEVER:
+
+   - **Never the venue.** The room does not present the show; a company hires the room. If the only name
+     you can find is the room's, the page has not told you who presents it.
+   - **Never the work-list item's own `orgName`.** That is the SOURCE Overture is reading, which is
+     frequently the landlord. FRIGID New York rents Under St Marks to dozens of independent companies, so
+     writing it here points every one of their shows at the same wrong organisation.
+   - **Never the festival or series alone when the page also names the act.** "Little Shakespeare 2026"
+     and "Monthly Shows" are containers; report the company or artist inside them. If the page names only
+     the series, the series is the honest answer.
+
+   **If the page names nobody, leave it null.** That is not a failure and must not be filled with the
+   nearest name to hand. A wrong presenter is worse than none: it is what a paid contact hunt is aimed at,
+   so a confident wrong name spends Dan's money looking for the wrong organisation's inbox, and the answer
+   comes back looking like an honest "nobody is reachable".
+
 4. **Judge the page and report one verdict.** This is the part that matters most, because an empty
    event list is ambiguous and all three readings occur in the wild:
 
