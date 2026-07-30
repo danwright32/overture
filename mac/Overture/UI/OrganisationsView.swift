@@ -41,6 +41,14 @@ struct OrganisationsView: View {
         return uncorrected.filter { $0.rowCount >= minimum }
     }
 
+    // #1768: names one character apart, which every rule that reads a name treats as two organisations.
+    // Presenters and venues together, because the split costs the same either way: a venue's typo divides
+    // a room's history and the producer gate's venue count, a presenter's divides its paid contact answer.
+    private var nearMisses: [NearMissNames.Pair] {
+        let names = prospects.compactMap { $0.presenter } + prospects.compactMap { $0.venue }
+        return NearMissNames.pairs(in: Array(Set(names)))
+    }
+
     private var matches: [OrganisationListing.Entry] {
         let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return [] }
@@ -56,6 +64,7 @@ struct OrganisationsView: View {
                     worthALook
                     treatedAsTheVenue
                     shareOneAnswer
+                    sameNameTwice
                     lookAnyOneUp
                 }
                 .padding(OVSpacing.lg)
@@ -128,6 +137,33 @@ struct OrganisationsView: View {
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(producers) { row(for: $0, detail: OrganisationListing.evidenceLine($0)) }
+        }
+    }
+
+    // MARK: - #1768: one name spelled two ways
+
+    private var sameNameTwice: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            sectionHeading("Possibly one name twice", systemImage: "doc.on.doc", count: nearMisses.count)
+            // Says the COST, which the heading does not, and admits the list is a guess. Overture cannot
+            // merge these itself: the same closeness that catches a typo also catches two names that are
+            // genuinely different, and merging those would put one company's contact on another's shows.
+            Text("Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names.")
+                .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            if nearMisses.isEmpty {
+                Text("No names look duplicated right now.")
+                    .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+            } else {
+                ForEach(nearMisses) { pair in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(pair.a).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                        Text(pair.b).font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 3)
+                }
+            }
         }
     }
 
