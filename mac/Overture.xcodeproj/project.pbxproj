@@ -552,6 +552,7 @@
 		A6CC28AA3D123E6D4D4B68DA /* StructuralVenueGapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD630D044744B94ECF773BDF /* StructuralVenueGapTests.swift */; };
 		A6EB8C74D853F664D4FF99F2 /* OVColorResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651C66AF621BAACD0184D491 /* OVColorResolutionTests.swift */; };
 		A73735AAC6D8860F7A922812 /* ProbeSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF00343367BE6C23A0E5D2C4 /* ProbeSelection.swift */; };
+		A87DC8832A769C7F1C0266F6 /* OrganisationsSheetModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63B0FBB2EC1279379611F4EF /* OrganisationsSheetModel.swift */; };
 		A884D0B4F88C29FB10E734D8 /* ReplyClassifyProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AA44C70F2843ED893E513C4 /* ReplyClassifyProgress.swift */; };
 		A937ABD19C5CE5A16F328E67 /* SourceConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEF50447A6BA2CC02A5D25 /* SourceConfirmation.swift */; };
 		A94E926C164498E82612A6AF /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26C128217DB0FB52D89CDBF /* Typography.swift */; };
@@ -586,6 +587,7 @@
 		B6EBEFF342508EE39AE673DA /* NearMissNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D67012632478190EF6A21BF /* NearMissNames.swift */; };
 		B74E50F8F416A9A966957517 /* FormOutreach.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B4B07AEBF70B38D0A2CD8E1 /* FormOutreach.swift */; };
 		B79CB5E690E50881984758AA /* DaysOffAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8487C82FCF4EE9A617F9C39 /* DaysOffAttentionTests.swift */; };
+		B845F698530B9BDA98D1C6E4 /* OrganisationsSheetModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82D11C10A566616C745EA49 /* OrganisationsSheetModelTests.swift */; };
 		B872EE4155A7604990262153 /* BackupLogHonestyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB62D50D07E41F362DEB407B /* BackupLogHonestyTests.swift */; };
 		B8C693EEAAE6A5F82D71A407 /* RecurringEventDateGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16FBA3C502F064F71CB15201 /* RecurringEventDateGuardTests.swift */; };
 		B8F2869EDCD83DED941DE6E0 /* ClassificationOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21465867C8C8C91EB41B9F68 /* ClassificationOverride.swift */; };
@@ -1127,6 +1129,7 @@
 		634B37154E1944291714A8F0 /* InquiryEditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryEditTests.swift; sourceTree = "<group>"; };
 		637CE6DCB47850272BCB073A /* ScoutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutService.swift; sourceTree = "<group>"; };
 		63AB5D45895A3FF0895BAB9F /* OpenForDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenForDecision.swift; sourceTree = "<group>"; };
+		63B0FBB2EC1279379611F4EF /* OrganisationsSheetModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganisationsSheetModel.swift; sourceTree = "<group>"; };
 		63F8BDF3177782E6E83DD846 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		63FA3A9DF520050E6151FB89 /* ReplyClassifyImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyImporter.swift; sourceTree = "<group>"; };
 		64394184DAE74C552F45FCD4 /* RowReferenceLinksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowReferenceLinksTests.swift; sourceTree = "<group>"; };
@@ -1425,6 +1428,7 @@
 		B7F3DF8E6846879404C861BE /* SourceSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSearch.swift; sourceTree = "<group>"; };
 		B7FA7AECE7C97B9D82DCA92E /* ScoutControlState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutControlState.swift; sourceTree = "<group>"; };
 		B8241C5C74975C9F06E4B505 /* GmailSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailSender.swift; sourceTree = "<group>"; };
+		B82D11C10A566616C745EA49 /* OrganisationsSheetModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganisationsSheetModelTests.swift; sourceTree = "<group>"; };
 		B9C7762E8E079ABC2A067C68 /* SourceReadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceReadState.swift; sourceTree = "<group>"; };
 		B9E886654D5B23418A170F61 /* WentByRetirementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WentByRetirementTests.swift; sourceTree = "<group>"; };
 		B9E9D565058A1B676D0A9256 /* EventLocationFill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLocationFill.swift; sourceTree = "<group>"; };
@@ -1884,6 +1888,7 @@
 				AFE429E308090E4B9A24C4F9 /* OpenForDecisionTests.swift */,
 				767E196BB09131152AA1A10B /* OperaAmericaCalendarTests.swift */,
 				C4AA30A4E3C975BBF29DA61C /* OrganisationListingTests.swift */,
+				B82D11C10A566616C745EA49 /* OrganisationsSheetModelTests.swift */,
 				156877A6AB1D1EC89DBAFFFE /* OrgAnswerLedgerTests.swift */,
 				C7430BD3261AA61411E87368 /* OrgAnswerMigrationDryRunTests.swift */,
 				305A357A5E9E9FDEFA7D53CE /* OrgAnswerRecordingTests.swift */,
@@ -2511,6 +2516,7 @@
 				54E5E4DF0C3AFC070CCEE374 /* LeadIntakeModel.swift */,
 				242373DDCA3D46E218959411 /* LiveRunLabel.swift */,
 				BEEBD1BC6A5C55DC146DC993 /* OnboardingView.swift */,
+				63B0FBB2EC1279379611F4EF /* OrganisationsSheetModel.swift */,
 				D423382B562659893C95B54B /* OrganisationsView.swift */,
 				07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */,
 				EA18BC286E92761C5A33E6F8 /* OVCapsuleButton.swift */,
@@ -2793,6 +2799,7 @@
 				4849B0AB5ED447FAAD26EF00 /* OrgKey.swift in Sources */,
 				68E06F0CAA40001555E22166 /* OrgReachabilityAnswer.swift in Sources */,
 				4C0F26BF00EA209CBE3AB6B5 /* OrganisationListing.swift in Sources */,
+				A87DC8832A769C7F1C0266F6 /* OrganisationsSheetModel.swift in Sources */,
 				718875B9DA6EC3C4A3A324AE /* OrganisationsView.swift in Sources */,
 				A3BEC0E701B16D4C2C4074E5 /* OutboundSignature.swift in Sources */,
 				88C7EEA480F528B5A4BE2811 /* OutcomePatterns.swift in Sources */,
@@ -3166,6 +3173,7 @@
 				CA67C78F84DB4DAA0EC662CC /* OrgDoNotContactTests.swift in Sources */,
 				0E4B31FB9C7F2131F6866A8D /* OrgKeyTests.swift in Sources */,
 				C7C7A622E03F78F82DA6D193 /* OrganisationListingTests.swift in Sources */,
+				B845F698530B9BDA98D1C6E4 /* OrganisationsSheetModelTests.swift in Sources */,
 				49AC114A263129DA6859E0BF /* OutboundSignatureConsolidationTests.swift in Sources */,
 				24D810620C56EC99120BB281 /* OutcomePatternsTests.swift in Sources */,
 				55ADB22C6520C4D9771237A4 /* OutcomeStatsTests.swift in Sources */,
