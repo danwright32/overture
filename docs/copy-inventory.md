@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **933 sentences**, from 317 source files.
+Every sentence Overture can say to Dan: **928 sentences**, from 317 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -70,7 +70,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (45)
+## The same sentence, said in more than one place (44)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -204,9 +204,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "What converts"
   - `App/RootView.swift`
   - `UI/OutcomePatternsView.swift`
-- "Who Overture thinks puts each show on, and who it reads as the building."
-  - `App/RootView.swift`
-  - `UI/OrganisationsView.swift`
 - "\n\nLast lines of the run log:\n\(tail)"
   - `Domain/DetachedRunOutcome.swift`
   - `UI/LeadIntakeModel.swift`
@@ -445,8 +442,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/RunProgressView.swift`
 "City not known"
     `Domain/VenueDisplay.swift`
-"Clear the organisation search"
-    `UI/OrganisationsView.swift`
 "Clear the search"
     `Domain/SourceSearch.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
@@ -610,8 +605,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ConversationReminder.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
-"Every organisation Overture knows about, including the ones it read correctly."
-    `UI/OrganisationsView.swift`
 "Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing."
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
@@ -620,8 +613,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Filed as \(reason.label) either way."
     `Domain/BulkDismiss.swift`
-"Find an organisation"
-    `UI/OrganisationsView.swift`
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -772,6 +763,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Keeps Overture resident in the menu bar so the syncs run unattended."
     `UI/OnboardingView.swift`
+"Kept as companies"
+    `UI/OrganisationsView.swift`
 "LONG SHOT"
     `UI/QueueView+Model.swift`
 "Last checked \(formatter.string(from: last))"
@@ -816,8 +809,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Look in Archive (\(archiveMatches))"
     `Domain/ShowSearch.swift`
-"Look one up"
-    `UI/OrganisationsView.swift`
 "Look-ahead window"
     `UI/ReminderSettingsView.swift`
 "Looks booked?"
@@ -1034,8 +1025,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
-"One answer covers all their shows"
-    `UI/OrganisationsView.swift`
 "One source couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "One source couldn't be checked. \(lines[0])"
@@ -1054,6 +1043,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Opening Google sign-in…"
     `UI/OnboardingView.swift`
+"Organisations Overture may have read wrongly. Everything else it decided is on the show itself."
+    `UI/OrganisationsView.swift`
 "Organizations that asked"
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
@@ -1078,8 +1069,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
-"Overture kept these as companies, but their shows sit oddly. Correct one from any of its shows if it looks wrong."
-    `UI/OrganisationsView.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     `Domain/DaysOffAttention.swift`
 "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
@@ -1090,6 +1079,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
+"Overture reads \(presenter) as the building here, not as the presenter."
+    `UI/QueueView+Model.swift`
 "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
     `Domain/ProbeSelection.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
@@ -1184,8 +1175,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
     `App/RootView.swift`
-"Read as the building"
-    `UI/OrganisationsView.swift`
 "Read none"
     `Domain/ScoutReadBudget.swift`
 "Read over an unencrypted connection, because this site's secure one is broken."
@@ -1398,8 +1387,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
-"So a wrong one here spreads a contact across shows it has nothing to do with."
-    `UI/OrganisationsView.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
 "Some of your shows may be missing"
@@ -1581,7 +1568,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Their name"
     `UI/InquiryIntakeSheet.swift`
-"Their name is never printed on a card and their address is never used as a contact."
+"Their shows sit oddly for a company. Correct one from any of its shows if it looks wrong."
     `UI/OrganisationsView.swift`
 "These leads are no longer in your queue."
     `UI/QueueView.swift`
@@ -1741,7 +1728,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepSelectionCopy.swift`
 "Who Overture thinks puts each show on, and who it reads as the building."
     `App/RootView.swift`
-    `UI/OrganisationsView.swift`
 "Why (optional): vacation, family, anything"
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"

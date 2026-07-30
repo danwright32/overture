@@ -224,4 +224,44 @@ struct ProducerCorrectionControlTests {
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         #expect(QueueModel.items(from: all).first?.unidentifiedPresenterNote == nil)
     }
+
+    // #1731, Dan's verdict on the Presenters sheet (2026-07-30): "this sheet is confusing. I'm not sure
+    // what to do with it." The question the sheet was built to answer ("why is no presenter named here?")
+    // is one he asks while looking at a CARD, and answering it on a separate screen he has to know exists
+    // means the answer never reaches the question. So the card says it.
+    //
+    // Only where the BUILDING VERDICT is what hid the name. Measured 2026-07-29: of 351 rows whose
+    // presenter is judged the building, 296 would have their name hidden anyway because the presenter
+    // field simply repeats the venue, where nothing is being judged and there is nothing to explain. The
+    // verdict uniquely hides 55, and those are the only ones with something to say.
+    @Test func aCardSaysWhenTheBuildingVerdictIsWhyNoPresenterIsNamed() throws {
+        let ctx = ModelContext(try container())
+        // Jalopy Theatre presenting in a park: the name differs from the venue, so only the gate's verdict
+        // hides it. Two rows, because the gate needs to see Jalopy as a venue elsewhere to judge it one.
+        _ = prospect(ctx, key: "k1", presenter: "Jalopy Theatre", venue: "Greeley Square")
+        _ = prospect(ctx, key: "k2", presenter: "A Visiting Act", venue: "Jalopy Theatre")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let item = QueueModel.items(from: all).first { $0.venue == "Greeley Square" }
+        #expect(item?.presenterLine == nil)
+        #expect(item?.readAsTheBuildingNote != nil)
+    }
+
+    // A presenter that merely REPEATS its own venue explains itself: the venue is printed right below, so
+    // a line saying the name was hidden would be telling Dan something he can already see.
+    @Test func aPresenterThatSimplyRepeatsItsVenueSaysNothingExtra() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "The Joyce Theater", venue: "The Joyce Theater")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        #expect(QueueModel.items(from: all).first?.readAsTheBuildingNote == nil)
+    }
+
+    // And a card that DOES name its presenter says nothing, or it would carry two lines disagreeing.
+    @Test func aCardThatNamesItsPresenterSaysNothingAboutBuildings() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "Young Concert Artists", venue: "Merkin Hall")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let item = QueueModel.items(from: all).first
+        #expect(item?.presenterLine == "Young Concert Artists")
+        #expect(item?.readAsTheBuildingNote == nil)
+    }
 }

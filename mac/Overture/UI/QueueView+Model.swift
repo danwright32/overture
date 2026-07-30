@@ -245,6 +245,25 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return "Couldn't tell who's putting this on: the listing named only the room."
     }
 
+    // #1731, after Dan read the Presenters sheet (2026-07-30): "this sheet is confusing. I'm not sure what
+    // to do with it." The question that sheet was built to answer, why is no presenter named here, is one
+    // he asks while looking at a CARD. Answering it on a separate screen he has to know exists means the
+    // answer never reaches the question, so the card answers it.
+    //
+    // Only where the VERDICT is what hid the name. Measured 2026-07-29: of the 351 rows whose presenter is
+    // judged the building, 296 would have their name hidden anyway because the presenter field simply
+    // repeats the venue printed directly below it. Nothing is being judged there and nothing needs saying.
+    // The verdict uniquely hides 55, and those are the only cards with something to explain.
+    var readAsTheBuildingNote: String? {
+        guard treatedAsVenue, presenterLine == nil, let presenter, !presenter.isEmpty else { return nil }
+        // The name repeats the venue or the title: the card already shows it, so there is no absence to
+        // explain. Compared through the fold the presenter line itself uses, so the two cannot disagree
+        // about when a name is a repeat.
+        let key = ProducerGate.key(presenter)
+        guard key != ProducerGate.key(venue), key != ProducerGate.key(groupName) else { return nil }
+        return "Overture reads \(presenter) as the building here, not as the presenter."
+    }
+
     // #1626: the contact forms the row offers as a link, when there is no address to print. Only forms
     // on the act's own site: an Instagram is a dead end Dan will not use, so putting it on the card
     // would hand him a control he cannot act on. Same rule as Prospect.usableContactFormURLs, and

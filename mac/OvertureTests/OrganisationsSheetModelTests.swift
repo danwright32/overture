@@ -34,38 +34,15 @@ struct OrganisationsSheetModelTests {
             return OrganisationListing.build(shows: shows, overrides: overrides)
         }
         _ = model.shortlist
-        _ = model.buildings
-        _ = model.sharing
-        _ = model.all
+        _ = model.shortlist
         #expect(builds == 1)
     }
 
-    // And searching filters what already exists rather than deriving it again, which is the half that
-    // used to run on every character typed.
-    @Test func searchingNeverRebuildsTheListing() {
-        var builds = 0
-        let model = OrganisationsSheetModel(shows: shows(), overrides: .none) { shows, overrides in
-            builds += 1
-            return OrganisationListing.build(shows: shows, overrides: overrides)
-        }
-        for typed in ["f", "fr", "fri", "frig", "frigi", "frigid"] { _ = model.matches(typed) }
-        #expect(builds == 1)
-    }
-
-    // The sections still say what they said, so the restructuring cannot have quietly changed the sheet.
-    @Test func theSectionsStillSplitTheSameWay() {
+    // The shortlist still holds what it held: the organisation whose shows sit oddly, and neither the
+    // building nor the travelling producer beside it.
+    @Test func onlyTheOddLookingOrganisationIsShortlisted() {
         let model = OrganisationsSheetModel(shows: shows(), overrides: .none)
-        #expect(model.buildings.map(\.name) == ["The Green Room 42"])
-        #expect(model.sharing.map(\.name) == ["Young Concert Artists"])
         #expect(model.shortlist.map(\.name) == ["FRIGID New York"])
-        #expect(model.all.count == 3)
     }
 
-    // Search is case insensitive and matches anywhere in a name, since Dan types what he remembers.
-    @Test func searchFindsANameHowEverItIsTyped() {
-        let model = OrganisationsSheetModel(shows: shows(), overrides: .none)
-        #expect(model.matches("frigid").map(\.name) == ["FRIGID New York"])
-        #expect(model.matches("CONCERT").map(\.name) == ["Young Concert Artists"])
-        #expect(model.matches("  ").isEmpty)
-    }
 }

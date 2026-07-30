@@ -11,21 +11,20 @@ import Foundation
 // what the injectable builder is for. It is not a convenience: without it the "once" is an assertion in a
 // comment, and this file is the second attempt at making it true.
 struct OrganisationsSheetModel {
-    // Every organisation, in the order the sheet reads them.
-    let all: [OrganisationListing.Entry]
-    // The three slices the sheet shows, sliced once here rather than filtered again per redraw.
+    // The one slice the sheet shows, sliced once here rather than filtered again per redraw.
+    //
+    // #1731: it used to expose the buildings, the answer-sharing organisations and every name for search
+    // as well. Dan read that sheet and said "I'm not sure what to do with it", and he was right: four
+    // read-only sections and a search box are a wall of facts with no decision in them. Those questions
+    // are now answered on the card that prompts them, so the slices they needed are gone rather than left
+    // unwired (L29).
     let shortlist: [OrganisationListing.Entry]
-    let buildings: [OrganisationListing.Entry]
-    let sharing: [OrganisationListing.Entry]
 
     init(shows: [OrganisationListing.Show],
          overrides: ProducerOverrides,
          build: ([OrganisationListing.Show], ProducerOverrides) -> [OrganisationListing.Entry]
             = { OrganisationListing.build(shows: $0, overrides: $1) }) {
         let entries = build(shows, overrides)
-        all = entries
-        buildings = entries.filter { $0.verdict == .theBuilding }
-        sharing = entries.filter { $0.verdict == .sharesOneAnswer }
         // #1729: refused, uncorrected, and covering enough rows that a correction is worth something.
         let minimum = OrganisationListing.shortlistMinimumRows
         shortlist = entries.filter {
@@ -33,10 +32,4 @@ struct OrganisationsSheetModel {
         }
     }
 
-    // Filters what already exists. Never derives, which is the half that used to run on every character.
-    func matches(_ search: String) -> [OrganisationListing.Entry] {
-        let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !needle.isEmpty else { return [] }
-        return all.filter { $0.name.lowercased().contains(needle) }
-    }
 }
