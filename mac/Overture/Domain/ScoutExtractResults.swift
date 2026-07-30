@@ -44,6 +44,10 @@ struct ScoutExtractResults: Codable, Equatable, Sendable {
             .map(ExtractedEventGuard.placed)              // #1214: carry a rescued outdoor venue to the prospect
             // #1278/#1291: drop a signup-form listing link (keep the show), falling back to the listings page.
             .map { ExtractedEventGuard.sanitizedSourceURL($0, listingsURL: listingsURL) }
+            // #1766: drop a presenter that is really the room (keep the show). This is the AGENT door, and
+            // it is the one FRIGID New York's rows come through, so wiring only the native path would have
+            // left the reported case untouched.
+            .map(ExtractedEventGuard.presenterThatIsNotTheRoom)
             .filter(ExtractedEventGuard.isUsable)
             .map { RecurringEventDate.normalized($0, today: today) }
     }

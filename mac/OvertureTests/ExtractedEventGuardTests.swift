@@ -396,6 +396,36 @@ struct ScoutExtractResultsGuardTests {
         #expect(counts.unreadTotal == 0)
         #expect(counts.droppedTotal == 0)
     }
+
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="open rows whose presenter is spelled exactly like their own venue"
+    // #1766: the AGENT door, and the one that matters. FRIGID New York's rows come through here, so a
+    // drain wired only into the native extractor path would have left the reported case untouched.
+    // Measured before this shipped: 163 of 512 open rows carried a presenter spelled exactly like their
+    // own venue, which is what the paid contact hunt then goes looking for an inbox for.
+    //
+    // The show SURVIVES. It is real and Dan should see it; what goes is the false claim about who is
+    // putting it on.
+    @Test func aPresenterThatIsReallyTheRoomIsDrainedAtTheBoundaryButTheShowSurvives() {
+        let r = results([ScoutExtractEvent(title: "Italian Abroad: Culture in Translation",
+                                           presenter: "Under St Marks", venue: "Under St Marks",
+                                           performanceDate: "2026-09-19",
+                                           sourceUrl: "https://tickets.frigid.nyc/italian-abroad",
+                                           location: nil)])
+        let usable = r.events(for: "s")
+        #expect(usable.count == 1)
+        #expect(usable.first?.presenter == nil)
+        #expect(usable.first?.venue == "Under St Marks")
+    }
+
+    // And a real presenter reaches the prospect untouched, or the guard would erase the very thing the
+    // runbook rule exists to capture.
+    @Test func arealPresenterReachesTheProspectThroughTheBoundary() {
+        let r = results([ScoutExtractEvent(title: "Sins and Stardust Burlesque",
+                                           presenter: "Stiletto Sinclair and Jackie Galaxy",
+                                           venue: "Under St Marks", performanceDate: "2026-09-19",
+                                           sourceUrl: "https://tickets.frigid.nyc/sins", location: nil)])
+        #expect(r.events(for: "s").first?.presenter == "Stiletto Sinclair and Jackie Galaxy")
+    }
 }
 
 // #1278: the listing link (`sourceUrl`) is what Dan clicks to look a concert up. Some rows link only to a
@@ -485,4 +515,49 @@ struct SignupFormSourceURLGuardTests {
         #expect(ExtractedEventGuard.sanitizedSourceURL(
             event(sourceUrl: form), listingsURL: nil).sourceUrl == nil)
     }
+
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="open rows whose presenter is spelled exactly like their own venue"
+    // #1766: runbook rule 3d forbids reporting the venue as the presenter, and a real run against the
+    // pinned FRIGID page obeyed it. But a runbook is a request, not a guarantee (the same reasoning that
+    // put the venue and signup-form guards in this file), and 163 of 512 open rows already carry a
+    // presenter spelled exactly like their own venue. A presenter is what the PAID contact hunt is aimed
+    // at, so a room's name sitting there sends Dan's money looking for the building's own inbox and the
+    // answer comes back reading like an honest "nobody is reachable".
+    //
+    // Drained to nil rather than dropping the show: the performance is real and Dan should still see it.
+    // Nil is also the honest value, because the page did not tell us who presents it.
+    @Test func aPresenterThatIsReallyTheVenueIsDrainedRatherThanStored() {
+        let e = ExtractedEvent(title: "Italian Abroad", presenter: "Under St Marks",
+                               venue: "Under St Marks", performanceDate: "2026-09-11", sourceUrl: nil)
+        #expect(ExtractedEventGuard.presenterThatIsNotTheRoom(e).presenter == nil)
+    }
+
+    // The same room under a spelling the venue fold already collapses. Compared through ProducerGate.key,
+    // the one fold the app already uses for exactly this presenter-versus-venue question, so this guard
+    // cannot drift from the producer gate's own idea of when a name IS the room.
+    @Test func aPresenterMatchingItsRoomUnderAnotherSpellingIsAlsoDrained() {
+        let e = ExtractedEvent(title: "A Recital", presenter: "The Cutting Room",
+                               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+                               performanceDate: "2026-09-11", sourceUrl: nil)
+        #expect(ExtractedEventGuard.presenterThatIsNotTheRoom(e).presenter == nil)
+    }
+
+    // And a real presenter is untouched, or the guard would erase the very thing #1766 exists to capture.
+    @Test func arealPresenterSurvivesTheGuard() {
+        let e = ExtractedEvent(title: "Sins and Stardust Burlesque",
+                               presenter: "Stiletto Sinclair and Jackie Galaxy", venue: "Under St Marks",
+                               performanceDate: "2026-09-28", sourceUrl: nil)
+        #expect(ExtractedEventGuard.presenterThatIsNotTheRoom(e).presenter == "Stiletto Sinclair and Jackie Galaxy")
+        // Nothing else about the event moves.
+        #expect(ExtractedEventGuard.presenterThatIsNotTheRoom(e).venue == "Under St Marks")
+    }
+
+    // Idempotent, like the other two drains in this file: running it twice changes nothing.
+    @Test func drainingThePresenterTwiceChangesNothing() {
+        let e = ExtractedEvent(title: "Italian Abroad", presenter: "Under St Marks",
+                               venue: "Under St Marks", performanceDate: "2026-09-11", sourceUrl: nil)
+        let once = ExtractedEventGuard.presenterThatIsNotTheRoom(e)
+        #expect(ExtractedEventGuard.presenterThatIsNotTheRoom(once) == once)
+    }
+
 }
