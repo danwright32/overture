@@ -24,21 +24,15 @@ struct OrganisationsView: View {
 
     @State private var search = ""
 
-    // Built once per redraw, never per row. Deciding this walks every presenter in the store against every
-    // venue spelling in it, which is a cost a row must not pay while it is being drawn (#1687, #1121).
-    private var entries: [OrganisationListing.Entry] {
-        OrganisationListing.build(
+    // #1731: the whole derivation, built ONCE, in a value a test can count the builds of. It used to be
+    // a computed property here, which SwiftUI re-reads on every access, so it rebuilt once per section and
+    // again on every keystroke below. See OrganisationsSheetModel.
+    private var model: OrganisationsSheetModel {
+        OrganisationsSheetModel(
             shows: prospects.map {
                 OrganisationListing.Show(presenter: $0.presenter, venue: $0.venue, title: $0.groupName)
             },
             overrides: ProducerOverrides(promotedRows: promoted, demotedRows: demoted))
-    }
-
-    private var shortlist: [OrganisationListing.Entry] {
-        let minimum = OrganisationListing.shortlistMinimumRows
-        let refused = entries.filter { $0.verdict == .paidForSeparately }
-        let uncorrected = refused.filter { $0.standing == .none }
-        return uncorrected.filter { $0.rowCount >= minimum }
     }
 
     // #1768: names one character apart, which every rule that reads a name treats as two organisations.
@@ -49,7 +43,7 @@ struct OrganisationsView: View {
         return NearMissNames.pairs(in: Array(Set(names)))
     }
 
-    private var matches: [OrganisationListing.Entry] {
+    private func matches(_ entries: [OrganisationListing.Entry]) -> [OrganisationListing.Entry] {
         let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return [] }
         return entries.filter { $0.name.lowercased().contains(needle) }
@@ -60,12 +54,15 @@ struct OrganisationsView: View {
             header
             Divider().overlay(OVColor.line)
             ScrollView {
+                // Built ONCE here and handed down, so a keystroke in the search field filters a list that
+                // already exists instead of rebuilding it.
+                let sheet = model
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                    worthALook
-                    treatedAsTheVenue
-                    shareOneAnswer
+                    worthALook(sheet)
+                    treatedAsTheVenue(sheet)
+                    shareOneAnswer(sheet)
                     sameNameTwice
-                    lookAnyOneUp
+                    lookAnyOneUp(sheet)
                 }
                 .padding(OVSpacing.lg)
             }
@@ -92,8 +89,9 @@ struct OrganisationsView: View {
 
     // MARK: - #1729: the ones most likely to be wrong
 
-    private var worthALook: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+    private func worthALook(_ sheet: OrganisationsSheetModel) -> some View {
+        let shortlist = sheet.shortlist
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
             sectionHeading("Worth a look", systemImage: "questionmark.circle", count: shortlist.count)
             // Earns its place: it says what to DO with the section, which the heading does not, and warns
             // that these are guesses rather than verdicts.
@@ -111,9 +109,9 @@ struct OrganisationsView: View {
 
     // MARK: - #1731: the question this sheet was filed to answer
 
-    private var treatedAsTheVenue: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            let buildings = entries.filter { $0.verdict == .theBuilding }
+    private func treatedAsTheVenue(_ sheet: OrganisationsSheetModel) -> some View {
+        let buildings = sheet.buildings
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
             sectionHeading("Read as the building", systemImage: "building.2", count: buildings.count)
             Text("Their name is never printed on a card and their address is never used as a contact.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
@@ -126,9 +124,9 @@ struct OrganisationsView: View {
 
     // MARK: - where a wrong verdict costs money
 
-    private var shareOneAnswer: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            let producers = entries.filter { $0.verdict == .sharesOneAnswer }
+    private func shareOneAnswer(_ sheet: OrganisationsSheetModel) -> some View {
+        let producers = sheet.sharing
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
             sectionHeading("One answer covers all their shows", systemImage: "arrow.triangle.branch",
                            count: producers.count)
             // The money sentence. This is the only section where being wrong costs a contact answer being
@@ -169,9 +167,9 @@ struct OrganisationsView: View {
 
     // MARK: - everything else, on demand
 
-    private var lookAnyOneUp: some View {
+    private func lookAnyOneUp(_ sheet: OrganisationsSheetModel) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Look one up", systemImage: "magnifyingglass", count: entries.count)
+            sectionHeading("Look one up", systemImage: "magnifyingglass", count: sheet.all.count)
             // The sections above are the interesting ones; the rest of the store is Overture working
             // correctly, and listing all of it would bury them. Search is how nothing becomes unreachable.
             Text("Every organisation Overture knows about, including the ones it read correctly.")
@@ -179,7 +177,7 @@ struct OrganisationsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             OVSearchField(query: $search, placeholder: "Find an organisation",
                           clearLabel: "Clear the organisation search")
-            ForEach(matches) { entry in
+            ForEach(sheet.matches(search)) { entry in
                 row(for: entry, detail: entry.reason.map(OrganisationListing.reasonLine)
                     ?? OrganisationListing.evidenceLine(entry))
             }
