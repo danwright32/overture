@@ -1,0 +1,50 @@
+{
+  "version": 8,
+  "generatedAt": "2026-06-25T00:00:00.000Z",
+  "houses": [
+    {
+      "key": "abrons arts center",
+      "name": "Abrons Arts Center"
+    }
+  ],
+  "items": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "groupName": "Aurora Strings",
+      "venue": "Carnegie Hall",
+      "performanceDate": "2026-03-10",
+      "discipline": "music",
+      "websiteURL": "https://aurorastrings.example",
+      "sourceListingURL": "https://example.org/aurora-10",
+      "possibleMatchName": "Aurora Strings",
+      "priorRelationship": "warm",
+      "production": "self",
+      "showListing": {
+        "status": "read",
+        "url": "https://example.org/aurora-10",
+        "text": "About the Show. Aurora Strings play a programme of new work for string quartet, written for them by three composers under thirty, alongside one late Beethoven quartet. Featuring: Ada Fenwick, Ruben Oyelaran, Mira Vance, Tomas Reidy. Duration 90 minutes."
+      }
+    },
+    {
+      "naturalKey": "harbour-winds|2026-04-02|the-example-room",
+      "groupName": "Harbour Winds",
+      "venue": "The Example Room",
+      "performanceDate": "2026-04-02",
+      "discipline": "music",
+      "sourceListingURL": "https://example.org/harbour-winds",
+      "priorRelationship": "none",
+      "production": "unknown",
+      "showListing": {
+        "status": "unreadable",
+        "url": "https://example.org/harbour-winds"
+      }
+    },
+    {
+      "naturalKey": "lumen-dance|undated|none",
+      "groupName": "Lumen Dance",
+      "discipline": "dance",
+      "priorRelationship": "cold",
+      "production": "agency"
+    }
+  ]
+}

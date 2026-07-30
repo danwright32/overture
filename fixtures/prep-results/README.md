@@ -43,3 +43,10 @@ confidence badge can link Dan through to verify it himself. Distinct from `formU
 `form_or_dm` contact's own submission link; only ever meaningful at `confidence == "high"`. It
 exercises a high-confidence act contact carrying a `sourceUrl` alongside a medium-confidence presenter
 contact with none.
+
+`v8.json` (#1824) adds an optional `showSummary` on the result itself, one plain line saying what the show
+IS as read from the listing text the app handed over, plus a `showSummaryAbsentReason` that is REQUIRED
+whenever there is no summary (`no_listing_page` / `page_unreadable` / `no_description_published`). The
+fixture carries a summary, an honest absence beside a real draft, and an absence on an entry with no
+contacts at all. Additive, so `v1.json` through `v7.json` still decode with both absent. The absent-reason
+vocabulary is enforced by `assertPrepResultsShape`, which also refuses a v8 entry carrying neither.

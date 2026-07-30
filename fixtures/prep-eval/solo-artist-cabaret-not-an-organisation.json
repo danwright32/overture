@@ -1,0 +1,65 @@
+{
+  "name": "solo-artist-cabaret-not-an-organisation",
+  "rule": "Read the listing text the app handed over, say back what the show IS, and describe Dan without categorizing the recipient. The stored discipline is `other` here, so the gallery link comes from what the page says the show is, not from the classifier (#1824).",
+  "input": {
+    "naturalKey": "alex-example|2026-08-03|the-example-room",
+    "groupName": "Alex Example",
+    "venue": "The Example Room",
+    "performanceDate": "2026-08-03",
+    "discipline": "other",
+    "production": "self",
+    "priorRelationship": "none",
+    "sourceListingURL": "https://tickets.example/showdetails/aBc123/dEf456",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/aBc123/dEf456",
+      "text": "Events FAQ About Contact Sign in Alex Example Don't Be So Hard on Yourself About the Show \"Don't Be So Hard on Yourself\" is a cabaret concert of new songs written by Alex Example (featuring guest songwriters Jo Marchetti and Teddy Rowe) built around a simple but resonant idea: that we are often our own harshest critics, and that there is real power, and real humor, in learning to sing those harsh words and let them go. Example and a cast of stunning friends each bring their own voice and perspective to the intimate, funny, cathartic material. It's an hour spent in the company of people who are all figuring it out together. Featuring: Cole Bradenton Capri Castellane Jo Marchetti Jamila Sabare Teddy Rowe Genre New Artists Duration 75 minutes Age Restriction All ages 570 Example Avenue New York, NY 10036 View on map Show Disclaimer/Terms All Sales are Final. No Refunds or Transfers. Similar Shows ALEX EXAMPLE Aug 3 9:30 PM From $19.00 Buy a ticket Related Events Jul 30, 7:00 PM Rosa Webbe $19.00 Buy a ticket Jul 31, 9:30 PM Pink On The Horizon $19.00 Buy a ticket Contact Us How to reach us General information tickets@theexampleroom.example Perform with us For programming information programming@theexampleroom.example Menu Events About FAQ Contact Terms & Conditions Refund Policy Privacy Policy Powered by an example ticketing host"
+    }
+  },
+  "sources": [
+    {
+      "label": "Alex Example own site",
+      "url": "https://alexexample.example/contact",
+      "content": "Alex Example is a songwriter and performer based in New York. Booking and general enquiries: alex@alexexample.example."
+    }
+  ],
+  "expected": {
+    "description": "Say what the listing says the show is (a cabaret concert of new songs), link the performing-arts gallery even though the stored discipline is `other`, and never describe the recipient as an organisation. The only addresses on the page belong to the room, and they stay refused.",
+    "requiredShowSummaryTerms": ["cabaret"],
+    "forbiddenEmails": [
+      "tickets@theexampleroom.example",
+      "programming@theexampleroom.example"
+    ],
+    "forbiddenDomains": ["theexampleroom.example"],
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/performing-arts",
+    "forbiddenBodyTerms": ["opera", "orchestra", "ensemble"]
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-07-30T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "alex-example|2026-08-03|the-example-room",
+        "showSummary": "A cabaret concert of new songs written by Alex Example, sung by Example and a cast of five, 75 minutes.",
+        "contacts": [
+          {
+            "name": "Alex Example",
+            "role": "Songwriter and performer",
+            "email": "alex@alexexample.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://alexexample.example/contact",
+            "overrideBody": "I photograph performing arts in New York and saw you're bringing an evening of your own new songs to The Example Room on August 3, sung by you and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Alex Example's new songs at The Example Room.",
+          "body": "I photograph performing arts in New York and saw Alex Example is bringing an evening of new songs to The Example Room on August 3, sung by Example and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}

@@ -437,11 +437,14 @@ enum ProspectMutations {
     // LAUNCHES a Prep run scoped to just this show (reusing PrepQueueService.startPrep, the same detached
     // path "Prep kept" uses), rather than only flagging it for some future run Dan has to remember to
     // start. The launch is an injected seam so it stays testable; production defaults to the real service.
+    // #1824: async, because the launch now renders this show's own listing page before starting the run, so
+    // the draft is grounded in what the show actually is. The caller awaits it from a task rather than
+    // blocking the click.
     static func reprep(_ item: QueueItem, mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                        now: Date = Date(),
-                       startPrep: @MainActor (ModelContext, Date, Set<String>) throws -> Void = { ctx, now, keys in
-                           _ = try PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
-                       }) {
+                       startPrep: @MainActor (ModelContext, Date, Set<String>) async throws -> Void = { ctx, now, keys in
+                           _ = try await PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
+                       }) async {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         let draftGranted = ReprepRequest.apply(mode, to: model)
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
@@ -457,7 +460,7 @@ enum ProspectMutations {
         // (CLAUDE.md "assume it runs twice"): a second click, or a run already going, throws
         // .alreadyRunning, and since the flag is already saved the show simply rides the next run.
         do {
-            try startPrep(context, now, [item.id])
+            try await startPrep(context, now, [item.id])
             feedback.acknowledge(ActionAck.reprepStarted(mode: mode, draftGranted: draftGranted, org: item.groupName))
         } catch PrepQueueService.PrepLaunchError.alreadyRunning {
             feedback.acknowledge(ActionAck.reprepRunInFlight(org: item.groupName))

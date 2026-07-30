@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **932 sentences**, from 318 source files.
+Every sentence Overture can say to Dan: **936 sentences**, from 320 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -742,6 +742,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "It leaves your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"Its listing page couldn't be read"
+    `Domain/ShowSummary.swift`
+"Its listing publishes no description"
+    `Domain/ShowSummary.swift`
 "Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
     `App/StoreShrinkCheck.swift`
 "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
@@ -886,6 +890,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExperimentReportView.swift`
 "No kept prospects need prepping. Keep some prospects first."
     `Integration/PrepQueueService.swift`
+"No listing page for this show"
+    `Domain/ShowSummary.swift`
 "No longer in the feed, may be cancelled"
     `UI/ProspectRowView.swift`
 "No matches for \"\(query)\""
@@ -1191,6 +1197,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Read this source's listings now, without scouting the rest of the list"
     `Domain/WatchlistEditing.swift`
 "Reading calendars"
+    `UI/RunProgressView.swift`
+"Reading show pages"
     `UI/RunProgressView.swift`
 "Reading them all takes a few minutes. A smaller batch leaves \(them) first in line next time."
     `Domain/ScoutReadBudget.swift`

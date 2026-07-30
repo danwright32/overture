@@ -423,7 +423,9 @@ describe("prep-eval fixtures", () => {
       "presenter-not-venue",
       "returning-client-booked",
       "returning-client-warm-lead",
+      "season-calendar-describes-no-show",
       "self-produced-duo-both-performers",
+      "solo-artist-cabaret-not-an-organisation",
       "stale-site-misnamed-co-performer",
     ]);
   });
@@ -468,5 +470,64 @@ describe("prep-eval fixtures", () => {
     const r = evaluateFixture(fixture!, produced);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/harbourarts\.example/);
+  });
+
+  // #1824. Same discipline: each of these fixtures must be seen to FAIL on the exact draft a runbook
+  // regression would produce, or it is decoration. All four are the real 2026-07-30 failure, replayed.
+
+  function clone(fixture: PrepEvalFixture): { results: Array<Record<string, unknown>> } {
+    return JSON.parse(JSON.stringify(fixture.sampleCompliantOutput));
+  }
+
+  function withBody(fixture: PrepEvalFixture, body: string): unknown {
+    const produced = clone(fixture);
+    (produced.results[0].draft as { body: string }).body = body;
+    delete produced.results[0].contacts;   // drop the overrideBody, so only the shared body is judged
+    produced.results[0].emptyReason = "nothing_published";
+    return produced;
+  }
+
+  it("solo-artist-cabaret-not-an-organisation: flags a run that never says what the show is", () => {
+    const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
+    const produced = clone(fixture);
+    delete produced.results[0].showSummary;
+    produced.results[0].showSummaryAbsentReason = "no_description_published";
+    const r = evaluateFixture(fixture, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/showSummary does not say what the listing says|showSummary expected/i);
+  });
+
+  // The sentence Dan actually received, verbatim in shape: a category the reader does not fit.
+  it("solo-artist-cabaret-not-an-organisation: flags a draft that categorizes the recipient", () => {
+    const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
+    const r = evaluateFixture(fixture, withBody(fixture,
+      "I'm a documentary photographer working with performing arts organizations in New York, and I'm "
+      + "writing about photographing your August 3 show at The Example Room. My rate is $250 an hour plus "
+      + "tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at "
+      + "danwrightphotography.com/performing-arts. Happy to answer any questions."));
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/categorizes the recipient/i);
+  });
+
+  it("solo-artist-cabaret-not-an-organisation: flags a draft that says the show is something it is not", () => {
+    const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
+    const r = evaluateFixture(fixture, withBody(fixture,
+      "I photograph performing arts in New York and saw your opera is at The Example Room on August 3. "
+      + "My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. "
+      + "Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions."));
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/says the show is something the listing does not/i);
+  });
+
+  // The other direction, and the one a naive "always summarise the listing" rule gets wrong: the page is
+  // a season calendar, so a summary of it is an invention about this show.
+  it("season-calendar-describes-no-show: flags a summary invented from the neighbouring listings", () => {
+    const fixture = fixtures.find((f) => f.name === "season-calendar-describes-no-show")!;
+    const produced = clone(fixture);
+    delete produced.results[0].showSummaryAbsentReason;
+    produced.results[0].showSummary = "A Bach and Baroque chamber programme.";
+    const r = evaluateFixture(fixture, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/showSummary was invented/i);
   });
 });

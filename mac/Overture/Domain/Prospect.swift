@@ -338,6 +338,20 @@ final class Prospect {
     var alreadyCoveredNote: String? = nil
     var alreadyCoveredDismissed: Bool = false
 
+    // #1824: what the Prep run understood this show to BE, read off the show's own listing page (which the
+    // APP renders and hands over, because the detached run's tools cannot). One plain line, or nothing when
+    // the run had nothing to go on, in which case `showSummaryAbsentReasonRaw` says which of the three
+    // honest reasons applied. Shown on the review card so Dan can see whether the draft beside it was
+    // grounded in anything. Defaulted so existing records migrate cleanly.
+    var showSummary: String? = nil
+    // The raw wire string, so a value a newer run invents survives the round trip and is simply not
+    // understood, rather than failing the decode. Read through `showSummaryAbsence` below, never directly.
+    var showSummaryAbsentReasonRaw: String? = nil
+
+    var showSummaryAbsence: ShowSummaryAbsence? {
+        showSummaryAbsentReasonRaw.flatMap(ShowSummaryAbsence.init(rawValue:))
+    }
+
     // Performer-name warm-lead detection (#749, plan #748, issue #585). Prep matched this
     // performance's PERFORMER (not its org) to a past client, and corrected the relationship the
     // org-name matcher had scored cold. Defaulted so existing records migrate cleanly.

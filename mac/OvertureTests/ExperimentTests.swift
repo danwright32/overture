@@ -119,7 +119,7 @@ struct ExperimentTests {
 
     // MARK: - Wiring into the real Prep path
 
-    @Test func startPrepStampsTheActiveExperimentsArmOntoEligibleProspects() throws {
+    @Test func startPrepStampsTheActiveExperimentsArmOntoEligibleProspects() async throws {
         let ctx = ModelContext(try container())
         let exp = Experiment(dimension: .openerShape, variantA: .reasonFirst, variantB: .credentialFirst, isActive: true)
         ctx.insert(exp)
@@ -140,10 +140,10 @@ struct ExperimentTests {
         let openersURL = tmp.appendingPathComponent("ro-\(UUID().uuidString).json")
         defer { [queueURL, marker, feedbackURL, openersURL].forEach { try? FileManager.default.removeItem(at: $0) } }
 
-        try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                       queueURL: queueURL, markerURL: marker,
-                                       voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
-                                       launch: {})
+        try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                             queueURL: queueURL, markerURL: marker,
+                                             voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
+                                             launch: {})
 
         #expect(["reason-first", "credential-first"].contains(toPrep.assignedArm))
         #expect(toPrep.experimentID == exp.experimentId)

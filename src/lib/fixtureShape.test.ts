@@ -33,7 +33,7 @@ describe("prep-queue fixture shapes", () => {
 
   it("covers exactly the known prep-queue files", () => {
     expect(files.sort()).toEqual([
-      "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+      "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json", "v8.json",
     ]);
   });
 
@@ -127,7 +127,8 @@ describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json"]);
+    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+                                  "v8.json"]);
   });
 
   for (const file of files) {

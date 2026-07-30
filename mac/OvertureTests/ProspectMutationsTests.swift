@@ -470,15 +470,15 @@ struct ProspectMutationsTests {
 
     // #367: the per-prospect re-prep action applies the requested mode and saves.
     // #1143: it now also LAUNCHES a scoped Prep run; an injected launch seam keeps this hermetic.
-    @Test func reprepAppliesTheRequestedModeAndSaves() throws {
+    @Test func reprepAppliesTheRequestedModeAndSaves() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .drafted)
         p.draftBody = "Hi"
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx, feedback: feedback,
-                                 startPrep: { _, _, _ in })
+        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx,
+                                       feedback: feedback, startPrep: { _, _, _ in })
 
         #expect(p.reprepContactsRequested == true)
         #expect(p.reprepDraftRequested == false)
@@ -487,18 +487,18 @@ struct ProspectMutationsTests {
 
     // #1143: clicking Re-prep must actually launch a Prep run scoped to JUST that prospect's key,
     // not merely flip the flag and wait for some future run.
-    @Test func reprepLaunchesAScopedPrepRunForJustThatProspect() throws {
+    @Test func reprepLaunchesAScopedPrepRunForJustThatProspect() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, key: "only-me", status: .drafted)
         p.draftBody = "Hi"
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        var launchedKeys: [Set<String>] = []
-        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback,
-                                 startPrep: { _, _, keys in launchedKeys.append(keys) })
+        let launched = LaunchedKeys()
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback,
+                                       startPrep: { _, _, keys in launched.keys.append(keys) })
 
-        #expect(launchedKeys == [["only-me"]])   // launched exactly once, scoped to this show
+        #expect(launched.keys == [["only-me"]])   // launched exactly once, scoped to this show
         #expect(p.reprepContactsRequested == true)
         #expect(feedback.message != nil)
     }
@@ -506,7 +506,7 @@ struct ProspectMutationsTests {
     // #1143 / CLAUDE.md "assume it runs twice": a second click (or a run already in flight) must not
     // launch a second run. The guard is startPrep's own in-flight marker, reused here: the first click
     // creates it, the second throws .alreadyRunning and no second launch happens.
-    @Test func reprepDoesNotLaunchTwiceWhenARunIsAlreadyInFlight() throws {
+    @Test func reprepDoesNotLaunchTwiceWhenARunIsAlreadyInFlight() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, key: "twice", status: .drafted)
         p.draftBody = "Hi"
@@ -519,29 +519,33 @@ struct ProspectMutationsTests {
         let marker = base.appendingPathComponent("prep-running")
         let queue = base.appendingPathComponent("queue.json")
 
-        var launches = 0
+        let counter = LaunchCounter()
         // Route the seam through the REAL startPrep so the real marker guard is exercised, with every
-        // file location pointed at the temp dir so nothing touches the live handoff directory.
-        let seam: @MainActor (ModelContext, Date, Set<String>) throws -> Void = { ctx, now, keys in
-            _ = try PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys,
-                                               queueURL: queue, markerURL: marker,
-                                               voiceFeedbackURL: base.appendingPathComponent("voice.json"),
-                                               recentOpenersURL: base.appendingPathComponent("openers.json"),
-                                               cancelURL: base.appendingPathComponent("prep-cancel"),
-                                               launch: { launches += 1 })
+        // file location pointed at the temp dir so nothing touches the live handoff directory. #1824: the
+        // renderer is stubbed too, so no listing page is ever loaded from a test.
+        let seam: @MainActor (ModelContext, Date, Set<String>) async throws -> Void = { ctx, now, keys in
+            _ = try await PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys,
+                                                     queueURL: queue, markerURL: marker,
+                                                     voiceFeedbackURL: base.appendingPathComponent("voice.json"),
+                                                     recentOpenersURL: base.appendingPathComponent("openers.json"),
+                                                     cancelURL: base.appendingPathComponent("prep-cancel"),
+                                                     render: { _ in "<html><body>a show</body></html>" },
+                                                     launch: { counter.launches += 1 })
         }
 
-        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback, startPrep: seam)
-        ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback, startPrep: seam)
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx,
+                                       feedback: feedback, startPrep: seam)
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx,
+                                       feedback: feedback, startPrep: seam)
 
-        #expect(launches == 1)                       // the in-flight marker blocked the second launch
+        #expect(counter.launches == 1)               // the in-flight marker blocked the second launch
         #expect(p.reprepContactsRequested == true)   // the flag is still recorded for the next run
         #expect(feedback.message != nil)             // and the "already running" case is surfaced, not silent
     }
 
     // #1143: a draft-only re-prep of a show already emailed has nothing to redraft (ReprepRequest gates
     // the draft half on sentAt == nil), so there is no dead work to launch. Fail-loud, not a phantom run.
-    @Test func reprepDraftOnlyOnAnAlreadySentShowLaunchesNothing() throws {
+    @Test func reprepDraftOnlyOnAnAlreadySentShowLaunchesNothing() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, key: "sent", status: .approved)
         p.draftBody = "Hi"
@@ -549,11 +553,11 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        var launches = 0
-        ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, prospects: [p], context: ctx, feedback: feedback,
-                                 startPrep: { _, _, _ in launches += 1 })
+        let counter = LaunchCounter()
+        await ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, prospects: [p], context: ctx,
+                                       feedback: feedback, startPrep: { _, _, _ in counter.launches += 1 })
 
-        #expect(launches == 0)                     // nothing to redraft, so no run
+        #expect(counter.launches == 0)             // nothing to redraft, so no run
         #expect(p.reprepDraftRequested == false)   // and the draft half was never granted
         #expect(feedback.message != nil)           // Dan is told why, not left with a silent no-op
     }
@@ -659,4 +663,10 @@ struct ProspectMutationsTests {
 
         #expect(p.recipients.first?.looksLikePressContactDismissed == true)
     }
+
+    // #1824: Re-prep launches asynchronously now (it renders the show's listing page first), so what a
+    // launch did is recorded on a reference the test can read afterwards rather than a captured local.
+    @MainActor private final class LaunchCounter { var launches = 0 }
+    @MainActor private final class LaunchedKeys { var keys: [Set<String>] = [] }
+
 }

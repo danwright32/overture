@@ -114,6 +114,10 @@ struct RootView: View {
     @State private var showInquiryIntake = false
     @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
     @State private var prepSheetShown = false      // #1130: the Prep run's takeover progress screen
+    // #1824: the app's own listing-page read, which runs before the detached Prep run launches. Non-nil
+    // only while that phase is in flight, which is also what routes the takeover to it.
+    @State private var listingReadProgress: RunProgressView.Snapshot?
+    @State private var listingReadStartedAt: Date?
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
@@ -1044,22 +1048,38 @@ struct RootView: View {
     }
 
     private func startPrep(includedKeys: Set<String>) {
-        do {
-            // #1809: the orphan settle lives in PrepQueueService.startPrep, so every way a Prep run begins
-            // is covered (a per-row Re-prep never reaches this function). This only supplies somewhere to
-            // SAY what that settle found.
-            // #353: no separate "started" message. The button's own "Prepping…" state and
-            // QueueView's masthead count already say a run is in progress; a second message
-            // saying the same thing was redundant.
-            _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys,
-                                               onOrphanSettled: { reportReachabilityRun($0) })
-            // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
-            // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
-            // #1143: the continuous watchPrepRuns task follows this run to completion (ingest, or a clear
-            // empty-run notice), so it is no longer started per-launch here; one watcher owns every run.
-            prepSheetShown = true
-        } catch {
-            errorMessage = error.localizedDescription
+        // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
+        // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
+        // #1824: raised to BEFORE the launch, because the launch now renders each kept show's listing page
+        // first (seconds of real work). Left where it was, that whole phase happened behind a button that
+        // looked like it had done nothing.
+        prepSheetShown = true
+        listingReadProgress = .init(completed: 0, total: 0, advancedAt: Date())
+        listingReadStartedAt = Date()
+        Task { @MainActor in
+            defer { listingReadProgress = nil }
+            do {
+                // #1809: the orphan settle lives in PrepQueueService.startPrep, so every way a Prep run
+                // begins is covered (a per-row Re-prep never reaches this function). This only supplies
+                // somewhere to SAY what that settle found.
+                // #353: no separate "started" message. The button's own "Prepping…" state and
+                // QueueView's masthead count already say a run is in progress; a second message
+                // saying the same thing was redundant.
+                // #1143: the continuous watchPrepRuns task follows this run to completion (ingest, or a
+                // clear empty-run notice), so it is not started per-launch here; one watcher owns every run.
+                _ = try await PrepQueueService.startPrep(
+                    from: context, now: Date(), includedKeys: includedKeys,
+                    onOrphanSettled: { reportReachabilityRun($0) },
+                    onListingProgress: { done, total in
+                        // A fresh stamp on every step: it is what tells the takeover this phase is still
+                        // alive, since an in-process read has no marker file to heartbeat.
+                        listingReadProgress = .init(completed: done, total: total, advancedAt: Date())
+                    })
+            } catch {
+                // The run never started, so the takeover must not sit there implying it did.
+                prepSheetShown = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -1611,15 +1631,25 @@ struct RootView: View {
     private var prepProgressModal: some View {
         VStack {
             Spacer(minLength: 0)
-            RunProgressView(
-                // #1322: a probe reuses this same takeover, so it labels itself "Checking reachability"
-                // instead of "Prepping" when the in-flight run is a probe (its marker is present).
-                phase: PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping,
-                since: PrepQueueService.lastRunStartedAt,
-                snapshot: { RunProgressView.Snapshot.livePrepping() },
-                runAlive: { PrepQueueService.isRunning(now: Date()) },
-                onHide: { prepSheetShown = false },
-                onCancel: { cancelPrep() })
+            // #1824: the launch's own first phase, the app rendering each kept show's listing page. It has
+            // no marker file (it runs in process), so its still-alive evidence is the same as the scout
+            // sweep's: a count that keeps advancing.
+            if let reading = listingReadProgress {
+                RunProgressView(phase: .readingListings,
+                                since: listingReadStartedAt,
+                                snapshot: { reading },
+                                onHide: { prepSheetShown = false })
+            } else {
+                RunProgressView(
+                    // #1322: a probe reuses this same takeover, so it labels itself "Checking reachability"
+                    // instead of "Prepping" when the in-flight run is a probe (its marker is present).
+                    phase: PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping,
+                    since: PrepQueueService.lastRunStartedAt,
+                    snapshot: { RunProgressView.Snapshot.livePrepping() },
+                    runAlive: { PrepQueueService.isRunning(now: Date()) },
+                    onHide: { prepSheetShown = false },
+                    onCancel: { cancelPrep() })
+            }
             Spacer(minLength: 0)
         }
         .frame(minWidth: 460, minHeight: 280)

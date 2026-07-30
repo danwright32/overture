@@ -47,6 +47,21 @@ export interface PrepEvalExpectation {
   forbidGalleryLink?: boolean;
   /** These performer contacts must be PRESENT but held below "high" confidence (uncorroborated). */
   lowConfidencePerformers?: string[];
+  /**
+   * #1824: the result's showSummary must contain each of these (case-insensitive), i.e. the run actually
+   * read the listing text it was handed and said back what the show IS.
+   */
+  requiredShowSummaryTerms?: string[];
+  /**
+   * #1824: the result must carry NO showSummary and exactly this showSummaryAbsentReason. For a page that
+   * genuinely publishes no description of this show, where inventing one is the failure.
+   */
+  expectedShowSummaryAbsentReason?: string;
+  /**
+   * #1824: no drafted body may name a term the show is not, e.g. describing what the listing calls a
+   * cabaret concert as an opera. Per-fixture because only the fixture knows what the show is not.
+   */
+  forbiddenBodyTerms?: string[];
 }
 
 export interface PrepEvalFixture {
@@ -81,6 +96,8 @@ interface ResultEntry {
   contacts?: Contact[];
   draft?: { subject?: string; body?: string; variant?: string };
   alreadyCoveredNote?: string;
+  showSummary?: string;
+  showSummaryAbsentReason?: string;
 }
 
 // Always-true runbook rules, checked regardless of a fixture's own expectations.
@@ -95,6 +112,12 @@ const GREETING = /^\s*(hi|hello|hey|dear|greetings)\b/i;
 const COLD_SELF_INTRO = /\bmy name is\b|\bi photograph performing arts\b|\bi'?m an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b|\bi am an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b/i;
 const PORTFOLIO_LINK = /danwrightphotography\.com/i;
 const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\]/;
+// #1824: describe Dan, never categorize the recipient. The 2026-07-30 draft opened "a documentary
+// photographer working with performing arts organizations in New York" to ONE singer-songwriter. The
+// phrase is in neither the runbook nor the skill; the model built it from Dan's identity line and applied
+// it to the reader. Universal, not per-fixture: no draft may make a claim about who is reading it.
+const RECIPIENT_CATEGORY =
+  /\b(?:with|for|alongside)\s+(?:performing[- ]arts|arts)\s+(?:organi[sz]ations?|institutions?|companies|groups|ensembles)\b|\bcompanies like yours\b|\borgani[sz]ations like yours\b|\bgroups like yours\b/i;
 const DOMAIN_TOKEN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s)]*)?/gi;
 const ALLOWED_LINK_HOSTS = new Set(["danwrightphotography.com", "www.danwrightphotography.com"]);
 
@@ -144,6 +167,9 @@ function checkUniversal(entries: ResultEntry[], failures: string[]): void {
     if (DASH.test(body)) failures.push(`${label}: contains an em/en dash`);
     if (GREETING.test(body)) failures.push(`${label}: opens with a greeting token; the app owns the greeting (#393)`);
     if (PLACEHOLDER.test(body)) failures.push(`${label}: contains an unfilled placeholder (#789)`);
+    if (RECIPIENT_CATEGORY.test(body)) {
+      failures.push(`${label}: categorizes the recipient instead of describing Dan (#1824)`);
+    }
     if (!/\$250/.test(body) || !/plus tax/i.test(body)) {
       failures.push(`${label}: must state the canonical rate ($250 an hour plus tax)`);
     }
@@ -232,6 +258,39 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
     for (const { label, body } of collectBodies([entry])) {
       if (COLD_SELF_INTRO.test(body)) {
         failures.push(`${label}: reintroduces Dan with a cold self-introduction; a booked/warm returning client already knows his work (#1215)`);
+      }
+    }
+  }
+
+  // #1824: the run was handed the show's own listing text and must say back what the show IS.
+  if (exp.requiredShowSummaryTerms?.length) {
+    const summary = (entry.showSummary ?? "").toLowerCase();
+    if (summary.trim().length === 0) {
+      failures.push(`showSummary expected (the listing describes this show) but is missing (#1824)`);
+    } else {
+      for (const term of exp.requiredShowSummaryTerms) {
+        if (!summary.includes(term.toLowerCase())) {
+          failures.push(`showSummary does not say what the listing says this show is: expected "${term}" (#1824)`);
+        }
+      }
+    }
+  }
+
+  // The other direction, and the one a naive rule gets wrong: a page that describes no show at all must
+  // produce an honest absence, never an invented summary assembled from the neighbouring listings.
+  if (exp.expectedShowSummaryAbsentReason) {
+    if ((entry.showSummary ?? "").trim().length > 0) {
+      failures.push(`showSummary was invented: this listing publishes no description of this show (#1824)`);
+    }
+    if (entry.showSummaryAbsentReason !== exp.expectedShowSummaryAbsentReason) {
+      failures.push(`expected showSummaryAbsentReason "${exp.expectedShowSummaryAbsentReason}", got "${entry.showSummaryAbsentReason ?? "(none)"}" (#1824)`);
+    }
+  }
+
+  for (const term of exp.forbiddenBodyTerms ?? []) {
+    for (const { label, body } of collectBodies([entry])) {
+      if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(body)) {
+        failures.push(`${label}: says the show is something the listing does not: "${term}" (#1824)`);
       }
     }
   }

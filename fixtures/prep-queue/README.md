@@ -34,3 +34,13 @@ that is NOT on the list gets visited before the run concludes no contact exists,
 it is refused exactly as the host venue is. Additive, so `v1.json` through `v6.json` still decode
 with it absent. See `docs/contracts.md` for why the judgment is computed in the app rather than
 restated in the runbook prompt.
+
+`v8.json` (#1824) adds an optional `showListing` to each item: what the show's OWN listing page says,
+rendered by the APP and handed over as text. The Prep run cannot read that page itself (its tool scope
+denies every browser tool, and this class of page is drawn client-side), which is how a solo
+singer-songwriter's cabaret concert came to be pitched as if the reader were a performing arts
+organisation. The fixture carries all three states, because the run says a different thing about each:
+`read` with the page's text, `unreadable` (a page we could not read, which is NOT a show with no
+description), and absent (there was no page to look at). Additive, so `v1.json` through `v7.json` still
+decode with it absent. See `docs/contracts.md` for why the app hands over the page's TEXT rather than
+trying to pick the description out of it.

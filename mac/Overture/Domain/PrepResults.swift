@@ -54,18 +54,32 @@ struct PrepResult: Codable, Equatable, Sendable {
     // A raw String, not the enum: an unrecognised value from a newer run must decode and then be dropped
     // by the reader, never fail the whole file and strand Dan's results.
     var emptyReason: String?
+    // v8 (#1824): one plain line saying what this show IS, sourced entirely from the listing text the app
+    // rendered and handed over in the queue. The trace that the "read the listing first" rule was actually
+    // followed, which otherwise lives only in the prompt (L27), and the line the review card shows Dan so
+    // he can see whether the draft beside it was grounded in anything.
+    var showSummary: String?
+    // v8 (#1824): REQUIRED on any entry with no `showSummary`, and one of ShowSummaryAbsence's three raw
+    // values. A raw String, not the enum, for the same reason `emptyReason` is: an unrecognised value from
+    // a newer run must decode and then be dropped by the reader, never fail the file and strand Dan's
+    // drafts.
+    var showSummaryAbsentReason: String?
 
     private enum CodingKeys: String, CodingKey {
         case naturalKey, contacts, contact, draft, alreadyCoveredNote, emptyReason
+        case showSummary, showSummaryAbsentReason
     }
 
     init(naturalKey: String, contacts: [PrepContact]? = nil, draft: PrepDraft? = nil,
-         alreadyCoveredNote: String? = nil, emptyReason: String? = nil) {
+         alreadyCoveredNote: String? = nil, emptyReason: String? = nil,
+         showSummary: String? = nil, showSummaryAbsentReason: String? = nil) {
         self.naturalKey = naturalKey
         self.contacts = contacts
         self.draft = draft
         self.alreadyCoveredNote = alreadyCoveredNote
         self.emptyReason = emptyReason
+        self.showSummary = showSummary
+        self.showSummaryAbsentReason = showSummaryAbsentReason
     }
 
     // v1 carried a single `contact` object; v2 carries `contacts[]`. Decode EITHER, mapping a legacy
@@ -76,6 +90,8 @@ struct PrepResult: Codable, Equatable, Sendable {
         draft = try c.decodeIfPresent(PrepDraft.self, forKey: .draft)
         alreadyCoveredNote = try c.decodeIfPresent(String.self, forKey: .alreadyCoveredNote)
         emptyReason = try c.decodeIfPresent(String.self, forKey: .emptyReason)
+        showSummary = try c.decodeIfPresent(String.self, forKey: .showSummary)
+        showSummaryAbsentReason = try c.decodeIfPresent(String.self, forKey: .showSummaryAbsentReason)
         if let many = try c.decodeIfPresent([PrepContact].self, forKey: .contacts) {
             contacts = many
         } else if let one = try c.decodeIfPresent(PrepContact.self, forKey: .contact) {
@@ -93,6 +109,8 @@ struct PrepResult: Codable, Equatable, Sendable {
         try c.encodeIfPresent(draft, forKey: .draft)
         try c.encodeIfPresent(alreadyCoveredNote, forKey: .alreadyCoveredNote)
         try c.encodeIfPresent(emptyReason, forKey: .emptyReason)
+        try c.encodeIfPresent(showSummary, forKey: .showSummary)
+        try c.encodeIfPresent(showSummaryAbsentReason, forKey: .showSummaryAbsentReason)
     }
 }
 
@@ -136,7 +154,9 @@ enum PrepResultsDecoder {
     // `try?`. If the runner ever writes a version this does not know, markProbed stamps every show in the
     // run with the no-email floor, nothing upgrades it, and the badge locks them out of a re-check for
     // ~90 days with no error anywhere. That is the #1594 shape.
-    static let supportedVersion = 7
+    // #1824 raised this to 8 with `showSummary`/`showSummaryAbsentReason`, IN THE SAME COMMIT as the
+    // fixture, for exactly the reason the paragraph above gives.
+    static let supportedVersion = 8
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

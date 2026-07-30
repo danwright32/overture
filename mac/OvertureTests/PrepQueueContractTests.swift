@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion7() {
+    @Test func theBuilderNowStampsVersion8() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 7)
+        #expect(q.version == 8)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -179,6 +179,34 @@ struct PrepQueueContractTests {
         for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json"] {
             let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
             #expect(decoded.houses == nil, "\(name) should carry no house list")
+        }
+    }
+
+    // v8 (#1824): each item may carry what its own listing page says, read by the app because the detached
+    // run's tool scope cannot render a JavaScript-drawn page. Three states, and the fixture carries all of
+    // them, because the run says a different sentence about each: `read` with the page's text, `unreadable`
+    // (a page we could not read, which is NOT a show with no description), and absent (there was no page
+    // to look at).
+    @Test func theV8FixtureCarriesWhatTheListingPageSays() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v8.json"))
+        #expect(decoded.version == 8)
+        #expect(decoded.items[0].showListing?.status == ShowListing.read)
+        #expect(decoded.items[0].showListing?.url == "https://example.org/aurora-10")
+        #expect(decoded.items[0].showListing?.text?.contains("string quartet") == true)
+        #expect(decoded.items[0].showListing?.truncated == nil)
+        #expect(decoded.items[1].showListing?.status == ShowListing.unreadable)
+        #expect(decoded.items[1].showListing?.text == nil)
+        #expect(decoded.items[2].showListing == nil)
+    }
+
+    // Additive, so every earlier queue file still decodes. Absent is not the same answer as `unreadable`:
+    // absent means the app never looked (no listing URL, or a file written before this field), and a run
+    // that read the two as the same thing would report "we could not read the page" about shows that never
+    // had one.
+    @Test func everyEarlierFixtureStillDecodesWithNoShowListing() throws {
+        for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json"] {
+            let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
+            #expect(decoded.items.allSatisfy { $0.showListing == nil }, "\(name) should carry no listing")
         }
     }
 

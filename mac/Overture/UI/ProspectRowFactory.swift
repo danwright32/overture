@@ -33,7 +33,14 @@ enum ProspectRowFactory {
             onApprove: onApprove ?? { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
-            onReprep: onReprep ?? { mode in ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback) },
+            // #1824: the launch renders this show's listing page first, so it is awaited from a task rather
+            // than blocking the click.
+            onReprep: onReprep ?? { mode in
+                Task { @MainActor in
+                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                                                   feedback: feedback)
+                }
+            },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,
