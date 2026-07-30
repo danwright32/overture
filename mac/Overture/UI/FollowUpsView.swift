@@ -199,6 +199,7 @@ struct FollowUpsView: View {
                 } else {
                     sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
                 }
+                standDownMenu(prospect: d.prospect, recipient: r)
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
                 Button("View in Archive") { onOpenInArchive(d.prospect.naturalKey, r.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -242,9 +243,16 @@ struct FollowUpsView: View {
                         Button("Remind me later") { remindLater(d) }
                             .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     case .closing:
+                        if let note = StandDownCopy.closingNoteOnStoodDownShow(
+                            stoodDownAt: p.outreachStoodDownAt, now: Date()) {
+                            Text(note).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+                        }
                         sendButton("Send closing note", enabled: gmailConnected && r.email != nil) {
                             requestConversationNudge(d, kind: .closing)
                         }
+                        // #1740: Dan may well not want to send a closing note either, and this was the
+                        // same gap as the nudge row: a send button and nothing else.
+                        closingNoteMenu(prospect: p, recipient: r)
                     case .suggested:
                         // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
                         sendButton("Confirm", enabled: true) { confirm(d) }
@@ -322,6 +330,81 @@ struct FollowUpsView: View {
                                                 prospects: prospects, context: context, feedback: feedback,
                                                 markSending: { sending[$0] = Date() },
                                                 clearSending: { sending[$0] = nil })
+    }
+
+    // #1740: Dan's way of saying "I'm not going to action this". Both futures are offered because he
+    // asked to choose each time (2026-07-30): standing the contact down for good, or pushing it out one
+    // gap. Secondary styling on purpose, never as loud as Send: declining is the quieter action, and the
+    // row sits one click from sending a real email to a stranger.
+    // The nudge row's version: decline this event's pitch, at either grain, or push it out one gap.
+    @ViewBuilder private func standDownMenu(prospect: Prospect, recipient: Recipient) -> some View {
+        Menu(StandDownCopy.menu) {
+            Button(StandDownCopy.stop) { standDown(prospect: prospect, recipient: recipient, scope: .contact) }
+            Button(StandDownCopy.stopShow) { standDown(prospect: prospect, recipient: recipient, scope: .show) }
+            Button(StandDownCopy.pushOut()) {
+                pushOut(prospect: prospect, recipient: recipient, track: .nudge)
+            }
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+    }
+
+    // The closing-note row's version, and it is a different decision: this note is about the NEXT event,
+    // so declining it is not declining the show. "Not sent but also done" (Dan, 2026-07-30).
+    @ViewBuilder private func closingNoteMenu(prospect: Prospect, recipient: Recipient) -> some View {
+        Menu(StandDownCopy.menu) {
+            Button(StandDownCopy.closeOut) { closeOut(prospect: prospect, recipient: recipient) }
+            Button(StandDownCopy.pushOut()) {
+                pushOut(prospect: prospect, recipient: recipient, track: .conversation)
+            }
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+    }
+
+    private func standDown(prospect: Prospect, recipient: Recipient, scope: StandDownScope) {
+        let now = Date()
+        switch scope {
+        case .contact: recipient.standDownOutreach(now: now)
+        case .show: prospect.standDownOutreach(now: now)
+        }
+        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
+        // Undo, because the row this replaces is one click from Send nudge and the decision removes work
+        // from a queue. The acknowledgement carries it, which is the shape every surface outside the
+        // queue's own Cmd+Z uses.
+        feedback.acknowledge(ActionAck.outreachStoodDown(org: prospect.groupName, scope: scope),
+                             action: .init(label: "Undo") {
+                                 switch scope {
+                                 case .contact: recipient.resumeOutreach()
+                                 case .show: prospect.resumeOutreach()
+                                 }
+                                 context.saveOrWarn(org: prospect.groupName, feedback: feedback)
+                             })
+    }
+
+    private func closeOut(prospect: Prospect, recipient: Recipient) {
+        recipient.standDownClosingNote(now: Date())
+        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(ActionAck.closingNoteClosedOut(org: prospect.groupName),
+                             action: .init(label: "Undo") {
+                                 recipient.resumeClosingNote()
+                                 context.saveOrWarn(org: prospect.groupName, feedback: feedback)
+                             })
+    }
+
+    private func pushOut(prospect: Prospect, recipient: Recipient, track: StandDownTrack) {
+        let now = Date()
+        // Only the clock this row actually runs on. Moving both would stamp the conversation track's
+        // anchor on a silent contact that has no conversation yet, and that anchor wins over the state's
+        // own date later, so a nudge pushed out today would make the contact's FIRST conversation
+        // reminder read as already overdue the moment a state is set.
+        switch track {
+        case .nudge: recipient.remindLaterAboutNudge(now: now)
+        case .conversation: recipient.remindLater(now: now)
+        }
+        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(ActionAck.nudgePushedOut(org: prospect.groupName,
+                                                      days: FollowUpConfig().gapDays))
     }
 
     private func remindLater(_ d: ConversationReminder.DueRecipient) {

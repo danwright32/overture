@@ -433,6 +433,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var conversationState: ConversationState? = nil
     var conversationStateSource: OutcomeSource? = nil
     var conversationRemindedAt: Date? = nil
+    // #1740: Dan stood this contact's outreach down, and when. Carried so the card can SAY so rather than
+    // just quietly showing no follow-up activity, which reads the same as a contact nobody got to.
+    var outreachStoodDownAt: Date? = nil
     // #654: moved from the now-deleted lead-level QueueItem fields, since contact confidence/method/
     // form-URL are genuinely per-recipient data.
     var contactConfidence: ContactConfidence? = nil
@@ -1831,6 +1834,7 @@ extension RecipientSnapshot {
                   conversationState: r.conversationState,
                   conversationStateSource: r.conversationStateSource,
                   conversationRemindedAt: r.conversationRemindedAt,
+            outreachStoodDownAt: r.outreachStoodDownAt,
                   contactConfidence: r.contactConfidence,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,

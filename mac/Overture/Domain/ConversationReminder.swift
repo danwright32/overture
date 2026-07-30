@@ -189,6 +189,14 @@ enum ConversationReminder {
             if p.status == .dismissed { continue }   // #238: dismissed leads stop nagging
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             for r in p.recipients {
+                // #1740: the closing note Dan closed out by hand, "not sent but also done". Skipped
+                // rather than resolved, because closing the conversation out is what he asked for while
+                // claiming a note was sent is exactly what he did not. A reply reopens it on its own.
+                //
+                // Deliberately NOT the pitch stand-down: that one means "I am not working this event", and
+                // a closing note serves the NEXT event, so it still comes due for a show he stood down.
+                // Its row says the show was stood down, so he has that in front of him when he decides.
+                if r.isClosingNoteStoodDown { continue }
                 let standing = r.standing
                 let unhandledReply = r.hasUnhandledReply
                 guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,

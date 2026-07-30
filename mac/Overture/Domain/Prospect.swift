@@ -410,6 +410,24 @@ final class Prospect {
     // The KEY is stored, never the sentence. The sentence is composed for display from the key, so
     // rewording the copy cannot silently re-raise every conflict Dan has already cleared, and cannot
     // leave old prospects quoting last month's wording back at him.
+    // #1740: Dan stood this whole SHOW's pitch down ("I no longer want to try and work this particular
+    // event"). A fact on the show rather than a stamp copied onto each contact, so a contact added later
+    // is covered too. Stops the pitch nudges only: a closing note still comes due, because that one serves
+    // the NEXT event, and a reply always reopens the show.
+    var outreachStoodDownAt: Date? = nil
+
+    // In force unless the contact has written back since. Takes the contact's own reply stamp because the
+    // reopen is per person: one contact replying does not put the whole show back in play for everyone
+    // else, but it does put THAT conversation back in play.
+    func isOutreachStoodDown(asOf repliedAt: Date?) -> Bool {
+        guard let stoodDown = outreachStoodDownAt else { return false }
+        if let repliedAt, repliedAt > stoodDown { return false }
+        return true
+    }
+
+    func standDownOutreach(now: Date) { outreachStoodDownAt = now }
+    func resumeOutreach() { outreachStoodDownAt = nil }
+
     var conflictKey: String? = nil
 
     // Dan-owned: the exact conflict he waved through ("I can shoot this anyway"). Stored as the KEY he
