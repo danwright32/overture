@@ -9,15 +9,90 @@ struct FollowUpConfig: Sendable {
     var maxFollowUps: Int = 2
 }
 
+// #1740: what the stand-down control says. Beside the config it reads from, not inside the view, so the
+// interval in the sentence and the interval the clock actually uses are one fact rather than two.
+// #1740: which clock a row's "remind me later" moves. The two tracks have separate anchors, and moving
+// the wrong one is not a no-op: the conversation anchor outranks the state's own date, so stamping it on
+// a contact with no conversation makes that contact's first reminder read as already overdue.
+enum StandDownTrack { case nudge, conversation }
+
+// #1740: whether Dan is declining this ONE contact or the whole event. Both, because he decides at both
+// grains (2026-07-30): "We should have both per show and per contact."
+enum StandDownScope { case contact, show }
+
+enum StandDownCopy {
+    // Deliberately not "Dismiss": what Dan is declining is the SENDING, not the row. A label about the row
+    // would read as "hide this", which is the one thing he said he did not want.
+    static let menu = "Not this one"
+    static let stop = "Stop sending to this contact"
+    // Names the SHOW, because that is the decision: not working this event any more. The two sit together
+    // so the grain is a choice he makes in the moment rather than one the app picks for him.
+    static let stopShow = "Stop working this show"
+    // The closing-note row's own way out. Says what it does and what it does not do, because "done" and
+    // "sent" are the two things it must not be confused between (Dan: "not sent but also done").
+    static let closeOut = "Close this out without sending"
+
+    static func pushOut(config: FollowUpConfig = .init()) -> String {
+        "Remind me in \(config.gapDays) days"
+    }
+
+    // What the contact's own row says afterwards. Without it the card shows a contact with no follow-up
+    // activity, which looks exactly like one nobody ever got to; this says the silence was a decision.
+    // nil when there is nothing to report, so no row gains a line it did not have.
+    //
+    // Relative rather than a date, matching FormOutreach.awaitingQuestion: what Dan needs off this line is
+    // how long ago he decided, not which Tuesday it was.
+    static func standDownLine(stoodDownAt: Date?, now: Date) -> String? {
+        guard let stoodDownAt else { return nil }
+        return "You stopped sending to this contact \(ago(stoodDownAt, now: now))"
+    }
+
+    // #1740: the closing note still comes due on a show Dan stood down, and its row says so, because the
+    // decision is months old by then and he is being asked whether to keep the door open for the NEXT
+    // event. Without this the row reads as a nudge about a show he already walked away from.
+    static func closingNoteOnStoodDownShow(stoodDownAt: Date?, now: Date) -> String? {
+        guard let stoodDownAt else { return nil }
+        return "You stopped working this show \(ago(stoodDownAt, now: now))"
+    }
+
+    private static func ago(_ date: Date, now: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: date, relativeTo: now)
+    }
+}
+
 enum FollowUp {
     // The pacing core (#418 D): eligible AND sent AND under the cap AND the gap has passed since the
     // last touch. Eligibility differs by grain; see the two callers below.
     static func isDue(eligible: Bool, sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
-                      now: Date, config: FollowUpConfig = .init()) -> Bool {
+                      remindedAt: Date? = nil, now: Date, config: FollowUpConfig = .init()) -> Bool {
         guard eligible, let sentAt else { return false }
         guard followUpCount < config.maxFollowUps else { return false }
-        let lastTouch = lastFollowUpAt ?? sentAt
+        // #1740: "remind me later" moves the clock without pretending a nudge was sent, so the anchor is
+        // whichever touch is most recent. `lastFollowUpAt` keeps meaning a nudge actually went.
+        let lastTouch = [lastFollowUpAt, remindedAt, sentAt].compactMap { $0 }.max() ?? sentAt
         return now.timeIntervalSince(lastTouch) >= TimeInterval(config.gapDays) * 86_400
+    }
+
+    // #1740: eligible for a NUDGE specifically, which is the silent-follow-up eligibility plus Dan's own
+    // stand-down. Deliberately NOT folded into `Recipient.isAwaitingFollowUp`: that predicate also drives
+    // the Reached out decide clock (`ReachedOutQueue`), and "stop writing to this one" is not "I have
+    // decided what happened to this lead". Widening it there would quietly hide a lead he still owes an
+    // answer, which is a worse failure than the one being fixed.
+    //
+    // Every surface that OFFERS or SENDS a nudge reads this one predicate, so the row, the Due count and
+    // the send path cannot disagree about who is due (#863: a count is a promise about rows).
+    // Two grains, because Dan decides at both (2026-07-30): this contact, or the whole show. The show
+    // grain is a fact on the SHOW rather than a stamp copied onto each contact, so a contact added later
+    // is covered by a decision made before it existed.
+    // The show is NOT defaulted, and that is the whole point. A default here is exactly the shape #1679
+    // was: the send path had already been written asking about the contact alone, which silently ignored a
+    // show Dan had walked away from, and it compiled and passed either way. Required, so forgetting it is
+    // a compile error rather than a nudge sent about an event he was finished with.
+    static func isAwaitingNudge(_ r: Recipient, in p: Prospect) -> Bool {
+        guard r.isAwaitingFollowUp, !r.isOutreachStoodDown else { return false }
+        return !p.isOutreachStoodDown(asOf: r.repliedAt)
     }
 
     // Lead-level (legacy / single-contact): eligible = outcome is still no-response (auto-stop on a
@@ -44,9 +119,9 @@ enum FollowUp {
         for p in prospects {
             // A hand-resolved or booked show stops all its follow-ups (matches the lead-level auto-stop).
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
-            for r in p.recipients where isDue(eligible: r.isAwaitingFollowUp, sentAt: r.sentAt,
+            for r in p.recipients where isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
                                               lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
-                                              now: now, config: config) {
+                                              remindedAt: r.nudgeRemindedAt, now: now, config: config) {
                 due.append(DueRecipient(prospect: p, recipient: r))
             }
         }

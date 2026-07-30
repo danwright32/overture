@@ -160,6 +160,16 @@ final class Recipient {
     // exclusive by construction, so a recipient can never legitimately want both at once.
     var nudgeSendClaimedAt: Date?
     var followUpCount: Int = 0
+    // #1740: when Dan stood this contact's outreach down ("I'm not going to action this"), and when he
+    // last pushed its nudge out a gap instead. Both default nil so existing records migrate cleanly, and
+    // both are read through `isOutreachStoodDown` / `FollowUp.isAwaitingNudge` rather than directly.
+    var outreachStoodDownAt: Date? = nil
+    var nudgeRemindedAt: Date? = nil
+    // #1740: the closing note stood down WITHOUT being sent. Its own fact, not the pitch stand-down
+    // above, because the two mean different things: the pitch stand-down is "I am not working this event",
+    // and the closing note serves the next one, so it survives that and is declined separately if at all.
+    // Dan, 2026-07-30: "not sent but also done."
+    var closingNoteStoodDownAt: Date? = nil
     var lastFollowUpAt: Date?
     var replied: Bool = false
     var repliedAt: Date?
@@ -483,6 +493,56 @@ final class Recipient {
     // sending.
     func remindLater(now: Date) {
         conversationRemindedAt = now
+    }
+
+    // #1740: Dan's answer to a nudge he is never going to send. His words, on the Mark Morris row:
+    // "I'm not going to action this." Before this the row offered only Send nudge and View in Archive,
+    // so the only ways to clear it were to send an email he did not want to send or to leave it counting
+    // toward the badge until the next nudge arrived for the same show he had already declined.
+    //
+    // ONE fact across both tracks (the silent nudge sequence and the closing note), because it is one
+    // decision in his head: stop asking me to write to this contact. Deliberately NOT a resolution. He is
+    // not marking the lead lost, and on the closing note specifically (Dan, 2026-07-30) it is "not sent
+    // but also done", so nothing here may claim a note went out.
+    func standDownOutreach(now: Date) {
+        outreachStoodDownAt = now
+    }
+
+    // The undo. The row sits one click away from Send nudge, so a decision that removes work from a queue
+    // and cannot be taken back is a trap.
+    func resumeOutreach() {
+        outreachStoodDownAt = nil
+    }
+
+    // The closing note was closed out by hand. Same reply-reopens rule as the pitch stand-down: if they
+    // write back, there is a live conversation again and it is not done after all.
+    var isClosingNoteStoodDown: Bool {
+        guard let stoodDown = closingNoteStoodDownAt else { return false }
+        if let repliedAt, repliedAt > stoodDown { return false }
+        return true
+    }
+
+    func standDownClosingNote(now: Date) { closingNoteStoodDownAt = now }
+    func resumeClosingNote() { closingNoteStoodDownAt = nil }
+
+    // Whether the stand-down is IN FORCE, which is not the same as whether it was ever made.
+    //
+    // A reply that lands afterwards puts the contact back in play, and that is derived here from the two
+    // stamps rather than cleared by whoever records the reply. If it were a mutation, every present and
+    // future reply path would have to remember it, and the failure would be the expensive direction: a
+    // contact stood down in June writes back in July and the app stays quiet about it. That costs a
+    // booking, where the other direction costs an unsent nudge.
+    var isOutreachStoodDown: Bool {
+        guard let stoodDown = outreachStoodDownAt else { return false }
+        if let repliedAt, repliedAt > stoodDown { return false }
+        return true
+    }
+
+    // "Remind me later" for the silent nudge track. Deliberately its own stamp rather than moving
+    // `lastFollowUpAt`: that field means a nudge actually WENT, and a record of the past must not be
+    // rewritten by a decision to wait (L37).
+    func remindLaterAboutNudge(now: Date) {
+        nudgeRemindedAt = now
     }
 
     // The AI's auto-classification suggests a state for this recipient (source = auto). Never

@@ -128,7 +128,9 @@ enum SendService {
     @discardableResult
     static func sendFollowUp(_ recipient: Recipient, of prospect: Prospect, now: Date, sender: MailSender,
                              config: FollowUpConfig = .init()) async -> Bool {
-        guard recipient.isAwaitingFollowUp, recipient.followUpCount < config.maxFollowUps,
+        // #1740: the same predicate the row and the Due count read, so a contact Dan stood down cannot be
+        // nudged from any surface, including one that never asks the Due list.
+        guard FollowUp.isAwaitingNudge(recipient, in: prospect), recipient.followUpCount < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
         // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
         // state, see the field's doc comment on Recipient), so a fast double-tap on either one

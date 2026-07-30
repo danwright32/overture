@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **938 sentences**, from 320 source files.
+Every sentence Overture can say to Dan: **949 sentences**, from 320 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -449,6 +449,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceSearch.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
     `UI/SourceFixConfirmActions.swift`
+"Close this out without sending"
+    `Domain/FollowUp.swift`
 "Closed (not interested)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
@@ -962,6 +964,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Not the venue"
     `UI/DraftReviewView.swift`
+"Not this one"
+    `Domain/FollowUp.swift`
 "Not treated as a returning client."
     `Domain/ClientTagCopy.swift`
 "Not yet synced"
@@ -984,6 +988,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OrganisationsView.swift`
 "Nothing matches this filter"
     `Domain/EmptyState.swift`
+"Nothing more will be sent about this \(org) show. No email went out"
+    `App/ActionFeedback.swift`
+"Nothing more will be sent to this contact at \(org). No email went out"
+    `App/ActionFeedback.swift`
 "Nothing new"
     `Domain/AgentRoster.swift`
 "Nothing new on the watched calendars"
@@ -1226,6 +1234,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Redraft only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
+"Remind me in \(config.gapDays) days"
+    `Domain/FollowUp.swift`
 "Remind me later"
     `UI/FollowUpsView.swift`
 "Reminder timing"
@@ -1428,10 +1438,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "Stop ignoring this"
     `Domain/ClientCoverage.swift`
+"Stop sending to this contact"
+    `Domain/FollowUp.swift`
 "Stop the reply drafting run"
     `UI/DraftReviewView.swift`
 "Stop watching"
     `UI/SourceFixConfirmActions.swift`
+"Stop working this show"
+    `Domain/FollowUp.swift`
 "Stopped at their request"
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
@@ -1775,8 +1789,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`
+"You stopped sending to this contact \(ago(stoodDownAt, now: now))"
+    `Domain/FollowUp.swift`
+"You stopped working this show \(ago(stoodDownAt, now: now))"
+    `Domain/FollowUp.swift`
 "You told Overture to read \(name) as the building, not the presenter."
     `Domain/OrganisationListing.swift`
+"You'll see \(org) again in \(days) days. No email went out"
+    `App/ActionFeedback.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."
@@ -1910,6 +1930,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) has already been sent to; re-prepping to find new contacts only"
     `App/ActionFeedback.swift`
 "\(org) is back in \(undoStageWord(for: priorStatus))"
+    `App/ActionFeedback.swift`
+"\(org) is closed out. No closing note was sent"
     `App/ActionFeedback.swift`
 "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     `App/ActionFeedback.swift`

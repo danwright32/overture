@@ -243,6 +243,27 @@ enum ActionAck {
         "\(org) has already been sent to, so there's nothing to redraft"
     }
 
+    // #1740: Dan declined a nudge he was never going to send. Two sentences because they are two
+    // different futures and the row vanishes either way: one says nothing more will be asked about this
+    // contact, the other says it will come back. Neither may read as "sent", which is what a row
+    // disappearing with no word looks like (#285, the same reason remindLater says anything at all).
+    static func outreachStoodDown(org: String, scope: StandDownScope) -> String {
+        switch scope {
+        case .contact: return "Nothing more will be sent to this contact at \(org). No email went out"
+        case .show: return "Nothing more will be sent about this \(org) show. No email went out"
+        }
+    }
+
+    // The closing note closed out by hand. It has to say both halves, because "done" and "sent" are
+    // exactly the two things it must not be confused between (Dan, 2026-07-30).
+    static func closingNoteClosedOut(org: String) -> String {
+        "\(org) is closed out. No closing note was sent"
+    }
+
+    static func nudgePushedOut(org: String, days: Int) -> String {
+        "You'll see \(org) again in \(days) days. No email went out"
+    }
+
     // #1828: the show sits on a night Dan is booked or away for. PrepQueueBuilder.needsPrep refuses a
     // clashed show before it reads the re-prep flags, so a run started here would find nothing to do; the
     // honest answer is that nothing runs until the clash is cleared, not a confirmation that it started.

@@ -613,6 +613,11 @@ struct DraftReviewView: View {
                     .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 20)
             }
+            // #1740: the stand-down has to be visible somewhere Dan looks, or the only trace of his
+            // decision is a row that stopped appearing in Due.
+            if let line = StandDownCopy.standDownLine(stoodDownAt: c.outreachStoodDownAt, now: Date()) {
+                Text(line).font(OVType.meta).foregroundStyle(OVColor.inkSoft).padding(.leading, 20)
+            }
             if c.sendState == .sent {
                 HStack(spacing: OVSpacing.xs) {
                     Menu {
