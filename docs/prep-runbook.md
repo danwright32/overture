@@ -466,7 +466,7 @@ Anatomy:
   `direct-intent`. Record the shape you WROTE (the produced opener), never a shape you
   meant to use but didn't; Overture reads this echo only to see which openers land.
 - **Body, 2-4 sentences:** unobtrusive no-flash documentary coverage; why it fits this
-  performance; a discipline-matched gallery link (below). Let the length breathe with
+  performance; the portfolio link (below). Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
 - **Offer:** held positively, and ALWAYS state the rate plainly ($250 an hour plus tax,
@@ -486,22 +486,15 @@ Anatomy:
   Carnegie tenure, another marquee venue can lead with itself or pair with the
   Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
-- **Discipline-matched portfolio link (#1405):** point the portfolio link at the gallery
-  for the show's discipline, so the recipient lands on relevant work rather than the general
-  site. Use exactly these gallery URLs and never invent one: music links
-  danwrightphotography.com/music, band links danwrightphotography.com/bands, comedy links
-  danwrightphotography.com/comedy, dance links danwrightphotography.com/dance, and opera or
-  theater links danwrightphotography.com/performing-arts (that gallery is Dan's theater and
-  opera work). This strengthens the same pitch honestly, showing relevant work
-  rather than claiming genre experience Dan does not have (see the overclaim rule below).
-  **When `discipline` does not fit any of them (`other`, or a value the listing plainly contradicts),
-  pick the gallery from what the show actually IS (#1824)**, using the `showListing` text above: a
-  cabaret, play or musical links performing-arts, a concert or recital links music, a stand-up or
-  sketch night links comedy, a band bill links bands, a dance programme links dance. Only from what the
-  page says, never from the title or the venue: with no readable listing there is nothing to judge on,
-  and the main site danwrightphotography.com stays the honest answer, as it does for any discipline
-  none of the five galleries fits. (The Alex Syiek draft fell back to the bare site for exactly this
-  reason: nothing had read the page that called it a cabaret concert.)
+- **One portfolio link, always the site itself (#1832):** link `danwrightphotography.com` and
+  NOTHING deeper. Never a gallery path: not `/music`, `/bands`, `/comedy`, `/dance`, or
+  `/performing-arts`. Dan's call, 2026-07-30: "just always go to the same site and let them click
+  into the portfolio they want to see." Choosing a gallery is a decision made on the reader's behalf,
+  and the reader is better placed to make it. This is ENFORCED at send, not just asked for: the app
+  refuses to mail a body carrying a gallery path (`DraftCheck.galleryPathLink`, see below).
+  Say what the work IS in the words instead (unobtrusive, no-flash documentary coverage) and let the
+  credential carry the rest, without claiming genre experience Dan does not have (see the overclaim
+  rule below).
 - **Don't overclaim genre experience:** Dan has shot far more concert, choral, and
   opera work than dance. When pitching a dance company or another genre he's less
   experienced in, don't describe genre-specific technique as established practice (for
@@ -552,22 +545,19 @@ it" or "I think my coverage would suit this" over "I'd love to photograph it".
 become "Carnegie Hall" in the email. Non-Carnegie venues (e.g. Thalia Spanish
 Theatre) stay as printed.
 
-**Gallery mapping** (discipline → the closest of the five site galleries):
-- music / classical recital → danwrightphotography.com/music
-- staged opera / theater → danwrightphotography.com/performing-arts
-- dance → danwrightphotography.com/dance
-- band → danwrightphotography.com/bands
-- comedy → danwrightphotography.com/comedy
-
-**Two of these rules are now enforced at send, not just asked for (#789).** The app lints the body
+**Three of these rules are now enforced at send, not just asked for (#789, #1832).** The app lints the body
 it is about to mail (`DraftCheck.blockingFindings`, gating `Recipient.isSendablePending`) and
-REFUSES to send a draft that carries either of these, until Dan fixes the text or deliberately
+REFUSES to send a draft that carries any of these, until Dan fixes the text or deliberately
 overrides the block:
 
-- **A link to any host other than danwrightphotography.com.** The gallery links above are the only
-  URLs a draft may contain. There is no pricing page, no contract page, and no client-gallery host
+- **A link to any host other than danwrightphotography.com.** That one host is the only URL a draft
+  may contain. There is no pricing page, no contract page, and no client-gallery host
   to point at, so any other link is one the drafter invented, and a 404 in a cold pitch costs the
   lead. Write the rate out in the words instead (see the pricing note above); never link it.
+- **A gallery path on that host (#1832)**, like `danwrightphotography.com/music` or
+  `/performing-arts`. The link is the site itself; the reader clicks into whichever gallery they
+  want. The five gallery paths are the only refused ones, so a page Dan links deliberately (an
+  about or contact page) is untouched.
 - **An unfilled placeholder**, like `[VENUE]` or `[NAME]`. Fill every slot from the work-list, or
   rewrite the sentence without it. Square brackets never appear in a finished draft.
 
@@ -587,7 +577,7 @@ Pierre are making your U.S. debut..." not "I saw Virgile Roche and Anna Pierre a
 making their debut...". Everything else about it follows the SAME rules as the shared
 body above: no greeting token (the app still injects the greeting separately at send),
 no performative enthusiasm, no em dashes, the same canonical rate and A/B offer
-handling, the same discipline-matched gallery link, and the same "never ask for a known
+handling, the same portfolio link, and the same "never ask for a known
 fact" rule. The subject line stays shared and unchanged, third-person subjects read
 fine regardless of recipient. When two named performers are pursued for the same
 show (§1), each gets their OWN `overrideBody` naming their co-performer correctly,

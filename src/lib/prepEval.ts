@@ -39,8 +39,12 @@ export interface PrepEvalExpectation {
   requireSomeContact?: boolean;
   /** Every performer contact must carry a second-person overrideBody (#634). */
   performerOverrideBodyRequired?: boolean;
-  /** Every drafted body present must contain this discipline gallery link substring (#365). */
-  expectedGalleryLink?: string;
+  /**
+   * #1832: every drafted body present must carry the portfolio link. It is always the same one, so this
+   * is a boolean rather than which gallery: a body that links a gallery PATH fails the universal check
+   * below, whatever this says.
+   */
+  requirePortfolioLink?: boolean;
   /** #1215: no body may reintroduce Dan cold (booked AND warm both drop the cold self-introduction). */
   forbidColdSelfIntro?: boolean;
   /** #1215: no body may carry the portfolio/gallery link (a booked returning client needs no proof). */
@@ -111,6 +115,11 @@ const GREETING = /^\s*(hi|hello|hey|dear|greetings)\b/i;
 // is deliberately not one of these, since the warm register keeps it.
 const COLD_SELF_INTRO = /\bmy name is\b|\bi photograph performing arts\b|\bi'?m an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b|\bi am an? (?:professional )?(?:arts |performing[- ]arts )?photographer\b/i;
 const PORTFOLIO_LINK = /danwrightphotography\.com/i;
+// #1832: one link in every draft, the site itself, and the reader clicks into whichever portfolio they
+// want (Dan, 2026-07-30). A deep link into one gallery is a choice made on their behalf. Universal, not
+// per-fixture: no draft may carry one, and the app refuses to mail a body that does
+// (DraftCheck.galleryPathLink), so a draft that reaches for one could not be sent anyway.
+const GALLERY_PATH = /danwrightphotography\.com\/(music|bands|comedy|dance|performing-arts)(?![A-Za-z0-9-])/i;
 const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\]/;
 // #1824: describe Dan, never categorize the recipient. The 2026-07-30 draft opened "a documentary
 // photographer working with performing arts organizations in New York" to ONE singer-songwriter. The
@@ -169,6 +178,9 @@ function checkUniversal(entries: ResultEntry[], failures: string[]): void {
     if (PLACEHOLDER.test(body)) failures.push(`${label}: contains an unfilled placeholder (#789)`);
     if (RECIPIENT_CATEGORY.test(body)) {
       failures.push(`${label}: categorizes the recipient instead of describing Dan (#1824)`);
+    }
+    if (GALLERY_PATH.test(body)) {
+      failures.push(`${label}: links one gallery instead of the portfolio itself (#1832)`);
     }
     if (!/\$250/.test(body) || !/plus tax/i.test(body)) {
       failures.push(`${label}: must state the canonical rate ($250 an hour plus tax)`);
@@ -246,10 +258,10 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
     failures.push(`at least one contact was expected but none was surfaced`);
   }
 
-  if (exp.expectedGalleryLink) {
+  if (exp.requirePortfolioLink) {
     for (const { label, body } of collectBodies([entry])) {
-      if (!body.includes(exp.expectedGalleryLink)) {
-        failures.push(`${label}: expected the ${exp.expectedGalleryLink} gallery link for this discipline (#365)`);
+      if (!PORTFOLIO_LINK.test(body)) {
+        failures.push(`${label}: expected the portfolio link (danwrightphotography.com) (#365)`);
       }
     }
   }

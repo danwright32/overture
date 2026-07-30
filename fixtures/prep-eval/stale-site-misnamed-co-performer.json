@@ -31,9 +31,14 @@
   ],
   "expected": {
     "description": "Keep both performers named on the authoritative listing; hold the uncorroborated co-performer at low confidence rather than dropping her or over-trusting the stale site.",
-    "requiredPerformers": ["Virgile Roche", "Anna Pierre"],
-    "lowConfidencePerformers": ["Anna Pierre"],
-    "expectedGalleryLink": "danwrightphotography.com/music"
+    "requiredPerformers": [
+      "Virgile Roche",
+      "Anna Pierre"
+    ],
+    "lowConfidencePerformers": [
+      "Anna Pierre"
+    ],
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -59,7 +64,7 @@
         ],
         "draft": {
           "subject": "Photographing Roche and Pierre at Carnegie Hall.",
-          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are performing at Carnegie Hall on May 18. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are performing at Carnegie Hall on May 18. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands.",
           "variant": "credential_first"
         }
       }

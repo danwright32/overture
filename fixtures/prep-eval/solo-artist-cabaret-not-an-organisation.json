@@ -25,15 +25,23 @@
   ],
   "expected": {
     "description": "Say what the listing says the show is (a cabaret concert of new songs), link the performing-arts gallery even though the stored discipline is `other`, and never describe the recipient as an organisation. The only addresses on the page belong to the room, and they stay refused.",
-    "requiredShowSummaryTerms": ["cabaret"],
+    "requiredShowSummaryTerms": [
+      "cabaret"
+    ],
     "forbiddenEmails": [
       "tickets@theexampleroom.example",
       "programming@theexampleroom.example"
     ],
-    "forbiddenDomains": ["theexampleroom.example"],
+    "forbiddenDomains": [
+      "theexampleroom.example"
+    ],
     "requireSomeContact": true,
-    "expectedGalleryLink": "danwrightphotography.com/performing-arts",
-    "forbiddenBodyTerms": ["opera", "orchestra", "ensemble"]
+    "forbiddenBodyTerms": [
+      "opera",
+      "orchestra",
+      "ensemble"
+    ],
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 8,
@@ -51,12 +59,12 @@
             "confidence": "high",
             "provenance": "performer",
             "sourceUrl": "https://alexexample.example/contact",
-            "overrideBody": "I photograph performing arts in New York and saw you're bringing an evening of your own new songs to The Example Room on August 3, sung by you and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions."
+            "overrideBody": "I photograph performing arts in New York and saw you're bringing an evening of your own new songs to The Example Room on August 3, sung by you and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
           }
         ],
         "draft": {
           "subject": "Photographing Alex Example's new songs at The Example Room.",
-          "body": "I photograph performing arts in New York and saw Alex Example is bringing an evening of new songs to The Example Room on August 3, sung by Example and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions.",
+          "body": "I photograph performing arts in New York and saw Alex Example is bringing an evening of new songs to The Example Room on August 3, sung by Example and a cast of five. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size and material that intimate. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions.",
           "variant": "reason-first"
         }
       }

@@ -44,7 +44,7 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `returning-client-booked`: a booked returning client opens warm, with no cold self-introduction and no portfolio/gallery scaffolding (#1215).
 - `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).
 - `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
-- `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, links the gallery that fits it even though the stored discipline is `other`, and describes Dan without categorizing the recipient (#1824).
+- `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, and describes Dan without categorizing the recipient (#1824).
 - `season-calendar-describes-no-show`: the same listing text, read, that describes no show at all. The honest answer is `no_description_published`, never a description assembled from the neighbouring listings (#1824).
 
 ### Where the #1824 pair's shape comes from (L48)

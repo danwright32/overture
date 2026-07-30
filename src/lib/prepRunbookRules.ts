@@ -69,10 +69,11 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // this rule would send a stranger's self-introduction and credential recital to someone who already
   // knows Dan, and would remove the guardrail against inventing a past-project memory to sound warm.
   { name: "returning-client-register", pattern: /a returning-client register does not license invented history/i },
-  // #1405: the portfolio link must be matched to the show's discipline (music, bands, comedy, dance,
-  // and opera/theater to the performing-arts gallery), so the recipient lands on relevant work.
-  // Dropping this rule sends every prospect the general site again, the exact regression #1405 closed.
-  { name: "discipline-matched-portfolio-link", pattern: /Discipline-matched portfolio link \(#1405\)/i },
+  // #1832: one link in every draft, the site itself, and the reader clicks into whichever portfolio they
+  // want (Dan, 2026-07-30). Dropping this rule returns the drafter to picking a gallery per discipline,
+  // which is a choice made on the reader's behalf, and the app would then refuse to send what it wrote.
+  { name: "one-portfolio-link-never-a-gallery",
+    pattern: /One portfolio link, always the site itself/i },
   // #1824: the three halves of "read what the show is", and each fails in its own direction.
   //
   // Dropping the USE rule returns the drafter to the state that produced the Alex Syiek draft: the app
@@ -93,11 +94,6 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /"No description published"\s+is a correct and complete answer/i },
   { name: "never-categorize-the-recipient",
     pattern: /Describe Dan, never categorize the recipient/i },
-  // #1824: the gallery link when the stored discipline does not fit. The classifier reads only the title
-  // and presenter, so a show whose page calls it a cabaret concert lands on `other` and #1405's mapping
-  // falls through to the bare site. Dropping this rule restores that fallback for every such row.
-  { name: "gallery-from-what-the-show-is",
-    pattern: /pick the gallery from what the show actually IS/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

@@ -28,7 +28,7 @@ struct DraftLintSendGateTests {
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
-    private let clean = "I photograph performing arts in New York. Recent work is at danwrightphotography.com/music."
+    private let clean = "I photograph performing arts in New York. Recent work is at danwrightphotography.com."
     private let foreign = "I photograph performing arts. Recent work is at https://smugmug.com/dan."
 
     @MainActor

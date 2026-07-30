@@ -453,7 +453,7 @@ struct ProspectMutationsTests {
         p.draftBody = "See my work at https://smugmug.com/dan."
         let blocked = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         let clean = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
-        clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com/music."
+        clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com."
         let alreadySent = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
         alreadySent.sendState = .sent
         p.setRecipients([blocked, clean, alreadySent])

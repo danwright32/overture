@@ -31,11 +31,15 @@
   ],
   "expected": {
     "description": "Surface the act's form and the presenting org; never the Grand Theatre box office or its domain.",
-    "forbiddenEmails": ["boxoffice@grandtheatre.example"],
-    "forbiddenDomains": ["grandtheatre.example"],
+    "forbiddenEmails": [
+      "boxoffice@grandtheatre.example"
+    ],
+    "forbiddenDomains": [
+      "grandtheatre.example"
+    ],
     "requirePresenter": true,
     "requireSomeContact": true,
-    "expectedGalleryLink": "danwrightphotography.com/dance"
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -59,7 +63,7 @@
         ],
         "draft": {
           "subject": "Photographing Lumen Dance at Grand Theatre.",
-          "body": "I photograph performing arts in New York and saw Lumen Dance are performing at Grand Theatre on March 12. I shoot unobtrusive, no-flash documentary coverage and it would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/dance. Let me know how that lands.",
+          "body": "I photograph performing arts in New York and saw Lumen Dance are performing at Grand Theatre on March 12. I shoot unobtrusive, no-flash documentary coverage and it would suit the program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands.",
           "variant": "reason_first"
         }
       }
