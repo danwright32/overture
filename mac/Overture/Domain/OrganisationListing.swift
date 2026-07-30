@@ -61,13 +61,6 @@ enum OrganisationListing {
 
         var id: String { key }
 
-        // Whether a correction offered here could actually move the verdict. False exactly where the name
-        // is spelled like a room and Dan has not already corrected it, because the gate tests that arm
-        // before it reads any override, so a correction would be stored and then ignored (#1763).
-        var isCorrectable: Bool {
-            if standing != .none { return true }
-            return reason != .spelledExactlyLikeARoom
-        }
     }
 
     // Every organisation in the corpus, sorted by the rows it covers so the ones worth the most attention
@@ -100,12 +93,9 @@ enum OrganisationListing {
 
             // Asked in the order the gate itself asks them, so the reason named is the one that actually
             // fired. Equality first, because that is the arm the gate tests before it reads an override.
-            var reason: Reason? = nil
-            if isBrand {
-                if venueKeys.contains(key) { reason = .spelledExactlyLikeARoom }
-                else if standing == .demoted { reason = .yourOwnCorrection }
-                else { reason = .namedInsideARoom }
-            }
+            let reason: Reason? = isBrand
+                ? buildingReason(isRoomName: venueKeys.contains(key), standing: standing)
+                : nil
 
             return Entry(key: key, name: name, verdict: verdict, reason: reason, standing: standing,
                          rowCount: members.count,
@@ -147,18 +137,30 @@ enum OrganisationListing {
         return "\(entry.rowCount) shows, \(titles), \(rooms)."
     }
 
-    // Why a name is treated as the building. Each reason invites a different response, which is why they
-    // are three sentences and not one: a verdict Dan set is his to revisit, a name overlap is a rule doing
-    // its job and can be overruled, and an exact room name cannot be overruled at all (#1763), so saying
-    // so is the only honest thing the row can offer there.
-    static func reasonLine(_ reason: Reason) -> String {
+    // #1731: WHICH reason applies, in one place, because the card and the sheet both need it and a second
+    // copy is how two surfaces come to state different reasons for the same name (#1702).
+    //
+    // Equality is asked FIRST, matching the gate, which tests it before it reads any correction: a name
+    // that IS a room's stays uncorrectable even where Dan has also demoted it (#1763).
+    static func buildingReason(isRoomName: Bool,
+                               standing: ProducerOverrideEditing.Standing) -> Reason {
+        if isRoomName { return .spelledExactlyLikeARoom }
+        if standing == .demoted { return .yourOwnCorrection }
+        return .namedInsideARoom
+    }
+
+    // What a CARD says when the verdict is why no presenter is named. It names the organisation, because
+    // unlike the sheet the card has no row title to carry it, and it gives the specific reason: all three
+    // used to read as one generic line, when a name that IS a room's cannot be overruled at all and one
+    // Dan set himself is his to revisit.
+    static func cardLine(_ name: String, _ reason: Reason) -> String {
         switch reason {
         case .spelledExactlyLikeARoom:
-            return "Spelled exactly like a room it plays, so this one can't be changed."
+            return "\(name) is a room's name, so Overture reads it as the building, not the presenter."
         case .namedInsideARoom:
-            return "Its name overlaps a room it plays."
+            return "\(name) overlaps a room's name, so Overture reads it as the building, not the presenter."
         case .yourOwnCorrection:
-            return "You set this."
+            return "You told Overture to read \(name) as the building, not the presenter."
         }
     }
 

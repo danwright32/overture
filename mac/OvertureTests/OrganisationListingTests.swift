@@ -34,11 +34,9 @@ struct OrganisationListingTests {
 
         #expect(entry("The Green Room 42")?.verdict == .theBuilding)
         #expect(entry("The Green Room 42")?.reason == .spelledExactlyLikeARoom)
-        #expect(entry("The Green Room 42")?.isCorrectable == false)
 
         #expect(entry("Carnegie Hall Presents")?.verdict == .theBuilding)
         #expect(entry("Carnegie Hall Presents")?.reason == .namedInsideARoom)
-        #expect(entry("Carnegie Hall Presents")?.isCorrectable == true)
 
         #expect(entry("Young Concert Artists")?.verdict == .sharesOneAnswer)
         #expect(entry("Young Concert Artists")?.reason == nil)
@@ -145,15 +143,36 @@ struct OrganisationListingTests {
         #expect(OrganisationListing.evidenceLine(entry) == "2 shows, 2 different titles, across 2 rooms.")
     }
 
-    // Why a name is treated as the building, in Dan's words rather than the gate's. Each reason invites a
-    // different response, which is why they are not collapsed into one sentence (#1719).
-    @Test func eachReasonSaysSomethingDifferent() {
-        #expect(OrganisationListing.reasonLine(.spelledExactlyLikeARoom)
-                == "Spelled exactly like a room it plays, so this one can't be changed.")
-        #expect(OrganisationListing.reasonLine(.namedInsideARoom)
-                == "Its name overlaps a room it plays.")
-        #expect(OrganisationListing.reasonLine(.yourOwnCorrection)
-                == "You set this.")
+
+
+    // #1731: the card says the SPECIFIC reason, not one line for all of them. The three reasons invite
+    // different responses, which is why they were three sentences in the first place: a name that IS a
+    // room's cannot be overruled at all (#1763), a name that merely overlaps one can, and one Dan set
+    // himself is his to revisit.
+    //
+    // Derived through ONE function both the card and the sheet call, so the two cannot state different
+    // reasons for the same name (#1702).
+    @Test func theBuildingReasonHasOneDefinitionForEverySurface() {
+        #expect(OrganisationListing.buildingReason(isRoomName: true, standing: .none)
+                == .spelledExactlyLikeARoom)
+        #expect(OrganisationListing.buildingReason(isRoomName: false, standing: .demoted)
+                == .yourOwnCorrection)
+        #expect(OrganisationListing.buildingReason(isRoomName: false, standing: .none)
+                == .namedInsideARoom)
+        // Equality is asked FIRST, matching the gate, which tests it before it reads any correction. A
+        // name that is a room's stays uncorrectable even where Dan has also demoted it.
+        #expect(OrganisationListing.buildingReason(isRoomName: true, standing: .demoted)
+                == .spelledExactlyLikeARoom)
+    }
+
+    // What a CARD says, which names the organisation because the card has no other place to put it.
+    @Test func theCardNamesTheOrganisationAndTheReason() {
+        #expect(OrganisationListing.cardLine("Jalopy Theatre", .spelledExactlyLikeARoom)
+                == "Jalopy Theatre is a room's name, so Overture reads it as the building, not the presenter.")
+        #expect(OrganisationListing.cardLine("Carnegie Hall Presents", .namedInsideARoom)
+                == "Carnegie Hall Presents overlaps a room's name, so Overture reads it as the building, not the presenter.")
+        #expect(OrganisationListing.cardLine("FRIGID New York", .yourOwnCorrection)
+                == "You told Overture to read FRIGID New York as the building, not the presenter.")
     }
 
 }
