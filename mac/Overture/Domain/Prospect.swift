@@ -21,6 +21,11 @@ final class Prospect {
     // approximates it, and writes answers a real scout would not give. #980 hit exactly this and had to
     // ship forward-only.
     var presenter: String?
+    // #1788: this row's blank presenter is a name Overture DISCARDED (the run reported the room), not a
+    // page that named nobody. Stored rather than derived: once the name is drained the two are identical
+    // in the data, and only the boundary that dropped it knows which happened. Optional so every row
+    // written before this decodes unchanged and simply carries none.
+    var presenterWasTheRoom: Bool? = nil
     // #970: where the page said the show is, VERBATIM and unresolved. Defaulted, so existing rows
     // migrate cleanly and stay nil, which is honest: every row that predates this was never asked.
     //

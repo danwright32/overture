@@ -415,6 +415,19 @@ struct ScoutExtractResultsGuardTests {
         #expect(usable.count == 1)
         #expect(usable.first?.presenter == nil)
         #expect(usable.first?.venue == "Under St Marks")
+        // #1788, Dan's call on the #1766 post-merge check: "flag the card for me". A discarded name and a
+        // page that named nobody are DIFFERENT facts, and he can act on the first. Without this the two
+        // are indistinguishable the moment the name is drained.
+        #expect(usable.first?.presenterWasTheRoom == true)
+    }
+
+    // And a show whose page genuinely named nobody is NOT flagged, or the mark would say "Overture threw
+    // a name away here" on every row that never had one, which is most of them.
+    @Test func aShowThatNamedNobodyIsNotFlaggedAsHavingHadAPresenterDiscarded() {
+        let r = results([ScoutExtractEvent(title: "A Quiet Listing", presenter: nil,
+                                           venue: "Under St Marks", performanceDate: "2026-09-19",
+                                           sourceUrl: "https://tickets.frigid.nyc/quiet", location: nil)])
+        #expect(r.events(for: "s").first?.presenterWasTheRoom != true)
     }
 
     // And a real presenter reaches the prospect untouched, or the guard would erase the very thing the

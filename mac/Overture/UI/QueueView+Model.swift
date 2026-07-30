@@ -31,6 +31,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // opposite corrections and say nothing about which one was already true, which is a menu asking Dan
     // to choose a state without telling him the state he is in (his walk of the Debug build, 2026-07-29).
     var treatedAsVenue: Bool = false
+    // #1788: this row's blank presenter is a name Overture DISCARDED, not a page that named nobody.
+    var presenterWasTheRoom: Bool = false
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -229,6 +231,18 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         let own = contacts.compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return own.isEmpty ? (inheritedReachability?.emails ?? []) : own
+    }
+
+    // #1788: the line the card shows where the presenter's name would have gone, when the run reported
+    // the ROOM and the boundary drained it. Dan's call on the #1766 post-merge check: "flag the card for
+    // me", because a show at a room he knows often has a company he can name himself.
+    //
+    // Shown ONLY where the question is still open: the moment a real presenter is named, on this run or a
+    // later one, the card answers "who puts this on?" outright and a mark saying it could not would be
+    // saying the opposite of what the row above it shows (the #843 rule against two lines that disagree).
+    var unidentifiedPresenterNote: String? {
+        guard presenterWasTheRoom, presenterLine == nil else { return nil }
+        return "Couldn't tell who's putting this on: the listing named only the room."
     }
 
     // #1626: the contact forms the row offers as a link, when there is no address to print. Only forms
@@ -1584,6 +1598,7 @@ enum QueueModel {
             // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
             // classification the row is not actually using.
             item.treatedAsVenue = venueBrands.contains($0.presenter)
+            item.presenterWasTheRoom = $0.presenterWasTheRoom == true   // #1788
             return item
         }
     }

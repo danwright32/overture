@@ -12,6 +12,10 @@ struct AssembledProspect: Equatable, Sendable {
     // being forward-only forever. #980 could not be: it fixed the classifier and the input that
     // produced every existing row was already gone.
     var presenter: String?
+    // #1788: the run named the ROOM as the presenter and the boundary drained it, so this row's blank
+    // presenter is a discarded name rather than a page that never said. Carried through here because a
+    // fact about what was thrown away is useless if it stops at the guard.
+    var presenterWasTheRoom: Bool? = nil
     // #970: where the page said the show is, verbatim. Carried through unresolved; EventPlace judges it
     // at queue time, so the store keeps the page's own words and the rule stays changeable.
     var location: String?
@@ -102,6 +106,7 @@ enum ProspectAssembler {
             // is unreachable in practice and exists only to keep the type non-optional.
             groupName: Prospect.decodeHTMLEntities(ExtractedEventGuard.displayName(for: event) ?? event.title),
             presenter: event.presenter,
+            presenterWasTheRoom: event.presenterWasTheRoom,
             // #1744: every path into the store passes through here, so this is where a show gets its
             // place: the page's own words when it published any, and otherwise whatever the venue text,
             // the tour-title convention or the shared venue table can say for certain (EventLocationFill).

@@ -190,4 +190,38 @@ struct ProducerCorrectionControlTests {
         #expect(row.contains("QueueModel.producerCorrectionLabel"))
         #expect(factory.contains("ProspectMutations.correctProducer"))
     }
+
+    // #1788, Dan's call on the #1766 post-merge check: "flag the card for me". A row whose presenter was
+    // DISCARDED (the run reported the room) reads identically to one whose page named nobody, once the
+    // name is gone. He can act on the first: a show at a room he knows often has a company he can name.
+    // So the card says which happened rather than leaving the field silently blank.
+    @Test func aRowWhosePresenterWasDiscardedSaysSo() throws {
+        let ctx = ModelContext(try container())
+        let p = prospect(ctx, key: "k1", presenter: nil)
+        p.presenterWasTheRoom = true
+        try? ctx.save()
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let item = QueueModel.items(from: all).first
+        #expect(item?.unidentifiedPresenterNote != nil)
+    }
+
+    // A page that simply named nobody says nothing extra. Most of the queue is this, and a mark on all of
+    // it would be noise claiming Overture threw a name away where it never had one.
+    @Test func aRowThatNeverHadAPresenterSaysNothingExtra() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: nil)
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        #expect(QueueModel.items(from: all).first?.unidentifiedPresenterNote == nil)
+    }
+
+    // And once a real presenter IS named, the mark goes, even if an older run had discarded one: the
+    // question the line answers ("who puts this on?") now has an answer on the card.
+    @Test func aRowThatLaterNamesAPresenterDropsTheMark() throws {
+        let ctx = ModelContext(try container())
+        let p = prospect(ctx, key: "k1", presenter: "Stiletto Sinclair and Jackie Galaxy")
+        p.presenterWasTheRoom = true
+        try? ctx.save()
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        #expect(QueueModel.items(from: all).first?.unidentifiedPresenterNote == nil)
+    }
 }

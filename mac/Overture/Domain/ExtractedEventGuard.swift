@@ -120,6 +120,9 @@ enum ExtractedEventGuard {
         else { return event }
         var cleaned = event
         cleaned.presenter = nil
+        // #1788: leave a trace. A drained name and a page that named nobody are opposite facts and are
+        // identical in the data the moment the name is gone, and Dan can act on the first.
+        cleaned.presenterWasTheRoom = true
         return cleaned
     }
 
