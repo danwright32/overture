@@ -63,12 +63,17 @@ enum NaturalKeyVenueMigration {
             }
 
             // Collision: two or more rows fold to one key.
+            //
+            // #1780: what blocks a merge is an outreach RECORD, not a dismissal. Two rows Dan merely
+            // refused used to deadlock here forever with nothing on screen to say so. Measured on the live
+            // store 2026-07-29: "Bone Wars" on 2026-07-26 sat twice, both dismissed "too soon", nothing
+            // sent or drafted on either, so there was never anything to reconcile.
             let withHistory = members.filter(hasOutreachHistory)
-            if withHistory.count >= 2 {
+            if mustDefer(members) {
                 // Genuine conflict. Never merge outreach history blind: leave every row untouched.
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-                NSLog("#1064 NaturalKeyVenueMigration: %d prospects carry outreach history and fold to one key; leaving them untouched for Dan to reconcile.",
-                      withHistory.count)
+                NSLog("#1064/#1780 NaturalKeyVenueMigration: %d prospects carrying history, %d distinct dismissal reasons, fold to one key; leaving them untouched for Dan to reconcile.",
+                      withHistory.count, Set(members.compactMap(\.dismissReasonRaw)).count)
                 // copy-inventory:ignore-end
                 summary.conflictsDeferred += 1
                 continue
@@ -88,7 +93,15 @@ enum NaturalKeyVenueMigration {
             // against a real Downbeat client. `ingestedAt` is rewritten on every re-scout, so it means
             // LAST SEEN, and keeping the earliest kept exactly the stale row: one card, saying he has
             // never worked with a group he has. The freshest wins instead.
-            let survivor = withHistory.first ?? members.max(by: { $0.ingestedAt < $1.ingestedAt })!
+            // #1780: a DISMISSED row outranks a pristine one when neither carries an outreach record.
+            // Without this the freshest row wins, and where the freshest is an untouched re-scout of a
+            // show Dan has already refused, the merge would quietly put it back in front of him, which is
+            // the opposite of what this pass is for.
+            let freshest: (Prospect, Prospect) -> Bool = { $0.ingestedAt < $1.ingestedAt }
+            let refused: [Prospect] = members.filter { $0.status == .dismissed }
+            let survivor: Prospect = withHistory.first
+                ?? refused.max(by: freshest)
+                ?? members.max(by: freshest)!
             // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
             // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
             // whenever the duplicate happened to appear.
@@ -110,15 +123,47 @@ enum NaturalKeyVenueMigration {
         return summary
     }
 
+    // #1780: the deferral decision, named once. Anything that predicts what this pass will do (the
+    // live-store rehearsal in ParentheticalVenueMergeLiveStoreTests) asks THIS rather than keeping a
+    // second copy of the rule, because a prediction written beside the rule drifts from it silently and
+    // then reports a fix as a regression.
+    //
+    // Defer when two or more rows carry history, EXCEPT in the one narrow case this issue measured: every
+    // row in the collision carries nothing beyond a dismissal, and they all give the same reason. Both
+    // halves of that exception are load-bearing. If any row was actually contacted the old refusal stands
+    // whole, because a dismissal on its twin may record how that outreach ended. And two refusals that
+    // disagree are a real conflict, since choosing between them silently rewrites why Dan said no, which
+    // the outcome reporting reads.
+    static func mustDefer(_ members: [Prospect]) -> Bool {
+        guard members.count > 1 else { return false }
+        guard members.filter(hasOutreachHistory).count >= 2 else { return false }
+        let neverContacted = members.allSatisfy { !hasRecordBeyondADismissal($0) }
+        let reasons = Set(members.compactMap(\.dismissReasonRaw))
+        return !(neverContacted && reasons.count <= 1)
+    }
+
     // A row is a pristine duplicate (safe to drop in a merge) ONLY when it is brand new and carries no
     // send, draft, recipient, dismissal, non-default outcome, or Dan decision. Anything else counts as
     // history and must never be deleted, and forces a colliding pair into the deferred branch above.
     static func hasOutreachHistory(_ p: Prospect) -> Bool {
         if p.status != .new { return true }
+        if p.dismissReasonRaw != nil { return true }
+        return hasRecordBeyondADismissal(p)
+    }
+
+    // #1780: the narrower question the MERGE needs, split out of the predicate above rather than copied
+    // beside it, so the two can never disagree about what counts.
+    //
+    // `hasOutreachHistory` asks "has ANYTHING happened to this row", which is the right question for its
+    // three other callers (SameNightTitleVariantMerge, DriftedRunMerge, ScoutService). It is too broad for
+    // deciding a deferral: a bare dismissal satisfied it, so any two dismissed duplicates went to the
+    // deferred branch and stayed there permanently, reported only through NSLog, which is invisible from a
+    // running Overture. A dismissal is a DECISION, recoverable and carried onto the survivor below; an
+    // outreach record is a fact about the outside world and must never be destroyed.
+    static func hasRecordBeyondADismissal(_ p: Prospect) -> Bool {
         if p.sentAt != nil || p.gmailThreadId != nil || p.gmailMessageId != nil { return true }
         if p.draftBody != nil || p.draftSubject != nil { return true }
         if !p.recipients.isEmpty { return true }
-        if p.dismissReasonRaw != nil { return true }
         if p.outcomeRaw != Outcome.noResponse.rawValue { return true }
         if p.draftEditedByDan || p.recipientsEditedByDan { return true }
         if p.confidenceReviewedByDan || p.classificationOverriddenByDan { return true }

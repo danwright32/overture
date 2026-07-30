@@ -305,4 +305,110 @@ struct NaturalKeyVenueMigrationTests {
         #expect(Set(remaining.map(\.naturalKey)) == ["legacy-dots-key", "legacy-ellipsis-key"],
                 "both keep their old keys, so neither row moves under Dan while he is mid-conversation")
     }
+
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="the status and outreach history of every row in the two colliding title pairs the merge has been deferring"
+    // #1780: two rows Dan merely REFUSED used to deadlock the merge forever. `hasOutreachHistory` answers
+    // "has anything at all happened to this row", which is right for its other three callers and too broad
+    // here: a bare dismissal counted, so any two dismissed duplicates went to the deferred branch, were
+    // reported only to NSLog (invisible from a running Overture), and stayed duplicated permanently.
+    //
+    // Measured on the live store: "Bone Wars" on 2026-07-26 sits twice, BOTH dismissed "too soon", with
+    // nothing sent, drafted or addressed on either. There is nothing to reconcile and nobody was ever told
+    // there was. A dismissal is a decision, not an outreach record, so it no longer blocks the merge.
+    @Test func twoDuplicatesDismissedForTheSameReasonMergeInsteadOfDeadlocking() throws {
+        let ctx = try context()
+        let group = "Bone Wars: A New Musical", date = "2026-07-26"
+        let folded = foldedKey(group, date, "The Players Theatre")
+
+        insert(ctx, key: "legacy-colon-key", group: group, date: date, venue: "The Players Theatre",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+        }
+        insert(ctx, key: "legacy-bracket-key", group: "Bone Wars (A New Musical)", date: date,
+               venue: "The Players Theatre", ingestedAt: Date(timeIntervalSince1970: 2_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+        }
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        #expect(summary.conflictsDeferred == 0)
+        #expect(summary.duplicatesDeleted == 1)
+        let rows = allProspects(ctx)
+        #expect(rows.count == 1)
+        #expect(rows.first?.naturalKey == folded)
+        // Dan's refusal survives the merge. Losing it would put a show he has already refused back in
+        // front of him, which is the opposite of the defect being fixed.
+        #expect(rows.first?.status == .dismissed)
+        #expect(rows.first?.dismissReasonRaw == "too_soon")
+    }
+
+    // And where the two refusals DISAGREE the merge still defers, because picking one silently rewrites
+    // why Dan said no, which the outcome reporting reads. Measured live: "macMcCarty + KiddTwist" on
+    // 2026-07-23 is dismissed once as "too soon" and once as "went by".
+    @Test func twoDuplicatesDismissedForDifferentReasonsStillDefer() throws {
+        let ctx = try context()
+        let group = "macMcCarty +KiddTwist", date = "2026-07-23"
+
+        insert(ctx, key: "legacy-tight-key", group: group, date: date, venue: "Jalopy Theatre",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+        }
+        insert(ctx, key: "legacy-spaced-key", group: "macMcCarty + KiddTwist", date: date,
+               venue: "Jalopy Theatre", ingestedAt: Date(timeIntervalSince1970: 2_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "went_by"
+        }
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0)
+        #expect(allProspects(ctx).count == 2)
+    }
+
+    // The guard that must not move, and the reason the relaxation above is narrow: once ANY row in the
+    // collision was actually contacted, the old refusal stands whole and both rows stay. A dismissal on
+    // the twin of a contacted show may be recording how that outreach ended, which is not a migration's
+    // to throw away.
+    @Test func aCollisionInvolvingAContactedRowStillDefers() throws {
+        let ctx = try context()
+        let group = "Contacted Show", date = "2026-08-02"
+
+        insert(ctx, key: "legacy-a", group: group, date: date, venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+        }
+        insert(ctx, key: "legacy-b", group: group, date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 2_000)) {
+            $0.status = .contacted; $0.sentAt = Date(timeIntervalSince1970: 3_000)
+        }
+
+        let summary = NaturalKeyVenueMigration.run(in: ctx)
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0)
+        let rows = allProspects(ctx)
+        #expect(rows.count == 2)
+        #expect(rows.contains { $0.sentAt != nil })
+    }
+
+    // #1780: the survivor rule the relaxation makes load-bearing. A show Dan refused, re-scouted later
+    // under a variant spelling, must not come back: the merge keeps his refusal even though the pristine
+    // row is the fresher of the two.
+    @Test func aRefusedShowDoesNotReturnWhenAPristineRescoutMergesIntoIt() throws {
+        let ctx = try context()
+        let group = "Refused Show", date = "2026-08-09"
+
+        insert(ctx, key: "legacy-refused", group: group, date: date, venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) {
+            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+        }
+        // The later re-scout, untouched, under a spelling that folds to the same key.
+        insert(ctx, key: "legacy-rescout", group: group, date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 2_000))
+
+        NaturalKeyVenueMigration.run(in: ctx)
+        let rows = allProspects(ctx)
+        #expect(rows.count == 1)
+        #expect(rows.first?.status == .dismissed)
+        #expect(rows.first?.dismissReasonRaw == "too_soon")
+    }
 }
