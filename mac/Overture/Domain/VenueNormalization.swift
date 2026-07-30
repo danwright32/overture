@@ -63,15 +63,35 @@ enum VenueNormalization {
     // an alternate name ("(MASS MoCA)"), a street address, and a note the model wrote to itself. Every
     // consumer of this key also carries the date and the group, so dropping it cannot collide two real
     // rooms. Applied AFTER the comma reduction, so it only ever sees the venue's own name.
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="distinct presenter and venue strings whose first comma clause is left holding an unbalanced open bracket"
+    // #1764: the bracket strip now runs BEFORE the comma reduction as well as after it. A bracket whose
+    // CONTENTS hold a comma used to be cut in half by the split, leaving a fragment ending in an
+    // unbalanced "(" that the balanced-pair stripper below could never match. The live instance was
+    // "The Golden Hour Series (curated with Jalopy Theatre, ...)", which keyed to
+    // "golden hour series (curated with jalopy theatre" and so read as a different organisation from the
+    // same series written plainly, letting one night be researched and paid for twice.
+    //
+    // Measured over the whole store before making the change: of 156 distinct presenters, 7 carry a
+    // bracket and exactly ONE has this shape; of 140 distinct venues, 3 carry a bracket and NONE does.
+    // That zero is what makes this safe to fix in the fold itself: no stored prospect natural key moves,
+    // so it needs no migration (contrast NaturalKeyVenueMigration, which #1064 did need). A live-store
+    // guard pins the zero so a future venue of this shape cannot slip a silent re-key past us.
     static func keyName(_ raw: String) -> String {
-        let firstClause = raw.split(separator: ",", omittingEmptySubsequences: false)[0]
+        let withoutSpanningParenthetical = raw
+            .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        // A name that is ENTIRELY a parenthetical keeps its raw form rather than becoming empty.
+        let source = withoutSpanningParenthetical.isEmpty ? raw : withoutSpanningParenthetical
+        let firstClause = source.split(separator: ",", omittingEmptySubsequences: false)[0]
             .trimmingCharacters(in: .whitespaces)
         // A venue that is nothing but a comma clause keeps its raw form rather than becoming empty.
         guard !firstClause.isEmpty else { return raw }
+        // Kept, rather than replaced by the pass above: a bracket can also be left behind by the comma
+        // reduction itself, and an UNBALANCED one (a stray "(" the source never closed) still reaches
+        // here untouched.
         let withoutParenthetical = firstClause
             .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        // A venue whose name is ENTIRELY a parenthetical keeps its name rather than becoming empty.
         return withoutParenthetical.isEmpty ? firstClause : withoutParenthetical
     }
 

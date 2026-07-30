@@ -617,6 +617,7 @@
 		C3FE310A2FEB26FCFC13B399 /* RunSummaryCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287DE498366E2CB5EBA5A033 /* RunSummaryCopyTests.swift */; };
 		C40875617FC4C60F43BFA6D4 /* PrepImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04976ED97928B91FDE4C573 /* PrepImporter.swift */; };
 		C5727253134A960439B4E3E0 /* ReachabilityProbeReuseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F7850C823B37E99EB2E26B /* ReachabilityProbeReuseTests.swift */; };
+		C597140419EDCDD82B58490F /* VenueKeyStabilityLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C0558E748706676537594AF /* VenueKeyStabilityLiveStoreTests.swift */; };
 		C5F17FEF5D152F48B95BC20F /* ProbeSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADECD2610E46B7D569E790E /* ProbeSelectionTests.swift */; };
 		C5F47DE8A62C1C0C4CB38351 /* DateCheckedMarkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA96D0798C2E79BAE26611 /* DateCheckedMarkerTests.swift */; };
 		C668DE94F54D60D23B7737A4 /* ClientCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC354880388EB61684D6B5A4 /* ClientCoverageTests.swift */; };
@@ -985,6 +986,7 @@
 		39E6FD194E3EAEC89C465A64 /* MailSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailSender.swift; sourceTree = "<group>"; };
 		3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueTixCalendar.swift; sourceTree = "<group>"; };
 		3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolbarPopoverGuardTests.swift; sourceTree = "<group>"; };
+		3C0558E748706676537594AF /* VenueKeyStabilityLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueKeyStabilityLiveStoreTests.swift; sourceTree = "<group>"; };
 		3C200298C3D0968B8EA55122 /* RecipientBackfillLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientBackfillLiveStoreTests.swift; sourceTree = "<group>"; };
 		3C648B81B775081C202D42D3 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		3C975DFD9E68F2288A834264 /* InquiryReplySenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryReplySenderTests.swift; sourceTree = "<group>"; };
@@ -2140,6 +2142,7 @@
 				832A551D016D3B2F0A76F6AB /* VenueContactFormGuardTests.swift */,
 				7D01977E9DAA7DBA8D3010F7 /* VenueContactGuardTests.swift */,
 				4ADBE3D77761E438E9AE8E2D /* VenueDisplayTests.swift */,
+				3C0558E748706676537594AF /* VenueKeyStabilityLiveStoreTests.swift */,
 				302A7E1717BA015F33EA5A04 /* VenueNormalizationTests.swift */,
 				C37374FD3A2F73C11538500F /* VenueParserTests.swift */,
 				9AFBC4CFEADC23EB774CDB46 /* VenueTixCalendarTests.swift */,
@@ -3404,6 +3407,7 @@
 				1B288047682D44DFE0CF3676 /* VenueContactFormGuardTests.swift in Sources */,
 				2298264F2AE1D09C83BFA8AC /* VenueContactGuardTests.swift in Sources */,
 				E6276267DF5E0ED80AF4E805 /* VenueDisplayTests.swift in Sources */,
+				C597140419EDCDD82B58490F /* VenueKeyStabilityLiveStoreTests.swift in Sources */,
 				2D4024C18C49DCADA2212B0B /* VenueNormalizationTests.swift in Sources */,
 				5C6A5AD503A4296B257C2D26 /* VenueParserTests.swift in Sources */,
 				C98AFDC16E9D3F946922DB7F /* VenueTixCalendarTests.swift in Sources */,
