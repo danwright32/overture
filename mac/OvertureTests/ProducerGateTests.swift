@@ -155,6 +155,34 @@ struct ProducerGateTests {
                                        overrides: .init(promoted: ["the green room 42"])) == false)
     }
 
+    // #1763: the test above states a rule the UI had no way to ask about, so the row offered a promotion
+    // on every one of those names and the gate silently ignored it.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="presenters judged the building by the equality arm, and whether promoting each moves the verdict"
+    // Measured over the whole store: 15 organisations and 312 rows are refused by equality, and promoting
+    // each one leaves all 15 refused. The other 7 brand presenters (39 rows) are caught only by
+    // containment, where promotion really does work. This names that difference so a surface can offer
+    // the correction where it bites and stay quiet where it cannot.
+    @Test("a name spelled exactly like a room is knowable as uncorrectable")
+    func aRoomNameIsReportedAsUncorrectable() {
+        let shows = [
+            show("The Green Room 42", at: "The Green Room 42"),
+            show("Carnegie Hall Presents", at: "Carnegie Hall"),
+            show("Carnegie Hall Presents", at: "Zankel Hall"),
+            show("FRIGID New York", at: "Under St Marks"),
+        ]
+        let brands = ProducerGate.VenueBrands(shows: shows)
+
+        // Equality: promotion can never reach it, so nothing should offer the correction.
+        #expect(brands.isRoomName("The Green Room 42"))
+        // Containment only: promotion genuinely relaxes this arm, so the correction must stay.
+        #expect(brands.contains("Carnegie Hall Presents"))
+        #expect(brands.isRoomName("Carnegie Hall Presents") == false)
+        // Not a brand at all, and not a room name either.
+        #expect(brands.isRoomName("FRIGID New York") == false)
+        #expect(brands.isRoomName(nil) == false)
+    }
+
     // #1719 (milestone 34 Phase 2): the OTHER direction. Promotion says "a producer despite looking like
     // a house"; this says "a house despite not looking like one", and without it the gate has no way to
     // be corrected when every automatic arm misses.

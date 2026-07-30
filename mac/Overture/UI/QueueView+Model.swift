@@ -1152,6 +1152,20 @@ enum QueueModel {
         return .none
     }
 
+    // #1763: the organisation this row can offer a correction on, or nil when it can offer none. Split
+    // out of the build so the rule is testable (#863) rather than stated inside a map closure.
+    //
+    // Three questions in order, and the order is the rule: a name the gate cannot key has no organisation
+    // in it at all; a correction already in force always keeps its way back; and what remains is offered
+    // only where a correction could actually move the verdict.
+    static func correctableOrganisation(_ presenter: String?,
+                                        venueBrands: ProducerGate.VenueBrands,
+                                        standing: ProducerOverrideEditing.Standing) -> String? {
+        guard let presenter, ProducerGate.key(presenter) != nil else { return nil }
+        if standing != .none { return presenter }
+        return venueBrands.isRoomName(presenter) ? nil : presenter
+    }
+
     // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
     // about a specific name rather than a rule in the abstract. Kept out of the view with every other
     // sentence the app can say (#915).
@@ -1551,11 +1565,22 @@ enum QueueModel {
             item.contactRoute = $0.contactRouteForScoring(now: now)
             item.presenterLine = presenterLine(title: $0.groupName, presenter: $0.presenter,
                                                venue: $0.venue, venueBrands: venueBrands)
+            item.producerStanding = producerStanding(of: $0.presenter, overrides: overrides)
             // Only an organisation the gate can actually key is correctable. A name that folds away to
             // nothing would store a key no presenter can ever match, which reads exactly like no
             // correction at all.
-            item.correctableOrganisation = ProducerGate.key($0.presenter) == nil ? nil : $0.presenter
-            item.producerStanding = producerStanding(of: $0.presenter, overrides: overrides)
+            //
+            // #1763: and only one a correction could actually MOVE. A presenter spelled exactly like a
+            // room is refused by isVenueBrand's first line, before it ever reads overrides.promoted, so
+            // promoting it stores a key the gate then ignores. Measured on the live store 2026-07-29:
+            // 15 organisations, 312 rows, all 15 still refused after being promoted. Offering the control
+            // there is the #1679 shape, a correction that reads as applied while changing nothing, so the
+            // row says nothing rather than something untrue.
+            //
+            // A correction ALREADY in force keeps its control regardless, because the way back is a real
+            // state change and stranding Dan with one he cannot take back is the worse failure.
+            item.correctableOrganisation = correctableOrganisation(
+                $0.presenter, venueBrands: venueBrands, standing: item.producerStanding)
             // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
             // classification the row is not actually using.
             item.treatedAsVenue = venueBrands.contains($0.presenter)
