@@ -96,6 +96,33 @@ enum ExtractedEventGuard {
         return promoted
     }
 
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="open rows whose presenter is spelled exactly like their own venue"
+    // #1766: a presenter that is really the room, drained to nil. Runbook rule 3d forbids reporting one,
+    // and a real run against the pinned FRIGID page obeyed it, but a runbook is a request and not a
+    // guarantee, which is the same reasoning that put the venue and signup-form guards in this file.
+    //
+    // Measured before this shipped: 163 of 512 open rows carried a presenter spelled exactly like their
+    // own venue. That field is what the PAID contact hunt is aimed at, so a room's name sitting in it
+    // spends Dan's money looking for the building's own inbox, and the answer comes home reading like an
+    // honest "nobody is reachable". Three Under St Marks rows recorded `only_venue_contact` outright.
+    //
+    // Drained rather than dropped: the performance is real and Dan should still see it. Nil is also the
+    // honest value, because the page did not say who presents it, and `Reachability.assess` already reads
+    // a blank presenter as "nothing to email" rather than inventing a target.
+    //
+    // Compared through ProducerGate.key, the fold the app ALREADY uses for the presenter-versus-venue
+    // question, so this guard cannot drift from the producer gate's own idea of when a name IS the room
+    // (#1702's rule, one judgment named once).
+    static func presenterThatIsNotTheRoom(_ event: ExtractedEvent) -> ExtractedEvent {
+        guard let presenterKey = ProducerGate.key(event.presenter),
+              let venueKey = ProducerGate.key(event.venue),
+              presenterKey == venueKey
+        else { return event }
+        var cleaned = event
+        cleaned.presenter = nil
+        return cleaned
+    }
+
     // #1278: registration/signup-form hosts that must never stand in for a show's listing link. DCINY's
     // /opportunities/ recruiting rows link to a getfeedback.com "apply to sing" form; `sourceUrl` is the
     // link Dan clicks to look a concert up, so a form sends him to join the choir, not to the show he is
