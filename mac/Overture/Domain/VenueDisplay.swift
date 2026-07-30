@@ -102,14 +102,45 @@ struct VenueDisplay: Equatable {
     // region name). If you loosen or tighten the shape accepted here, check that consumer too;
     // LocationTwoConsumersGuardTests pins both tolerances against shared inputs and goes red when the
     // two silently diverge.
+    // #1762: an address-shaped value is no longer thrown away whole. It used to be, and that cost 131
+    // cards their city line while the city sat in the stored value: 122 of them The Green Room 42, whose
+    // rows all carry `570 10th Ave, New York, NY 10036`. The #1030 promise is that no street address
+    // reaches the card, not that a city inside one is unusable.
+    //
+    // So this asks "what city and state does this name" rather than "is this already clean", and answers
+    // nothing when it cannot be sure.
     private static func safeCityStateLine(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let looksLikeAnAddress = trimmed.split(separator: ",").contains {
-            $0.trimmingCharacters(in: .whitespaces).first?.isNumber == true
-        }
-        return looksLikeAnAddress ? nil : trimmed
+        let clauses = trimmed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        let looksLikeAnAddress = clauses.contains { $0.first?.isNumber == true }
+        // Already clean: passed through verbatim, exactly as before. A bare city with no state at all
+        // ("Brooklyn") is precisely what this fallback was built for and must keep working.
+        guard looksLikeAnAddress else { return trimmed }
+        return cityStateFromAddress(clauses)
+    }
+
+    // The city and state named inside an address, or nothing.
+    //
+    // Scanned from the END for the state, so a city that is itself a state name reads as the city ("New
+    // York, NY" is New York in NY, not the reverse), matching how EventPlace reads the same shapes.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="every distinct address-shaped `location` value in the live store"
+    // All six yield the right city and none leaks a street number; CityFromAddressTests holds them as a
+    // table-driven case with the exact line each must produce.
+    private static func cityStateFromAddress(_ clauses: [String]) -> String? {
+        guard let stateIndex = clauses.indices.reversed().first(where: {
+            EventPlace.stateCodeInClause(clauses[$0]) != nil
+        }), let code = EventPlace.stateCodeInClause(clauses[stateIndex]) else { return nil }
+        // The nearest preceding clause carrying NO digit at all. Not merely "does not start with one":
+        // a clause like "Floor 4" does not start with a digit and would put one on the card, which is the
+        // whole thing #1030 forbids. No digit anywhere is the only version of this rule that cannot leak.
+        guard let cityIndex = clauses[..<stateIndex].indices.reversed().first(where: {
+            let clause = clauses[$0]
+            return !clause.isEmpty && !clause.contains(where: \.isNumber)
+        }) else { return nil }
+        return "\(clauses[cityIndex]), \(code)"
     }
 
     // The embedded-address stripping (splitting on commas and dropping the first digit-leading clause and

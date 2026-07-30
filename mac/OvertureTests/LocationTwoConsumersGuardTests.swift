@@ -32,15 +32,31 @@ struct LocationTwoConsumersGuardTests {
         EventPlace.resolve(location: location, discipline: .theater).verdict
     }
 
-    // AN ADDRESS-SHAPED STRING. This is the crux of #1065. The display fallback must REJECT it (show
-    // nothing rather than a raw street line), while the geography gate must still PLACE it (it reads
-    // "New York" straight through the street noise and calls it inRange). If someone loosens the
-    // display fallback to accept an address, the `== nil` breaks; if someone makes the geography gate
-    // choke on an address, the `.inRange` breaks. Either way the divergence surfaces here.
-    @Test func anAddressShapedLocationIsRejectedForDisplayButStillPlacedByTheGate() {
+    // AN ADDRESS-SHAPED STRING. This is the crux of #1065, and #1762 MOVED the stricter consumer's
+    // tolerance, which is exactly the event this suite exists to force someone to reckon with.
+    //
+    // The display fallback now READS an address rather than rejecting it whole, so both consumers get
+    // something from this string. They still differ, and the difference is still the point: the gate
+    // takes the whole messy value and answers a question about range, while the card takes only the city
+    // and state out of it and still puts no street number or ZIP on screen. If a future change lets the
+    // card print any part of the street line, the digit assertion breaks; if it makes the gate choke on
+    // an address, the `.inRange` breaks.
+    @Test func anAddressShapedLocationIsReadForDisplayAndStillPlacedByTheGate() {
         let address = "123 E 24th St, New York, NY 10010"
-        #expect(displayFallback(address) == nil)       // stricter: no raw address on the card
+        let shown = displayFallback(address)
+        #expect(shown == "New York, NY")                // stricter: the city and state, never the street
+        let hasDigit = (shown ?? "").contains { $0.isNumber }
+        #expect(!hasDigit)                              // and #1030's promise survives the loosening
         #expect(geoVerdict(address) == .inRange)        // looser: still reads NY and places it
+    }
+
+    // #1762: where the two now genuinely differ on an address. An address naming NO state gives the card
+    // nothing it can be sure of, so it says nothing, while the gate still reads the city out of it and
+    // places the show. The stricter consumer refusing to guess is the whole distinction.
+    @Test func anAddressWithNoStateIsShownAsNothingButStillPlacedByTheGate() {
+        let address = "44 East 32nd Street, New York City"
+        #expect(displayFallback(address) == nil)
+        #expect(geoVerdict(address) == .inRange)
     }
 
     // A CLEAN CITY/STATE STRING. Both consumers accept it, and they agree: the display fallback shows

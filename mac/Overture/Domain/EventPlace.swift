@@ -263,6 +263,19 @@ enum EventPlace {
         return nil
     }
 
+    // #1762: the two-letter CODE a clause names, or nil. The sibling above answers with the text as
+    // WRITTEN, because it exists to write a value back into a location field; the card wants one shape
+    // whatever a source published, so "Brooklyn, New York" and "Brooklyn, NY 11217" both end up reading
+    // "Brooklyn, NY". Same table, two renderings, rather than a second list of the United States.
+    static func stateCodeInClause(_ clause: String) -> String? {
+        let trimmed = clause.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        if let code = stateNames[trimmed.lowercased()] { return code.uppercased() }
+        let head = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        if head.count == 2, usStateCodes.contains(head.lowercased()) { return head.uppercased() }
+        return nil
+    }
+
     // #1744: whether this text names a country or US state the resolver already knows. It is what keeps
     // the tour-title rule narrow: the tail of a title counts as a place only when the gate would be able
     // to place it, so a show called "... in Concert" never becomes a show in a town called Concert.

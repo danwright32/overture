@@ -156,11 +156,47 @@ enum VenuePlaces {
         // name is not globally unique, so this is here only because it places IN range, where a wrong
         // entry costs a wrong city line and cannot hide a show.
         "trinity church": manhattan,
+        // #1762: the same church, spelled with the city appended by whichever source published it. Its
+        // own key, deliberately, rather than teaching the lookup to drop trailing words: a trailing word
+        // is often a DISAMBIGUATOR ("Holy Trinity Lutheran Church Brooklyn" is not the Manhattan one), so
+        // dropping it blind would send a show to the wrong city, which is the hazard the Epiphany note
+        // above is about. The general problem is its own issue.
+        "trinity church nyc": manhattan,
+
+        // #1762: rows whose `location` is blank, so nothing can be parsed out of the row itself and only
+        // this table can give the card a city.
+        //
+        // LIVE-STORE-CLAIM verified=2026-07-30 measure="distinct ZVENUE on status-new prospects with a null or empty ZLOCATION"
+        // Keyed on the string the store ACTUALLY holds, not the venue's tidy name. "House of the
+        // Redeemer" alone looked right and matched nothing: the row reads "House of the Redeemer, Fabbri
+        // Mansion", and the card looks a venue up exactly. A test written against the tidy name passed
+        // while the entry did nothing (L48).
+        "st. luke in the fields": manhattan,
+        "park avenue christian church": manhattan,
+        "brick presbyterian church": manhattan,
+        "holy trinity lutheran church": manhattan,
+        "house of the redeemer, fabbri mansion": manhattan,
+        "the kosciuszko foundation": manhattan,
+        // Dan's call (2026-07-30) on these two: the names are shared by churches nationwide, which is the
+        // hazard the Epiphany note above describes. He accepts them as New York because the scout only
+        // watches New York area sources, so a show reaching his queue is his local one. Both place IN
+        // range, where a wrong entry costs a wrong city line and cannot hide a show.
+        "st. paul's episcopal church": manhattan,
+        "st. michael's parish hall": manhattan,
+        // The 122-row venue. #1762's address parsing already gives its cards a city, since every one of
+        // its rows carries an address. It is here so a row that arrives with NO location still places:
+        // this table is read by the geography gate too now, not only by the card.
+        "the green room 42": manhattan,
 
         // Brooklyn.
         "jalopy theatre": brooklyn,
         "jalopy's classroom": brooklyn,
         "roulette intermedium": brooklyn,
+        // #1762: the same room, and the single biggest group of cards with no city (9 rows on
+        // 2026-07-30). The table held only the full name, so the bare one every source writes missed it.
+        "roulette": brooklyn,
+        // #1762: the same room, and the single biggest group of cards with no city (9 rows on
+        // 2026-07-30). The table held only the full name, so the bare one every source writes missed it.
         "national sawdust": brooklyn,
         "the space at irondale": brooklyn,
         "church of st. luke and st. matthew": brooklyn,
