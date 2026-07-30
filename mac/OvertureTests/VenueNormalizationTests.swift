@@ -161,4 +161,37 @@ struct VenueNormalizationTests {
         let forKey = VenueNormalization.normalizeForKey("The Cutting Room, 44 East 32nd Street, New York, NY")
         #expect(forKey == "The Cutting Room")
     }
+
+    // LIVE-STORE-CLAIM verified=2026-07-29 measure="distinct presenter and venue strings whose first comma clause is left holding an unbalanced open bracket"
+    // #1764: a bracket whose CONTENTS contain a comma was cut in half by #1498's comma reduction before
+    // #1686's bracket stripper ever ran, so the stripper (which matches a balanced pair) could never
+    // match, and the key kept a truncated fragment ending in an unbalanced "(".
+    //
+    // Measured over the whole live store 2026-07-29: 156 distinct presenters, 7 carrying a bracket, and
+    // exactly ONE of this shape; 140 distinct venues, 3 carrying a bracket, and NONE of this shape. So
+    // the reordering below re-keys no stored prospect today, which is the whole reason it can be made in
+    // the fold itself rather than as a migration.
+    @Test func aBracketWhoseContentsHoldACommaIsStrippedWholeRatherThanCutInHalf() {
+        // The live string, exactly as stored: the series is curated WITH five other organisations, and
+        // the list of them is inside the brackets.
+        let live = "The Golden Hour Series (curated with Jalopy Theatre, The New Colossus Festival, "
+                 + "The Jazz Gallery, Sofar Sounds, Manhattan School of Music)"
+        #expect(VenueNormalization.keyName(live) == "The Golden Hour Series")
+        // And it now keys to the same organisation as the short spelling of the same series, which is
+        // what let one night be paid for twice.
+        #expect(ProducerGate.key(live) == ProducerGate.key("The Golden Hour Series"))
+
+        // The three bracketed venues in the live store keep the keys they already had. Their brackets
+        // sit AFTER the venue's own name and hold no comma, so the reordering must not touch them.
+        #expect(VenueNormalization.keyName("Massachusetts Museum of Contemporary Art (MASS MoCA)")
+                == "Massachusetts Museum of Contemporary Art")
+        #expect(VenueNormalization.keyName("downtown Brooklyn, NY (specific venue not named on page)")
+                == "downtown Brooklyn")
+        #expect(VenueNormalization.keyName(
+            "Soldiers' and Sailors' Monument, Riverside Park (W. 89th St. & Riverside Drive), New York, NY")
+                == "Soldiers' and Sailors' Monument")
+
+        // A name that is ENTIRELY a bracket still keeps itself rather than folding away to nothing.
+        #expect(VenueNormalization.keyName("(TBA)") == "(TBA)")
+    }
 }
