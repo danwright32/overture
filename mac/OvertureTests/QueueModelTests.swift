@@ -878,6 +878,11 @@ struct SelfBookingWiringTests {
         #expect(!QueueModel.selfBookingIsCommitment(dead))
         var bookedElsewhere = item(status: .dismissed, key: "b"); bookedElsewhere.dismissReason = .alreadyBooked
         #expect(QueueModel.selfBookingIsCommitment(bookedElsewhere))
+        // #1821: "Pitching other shows that night" is NOT a commitment, even though it sounds like one.
+        // The show Dan actually picked carries its own commitment on its own row (kept, drafted or sent);
+        // counting the ones he passed over as well would warn him of a clash with a show he never pitched.
+        var passedOver = item(status: .dismissed, key: "c"); passedOver.dismissReason = .pitchingOtherShows
+        #expect(!QueueModel.selfBookingIsCommitment(passedOver))
     }
 
     // A committed different show on the same date is a conflict; a non-committed one (kept, no draft) is not.

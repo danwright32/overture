@@ -19,6 +19,11 @@ enum DayOffOffer {
     // The reasons that mean "I can't shoot on this date", mirroring the three DismissReason cases the
     // engine already carries. Every other reason (not a fit, don't want to shoot, duplicate, went by) is
     // about the show, not the calendar, so it offers nothing.
+    //
+    // #1821: `pitchingOtherShows` sits beside `dateConflict` everywhere else (both are scheduling misses
+    // that keep the org hot) and deliberately NOT here. It is the one place the two mean opposite things:
+    // a date conflict says the night is spoken for, while pitching other shows that night says Dan is
+    // working it. Blocking it as a day off would stop Overture pitching him for a night he actively wants.
     private static let calendarReasons: Set<DismissReason> = [.dateConflict, .alreadyBooked]
 
     // `alreadyBlocked` is the show's own conflict state: when its date is already a day off or a booked
