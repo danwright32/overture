@@ -9,7 +9,11 @@ import Foundation
 enum LocalHistory {
     // Reasons Dan skips a prospect because HE couldn't take it (a scheduling miss), not because
     // they're a bad fit; these stay hot future leads (1.2 / #70).
-    private static let schedulingDismissals: Set<DismissReason> = [.dateConflict, .alreadyBooked]
+    // #1821: `pitchingOtherShows` belongs here for exactly the same reason. Dan wanted the show and lost
+    // it to the night's capacity, not to anything about the org, so it stays a hot future lead and scores
+    // identically to a date conflict ("declined", which Ranker.priorPoints weights 0 by #1362's decision).
+    private static let schedulingDismissals: Set<DismissReason> = [.dateConflict, .alreadyBooked,
+                                                                   .pitchingOtherShows]
 
     static func records(from prospects: [Prospect]) -> [HistoryRecord] {
         prospects.compactMap { p in

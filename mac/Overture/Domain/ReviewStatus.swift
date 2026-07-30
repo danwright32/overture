@@ -113,6 +113,15 @@ enum DismissReason: String, CaseIterable, Sendable {
     // (he is free, there just wasn't time) and from `notInterested`/`dontWantToShoot` (he does want it).
     // A missed opportunity, never a bad-fit signal, so it must never be folded into `notInterested`.
     case tooSoon = "too_soon"
+    // #1821: Dan reaches out about one show a night, occasionally two, so on a busy night the other good
+    // shows are cut because he ran out of nights, not because anything was wrong with them. Every other
+    // reason says something untrue about that: `dateConflict` claims the night did not work when he spent
+    // it, `alreadyBooked` claims a paid booking held it, and the three judgement reasons blame the show.
+    //
+    // It is NOT a variation on `dateConflict` and must never be folded into it. Kept apart, Dan can
+    // eventually ask how many strong shows he drops purely for want of a night rather than on fit (#16);
+    // folded, that question can never be asked afterwards, because the difference was never written down.
+    case pitchingOtherShows = "pitching_other_shows"
     case wentBy = "went_by"
     // #1238: Dan blocked the town this show is in ("Never show me shows in <town>"). Like `wentBy`, this
     // is Overture's OWN automatic cut, never a choice in the menu, and it must never teach LocalHistory a
@@ -127,6 +136,7 @@ enum DismissReason: String, CaseIterable, Sendable {
         case .alreadyBooked: return "Already booked"
         case .duplicate: return "Duplicate"
         case .tooSoon: return "Too soon"
+        case .pitchingOtherShows: return "Pitching other shows that night"
         case .wentBy: return "Went by"
         case .tooFar: return "Too far"
         }
