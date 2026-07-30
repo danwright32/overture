@@ -19,6 +19,26 @@ import SwiftData
 // Measured on the live store 2026-07-27: 7 such groups, 8 duplicate cards, on top of the 10 the fold
 // collapses. Each duplicate is also a duplicate PAID reachability lookup since milestone 32.
 //
+// #1761: THE ROOM NO LONGER TAKES PART. This pass used to bucket rows on the night AND the folded venue
+// key, so it could only ever see a duplicate that already agreed on the room. One source page scouted
+// twice, transcribing its own room differently the second time ("Jalopy Theatre" one week, "Jalopy
+// Theater" the next), landed in two buckets and stayed two cards forever.
+//
+// LIVE-STORE-CLAIM verified=2026-07-30 measure="same-night groups whose titles confidently match, the duplicate rows they hold, and how many the shipped pass caught"
+// Measured over all 742 dated rows on 2026-07-30: 26 such groups holding 32 duplicate rows, 23 of them
+// inside the 90-day queue window. The pass as it stood caught 3 of the 26. It had already cost 7 paid
+// contact lookups spent twice on one show, and 12 of the 26 groups hold copies that disagree about the
+// show's fit score, one by 8 points, so a duplicate also corrupts the order Dan triages in.
+//
+// Four candidate rules were scored against the whole store before this one was chosen (room-name
+// containment, a spelling-distance test, a shared listing link, and a connectivity rule). Every one of
+// them was strictly worse, and the link in particular found NOTHING the title match did not. All 26
+// groups were then read by hand: each is one show. Dan's call on the residue, 2026-07-30: if the title is
+// the same on the same night, one pitch covers it, so it is one card, even for the single group whose
+// rooms genuinely differ (a festival playing a church and a theatre on one night). So the merge now rests
+// on the night plus a confident title match, and the TITLE is the only thing holding the line: see
+// SameNightRoomVariantMergeTests for the guards that pin it.
+//
 // BLAST RADIUS. This DELETES prospect rows, so it takes its safety rules verbatim from the two passes
 // that already do (#1064 NaturalKeyVenueMigration, #1559 DriftedRunMerge), and the launch backup
 // (#601/#602) taken just before migrations run is what makes it recoverable:
@@ -43,13 +63,14 @@ enum SameNightTitleVariantMerge {
         let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         var summary = Summary()
 
-        // The venue half folds through VenueNormalization, the SAME reduction the natural key and
-        // RunGrouping use, so a row carrying the street address still counts as the same room.
+        // #1761: the venue no longer takes part. It used to bucket the rows, which meant one room spelled
+        // two ways ("Jalopy Theatre" against "Jalopy Theater") produced two buckets and the pass could
+        // never see the pair at all. Grouping on the night alone lets the title decide, which is the whole
+        // point of this pass; see the file header for why the room was dropped rather than fuzzily matched.
         var groups: [String: [Prospect]] = [:]
         for p in stored {
             guard let date = p.performanceDate, !date.isEmpty else { continue }
-            let venueKey = VenueNormalization.normalizeForKey(p.venue ?? "").lowercased()
-            groups[date + "|" + venueKey, default: []].append(p)
+            groups[date, default: []].append(p)
         }
 
         for (_, members) in groups where members.count > 1 {
@@ -71,6 +92,15 @@ enum SameNightTitleVariantMerge {
                 }
 
                 let survivor = withHistory.first ?? probed(cluster) ?? cluster[0]
+                // #1761: the survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its
+                // age), which is a different question from which row names the room best. Since the room
+                // no longer gates the merge, a cluster can hold several spellings of one place and the
+                // survivor is often not the clearest of them: the Brooklyn Folk Festival's oldest row
+                // says "specific venue not named on page" while a row naming a real church is about to be
+                // deleted, and the Derek Piotr workshop's oldest row says "Jalopy Theatre" while the room
+                // it is actually in, "Jalopy's Classroom", is on a row being deleted. Carry the clearest
+                // name across before the others go, so the card Dan reads names the room.
+                if let clearest = clearestRoomName(in: cluster) { survivor.venue = clearest }
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1
@@ -87,6 +117,24 @@ enum SameNightTitleVariantMerge {
     // answer away and re-offers the same check. A probed row outranks an unprobed one.
     private static func probed(_ cluster: [Prospect]) -> Prospect? {
         cluster.first { $0.reachabilityProbedAt != nil }
+    }
+
+    // #1761: the most specific room name in a cluster, measured on the venue's OWN name (keyName drops
+    // the street address and the trailing city, so a row is not "clearest" merely for carrying a postcode)
+    // and counted in words. "Jalopy's Classroom at 319 Columbia St" beats "Jalopy Theatre";
+    // "St. Ann & the Holy Trinity Church" beats "downtown Brooklyn"; "Roulette Intermedium" beats
+    // "Roulette". Returns nil on a tie or when nothing beats the survivor's own, so the common case where
+    // every row spells the room the same way leaves the field untouched.
+    private static func clearestRoomName(in cluster: [Prospect]) -> String? {
+        func specificity(_ venue: String?) -> Int {
+            let name = VenueNormalization.keyName(venue ?? "")
+            return name.split(whereSeparator: { $0.isWhitespace }).count
+        }
+        let best = cluster.max { specificity($0.venue) < specificity($1.venue) }
+        guard let best, let venue = best.venue, !venue.isEmpty else { return nil }
+        let tiedAtBest = cluster.filter { specificity($0.venue) == specificity(best.venue) }
+        guard tiedAtBest.count == 1 else { return nil }
+        return venue
     }
 
     // Greedy clustering against each cluster's FIRST member, never its most recent one, so membership is
