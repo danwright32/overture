@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **927 sentences**, from 317 source files.
+Every sentence Overture can say to Dan: **930 sentences**, from 318 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -269,6 +269,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "1 new show waiting for you"
     `Domain/SourceYield.swift`
+"1 of \(requested) shows never got an answer and is still unchecked"
+    `Domain/ReachabilityRunSummary.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
@@ -1956,6 +1958,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"
     `App/ActionFeedback.swift`
+"\(unanswered) of \(requested) shows never got an answer and are still unchecked"
+    `Domain/ReachabilityRunSummary.swift`
 "\(undoRestoredNight(count: restored, priorStatuses: priorStatuses)). \(others) already moved on."
     `App/ActionFeedback.swift`
 "\(unread.count == 1 ? "that month" : "those months") isn't here."
@@ -2098,6 +2102,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the show you checked never got an answer and is still unchecked"
+    `Domain/ReachabilityRunSummary.swift`
 "the venue"
     `UI/QueueView+Model.swift`
 "to confirm"

@@ -25,7 +25,14 @@ enum PrepRunSummary {
     }
 
     // What the run is telling him went differently than it should have.
-    private static func concernNotes(for outcome: PrepImporter.Outcome) -> [String] {
+    //
+    // #1769: a reachability check shares this runner, this results file and this Outcome, so it shares
+    // these sentences too rather than growing a second near-identical set that would drift. It opts OUT of
+    // one of them: `includeRetryNote`. The shortfall sentence below promises an automatic retry, which is
+    // TRUE for a Prep run (PrepQueueBuilder re-queues an undrafted prospect) and FALSE for a check
+    // (nothing re-checks reachability by itself; Dan has to pick those dates again). Same fact, different
+    // promise, so the check states it its own way in ReachabilityRunSummary and suppresses this one.
+    static func concernNotes(for outcome: PrepImporter.Outcome, includeRetryNote: Bool = true) -> [String] {
         var notes: [String] = []
         // #1721: a run that reached the web far more than expected. Said in LOOKUPS and shows, never in
         // dollars: Dan is on a Max plan and a dollar figure there is both meaningless and alarming.
@@ -46,7 +53,7 @@ enum PrepRunSummary {
         //
         // The promise is a real one, not a reassurance: an un-drafted prospect is re-queued by
         // PrepQueueBuilder, so "they'll be retried" states what the app will actually do next.
-        if !outcome.missingKeys.isEmpty {
+        if includeRetryNote, !outcome.missingKeys.isEmpty {
             notes.append(HandoffShortfall.retryNote(count: outcome.missingKeys.count))
         }
         if outcome.saveFailed { notes.append("couldn't save, try again") }

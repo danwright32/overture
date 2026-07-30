@@ -1073,21 +1073,43 @@ struct RootView: View {
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         // #1308 Layer 2: a probe and a real Prep share this one runner and results file, so route by the
-        // probe-run marker first. settleReachabilityProbe returns true only when the finished run was a
+        // probe-run marker first. settleReachabilityProbe returns a report only when the finished run was a
         // probe (marking every probed show, ingesting probe-safely, clearing the marker); a probe that
         // found nothing is a valid "no email found" result, so on finishedEmpty it still settles rather
-        // than nagging. A normal prep run has no marker, so it falls through to the usual handling.
+        // than raising the generic empty-run error. A normal prep run has no marker, so it falls through to
+        // the usual handling.
+        //
+        // #1769: "settles rather than nagging" used to mean it said NOTHING, which was right for a check
+        // that answered its shows and found nobody and wrong for one that came home short. The report now
+        // carries that difference, and stays silent when there is genuinely nothing to say.
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
-            if !PrepQueueService.settleReachabilityProbe(into: context, now: Date()) { ingestPrep() }
+            if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+                reportReachabilityRun(report)
+            } else {
+                ingestPrep()
+            }
         case .finishedEmpty:
-            if !PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+            if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+                reportReachabilityRun(report)
+            } else {
                 errorMessage = DetachedRunOutcome.finishedEmptyMessage(
                     .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
             }
         case .idle:
             break
         }
+    }
+
+    // #1769: a check that came home partial says so. The sentence itself lives in ReachabilityRunSummary,
+    // where a test can read it (#863): assembled here in the view body it would be unreachable by any test,
+    // which is how the shortfall came to be computed and discarded in the first place.
+    //
+    // .warning for the same reason a Prep run's shortfall is: an .info write can be silently overwritten by
+    // a later routine receipt, and this is the one thing about a 21-minute run Dan has to see.
+    private func reportReachabilityRun(_ report: ReachabilityRunReport) {
+        guard let message = report.attentionMessage else { return }
+        status.set(message, priority: .warning)
     }
 
     // #1143: continuously watch for a Prep run to begin (a per-row Re-prep click, an explicit "Prep kept"

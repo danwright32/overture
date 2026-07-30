@@ -50,10 +50,10 @@ struct ReachabilityProbeCompletionTests {
                                                              formUrl: nil, provenance: "act")], draft: nil)
         ]))
 
-        let wasProbe = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
-        #expect(wasProbe == true)
+        #expect(report != nil)
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
         let pb = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == b })).first
         #expect(pa?.reachabilityProbedAt == now)
@@ -100,10 +100,10 @@ struct ReachabilityProbeCompletionTests {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
 
-        let wasProbe = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
-        #expect(wasProbe == true)   // still a probe, and the marker still clears
+        #expect(report != nil)   // still a probe, and the marker still clears
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
         #expect(pa?.reachabilityProbedAt == nil)
     }
@@ -175,11 +175,11 @@ struct ReachabilityProbeCompletionTests {
         let ctx = ModelContext(try container())
         _ = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let wasProbe = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(
             markerURL: d.appendingPathComponent("absent.json"),
             resultsURL: d.appendingPathComponent("results.json"),
             into: ctx, now: Date(), defaults: freshDefaults())
-        #expect(wasProbe == false)
+        #expect(report == nil)
     }
 
     // #1596 Phase 3, the hole the plan named. When Dan has hand-entered a recipient, the importer SKIPS
