@@ -63,7 +63,7 @@ const PROVENANCE = ["act", "performer", "presenter"] as const;
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -180,15 +180,17 @@ function assertPrepContact(
 // version 3: adds "performer" to the provenance vocabulary, #587; version 5: adds an optional
 // alreadyCoveredNote fit-risk flag on the result itself, #611; version 6: adds an optional
 // sourceUrl per contact, #363; version 7: adds an optional emptyReason on the result itself, REQUIRED
-// when contacts is absent, #1722)
+// when contacts is absent, #1722; version 8: adds an optional showSummary plus a showSummaryAbsentReason
+// that is REQUIRED when there is no summary, #1824)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
   const overrideBodyAllowed = version >= 4;
   const emptyReasonAllowed = version >= 7;
+  const showSummaryAllowed = version >= 8;
   const alreadyCoveredNoteAllowed = version >= 5;
   const sourceUrlAllowed = version >= 6;
   results.forEach((item, i) => {
@@ -220,6 +222,23 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
       }
     } else if (o.emptyReason !== undefined) {
       fail(file, `results[${i}].emptyReason must not be present before version 7`);
+    }
+    // #1824: what the run understood the show to BE, read off the listing text the app rendered and handed
+    // over. An entry with no summary must say WHY, or "we could not tell" and "nobody asked" become the
+    // same silence, and the whole point of writing it back is that the rule leaves a checkable trace (L27).
+    if (showSummaryAllowed) {
+      const ABSENT_REASONS = ["no_listing_page", "page_unreadable", "no_description_published"];
+      optionalString(o.showSummary, file, `results[${i}].showSummary`);
+      optionalString(o.showSummaryAbsentReason, file, `results[${i}].showSummaryAbsentReason`);
+      if (o.showSummaryAbsentReason !== undefined && !ABSENT_REASONS.includes(o.showSummaryAbsentReason as string)) {
+        fail(file, `results[${i}].showSummaryAbsentReason must be one of ${ABSENT_REASONS.join(", ")}; got ${String(o.showSummaryAbsentReason)}`);
+      }
+      const hasSummary = typeof o.showSummary === "string" && (o.showSummary as string).trim().length > 0;
+      if (!hasSummary && o.showSummaryAbsentReason === undefined) {
+        fail(file, `results[${i}] has no showSummary, so it must carry a showSummaryAbsentReason saying why`);
+      }
+    } else if (o.showSummary !== undefined || o.showSummaryAbsentReason !== undefined) {
+      fail(file, `results[${i}].showSummary/showSummaryAbsentReason must not be present before version 8`);
     }
     if (version === 1) {
       if (o.contacts !== undefined) fail(file, `results[${i}].contacts must not be present before version 2`);

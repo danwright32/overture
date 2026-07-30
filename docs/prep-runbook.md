@@ -12,11 +12,11 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `7`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `8`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -32,11 +32,18 @@ before this was codified.
   has judged to be the building rather than the act, each as a folded `key` and a readable `name`.
   It decides which organisations you refuse and which you must go and visit; §1's "The queue names
   the houses" is the rule, and it applies to every item in the run.
+  `showListing` (v8, #1824) is what the show's OWN listing page says, rendered by the APP and handed
+  to you as text, because your tools cannot render a JavaScript-drawn page. It carries a `status` of
+  `read` (with the page's `text`, plus `truncated` when the page had to be cut at 4000 characters) or
+  `unreadable`, and is ABSENT when there was no page to look at. See §2's step on grounding a draft in the
+  listing; the three states are three different answers and you say a different thing about each.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `7`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
-  optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), and an
+  (`PrepResults` version `8`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
-  entry has no contacts" in §1. This number had said `5` since v5 while real runs wrote v6;
+  entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
+  `showSummaryAbsentReason` REQUIRED whenever there is no summary, see §2's step on grounding a
+  draft in the listing. This number had said `5` since v5 while real runs wrote v6;
   corrected with the v7 bump in #1722.)
   Each entry in `contacts[]` is one party to email for the performance, carrying a
   `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
@@ -352,7 +359,46 @@ app surfaces to Dan so he can judge it himself.
 ### 2. Draft the email (PLAN.md §7 + the dan-wright-brand-voice skill)
 
 INVOKE the `dan-wright-brand-voice` skill and follow it. Then, as secondary nudges only,
-apply the distilled voice guidance from "Once per run" above (the skill always wins). Anatomy:
+apply the distilled voice guidance from "Once per run" above (the skill always wins).
+
+**Before you draft, read what the show IS (#1824).** Nothing used to tell you. `sourceListingURL`
+was handed over and never mentioned again, and on 2026-07-30 one singer-songwriter's cabaret concert
+was pitched as if the reader were an organisation, with the only nod to the material ("intimate,
+funny") naming nothing. The listing said outright what it was.
+
+You cannot open that page yourself: it is drawn by JavaScript and your tools cannot render it (the
+same run fetched the URL, got an 11KB shell, asked for a browser and was refused). So the app renders
+it for you and hands over the text in the item's `showListing`. Three states, and they are three
+different answers:
+
+- **`status: "read"`.** `text` is that page's readable text. Read it FIRST and let it decide what the
+  show is in your draft: a cabaret concert of one songwriter's new songs, a staged opera, a programme
+  of new work for string quartet, a stand-up bill. Use only what the page actually says, exactly the
+  grounding discipline that applies everywhere else here. If `truncated` is `true`, the page was cut
+  at 4000 characters and what you hold may not be all of it.
+- **`status: "unreadable"`.** The app could not read that page. You do not know what this show is
+  beyond the queue's own fields. Do not go hunting for the page, and do not infer the show from its
+  title: "Don't Be So Hard on Yourself" tells you nothing about what happens on stage.
+- **absent.** There was no listing page to read at all.
+
+**A listing URL is often not this show's own page.** Roughly a third of them point at a season
+calendar or an index (`/opportunities/`, `/show-schedule.html`, `/calendar-events/`). If the text you
+were handed does not describe THIS show on THIS date, that is a page that published no description of
+it, NOT a licence to describe this show from the neighbouring listings. **"No description published"
+is a correct and complete answer**, and a draft that says nothing specific about the material is far
+better than one that says something invented.
+
+**Record what you found**, on this item's result entry, so the answer leaves a trace instead of living
+only in your head:
+
+- `showSummary`: one plain line saying what this show is, in your own words but sourced entirely from
+  the page ("A cabaret concert of new songs by one songwriter, with a cast of five, 75 minutes").
+- When there is no summary to write, LEAVE `showSummary` OUT and set `showSummaryAbsentReason` to
+  exactly one of `no_listing_page` (the item carried no `showListing`), `page_unreadable`
+  (`status: "unreadable"`), or `no_description_published` (the page was read and does not describe
+  this show, the calendar case above included). Never write a summary you could not source.
+
+Anatomy:
 
 - **Relationship register: read `priorRelationship` first (#1215).** The handoff's
   `priorRelationship` is already the confirmation-gated value (`priorRelationshipForDrafting`,
@@ -374,6 +420,16 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   **a returning-client register does not license invented history**. The greeting rule below still
   applies in every register.
 
+- **Describe Dan, never categorize the recipient (#1824).** The 2026-07-30 draft opened "I'm a
+  documentary photographer working with performing arts organizations in New York" to ONE
+  singer-songwriter. That phrase is in neither this runbook nor the skill; it was built out of Dan's
+  own identity line and then applied to the reader, who does not fit it. Nothing about introducing
+  Dan requires a claim about who is reading, so make none: say what HE does ("I photograph performing
+  arts in New York", "I'm a documentary photographer here in New York") and let the next sentence name
+  THIS show. Never open with a category the reader has to fit ("performing arts organizations",
+  "companies like yours", "arts institutions"), and never call a recipient an organisation, a company,
+  an institution, a team or an ensemble unless the work-list or the listing actually says so. A solo
+  artist, a duo, and a producing company all get the same self-introduction.
 - **No greeting in the body (#393).** The drafted `body` MUST start at the first real
   sentence with NO greeting token: write "I photograph performing arts in New York and
   saw..." NOT "Hi Emma, I photograph...". The app owns the greeting and renders it per
@@ -436,9 +492,16 @@ apply the distilled voice guidance from "Once per run" above (the skill always w
   danwrightphotography.com/music, band links danwrightphotography.com/bands, comedy links
   danwrightphotography.com/comedy, dance links danwrightphotography.com/dance, and opera or
   theater links danwrightphotography.com/performing-arts (that gallery is Dan's theater and
-  opera work). For any other discipline, or when none fits, link the main site
-  danwrightphotography.com. This strengthens the same pitch honestly, showing relevant work
+  opera work). This strengthens the same pitch honestly, showing relevant work
   rather than claiming genre experience Dan does not have (see the overclaim rule below).
+  **When `discipline` does not fit any of them (`other`, or a value the listing plainly contradicts),
+  pick the gallery from what the show actually IS (#1824)**, using the `showListing` text above: a
+  cabaret, play or musical links performing-arts, a concert or recital links music, a stand-up or
+  sketch night links comedy, a band bill links bands, a dance programme links dance. Only from what the
+  page says, never from the title or the venue: with no readable listing there is nothing to judge on,
+  and the main site danwrightphotography.com stays the honest answer, as it does for any discipline
+  none of the five galleries fits. (The Alex Syiek draft fell back to the bare site for exactly this
+  reason: nothing had read the page that called it a cabaret concert.)
 - **Don't overclaim genre experience:** Dan has shot far more concert, choral, and
   opera work than dance. When pitching a dance company or another genre he's less
   experienced in, don't describe genre-specific technique as established practice (for

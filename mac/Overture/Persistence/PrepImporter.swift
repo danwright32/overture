@@ -185,6 +185,19 @@ enum PrepImporter {
                 p.alreadyCoveredNote = note
                 p.alreadyCoveredDismissed = false
             }
+            // #1824: what the run understood this show to be, and the two are mutually exclusive on screen,
+            // so whichever one arrives clears the other. A run that sends NEITHER leaves what is already
+            // recorded alone: the runbook is a prompt (L27) and a silent gap is not evidence the page went
+            // unreadable, so a missing field must never wipe a summary a previous run really did read.
+            let summary = r.showSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let summary, !summary.isEmpty {
+                p.showSummary = summary
+                p.showSummaryAbsentReasonRaw = nil
+            } else if let reason = r.showSummaryAbsentReason,
+                      ShowSummaryAbsence(rawValue: reason) != nil {
+                p.showSummary = nil
+                p.showSummaryAbsentReasonRaw = reason
+            }
             // #367: the request is "served" once the run has produced any result for this key,
             // whether applied or skipped above; an item the run never reaches keeps its flags and
             // correctly rides along again in the next queue.

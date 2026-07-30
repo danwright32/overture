@@ -105,6 +105,7 @@ struct ProspectRowView: View {
                 if item.isBooked { bookedSeal } else { fitSeal }
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
+                    showSummaryNote
                     tooFarReasonNote
                     feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
@@ -388,6 +389,23 @@ struct ProspectRowView: View {
             .font(OVType.tag)
             .foregroundStyle(OVColor.inkSoft)
             .padding(.top, 2)
+        }
+    }
+
+    // #1824: what the Prep run found this show actually IS, read off the show's own listing page. It sits
+    // directly under the header because it is a fact about the SHOW (the name, room and date above it say
+    // who and where, and never what), ahead of the fit reason, which is about something else entirely.
+    //
+    // When there is no summary it says why instead, and only when the run gave a reason: every draft
+    // written before this existed has none, and a line on all of those would assert something nobody
+    // measured.
+    @ViewBuilder private var showSummaryNote: some View {
+        if let line = ShowSummaryCopy.line(summary: item.showSummary, absence: item.showSummaryAbsence) {
+            Text(line)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
         }
     }
 

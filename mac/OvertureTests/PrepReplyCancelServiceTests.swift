@@ -47,7 +47,7 @@ struct PrepReplyCancelServiceTests {
 
     // A sentinel left over from a previously cancelled run must be gone before a new run starts, or the
     // new run's heartbeat would read it and stop on its first tick. startPrep clears it as it takes the run.
-    @Test func startPrepClearsAStaleCancelSentinelBeforeLaunching() throws {
+    @Test func startPrepClearsAStaleCancelSentinelBeforeLaunching() async throws {
         let ctx = try prepContext()
         keptProspect(ctx)
         let dir = try tempDir()
@@ -55,14 +55,14 @@ struct PrepReplyCancelServiceTests {
         try Data().write(to: cancel)   // a leftover from a prior cancelled run
         var launched = false
 
-        _ = try PrepQueueService.startPrep(
-            from: ctx, now: Date(),
-            queueURL: dir.appendingPathComponent("queue.json"),
-            markerURL: dir.appendingPathComponent("marker"),
-            voiceFeedbackURL: dir.appendingPathComponent("voice-feedback.json"),
-            recentOpenersURL: dir.appendingPathComponent("recent-openers.json"),
-            cancelURL: cancel,
-            launch: { launched = true })
+        _ = try await PrepQueueService.startPrep(
+                  from: ctx, now: Date(),
+                  queueURL: dir.appendingPathComponent("queue.json"),
+                  markerURL: dir.appendingPathComponent("marker"),
+                  voiceFeedbackURL: dir.appendingPathComponent("voice-feedback.json"),
+                  recentOpenersURL: dir.appendingPathComponent("recent-openers.json"),
+                  cancelURL: cancel,
+                  launch: { launched = true })
 
         #expect(launched == true)
         #expect(!FileManager.default.fileExists(atPath: cancel.path))   // cleared before the run began

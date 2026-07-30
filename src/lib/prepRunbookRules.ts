@@ -73,6 +73,31 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // and opera/theater to the performing-arts gallery), so the recipient lands on relevant work.
   // Dropping this rule sends every prospect the general site again, the exact regression #1405 closed.
   { name: "discipline-matched-portfolio-link", pattern: /Discipline-matched portfolio link \(#1405\)/i },
+  // #1824: the three halves of "read what the show is", and each fails in its own direction.
+  //
+  // Dropping the USE rule returns the drafter to the state that produced the Alex Syiek draft: the app
+  // renders the listing, the text rides in the queue, and nothing tells the run to read it, so a draft
+  // describes a cabaret concert as "intimate, funny material" and names nothing.
+  //
+  // Dropping the HONEST ABSENCE rule is the more expensive direction, because it fails silently and in
+  // Dan's name: with no instruction that "no description published" is a complete answer, a run handed a
+  // season calendar (roughly a third of the store's listing URLs) describes this show out of the
+  // neighbouring listings, and the invention reads exactly like research.
+  //
+  // Dropping the SELF-DESCRIPTION rule is what put "working with performing arts organizations in New
+  // York" in front of one singer-songwriter. The phrase is in neither this runbook nor the skill; it was
+  // built out of Dan's own identity line and applied to a reader who does not fit it.
+  { name: "use-the-listing-handed-over",
+    pattern: /Before\s+you\s+draft,\s+read\s+what\s+the\s+show\s+IS/i },
+  { name: "no-description-is-a-complete-answer",
+    pattern: /"No description published"\s+is a correct and complete answer/i },
+  { name: "never-categorize-the-recipient",
+    pattern: /Describe Dan, never categorize the recipient/i },
+  // #1824: the gallery link when the stored discipline does not fit. The classifier reads only the title
+  // and presenter, so a show whose page calls it a cabaret concert lands on `other` and #1405's mapping
+  // falls through to the bare site. Dropping this rule restores that fallback for every such row.
+  { name: "gallery-from-what-the-show-is",
+    pattern: /pick the gallery from what the show actually IS/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

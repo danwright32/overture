@@ -468,7 +468,14 @@ enum PrepQueueService {
                           recentOpenersURL: URL = RecentOpenersBuilder.defaultURL,
                           cancelURL: URL = defaultCancelURL,
                           onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in },
-                          launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+                          // #1824: how a show's own listing page is loaded, so the run is handed what the
+                          // show IS instead of drafting blind. Injected for tests; the production default
+                          // refuses to run under test, so a test that forgets the seam cannot reach the web.
+                          render: @escaping ShowListingReader.Render = ShowListingReader.liveRender,
+                          onListingProgress: @MainActor (Int, Int) -> Void = { _, _ in },
+                          // Async only so the double-launch test can nest a real second start inside the
+                          // first's launch, which is the check-then-act window #480 exists to close.
+                          launch: @MainActor () async throws -> Void = launchRunner) async throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
         // #1809: every Prep run passes through here, whichever surface started it, so this is the one place
         // that can guarantee no leftover check marker survives to relabel this run and discard its drafts.
@@ -507,7 +514,16 @@ enum PrepQueueService {
         try? FileManager.default.removeItem(at: cancelURL)
 
         do {
-            let data = try PrepQueueBuilder.encode(queue)
+            // #1824: read what each show IS from its own listing page, and hand the text over in the queue.
+            // Inside the lock and before the file is written, deliberately: the run opens the queue the
+            // moment it launches, so a listing read after the launch would arrive too late to be read, and
+            // reading it before the lock would let two presses each pay for the same renders.
+            //
+            // This is the slow part of a launch (a hidden browser per show), which is why it reports
+            // progress to the caller rather than leaving Dan on an indefinite spinner.
+            let listings = await ShowListingReader.readAll(for: queue.items, render: render,
+                                                           onProgress: onListingProgress)
+            let data = try PrepQueueBuilder.encode(PrepQueueBuilder.attaching(listings, to: queue))
             try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: queueURL, options: .atomic)
 
@@ -523,7 +539,7 @@ enum PrepQueueService {
             VoiceNotesProtector.backup(fileURL: VoiceGuidanceGuard.defaultURL,
                                        backupURL: VoiceNotesProtector.defaultBackupURL)
 
-            try launch()
+            try await launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched

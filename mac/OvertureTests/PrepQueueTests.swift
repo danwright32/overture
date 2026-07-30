@@ -135,7 +135,7 @@ struct PrepQueueTests {
         #expect(queue.items[0].reprepMode == nil)
     }
 
-    @Test func startPrepWritesWorkListThenReportsRunnerUnavailable() throws {
+    @Test func startPrepWritesWorkListThenReportsRunnerUnavailable() async throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Kept Choir", status: .queued)
 
@@ -147,10 +147,10 @@ struct PrepQueueTests {
         defer { try? FileManager.default.removeItem(at: marker) }
 
         // Launch throws (runner unavailable) — but the work-list must already be written.
-        #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                           queueURL: tmp, markerURL: marker,
-                                           launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
+        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                                 queueURL: tmp, markerURL: marker,
+                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
         }
         let written = try Data(contentsOf: tmp)
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: written)
@@ -158,13 +158,13 @@ struct PrepQueueTests {
         #expect(decoded.items[0].groupName == "Kept Choir")
     }
 
-    @Test func startPrepThrowsWhenNothingToPrep() throws {
+    @Test func startPrepThrowsWhenNothingToPrep() async throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Not Kept", status: .new)
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
-        #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(), markerURL: marker, launch: {})
+        await #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(), markerURL: marker, launch: {})
         }
     }
 
@@ -210,7 +210,7 @@ struct PrepQueueTests {
         #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)
     }
 
-    @Test func startPrepRefusesWhileARunIsInFlight() throws {
+    @Test func startPrepRefusesWhileARunIsInFlight() async throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Kept Choir", status: .queued)
         let tmpQueue = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
@@ -218,8 +218,8 @@ struct PrepQueueTests {
         defer { try? FileManager.default.removeItem(at: tmpQueue); try? FileManager.default.removeItem(at: marker) }
 
         try Data().write(to: marker) // a run is already in flight
-        #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: tmpQueue, markerURL: marker)
+        await #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: tmpQueue, markerURL: marker)
         }
     }
 
@@ -227,7 +227,7 @@ struct PrepQueueTests {
     // presses can both pass the isRunning guard and both launch. The nested call inside `launch`
     // simulates a second press landing while the first is still mid-flight, exactly the check-then-act
     // window a plain post-launch marker write leaves open.
-    @Test func concurrentStartPrepCallsYieldExactlyOneLaunch() throws {
+    @Test func concurrentStartPrepCallsYieldExactlyOneLaunch() async throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Kept Choir", status: .queued)
         let queueURL = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID().uuidString).json")
@@ -235,20 +235,23 @@ struct PrepQueueTests {
         defer { try? FileManager.default.removeItem(at: queueURL); try? FileManager.default.removeItem(at: markerURL) }
 
         var launches = 0
-        _ = try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL, launch: {
-            launches += 1
-            #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
-                try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
-                                               launch: { launches += 1 })
-            }
-        })
+        _ = try await PrepQueueService.startPrep(
+            from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
+            launch: {
+                launches += 1
+                await #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
+                    try await PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL,
+                                                         markerURL: markerURL,
+                                                         launch: { launches += 1 })
+                }
+            })
 
         #expect(launches == 1)
     }
 
     // #480: mirrors ReplyClassifyService. If launch fails, the atomic lock must be released so a
     // retry is not permanently blocked.
-    @Test func aFailedLaunchReleasesTheLock() throws {
+    @Test func aFailedLaunchReleasesTheLock() async throws {
         struct LaunchFailed: Error {}
         let ctx = ModelContext(try container())
         insert(ctx, group: "Kept Choir", status: .queued)
@@ -256,9 +259,9 @@ struct PrepQueueTests {
         let markerURL = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: queueURL); try? FileManager.default.removeItem(at: markerURL) }
 
-        #expect(throws: LaunchFailed.self) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
-                                           launch: { throw LaunchFailed() })
+        await #expect(throws: LaunchFailed.self) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(), queueURL: queueURL, markerURL: markerURL,
+                                                 launch: { throw LaunchFailed() })
         }
         #expect(FileManager.default.fileExists(atPath: markerURL.path) == false)   // lock released
     }
@@ -322,7 +325,7 @@ struct PrepQueueTests {
     // startPrep honours the subset end to end: the work-list it writes carries only the selected row,
     // even though a second eligible prospect exists. (The launch throws so this stays offline, but the
     // file is written before launch, so the subset is observable.)
-    @Test func startPrepWritesOnlyTheSelectedSubset() throws {
+    @Test func startPrepWritesOnlyTheSelectedSubset() async throws {
         let ctx = ModelContext(try container())
         let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
         insert(ctx, group: "Far Show", status: .queued, performanceDate: "2026-12-01")
@@ -332,11 +335,11 @@ struct PrepQueueTests {
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tmp); try? FileManager.default.removeItem(at: marker) }
 
-        #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                           includedKeys: [near.naturalKey],
-                                           queueURL: tmp, markerURL: marker,
-                                           launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
+        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                                 includedKeys: [near.naturalKey],
+                                                 queueURL: tmp, markerURL: marker,
+                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
         }
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: Data(contentsOf: tmp))
         #expect(decoded.items.map(\.groupName) == ["Near Show"])
@@ -344,15 +347,15 @@ struct PrepQueueTests {
 
     // The edge case Dan can reach from the sheet: uncheck the last near show and select nothing. A run
     // with an empty selection has nothing to prep, so it refuses rather than launching an empty run.
-    @Test func startPrepWithAnEmptySelectionReportsNothingToPrep() throws {
+    @Test func startPrepWithAnEmptySelectionReportsNothingToPrep() async throws {
         let ctx = ModelContext(try container())
         insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
 
-        #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
-            try PrepQueueService.startPrep(from: ctx, now: Date(), includedKeys: [],
-                                           markerURL: marker, launch: {})
+        await #expect(throws: PrepQueueService.PrepLaunchError.nothingToPrep) {
+            try await PrepQueueService.startPrep(from: ctx, now: Date(), includedKeys: [],
+                                                 markerURL: marker, launch: {})
         }
     }
 

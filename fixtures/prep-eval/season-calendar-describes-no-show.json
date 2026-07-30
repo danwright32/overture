@@ -1,0 +1,59 @@
+{
+  "name": "season-calendar-describes-no-show",
+  "rule": "A listing URL often points at a season calendar rather than this show's own page. The page was read, so the run has text in hand, and it still publishes no description OF THIS SHOW: that is an honest absence, never a description assembled from the neighbouring listings (#1824).",
+  "input": {
+    "naturalKey": "harbour-winds|2026-04-02|the-example-room",
+    "groupName": "Harbour Winds",
+    "venue": "The Example Room",
+    "performanceDate": "2026-04-02",
+    "discipline": "music",
+    "production": "self",
+    "priorRelationship": "none",
+    "sourceListingURL": "https://harbourwinds.example/calendar-events/",
+    "showListing": {
+      "status": "read",
+      "url": "https://harbourwinds.example/calendar-events/",
+      "text": "Harbour Winds Home About Musicians Calendar Support Contact Calendar of Events March 14, 2026 7:30 PM Bach and the Baroque Chamber Series St Anne's Hall Tickets March 28, 2026 3:00 PM Family Concert: Carnival of the Animals Example Community Center Tickets April 2, 2026 7:00 PM Spring Program The Example Room Tickets April 25, 2026 7:30 PM Winds and Strings, a collaboration with the Example String Quartet St Anne's Hall Tickets May 9, 2026 7:30 PM Season Finale The Example Room Tickets Join our mailing list Support our work Harbour Winds is a registered nonprofit. Contact us at info@harbourwinds.example."
+    }
+  },
+  "sources": [
+    {
+      "label": "Harbour Winds own site",
+      "url": "https://harbourwinds.example/contact",
+      "content": "Harbour Winds. Ensemble manager Iris Calder, iris@harbourwinds.example."
+    }
+  ],
+  "expected": {
+    "description": "The page names this April 2 date and nothing about the programme, so there is no description to summarise. Say so with `no_description_published` and draft without one, rather than describing this show out of the Bach programme two weeks earlier.",
+    "expectedShowSummaryAbsentReason": "no_description_published",
+    "requireSomeContact": true,
+    "expectedGalleryLink": "danwrightphotography.com/music",
+    "forbiddenBodyTerms": ["Bach", "Baroque", "Carnival"]
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-07-30T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "harbour-winds|2026-04-02|the-example-room",
+        "showSummaryAbsentReason": "no_description_published",
+        "contacts": [
+          {
+            "name": "Iris Calder",
+            "role": "Ensemble Manager",
+            "email": "iris@harbourwinds.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "act",
+            "sourceUrl": "https://harbourwinds.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Harbour Winds at The Example Room.",
+          "body": "I photograph performing arts in New York and saw Harbour Winds is playing The Example Room on April 2. I shoot unobtrusive, no-flash documentary coverage from the back of the house, and I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Happy to answer any questions.",
+          "variant": "direct-intent"
+        }
+      }
+    ]
+  }
+}

@@ -161,7 +161,7 @@ struct VoiceFeedbackTests {
         #expect(decoded.pairs.first?.naturalKey == "k1")
     }
 
-    @Test func startPrepWritesVoiceFeedbackAlongsideTheQueue() throws {
+    @Test func startPrepWritesVoiceFeedbackAlongsideTheQueue() async throws {
         let ctx = ModelContext(try container())
         // One kept-undrafted prospect so the queue is non-empty (otherwise startPrep throws).
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
@@ -183,9 +183,9 @@ struct VoiceFeedbackTests {
         let feedbackURL = FileManager.default.temporaryDirectory.appendingPathComponent("vf-\(UUID().uuidString).json")
         defer { [queueURL, marker, feedbackURL].forEach { try? FileManager.default.removeItem(at: $0) } }
 
-        try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                       queueURL: queueURL, markerURL: marker,
-                                       voiceFeedbackURL: feedbackURL, launch: {})
+        try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                             queueURL: queueURL, markerURL: marker,
+                                             voiceFeedbackURL: feedbackURL, launch: {})
 
         let decoded = try JSONDecoder().decode(VoiceFeedback.self, from: Data(contentsOf: feedbackURL))
         #expect(decoded.pairs.map(\.naturalKey) == ["edited-sent"])

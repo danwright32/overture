@@ -22,6 +22,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "carnegie-citywide-press-example",
       "discipline-matched-portfolio-link",
       "empty-answer-carries-a-reason",
+      "gallery-from-what-the-show-is",
       "grouped-answer-emits-every-key",
       "grouped-answer-never-self-invented",
       "high-confidence-only-when-read",
@@ -29,7 +30,9 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "house-name-matches-a-longer-name",
       "named-organisation-must-be-visited",
       "named-performer-never-dropped",
+      "never-categorize-the-recipient",
       "never-host-venue-target",
+      "no-description-is-a-complete-answer",
       "no-pattern-guessed-high",
       "partial-performer-results-ok",
       "passed-opening-not-named",
@@ -37,6 +40,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "press-media-disqualified",
       "pursue-each-named-performer",
       "returning-client-register",
+      "use-the-listing-handed-over",
       "venue-address-disqualified",
     ]);
   });

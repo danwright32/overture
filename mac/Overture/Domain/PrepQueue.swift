@@ -68,10 +68,49 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // A run that ignores this field leaves those shows unanswered and they are simply offered again,
     // which is why it fails safe.
     var alsoAnswersFor: [String]? = nil
+    // v8 (#1824): what this show's OWN listing page says, read by the app and handed over as text.
+    //
+    // Nothing ever told the run what a show IS. On 2026-07-30 a solo singer-songwriter's cabaret concert
+    // was pitched as if the recipient were a performing arts organisation, with the only nod to the
+    // material ("intimate, funny") naming nothing, because `sourceListingURL` was passed and then never
+    // mentioned again in the runbook. The listing said it outright.
+    //
+    // The run cannot read that page itself. Its tool scope denies every browser tool, and the page is
+    // drawn client-side: the run fetched the URL, got an 11KB shell, asked to render it, was refused, and
+    // drafted anyway. So the app renders it (`ShowListingReader`) and hands over the text.
+    //
+    // Absent means the app never looked (no listing URL, or a file written before this field existed),
+    // which is a different answer from `unreadable` (it looked and could not read the page) and from
+    // `read` with text that turns out to be a calendar rather than this show's own page. The runbook is
+    // told all three, because the honest sentence differs for each.
+    var showListing: ShowListing? = nil
+}
+
+// What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
+//
+// Deliberately just the page's readable TEXT, not an app-side attempt to pick "the description" out of
+// it. Roughly a third of the store's listing URLs point at a calendar or a season index rather than one
+// show's own page, and no heuristic here can tell the difference reliably; the run has the show's name,
+// date and venue in front of it and can. So the app answers the one question it CAN answer (could this
+// page be read at all) and leaves the judgment to the reader that has the context.
+struct ShowListing: Codable, Equatable, Sendable {
+    // "read" (text present) or "unreadable" (the page did not load, or carried nothing to read). Two raw
+    // strings rather than an enum, matching every other wire vocabulary in this file (`production`,
+    // `reprepMode`, `experimentArmInstruction`).
+    var status: String
+    var url: String
+    var text: String? = nil
+    // Set only when the page was longer than `ShowListingReader.textLimit` and had to be cut, so a
+    // description that fell past the cut is never reported as a page that published none (L11: a message
+    // may claim only what its check actually measured). Absent means the whole page is here.
+    var truncated: Bool? = nil
+
+    static let read = "read"
+    static let unreadable = "unreadable"
 }
 
 enum PrepQueueBuilder {
-    static let version = 7
+    static let version = 8
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
@@ -220,6 +259,20 @@ enum PrepQueueBuilder {
     static func build(from prospects: [PrepQueueItem], generatedAt: String,
                       houses: [ProducerGate.House]) -> PrepQueue {
         PrepQueue(version: version, generatedAt: generatedAt, items: prospects, houses: houses)
+    }
+
+    // #1824: put each show's own listing text onto its item, matched by `naturalKey` (the opaque token,
+    // never rebuilt). An item with no answer keeps none, which is the "there was no page to read" state and
+    // is deliberately different from an `unreadable` one. Pure, and held out of the service, so the join
+    // itself is directly testable rather than only observable through a written file.
+    static func attaching(_ listings: [String: ShowListing], to queue: PrepQueue) -> PrepQueue {
+        var out = queue
+        out.items = queue.items.map { item in
+            var copy = item
+            copy.showListing = listings[item.naturalKey]
+            return copy
+        }
+        return out
     }
 
     static func encode(_ queue: PrepQueue) throws -> Data {

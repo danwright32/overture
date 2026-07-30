@@ -1108,7 +1108,10 @@ struct QueueView: View {
     private func requestReprep(_ item: QueueItem, _ mode: ReprepMode) {
         guardSelfBooking(item, title: SelfBookingCopy.prepConfirmTitle,
                          proceedLabel: SelfBookingCopy.prepConfirmProceed) {
-            ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context, feedback: feedback)
+            Task { @MainActor in
+                await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                                               feedback: feedback)
+            }
         }
     }
 

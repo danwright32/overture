@@ -218,6 +218,25 @@ Additive; `v1.json` through `v6.json` stay byte-identical and still decode with 
 EMPTY differ and the runbook is told so: absent means a file written before this phase, empty means
 the app looked and named nothing.
 
+Queue version 8 (#1824) adds an optional `showListing` to each item: what the show's OWN listing page says,
+rendered by the APP and handed over as text. It exists because the Prep run cannot read that page itself.
+On 2026-07-30 the run fetched `sourceListingURL`, got an 11KB JavaScript shell with no description in it,
+asked for a browser render, and was DENIED by its own tool scope (`PREP_ALLOWED_TOOLS` in
+`mac/scripts/lib/claude-run-scope.sh`), then drafted a solo singer-songwriter's cabaret concert as if the
+reader were a performing arts organisation. Dan's call was to render it app-side (`ShowListingReader`, reusing
+#806's `RenderedPage`) rather than widen an unsupervised run's tools, since that scope exists because #1026
+found a detached run auto-approving everything.
+
+Three states, and the runbook is told all three because the honest sentence differs for each: `read` (with
+the page's bounded readable `text`, plus `truncated` when it had to be cut), `unreadable` (the page did not
+load or carried nothing), and ABSENT (there was no page to look at, or a file written before this field).
+The app deliberately hands over the page's TEXT rather than trying to pick "the description" out of it:
+roughly a third of the store's listing URLs point at a season calendar or an index rather than one show's
+own page, and the run, which holds the show's name, date and venue, is the only side that can tell. Read by
+`docs/prep-runbook.md` §2, which also requires the run to write back what it concluded. A reachability check
+never carries one: it finds contacts and never drafts, so a render there would buy nothing. Additive, so
+`v1.json` through `v7.json` stay byte-identical and still decode with it absent.
+
 Version 2 (#392) replaces the single `contact` object with a `contacts[]` array, one entry per party
 the run found for the performance: the act plus at most one real presenting org, each labelled with a
 `provenance` (`act` / `presenter`), and NEVER the host venue. `PrepImporter` ingests them as the
@@ -259,6 +278,22 @@ Distinct from the existing `formUrl`, which stays the `form_or_dm` contact's own
 submission link; the two fields never carry the same meaning. Purely additive; the reader's
 tolerant gate (1 through 6) still accepts `v1.json`/`v2.json`/`v3.json`/`v4.json`/`v5.json`
 unchanged, `v6.json` is the source-URL spec.
+
+Version 8 (#1824) adds an optional `showSummary` on the result itself, one plain line saying what the show
+IS, sourced entirely from the listing text the app handed over in the queue (version 8 above), plus a
+`showSummaryAbsentReason` that is REQUIRED whenever there is no summary: `no_listing_page` (the item carried
+no `showListing`), `page_unreadable` (the app could not read it), or `no_description_published` (it was read
+and does not describe this show, which includes the common case of a listing URL pointing at a season
+calendar). Three reasons rather than one silence, because they are three different facts and only the last
+is a statement about the show (L11).
+
+Two things it is for. It makes the "read the listing first" rule leave a CHECKABLE TRACE instead of living
+only inside the prompt (L27), and it gives Dan a line on the review card saying what the draft beside it was
+grounded in, or honestly that it was grounded in nothing (`Prospect.showSummary` ->
+`ProspectRowView.showSummaryNote`). A run that sends neither field leaves whatever is already recorded alone:
+the runbook is a prompt, and a silent gap is not evidence a page became unreadable. Purely additive; the
+reader's tolerant gate (1 through 8) still accepts `v1.json` through `v7.json` unchanged, `v8.json` is the
+show-summary spec.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

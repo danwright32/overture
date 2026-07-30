@@ -9,6 +9,13 @@ enum RunTimeouts {
     // as dead. Matches the marker-stale guard that frees the run.
     static let prep: TimeInterval = 3 * 60
 
+    // Reading show pages (#1824): the app's own render of each kept show's listing page, in process, before
+    // the Prep run launches. Sized from the work rather than guessed: one page is at most a 25s WebKit load
+    // plus its 2.5s settle (RenderedPage), four render at once (ShowListingReader.concurrency), so a batch
+    // of twenty dead pages is about 140s of legitimate waiting. Three minutes leaves headroom for a bigger
+    // launch without letting a genuinely wedged read sit there looking healthy.
+    static let showListingRead: TimeInterval = 3 * 60
+
     // Reply classify / drafter handoff: the heaviest detached run (reads a thread, classifies, drafts),
     // so it gets the longest leash before the marker is considered stale.
     static let replyClassify: TimeInterval = 10 * 60

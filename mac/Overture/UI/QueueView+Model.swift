@@ -121,6 +121,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // dismissible without changing fitScore/tier or the whole prospect's status.
     var alreadyCoveredNote: String? = nil
     var alreadyCoveredDismissed: Bool = false
+    // #1824: what the Prep run found this show to BE, read off its own listing page, or the honest reason
+    // there is nothing to say. Drawn under the header by ProspectRowView.showSummaryNote.
+    var showSummary: String? = nil
+    var showSummaryAbsence: ShowSummaryAbsence? = nil
     // #753: Prep matched this show's PERFORMER (not its org) to a past client and warmed the lead.
     // Unlike alreadyCovered, this one ALREADY changed fitScore/tier, so the row has to be able to
     // both explain it and take it back. Unreviewed means the warm drafting tone is still held back
@@ -1751,6 +1755,8 @@ extension QueueItem {
             bookingSuggested: p.bookingSuggested,
             alreadyCoveredNote: p.alreadyCoveredNote,
             alreadyCoveredDismissed: p.alreadyCoveredDismissed,
+            showSummary: p.showSummary,
+            showSummaryAbsence: p.showSummaryAbsence,
             orgDoNotContact: p.orgDoNotContact,
             relationshipCorrectedByPerformerMatch: p.relationshipCorrectedByPerformerMatch,
             performerMatchNote: p.performerMatchNote,

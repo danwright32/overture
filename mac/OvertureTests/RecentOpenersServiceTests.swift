@@ -43,7 +43,7 @@ struct RecentOpenersServiceTests {
         #expect(decoded.openers.first?.opener == "I photograph performing arts in New York.")
     }
 
-    @Test func startPrepWritesRecentOpenersAlongsideTheQueue() throws {
+    @Test func startPrepWritesRecentOpenersAlongsideTheQueue() async throws {
         let ctx = ModelContext(try container())
         // One kept-undrafted prospect so the queue is non-empty (otherwise startPrep throws).
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
@@ -64,16 +64,16 @@ struct RecentOpenersServiceTests {
         let openersURL = FileManager.default.temporaryDirectory.appendingPathComponent("ro-\(UUID().uuidString).json")
         defer { [queueURL, marker, feedbackURL, openersURL].forEach { try? FileManager.default.removeItem(at: $0) } }
 
-        try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                       queueURL: queueURL, markerURL: marker,
-                                       voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
-                                       launch: {})
+        try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                             queueURL: queueURL, markerURL: marker,
+                                             voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
+                                             launch: {})
 
         let decoded = try JSONDecoder().decode(RecentOpeners.self, from: Data(contentsOf: openersURL))
         #expect(decoded.openers.map(\.opener) == ["A distinctive opener sentence."])
     }
 
-    @Test func startPrepStillProceedsWhenTheRecentOpenersWriteFails() throws {
+    @Test func startPrepStillProceedsWhenTheRecentOpenersWriteFails() async throws {
         // The export is best-effort (try?): a failure to write the anti-repetition file must never block
         // the Prep run itself. Force the write to fail by pointing it under a path whose parent is a
         // FILE, so createDirectory throws, and prove the queue is still written and the launch happens.
@@ -99,10 +99,10 @@ struct RecentOpenersServiceTests {
         defer { [queueURL, marker, feedbackURL, blocker].forEach { try? FileManager.default.removeItem(at: $0) } }
 
         var launched = false
-        let count = try PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
-                                                   queueURL: queueURL, markerURL: marker,
-                                                   voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
-                                                   launch: { launched = true })
+        let count = try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
+                                                         queueURL: queueURL, markerURL: marker,
+                                                         voiceFeedbackURL: feedbackURL, recentOpenersURL: openersURL,
+                                                         launch: { launched = true })
 
         #expect(count == 1)                                              // the run went ahead
         #expect(launched)                                               // and launched

@@ -44,6 +44,21 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `returning-client-booked`: a booked returning client opens warm, with no cold self-introduction and no portfolio/gallery scaffolding (#1215).
 - `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).
 - `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
+- `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, links the gallery that fits it even though the stored discipline is `other`, and describes Dan without categorizing the recipient (#1824).
+- `season-calendar-describes-no-show`: the same listing text, read, that describes no show at all. The honest answer is `no_description_published`, never a description assembled from the neighbouring listings (#1824).
+
+### Where the #1824 pair's shape comes from (L48)
+
+Both carry a `showListing` inside their `input`, which is what the app now hands the run. Their page text is
+shaped from a MEASURED page, not invented to make the rule fire: the Green Room 42 listing behind the
+2026-07-30 draft (`thegreenroom42.venuetix.com/showdetails/...`), rendered on 2026-07-30, carries 1,994
+characters of visible text in total, in this order: nav bar, artist name, show title, an "About the Show"
+paragraph naming the form outright ("a cabaret concert of new songs written by..."), a Featuring list of
+five, Genre and Duration and Age Restriction, a street address, similar and related shows, and a footer
+carrying the room's two addresses. A plain download of the same URL returns an 11KB shell containing zero
+occurrences of "cabaret". The fixture reproduces that structure with invented names and `.example` domains,
+per the no-real-PII rule above; the calendar fixture reproduces the OTHER shape a `sourceListingURL` reaches
+(a season index), which about a third of the store's listing URLs point at.
 
 ## What this harness CANNOT test, and why no fixture should pretend otherwise (#1723)
 

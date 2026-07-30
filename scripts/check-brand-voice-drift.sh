@@ -44,6 +44,11 @@ BRAND_VOICE_ANCHORS=(
   "danwrightphotography.com/comedy"
   "danwrightphotography.com/dance"
   "danwrightphotography.com/performing-arts"
+  # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
+  # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
+  # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble
+  # one from Dan's identity line again.
+  "never categorize the recipient"
 )
 
 # #1227: phrases Dan has SUPERSEDED. Unlike an anchor (a fact that must appear on both sides), a rejected
