@@ -113,9 +113,14 @@ struct VenueDisplayTests {
 
     // #1030 follow-up: the runbook explicitly allows `location` to be a full street address (it must
     // be reported verbatim), which would reintroduce the exact "shows a raw address" problem Dan asked
-    // to eliminate, just moved to the second line. These are real, live `location` values. None may be
-    // used as the fallback; the card should show nothing rather than guess at a city from an address.
-    @Test func aStreetAddressLocationIsNeverUsedAsTheFallback() {
+    // to eliminate, just moved to the second line. These are real, live `location` values.
+    //
+    // #1762 SPLIT THIS TEST, because it had come to assert two different things under one name. The
+    // promise Dan cares about is that no street address reaches the card, and that promise is unchanged
+    // and asserted below. What it ALSO asserted, that an address yields nothing at all, cost 131 cards a
+    // city line that was sitting in the stored value. An address whose city and state can be read now
+    // yields exactly that city and state, which CityFromAddressTests owns.
+    @Test func aStreetAddressIsNeverShownRawOnTheCard() {
         for raw in [
             "123 E 24th St, New York, NY 10010",
             "157 Montague St, Brooklyn, New York",
@@ -123,8 +128,21 @@ struct VenueDisplayTests {
             "466 Grand Street (at Pitt Street), New York, NY 10002",
             "789 Tenth Avenue, 2nd Floor, NYC, b/t W. 52nd & 53rd Sts.",
         ] {
-            let v = VenueDisplay.resolve("Some Unlisted Hall", location: raw)
-            #expect(v.location == nil, "\(raw) is address-shaped and must not be shown")
+            let shown = VenueDisplay.resolve("Some Unlisted Hall", location: raw).location
+            #expect(shown != raw, "\(raw) must never be shown verbatim")
+            let hasDigit = (shown ?? "").contains { $0.isNumber }
+            #expect(!hasDigit, "\(raw) must not put a street number or ZIP on the card")
+        }
+    }
+
+    // The two among those that name no state at all. Nothing can be established from them, so the card
+    // still says nothing rather than treating a trailing clause as a city.
+    @Test func anAddressNamingNoStateStillShowsNothing() {
+        for raw in [
+            "44 East 32nd Street, New York City",
+            "789 Tenth Avenue, 2nd Floor, NYC, b/t W. 52nd & 53rd Sts.",
+        ] {
+            #expect(VenueDisplay.resolve("Some Unlisted Hall", location: raw).location == nil)
         }
     }
 
