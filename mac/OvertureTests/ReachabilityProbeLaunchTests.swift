@@ -122,7 +122,10 @@ struct ReachabilityProbeLaunchTests {
             PrepResult(naturalKey: a, contacts: [], draft: nil)
         ])).write(to: resultsURL)
 
-        PrepQueueService.markProbed(keys: [a, b], answeredIn: resultsURL, in: ctx, now: now)
+        var stampSaveFailed = false
+        PrepQueueService.markProbed(keys: [a, b], answeredIn: resultsURL, in: ctx, now: now,
+                                    saveFailed: &stampSaveFailed)
+        #expect(!stampSaveFailed)
 
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
         let pb = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == b })).first

@@ -211,9 +211,16 @@ enum PrepQueueService {
     // Returns the keys it actually stamped, so the organisation ledger (#1598) records an answer for
     // exactly the shows this run answered and there is ONE definition of "answered" rather than two that
     // can drift.
+    // #1677: `saveFailed` is an OUT parameter rather than a changed return type because the answered-key
+    // set is what every caller is really asking for. The save used to be `try? context.save()`, discarding
+    // the error outright: on the normal path the ingest that follows saves again so the window is narrow,
+    // but on a re-settle `consumeIfNew` skips the ingest entirely and this is the ONLY writer that runs. A
+    // failed save there leaves the shows unstamped, the marker cleared, and a Check button offering to pay
+    // again for lookups that already happened.
     @discardableResult
     static func markProbed(keys: Set<String>, answeredIn resultsURL: URL,
-                           in context: ModelContext, now: Date) -> Set<String> {
+                           in context: ModelContext, now: Date,
+                           saveFailed: inout Bool) -> Set<String> {
         let answered = PrepImporter.answeredKeys(at: resultsURL)
         let toStamp = keys.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -225,7 +232,15 @@ enum PrepQueueService {
             // landed. A run that found nothing never reaches the ingest, so this value is the answer.
             p.reachabilityResult = .noEmailFound
         }
-        try? context.save()
+        saveFailed = false
+        do {
+            try context.save()
+        } catch {
+            saveFailed = true
+            // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
+            NSLog("could not stamp %d probed shows: %@", toStamp.count, error.localizedDescription)
+            // copy-inventory:ignore-end
+        }
         // The diagnostic copy of the shortfall, naming both counts for whoever is reading the log.
         //
         // #1769: this used to be the ONLY place a partial check was reported, described as failing loud.
@@ -267,7 +282,9 @@ enum PrepQueueService {
                                         into context: ModelContext, now: Date,
                                         defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
-        let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now)
+        var stampSaveFailed = false
+        let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now,
+                                  saveFailed: &stampSaveFailed)
         // #1769: the ingest Outcome used to be discarded whole, so a failed save or a runaway web-call
         // count was invisible on a check as well as the shortfall. Kept, and folded into the report below.
         //
@@ -283,7 +300,9 @@ enum PrepQueueService {
         // sibling show never has to be paid for again. Deliberately last: only now have the venue and
         // press guards run, so a real contact can be told from a front desk, and only the shows the run
         // genuinely answered are in hand.
-        OrgAnswerRecording.record(answeredKeys: answered, in: context, now: now)
+        // #1676: its outcome is KEPT. A failed ledger save is money already spent that Overture will spend
+        // again, and it used to report only to an NSLog nothing surfaces.
+        let ledger = OrgAnswerRecording.record(answeredKeys: answered, in: context, now: now)
         // #1648 Phase E: the ONE place a fresh answer moves the stored score, and it is here for exactly
         // the reason the two calls above are. markProbed writes a .noEmailFound FLOOR and saves before
         // the importer upgrades it, so hooking "wherever the result is written" would commit a demotion
@@ -296,9 +315,80 @@ enum PrepQueueService {
         let answeredShows = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         _ = ContactScoreAdjustment.settleAll(answeredShows.filter { answered.contains($0.naturalKey) },
                                              now: now)
-        ReachabilityProbeMarker.clear(at: markerURL)
+        // #1677, Dan's call (2026-07-30): a run whose record did not save is NOT finished, so its marker
+        // stays and it settles again rather than closing out as though the stamps had landed. Clearing here
+        // is what would make the loss permanent and hand Dan a Check button offering to pay again.
+        //
+        // Bounded, his second call: the retry is idempotent (same keys, same results file), but a store that
+        // will never accept a write would otherwise re-announce on every launch forever. After
+        // maxSettleAttempts the marker is released and the report says it stopped trying, so the run closes
+        // out having told him plainly rather than nagging indefinitely.
+        var gaveUp = false
+        if stampSaveFailed {
+            let attempts = (marker.settleAttempts ?? 0) + 1
+            if attempts >= ReachabilityProbeMarker.maxSettleAttempts {
+                gaveUp = true
+                ReachabilityProbeMarker.clear(at: markerURL)
+            } else {
+                var next = marker
+                next.settleAttempts = attempts
+                // If even THIS write fails the marker keeps its old count, so the worst case is a few extra
+                // attempts, never a lost run.
+                try? ReachabilityProbeMarker.write(next, to: markerURL)
+            }
+        } else {
+            ReachabilityProbeMarker.clear(at: markerURL)
+        }
         return ReachabilityRunReport(requested: marker.keys.count, answered: answered.count,
-                                     outcome: outcome)
+                                     outcome: outcome, stampSaveFailed: stampSaveFailed,
+                                     ledgerSaveFailed: ledger.saveFailed, stampSaveGaveUp: gaveUp)
+    }
+
+    // #1809: settle a check that finished while Overture was CLOSED.
+    //
+    // `settleReachabilityProbe` is only reachable from the run watcher, which runs only while a run is
+    // live. The runner is detached and removes its own run marker on exit, so a check that finished with
+    // the app shut is never settled, now or ever: its paid answers never land, and the marker it leaves
+    // behind then makes the next Prep run read as a check and discard every draft it wrote.
+    //
+    // Returns nil when there is nothing left over, which is the normal case and must stay cheap.
+    @discardableResult
+    static func settleOrphanedProbe(markerURL: URL = defaultProbeRunURL,
+                                    resultsURL: URL = PrepImporter.defaultURL,
+                                    queueURL: URL = PrepQueueBuilder.defaultURL,
+                                    downbeatURL: URL = DownbeatBridge.defaultURL,
+                                    historyURL: URL = LocalHistory.importedURL,
+                                    into context: ModelContext, now: Date,
+                                    defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
+        guard ((try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil) != nil else { return nil }
+        return settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL, queueURL: queueURL,
+                                       downbeatURL: downbeatURL, historyURL: historyURL,
+                                       into: context, now: now, defaults: defaults)
+    }
+
+    // #1809: a Prep run is definitively NOT a check, so no check marker may survive into its completion,
+    // where it would make this run ingest probe-safely and silently drop every draft it produced.
+    //
+    // Settles any orphan FIRST and only then releases the marker: dropping it blind would discard answers
+    // Dan already paid for. The report goes to `onOrphanSettled` so a caller with somewhere to show it can,
+    // rather than the settle being silent, which is the whole thing this milestone is about.
+    //
+    // Lives HERE, in the service, and is called from startPrep rather than from the view. Put in
+    // RootView.startPrep it covered only two of the three ways a Prep run begins: a per-row Re-prep goes
+    // straight to the service from ProspectMutations with no RootView call at all, so that path would have
+    // kept the exact bug this issue is about.
+    @discardableResult
+    static func settleAnyCheckBefore(prepRunIn context: ModelContext, now: Date,
+                                     probeRunURL: URL = defaultProbeRunURL,
+                                     onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in })
+        -> ReachabilityRunReport? {
+        let report = settleOrphanedProbe(markerURL: probeRunURL, into: context, now: now)
+        if let report { onOrphanSettled(report) }
+        // Belt and braces: a settle that kept the marker (its save failed, #1677) must still not leave a
+        // check marker standing in front of a Prep run. The answers are retried on the settle's own terms;
+        // what must not survive is the marker's power to relabel THIS run.
+        ReachabilityProbeMarker.clear(at: probeRunURL)
+        return report
     }
 
     enum PrepLaunchError: LocalizedError {
@@ -377,8 +467,14 @@ enum PrepQueueService {
                           voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
                           recentOpenersURL: URL = RecentOpenersBuilder.defaultURL,
                           cancelURL: URL = defaultCancelURL,
+                          onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in },
                           launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
+        // #1809: every Prep run passes through here, whichever surface started it, so this is the one place
+        // that can guarantee no leftover check marker survives to relabel this run and discard its drafts.
+        // A per-row Re-prep reaches the service directly with no RootView call, so doing this in the view
+        // covered only two of the three ways a Prep run can begin.
+        settleAnyCheckBefore(prepRunIn: context, now: now, onOrphanSettled: onOrphanSettled)
 
         let stamp = ISO8601DateFormatter().string(from: now)
         // #5 Phase 1: stamp an A/B arm onto each eligible prospect under the active experiment (sticky,

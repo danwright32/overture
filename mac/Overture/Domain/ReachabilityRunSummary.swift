@@ -26,9 +26,20 @@ enum ReachabilityRunSummary {
     // Nothing to report reads as nothing at all, never an empty "Reachability:". This slot is "does
     // something need me", and an alert that fires on an ordinary run is one Dan learns to scroll past (L36).
     static func attentionMessage(requested: Int, answered: Int,
-                                 outcome: PrepImporter.Outcome?) -> String? {
+                                 outcome: PrepImporter.Outcome?,
+                                 stampSaveFailed: Bool = false,
+                                 ledgerSaveFailed: Bool = false,
+                                 stampSaveGaveUp: Bool = false) -> String? {
         var notes: [String] = []
         if let note = shortfallNote(requested: requested, answered: answered) { notes.append(note) }
+        // #1677 and #1676: the answers came back and the RECORD of them did not save. Said before the
+        // shortfall's siblings because it is the only note here about work Dan has already paid for that
+        // he is about to pay for again.
+        //
+        // Both say what it costs him, not what failed inside. "couldn't save" matches the wording Prep
+        // already uses for the same class of failure, so the two runs do not describe one problem two ways.
+        if stampSaveFailed { notes.append(stampSaveGaveUp ? stampSaveGaveUpNote : stampSaveFailedNote) }
+        if ledgerSaveFailed { notes.append(ledgerSaveFailedNote) }
         // The rest of what the run has to say about itself. Prep's own sentences, reused rather than
         // reworded, because a check shares the runner, the results file and the Outcome with it: a second
         // set of near-identical notes here is how the two would drift. The one it opts out of is the
@@ -37,6 +48,22 @@ enum ReachabilityRunSummary {
         guard !notes.isEmpty else { return nil }
         return "Reachability: " + notes.joined(separator: " · ")
     }
+
+    // #1677: the stamp did not commit, so nothing records that these lookups happened. Names the
+    // consequence (it will be offered again) rather than the mechanism, and says the run is not finished,
+    // because it genuinely is not: the marker is held and the settle retries.
+    static let stampSaveFailedNote =
+        "couldn't save what this check found, so it isn't finished and those shows may be checked again"
+
+    // The same failure, after the last allowed attempt. It must NOT keep saying "isn't finished", because
+    // by now Overture has stopped trying and nothing further will happen on its own.
+    static let stampSaveGaveUpNote =
+        "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
+
+    // #1676: the ledger is what lets another show by the same producer reuse this answer instead of buying
+    // its own. Without it that saving is lost, which is a different cost from the stamp's.
+    static let ledgerSaveFailedNote =
+        "couldn't save the producer answers, so other shows by them won't reuse this one"
 
     // The shows the check was given and never answered.
     //
@@ -75,10 +102,22 @@ struct ReachabilityRunReport: Equatable, Sendable {
     let requested: Int
     let answered: Int
     let outcome: PrepImporter.Outcome?
+    // #1677: the stamp recording WHICH shows were answered did not commit. Until it does, those lookups
+    // are unrecorded and Overture will offer to pay for them again.
+    var stampSaveFailed: Bool = false
+    // #1676: the organisation ledger, which is what lets a sibling show reuse this answer instead of
+    // buying its own, did not commit.
+    var ledgerSaveFailed: Bool = false
+    // #1677: the stamp failed on the LAST allowed attempt, so the run has been released rather than kept
+    // for another try. A different sentence, because the two say different things about what happens next.
+    var stampSaveGaveUp: Bool = false
 
     var unanswered: Int { max(0, requested - answered) }
 
     var attentionMessage: String? {
-        ReachabilityRunSummary.attentionMessage(requested: requested, answered: answered, outcome: outcome)
+        ReachabilityRunSummary.attentionMessage(requested: requested, answered: answered, outcome: outcome,
+                                                stampSaveFailed: stampSaveFailed,
+                                                ledgerSaveFailed: ledgerSaveFailed,
+                                                stampSaveGaveUp: stampSaveGaveUp)
     }
 }

@@ -90,12 +90,23 @@ enum OrgAnswerRecording {
     // the results file), never the set it was asked about. A show the run never reached has no answer,
     // and inventing "no email found" for its whole organisation would be invisible and would stand for
     // 90 days.
+    // #1676: the outcome is a PAIR, because "wrote nothing" and "the save failed" are opposite facts and
+    // used to share the value 0. Nothing could tell them apart, so nothing could report the second, which
+    // is money already spent that Overture will spend again. Two independent conditions must never share
+    // one status field (L53).
+    struct Outcome: Equatable, Sendable {
+        let written: Int
+        let saveFailed: Bool
+
+        static let nothingToDo = Outcome(written: 0, saveFailed: false)
+    }
+
     @discardableResult
-    static func record(answeredKeys: Set<String>, in context: ModelContext, now: Date) -> Int {
-        guard !answeredKeys.isEmpty else { return 0 }
+    static func record(answeredKeys: Set<String>, in context: ModelContext, now: Date) -> Outcome {
+        guard !answeredKeys.isEmpty else { return .nothingToDo }
         let prospects = ((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
             .filter { answeredKeys.contains($0.naturalKey) }
-        guard !prospects.isEmpty else { return 0 }
+        guard !prospects.isEmpty else { return .nothingToDo }
 
         let existing = ((try? context.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? [])
         var byKey = Dictionary(existing.map { ($0.orgKey, $0) }, uniquingKeysWith: { a, _ in a })
@@ -131,14 +142,16 @@ enum OrgAnswerRecording {
         do {
             try context.save()
         } catch {
-            // Fail loud. A silently dropped ledger row is money already spent that Overture will spend
-            // again, and nothing on screen would ever say so.
+            // #1676: this said "Fail loud" and did not. An NSLog is invisible from the running app, so a
+            // silently dropped ledger row (money already spent that Overture will spend again) reported to
+            // nobody. The log line stays as the diagnostic record; the RETURN is what now carries the
+            // failure to a caller that can put it on screen.
             // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
             NSLog("could not record %d organisation reachability answers: %@",
                   written, error.localizedDescription)
             // copy-inventory:ignore-end
-            return 0
+            return Outcome(written: 0, saveFailed: true)
         }
-        return written
+        return Outcome(written: written, saveFailed: false)
     }
 }

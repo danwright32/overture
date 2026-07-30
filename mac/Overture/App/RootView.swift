@@ -637,6 +637,14 @@ struct RootView: View {
                     // task (below) follows it to completion, so this no longer awaits here (which also
                     // stops an in-flight Prep from blocking the scout reattach that follows).
                     prepSheetShown = true
+                } else if let report = PrepQueueService.settleOrphanedProbe(into: context, now: Date()) {
+                    // #1809: a check that finished while Overture was CLOSED. The run watcher below only
+                    // settles a run it is watching, and the detached runner removes its own marker on
+                    // exit, so without this the check is never settled at all: its paid answers never
+                    // land, and the marker it leaves behind makes the next Prep run read as a check and
+                    // discard every draft it wrote. #1765 is what made that likely, since a check is no
+                    // longer capped at about eleven minutes.
+                    reportReachabilityRun(report)
                 } else {
                     ingestPrep()
                 }
@@ -1037,10 +1045,14 @@ struct RootView: View {
 
     private func startPrep(includedKeys: Set<String>) {
         do {
+            // #1809: the orphan settle lives in PrepQueueService.startPrep, so every way a Prep run begins
+            // is covered (a per-row Re-prep never reaches this function). This only supplies somewhere to
+            // SAY what that settle found.
             // #353: no separate "started" message. The button's own "Prepping…" state and
             // QueueView's masthead count already say a run is in progress; a second message
             // saying the same thing was redundant.
-            _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys)
+            _ = try PrepQueueService.startPrep(from: context, now: Date(), includedKeys: includedKeys,
+                                               onOrphanSettled: { reportReachabilityRun($0) })
             // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
             // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
             // #1143: the continuous watchPrepRuns task follows this run to completion (ingest, or a clear

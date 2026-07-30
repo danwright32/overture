@@ -8,6 +8,19 @@ import Foundation
 struct ReachabilityProbeMarker: Codable, Equatable, Sendable {
     var keys: Set<String>
     var startedAt: String
+    // #1677/#1809: how many times settling this run has been attempted and failed to SAVE. A settle whose
+    // stamp cannot commit leaves the marker in place so the run tries again (the run is not finished if the
+    // record of it did not land), and this is what stops that becoming a forever loop.
+    //
+    // OPTIONAL, and it has to be: Swift's synthesized decoding does not apply a property's default value,
+    // so a non-optional here would fail to decode every marker written before this field existed, which is
+    // exactly the paid run whose answers this field was added to protect.
+    var settleAttempts: Int?
+
+    // Dan's call (2026-07-30): retry, but give up rather than trying forever. Three is enough to ride out a
+    // transient lock or a store busy behind another writer, and few enough that a genuinely broken store is
+    // reported and closed out rather than re-announcing on every launch until he notices.
+    static let maxSettleAttempts = 3
 
     static func write(_ marker: ReachabilityProbeMarker, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
