@@ -33,6 +33,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var treatedAsVenue: Bool = false
     // #1788: this row's blank presenter is a name Overture DISCARDED, not a page that named nobody.
     var presenterWasTheRoom: Bool = false
+    // #1731: WHY the verdict reads this presenter as the building, so the card can say the specific
+    // reason rather than one line for all of them. Derived in the queue build through the same shared
+    // function the sheet uses, never re-decided here.
+    var readAsTheBuildingReason: OrganisationListing.Reason? = nil
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
@@ -256,12 +260,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // The verdict uniquely hides 55, and those are the only cards with something to explain.
     var readAsTheBuildingNote: String? {
         guard treatedAsVenue, presenterLine == nil, let presenter, !presenter.isEmpty else { return nil }
+        guard let reason = readAsTheBuildingReason else { return nil }
         // The name repeats the venue or the title: the card already shows it, so there is no absence to
         // explain. Compared through the fold the presenter line itself uses, so the two cannot disagree
         // about when a name is a repeat.
         let key = ProducerGate.key(presenter)
         guard key != ProducerGate.key(venue), key != ProducerGate.key(groupName) else { return nil }
-        return "Overture reads \(presenter) as the building here, not as the presenter."
+        return OrganisationListing.cardLine(presenter, reason)
     }
 
     // #1626: the contact forms the row offers as a link, when there is no address to print. Only forms
@@ -1618,6 +1623,12 @@ enum QueueModel {
             // classification the row is not actually using.
             item.treatedAsVenue = venueBrands.contains($0.presenter)
             item.presenterWasTheRoom = $0.presenterWasTheRoom == true   // #1788
+            // #1731: only meaningful where the verdict IS the building; nil otherwise.
+            item.readAsTheBuildingReason = venueBrands.contains($0.presenter)
+                ? OrganisationListing.buildingReason(
+                    isRoomName: venueBrands.isRoomName($0.presenter),
+                    standing: item.producerStanding)
+                : nil
             return item
         }
     }

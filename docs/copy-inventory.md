@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **928 sentences**, from 317 source files.
+Every sentence Overture can say to Dan: **927 sentences**, from 317 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -741,8 +741,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
     `App/StoreShrinkCheck.swift`
-"Its name overlaps a room it plays."
-    `Domain/OrganisationListing.swift`
 "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
     `UI/SourcesView.swift`
 "Its start-up tidy-up didn't save, so the queue may still be showing duplicates it meant to merge, or shows that have already gone by. Quit and reopen Overture to try again."
@@ -1079,8 +1077,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
-"Overture reads \(presenter) as the building here, not as the presenter."
-    `UI/QueueView+Model.swift`
 "Overture stops at \(ProbeSelection.maxResearchesPerRun) in one run so a whole week "
     `Domain/ProbeSelection.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
@@ -1401,8 +1397,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Sources you stopped watching."
     `Domain/SourceGrade.swift`
-"Spelled exactly like a room it plays, so this one can't be changed."
-    `Domain/OrganisationListing.swift`
 "Start a new experiment"
     `UI/ExperimentReportView.swift`
 "Start at login"
@@ -1766,10 +1760,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
     `Domain/FormOutreach.swift`
-"You set this."
-    `Domain/OrganisationListing.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`
+"You told Overture to read \(name) as the building, not the presenter."
+    `Domain/OrganisationListing.swift`
 "You're already shooting \(name) on \(day)."
     `Domain/BlockedCalendar.swift`
 "You're already shooting on \(day)."
@@ -1874,12 +1868,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "\(n) reply draft\(n == 1 ? "" : "s") stalled"
     `Domain/AgentRoster.swift`
+"\(name) is a room's name, so Overture reads it as the building, not the presenter."
+    `Domain/OrganisationListing.swift`
 "\(name) may already be pitched for a nearby show; blocked from sending."
     `Domain/DraftReviewNotes.swift`
 "\(name) may be a press/media contact, not the act; blocked from sending."
     `Domain/DraftReviewNotes.swift`
 "\(name) may be the venue itself, not the act; blocked from sending."
     `Domain/DraftReviewNotes.swift`
+"\(name) overlaps a room's name, so Overture reads it as the building, not the presenter."
+    `Domain/OrganisationListing.swift`
 "\(name) will instead receive:"
     `Domain/DraftReviewNotes.swift`
 "\(names.count) new booking\(names.count == 1 ? "" : "s") (\(names.joined(separator: ", ")))"
