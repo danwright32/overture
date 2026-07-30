@@ -243,6 +243,13 @@ enum ActionAck {
         "\(org) has already been sent to, so there's nothing to redraft"
     }
 
+    // #1828: the show sits on a night Dan is booked or away for. PrepQueueBuilder.needsPrep refuses a
+    // clashed show before it reads the re-prep flags, so a run started here would find nothing to do; the
+    // honest answer is that nothing runs until the clash is cleared, not a confirmation that it started.
+    static func reprepBlockedByClash(org: String) -> String {
+        "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
+    }
+
     // #1143: a Prep run was already in progress when Dan clicked Re-prep. The flag is saved, so the show
     // is queued to re-prep on the next run rather than launching a second run over the one in flight.
     static func reprepRunInFlight(org: String) -> String {

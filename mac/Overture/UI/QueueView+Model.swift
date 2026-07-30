@@ -714,6 +714,34 @@ enum QueueModel {
     // promised a contact hunt on shows whose contact a reachability probe had already found. It also had
     // no one left to tell: a kept, undrafted show only ever appears inside the Prep stage list, whose
     // heading already says these are the shows waiting for a Prep run.
+    // #1828: whether this card offers Re-prep, and when it must say why it cannot.
+    //
+    // Held here rather than as an `if` inside each of DraftReviewView's action branches, which is how the
+    // branch that needs it most came to be the one branch without it: a show with NO ADDRESS AT ALL draws
+    // the form-pitch row, where "find contacts only" is the highest-value action on the card, and it was
+    // the only place Dan could not ask for it. One rule, one place, reachable by a test.
+    enum ReprepOffer: Equatable {
+        case shown
+        case hidden
+        // Offered but inert, with the reason to say out loud. NOT hidden: a control that vanishes teaches
+        // nothing, and this state is one Dan can clear himself.
+        case blocked(String)
+    }
+
+    static func reprepOffer(for item: QueueItem) -> ReprepOffer {
+        // #367: never on a show already emailed or given up on.
+        guard item.isReprepEligible else { return .hidden }
+        // The trap #1828's scope note found: PrepQueueBuilder.needsPrep refuses a clashed show BEFORE it
+        // reads the re-prep flags, so a run started here does nothing while the acknowledgement says work
+        // began. Say so instead of confirming work that cannot happen.
+        // The same sentence the action itself uses when it refuses, so the tooltip and the toast can
+        // never say two different things about one state (#843).
+        if item.hasUnclearedConflict {
+            return .blocked(ActionAck.reprepBlockedByClash(org: item.groupName))
+        }
+        return .shown
+    }
+
     static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?) {
         (url(item.sourceListingURL), url(item.websiteURL))
     }

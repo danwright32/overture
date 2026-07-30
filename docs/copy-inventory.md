@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **937 sentences**, from 320 source files.
+Every sentence Overture can say to Dan: **938 sentences**, from 320 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1910,6 +1910,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) has already been sent to; re-prepping to find new contacts only"
     `App/ActionFeedback.swift`
 "\(org) is back in \(undoStageWord(for: priorStatus))"
+    `App/ActionFeedback.swift`
+"\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     `App/ActionFeedback.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     `Domain/WatchlistEditing.swift`

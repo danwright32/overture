@@ -446,6 +446,18 @@ enum ProspectMutations {
                            _ = try await PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
                        }) async {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+
+        // #1828: a show on a night Dan is booked or away for cannot be re-prepped at all.
+        // PrepQueueBuilder.needsPrep refuses it BEFORE it reads the re-prep flags, so setting a flag and
+        // launching would acknowledge work that the run then silently declines to do. Checked here, ahead
+        // of the flags, so no request is left behind to ride a later run just as silently. The card
+        // already offers the control in a blocked state saying this (QueueModel.reprepOffer); this is the
+        // enforcement under it, since a rule and its wiring are two claims (#1679).
+        guard !model.hasUnclearedConflict else {
+            feedback.acknowledge(ActionAck.reprepBlockedByClash(org: item.groupName), tone: .warning)
+            return
+        }
+
         let draftGranted = ReprepRequest.apply(mode, to: model)
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
 

@@ -353,7 +353,7 @@ struct DraftReviewView: View {
                     .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this email now"))
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    if item.isReprepEligible { reprepMenu }
+                    reprepControl
                     // #1311: an approved show with no emailable contact can never send, and the greyed
                     // Send button never said why. This explains the stall so Dan can add a contact. The
                     // wording is DraftReviewNotes' (#885); the view only decides where it sits.
@@ -418,10 +418,17 @@ struct DraftReviewView: View {
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                // #1828: this is the card that needs Re-prep MOST. The show has no address at all, so
+                // "find contacts only" is the highest-value action available on it, and it was the one
+                // branch that never drew the control.
+                reprepControl
                 Spacer()
             } else if case let .awaitingConfirmation(recipientId, _, startedAt) = item.formPitch {
                 Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date()))
                     .font(OVType.meta).foregroundStyle(OVColor.ink)
+                // #1828, Dan's call: offered here too. A show waiting on his answer is still a show whose
+                // contacts he may want researched, and the answer controls below are untouched by it.
+                reprepControl
                 Button { onRecordFormPitch(recipientId) } label: {
                     Text(FormOutreachCopy.sentIt).font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
@@ -449,7 +456,7 @@ struct DraftReviewView: View {
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                if item.isReprepEligible { reprepMenu }
+                reprepControl
             }
             if !isApproved { Spacer() }
         }
@@ -486,6 +493,21 @@ struct DraftReviewView: View {
     // #733: the whole menu disables while a request is already pending (nothing new to pick), and
     // any choice made within the cooldown window confirms before actually asking, rather than
     // silently spending another Prep run on a prospect just researched.
+    // #1828: Re-prep, drawn from ONE decision (QueueModel.reprepOffer) rather than an `if` repeated in
+    // each action branch, which is how the branch that needed it most ended up without it. The blocked
+    // state is drawn, not hidden: a control that vanishes teaches nothing, and this is a state Dan can
+    // clear himself by accepting the clash on the show.
+    @ViewBuilder private var reprepControl: some View {
+        switch QueueModel.reprepOffer(for: item) {
+        case .shown:
+            reprepMenu
+        case .blocked(let reason):
+            reprepMenu.disabled(true).help(reason)
+        case .hidden:
+            EmptyView()
+        }
+    }
+
     private var reprepMenu: some View {
         Menu("Re-prep") {
             Button("Redraft only") { requestReprep(.draftOnly) }
