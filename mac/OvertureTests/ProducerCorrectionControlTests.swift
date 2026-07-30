@@ -18,9 +18,10 @@ struct ProducerCorrectionControlTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func prospect(_ ctx: ModelContext, key: String, presenter: String?) -> Prospect {
+    private func prospect(_ ctx: ModelContext, key: String, presenter: String?,
+                          venue: String = "Under St Marks") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A Show", discipline: "theater",
-                         venue: "Under St Marks", performanceDate: "2026-09-10",
+                         venue: venue, performanceDate: "2026-09-10",
                          sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
@@ -66,6 +67,47 @@ struct ProducerCorrectionControlTests {
         _ = prospect(ctx, key: "k1", presenter: "FRIGID New York")
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         #expect(QueueModel.items(from: all).first?.correctableOrganisation == "FRIGID New York")
+    }
+
+    // #1763: a presenter spelled EXACTLY like a room can never be promoted. ProducerGate.isVenueBrand
+    // tests equality before it ever reads `overrides.promoted`, and ProducerGateTests pins that as
+    // deliberate, so the control offered on those rows applies a correction the gate then ignores.
+    // Measured on the live store 2026-07-29: 15 organisations, 312 rows, and all 15 stay refused after
+    // being promoted. That is a control that reads as applied while changing nothing, the #1679 shape.
+    // So it must not be offered at all: the row says nothing rather than something untrue.
+    @Test func aPresenterSpelledExactlyLikeItsRoomOffersNoCorrection() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "The Green Room 42", venue: "The Green Room 42")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        #expect(QueueModel.items(from: all).first?.correctableOrganisation == nil)
+    }
+
+    // The other arm must keep its control: promotion genuinely relaxes containment, so an organisation
+    // caught only by name overlap IS correctable and losing its control would be the opposite defect.
+    // Carnegie Hall Presents is this shape on the live store (28 rows), and the Metropolitan Opera at the
+    // Metropolitan Opera House is the case promotion was written for.
+    @Test func aPresenterCaughtOnlyByNameOverlapKeepsItsCorrection() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "Carnegie Hall Presents", venue: "Carnegie Hall")
+        _ = prospect(ctx, key: "k2", presenter: "Carnegie Hall Presents", venue: "Zankel Hall")
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let item = QueueModel.items(from: all).first { $0.correctableOrganisation != nil }
+        #expect(item?.correctableOrganisation == "Carnegie Hall Presents")
+    }
+
+    // And a correction ALREADY in force keeps its way back, even on a room name. Clearing a promotion
+    // that never worked is still a real state change, and stranding Dan with a standing correction he
+    // cannot take back is how #1679 happened. The store holds none of these today, so this is the guard
+    // that stops the narrowing from creating a one-way door later.
+    @Test func aRoomNameWithACorrectionInForceKeepsTheWayBack() throws {
+        let ctx = ModelContext(try container())
+        _ = prospect(ctx, key: "k1", presenter: "The Green Room 42", venue: "The Green Room 42")
+        ProducerOverrideEditing.promote("The Green Room 42", into: ctx)
+        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let item = QueueModel.items(from: all,
+                                    overrides: ProducerOverrideEditing.overrides(in: ctx)).first
+        #expect(item?.correctableOrganisation == "The Green Room 42")
+        #expect(item?.producerStanding == .promoted)
     }
 
     // The mutation, end to end from the row's own item: it stores the correction the gate will read.

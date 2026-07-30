@@ -254,28 +254,52 @@ enum ProducerGate {
     // live store, and the answer never changes within a run.
     struct VenueBrands: Equatable, Sendable {
         private let brandKeys: Set<String>
+        // #1763: the subset refused by the EQUALITY arm specifically. Held apart because the two arms
+        // answer to Dan's correction differently and nothing could tell them apart from outside: promotion
+        // relaxes containment and can never relax equality (isVenueBrand tests equality at the top, before
+        // it reads overrides.promoted), so a control offered on one works and on the other silently does
+        // nothing. Derived here, in the one pass that already folds every presenter against every venue,
+        // rather than recomputed by each caller, for the #1702 reason: a second copy of this judgment is
+        // how the two drift apart.
+        private let roomNameKeys: Set<String>
 
         // No corpus, no exclusions. The default for every caller that has no store in hand (a unit test,
         // an importer), so this can never silently start suppressing matches somewhere that never opted in.
-        static let none = VenueBrands(brandKeys: [])
+        static let none = VenueBrands(brandKeys: [], roomNameKeys: [])
 
-        private init(brandKeys: Set<String>) { self.brandKeys = brandKeys }
+        private init(brandKeys: Set<String>, roomNameKeys: Set<String>) {
+            self.brandKeys = brandKeys
+            self.roomNameKeys = roomNameKeys
+        }
 
         init(shows: [Show], overrides: ProducerOverrides = .none) {
             let venueKeys = ProducerGate.venueKeys(of: shows)
             var keys = Set<String>()
+            var rooms = Set<String>()
             for presenter in Set(shows.compactMap { $0.presenter }) {
                 guard let key = ProducerGate.key(presenter), !keys.contains(key) else { continue }
                 if ProducerGate.isVenueBrand(key, venueKeys: venueKeys, overrides: overrides) {
                     keys.insert(key)
+                    // Read off the SAME venue key set the arm itself uses, so this can only ever be true
+                    // where isVenueBrand's own first line was what fired.
+                    if venueKeys.contains(key) { rooms.insert(key) }
                 }
             }
             brandKeys = keys
+            roomNameKeys = rooms
         }
 
         func contains(_ presenter: String?) -> Bool {
             guard let presenter, let key = ProducerGate.key(presenter) else { return false }
             return brandKeys.contains(key)
+        }
+
+        // #1763: this presenter is spelled exactly like a room, so no correction Dan can make will change
+        // the verdict. A surface offering the correction here would apply it, store it, and watch the gate
+        // ignore it, which is the #1679 shape (a control that reads as applied while changing nothing).
+        func isRoomName(_ presenter: String?) -> Bool {
+            guard let presenter, let key = ProducerGate.key(presenter) else { return false }
+            return roomNameKeys.contains(key)
         }
     }
 
