@@ -82,9 +82,14 @@ struct ToolbarConsolidationGuardTests {
         #expect(!rootView.isEmpty)
         let occurrences = rootView.components(separatedBy: "ToolbarHoverLabel(").count - 1
         // Dismissed, Due, What converts, Voice guidance, Sources (#800), Days off (#901), Skipped towns
-        // (#1118), the merged Scout/Prep idle state, the disconnected-Gmail CTA, and the OmniFocus menu's
-        // idle state: ten call sites.
-        #expect(occurrences == 10)
+        // (#1118), Presenters (#1731), the merged Scout/Prep idle state, the disconnected-Gmail CTA, and
+        // the OmniFocus menu's idle state: eleven call sites.
+        //
+        // The number is pinned deliberately rather than loosened to "at least one". SwiftUI's toolbar
+        // builder tops out at ten CHILDREN and the row already overflows into the macOS ">>" menu, so a
+        // new button is never free: it pushes something else towards being hidden. Making this test fail
+        // is the point, because it forces whoever adds one to decide what it displaces.
+        #expect(occurrences == 11)
     }
 
     // #901 (Dan's walk, 2026-07-14): Days off is ordered AHEAD of the settings-ish buttons (What

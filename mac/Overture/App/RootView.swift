@@ -117,6 +117,7 @@ struct RootView: View {
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
+    @State private var showOrganisations = false   // #1731: what Overture reads as a building
     @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
     // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
@@ -486,6 +487,18 @@ struct RootView: View {
                         ToolbarHoverLabel(title: "Skipped towns", systemImage: "hand.raised")
                     }
                     .help("Towns you've told Overture to skip. Take one back off the list here.")
+
+                    // #1731: who Overture thinks puts each show on. It belongs in this group for the same
+                    // reason the other three do: all four say what Overture is working from, one the
+                    // calendars it reads, one the days it keeps clear, one the places it stays out of, and
+                    // this one the organisations it decided about. No attention state: these verdicts are
+                    // his to review when he chooses, never something that needs him.
+                    Button {
+                        showOrganisations = true
+                    } label: {
+                        ToolbarHoverLabel(title: "Presenters", systemImage: "building.2")
+                    }
+                    .help("Who Overture thinks puts each show on, and who it reads as the building.")
                 }
                 // #901 (Dan's walk, 2026-07-14): What converts and Voice guidance sit AFTER the
                 // Sources/Days off group, not before it. With every toolbar label now always shown the row
@@ -747,6 +760,7 @@ struct RootView: View {
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
+            .sheet(isPresented: $showOrganisations) { OrganisationsView() }
             .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
             .sheet(item: Bindable(dayOffOffer).pending) { pending in
