@@ -226,8 +226,13 @@ enum PrepQueueService {
             p.reachabilityResult = .noEmailFound
         }
         try? context.save()
-        // Fail loud rather than silently settling a partial run: an incomplete check is the thing Dan most
-        // needs to know about, because the shows it missed look identical to shows it never had to visit.
+        // The diagnostic copy of the shortfall, naming both counts for whoever is reading the log.
+        //
+        // #1769: this used to be the ONLY place a partial check was reported, described as failing loud.
+        // It was not loud: an NSLog is invisible from the running app, so a check that answered 3 of 5
+        // shows told nobody. `settleReachabilityProbe` now returns the same shortfall as a report the
+        // caller puts on screen (ReachabilityRunSummary). This line stays as the log record, not as the
+        // way Dan finds out.
         if toStamp.count < keys.count {
             // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
             NSLog("reachability probe settled with %d of %d shows answered; %d were never reached and stay unchecked",
@@ -238,20 +243,42 @@ enum PrepQueueService {
     }
 
     // #1308 Layer 2: settle a finished detached run. A probe and a real Prep share the runner and results
-    // file, so the probe-run marker is what tells them apart. Returns true when the finished run was a
+    // file, so the probe-run marker is what tells them apart. Returns a report when the finished run was a
     // probe (and was settled): every probed show is marked probed (found or not), the results are ingested
-    // probe-safely (never a draft), and the marker is cleared. Returns false when no probe marker is
+    // probe-safely (never a draft), and the marker is cleared. Returns nil when no probe marker is
     // present, so the caller ingests the run as a normal prep. Called on both producedResults and
     // finishedEmpty: a probe that found nothing is a valid "no email found" result, not a failure.
+    //
+    // #1769: it returns a REPORT rather than a bare yes/no because a check can come home partial. It runs
+    // as up to ten concurrent claudes and a chunk that dies partway leaves the shows it never reached with
+    // no answer. markProbed already knew that (it computes exactly this shortfall) and said so only to an
+    // NSLog nothing surfaces, so a run that answered 69 of 77 read to Dan as a clean pass.
+    //
+    // #1769: the three files the ingest reads are injectable for the same reason the marker and results
+    // already were. Left at their defaults a test reached Dan's LIVE prep queue and his real Downbeat
+    // export, so the Outcome it examined depended on what happened to be on this Mac (L2). No caller in
+    // the app passes them; they exist so a test cannot.
     @discardableResult
     static func settleReachabilityProbe(markerURL: URL = defaultProbeRunURL,
                                         resultsURL: URL = PrepImporter.defaultURL,
+                                        queueURL: URL = PrepQueueBuilder.defaultURL,
+                                        downbeatURL: URL = DownbeatBridge.defaultURL,
+                                        historyURL: URL = LocalHistory.importedURL,
                                         into context: ModelContext, now: Date,
-                                        defaults: UserDefaults = .standard) -> Bool {
-        guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return false }
+                                        defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
+        guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
         let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now)
-        _ = PrepImporter.consumeIfNew(at: resultsURL, into: context, defaults: defaults,
-                                      ingest: { try PrepImporter.ingestFile(at: $0, into: $1, isProbe: true, now: now) })
+        // #1769: the ingest Outcome used to be discarded whole, so a failed save or a runaway web-call
+        // count was invisible on a check as well as the shortfall. Kept, and folded into the report below.
+        //
+        // It is nil on a re-settle (consumeIfNew refuses a results file it has already read), which is
+        // exactly why the shortfall is derived from `marker` against `answered` and never from here: those
+        // two are on disk either way.
+        let outcome = PrepImporter.consumeIfNew(
+            at: resultsURL, into: context, defaults: defaults,
+            ingest: { try PrepImporter.ingestFile(at: $0, into: $1, downbeatURL: downbeatURL,
+                                                  historyURL: historyURL, queueURL: queueURL,
+                                                  isProbe: true, now: now) })
         // #1598 Phase 5: record what this check concluded about each ANSWERED show's organisation, so a
         // sibling show never has to be paid for again. Deliberately last: only now have the venue and
         // press guards run, so a real contact can be told from a front desk, and only the shows the run
@@ -270,7 +297,8 @@ enum PrepQueueService {
         _ = ContactScoreAdjustment.settleAll(answeredShows.filter { answered.contains($0.naturalKey) },
                                              now: now)
         ReachabilityProbeMarker.clear(at: markerURL)
-        return true
+        return ReachabilityRunReport(requested: marker.keys.count, answered: answered.count,
+                                     outcome: outcome)
     }
 
     enum PrepLaunchError: LocalizedError {
