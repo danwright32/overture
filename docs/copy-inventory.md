@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **928 sentences**, from 318 source files.
+Every sentence Overture can say to Dan: **931 sentences**, from 318 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -62,6 +62,7 @@ What is not, and why:
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: an outbound API request scoped by a header, not the app's voice (#915)
+- `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/TicketTailor.swift`: an outbound API request's headers, not the app's voice (#915)
 - `Integration/TicketTailorCalendar.swift`: an outbound fetch's headers for the venue page hop, not the app's voice (#915)
@@ -2007,6 +2008,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "book now"
     `Domain/TicketLink.swift`
+"couldn't save the producer answers, so other shows by them won't reuse this one"
+    `Domain/ReachabilityRunSummary.swift`
+"couldn't save what this check found, so it isn't finished and those shows may be checked again"
+    `Domain/ReachabilityRunSummary.swift`
 "couldn't save, try again"
     `Domain/PrepRunSummary.swift`
 "delivery failed"
@@ -2075,6 +2080,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "something Overture has seen before"
     `UI/QueueView+Model.swift`
+"still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
+    `Domain/ReachabilityRunSummary.swift`
 "ten are kept."
     `App/StoreShrinkCheck.swift`
 "the Downbeat client export couldn't be read"
