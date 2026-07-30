@@ -775,6 +775,7 @@
 		F13FA6380F87B044A01A861B /* SaveOrWarnConsolidationGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 446CED6B3B61366AC83A38A2 /* SaveOrWarnConsolidationGuardTests.swift */; };
 		F34F3DBC55406E6C54618D6B /* ScoutExtractProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F6A280CEB97ABFA5673233 /* ScoutExtractProgress.swift */; };
 		F386EEC5B18F887867742E43 /* DaysOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8125330BA909D183E5966B5E /* DaysOffView.swift */; };
+		F3CCC40E25DC93F46A8D969C /* ProbeSelectionRunnableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D03C999826F6436D42765C4 /* ProbeSelectionRunnableTests.swift */; };
 		F4087EC28B4DDFA3BBC4F9EA /* SendDelightTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */; };
 		F508201D12EF5DE3484CC2AE /* ProspectRowViewDraftTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB978A347FCCFFE1231AAF5 /* ProspectRowViewDraftTraceTests.swift */; };
 		F569007752EAD69F52BC57D4 /* LocationBackfillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86969889EAB63F6EB6B108A9 /* LocationBackfillTests.swift */; };
@@ -959,6 +960,7 @@
 		2CB4AC8F291F4746594A2676 /* ActionFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionFeedbackTests.swift; sourceTree = "<group>"; };
 		2CE475D014277ED73D2C8405 /* FeedMovementLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedMovementLog.swift; sourceTree = "<group>"; };
 		2CF637553CB10A5029D06811 /* ScoutResultAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutResultAuditTests.swift; sourceTree = "<group>"; };
+		2D03C999826F6436D42765C4 /* ProbeSelectionRunnableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeSelectionRunnableTests.swift; sourceTree = "<group>"; };
 		2D1D81C89C71CEC2884EDD4C /* SourceExtractorRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceExtractorRegistry.swift; sourceTree = "<group>"; };
 		2D9834539BA47D783475B28C /* ProspectRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProspectRowView.swift; sourceTree = "<group>"; };
 		2F3180AAE3A0F32C65075DFF /* SecureFileWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureFileWriteTests.swift; sourceTree = "<group>"; };
@@ -1949,6 +1951,7 @@
 				997E892D65956AF07F7B913A /* PressContactGuardTests.swift */,
 				5220627F67F59315EA0FA983 /* ProbeBatchTests.swift */,
 				28F58A71754FD5DC76BBA0D2 /* ProbeMultiDateSelectionTests.swift */,
+				2D03C999826F6436D42765C4 /* ProbeSelectionRunnableTests.swift */,
 				FADECD2610E46B7D569E790E /* ProbeSelectionTests.swift */,
 				9F9C6C988E9796C7EF0B0EB8 /* ProducerCorrectionControlTests.swift */,
 				F28716938847547912C865B9 /* ProducerCorrectionLiveStoreTests.swift */,
@@ -3228,6 +3231,7 @@
 				9A9F293EA863BC1D06197B54 /* PressContactGuardTests.swift in Sources */,
 				F7EBA8DD31418E5061A34FAB /* ProbeBatchTests.swift in Sources */,
 				5F58E79D602CD45071264B76 /* ProbeMultiDateSelectionTests.swift in Sources */,
+				F3CCC40E25DC93F46A8D969C /* ProbeSelectionRunnableTests.swift in Sources */,
 				C5F17FEF5D152F48B95BC20F /* ProbeSelectionTests.swift in Sources */,
 				CC1648A579BF099DE60D5D52 /* ProducerCorrectionControlTests.swift in Sources */,
 				6D96600AAD87A3F0BF8A5CFE /* ProducerCorrectionLiveStoreTests.swift in Sources */,

@@ -95,9 +95,11 @@ struct ProbeMultiDateSelectionTests {
         #expect(summary.researchCount == 1)
     }
 
-    // And the brake, reached through the same seam the bar uses, so the refusal is not a separate
-    // calculation that could disagree with the total shown beside it.
-    @Test func aWeekOfOneOffsIsRefusedThroughTheSameSeam() throws {
+    // #1765: a week of one-offs RUNS, and it reaches the confirm through the same seam the bar uses, so
+    // what Dan approves can never be a different total from the one shown beside the button. This used to
+    // assert the refusal; the ceiling is gone, and the claim that replaces it is that the big case is
+    // runnable rather than that it is stopped.
+    @Test func aWeekOfOneOffsIsRunnableThroughTheSameSeam() throws {
         let many = (0..<45).map {
             item("k\($0)", date: "2026-09-1\($0 % 5)", presenter: "Solo \($0)", venue: "Room \($0)")
         }
@@ -105,7 +107,11 @@ struct ProbeMultiDateSelectionTests {
         let (summary, _) = try #require(
             QueueModel.probeSelection(dates: dates, in: many, among: many, today: today, stage: .scout))
         #expect(summary.researchCount == 45)
-        #expect(summary.overCeiling)
+        guard case .confirm(_, let message) = ProbeSelection.outcome(for: summary) else {
+            Issue.record("a 45-lookup week must be runnable, not refused")
+            return
+        }
+        #expect(message.contains("45 lookups"))
     }
 
     // #1597 follow-up (Dan, walking the Debug build): the bar must not outlive the stage that produced
