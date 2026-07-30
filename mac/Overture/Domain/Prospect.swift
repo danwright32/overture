@@ -825,7 +825,11 @@ final class Prospect {
         // prevent. Suppressing the untried recipients only stops FIRST sends.
         if orgDoNotContact { return true }
         switch performanceStatus {
-        case .booked, .lostDoorOpen, .lostNotInterested: return true
+        // #1840: a show Dan stopped working is closed for ROUTINE follow-ups, same as the two lost
+        // states. The one thing it keeps raising, its post-event closing note, is carved out inside
+        // ConversationReminder rather than here, so this stays the plain "no routine work" answer and
+        // the exception lives in exactly one place.
+        case .booked, .lostDoorOpen, .lostNotInterested, .stoodDown: return true
         case .active, .new: return outcome == .lostSoft || outcome == .lostHard
         }
     }

@@ -9,6 +9,10 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
     case active
     case lostDoorOpen
     case lostNotInterested
+    // #1840: a show Dan stopped working. Its own bucket for the same reason it is its own contact
+    // state: it is not a close somebody else decided, and burying it among the ones that were would
+    // make his own walk-aways unfindable and uncountable.
+    case stoodDown
     case booked
     case dismissed
     // #864: a show whose last night passed while it sat untriaged. Overture retired it; Dan never
@@ -23,6 +27,7 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
         case .active: return "Active"
         case .lostDoorOpen: return "Closed (not now)"
         case .lostNotInterested: return "Closed (not interested)"
+        case .stoodDown: return "Stopped working"
         case .booked: return "Booked"
         case .dismissed: return "Dismissed"
         case .wentBy: return "Went by"
@@ -39,6 +44,7 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
         case .active: return .active
         case .lostDoorOpen: return .lostDoorOpen
         case .lostNotInterested: return .lostNotInterested
+        case .stoodDown: return .stoodDown
         case .booked: return .booked
         }
     }

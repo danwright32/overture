@@ -30,6 +30,10 @@ enum PerformanceStatus: String, Sendable, Equatable, CaseIterable {
     case active
     case lostDoorOpen
     case lostNotInterested
+    // #1840: Dan stopped working this event. Distinct from `lostDoorOpen` on screen as well as in the
+    // data, because a card that said "Closed (not now)" over a show he simply walked away from would be
+    // two different facts wearing one sentence (#843).
+    case stoodDown
     case booked
 
     // First match wins: Booked > Active > Lost > New.
@@ -44,6 +48,11 @@ enum PerformanceStatus: String, Sendable, Equatable, CaseIterable {
         if standings.contains(where: \.isUntried) { return .active }
         // Nobody left to try: every emailed contact is resolved or bounced. A soft "not now" leaves the
         // door open; otherwise it's a hard close.
+        // #1840: ahead of the decline cases, and only when NOTHING was declined. A show whose contacts
+        // Dan stopped working reads as stopped; a show where one contact said no and another was stood
+        // down is still a decline, because somebody genuinely answered.
+        if contacted.allSatisfy({ $0.resolution == .stoodDown || $0.resolution == nil }),
+           contacted.contains(where: { $0.resolution == .stoodDown }) { return .stoodDown }
         if contacted.contains(where: { $0.resolution == .declinedSoft }) { return .lostDoorOpen }
         return .lostNotInterested
     }
@@ -65,6 +74,7 @@ extension PerformanceStatus {
         case .new: return "New"
         case .active: return "Active"
         case .lostDoorOpen: return "Closed (not now)"
+        case .stoodDown: return "Stopped working this"
         case .lostNotInterested: return "Closed (not interested)"
         case .booked: return "Booked"
         }

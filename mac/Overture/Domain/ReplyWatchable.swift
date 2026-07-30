@@ -25,6 +25,20 @@ protocol ReplyWatchableRecipient: AnyObject {
     var dismissedBounceId: String? { get }
     var lastDelayMessageId: String? { get set }
     var delayNoticeAt: Date? { get set }
+
+    // #1840: record a reply, and clear anything a reply should clear. A method rather than two field
+    // writes because the rule ("a reply clears the stand-down, and only the stand-down") has to hold
+    // wherever a reply is recorded; written as assignments at the call site it was already forgotten once.
+    func reopenOnReply(at repliedAt: Date)
+}
+
+extension ReplyWatchableRecipient {
+    // The default is the plain recording, which is all a test double has to do. `Recipient` overrides it
+    // to clear a stand-down as well.
+    func reopenOnReply(at repliedAt: Date) {
+        replied = true
+        self.repliedAt = repliedAt
+    }
 }
 
 // A contacted entity (a show's lead, or an inquiry) that owns one or more watched threads.

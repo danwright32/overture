@@ -426,6 +426,39 @@ enum ProspectMutations {
         return true
     }
 
+    // #1740/#1840: Dan is not working this event any more. Held here rather than inside FollowUpsView so
+    // the whole decision (which grain, what it records, what it leaves alone) is reachable by a test; the
+    // view supplies the save and the acknowledgement around it.
+    //
+    // It records `.stoodDown` on the contacts, which closes them: the decide clock stops asking and the
+    // show reads as stopped rather than declined. It deliberately does NOT touch the lead's own outcome
+    // or `outcomeSource`, which are the auto-detection's to move.
+    static func standDown(prospect: Prospect, recipient: Recipient, scope: StandDownScope, now: Date) {
+        switch scope {
+        case .contact:
+            recipient.standDownOutreach(now: now)
+            recipient.resolution = .stoodDown
+        case .show:
+            prospect.standDownOutreach(now: now)
+            // Every contact, because "I am not working this event" is a statement about all of them, and a
+            // contact left open would keep the show reading as active and keep the clock asking.
+            for r in prospect.recipients where r.resolution == nil { r.resolution = .stoodDown }
+        }
+    }
+
+    // The undo. It clears the recorded state as well as the stand-down: leaving the contacts closed would
+    // keep the show shut on a decision Dan just reversed.
+    static func resumeStandDown(prospect: Prospect, recipient: Recipient, scope: StandDownScope) {
+        switch scope {
+        case .contact:
+            recipient.resumeOutreach()
+            if recipient.resolution == .stoodDown { recipient.resolution = nil }
+        case .show:
+            prospect.resumeOutreach()
+            for r in prospect.recipients where r.resolution == .stoodDown { r.resolution = nil }
+        }
+    }
+
     static func saveDraft(_ item: QueueItem, _ subject: String, _ body: String,
                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }

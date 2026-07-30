@@ -199,9 +199,18 @@ enum ConversationReminder {
                 if r.isClosingNoteStoodDown { continue }
                 let standing = r.standing
                 let unhandledReply = r.hasUnhandledReply
+                // #1840: THE carve-out, and the one place in the app where a closed contact still raises
+                // work. Dan's call (2026-07-30), knowing it cuts against the general "a resolved show goes
+                // quiet" rule: a show he stopped working still gets its post-event closing note, because
+                // that note is about the NEXT event, not this one.
+                //
+                // Keyed on `.stoodDown` specifically rather than on "closed", so a genuine decline stays
+                // quiet exactly as it does today. If you are here removing this because it looks like an
+                // inconsistency, it is the deliberate exception, and the row that draws it says so.
+                let closed = !standing.isInPlay && r.resolution != .stoodDown
                 guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
                                          remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
-                                         isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
+                                         isClosed: closed, hasUnhandledReply: unhandledReply,
                                          source: r.conversationStateSource, now: now, config: config)
                 else { continue }
                 due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
