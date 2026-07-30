@@ -141,6 +141,7 @@ struct DraftLintBlockingTests {
     @Test func onlyTheLinkAndPlaceholderFindingsBlock() {
         #expect(DraftIssue.foreignLink.isBlocking)
         #expect(DraftIssue.placeholder.isBlocking)
+        #expect(DraftIssue.galleryPathLink.isBlocking)   // #1832
         #expect(!DraftIssue.nonCanonicalRate.isBlocking)
         #expect(!DraftIssue.emDash.isBlocking)
         #expect(!DraftIssue.performativeEnthusiasm.isBlocking)
@@ -164,11 +165,43 @@ struct DraftLintBlockingTests {
         #expect(DraftCheck.blockingFindings(in: "More at www.example.org.") == [.foreignLink])
     }
 
-    @Test func allowsDansOwnGalleryLinks() {
-        // The five galleries the runbook maps disciplines onto, with and without scheme/www.
-        #expect(DraftCheck.blockingFindings(in: "Recent work: danwrightphotography.com/music").isEmpty)
-        #expect(DraftCheck.blockingFindings(in: "Recent work: https://danwrightphotography.com/performing-arts").isEmpty)
-        #expect(DraftCheck.blockingFindings(in: "Recent work: https://www.danwrightphotography.com/dance.").isEmpty)
+    // #1832: one link in every draft, the site itself, and the recipient clicks into whatever they
+    // want to see. Dan's call 2026-07-30: "just always go to the same site and let them click into the
+    // portfolio they want to see."
+    @Test func allowsThePortfolioLinkItself() {
+        #expect(DraftCheck.blockingFindings(in: "Recent work: danwrightphotography.com").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Recent work: https://danwrightphotography.com").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "Recent work: https://www.danwrightphotography.com.").isEmpty)
+    }
+
+    // #1832: a deep link into one gallery is a choice on the recipient's behalf that Dan does not want
+    // made. It is a blocker rather than an advisory because, unlike the rate or concession matchers, it
+    // is an exact path comparison with nowhere for a false positive to come from, and it stays
+    // overridable like every other block.
+    @Test func blocksADeepLinkIntoOneGallery() {
+        #expect(DraftCheck.blockingFindings(in: "Recent work: danwrightphotography.com/music") == [.galleryPathLink])
+        #expect(DraftCheck.blockingFindings(in: "Recent work at https://danwrightphotography.com/dance.")
+                == [.galleryPathLink])
+        #expect(DraftCheck.blockingFindings(in: "See https://www.danwrightphotography.com/performing-arts")
+                == [.galleryPathLink])
+        #expect(DraftCheck.blockingFindings(in: "Bands: danwrightphotography.com/bands") == [.galleryPathLink])
+        #expect(DraftCheck.blockingFindings(in: "Comedy: danwrightphotography.com/comedy") == [.galleryPathLink])
+    }
+
+    // A path Dan links deliberately that is not one of the five galleries is his own business: the rule
+    // is "don't pick a gallery for them", not "never link a page".
+    @Test func doesNotBlockANonGalleryPathOnHisOwnSite() {
+        #expect(DraftCheck.blockingFindings(in: "About me: danwrightphotography.com/about").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "danwrightphotography.com/contact").isEmpty)
+        // A longer path that merely STARTS with a gallery name is a different page, not one of the five.
+        #expect(DraftCheck.blockingFindings(in: "danwrightphotography.com/music-notes").isEmpty)
+        #expect(DraftCheck.blockingFindings(in: "danwrightphotography.com/dancers").isEmpty)
+    }
+
+    // An address at his own domain is not a gallery link, and stripping emails before the scan is what
+    // keeps a signature from tripping the block.
+    @Test func doesNotReadAnEmailAsAGalleryLink() {
+        #expect(DraftCheck.blockingFindings(in: "Reach me at music@danwrightphotography.com.").isEmpty)
     }
 
     // The matcher must not read ordinary prose as a link. A missing space after a period is the

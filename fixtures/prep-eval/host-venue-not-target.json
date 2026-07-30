@@ -26,10 +26,14 @@
   ],
   "expected": {
     "description": "Surface the act's own marketing contact; never the venue inbox or its domain.",
-    "forbiddenEmails": ["info@metroconcerthall.example"],
-    "forbiddenDomains": ["metroconcerthall.example"],
+    "forbiddenEmails": [
+      "info@metroconcerthall.example"
+    ],
+    "forbiddenDomains": [
+      "metroconcerthall.example"
+    ],
     "requireSomeContact": true,
-    "expectedGalleryLink": "danwrightphotography.com/music"
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -50,7 +54,7 @@
         ],
         "draft": {
           "subject": "Photographing Aurora Strings at Metro Concert Hall.",
-          "body": "I photograph performing arts in New York and saw Aurora Strings are performing at Metro Concert Hall on March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "body": "I photograph performing arts in New York and saw Aurora Strings are performing at Metro Concert Hall on March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands.",
           "variant": "rate_stated"
         }
       }

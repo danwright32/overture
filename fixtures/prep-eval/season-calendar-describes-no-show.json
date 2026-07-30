@@ -27,8 +27,12 @@
     "description": "The page names this April 2 date and nothing about the programme, so there is no description to summarise. Say so with `no_description_published` and draft without one, rather than describing this show out of the Bach programme two weeks earlier.",
     "expectedShowSummaryAbsentReason": "no_description_published",
     "requireSomeContact": true,
-    "expectedGalleryLink": "danwrightphotography.com/music",
-    "forbiddenBodyTerms": ["Bach", "Baroque", "Carnival"]
+    "forbiddenBodyTerms": [
+      "Bach",
+      "Baroque",
+      "Carnival"
+    ],
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 8,
@@ -50,7 +54,7 @@
         ],
         "draft": {
           "subject": "Photographing Harbour Winds at The Example Room.",
-          "body": "I photograph performing arts in New York and saw Harbour Winds is playing The Example Room on April 2. I shoot unobtrusive, no-flash documentary coverage from the back of the house, and I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Happy to answer any questions.",
+          "body": "I photograph performing arts in New York and saw Harbour Winds is playing The Example Room on April 2. I shoot unobtrusive, no-flash documentary coverage from the back of the house, and I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions.",
           "variant": "direct-intent"
         }
       }

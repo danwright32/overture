@@ -20,9 +20,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "carnegie-citywide-press-example",
-      "discipline-matched-portfolio-link",
       "empty-answer-carries-a-reason",
-      "gallery-from-what-the-show-is",
       "grouped-answer-emits-every-key",
       "grouped-answer-never-self-invented",
       "high-confidence-only-when-read",
@@ -34,6 +32,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "never-host-venue-target",
       "no-description-is-a-complete-answer",
       "no-pattern-guessed-high",
+      "one-portfolio-link-never-a-gallery",
       "partial-performer-results-ok",
       "passed-opening-not-named",
       "performer-misidentification-low",

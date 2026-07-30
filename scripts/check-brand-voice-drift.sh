@@ -37,13 +37,6 @@ BRAND_VOICE_ANCHORS=(
   "observation-first"
   "direct-intent"
   "Happy to answer any questions"
-  # #1405: the discipline-matched portfolio galleries. Each must appear in both sources; a gallery
-  # link present on one side but not the other would send some prospects the wrong (or general) page.
-  "danwrightphotography.com/music"
-  "danwrightphotography.com/bands"
-  "danwrightphotography.com/comedy"
-  "danwrightphotography.com/dance"
-  "danwrightphotography.com/performing-arts"
   # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
   # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble
@@ -58,6 +51,15 @@ BRAND_VOICE_ANCHORS=(
 # guards against the rejected one being re-endorsed anywhere inside the skill.
 BRAND_VOICE_REJECTED=(
   "let me know how that lands"
+  # #1832: the five galleries. Dan's call, 2026-07-30, is one link in every draft, the site itself, and
+  # the reader clicks into whichever portfolio they want. These were ANCHORS under #1405 (a fact both
+  # sources had to state); they are rejected phrases now, so either side re-endorsing one is caught
+  # instead of quietly reinstating a per-discipline link the other side no longer knows about.
+  "danwrightphotography.com/music"
+  "danwrightphotography.com/bands"
+  "danwrightphotography.com/comedy"
+  "danwrightphotography.com/dance"
+  "danwrightphotography.com/performing-arts"
 )
 
 # Collapses every run of whitespace (including newlines) to a single space and lowercases, so a

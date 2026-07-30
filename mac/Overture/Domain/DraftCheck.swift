@@ -14,6 +14,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case nonCanonicalRate         // states a rate other than the canonical $250/hr + tax (#39/#458)
     case foreignLink              // links a host that is not Dan's own site (#789)
     case placeholder              // a template slot the drafter never filled: "[VENUE]" (#789)
+    case galleryPathLink          // deep-links one gallery instead of the site itself (#1832)
 
     var label: String {
         switch self {
@@ -26,6 +27,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .nonCanonicalRate: return "States a rate other than $250 an hour plus tax"
         case .foreignLink: return "Links a site that is not danwrightphotography.com"
         case .placeholder: return "Contains an unfilled placeholder like [VENUE]"
+        case .galleryPathLink: return "Links one gallery instead of the portfolio itself"
         }
     }
 
@@ -41,7 +43,10 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     // matcher fires on the bare word "flexible".
     var isBlocking: Bool {
         switch self {
-        case .foreignLink, .placeholder: return true
+        // #1832: a gallery deep link clears the same bar the other two do. It is an exact comparison
+        // against five known paths, so there is nowhere for a false positive to come from, and the thing
+        // it prevents is a choice made on the recipient's behalf that Dan does not want made.
+        case .foreignLink, .placeholder, .galleryPathLink: return true
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate: return false
         }
@@ -113,6 +118,7 @@ enum DraftCheck {
         if hasNonCanonicalRate(text) { issues.append(.nonCanonicalRate) }
         if hasForeignLink(body) { issues.append(.foreignLink) }
         if hasPlaceholder(body) { issues.append(.placeholder) }
+        if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
         return issues
     }
 
@@ -138,11 +144,16 @@ enum DraftCheck {
         return text.range(of: #"(?<!feel )\bfree\b"#, options: .regularExpression) != nil
     }
 
-    // #789. The ONLY host a draft may link is Dan's own site: the runbook maps each discipline onto
-    // one of its five galleries and there is no pricing page and no client-gallery host to point at,
-    // so any other host is something the drafter invented. A 404 (or someone else's site) in a cold
-    // pitch is exactly the unforced error that costs the lead.
+    // #789. The ONLY host a draft may link is Dan's own site: there is no pricing page and no
+    // client-gallery host to point at, so any other host is something the drafter invented. A 404 (or
+    // someone else's site) in a cold pitch is exactly the unforced error that costs the lead.
     static let allowedLinkHost = "danwrightphotography.com"
+
+    // #1832: the five galleries the site keeps. A draft links the SITE and lets the reader click into
+    // whichever of these they want (Dan, 2026-07-30), so a deep link into one of them is a choice made on
+    // their behalf. Listed here rather than matched loosely, so a page that is not one of the five (an
+    // about or contact page Dan links deliberately) is untouched.
+    static let galleryPaths = ["music", "bands", "comedy", "dance", "performing-arts"]
 
     // Deliberately NOT a general URL grammar. Prose is full of things that look like hosts once you
     // relax the rules ("the performing arts.The show", "e.g. no flash"), and a false block costs Dan
@@ -172,6 +183,19 @@ enum DraftCheck {
             }
         }
         return false
+    }
+
+    // #1832: a link into one of the five galleries rather than the site itself. Emails are stripped
+    // first, exactly as the foreign-link scan does, so an address at Dan's own domain is never read as a
+    // path. The path must be the whole first segment, so a hypothetical /music-notes page would not match
+    // a rule that is about the five galleries and nothing else.
+    private static func hasGalleryPathLink(_ body: String) -> Bool {
+        let text = body.replacingOccurrences(of: emailPattern, with: " ", options: .regularExpression)
+        let host = allowedLinkHost.replacingOccurrences(of: ".", with: "\\.")
+        return galleryPaths.contains { path in
+            let pattern = "(?i)(?:https?://)?(?:www\\.)?\(host)/\(path)(?![A-Za-z0-9-])"
+            return text.range(of: pattern, options: .regularExpression) != nil
+        }
     }
 
     // A template slot the drafter left unfilled ("Hi [NAME]", "at [VENUE]"). Square brackets carry no

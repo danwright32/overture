@@ -31,10 +31,13 @@
   ],
   "expected": {
     "description": "Both named performers surfaced as performer contacts, no act contact, each with a second-person overrideBody.",
-    "requiredPerformers": ["Virgile Roche", "Anna Pierre"],
+    "requiredPerformers": [
+      "Virgile Roche",
+      "Anna Pierre"
+    ],
     "forbidActProvenance": true,
     "performerOverrideBodyRequired": true,
-    "expectedGalleryLink": "danwrightphotography.com/music"
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -50,7 +53,7 @@
             "confidence": "high",
             "provenance": "performer",
             "sourceUrl": "https://virgileroche.example/contact",
-            "overrideBody": "I photograph performing arts in New York and saw you and Anna Pierre are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands."
+            "overrideBody": "I photograph performing arts in New York and saw you and Anna Pierre are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands."
           },
           {
             "name": "Anna Pierre",
@@ -59,12 +62,12 @@
             "confidence": "high",
             "provenance": "performer",
             "sourceUrl": "https://annapierre.example/contact",
-            "overrideBody": "I photograph performing arts in New York and saw you and Virgile Roche are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands."
+            "overrideBody": "I photograph performing arts in New York and saw you and Virgile Roche are making your U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands."
           }
         ],
         "draft": {
           "subject": "Photographing Roche and Pierre's Carnegie Hall debut.",
-          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are making their U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Let me know how that lands.",
+          "body": "I photograph performing arts in New York and saw Virgile Roche and Anna Pierre are making their U.S. debut at Carnegie Hall on March 10. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit the recital. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands.",
           "variant": "credential_first"
         }
       }

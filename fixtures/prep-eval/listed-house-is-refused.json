@@ -13,8 +13,14 @@
     "production": "agency"
   },
   "houses": [
-    { "key": "harbour arts centre", "name": "Harbour Arts Centre" },
-    { "key": "bergen room", "name": "Bergen Room" }
+    {
+      "key": "harbour arts centre",
+      "name": "Harbour Arts Centre"
+    },
+    {
+      "key": "bergen room",
+      "name": "Bergen Room"
+    }
   ],
   "sources": [
     {
@@ -43,7 +49,7 @@
       "harbourarts.example"
     ],
     "requireSomeContact": true,
-    "expectedGalleryLink": "danwrightphotography.com/music"
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -64,7 +70,7 @@
         ],
         "draft": {
           "subject": "Photographing Lumen Quartet in the Bergen Room.",
-          "body": "I photograph performing arts in New York and saw Lumen Quartet are playing the Bergen Room on April 18. I shoot unobtrusive, no-flash documentary coverage and it would suit your programme. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music. Would coverage of this one be useful to you?",
+          "body": "I photograph performing arts in New York and saw Lumen Quartet are playing the Bergen Room on April 18. I shoot unobtrusive, no-flash documentary coverage and it would suit your programme. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Would coverage of this one be useful to you?",
           "variant": "rate_stated"
         }
       }

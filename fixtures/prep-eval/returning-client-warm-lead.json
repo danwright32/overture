@@ -23,7 +23,7 @@
     "description": "A warm lead drops the cold self-introduction but keeps one light credential and the portfolio/gallery link as soft proof.",
     "requireSomeContact": true,
     "forbidColdSelfIntro": true,
-    "expectedGalleryLink": "danwrightphotography.com/music"
+    "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
     "version": 6,
@@ -44,7 +44,7 @@
         ],
         "draft": {
           "subject": "Photographing the Boreal Quartet at Metro Concert Hall.",
-          "body": "It was good connecting about the Boreal Quartet at Metro Concert Hall on July 12, and I'd love to photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and recent work is at danwrightphotography.com/music. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Happy to answer any questions.",
+          "body": "It was good connecting about the Boreal Quartet at Metro Concert Hall on July 12, and I'd love to photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and recent work is at danwrightphotography.com. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Happy to answer any questions.",
           "variant": "warm_lead"
         }
       }

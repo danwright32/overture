@@ -21,7 +21,7 @@ const CANONICAL_BODY =
   "I photograph performing arts in New York and saw Aurora Strings is performing at Carnegie Hall on " +
   "March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate " +
   "is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work " +
-  "is at danwrightphotography.com/music. Let me know how that lands.";
+  "is at danwrightphotography.com. Let me know how that lands.";
 
 function results(contacts: unknown[], extra: Record<string, unknown> = {}, draftBody = CANONICAL_BODY): unknown {
   return {
@@ -182,7 +182,7 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
       `I photograph performing arts in New York and saw you and ${coName} are performing at Carnegie Hall on ` +
       "March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate " +
       "is $250 an hour plus tax, one-hour minimum, with the gallery in two weeks. Recent work is at " +
-      "danwrightphotography.com/music. Let me know how that lands.",
+      "danwrightphotography.com. Let me know how that lands.",
   });
 
   it("passes when both performers appear as performer contacts with second-person overrideBody", () => {
@@ -313,13 +313,37 @@ describe("evaluatePrepResult - already-covered fit-risk flag (#611)", () => {
   });
 });
 
-describe("evaluatePrepResult - discipline gallery link (#365)", () => {
-  it("flags a draft that links the wrong discipline gallery", () => {
-    const expected: PrepEvalExpectation = { description: "music gallery", expectedGalleryLink: "danwrightphotography.com/music" };
-    const bad = results([NAMED_ACT], {}, CANONICAL_BODY.replace("danwrightphotography.com/music", "danwrightphotography.com/dance"));
-    const r = evaluatePrepResult(bad, expected);
+// #1832: one link in every draft, the site itself, and the reader clicks into whichever portfolio they
+// want (Dan, 2026-07-30). Universal, so it fires with no fixture expectation set at all.
+describe("evaluatePrepResult - one portfolio link, never a gallery (#1832)", () => {
+  for (const gallery of ["music", "bands", "comedy", "dance", "performing-arts"]) {
+    it(`flags a draft that deep-links the ${gallery} gallery`, () => {
+      const bad = results([NAMED_ACT], {},
+        CANONICAL_BODY.replace("danwrightphotography.com", `danwrightphotography.com/${gallery}`));
+      const r = evaluatePrepResult(bad, { description: "any draft" });
+      expect(r.pass).toBe(false);
+      expect(r.failures.join(" ")).toMatch(/links one gallery instead of the portfolio itself/i);
+    });
+  }
+
+  it("passes the portfolio link itself", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, CANONICAL_BODY), { description: "any draft" });
+    expect(r.failures).toEqual([]);
+  });
+
+  // The rule is "don't pick a gallery for them", not "never link a page": a longer path that merely
+  // starts with a gallery name is a different page and is left alone.
+  it("does not flag a longer path that only starts with a gallery name", () => {
+    const other = results([NAMED_ACT], {},
+      CANONICAL_BODY.replace("danwrightphotography.com", "danwrightphotography.com-notes"));
+    expect(evaluatePrepResult(other, { description: "any draft" }).failures).toEqual([]);
+  });
+
+  it("flags a draft that drops the portfolio link when the fixture requires it", () => {
+    const noLink = results([NAMED_ACT], {}, CANONICAL_BODY.replace("danwrightphotography.com", "my site"));
+    const r = evaluatePrepResult(noLink, { description: "cold", requirePortfolioLink: true });
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/gallery|music/i);
+    expect(r.failures.join(" ")).toMatch(/expected the portfolio link/i);
   });
 });
 
@@ -333,7 +357,7 @@ describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", ()
   const WARM_LEAD_BODY =
     "It was good connecting about the Aurora Strings at Carnegie Hall on March 10, and I'd love to " +
     "photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and " +
-    "recent work is at danwrightphotography.com/music. My rate is $250 an hour plus tax, one-hour minimum, " +
+    "recent work is at danwrightphotography.com. My rate is $250 an hour plus tax, one-hour minimum, " +
     "with the gallery delivered within two weeks. Happy to answer any questions.";
 
   it("passes a booked draft that opens warm and drops the cold intro and portfolio scaffolding", () => {
@@ -352,7 +376,7 @@ describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", ()
 
   it("flags a booked draft that keeps the portfolio link (a returning client needs no proof)", () => {
     const withLink = BOOKED_BODY.replace("Happy to answer any questions.",
-      "Recent work is at danwrightphotography.com/music. Happy to answer any questions.");
+      "Recent work is at danwrightphotography.com. Happy to answer any questions.");
     const r = evaluatePrepResult(results([NAMED_ACT], {}, withLink),
       { description: "booked", forbidColdSelfIntro: true, forbidGalleryLink: true });
     expect(r.pass).toBe(false);
@@ -361,17 +385,17 @@ describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", ()
 
   it("passes a warm-lead draft that drops the intro but keeps one credential and the portfolio link", () => {
     const r = evaluatePrepResult(results([NAMED_ACT], {}, WARM_LEAD_BODY),
-      { description: "warm", forbidColdSelfIntro: true, expectedGalleryLink: "danwrightphotography.com/music" });
+      { description: "warm", forbidColdSelfIntro: true, requirePortfolioLink: true });
     expect(r.failures).toEqual([]);
     expect(r.pass).toBe(true);
   });
 
   it("flags a warm-lead draft that drops the portfolio link (a warm lead has not seen his work)", () => {
-    const noLink = WARM_LEAD_BODY.replace("danwrightphotography.com/music", "my site");
+    const noLink = WARM_LEAD_BODY.replace("danwrightphotography.com", "my site");
     const r = evaluatePrepResult(results([NAMED_ACT], {}, noLink),
-      { description: "warm", forbidColdSelfIntro: true, expectedGalleryLink: "danwrightphotography.com/music" });
+      { description: "warm", forbidColdSelfIntro: true, requirePortfolioLink: true });
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/gallery link/i);
+    expect(r.failures.join(" ")).toMatch(/portfolio link/i);
   });
 });
 
@@ -504,7 +528,7 @@ describe("prep-eval fixtures", () => {
       "I'm a documentary photographer working with performing arts organizations in New York, and I'm "
       + "writing about photographing your August 3 show at The Example Room. My rate is $250 an hour plus "
       + "tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at "
-      + "danwrightphotography.com/performing-arts. Happy to answer any questions."));
+      + "danwrightphotography.com. Happy to answer any questions."));
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/categorizes the recipient/i);
   });
@@ -514,7 +538,7 @@ describe("prep-eval fixtures", () => {
     const r = evaluateFixture(fixture, withBody(fixture,
       "I photograph performing arts in New York and saw your opera is at The Example Room on August 3. "
       + "My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. "
-      + "Recent work is at danwrightphotography.com/performing-arts. Happy to answer any questions."));
+      + "Recent work is at danwrightphotography.com. Happy to answer any questions."));
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/says the show is something the listing does not/i);
   });
