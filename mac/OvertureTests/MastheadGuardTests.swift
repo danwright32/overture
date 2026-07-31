@@ -26,8 +26,10 @@ struct MastheadGuardTests {
         #expect(!queueView.isEmpty)
         // The locator is the function's real signature, so a change to it fails this LOUDLY (a nil body)
         // rather than quietly scoping the check to nothing and passing. #1694 changed the signature and
-        // this is how that was noticed.
-        let mastheadBody = SourceGuardHelper.propertyBody("func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?) -> some View {", in: queueView)
+        // this is how that was noticed. #1771 added an agentInputs: argument, so the anchor is the last
+        // line of the signature rather than the whole of it (the same shape QueueRenderDataGuardTests
+        // uses for AgentInputs.from).
+        let mastheadBody = SourceGuardHelper.propertyBody("agentInputs: AgentInputs) -> some View {", in: queueView)
         #expect(mastheadBody != nil)
         #expect(mastheadBody?.contains("Circle()") == false)
     }

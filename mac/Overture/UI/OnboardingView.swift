@@ -8,7 +8,7 @@ import UserNotifications
 struct OnboardingView: View {
     var onClose: () -> Void = {}
 
-    @State private var gmail = GmailAuthManager.shared.isConnected
+    @State private var gmail = GmailConnection.shared.isConnected
     @State private var omniFocus = false
     @State private var notifications = false
     @State private var agent = OnboardingState.agentInstalled()
@@ -123,7 +123,7 @@ struct OnboardingView: View {
     }
 
     private func refresh() {
-        gmail = GmailAuthManager.shared.isConnected
+        gmail = GmailConnection.shared.refreshedIsConnected()
         omniFocus = OmniFocusAutomationPermission.current() == .granted
         agent = OnboardingState.agentInstalled()
     }

@@ -10,6 +10,14 @@ import SwiftUI
 struct QueueViewMastheadLayoutTests {
     private static let mastheadWidth: CGFloat = 760
 
+    // #1771: the pill strip's counts are built once per render by QueueView and threaded into the
+    // masthead, so these render it with a calm, quiet set rather than the masthead sourcing its own.
+    // Calm on purpose: a pill that needed attention would add its own height and confound the
+    // height comparisons below.
+    private let calmInputs = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
+                                         readyToSend: 0, gmailConnected: true, sendErrors: 0,
+                                         followUpsDue: 0)
+
     private func renderedHeight(_ view: some View) -> CGFloat {
         let renderer = ImageRenderer(content: view.frame(width: Self.mastheadWidth).background(Color.white))
         renderer.scale = 1
@@ -36,7 +44,8 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil)) > 0)
+        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil,
+                                     agentInputs: calmInputs)) > 0)
     }
 
     // #1694: the fan-out warning is drawn, not merely computed. Dan's call was that the questions stay on
@@ -47,11 +56,13 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil))
+        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil,
+                                                 agentInputs: calmInputs))
         let warned = renderedHeight(view.masthead(
             visible: items, items: items,
             fanOutLine: "Carnegie Hall Citywide: Ivalas Quartet is flagged as a possible match on 19 "
-                + "shows, which usually means the match is wrong."))
+                + "shows, which usually means the match is wrong.",
+            agentInputs: calmInputs))
 
         #expect(quiet > 0)
         #expect(warned > quiet)
@@ -65,8 +76,10 @@ struct QueueViewMastheadLayoutTests {
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
-        let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit, fanOutLine: nil))
-        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit, fanOutLine: nil))
+        let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit,
+                                                    fanOutLine: nil, agentInputs: calmInputs))
+        let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit,
+                                                    fanOutLine: nil, agentInputs: calmInputs))
 
         #expect(baseline > 0)
         #expect(withHigh == baseline)

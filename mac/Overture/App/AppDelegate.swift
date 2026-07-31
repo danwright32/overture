@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         Task { @MainActor in
             let settings = await UNUserNotificationCenter.current().notificationSettings()
             let state = OnboardingState(
-                gmailConnected: GmailAuthManager.shared.isConnected,
+                gmailConnected: GmailConnection.shared.isConnected,
                 omniFocusGranted: OmniFocusAutomationPermission.current() == .granted,
                 notificationsAuthorized: settings.authorizationStatus == .authorized,
                 loginAgentInstalled: OnboardingState.agentInstalled())
