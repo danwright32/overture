@@ -205,8 +205,28 @@ item's `production` field first:
     confidence per above, never dropped for a weak contact; never block trying to find
     every one. Dan reviews every draft and can hand-add anyone genuinely absent from the
     listing via the manual-recipient path.
-- **`production != "self"`** (agency-produced or unknown): the waterfall below runs
-  exactly as it does today, targeting the act with `provenance: "act"`. Nothing changes.
+- **`onlyTheActIsNamed == true` (#1856), whatever `production` says:** this listing named
+  no producing organisation at all. The room it plays in is not the producer (the app has
+  already removed the room's own name where one was billed), so there is NOTHING to research
+  under `groupName` as an organisation, and reporting `nothing_published` after hunting for
+  one is a claim you never tested. Pursue the people actually named instead:
+  - Read the item's `showListing.text` FIRST. On these shows the app has rendered the show's
+    own page for you precisely because the act's name is often nowhere else: `groupName` is
+    frequently the show's TITLE ("Broadway's Bad Guys!"), not a company. Take the performer or
+    ensemble names from that text.
+  - With 1-2 named leads, pursue EACH directly exactly as the `production == "self"` route
+    above does, `provenance: "performer"`, one entry per person, each with its own
+    `overrideBody`. With a bigger lineup, or none you can name, run the standard waterfall
+    against `groupName` with `provenance: "act"`.
+  - NEVER emit `provenance: "presenter"` for one of these shows. No presenter was
+    established, and the only organisation on the page is the room, which the hard
+    venue-disqualify rule below already forbids.
+  - If `showListing` is absent or `unreadable`, say so honestly: search on `groupName` alone,
+    and where that names nobody findable, `nothing_published` is then a true answer about a
+    search you actually ran.
+- **`production != "self"`** (agency-produced or unknown) **and no `onlyTheActIsNamed`**: the
+  waterfall below runs exactly as it does today, targeting the act with `provenance: "act"`.
+  Nothing changes.
 
 **Hard venue-disqualify rule (#368), unchanged regardless of target.** Any address
 belonging to the host venue is DISQUALIFIED, not a low-confidence fallback. Treat the

@@ -24,11 +24,13 @@ enum Reachability {
     // firm claim.
     // #1626: `contactFormOnly` is a real way through, not a near miss, so it is its own state rather
     // than a shade of "no email". The row prints the link beside it.
+    // #1856: there is no "try the act directly" state. #1795 added one and Dan took it off the card the
+    // next day (2026-07-31): "I don't need the badge to say try the act directly. it should just say hard
+    // to reach if it's a generic inbox, email found if it found one or no email found". The advice was
+    // telling him to do by hand the thing the check itself now does, so the card reports and the check
+    // acts, rather than both half-doing each other's job.
     enum Badge: Equatable {
-        // #1795: `tryTheActDirectly` is NOT a shade of "hard to reach", it is the opposite claim. It says
-        // the show has a named party to write to (the act) and that the missing organiser is a gap rather
-        // than a dead end. Its own case, because a badge may only claim what its check measured (L11).
-        case none, hardToReach, tryTheActDirectly, noEmailFound, weakContactOnly, contactFormOnly,
+        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly,
              staleProbe, emailFound
     }
 
@@ -66,7 +68,7 @@ enum Reachability {
         switch badge {
         case .emailFound: return onlyUnverified ? .tentative : .pending
         case .noEmailFound: return .warning
-        case .contactFormOnly, .weakContactOnly, .hardToReach, .tryTheActDirectly, .staleProbe, .none:
+        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .none:
             return .neutral
         }
     }
@@ -134,13 +136,9 @@ enum Reachability {
     // where it came from. A sixth badge state would be the #843 shape: a second line telling him nothing
     // the first did not. It is consulted only when this show has no answer of its own, and only ever
     // carries a positive, because OrgAnswerLedger refuses to fan out anything else.
-    // #1795: `presenterWasTheRoom` is the MEASURED reason a presenter is missing (Overture removed one
-    // that was only the room's own name, #1787), which is what separates a show whose act is still billed
-    // from a page that named nobody at all. Defaulted so no other caller has to care.
     static func badge(result: ProbeResult?, probeIsStale: Bool = false,
                       inherited: ProbeResult? = nil,
-                      presenter: String?, sourceListingURL: String?, websiteURL: String?,
-                      presenterWasTheRoom: Bool = false) -> Badge {
+                      presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
         if let result {
             // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
             if probeIsStale { return .staleProbe }
@@ -155,12 +153,7 @@ enum Reachability {
         // it is not re-derived here: one decision, in one place.
         if inherited == .emailFound { return .emailFound }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
-        case .hardToReach:
-            // #1795: a social-only listing is a VERIFIED dead end and keeps saying so, whoever is billed.
-            // Only where the assessment fell through purely for want of an organiser, AND Overture knows
-            // it removed one because it was the room, does the row carry advice instead of a verdict.
-            if let listing = sourceListingURL, isSocialOnly(listing) { return .hardToReach }
-            return presenterWasTheRoom ? .tryTheActDirectly : .hardToReach
+        case .hardToReach: return .hardToReach
         case .likelyReachable, .unclear: return .none
         }
     }
@@ -203,13 +196,6 @@ enum Reachability {
 enum ReachabilityCopy {
     static let hardToReachBadge = "Hard to reach"
 
-    // #1795. Measured on the live store 2026-07-30: 78 open cards said "Hard to reach" because Overture
-    // had removed a presenter that was only the room's own name, and 63 of those are one cabaret room
-    // that books a different act every night. The listing names the room and names the ACT; what is
-    // missing is who is producing, not a way through. Dan's words: "It should try the act directly."
-    static let tryTheActDirectlyBadge = "Try the act directly"
-    static let tryTheActDirectlyHelp =
-        "The only organiser this listing named was the room itself, so Overture set it aside. The act is the only party still named here, so they are the one to try. Who is producing the night has not been established."
     static let hardToReachHelp =
         "Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
 

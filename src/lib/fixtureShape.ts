@@ -63,7 +63,7 @@ const PROVENANCE = ["act", "performer", "presenter"] as const;
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -99,6 +99,11 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // v1-v5 queue is caught rather than silently ignored by a runner that predates the rule and would then
   // leave every covered show unanswered.
   const groupFieldAllowed = version >= 6;
+  // #1856 v9: whether this show names any producing organisation at all. Forbidden on older versions for
+  // the same reason as every field above: a stamp a runner predating the rule would silently ignore is
+  // worse than an error, because the run would go on hunting an organisation that does not exist and
+  // report that nobody publishes an address.
+  const actNamingFieldAllowed = version >= 9;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -140,6 +145,13 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.alsoAnswersFor !== undefined) {
       fail(file, `items[${i}].alsoAnswersFor must not be present before version 6`);
+    }
+    if (actNamingFieldAllowed) {
+      if (o.onlyTheActIsNamed !== undefined && typeof o.onlyTheActIsNamed !== "boolean") {
+        fail(file, `items[${i}].onlyTheActIsNamed must be a boolean`);
+      }
+    } else if (o.onlyTheActIsNamed !== undefined) {
+      fail(file, `items[${i}].onlyTheActIsNamed must not be present before version 9`);
     }
   });
 }
@@ -184,7 +196,7 @@ function assertPrepContact(
 // that is REQUIRED when there is no summary, #1824)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");

@@ -1039,11 +1039,25 @@ struct RootView: View {
     // startPrep (same single-slot lock, same takeover for working/still-alive/stalled), but researches
     // contacts only. watchPrepRuns follows it to completion and settleReachabilityProbe settles it.
     private func startReachabilityProbe(keys: Set<String>) {
-        do {
-            _ = try PrepQueueService.startReachabilityProbe(keys: keys, from: context, now: Date())
-            prepSheetShown = true
-        } catch {
-            errorMessage = error.localizedDescription
+        // #1856: a check over shows that name no producer renders each of their listing pages first, which
+        // is seconds of real work. Same treatment as startPrep's: the takeover goes up BEFORE the launch
+        // and carries a live count, or that whole phase happens behind a button that looks inert.
+        prepSheetShown = true
+        listingReadProgress = .init(completed: 0, total: 0, advancedAt: Date())
+        listingReadStartedAt = Date()
+        Task { @MainActor in
+            defer { listingReadProgress = nil }
+            do {
+                _ = try await PrepQueueService.startReachabilityProbe(
+                    keys: keys, from: context, now: Date(),
+                    onListingProgress: { done, total in
+                        listingReadProgress = .init(completed: done, total: total, advancedAt: Date())
+                    })
+            } catch {
+                // The check never started, so the takeover must not sit there implying it did.
+                prepSheetShown = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

@@ -251,7 +251,12 @@ enum PrepImporter {
             } else {
                 let recipient = Recipient(id: id, email: email, name: c.name, role: c.role,
                                           provenance: provenance, contactMethodRaw: c.method,
-                                          contactConfidenceRaw: c.confidence, contactFormURL: c.formUrl,
+                                          // #1856: a find may claim to be verified only when it names the
+                                          // page it was read off; the runbook always said so and nothing
+                                          // enforced it (L27).
+                                          contactConfidenceRaw: ContactConfidenceGuard.confidence(
+                                              raw: c.confidence, sourceURL: c.sourceUrl),
+                                          contactFormURL: c.formUrl,
                                           contactSourceURL: c.sourceUrl)
                 // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
                 // matching guard for why a non-performer contact never carries one.
@@ -308,6 +313,11 @@ enum PrepImporter {
         r.contactConfidenceRaw = c.confidence ?? r.contactConfidenceRaw
         r.contactFormURL = c.formUrl ?? r.contactFormURL
         r.contactSourceURL = c.sourceUrl ?? r.contactSourceURL
+        // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
+        // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
+        // high while carrying no page of its own, and only the result is the claim Dan reads.
+        r.contactConfidenceRaw = ContactConfidenceGuard.confidence(raw: r.contactConfidenceRaw,
+                                                                   sourceURL: r.contactSourceURL)
         // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
         // above, a reclassification AWAY from .performer must CLEAR it rather than preserve it, or a
         // recipient now treated as a generic act/presenter contact would keep stale second-person

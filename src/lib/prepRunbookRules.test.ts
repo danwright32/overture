@@ -19,6 +19,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
 
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
+      "act-pursued-when-no-organiser-named",
       "carnegie-citywide-press-example",
       "empty-answer-carries-a-reason",
       "grouped-answer-emits-every-key",
@@ -32,6 +33,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "never-host-venue-target",
       "no-description-is-a-complete-answer",
       "no-pattern-guessed-high",
+      "no-presenter-provenance-without-an-organiser",
       "one-portfolio-link-never-a-gallery",
       "partial-performer-results-ok",
       "passed-opening-not-named",

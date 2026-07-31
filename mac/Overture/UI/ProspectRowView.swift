@@ -459,13 +459,6 @@ struct ProspectRowView: View {
         case .hardToReach:
             reachabilityNote(icon: "envelope", text: ReachabilityCopy.hardToReachBadge,
                              tone: Reachability.tone(for: .hardToReach), help: ReachabilityCopy.hardToReachHelp)
-        case .tryTheActDirectly:
-            // #1795: the same quiet tone as its neighbour, because it is advice and not an alarm, but a
-            // person icon rather than an envelope: the point of the line is WHO to write to, not that
-            // email is a problem.
-            reachabilityNote(icon: "person", text: ReachabilityCopy.tryTheActDirectlyBadge,
-                             tone: Reachability.tone(for: .tryTheActDirectly),
-                             help: ReachabilityCopy.tryTheActDirectlyHelp)
         case .noEmailFound:
             // #1722: same badge, same rust tone, same icon. Only the SENTENCE varies, so a check that
             // found the room's own address and refused it stops reporting that it found nothing. With no
