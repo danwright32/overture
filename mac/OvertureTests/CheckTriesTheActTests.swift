@@ -168,8 +168,10 @@ struct CheckTriesTheActTests {
         var unflagged = queueItem(group: "Echoes of Home")
         unflagged.presenterWasTheRoom = false
 
-        #expect(flagged.reachabilityBadge() == .hardToReach)
-        #expect(unflagged.reachabilityBadge() == .hardToReach)
+        // #1859 then took the "Hard to reach" verdict off these rows too, so what the card says about
+        // them now is nothing at all, until a check has actually looked.
+        #expect(flagged.reachabilityBadge() == .none)
+        #expect(unflagged.reachabilityBadge() == .none)
     }
 
     private func queueItem(group: String) -> QueueItem {

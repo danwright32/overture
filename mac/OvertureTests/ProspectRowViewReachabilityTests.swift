@@ -41,9 +41,11 @@ struct ProspectRowViewReachabilityTests {
         #expect(t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 
-    @Test func aShowWithNoPresenterShowsTheBadge() throws {
+    // #1859: a show that simply names no organiser shows NOTHING before a check. It is not a dead end,
+    // it is one nothing has looked at, and since #1856 a check on it pursues the act.
+    @Test func aShowWithNoPresenterShowsNoBadgeUntilACheckHasLooked() throws {
         let t = try texts(item(presenter: nil, sourceListingURL: "https://carnegiehall.org/calendar/x"))
-        #expect(t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
+        #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 
     @Test func aNamedPresenterOnANormalListingShowsNoBadge() throws {

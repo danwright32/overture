@@ -153,7 +153,18 @@ enum Reachability {
         // it is not re-derived here: one decision, in one place.
         if inherited == .emailFound { return .emailFound }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
-        case .hardToReach: return .hardToReach
+        case .hardToReach:
+            // #1859: only the MEASURED dead end still speaks. A social-only listing is one Overture has
+            // actually tested (a raw fetch returns a login wall, and lead intake refuses these outright),
+            // so it warns whoever is billed.
+            //
+            // A show that simply names no organiser is NOT a dead end any more: since #1856 a check on one
+            // pursues the act itself, and 93 open shows are in that state. Calling it hard to reach before
+            // anything has looked is a verdict no check reached (L11), which is what Dan said when he was
+            // asked what such a card should say: nothing, until a check runs. So the row stays silent and
+            // the check, not the badge, is what answers.
+            if let listing = sourceListingURL, isSocialOnly(listing) { return .hardToReach }
+            return .none
         case .likelyReachable, .unclear: return .none
         }
     }
@@ -196,8 +207,11 @@ enum Reachability {
 enum ReachabilityCopy {
     static let hardToReachBadge = "Hard to reach"
 
+    // #1859: the sentence names the ONE thing that can still produce this badge. It used to offer two
+    // reasons, "no presenting org, or only a social page", and only the second can happen now; leaving the
+    // first in would have the card explaining a card Dan is no longer looking at.
     static let hardToReachHelp =
-        "Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
+        "The only listing for this one is a social page, which sits behind a login, so there's no way in from there. You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
 
     // #1308 Layer 2 Phase 2: the firm result once a probe has run.
     static let emailFoundBadge = "Email found"

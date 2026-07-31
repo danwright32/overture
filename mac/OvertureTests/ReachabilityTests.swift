@@ -117,8 +117,10 @@ struct ReachabilityTests {
     func noStoredResultFallsBackToTheHeuristic() {
         #expect(Reachability.badge(result: nil, presenter: "Some Org",
                                    sourceListingURL: nil, websiteURL: nil) == .none)
+        // #1859: no organiser named is no longer a verdict, only an unlooked-at show, so it stays silent
+        // like every other state the heuristic cannot speak to.
         #expect(Reachability.badge(result: nil, presenter: nil,
-                                   sourceListingURL: nil, websiteURL: nil) == .hardToReach)
+                                   sourceListingURL: nil, websiteURL: nil) == .none)
     }
 
     @Test("a stale result overrides every stored answer")
