@@ -59,21 +59,21 @@
         "naturalKey": "lumen-quartet|2026-04-18|bergen-room",
         "contacts": [
           {
+            "provenance": "act",
             "name": "Tomas Reid",
             "role": "Manager",
             "email": "tomas@lumenquartet.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "act",
             "sourceUrl": "https://lumenquartet.example/contact"
           }
         ],
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing Lumen Quartet in the Bergen Room.",
-          "body": "I'm Dan Wright, a photographer here in NYC, and live performance is the whole of what I shoot. I'm writing in regard to the Lumen Quartet's April 18 date in the Bergen Room. I work without flash and stay unobtrusive, so nothing I do registers with the audience or interrupts the music. I've been photographing at Carnegie Hall for nearly ten years, and my work has also taken me to Madison Square Garden and Lincoln Center. My rate is $250 an hour plus tax, one hour minimum, with the edited gallery delivered inside two weeks. My portfolio is at danwrightphotography.com. I'd be glad to talk about your photography plans for the evening. I look forward to hearing back.",
+          "subject": "Photographing Lumen Quartet's April 18 performance at the Bergen Room",
+          "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to Lumen Quartet's April 18 performance at the Bergen Room. My coverage is unobtrusive and shot without flash, so the audience stays with the music and the players aren't working around a photographer. I've spent close to ten years photographing at Carnegie Hall, with other work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you.",
           "variant": "reason-first"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+        }
       }
     ]
   }

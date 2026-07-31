@@ -62,6 +62,21 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /NEVER\s+state\s+a\s+count/i },
   { name: "venue-history-absent-means-silent",
     pattern: /An\s+ABSENT\s+`venueHistory`\s+means\s+SAY\s+NOTHING/i },
+  // Dan, 2026-07-31, reading the first real draft this rule produced: "I've photographed a few shows
+  // in that room already, so I'm not learning it on the night". The band was right; the clause the
+  // model hung off it names the bad outcome and plants it in the reader's head. Drop this and the
+  // sentence meant to prove he knows the room starts describing a photographer who might not.
+  { name: "venue-history-clause-is-familiarity",
+    pattern: /follow-on\s+clause\s+is\s+about\s+FAMILIARITY/i },
+  // Dan, 2026-07-31: "the portfolio" reads as a shared company asset in an email written entirely in
+  // his own first person.
+  // #1906: the rule this REVERSED was stated as mandatory ("ALWAYS state the rate plainly"), so a
+  // careless edit restoring the old sentence is entirely plausible. Dan's reason is that a number in
+  // a first email from a stranger gets judged before the work does.
+  { name: "cold-pitch-carries-no-price",
+    pattern: /carrying\s+NO\s+PRICE\s+AND\s+NO\s+TURNAROUND/i },
+  { name: "portfolio-is-mine-not-the",
+    pattern: /It\s+is\s+MY\s+portfolio,\s+never\s+THE\s+portfolio/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },
   { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },

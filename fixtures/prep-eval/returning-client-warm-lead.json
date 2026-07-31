@@ -33,21 +33,21 @@
         "naturalKey": "boreal-quartet|2026-07-12|metro-concert-hall",
         "contacts": [
           {
+            "provenance": "act",
             "name": "Marcus Lee",
             "role": "Manager",
             "email": "marcus@borealquartet.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "act",
             "sourceUrl": "https://borealquartet.example/contact"
           }
         ],
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing the Boreal Quartet at Metro Concert Hall.",
-          "body": "It was good connecting about the Boreal Quartet at Metro Concert Hall on July 12. I shoot unobtrusive documentary coverage with no flash, so the audience doesn't notice me and the performance isn't disturbed, and nearly ten years of that has been at Carnegie Hall. Recent work is at danwrightphotography.com. My rate is $250 an hour plus tax, one hour minimum, with the edited gallery back within two weeks. I'd be glad to talk about your photography plans for the evening. I look forward to hearing from you.",
-          "variant": "warm_lead"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+          "subject": "Photographing Boreal Quartet's July 12 performance at Metro Concert Hall.",
+          "body": "I'm writing about Boreal Quartet's July 12 performance at Metro Concert Hall. I shoot unobtrusive, no-flash documentary coverage of live performance, working quietly enough that the audience doesn't notice me and nothing on stage gets disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I'd be glad to cover the July 12 date if you don't have someone on it already. Either way, it would be good to talk through your photography plans for the performance. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
       }
     ]
   }

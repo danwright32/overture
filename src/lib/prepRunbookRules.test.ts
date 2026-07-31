@@ -22,6 +22,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "act-pursued-when-no-organiser-named",
       "ask-presupposes-photography-plans",
       "carnegie-citywide-press-example",
+      "cold-pitch-carries-no-price",
       "effect-not-vantage-point",
       "empty-answer-carries-a-reason",
       "grouped-answer-emits-every-key",
@@ -43,6 +44,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "partial-performer-results-ok",
       "passed-opening-not-named",
       "performer-misidentification-low",
+      "portfolio-is-mine-not-the",
       "press-media-disqualified",
       "pursue-each-named-performer",
       "returning-client-register",
@@ -52,6 +54,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "use-the-listing-handed-over",
       "venue-address-disqualified",
       "venue-history-absent-means-silent",
+      "venue-history-clause-is-familiarity",
       "venue-history-never-a-count",
     ]);
   });

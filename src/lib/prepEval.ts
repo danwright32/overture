@@ -251,8 +251,13 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
     if (GALLERY_PATH.test(body)) {
       failures.push(`${label}: links one gallery instead of the portfolio itself (#1832)`);
     }
-    if (!/\$250/.test(body) || !/plus tax/i.test(body)) {
-      failures.push(`${label}: must state the canonical rate ($250 an hour plus tax)`);
+    // #1906, reversing the rule that made the rate mandatory. Dan, 2026-07-31: "I feel like I'm
+    // more likely to get a response if I don't, because they may check out my portfolio instead of
+    // getting sticker shock and then email me asking about it." A cold pitch carries no price and
+    // no delivery turnaround; a REPLY to someone who asked still states both, and replies are not
+    // scored here.
+    if (/\$\s?\d/.test(body) || /\bplus tax\b/i.test(body) || /within (two|2) weeks/i.test(body)) {
+      failures.push(`${label}: a cold pitch must state no rate and no turnaround`);
     }
     if (VANTAGE_POINT.test(body)) {
       failures.push(`${label}: names where Dan stands ("back of the house") instead of the effect`);

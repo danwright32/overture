@@ -48,26 +48,28 @@
         "contacts": [
           {
             "name": "Virgile Roche",
+            "role": "Pianist",
             "email": "virgile@virgileroche.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "performer",
             "sourceUrl": "https://virgileroche.example/contact",
-            "overrideBody": "My name is Dan Wright and I'm an arts photographer here in NYC. I'm writing about your March 10 date at Carnegie Hall with Anna Pierre. Carnegie has been my main room for nearly ten years, and I shoot no flash documentary coverage that keeps the audience's attention on you rather than on me. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery arrives within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+            "provenance": "performer",
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Anna Pierre at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
           },
           {
             "name": "Anna Pierre",
+            "role": "Pianist",
             "email": "anna@annapierre.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "performer",
             "sourceUrl": "https://annapierre.example/contact",
-            "overrideBody": "My name is Dan Wright and I'm a performing arts photographer working here in New York City. I'm writing about your March 10 date at Carnegie Hall with Virgile Roche. I've photographed at Carnegie Hall for nearly ten years, working without flash and staying unobtrusive, so nobody in the audience registers that I'm there. My rate is $250 an hour plus tax, one hour minimum, with your edited gallery delivered inside two weeks. There's more of my work at danwrightphotography.com. I'd be glad to hear where your photography plans for that night stand. I look forward to your reply."
+            "provenance": "performer",
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Virgile Roche at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
           }
         ],
         "draft": {
-          "subject": "Photographing Roche and Pierre's Carnegie Hall debut.",
-          "body": "I'm Dan Wright, a performing arts photographer, and I shoot in and around New York City. I'm writing in regard to the Roche and Pierre Duo at Carnegie Hall on March 10. I've been photographing at Carnegie Hall for nearly ten years, and I work without flash and stay unobtrusive, so the audience doesn't notice me and the performance isn't disturbed. My rate is $250 an hour plus tax, one hour minimum, with the edited gallery delivered within two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "subject": "Photographing the Roche and Pierre Duo's March 10 recital at Carnegie Hall",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the Roche and Pierre Duo's March 10 recital at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about the photography plans for the recital. I look forward to hearing from you.",
           "variant": "reason-first"
         },
         "showSummaryAbsentReason": "no_listing_page"

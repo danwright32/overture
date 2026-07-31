@@ -49,22 +49,21 @@
     "results": [
       {
         "naturalKey": "alex-example|2026-08-03|the-example-room",
-        "showSummary": "A cabaret concert of new songs written by Alex Example, sung by Example and a cast of five, 75 minutes.",
+        "showSummary": "A cabaret concert of new songs written by one songwriter, performed with two guest songwriters and a cast of five, running 75 minutes.",
         "contacts": [
           {
-            "name": "Alex Example",
-            "role": "Songwriter and performer",
-            "email": "alex@alexexample.example",
-            "method": "named_decision_maker",
-            "confidence": "high",
             "provenance": "performer",
+            "name": "Alex Example",
+            "email": "alex@alexexample.example",
+            "method": "named_contact",
+            "confidence": "high",
             "sourceUrl": "https://alexexample.example/contact",
-            "overrideBody": "My name is Dan Wright and I'm a documentary photographer for the stage, here in NYC. I'm writing about your August 3 night at The Example Room. I work without flash and keep myself unobtrusive, so the audience stays with you and the performance isn't disturbed. Carnegie Hall has been my main room for nearly ten years, and I've also shot at Radio City Music Hall and Lincoln Center. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you!"
           }
         ],
         "draft": {
-          "subject": "Photographing Alex Example's new songs at The Example Room.",
-          "body": "I'm Dan Wright, a photographer here in NYC whose work is entirely live performance. I'm writing about your August 3 show at The Example Room. I shoot without flash and stay unobtrusive, so the audience doesn't notice me and nothing on stage is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and the edited gallery comes back within two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "subject": "Photographing Alex Example's Don't Be So Hard on Yourself at The Example Room",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Alex Example's August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If there isn't someone on it already, I'd be glad to talk about the photography plans for the night. I look forward to hearing from you!",
           "variant": "reason-first"
         }
       }

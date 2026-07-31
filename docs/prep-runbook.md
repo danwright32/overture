@@ -12,11 +12,12 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `9`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `10`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
+  `venueHistory`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -42,6 +43,12 @@ before this was codified.
   the act itself is who you pursue. Absent is not `false`: it means the app said nothing about it (a
   file predating the field, or a show that names a producer), and you behave exactly as you always did.
   See §1's route for what to do with it.
+  `venueHistory` (v10, #1887) is how well Dan already knows the ROOM this show plays in, as one of
+  `shot_before` / `a_few` / `regularly`. It is a BAND and carries NO COUNT, deliberately: the app
+  holds the number and never sends it, so there is nothing for you to state. ABSENT means say
+  nothing about the venue, and it is absent for three different reasons you cannot tell apart and
+  must not guess between (no history there, no history imported at all, or a Carnegie show, where
+  the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `8`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
@@ -572,9 +579,20 @@ Anatomy:
   performance isn't disturbed. Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
-- **Offer:** held positively, and ALWAYS state the rate plainly ($250 an hour plus tax,
-  one-hour minimum, gallery within two weeks).
-  **Never link to a contract, pricing, or rates page: the site does not have one** (#612).
+- **Offer:** held positively, and carrying NO PRICE AND NO TURNAROUND. Never state the rate,
+  never state that the gallery comes back within two weeks, and never link to a contract,
+  pricing, or rates page (#612: the site does not have one).
+
+  Dan's call, 2026-07-31, reversing the previous rule that made the rate mandatory: "I feel
+  like I'm more likely to get a response if I don't, because they may check out my portfolio
+  instead of getting sticker shock and then email me asking about it." A number in a first
+  email from a stranger is judged before the work is looked at. Leave the reader with the
+  portfolio and the ask, and let them raise money themselves; answering that question in a
+  REPLY is a conversation, and a conversation is the point.
+
+  This is about a COLD PITCH. A reply to someone who asks what Dan charges states the rate
+  plainly, as it always has ($250 an hour plus tax, one-hour minimum, gallery within two
+  weeks).
   The original plan called for A/B testing "state the rate" against "link the contract
   page", but that second arm was never real, and the only way to write it is to invent a
   URL that 404s in an email Dan actually sends. There is nothing to choose between here.
@@ -595,11 +613,13 @@ Anatomy:
     photography plans" rather than "I'd love to", which the no-enthusiasm rule below rules
     out even though Dan's own reference pitch uses it.
   - **Close by expecting a reply: "I look forward to hearing from you"** or a rewording of
-    it, and NO exclamation mark. **"Happy to answer any questions" is RETIRED (Dan,
+    it. An exclamation mark IS allowed here, and only here (#1906, Dan's call 2026-07-31: it
+    is his own sign-off, and he restored it by hand on a real draft). One mark, in the final
+    sentence, with none earlier in the email. **"Happy to answer any questions" is RETIRED (Dan,
     2026-07-31)**, along with any variation that asks THEM to produce something ("let me
     know if you have any questions", "feel free to reach out with questions"): inviting
     questions makes the reader do the work of inventing one, when the draft has already
-    stated the rate, the turnaround and the ask. Never "let me know how that lands" either,
+    made the offer and the ask. Never "let me know how that lands" either,
     Dan flagged it as sounding douchey.
 
   A draft MAY acknowledge they might be covered already ("if you don't have someone on it
@@ -626,11 +646,23 @@ Anatomy:
   the email never claims an exact number. The field carries a band and no number precisely so
   there is nothing to state, and inventing one is a fabricated fact about his own history.
 
+  **The follow-on clause is about FAMILIARITY, never about what could otherwise go wrong**
+  (Dan, 2026-07-31). A short phrase after the band is welcome, and it says he knows the space:
+  "so I'm familiar with the room", "so I know the space", "so the room isn't new to me". It must
+  NEVER be framed as a risk avoided: "so I'm not learning it on the night", "so there's no
+  guesswork", "so I won't be finding my angles during the first number". Dan flagged that shape
+  himself. Naming the bad outcome plants it in the reader's head and invites them to picture a
+  photographer fumbling in an unfamiliar room, which is the opposite of what the sentence is for.
+
   An ABSENT `venueHistory` means SAY NOTHING about having worked the venue. Never infer it from
   the venue's name, from a past client, or from anything else in the payload. The app omits the
   field when it has no history to report and, deliberately, on a Carnegie Hall show, where the
   Carnegie tenure credential above is already about that exact room and a venue line beside it
   would be the same fact twice.
+- **It is MY portfolio, never THE portfolio** (Dan, 2026-07-31). Write "you can see my portfolio
+  at danwrightphotography.com", never "you can see the portfolio at ...". The definite article
+  makes it sound like a shared company asset rather than his own body of work, and the whole
+  email is written in his first person voice.
 - **One portfolio link, always the site itself (#1832):** link `danwrightphotography.com` and
   NOTHING deeper. Never a gallery path: not `/music`, `/bands`, `/comedy`, `/dance`, or
   `/performing-arts`. Dan's call, 2026-07-30: "just always go to the same site and let them click
@@ -733,9 +765,12 @@ Applies to the shared `draft.body` AND every contact's `overrideBody`, if any. R
 fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);
-- states a rate that is not the canonical "$250 an hour plus tax, one-hour minimum";
+- states a rate, a price, or a delivery turnaround AT ALL (#1906: a cold pitch carries
+  neither; a reply to someone who asked still does);
 - contains performative enthusiasm: "love to", "thrilled", "excited", "can't wait",
-  "delighted", or any exclamation point. Rephrase level before writing.
+  "delighted", or an exclamation point ANYWHERE EXCEPT the final closing sentence
+  (#1906, Dan's call 2026-07-31: "I look forward to hearing from you!" is his own sign-off
+  and is allowed; one mark, at the very end, and none earlier). Rephrase level before writing.
 
 ### 4. Keep the results file current (#1023)
 

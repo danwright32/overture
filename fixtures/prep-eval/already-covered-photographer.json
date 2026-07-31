@@ -31,24 +31,24 @@
     "results": [
       {
         "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
-        "alreadyCoveredNote": "Their staff page names a Photographer in Residence, so they may already have concert coverage.",
         "contacts": [
           {
+            "provenance": "act",
             "name": "Emma Robinson",
             "role": "Marketing Director",
             "email": "emma@aurorastrings.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "act",
             "sourceUrl": "https://aurorastrings.example/about/staff"
           }
         ],
+        "alreadyCoveredNote": "Aurora Strings' own staff page names a Photographer in Residence and says its concert imagery is by that resident photographer.",
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
-          "body": "My name is Dan Wright and I'm a performing arts photographer here in NYC. I'm writing about the Aurora Strings performance at Metro Concert Hall on June 4. I shoot unobtrusive documentary coverage with no flash, so the audience doesn't notice me and the performance isn't disturbed, and nearly ten years of that work has been at Carnegie Hall. My rate is $250 an hour plus tax, with a one hour minimum, and the edited gallery comes back within two weeks. Recent work is at danwrightphotography.com. If you don't already have someone on it, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "subject": "Photographing Aurora Strings' June 4 concert at Metro Concert Hall",
+          "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your June 4 concert at Metro Concert Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you.",
           "variant": "reason-first"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+        }
       }
     ]
   }

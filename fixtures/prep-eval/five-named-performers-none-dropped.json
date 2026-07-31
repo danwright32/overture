@@ -78,59 +78,52 @@
     "results": [
       {
         "naturalKey": "feminine-fury|2026-08-03|the-example-room",
-        "showSummary": "A night of rock and theatre songs sung by five women, 80 minutes.",
+        "showSummary": "An 80 minute cabaret night of rock and theatre songs performed by a bill of five women.",
         "contacts": [
           {
+            "provenance": "performer",
             "name": "Bianca Delmar",
-            "role": "Performer",
             "email": "bianca@biancadelmar.example",
-            "method": "named_decision_maker",
+            "method": "direct_email",
             "confidence": "high",
-            "provenance": "performer",
             "sourceUrl": "https://biancadelmar.example/contact",
-            "overrideBody": "I'm Dan Wright, a documentary photographer covering live performance here in NYC. I'm writing about your August 3 show at The Example Room. I work without flash and stay unobtrusive, so the audience doesn't notice me and nothing about your performance is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the night, if you don't have someone on it already. I look forward to hearing from you."
           },
           {
+            "provenance": "performer",
             "name": "Megan Dwight",
-            "role": "Performer",
             "method": "form_or_dm",
-            "confidence": "medium",
+            "confidence": "low",
             "formUrl": "https://megandwight.example/about",
-            "provenance": "performer",
-            "sourceUrl": "https://megandwight.example/about",
-            "overrideBody": "I'm Dan Wright, a documentary photographer covering live performance here in NYC. I'm writing about your August 3 show at The Example Room. I work without flash and stay unobtrusive, so the audience doesn't notice me and nothing about your performance is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "overrideBody": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 3 show at The Example Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk through your photography plans for the show, if you don't have someone on it already. I look forward to hearing from you."
           },
           {
+            "provenance": "performer",
             "name": "Francesca Loew",
-            "role": "Performer",
             "email": "francesca@francescaloew.example",
-            "method": "named_decision_maker",
-            "confidence": "high",
-            "provenance": "performer",
-            "sourceUrl": "https://francescaloew.example",
-            "overrideBody": "I'm Dan Wright, a documentary photographer covering live performance here in NYC. I'm writing about your August 3 show at The Example Room. I work without flash and stay unobtrusive, so the audience doesn't notice me and nothing about your performance is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "method": "direct_email",
+            "confidence": "low",
+            "overrideBody": "My name is Dan, and I'm a performing arts photographer based in New York City. I'm writing about your August 3 show at The Example Room. I work as a documentary photographer, no flash and no interruption, so nobody in the room has to think about me. I've spent close to ten years photographing at Carnegie Hall, plus dates at Radio City Music Hall and Lincoln Center, and my portfolio is at danwrightphotography.com. I'd be glad to hear what your photography plans are for the night, if you don't have someone on it already. I look forward to hearing from you."
           },
           {
+            "provenance": "performer",
             "name": "Kristen Platt",
-            "role": "Performer",
             "method": "form_or_dm",
             "confidence": "low",
-            "provenance": "performer",
-            "overrideBody": "I'm Dan Wright, a documentary photographer covering live performance here in NYC. I'm writing about your August 3 show at The Example Room. I work without flash and stay unobtrusive, so the audience doesn't notice me and nothing about your performance is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "overrideBody": "I'm Dan Wright, an arts photographer working here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot quiet documentary coverage without flash, so the performance isn't disturbed and the audience doesn't clock me. Nearly a decade of that work has been at Carnegie Hall, alongside Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the show, if you haven't got someone on it already. I look forward to hearing from you."
           },
           {
+            "provenance": "performer",
             "name": "Nyla Vela",
-            "role": "Performer",
             "method": "form_or_dm",
             "confidence": "low",
-            "provenance": "performer",
-            "overrideBody": "I'm Dan Wright, a documentary photographer covering live performance here in NYC. I'm writing about your August 3 show at The Example Room. I work without flash and stay unobtrusive, so the audience doesn't notice me and nothing about your performance is disturbed. I've photographed at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery is delivered within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+            "overrideBody": "My name is Dan Wright and I'm a documentary arts photographer here in New York City. I'm writing about your August 3 show at The Example Room. I work without flash and stay out of the way, so the night runs as it would if I weren't there. I've photographed at Carnegie Hall for nearly ten years, with work at Radio City Music Hall and Lincoln Center too, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you."
           }
         ],
         "draft": {
-          "subject": "Photographing Feminine Fury at The Example Room.",
-          "body": "My name is Dan Wright, and I'm a concert and theatre photographer working here in NYC. I'm writing about the Feminine Fury date at The Example Room on August 3. I shoot documentary coverage with no flash and I stay unobtrusive, so the audience doesn't notice me and the performance isn't disturbed. Nearly ten years of that has been at Carnegie Hall, and other nights have taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and the edited gallery is delivered within two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
-          "variant": "reason-first"
+          "subject": "Photographing Feminine Fury at The Example Room",
+          "variant": "reason-first",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the August 3 performance of Feminine Fury at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for this one, if you don't have someone on it already. I look forward to hearing from you."
         }
       }
     ]

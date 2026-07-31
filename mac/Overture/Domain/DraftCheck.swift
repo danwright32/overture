@@ -112,7 +112,8 @@ enum DraftCheck {
         // not enthusiasm the drafter added, so strip the known title before hunting for a stray "!". A
         // performative word anywhere still fires (the title never licenses "thrilled"), and with no title
         // supplied (the blocking path, legacy call sites) this is byte-for-byte the old check.
-        if bodyOutsideTitle(body, title: title).contains("!") || performative.contains(where: text.contains) {
+        if hasStrayExclamation(bodyOutsideTitle(body, title: title))
+            || performative.contains(where: text.contains) {
             issues.append(.performativeEnthusiasm)
         }
         if booking.contains(where: text.contains) { issues.append(.presumesBooking) }
@@ -134,6 +135,31 @@ enum DraftCheck {
     // known (the send gate, the queue, the UI) without threading the prospect's facts through.
     static func blockingFindings(in body: String) -> [DraftIssue] {
         findings(in: body).filter(\.isBlocking)
+    }
+
+    // #1906: an exclamation mark is allowed in the CLOSING line, and nowhere else.
+    //
+    // Dan's call, 2026-07-31, after this check flagged his own sign-off: he edited a real draft to end
+    // "I look forward to hearing from you!" and kept it. The rule was written for performative warmth
+    // in the body of an email, and it was catching the one place he uses a mark deliberately.
+    //
+    // Exactly one, and only in the last sentence. A body ending in a run of them is performative again,
+    // which is what the rule is for. The performative WORD list is unaffected and still fires anywhere,
+    // including in the closing line, so "I'd be thrilled to hear from you!" is still caught.
+    private static func hasStrayExclamation(_ text: String) -> Bool {
+        let marks = text.filter { $0 == "!" }.count
+        guard marks > 0 else { return false }
+        guard marks == 1 else { return true }
+        guard let idx = text.lastIndex(of: "!") else { return true }
+        // Nothing but whitespace may follow it: that is what makes it the closing line rather than a
+        // mid-email flourish.
+        guard text[text.index(after: idx)...].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return true }
+        // And there has to be an actual email in front of it. Without this, a body that is nothing
+        // BUT an exclamation ("Come see the show!") reads as its own closing line and walks straight
+        // through, which is precisely the performative shape the rule was written for. Two existing
+        // tests caught this; the exemption is for a sign-off, not for any sentence that ends a string.
+        return !text[..<idx].contains { $0 == "." || $0 == "?" }
     }
 
     // #1141: the body with the show's own title removed, so an exclamation point (or other punctuation)

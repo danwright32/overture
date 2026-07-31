@@ -43,21 +43,21 @@
         "naturalKey": "aurora-strings|2026-03-10|metro-concert-hall",
         "contacts": [
           {
+            "provenance": "act",
             "name": "Emma Robinson",
             "role": "Marketing Director",
             "email": "emma@aurorastrings.example",
-            "method": "named_decision_maker",
+            "method": "named_contact",
             "confidence": "high",
-            "provenance": "act",
             "sourceUrl": "https://aurorastrings.example/about/staff"
           }
         ],
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
-          "body": "My name is Dan Wright and I work as a performance photographer here in New York City. I'm writing about the Aurora Strings date at Metro Concert Hall on March 10. I shoot documentary coverage without flash and keep out of the way, so the audience doesn't notice me and the performance runs undisturbed. Nearly ten years of my work has been at Carnegie Hall, with other nights at Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and the edited gallery is delivered within two weeks. Recent work sits at danwrightphotography.com. I'd be glad to talk through your photography plans for that night. I look forward to hearing from you.",
+          "subject": "Photographing Aurora Strings' March 10 concert at Metro Concert Hall",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 concert at Metro Concert Hall. I work in an unobtrusive documentary style, without flash, so the audience stays with the music and the players aren't pulled out of the performance. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I'd be glad to photograph the concert, and if you don't have someone on it already, I'd like to talk about your photography plans for the night. I look forward to hearing from you.",
           "variant": "reason-first"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+        }
       }
     ]
   }

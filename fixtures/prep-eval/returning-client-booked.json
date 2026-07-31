@@ -33,21 +33,21 @@
         "naturalKey": "aurora-strings|2026-06-04|metro-concert-hall",
         "contacts": [
           {
+            "provenance": "act",
             "name": "Emma Robinson",
             "role": "Marketing Director",
             "email": "emma@aurorastrings.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "provenance": "act",
             "sourceUrl": "https://aurorastrings.example/contact"
           }
         ],
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing Aurora Strings at Metro Concert Hall.",
-          "body": "It's good to see the Aurora Strings back at Metro Concert Hall on June 4, and I'd be glad to cover the night for you. My rate is unchanged at $250 an hour plus tax, one hour minimum, with the edited gallery delivered within two weeks. Tell me where your photography plans for June 4 stand and I'll hold the date. I look forward to hearing from you.",
-          "variant": "returning_client_warm"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+          "subject": "Photographing Aurora Strings' June 4 concert at Metro Concert Hall",
+          "body": "I saw Aurora Strings has a June 4 date at Metro Concert Hall coming up, and I'm writing to ask whether you've got photography sorted for that night. You know how I work by now: no flash, unobtrusive documentary coverage that neither the players nor the audience really notice. I'd be glad to talk through your photography plans for the performance, and if you've already got someone on it, that's no trouble. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
       }
     ]
   }
