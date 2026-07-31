@@ -167,6 +167,37 @@ describe("evaluatePrepResult - host venue disqualify (#368)", () => {
 // Nothing was established to be the presenter, and the only organisation on the page is the room Dan is not
 // pitching, so this is the shape a regression would take: the run gives up on the people and labels the
 // house as the producer instead.
+// #1870: an expectation matched as literal text is brittle in a way its author cannot see. A real run on
+// 2026-07-31 summarised the show as "musical theatre villain songs", which is exactly what the listing says
+// it is, and an expectation asking for "villains" scored that correct answer as a failure. The rule being
+// checked is "did the run say what the show IS", never "did it pluralise the noun the way the fixture did",
+// so the term has to be the shortest genuinely diagnostic one.
+describe("evaluatePrepResult - a show summary is scored on what it says, not its word endings", () => {
+  const expected: PrepEvalExpectation = {
+    description: "the run said what the show is",
+    requiredShowSummaryTerms: ["villain"],
+  };
+
+  it("accepts the wording a real run produced", () => {
+    const produced = results([NAMED_ACT]) as { version: number; results: Array<Record<string, unknown>> };
+    produced.version = 8;   // a summary is a v8 field, so the document has to declare v8 to carry one
+    produced.results[0].showSummary =
+      "A cabaret evening of musical theatre villain songs, sung straight, hosted by two performers.";
+    const verdict = evaluatePrepResult(produced, expected);
+    expect(verdict.failures).toEqual([]);
+    expect(verdict.pass).toBe(true);
+  });
+
+  it("still fails a summary that never says what the show is", () => {
+    const produced = results([NAMED_ACT]) as { version: number; results: Array<Record<string, unknown>> };
+    produced.version = 8;
+    produced.results[0].showSummary = "An evening of songs at a cabaret room, 70 minutes.";
+    const verdict = evaluatePrepResult(produced, expected);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures.join(" ")).toContain("villain");
+  });
+});
+
 describe("evaluatePrepResult - no producing organisation was named (#1856)", () => {
   const expected: PrepEvalExpectation = {
     description: "pursue the named people, never label anyone presenter",
