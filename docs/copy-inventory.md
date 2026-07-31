@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **956 sentences**, from 323 source files.
+Every sentence Overture can say to Dan: **959 sentences**, from 324 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -918,6 +918,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ReplyClassifyService.swift`
 "No response"
     `Domain/ReviewStatus.swift`
+"No shoot history has been imported, so pitches can't mention rooms you've photographed before. Export your Shoots calendar and run the shoot-history import."
+    `Domain/ShootHistory.swift`
 "No source matches that name."
     `Domain/SourceSearch.swift`
 "No sources need re-reading right now."
@@ -1586,6 +1588,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
     `Integration/ScoutExtractService.swift`
+"The shoot history file couldn't be read (it may be corrupted or a newer format), so pitches can't mention rooms you've photographed before. Re-run the shoot-history import."
+    `Domain/ShootHistory.swift`
 "The show on \(dateLabel) is dismissed as \(reason.label)"
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
@@ -1823,6 +1827,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
     `UI/SendConfirmAndReconnectAlerts.swift`
+"Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
+    `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
 "\(Plural.count(count, "draft")) to review"

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-31T18:00:00.000Z",
+  "shoots": [
+    {
+      "venue": "The Green Room 42\n570 10th Ave\nNew York NY 10036\nUnited States",
+      "date": "2018-06-22",
+      "title": "‘Round Midnight"
+    },
+    {
+      "venue": "\"Carnegie Hall, Carnegie Hall\"",
+      "date": "2019-01-21",
+      "title": "[DCINY] The Music of Sir Karl Jenkins: A 75th Birthday Celebration"
+    },
+    {
+      "venue": "Weill Recital Hall",
+      "date": "2023-05-14",
+      "title": "[Every Voice Choirs] Spring Concert"
+    },
+    {
+      "venue": "Abrons Arts Center",
+      "date": "2024-11-13",
+      "title": "[On Site Opera] Lucidity - Dress Rehearsal"
+    },
+    {
+      "venue": "Abrons Arts Center",
+      "date": "2024-11-14",
+      "title": "[On Site Opera] Lucidity - Performance"
+    },
+    {
+      "venue": "The Green Room 42, 570 10th Ave., New York City, New York 10036",
+      "date": "2026-01-24",
+      "title": "[Troubadour Music Studio] Voice Recital"
+    }
+  ]
+}
