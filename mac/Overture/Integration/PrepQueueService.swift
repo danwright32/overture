@@ -244,19 +244,39 @@ enum PrepQueueService {
     // failed save there leaves the shows unstamped, the marker cleared, and a Check button offering to pay
     // again for lookups that already happened.
     @discardableResult
+    // #1623: `anIngestIsStillToCome` is whether the results file this settle is reading has yet to be
+    // ingested. It decides whether the floor below is a DEFAULT or an OVERWRITE, and it is asked of the
+    // same decision `consumeIfNew` makes rather than inferred from the row.
     static func markProbed(keys: Set<String>, answeredIn resultsURL: URL,
                            in context: ModelContext, now: Date,
+                           anIngestIsStillToCome: Bool,
                            saveFailed: inout Bool) -> Set<String> {
         let answered = PrepImporter.answeredKeys(at: resultsURL)
         let toStamp = keys.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where toStamp.contains(p.naturalKey) {
-            p.reachabilityProbedAt = now
             // #1596 Phase 3: the pre-guard default. This runs BEFORE the probe-safe ingest, so the venue
             // and press guards have not classified anything yet and this writer cannot tell a sendable
             // address from a front desk. It records the floor; the ingest upgrades it when contacts
             // landed. A run that found nothing never reaches the ingest, so this value is the answer.
-            p.reachabilityResult = .noEmailFound
+            //
+            // #1623: only while an ingest is still to come. On a RE-settle nothing follows this, so an
+            // unconditional floor is the last word and a show that found jane@example.org last night comes
+            // back reading "No email found", with that address still printed underneath it and a 90-day
+            // freshness stamp locking it out of a re-check.
+            if anIngestIsStillToCome {
+                p.reachabilityProbedAt = now
+                p.reachabilityResult = .noEmailFound
+            } else {
+                // Re-settling the same file changes nothing about WHEN this show was researched or what
+                // was found, so both fields are filled in only where nothing is there. That is not the
+                // "write the floor only when the result is nil" rule the issue warns against: on a FIRST
+                // settle the branch above still overwrites, so a genuine re-check that found nothing
+                // still clears an earlier positive. This branch exists for the row a first settle failed
+                // to save, which would otherwise read as never checked and be paid for twice.
+                if p.reachabilityProbedAt == nil { p.reachabilityProbedAt = now }
+                if p.reachabilityResult == nil { p.reachabilityResult = .noEmailFound }
+            }
         }
         saveFailed = false
         do {
@@ -309,7 +329,11 @@ enum PrepQueueService {
                                         defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
         var stampSaveFailed = false
+        // #1623: asked BEFORE the ingest below consumes the file, because afterwards the answer is always
+        // "already consumed" and the floor would never overwrite anything again.
+        let ingestToCome = PrepImporter.hasUnconsumedResults(at: resultsURL, defaults: defaults)
         let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now,
+                                  anIngestIsStillToCome: ingestToCome,
                                   saveFailed: &stampSaveFailed)
         // #1769: the ingest Outcome used to be discarded whole, so a failed save or a runaway web-call
         // count was invisible on a check as well as the shortfall. Kept, and folded into the report below.

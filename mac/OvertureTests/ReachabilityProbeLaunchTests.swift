@@ -123,8 +123,9 @@ struct ReachabilityProbeLaunchTests {
         ])).write(to: resultsURL)
 
         var stampSaveFailed = false
+        // #1623: a first settle, so the floor is written unconditionally, which is what this test is about.
         PrepQueueService.markProbed(keys: [a, b], answeredIn: resultsURL, in: ctx, now: now,
-                                    saveFailed: &stampSaveFailed)
+                                    anIngestIsStillToCome: true, saveFailed: &stampSaveFailed)
         #expect(!stampSaveFailed)
 
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
