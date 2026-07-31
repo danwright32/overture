@@ -35,8 +35,11 @@
     }
   ],
   "expected": {
-    "description": "The show title is not an organisation, so hunting for one and reporting that nobody publishes an address is the failure this fixture exists to catch. Both hosts named in the listing text are pursued directly, each with their own second-person body. The room's two inboxes are refused, and nothing is labelled `presenter`: no producer was ever established.",
-    "requiredPerformers": ["Delaney Brown", "Miggie Snyder"],
+    "description": "The show title is not an organisation, so hunting for one and reporting that nobody publishes an address is the failure this fixture exists to catch. Both hosts named in the listing text are pursued directly, each with their own second-person body. The room's two inboxes are refused, and nothing is labelled `presenter`: no producer was ever established. The summary term is the STEM, because the expectation is that the run said what the show is, not that it happened to pluralise the word the way this fixture's author did: a real run on 2026-07-31 wrote \"musical theatre villain songs\", a correct answer that an exact match on \"villains\" scored as a failure.",
+    "requiredPerformers": [
+      "Delaney Brown",
+      "Miggie Snyder"
+    ],
     "performerOverrideBodyRequired": true,
     "forbidPresenterProvenance": true,
     "requireSomeContact": true,
@@ -44,8 +47,12 @@
       "tickets@theexampleroom.example",
       "programming@theexampleroom.example"
     ],
-    "forbiddenDomains": ["theexampleroom.example"],
-    "requiredShowSummaryTerms": ["villains"],
+    "forbiddenDomains": [
+      "theexampleroom.example"
+    ],
+    "requiredShowSummaryTerms": [
+      "villain"
+    ],
     "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
