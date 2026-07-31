@@ -244,13 +244,20 @@ real_run() {
   . "${REPO_ROOT}/mac/scripts/lib/models.sh"
   # shellcheck source=/dev/null
   . "${REPO_ROOT}/mac/scripts/lib/claude-run-scope.sh"
-  _eval_scope="$(claude_run_scope "Read" "manual" "Bash Edit WebFetch WebSearch Skill" "eval-prep-runbook")" || {
-    echo "eval-prep-runbook: refusing to run, unsafe tool scope" >&2
-    exit 1
-  }
-
+  # Resolved BEFORE the scope call, which needs it: `claude_run_scope`'s fifth argument is the binary it
+  # enumerates this Mac's plugins with, so it can turn them off (#1682). Passing four arguments aborted the
+  # helper under `set -u`, and its failure read as an unsafe scope, so this whole opt-in layer could not
+  # start for three days (#1862).
   _eval_claude="$(command -v claude || true)"
   [ -n "${_eval_claude}" ] || { echo "eval-prep-runbook: the 'claude' CLI is not on PATH" >&2; exit 1; }
+
+  _eval_scope="$(claude_run_scope "Read" "manual" "Bash Edit WebFetch WebSearch Skill" "eval-prep-runbook" \
+                                  "${_eval_claude}")" || {
+    # The helper has already said WHICH posture it refused, on stderr. This line names the stage, so a
+    # caller-side failure (the shape #1862 took) is not read as the guard rejecting a real scope problem.
+    echo "eval-prep-runbook: refusing to run: the tool scope for this run could not be established" >&2
+    exit 1
+  }
 
   _eval_tmp="$(mktemp -d)"
   trap 'rm -rf "${_eval_tmp}"' EXIT
