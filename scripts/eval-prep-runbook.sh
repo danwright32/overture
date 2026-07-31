@@ -41,6 +41,16 @@ CLI="${SCRIPT_DIR}/eval-prep-runbook.ts"
 # those (#1400). Gitignored; overridable so the test can point it at a throwaway path. NOT under the
 # per-run mktemp dir (that is deleted on EXIT), because it must survive between invocations.
 FAILURES_FILE="${OVERTURE_EVAL_FAILURES_FILE:-${REPO_ROOT}/.overture-eval-failures}"
+# Where each real run's produced outputs are KEPT (#1870). A run spends real money to produce them, so
+# deleting them on exit means a failure can be named and never read: the one FAIL of the 2026-07-31 run
+# reported which expectation missed and left nothing to tell a rule that had drifted from an expectation
+# that was simply too strict. Reading it back had to cost another run.
+#
+# Kept per run in a dated directory and pruned to the last few, the same shape as the store backups:
+# evidence that grows without limit is its own problem, and only the recent handful is ever read.
+# Gitignored, and overridable so the test can point it at a throwaway path.
+RUNS_DIR="${OVERTURE_EVAL_RUNS_DIR:-${REPO_ROOT}/.overture-eval-runs}"
+RUNS_KEPT=10
 
 cost_warning() {
   cat >&2 <<'WARN'
@@ -219,6 +229,22 @@ run_plan() {
   esac
 }
 
+# Keep only the most recent RUNS_KEPT run directories (#1870). Only the plain dated shape is counted, so a
+# directory a person renamed to hold on to (an eval worth keeping past its turn) can never be aged out by
+# the next ten runs, which is the same rule the store backups follow for a `.foreign` snapshot.
+prune_kept_runs() {
+  [ -d "${RUNS_DIR}" ] || return 0
+  local names count excess name
+  names="$(ls -1 "${RUNS_DIR}" 2>/dev/null | grep -E '^[0-9]{8}-[0-9]{6}$' | sort || true)"
+  count="$(printf '%s\n' "${names}" | grep -c . || true)"
+  excess=$(( count - RUNS_KEPT ))
+  [ "${excess}" -gt 0 ] || return 0
+  # Oldest first, so the ones removed are always the ones nobody is going to open.
+  for name in $(printf '%s\n' "${names}" | sed -n "1,${excess}p"); do
+    rm -rf "${RUNS_DIR:?}/${name}"
+  done
+}
+
 # Rewrite FAILURES_FILE to the post-run failing set so `--yes --failed` CONVERGES (#1400): keep prior
 # failures this run did NOT retest, drop the ones it retested-and-passed, add the ones it failed. This one
 # rule is correct for a full run (nothing prior survives, so the file becomes exactly this run's failures),
@@ -273,8 +299,11 @@ real_run() {
     exit 1
   }
 
-  _eval_tmp="$(mktemp -d)"
-  trap 'rm -rf "${_eval_tmp}"' EXIT
+  # #1870: a real directory that OUTLIVES the run, not a mktemp deleted on exit. The stamp is the run's
+  # own start time, so two runs never share a directory and the newest sorts last.
+  _eval_tmp="${RUNS_DIR}/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "${_eval_tmp}"
+  echo "keeping this run's outputs in ${_eval_tmp}"
 
   _eval_failures=0
   _eval_total=0
@@ -285,8 +314,11 @@ real_run() {
   # Record which fixtures this run left failing so a later `--yes --failed` can recheck just those.
   update_failures_file
 
+  prune_kept_runs
+
   echo
   echo "eval complete: $(( _eval_total - _eval_failures ))/${_eval_total} fixtures passed"
+  echo "the outputs each fixture produced are in ${_eval_tmp}"
   [ "${_eval_failures}" -eq 0 ]
 }
 

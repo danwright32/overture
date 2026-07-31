@@ -55,3 +55,5 @@ DerivedData/
 
 # Last real eval-prep-runbook.sh run's failing fixtures, for `--yes --failed` rechecks (#1400)
 .overture-eval-failures
+# #1870: each real eval run's produced outputs, kept so a failure can be read instead of re-bought.
+.overture-eval-runs/

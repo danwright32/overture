@@ -32,6 +32,9 @@ person, org, venue, or email address. `.example` domains and made-up names throu
    - `scripts/eval-prep-runbook.sh --yes` runs the CURRENT runbook against each fixture through the same
      headless `claude -p` mechanism the app uses, then scores the actual output with the SAME engine
      (`scripts/eval-prep-runbook.ts` -> `src/lib/prepEval.ts`). Run it by hand before shipping a runbook edit.
+     Each real run KEEPS what it produced, in a dated directory under `.overture-eval-runs/` (last 10, and a
+     directory renamed off that shape is never pruned). Read a failure's own output there rather than paying
+     to produce it again; the run prints the path when it finishes.
 
 ## Rules covered
 
