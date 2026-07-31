@@ -26,7 +26,7 @@
     "forbidGalleryLink": true
   },
   "sampleCompliantOutput": {
-    "version": 6,
+    "version": 8,
     "generatedAt": "2026-07-20T00:00:00.000Z",
     "results": [
       {
@@ -46,7 +46,8 @@
           "subject": "Photographing Aurora Strings at Metro Concert Hall.",
           "body": "It's good to see the Aurora Strings back at Metro Concert Hall on June 4. I'd love to photograph the night for you. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Happy to answer any questions.",
           "variant": "returning_client_warm"
-        }
+        },
+        "showSummaryAbsentReason": "no_listing_page"
       }
     ]
   }

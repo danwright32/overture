@@ -19,8 +19,15 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `expected`: the rule outcome the produced `PrepResults` must satisfy (`PrepEvalExpectation` in
   `src/lib/prepEval.ts`): forbidden inboxes/domains/patterns, required performers, provenance rules,
   confidence rules, presenter/note requirements, the discipline gallery link.
-- `sampleCompliantOutput`: a hand-written `PrepResults` (v6) that satisfies `expected`. The always-on
-  tests assert it passes; the real-AI harness uses it as a reference of a correct answer.
+- `sampleCompliantOutput`: a hand-written `PrepResults` that satisfies `expected`. The always-on tests
+  assert it passes; the real-AI harness uses it as a reference of a correct answer.
+  It must satisfy the runbook AS IT STANDS, not as it stood when the fixture was typed (#1872). Nothing
+  re-reads these when a rule lands, and the drift runs the way that hides problems: nine samples drafted
+  without saying what the show is, long after #1824 required it, and every one still self-checked clean.
+  A test now asserts each drafting entry either says what the show is or says why it cannot, so when you
+  add a runbook rule, update every sample in the same change. Where a fixture's item carries no
+  `showListing` at all, the honest answer is `showSummaryAbsentReason: "no_listing_page"`, never a summary
+  written from the sources: a sample that invents one teaches the eval to accept an invented answer.
 
 ## The two layers
 
