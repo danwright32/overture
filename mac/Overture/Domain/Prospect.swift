@@ -169,12 +169,10 @@ final class Prospect {
     // guard is real but not sendable, which is `weakContactOnly` rather than `noEmailFound` (#1324).
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
         if recipients.contains(where: \.isSendablePending) { return .emailFound }
-        let weak = recipients.contains { r in
-            r.email?.isEmpty == false
-                && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
-                    || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
-        }
-        if weak { return .weakContactOnly }
+        // #1798: through the ONE shared definition, which lists every guard that can hold an address
+        // (`Recipient.isHeldByAGuard`). This rule listed two of the three, so an address held only as a
+        // possible duplicate was neither sendable nor weak and fell through to "no address at all".
+        if recipients.contains(where: \.isHeldByAGuard) { return .weakContactOnly }
         // #1626: no address anywhere, but the act publishes a form on its own site. Ranked below the
         // address states deliberately: those are about whether an address exists at all, and leaving
         // their order untouched keeps #1324's tested behaviour exactly as it was. The combination (a

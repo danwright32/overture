@@ -470,8 +470,14 @@ struct ProspectRowView: View {
         case .weakContactOnly:
             // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
             // but only a weak (venue/press) one.
-            reachabilityNote(icon: "envelope.badge", text: ReachabilityCopy.weakContactOnlyBadge,
-                             tone: Reachability.tone(for: .weakContactOnly), help: ReachabilityCopy.weakContactOnlyHelp)
+            reachabilityNote(icon: "envelope.badge",
+                             text: ReachabilityCopy.weakContactBadge(
+                                reason: item.weakContactHoldReason ?? .venueOrPress),
+                             tone: Reachability.tone(for: .weakContactOnly),
+                             // #1798: the sentence names the hold this row actually has. Decided on the
+                             // model (testable), never re-derived here.
+                             help: ReachabilityCopy.weakContactHelp(
+                                reason: item.weakContactHoldReason ?? .venueOrPress))
         case .contactFormOnly:
             // #1626: gold, which Dan reserves for what he can act on. There IS a way through here; it
             // just costs him a few minutes at their site instead of a send.

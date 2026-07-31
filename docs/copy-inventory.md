@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **954 sentences**, from 322 source files.
+Every sentence Overture can say to Dan: **956 sentences**, from 322 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -692,6 +692,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectMutations.swift`
 "Hedges like a cold pitch at a warm client"
     `Domain/DraftCheck.swift`
+"Held as a duplicate"
+    `Domain/Reachability.swift`
 "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     `App/ActionFeedback.swift`
 "Hide this for a week"
@@ -1611,6 +1613,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "They replied"
     `Domain/InquiryCopy.swift`
+"This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
+    `Domain/Reachability.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
