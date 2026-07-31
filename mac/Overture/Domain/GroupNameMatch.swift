@@ -141,6 +141,62 @@ enum GroupNameMatch {
         return containsTokenRun(long, short)
     }
 
+    // #1764: the same-night dedupe's own entry point, and the ONLY caller allowed to tolerate a
+    // misspelling. Since #1761 dropped the room from the merge, the title is the sole guard against a
+    // wrong merge, so this is written to be as narrow as the live evidence demands and no wider.
+    //
+    // The live case: one source spells its own show "The Golden Hour Series at Greely Square: Vaden
+    // Landers" on two days and "Greeley Square" on a third. One letter, inside the title, so the
+    // containment rule refuses them and the night reads as two cards.
+    //
+    // LIVE-STORE-CLAIM verified=2026-07-30 measure="same-night groups and duplicate rows before and after allowing a one-character typo in a single word of the title"
+    // Measured over all 742 dated rows before it was written: the group count does not move (26), rows
+    // removed goes from 32 to 34, and exactly two groups change, both Golden Hour nights absorbing the
+    // copy that spells Greeley correctly. NO new group appears anywhere in the store.
+    //
+    // Every condition below is load-bearing, because a season's own numbering is one character apart by
+    // design ("Symphony No 5" against "No 6", "Part I" against "Part II") and those are different
+    // concerts:
+    //   - the two titles must hold the SAME NUMBER of words, so nothing is gained or lost,
+    //   - exactly ONE word may differ, since a typo is one slip and not two,
+    //   - that word may not be a number,
+    //   - it must be at least four letters, which is what keeps "me" from matching "ye",
+    //   - and it must be one character from its twin.
+    static func isSameNightVariant(_ a: String, _ b: String) -> Bool {
+        if isConfident(a, b, minimumContainment: sameNightContainmentFraction) { return true }
+        return differsByOneTypo(a, b)
+    }
+
+    private static func differsByOneTypo(_ a: String, _ b: String) -> Bool {
+        let ta = tokens(a), tb = tokens(b)
+        guard !ta.isEmpty, ta.count == tb.count else { return false }
+        let differing = zip(ta, tb).filter { $0 != $1 }
+        guard differing.count == 1, let pair = differing.first else { return false }
+        return isOneCharacterApart(pair.0, pair.1)
+    }
+
+    private static func isOneCharacterApart(_ a: String, _ b: String) -> Bool {
+        guard !a.contains(where: \.isNumber), !b.contains(where: \.isNumber) else { return false }
+        guard min(a.count, b.count) >= 4, abs(a.count - b.count) <= 1 else { return false }
+        return editDistance(a, b) <= 1
+    }
+
+    // Levenshtein, two rows at a time. Only ever called on two short words that already passed the
+    // length and digit guards above.
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let x = Array(a), y = Array(b)
+        if x.isEmpty { return y.count }
+        var prev = Array(0...y.count)
+        for i in 1...x.count {
+            var cur = [i]
+            for j in 1...y.count {
+                cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1)))
+            }
+            prev = cur
+        }
+        return prev[y.count]
+    }
+
     // #1693: the fuzzy gate scores the WHOLE name, unlike isConfident above, which keeps the subtitle
     // strip. The two want opposite things from that strip and it took 18 wrong flags to see it.
     //
