@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **956 sentences**, from 323 source files.
+Every sentence Overture can say to Dan: **965 sentences**, from 326 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -27,6 +27,7 @@ What is not, and why:
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
+- `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
@@ -39,6 +40,8 @@ What is not, and why:
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)
+- `Domain/VenueShootHistory.swift`: A venue name looked UP in the table, never shown to Dan (#1887)
+- `Domain/VenueShootHistory.swift`: Words MATCHED in Dan's own calendar titles, never shown to him (#1887)
 - `Integration/AppleScriptOmniFocusClient.swift`: AppleScript source and OmniFocus tag names: OmniFocus reads these, not Dan (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic log to a file, not the app's own voice (#915)
 - `Integration/GmailAuthManager.swift`: developer diagnostic + a system activity reason, not the app's voice (#915)
@@ -918,6 +921,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ReplyClassifyService.swift`
 "No response"
     `Domain/ReviewStatus.swift`
+"No shoot history has been imported, so pitches can't mention rooms you've photographed before. Export your Shoots calendar and run the shoot-history import."
+    `Domain/ShootHistory.swift`
 "No source matches that name."
     `Domain/SourceSearch.swift`
 "No sources need re-reading right now."
@@ -1125,6 +1130,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExperimentReportView.swift`
 "Pitch copied for \(org)"
     `App/ActionFeedback.swift`
+"Pitch will say \(claim(for: band)): \(dates)"
+    `Domain/VenueHistoryCopy.swift`
 "Pitching other shows that night"
     `Domain/ReviewStatus.swift`
 "Possible booking, confirm?"
@@ -1304,6 +1311,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Say what happened"
     `Domain/ReachedOutQueue.swift`
+"Says how many times Dan has shot the venue"
+    `Domain/DraftCheck.swift`
 "Scout & Prep"
     `App/RootView.swift`
 "Scout progress"
@@ -1586,6 +1595,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
     `Integration/ScoutExtractService.swift`
+"The shoot history file couldn't be read (it may be corrupted or a newer format), so pitches can't mention rooms you've photographed before. Re-run the shoot-history import."
+    `Domain/ShootHistory.swift`
 "The show on \(dateLabel) is dismissed as \(reason.label)"
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
@@ -1823,6 +1834,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
     `UI/SendConfirmAndReconnectAlerts.swift`
+"Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
+    `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
 "\(Plural.count(count, "draft")) to review"
@@ -1983,6 +1996,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
+"\(shown.joined(separator: ", ")) and \(hidden) more"
+    `Domain/VenueHistoryCopy.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
@@ -2175,6 +2190,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
+"you shoot here regularly"
+    `Domain/VenueHistoryCopy.swift`
+"you've photographed a few shows here"
+    `Domain/VenueHistoryCopy.swift`
+"you've photographed here before"
+    `Domain/VenueHistoryCopy.swift`
 "your booking log"
     `UI/QueueView+Model.swift`
 "your queue"

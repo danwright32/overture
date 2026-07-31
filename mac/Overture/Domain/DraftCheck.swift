@@ -15,6 +15,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case foreignLink              // links a host that is not Dan's own site (#789)
     case placeholder              // a template slot the drafter never filled: "[VENUE]" (#789)
     case galleryPathLink          // deep-links one gallery instead of the site itself (#1832)
+    case venueHistoryCount        // states how MANY times Dan has shot the room (#1887)
 
     var label: String {
         switch self {
@@ -28,6 +29,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .foreignLink: return "Links a site that is not danwrightphotography.com"
         case .placeholder: return "Contains an unfilled placeholder like [VENUE]"
         case .galleryPathLink: return "Links one gallery instead of the portfolio itself"
+        case .venueHistoryCount: return "Says how many times Dan has shot the venue"
         }
     }
 
@@ -46,7 +48,11 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // #1832: a gallery deep link clears the same bar the other two do. It is an exact comparison
         // against five known paths, so there is nowhere for a false positive to come from, and the thing
         // it prevents is a choice made on the recipient's behalf that Dan does not want made.
-        case .foreignLink, .placeholder, .galleryPathLink: return true
+        // #1887: a count of past shoots clears the same bar. The app deliberately sends the drafter a
+        // BAND and no number, so a number in this shape was invented, and it is a claim about Dan's own
+        // history made to someone who works at that venue. The matcher is narrow enough to have nowhere
+        // for a false positive to come from: see hasVenueHistoryCount.
+        case .foreignLink, .placeholder, .galleryPathLink, .venueHistoryCount: return true
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate: return false
         }
@@ -119,6 +125,7 @@ enum DraftCheck {
         if hasForeignLink(body) { issues.append(.foreignLink) }
         if hasPlaceholder(body) { issues.append(.placeholder) }
         if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
+        if hasVenueHistoryCount(body) { issues.append(.venueHistoryCount) }
         return issues
     }
 
@@ -203,6 +210,47 @@ enum DraftCheck {
     // in sync with whatever the drafter happens to name its slots.
     private static func hasPlaceholder(_ body: String) -> Bool {
         body.range(of: #"\[[^\]\n]{1,60}\]"#, options: .regularExpression) != nil
+    }
+
+    // #1887: the draft states HOW MANY times Dan has shot this room.
+    //
+    // Dan's rule is that a pitch never claims an exact number, and the app enforces it by sending the
+    // drafter a BAND and no count at all (PrepQueueItem.venueHistory). A number in this shape was
+    // therefore invented, which makes it a fabricated fact about Dan's own history, told to somebody
+    // who works at the venue. That is why it BLOCKS rather than warns.
+    //
+    // Deliberately narrow, so it clears the "nowhere for a false positive to come from" bar:
+    //   1. a PAST-TENSE, first-person shooting phrase ("I've shot", "I have photographed", ...), which
+    //      is what keeps it away from an offer about the show being pitched. "I'll be photographing
+    //      your three performances" is a perfectly good sentence and must not be blocked.
+    //   2. a numeral or number word, or a standalone count word ("twice", "a couple"),
+    //   3. within a few words of a countable noun for an occasion (show, time, concert, night, ...).
+    //
+    // What it deliberately does NOT catch is the sanctioned band wording: "a few shows there" carries
+    // no number, and the Carnegie tenure credential ("close to ten years") is a number attached to
+    // YEARS, not to a countable occasion, so neither trips it.
+    private static func hasVenueHistoryCount(_ body: String) -> Bool {
+        // copy-inventory:ignore-start  Words MATCHED in a draft, never shown to Dan (#1887)
+        let pastTenseShooting =
+            #"(?i)\bI(?:'ve| have)?\s+(?:have\s+)?(?:shot|photographed|covered|worked)\b"#
+        let numberWord =
+            #"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|dozens|"#
+            + #"several|numerous|countless|multiple|many)"#
+        let occasion = #"(?:show|shows|time|times|concert|concerts|performance|performances|"#
+            + #"night|nights|gig|gigs|event|events|occasion|occasions)"#
+        // "twice"/"three times" and "a couple of" are counts written as words rather than digits.
+        let standaloneCount = #"(?i)\b(?:twice|thrice|a\s+couple(?:\s+of)?)\b"#
+        // copy-inventory:ignore-end
+
+        for sentence in body.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) {
+            guard sentence.range(of: pastTenseShooting, options: .regularExpression) != nil else {
+                continue
+            }
+            if sentence.range(of: standaloneCount, options: .regularExpression) != nil { return true }
+            let counted = #"(?i)\b"# + numberWord + #"\b(?:\s+\w+){0,2}\s+"# + occasion + #"\b"#
+            if sentence.range(of: counted, options: .regularExpression) != nil { return true }
+        }
+        return false
     }
 
     // The canonical rate is "$250 an hour plus tax, one-hour minimum" (#39). Any other dollar

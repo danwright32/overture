@@ -52,13 +52,68 @@ enum VenuePlaces {
     // real on the live store. Rather than one key per spelling, the candidates below reduce a string to
     // the parts that could name a venue and ask the table about each.
     static func entry(for venue: String?) -> Entry? {
-        guard let raw = venue?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return nil
-        }
+        guard let raw = sourceCleaned(venue), !raw.isEmpty else { return nil }
         for candidate in candidates(raw) {
             if let hit = table[key(candidate)] { return hit }
         }
         return nil
+    }
+
+    // #1896: the venue's IDENTITY, as one lowercased string. Distinct from `entry(for:)`, which
+    // answers WHERE a venue is.
+    //
+    // THE REASON THIS EXISTS AS ITS OWN FUNCTION. `Entry` is Equatable and 41 rows of the table
+    // below share the identical `manhattan` value, so anything keying identity on the entry
+    // merges The Green Room 42, Merkin Hall, Asylum NYC, SoHo Playhouse, Abrons and Carnegie into
+    // ONE venue. In #1887's shoot count that would tell the first recipient at any Manhattan room
+    // that Dan shoots there regularly, which is the worst thing that feature can say.
+    //
+    // Answers, most authoritative first: the parent building when the table knows one (so Weill,
+    // Zankel, Stern and Resnick are all Carnegie Hall), else the table's own spelling of whichever
+    // candidate matched (so "Merkin Hall at Kaufman Music Center" and "Merkin Hall" agree), else
+    // the shared natural-key fold, so a venue the table has never heard of still gets a stable
+    // identity rather than none.
+    //
+    // CAUTION for anyone adding a `parent` to a row: `parent` was built for GEOGRAPHY, and this is
+    // now its SECOND consumer. Giving a row a parent so its CARD reads nicely also merges it into
+    // that parent here, in a sentence sent to a stranger. `jalopy's classroom` is the standing
+    // example of a parent that is deliberately NOT the same room.
+    static func canonicalKey(for venue: String?) -> String? {
+        guard let raw = sourceCleaned(venue), !raw.isEmpty else { return nil }
+        for candidate in candidates(raw) {
+            guard let hit = table[key(candidate)] else { continue }
+            if let parent = hit.parent { return key(parent) }
+            return key(candidate)
+        }
+        return normalize(VenueNormalization.normalizeForKey(raw))
+    }
+
+    // #1896: the formatting a SOURCE wraps a venue in, as opposed to the venue's own name. Both
+    // artifacts below are the Shoots calendar's, measured on the real export (2026-07-31), and
+    // neither has ever appeared in a stored prospect venue, so cleaning them here rather than in
+    // `VenueNormalization.normalizeForKey` keeps every stored natural key exactly where it is (a
+    // change there is a migration, not a fix).
+    //
+    // Shared by `entry(for:)` and `canonicalKey(for:)` rather than done at one call site, so a
+    // venue cannot be placed in one city by the card and keyed as a different room by the count.
+    static func sourceCleaned(_ venue: String?) -> String? {
+        guard var s = venue?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+
+        // A matched pair of wrapping double quotes: 40 of 322 events, e.g. "Carnegie Hall,
+        // Carnegie Hall". Only a matched pair is stripped, so a name that merely contains a quote
+        // is untouched.
+        while s.count >= 2, s.hasPrefix("\""), s.hasSuffix("\"") {
+            s = String(s.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // An address written after a NEWLINE rather than a comma: 42 of 322 events. A newline
+        // says exactly what a comma says here (this clause is WHERE the venue is), and every
+        // clause-splitting rule downstream, `candidates` and `VenueNormalization.keyName` alike,
+        // only knows about commas. Without this, "The Green Room 42\n570 10th Ave" is a different
+        // venue from "The Green Room 42" and #1887's motivating room counts 1 shoot instead of 2.
+        s = s.replacingOccurrences(of: #"\s*\n\s*"#, with: ", ", options: .regularExpression)
+
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // The spellings to try, most specific first:

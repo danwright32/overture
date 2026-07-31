@@ -612,6 +612,25 @@ Anatomy:
   Carnegie tenure, another marquee venue can lead with itself or pair with the
   Carnegie tenure. Vary the phrasing draft to draft; never reproduce Dan's reference
   pitch (dan-wright-brand-voice skill, references/email-and-alt-text.md) verbatim.
+- **Say if Dan already knows the room (#1887):** when the item carries `venueHistory`, work that
+  fact into the draft ALONGSIDE the credential above, never instead of it (Dan's call,
+  2026-07-31). The credential says the level he works at; this says he knows THIS room, and it is
+  the one thing in a cold pitch a stranger cannot fake. Use the band's meaning and nothing more
+  precise:
+  - `shot_before`: he has photographed at this venue before, so he knows the room.
+  - `a_few`: he has photographed a few shows there.
+  - `regularly`: he shoots there regularly.
+
+  **NEVER state a count.** Not a numeral, not a number word, and not a phrase standing in for one
+  ("twice", "a couple of", "three times", "over a dozen"). Dan was explicit: the bands exist so
+  the email never claims an exact number. The field carries a band and no number precisely so
+  there is nothing to state, and inventing one is a fabricated fact about his own history.
+
+  An ABSENT `venueHistory` means SAY NOTHING about having worked the venue. Never infer it from
+  the venue's name, from a past client, or from anything else in the payload. The app omits the
+  field when it has no history to report and, deliberately, on a Carnegie Hall show, where the
+  Carnegie tenure credential above is already about that exact room and a venue line beside it
+  would be the same fact twice.
 - **One portfolio link, always the site itself (#1832):** link `danwrightphotography.com` and
   NOTHING deeper. Never a gallery path: not `/music`, `/bands`, `/comedy`, `/dance`, or
   `/performing-arts`. Dan's call, 2026-07-30: "just always go to the same site and let them click

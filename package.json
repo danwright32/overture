@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "import-history": "tsx scripts/import-history.ts"
+    "import-history": "tsx scripts/import-history.ts",
+    "import-shoot-history": "tsx scripts/import-shoot-history.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.0"

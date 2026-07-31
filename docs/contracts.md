@@ -26,7 +26,8 @@ the workflow's runbook is its spec.
 | --- | --- | --- | --- | --- | --- |
 | `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
-| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
+| `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
+| `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6, 7 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
@@ -298,6 +299,43 @@ grounded in, or honestly that it was grounded in nothing (`Prospect.showSummary`
 the runbook is a prompt, and a silent gap is not evidence a page became unreadable. Purely additive; the
 reader's tolerant gate (1 through 8) still accepts `v1.json` through `v7.json` unchanged, `v8.json` is the
 show-summary spec.
+
+Queue version 10 (#1887) adds an optional `venueHistory` to each item: how well Dan already knows
+THIS room, as one of `shot_before` / `a_few` / `regularly`. It is a BAND and never a count, and the
+count itself never leaves the app (`VenueShootHistory`). Dan's rule is that a pitch never claims an
+exact number, and a rule that lives only in the prompt is a hope (L27), so the wire carries nothing
+for the drafter to state. A second, deterministic guard sits at the other end: `DraftCheck`'s
+`venueHistoryCount` BLOCKS a send whose body pairs a past-tense first-person shooting phrase with a
+count, since the app never supplied one.
+
+Absent means SAY NOTHING, and three different situations produce it: no history at the venue, no
+history imported at all, and, deliberately, a show at Carnegie Hall, where the runbook already
+requires the "nearly ten years at Carnegie Hall" tenure credential and a venue band beside it would
+be one fact stated twice (Dan's call, 2026-07-31). Additive; the reader's tolerant gate (1 through
+10) still accepts `v1.json` through `v9.json` unchanged, and `v10.json` is the venue-history spec.
+
+### `overture-shoot-history.json`
+
+Every past shoot Dan has photographed, with its venue and date, so a pitch can say he has shot this
+room before. Written by `scripts/import-shoot-history.ts` from an iCalendar export of his "Shoots"
+Google Calendar (a manual, re-runnable step: Overture holds no standing calendar permission and asks
+for none), read by the app through `ShootHistory`.
+
+`venue` arrives EXACTLY as the calendar writes it, unfolded but NOT normalised: 42 of 322 events
+separate the address with a newline rather than a comma, and 40 wrap the whole value in double
+quotes. The importer does no venue folding on purpose, so this file cannot become a fourth name
+vocabulary drifting from the three the app already has; `VenuePlaces.canonicalKey` folds it. `date`
+is already the Eastern day (81 of 381 events are evening shows whose UTC day is the next one).
+
+Four `VEVENT` shapes never reach the file, and the importer names each one it refused rather than
+guessing: `RRULE`, `RECURRENCE-ID`, `STATUS:CANCELLED`, and an all-day `DTSTART` (no time zone to
+date it by). Refusing is the only behaviour that cannot be silently wrong: a parser that expanded a
+weekly rule would turn one booking into hundreds of shoots, and one that ignored it would count a
+decade of weekly shoots as one.
+
+Code on both sides, so it carries no `fixtureShape.ts` entry (that guard exists for the contracts
+whose other side is a workflow); its Swift contract test against the shared fixture is the whole
+guard, exactly as `overture-history.json` works.
 
 ### `overture-reply-classify-queue.json` and `overture-reply-classify-results.json`
 

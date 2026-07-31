@@ -49,6 +49,19 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // contains those letters.
   { name: "house-name-matches-a-longer-name",
     pattern: /contains\s+a\s+listed\s+house's\s+name\s+as\s+whole\s+words/i },
+  // #1887: the two halves of the venue-history rule, and each fails in its own direction.
+  //
+  // Dropping the NO-COUNT half puts an exact number back in an email about Dan's own history,
+  // which is the one thing he was explicit about ("never an exact number"). The app deliberately
+  // sends a band and no count, so a number in a draft is always invented.
+  //
+  // Dropping the ABSENT half is #1824 returning: a prompt that references a field the payload does
+  // not carry makes the model supply it. Here that means claiming Dan knows a room he has never
+  // worked, to someone who works there.
+  { name: "venue-history-never-a-count",
+    pattern: /NEVER\s+state\s+a\s+count/i },
+  { name: "venue-history-absent-means-silent",
+    pattern: /An\s+ABSENT\s+`venueHistory`\s+means\s+SAY\s+NOTHING/i },
   { name: "pursue-each-named-performer", pattern: /pursue EACH named performer directly/i },
   { name: "performer-misidentification-low", pattern: /misidentification\s+risk, so mark it `low`/i },
   { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },

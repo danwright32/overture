@@ -53,6 +53,9 @@ function requireNonNegativeInt(v: unknown, file: string, path: string): number {
 
 const PRODUCTION = ["self", "agency", "unknown"] as const;
 const REPREP_MODE = ["draft_only", "contacts_only"] as const;
+// #1887: the three bands, and never a count. The vocabulary is closed because an unrecognised token
+// would leave the drafter to decide what it means, which is exactly what the band exists to prevent.
+const VENUE_HISTORY_BAND = ["shot_before", "a_few", "regularly"] as const;
 // #5 v5: the four opener archetypes an A/B experiment item can be told to use.
 // Two lists, because the two directions have opposite obligations after the 2026-07-31 retirement of
 // credential-first and observation-first.
@@ -71,12 +74,13 @@ const OPENER_ARCHETYPE = ["reason-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-7, additive: production at v2+ #586, reprepMode at v3+ #367,
+// overture-prep-queue.json (versions 1-10, additive: production at v2+ #586, reprepMode at v3+ #367,
 // runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
-// alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720)
+// alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720, showListing at v8+ #1824,
+// onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -117,6 +121,11 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // worse than an error, because the run would go on hunting an organisation that does not exist and
   // report that nobody publishes an address.
   const actNamingFieldAllowed = version >= 9;
+  // #1887 v10: how well Dan already knows this room, as a BAND and never a count. Forbidden on older
+  // versions for the same reason as every field above, and with a closed vocabulary: an unrecognised
+  // token would leave the drafter to invent what it means, which is the one thing the band exists to
+  // prevent.
+  const venueHistoryFieldAllowed = version >= 10;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -166,6 +175,13 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.onlyTheActIsNamed !== undefined) {
       fail(file, `items[${i}].onlyTheActIsNamed must not be present before version 9`);
+    }
+    if (venueHistoryFieldAllowed) {
+      if (o.venueHistory !== undefined) {
+        requireEnum(o.venueHistory, file, `items[${i}].venueHistory`, VENUE_HISTORY_BAND);
+      }
+    } else if (o.venueHistory !== undefined) {
+      fail(file, `items[${i}].venueHistory must not be present before version 10`);
     }
   });
 }
