@@ -62,11 +62,17 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // run researches the producer ONCE and reports the same contact under each key listed here, which
     // keeps Dan's "every show on the date, no exceptions" rule intact while paying once.
     //
-    // Carrying the group in the QUEUE rather than fanning the answer out in the app afterwards is
-    // deliberate: the results file then holds a normal entry per show and the existing import path
-    // settles all of them with no second contact-copying code path to keep in step with the first.
-    // A run that ignores this field leaves those shows unanswered and they are simply offered again,
-    // which is why it fails safe.
+    // Carrying the group in the QUEUE is what lets the results file hold a normal entry per show, so the
+    // existing import path settles all of them with no second contact-copying code path to keep in step
+    // with the first.
+    //
+    // #1804: it is no longer left to the run to produce those entries. The original note here said a run
+    // that ignored this field simply left those shows to be offered again, "which is why it fails safe".
+    // It did not: they were paid for a second time, never received the contact the first lookup found, and
+    // were counted into #1769's shortfall sentence as never answered, which would have told Dan seven
+    // shows went unanswered about a lookup that came home fine. The app wrote the grouping, so
+    // `PrepGroupCredit` applies it at ingest and a terse run and a compliant one now settle identically.
+    // The run is still asked for an entry per show, because only it can say anything show-specific.
     var alsoAnswersFor: [String]? = nil
     // v8 (#1824): what this show's OWN listing page says, read by the app and handed over as text.
     //

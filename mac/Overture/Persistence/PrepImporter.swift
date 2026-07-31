@@ -430,7 +430,17 @@ enum PrepImporter {
         let loaded = DownbeatBridge.loadWithHealth(from: downbeatURL, now: now)
         let history = LocalHistory.forMatchingWithHealth(existing: existing, importedFrom: historyURL)
 
-        let results = try PrepResultsDecoder.decode(data)
+        var results = try PrepResultsDecoder.decode(data)
+        // #1804: credit a grouped answer to the shows it was paid to cover, BEFORE the ingest, so those
+        // shows go through the identical matching, guard and stamping path as an entry the run wrote itself.
+        // Gated on `isProbe` because only a check ever carries a grouping, and because a normal Prep run
+        // produces drafts, which must never fan out (PrepGroupCredit drops them anyway; this is the outer
+        // half of that pair). A run that DID follow the runbook is unaffected: every key it answered itself
+        // already wins over the credit.
+        if isProbe {
+            results.results = PrepGroupCredit.credited(
+                results.results, groups: PrepGroupCredit.groups(queueURL: queueURL, resultsURL: url))
+        }
         var outcome = ingest(results, into: context, now: now,
                              clients: loaded.clients, history: history.records, isProbe: isProbe)
         // #754: the health verdict used to be computed here and then thrown away, so a missing or
@@ -487,10 +497,17 @@ enum PrepImporter {
     //
     // An unreadable or unparsable file yields the empty set, which is the honest reading: nothing can be
     // shown to have been answered, so nothing is stamped and every show stays re-checkable.
-    static func answeredKeys(at url: URL) -> Set<String> {
+    //
+    // #1804: a show the app GROUPED under a lead that came back with contacts counts as answered, because
+    // the lookup Dan paid for covers it. Read through the same `PrepGroupCredit.credited` the ingest uses,
+    // so "answered" has ONE definition here, at the ingest, and in the shortfall Dan reads, rather than
+    // three that can drift. The queue is the app's own record of the grouping; a caller that has no queue
+    // to offer (a test, a path with no work-list on disk) credits nothing and gets the old behaviour.
+    static func answeredKeys(at url: URL, queueURL: URL? = nil) -> Set<String> {
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(PrepResults.self, from: data) else { return [] }
-        return Set(decoded.results.map(\.naturalKey))
+        let groups = queueURL.map { PrepGroupCredit.groups(queueURL: $0, resultsURL: url) } ?? [:]
+        return Set(PrepGroupCredit.credited(decoded.results, groups: groups).map(\.naturalKey))
     }
 
     // #1623: whether an ingest of this results file is still to come, asked WITHOUT consuming it.

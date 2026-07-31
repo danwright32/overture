@@ -46,8 +46,33 @@ update_progress_from_results() {
       if (!total) return;   // the queue is missing, unparsable, or empty: nothing to derive
 
       const results = parse(read(resultsPath) ?? "");
-      const completedRaw = Array.isArray(results?.results) ? results.results.length : null;
-      if (completedRaw === null) return;   // no results yet, or unreadable: leave progress as is
+      if (!Array.isArray(results?.results)) return;   // no results yet, or unreadable: leave progress as is
+      // #1804: SHOWS again, on the completed side too. `total` counts an item plus everything it answers
+      // for, so counting bare entries meant a run that answered a group of six with one entry sat at 1 of 6
+      // for the whole run and never reached its own total. The app credits the same grouping when it
+      // settles, so the live count and the settled outcome now agree instead of contradicting each other.
+      // An entry for a key nothing grouped (the ordinary case) still counts as exactly one.
+      // Entries written so far, exactly as before. Scout-extract and reply-classify entries are counted by
+      // this line alone: neither carries alsoAnswersFor, and scout-extract does not even key by naturalKey,
+      // so the credit below can never reach them.
+      let completedRaw = results.results.length;
+      const answered = new Map();
+      for (const r of results.results) {
+        if (typeof r?.naturalKey === "string") answered.set(r.naturalKey, r);
+      }
+      for (const i of items) {
+        const lead = answered.get(i?.naturalKey);
+        if (!lead || !Array.isArray(i?.alsoAnswersFor)) continue;
+        // Only a lead that FOUND somebody credits its group, matching PrepGroupCredit exactly: a lead that
+        // came home with nobody leaves its covered shows genuinely unanswered, and the count must say so.
+        if (!Array.isArray(lead.contacts) || lead.contacts.length === 0) continue;
+        for (const key of i.alsoAnswersFor) {
+          // A covered show the run answered IN ITS OWN RIGHT is already in the entry count above, and must
+          // not be counted twice, once on its own and once through its lead. Same "its own entry wins" rule
+          // the app applies when it settles.
+          if (!answered.has(key)) completedRaw += 1;
+        }
+      }
 
       const completed = Math.min(completedRaw, total);
       fs.writeFileSync(progressPath, JSON.stringify({ version: 1, total, completed }, null, 2));
