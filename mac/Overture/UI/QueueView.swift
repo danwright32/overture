@@ -174,6 +174,13 @@ struct QueueView: View {
     struct RenderData {
         let items: [QueueItem]
         let visible: [QueueItem]
+        // #1771: built ONCE here rather than by each of its two readers (the pill strip and the focused
+        // stage heading). One build is roughly four full traversals of every prospect and its recipients,
+        // so building it twice cost eight per render pass.
+        let agentInputs: AgentInputs
+        // #1770: the one answer for this render pass, read from the cache rather than from the token file,
+        // and threaded to every card instead of each card sourcing its own.
+        let gmailConnected: Bool
         // Contacted RECIPIENTS Dan is still working, soonest-first. #652: one entry per recipient, so a
         // multi-contact show can appear more than once, each with its own contact and timing.
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
@@ -202,7 +209,18 @@ struct QueueView: View {
         let inAStage = StageNavigation.queueKeys(in: prospects, reachedOutKeys: reachedOutKeys,
                                                  today: today, now: now, geo: geo)
         let visible = items.filter { inAStage.contains($0.id) }
-        return RenderData(items: items, visible: visible, reachedOut: reachedOut,
+        // #1770: read once for the whole render, exactly like `items` above. Its two readers here (the
+        // pill strip's inputs and every card) then answer from the same value, and no card sources one.
+        let gmailConnected = GmailConnection.shared.isConnected
+        return RenderData(items: items, visible: visible,
+                          agentInputs: AgentInputs.from(
+                              prospects: prospects, inquiries: inquiries, now: now, today: today,
+                              gmailConnected: gmailConnected,
+                              prepRunning: PrepQueueService.isRunning(now: now),
+                              replyRunAlive: ReplyClassifyService.isRunning(now: now),
+                              geo: geo),
+                          gmailConnected: gmailConnected,
+                          reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
                           pendingBookings: QueueModel.pendingBookingCount(items))
     }
@@ -262,8 +280,10 @@ struct QueueView: View {
     }
 
     private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
+        // #1771: `data.items`, not `self.items`. Reading the computed property here rebuilt the entire
+        // queue a second time on every render, one word away from the snapshot the caller already holds.
         QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
-                                  among: items, today: today, stage: focusedStage,
+                                  among: data.items, today: today, stage: focusedStage,
                                   overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                                demotedRows: demotedHouses),
                                   geo: geo)
@@ -395,7 +415,8 @@ struct QueueView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visible, items: data.items, fanOutLine: fanOutWarning)
+                    masthead(visible: data.visible, items: data.items, fanOutLine: fanOutWarning,
+                             agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
                     // default), or the exact away-alert leads (#308) when focusedStage is nil.
@@ -439,7 +460,7 @@ struct QueueView: View {
                                                 departing: departing)
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(focusedStageHeading(rows: rows))
+                    Text(focusedStageHeading(rows: rows, agentInputs: data.agentInputs))
                         .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                     Spacer()
                     // #1129: the discoverable Prep button, only on the Prep stage with kept shows and no
@@ -474,7 +495,7 @@ struct QueueView: View {
                         // so a day holding both gave one id to two targets and a jump could land on the
                         // wrong one.
                         ForEach(QueueModel.groupByDate(rows)) { group in
-                            dateSection(group).id(QueueModel.showGroupScrollID(group.id))
+                            dateSection(group, data: data).id(QueueModel.showGroupScrollID(group.id))
                         }
                     }
                     .scrollTargetLayout()
@@ -537,7 +558,7 @@ struct QueueView: View {
     // month/day, year) and the #1193/#901 "Unavailable" marker up by the date. The grouping
     // (QueueModel.groupByDate) and the unavailability rule (QueueModel.groupIsUnavailable) are tested
     // model helpers; this only renders them.
-    private func dateSection(_ group: QueueModel.DateGroup) -> some View {
+    private func dateSection(_ group: QueueModel.DateGroup, data: RenderData) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
@@ -565,7 +586,9 @@ struct QueueView: View {
                 // even after the other show moves to another stage. Single tier: any real commitment on the
                 // date shows it. The per-row marker names the specific clashing show; this is the date flag.
                 // Not shown in Scout (untriaged candidates are not commitments Dan is protecting yet).
-                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, among: items) {
+                // #1772: `data.items`, not `self.items`. This runs for every date heading the list
+                // draws, and reading the computed property rebuilt the whole queue from the store each time.
+                if focusedStage != .scout, let note = QueueModel.selfBookingNote(group.items, among: data.items) {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
                         Text(note)
@@ -612,7 +635,7 @@ struct QueueView: View {
             // has already kept or drafted is not something to lose to one right-click.
             .contextMenu { if focusedStage == .scout { nightDismissMenu(group) } }
 
-            ForEach(group.items) { item in prospectRow(item) }
+            ForEach(group.items) { item in prospectRow(item, data: data) }
         }
     }
 
@@ -666,7 +689,7 @@ struct QueueView: View {
     // as shows leave the stage (Scout/Prep/Review map one-to-one to a live status; so does Send while its
     // most-urgent focus is still the one Dan tapped). Falls back to the heading captured at tap time (the
     // rare Send-focus-shifted case), then to the #308 away-leads phrasing.
-    private func focusedStageHeading(rows: [QueueItem]) -> String {
+    private func focusedStageHeading(rows: [QueueItem], agentInputs: AgentInputs) -> String {
         if let stage = focusedStage,
            let live = AgentRoster.statuses(agentInputs).first(where: { $0.focus == stage }) {
             return "\(live.name): \(live.detail)"
@@ -752,7 +775,10 @@ struct QueueView: View {
     // #1694: the possible-match fan-out warning, when there is one. Passed IN rather than read from the
     // store here, so the line the masthead draws can be pinned by a test; there is no default, so a call
     // site has to decide what it shows rather than inherit silence.
-    func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?) -> some View {
+    // #1771: agentInputs is threaded in for the same reason visible/items are: the pill strip this draws
+    // and the focused stage heading are two readers of one build, so the build belongs to the caller.
+    func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?,
+                  agentInputs: AgentInputs) -> some View {
         let summary = QueueModel.summary(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
@@ -803,7 +829,7 @@ struct QueueView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             replyRunLine
-            agentStrip
+            agentStrip(agentInputs)
         }
     }
 
@@ -847,19 +873,10 @@ struct QueueView: View {
     // (#792, #861) with the rule stating itself in StageNavigation's header the whole time.
     // Counted across EVERY prospect, not just the ones still in the queue: a held contact's show has
     // usually already left the queue reading "Sent", which is how the person waiting became invisible.
-    private var agentInputs: AgentInputs {
-        let now = Date()
-        return AgentInputs.from(
-            prospects: prospects, inquiries: inquiries, now: now, today: today,
-            gmailConnected: GmailAuthManager.shared.isConnected,
-            prepRunning: PrepQueueService.isRunning(now: now),
-            replyRunAlive: ReplyClassifyService.isRunning(now: now),
-            geo: geo
-        )
-    }
-
-    private var agentStrip: some View {
-        let statuses = AgentRoster.statuses(agentInputs)
+    // #1771: this used to be a computed property here, which meant each of its two readers rebuilt it.
+    // It is built once in makeRenderData and threaded down, the same rule #1121 set for `items`.
+    private func agentStrip(_ inputs: AgentInputs) -> some View {
+        let statuses = AgentRoster.statuses(inputs)
         let needs = AgentRoster.needsYouCount(statuses)
         return VStack(alignment: .leading, spacing: OVSpacing.xs) {
             if let needsYou = AgentRoster.needsYouLabel(needs) {
@@ -1061,7 +1078,7 @@ struct QueueView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    @ViewBuilder private func prospectRow(_ item: QueueItem) -> some View {
+    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData) -> some View {
         if departing[item.id] != nil {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
@@ -1074,8 +1091,10 @@ struct QueueView: View {
             // #1219/#1246: the persistent self double-booking marker, on the row itself so it travels with
             // the show and never vanishes when the OTHER show changes stage. Names the clashing show(s).
             // Not in Scout (untriaged candidates are not commitments Dan is protecting yet).
+            // #1772: `data.items`, not `self.items`. This runs for every CARD, so reading the computed
+            // property rebuilt the entire 724-row queue once per card on every render pass.
             let selfBookingMarker = focusedStage != .scout
-                ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: items))
+                ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: data.items))
                 : nil
             VStack(alignment: .leading, spacing: 4) {
                 if let marker = selfBookingMarker {
@@ -1088,6 +1107,7 @@ struct QueueView: View {
                 }
                 ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                                       dayOffOffer: dayOffOffer,
+                                      gmailConnected: data.gmailConnected,
                                       undoStack: undoStack,
                                       highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
                                       replySendSince: { rid in replySending[rid] },

@@ -52,6 +52,43 @@ struct QueueRenderDataGuardTests {
         #expect(occurrences == 1)
     }
 
+    // #1771: the snapshot is the one place a render's derived state lives, so AgentInputs belongs IN it.
+    // As a computed property it was built twice per render (once for the pill strip, once for the stage
+    // heading), and each build is roughly four full traversals of every prospect and its recipients.
+    @Test func theSnapshotCarriesTheAgentInputsSoTheyAreBuiltOnce() {
+        #expect(queueView.contains("let agentInputs: AgentInputs"))
+        // As a computed property, every reader rebuilt it. That is the shape that must not come back.
+        #expect(!queueView.contains("private var agentInputs: AgentInputs {"))
+    }
+
+    // #1771: probeSummary took the snapshot and then ignored half of it, calling the expensive `items`
+    // computed property fresh. One word, and a whole second rebuild of the queue behind it.
+    @Test func probeSummaryUsesTheItemsItWasHanded() {
+        guard let body = SourceGuardHelper.propertyBody(
+            "private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {",
+            in: queueView) else {
+            Issue.record("expected to find probeSummary's body")
+            return
+        }
+        #expect(body.contains("among: data.items"))
+    }
+
+    // #1772: the same defect one level lower, where it scales with the number of cards rather than
+    // running a fixed number of times. Both self-booking lookups sit on paths that run per CARD and per
+    // DATE HEADING, and each was rebuilding the entire queue from the store to answer one row's question.
+    @Test func theSelfBookingLookupsUseTheItemsTheyWereHanded() {
+        for marker in ["@ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData) -> some View {",
+                       "private func dateSection(_ group: QueueModel.DateGroup, data: RenderData) -> some View {"] {
+            guard let body = SourceGuardHelper.propertyBody(marker, in: queueView) else {
+                Issue.record("expected to find the body of \(marker)")
+                continue
+            }
+            #expect(body.contains("among: data.items"))
+            // `among: items` there is `self.items`, the computed property that rebuilds the whole queue.
+            #expect(!body.contains("among: items"))
+        }
+    }
+
     // AgentInputs.from counts every focus through the single pass, not one naturalKeys traversal per
     // focus. Paired with StageNavigationCountsTests, which proves that single pass agrees with the
     // per-focus navigation it replaced.

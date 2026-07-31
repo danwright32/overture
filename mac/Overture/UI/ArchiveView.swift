@@ -213,6 +213,8 @@ struct ArchiveView: View {
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
         ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
+                              // #1770: read once from the cache here rather than by each card it builds.
+                              gmailConnected: GmailConnection.shared.isConnected,
                               undoStack: undoStack,
                               highlightedKey: highlightedKey, highlightedRecipientId: highlightedRecipientId,
                               outboundSendSince: outboundSendSince,

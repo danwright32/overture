@@ -82,7 +82,9 @@ struct FollowUpsView: View {
         ConversationReminder.dueRecipients(from: prospects, now: Date(), config: reminderConfig)
     }
 
-    private var gmailConnected: Bool { GmailAuthManager.shared.isConnected }
+    // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
+    // token file on EVERY access, and the body below reads it once per send button it draws.
+    private var gmailConnected: Bool { GmailConnection.shared.isConnected }
     private var isEmpty: Bool { due.isEmpty && conversationDue.isEmpty }
 
     var body: some View {

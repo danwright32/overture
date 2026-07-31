@@ -10,6 +10,13 @@ import SwiftData
 enum ProspectRowFactory {
     static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                     dayOffOffer: DayOffOfferRequest,
+                    // #1770: HANDED IN, never sourced here. This used to read GmailAuthManager.shared
+                    // .isConnected, which opens and JSON-decodes the token file: one synchronous disk read
+                    // per card, on the main thread, on every scroll frame. It is one fact about the app,
+                    // identical for every row, so the caller reads it once (GmailConnection, itself cached)
+                    // and passes it down. Deliberately no default: a default would let a call site ship a
+                    // silently wrong answer, and being wrong here disables Send on a connected account.
+                    gmailConnected: Bool,
                     // #1414: optional so a surface that does not offer undo (and any future caller)
                     // simply passes nothing rather than every call site growing a parameter it ignores.
                     undoStack: QueueUndoStack? = nil,
@@ -100,7 +107,7 @@ enum ProspectRowFactory {
             onConfirmPerformerMatch: { ProspectMutations.confirmPerformerMatch(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissPerformerMatch: { ProspectMutations.dismissPerformerMatch(item, prospects: prospects, context: context, feedback: feedback) },
             onRestore: onRestore,
-            gmailConnected: GmailAuthManager.shared.isConnected,
+            gmailConnected: gmailConnected,
             outboundSendSince: outboundSendSince,
             replySendSince: replySendSince,
             highlightedRecipientId: highlightedRecipientId,

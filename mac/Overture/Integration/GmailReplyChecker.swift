@@ -16,7 +16,9 @@ struct GmailReplyChecker {
     // it instead of it failing silently. false covers both "nothing to save" and "not connected".
     @discardableResult
     func checkReplies(in context: ModelContext, now: Date = Date()) async -> Bool {
-        guard GmailAuthManager.shared.isConnected,
+        // #1770: the periodic check is a natural place to notice a credential that died since launch,
+        // and it is nowhere near a render path, so it pays for a fresh read.
+        guard GmailConnection.shared.refreshedIsConnected(),
               let token = try? await GmailAuthManager.shared.validAccessToken() else { return false }
         return await markReplies(in: context, token: token, now: now)
     }

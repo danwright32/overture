@@ -25,7 +25,11 @@ struct RootView: View {
     // #1414: owned by the App (a .commands block cannot read view state) and injected down to here.
     @Environment(QueueUndoStack.self) private var undoStack
     @Environment(QueueUndoRequest.self) private var undoRequest
-    @State private var gmailConnected = GmailAuthManager.shared.isConnected
+    // #1770: the one cached answer, observed rather than snapshotted. As @State it was read from disk
+    // once at init and then only ever set to true on a successful connect, so a revoked credential left
+    // this reading connected until relaunch. GmailConnection is @Observable, so this re-renders whenever
+    // something refreshes it (a connect, a failed send, the periodic reply check).
+    private var gmailConnected: Bool { GmailConnection.shared.isConnected }
     @State private var isConnectingGmail = false
     @State private var gmailConnectStartedAt: Date?   // for the live elapsed counter + stuck timeout (#436)
     // #1163: a Gmail-connect failure gets its OWN alert (not the shared "Something went wrong" one) so it
@@ -866,7 +870,7 @@ struct RootView: View {
             status.set("DEBUG: live Gmail isn't connected. Connect it in the release app first, then retry.")
             return
         }
-        status.set(GmailAuthManager.shared.isConnected
+        status.set(GmailConnection.shared.refreshedIsConnected()
             ? "DEBUG: Gmail connected from live (\(result.copied.joined(separator: ", ")))"
             : "DEBUG: copied \(result.copied.count) file(s) but Gmail still reads as not connected")
     }
@@ -1023,7 +1027,7 @@ struct RootView: View {
         Task {
             do {
                 try await GmailAuthManager.shared.connect()
-                gmailConnected = true
+                GmailConnection.shared.refresh()   // #1770: the tokens just landed; re-read them once.
                 status.set("Gmail connected. You can now send approved emails.")
             } catch {
                 gmailConnectError = error.localizedDescription
