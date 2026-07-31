@@ -46,28 +46,30 @@
     "results": [
       {
         "naturalKey": "roche-pierre-duo|2026-05-18|carnegie-hall",
+        "showSummaryAbsentReason": "no_listing_page",
         "contacts": [
           {
+            "provenance": "performer",
             "name": "Virgile Roche",
             "email": "virgile@virgileroche.example",
-            "method": "named_decision_maker",
+            "method": "direct_email",
             "confidence": "high",
-            "provenance": "performer",
-            "sourceUrl": "https://virgileroche.example/schedule"
+            "sourceUrl": "https://virgileroche.example/schedule",
+            "overrideBody": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your May 18 concert with Anna Pierre at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you!"
           },
           {
+            "provenance": "performer",
             "name": "Anna Pierre",
             "method": "form_or_dm",
             "confidence": "low",
-            "provenance": "performer"
+            "overrideBody": "I'm Dan Wright, a documentary photographer here in New York City working in the performing arts. I'm writing about your May 18 concert with Virgile Roche at Carnegie Hall. I work without flash and stay out of the way, so nothing about the night changes because I'm in the room. My work at Carnegie Hall goes back close to ten years, and my portfolio is at danwrightphotography.com. I'd be glad to talk through your photography plans for this performance, if you don't have it covered already. I look forward to hearing from you."
           }
         ],
         "draft": {
-          "subject": "Photographing Roche and Pierre at Carnegie Hall.",
-          "body": "I'm Dan Wright, a concert photographer based here in New York City. I'm writing in regard to the Roche and Pierre Duo at Carnegie Hall on May 18. Carnegie has been my main room for nearly ten years, and I shoot no flash documentary coverage that the audience never notices. My rate is $250 an hour plus tax, one hour minimum, with the edited gallery delivered within two weeks. Recent work is at danwrightphotography.com. If you don't already have someone on it, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "subject": "Photographing the Roche and Pierre Duo's May 18 performance at Carnegie Hall",
+          "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to the Roche and Pierre Duo's May 18 concert at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for the performance, if there isn't someone on it already. I look forward to hearing from you!",
           "variant": "reason-first"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+        }
       }
     ]
   }

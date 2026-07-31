@@ -40,12 +40,24 @@ describe("the runbook never tells the drafter to link a contract or pricing page
 
   // The prohibition itself must be present. Without this, deleting the warning would silently pass:
   // the absence of a bad instruction is not the same as the presence of a good one.
+  // Whitespace-tolerant: the runbook is prose that gets rewrapped, and a pattern pinned to one
+  // particular line break reports a rule missing when it is still there.
   it("the runbook positively forbids linking a contract, pricing, or rates page", () => {
-    expect(runbook).toMatch(/never link to a contract, pricing, or rates page/i);
+    expect(runbook).toMatch(/never\s+link\s+to\s+a\s+contract,\s+pricing,\s+or\s+rates\s+page/i);
   });
 
-  it("the runbook still tells the drafter to state the rate plainly", () => {
-    expect(runbook).toMatch(/state the rate plainly/i);
+  // #1906 INVERTED this guard. It used to assert the runbook still told the drafter to state the
+  // rate plainly, which was right until Dan reversed the rule on 2026-07-31: "I feel like I'm more
+  // likely to get a response if I don't, because they may check out my portfolio instead of getting
+  // sticker shock and then email me asking about it."
+  //
+  // The guard is kept rather than deleted, and pointed the other way, because the failure mode is
+  // unchanged in shape: an edit that restores "always state the rate" would put a price back into
+  // every cold email with nothing to catch it. Note the prohibition on a pricing PAGE above is a
+  // different rule and still stands: the page never existed, which is why linking one invents a 404.
+  it("the runbook tells the drafter a cold pitch carries no price and no turnaround", () => {
+    expect(runbook).toMatch(/carrying\s+NO\s+PRICE\s+AND\s+NO\s+TURNAROUND/i);
+    expect(runbook).not.toMatch(/ALWAYS\s+state\s+the\s+rate\s+plainly/i);
   });
 
   // #5 Phase 0: the `variant` field no longer records the retired constant "rate_stated" (a leftover

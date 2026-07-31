@@ -20,8 +20,7 @@ import {
 const CANONICAL_BODY =
   "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to " +
   "the Aurora Strings date at Carnegie Hall on March 10. I shoot unobtrusive, no-flash documentary " +
-  "coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with " +
-  "the gallery delivered within two weeks. Recent work is at danwrightphotography.com. I'd be glad to " +
+  "coverage and it would suit your program. Recent work is at danwrightphotography.com. I'd be glad to " +
   "talk about your photography plans for the night. I look forward to hearing from you.";
 
 function results(contacts: unknown[], extra: Record<string, unknown> = {}, draftBody = CANONICAL_BODY): unknown {
@@ -266,8 +265,7 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
     overrideBody:
       "My name is Dan Wright and I'm an arts photographer here in New York City. I'm writing about your " +
       `March 10 date at Carnegie Hall with ${coName}. I shoot unobtrusive, no-flash documentary coverage ` +
-      "and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the " +
-      "gallery in two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your " +
+      "and it would suit your program. Recent work is at danwrightphotography.com. I'd be glad to talk about your " +
       "photography plans for the night. I look forward to hearing from you.",
   });
 
@@ -437,15 +435,13 @@ describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", ()
   // booked = fully warm: skip the cold self-introduction AND the credential + portfolio scaffolding.
   const BOOKED_BODY =
     "It's good to see the Aurora Strings back at Carnegie Hall on March 10, and I'd be glad to cover the " +
-    "night for you. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within " +
-    "two weeks. Tell me where your photography plans for the night stand and I'll hold the date. I look " +
+    "night for you. Tell me where your photography plans for the night stand and I'll hold the date. I look " +
     "forward to hearing from you.";
   // warm lead = drop the cold self-introduction, keep ONE light credential and the portfolio link.
   const WARM_LEAD_BODY =
     "It was good connecting about the Aurora Strings at Carnegie Hall on March 10. I shoot unobtrusive, " +
     "no-flash documentary coverage that suits a concert program, and recent work is at " +
-    "danwrightphotography.com. My rate is $250 an hour plus tax, one-hour minimum, with the gallery " +
-    "delivered within two weeks. I'd be glad to talk about your photography plans for the night. I look " +
+    "danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look " +
     "forward to hearing from you.";
 
   it("passes a booked draft that opens warm and drops the cold intro and portfolio scaffolding", () => {
@@ -637,8 +633,7 @@ describe("prep-eval fixtures", () => {
     const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
     const r = evaluateFixture(fixture, withBody(fixture,
       "I'm a documentary photographer working with performing arts organizations in New York, and I'm "
-      + "writing about photographing your August 3 show at The Example Room. My rate is $250 an hour plus "
-      + "tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at "
+      + "writing about photographing your August 3 show at The Example Room. Recent work is at "
       + "danwrightphotography.com. Happy to answer any questions."));
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/categorizes the recipient/i);
@@ -648,7 +643,6 @@ describe("prep-eval fixtures", () => {
     const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
     const r = evaluateFixture(fixture, withBody(fixture,
       "I photograph performing arts in New York and saw your opera is at The Example Room on August 3. "
-      + "My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. "
       + "Recent work is at danwrightphotography.com. Happy to answer any questions."));
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/says the show is something the listing does not/i);
@@ -713,7 +707,6 @@ describe("the 2026-07-31 drafting rules are enforced on the produced body", () =
 
   it("does not require the self-introduction of a returning client, who already knows him", () => {
     const body = "It's good to have you back at Carnegie Hall on March 10, and I'd be glad to cover it. "
-      + "My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. "
       + "I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.";
     const r = evaluatePrepResult(results([NAMED_ACT], {}, body),
                                  { description: "booked", forbidColdSelfIntro: true });

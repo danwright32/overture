@@ -40,22 +40,22 @@
     "results": [
       {
         "naturalKey": "harbour-winds|2026-04-02|the-example-room",
-        "showSummaryAbsentReason": "no_description_published",
         "contacts": [
           {
-            "name": "Iris Calder",
-            "role": "Ensemble Manager",
-            "email": "iris@harbourwinds.example",
-            "method": "named_decision_maker",
-            "confidence": "high",
             "provenance": "act",
+            "name": "Iris Calder",
+            "role": "Ensemble manager",
+            "email": "iris@harbourwinds.example",
+            "method": "named_direct",
+            "confidence": "high",
             "sourceUrl": "https://harbourwinds.example/contact"
           }
         ],
+        "showSummaryAbsentReason": "no_description_published",
         "draft": {
-          "subject": "Photographing Harbour Winds at The Example Room.",
-          "body": "My name is Dan Wright and photography of live performance in NYC is what I do. I work without flash and stay unobtrusive enough that the audience doesn't notice me, and I'm writing about the Harbour Winds date at The Example Room on April 2. I've been photographing at Carnegie Hall for nearly ten years, and my work has also taken me to Lincoln Center and Madison Square Garden. My rate is $250 an hour plus tax, one hour minimum, and the edited gallery is delivered within two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your photography plans for the evening. I look forward to hearing from you.",
-          "variant": "direct-intent"
+          "subject": "Photographing Harbour Winds' Spring Program at The Example Room",
+          "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your April 2 Spring Program at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "variant": "reason-first"
         }
       }
     ]

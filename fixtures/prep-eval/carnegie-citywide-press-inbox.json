@@ -44,18 +44,18 @@
         "naturalKey": "solaris-quartet|2026-04-02|carnegie-hall",
         "contacts": [
           {
+            "provenance": "act",
             "method": "form_or_dm",
             "confidence": "low",
-            "provenance": "act",
             "formUrl": "https://solarisquartet.example/contact"
           }
         ],
+        "showSummaryAbsentReason": "no_listing_page",
         "draft": {
-          "subject": "Photographing Solaris Quartet at Carnegie Hall.",
-          "body": "I'm Dan Wright, a performing arts photographer based in New York City. I'm writing in regard to the Solaris Quartet's April 2 date at Carnegie Hall. I've been photographing at Carnegie Hall for close to ten years, and I work without flash and stay out of the way, so nobody watching registers that I'm there. My rate is $250 an hour plus tax, one hour minimum, and I deliver the edited gallery inside two weeks. There's more of my work at danwrightphotography.com. I'd be glad to hear where your photography plans for that evening stand. I look forward to your reply.",
+          "subject": "Photographing Solaris Quartet's April 2 concert at Carnegie Hall.",
+          "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to Solaris Quartet's April 2 performance at Carnegie Hall. I shoot quiet, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you.",
           "variant": "reason-first"
-        },
-        "showSummaryAbsentReason": "no_listing_page"
+        }
       }
     ]
   }
