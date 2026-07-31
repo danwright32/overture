@@ -63,9 +63,11 @@ struct MergedCardRoomNameTests {
         ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []).first
     }
 
-    // Dan's headline case. He watches Jalopy Theatre under that name, and one copy spells the room that
-    // way, so the card says what he called it rather than the longer spelling from the other copy.
-    @Test func theNameDanEnteredWinsWhenACopySpelledTheRoomThatWay() throws {
+    // #1850 REVERSED this one, deliberately. The entered name used to beat a copy that named a more
+    // specific room, which deleted the room from the only row holding it. Dan chose to keep both instead
+    // and let the card render "building (room)", so the entered name now yields to anything that says
+    // more, and "Jalopy's Classroom" survives where "Jalopy Theatre" used to win.
+    @Test func aMoreSpecificRoomOutlivesTheEnteredName() throws {
         let ctx = try context()
         watch(ctx, id: "jalopytheatre-netlify-app", orgName: "Jalopy Theatre")
         insert(ctx, "A Workshop with the Derek Piotr Fieldwork Archive", date: "2026-10-16",
@@ -77,12 +79,12 @@ struct MergedCardRoomNameTests {
         SameNightTitleVariantMerge.run(in: ctx)
         try? ctx.save()
 
-        #expect(survivor(ctx)?.venue == "Jalopy Theatre")
+        #expect(survivor(ctx)?.venue == "Jalopy's Classroom at 319 Columbia St")
     }
 
-    // The entered name still wins when the copy that used it carries a trailing town, because the room is
+    // #1850: same reversal. The room inside the building outlives the merge, because the room is
     // the same room. Live shape: "Abrons Arts Center, New York, NY" against the room inside it.
-    @Test func theEnteredNameWinsOverARoomInsideTheSameBuilding() throws {
+    @Test func theRoomInsideTheBuildingOutlivesTheEnteredName() throws {
         let ctx = try context()
         watch(ctx, id: "abronsartscenter-org", orgName: "Abrons Arts Center")
         insert(ctx, "Orbit", date: "2026-08-09", venue: "Abrons Arts Center, New York, NY",
@@ -93,7 +95,7 @@ struct MergedCardRoomNameTests {
         SameNightTitleVariantMerge.run(in: ctx)
         try? ctx.save()
 
-        #expect(survivor(ctx)?.venue == "Abrons Arts Center")
+        #expect(survivor(ctx)?.venue == "Experimental Theater at Abrons Arts Center")
     }
 
     // The entered name is the LONGER one here, so this passes for the wrong reason unless the rule really

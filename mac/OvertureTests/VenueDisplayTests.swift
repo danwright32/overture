@@ -12,7 +12,8 @@ struct VenueDisplayTests {
             #expect(v.hall == hall)
             #expect(v.parent == "Carnegie Hall")
             #expect(v.location == "New York, NY")
-            #expect(v.nameLine == "\(hall), Carnegie Hall")
+            // #1850: the building leads, the room follows in brackets.
+            #expect(v.nameLine == "Carnegie Hall (\(hall))")
         }
     }
 
@@ -87,7 +88,7 @@ struct VenueDisplayTests {
             #expect(v.hall == "Stern Auditorium / Perelman Stage", "\(raw) hall")
             #expect(v.parent == "Carnegie Hall", "\(raw) parent")
             #expect(v.location == "New York, NY", "\(raw) location")
-            #expect(v.nameLine == "Stern Auditorium / Perelman Stage, Carnegie Hall", "\(raw) nameLine")
+            #expect(v.nameLine == "Carnegie Hall (Stern Auditorium / Perelman Stage)", "\(raw) nameLine")
         }
     }
 
