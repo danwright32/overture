@@ -1078,8 +1078,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreRelocation.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
     `UI/DraftReviewView.swift`
-"Overture couldn't spot a way to email this one: no presenting org, or only a social page (which sits behind a login). You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
-    `Domain/Reachability.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
@@ -1528,6 +1526,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
     `Integration/OmniFocusUserNotifier.swift`
+"The only listing for this one is a social page, which sits behind a login, so there's no way in from there. You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
+    `Domain/Reachability.swift`
 "The other \(missed) had"
     `App/ActionFeedback.swift`
 "The other one had"
