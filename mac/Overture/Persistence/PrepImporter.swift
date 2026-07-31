@@ -493,6 +493,22 @@ enum PrepImporter {
         return Set(decoded.results.map(\.naturalKey))
     }
 
+    // #1623: whether an ingest of this results file is still to come, asked WITHOUT consuming it.
+    //
+    // The reachability settle writes a pre-guard floor before the ingest and relies on the ingest to
+    // upgrade it. On a re-settle no ingest runs, so the floor is the last word and a show that found an
+    // address came back reading "No email found". The settle therefore has to know which of the two it is
+    // in, and that is exactly the decision `consumeIfNew` makes one line later, so it is asked here rather
+    // than guessed at from the row's own state (which cannot tell a stale positive from a fresh one).
+    //
+    // An unreadable file reads as nothing to come, which is the fail-safe direction: the settle then
+    // preserves whatever the row already holds instead of overwriting it on the strength of a file it
+    // could not read.
+    static func hasUnconsumedResults(at url: URL = defaultURL, defaults: UserDefaults = .standard) -> Bool {
+        guard let data = try? Data(contentsOf: url) else { return false }
+        return Self.fingerprint(data) != defaults.string(forKey: consumedKey)
+    }
+
     @MainActor
     @discardableResult
     static func consumeIfNew(at url: URL = defaultURL,
