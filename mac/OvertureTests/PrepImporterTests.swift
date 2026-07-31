@@ -29,9 +29,11 @@ struct PrepImporterTests {
 
         let results = PrepResults(version: 2, generatedAt: "now", results: [
             PrepResult(naturalKey: key,
+                       // #1856: a high-confidence find names the page it was read off. Without one it is
+                       // now stored as unverified, which is the rule this happy path is not about.
                        contacts: [PrepContact(name: "Jane Doe", role: "Artistic Director", email: "jane@choir.org",
                                               method: "named_decision_maker", confidence: "high", formUrl: nil,
-                                              provenance: "act")],
+                                              provenance: "act", sourceUrl: "https://choir.org/about")],
                        draft: PrepDraft(subject: "Photographing your Carnegie performance", body: "Hi Jane,\n...", variant: "A"))
         ])
         let outcome = PrepImporter.ingest(results, into: ctx)

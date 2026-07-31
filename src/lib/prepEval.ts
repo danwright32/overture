@@ -33,6 +33,12 @@ export interface PrepEvalExpectation {
   forbidActProvenance?: boolean;
   /** At least one provenance:"presenter" contact must be present. */
   requirePresenter?: boolean;
+  /**
+   * #1856: no contact may carry provenance "presenter". For a show whose listing named no producing
+   * organisation at all: nothing was established to be the presenter, and the only organisation on the
+   * page is the room, so a presenter contact there can only be the host venue wearing another label.
+   */
+  forbidPresenterProvenance?: boolean;
   /** The result must carry a non-empty alreadyCoveredNote (#611). */
   requireAlreadyCoveredNote?: boolean;
   /** The result must carry at least one contact. */
@@ -218,6 +224,12 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
 
   if (exp.forbidActProvenance && allContacts.some((c) => norm(c.provenance) === "act")) {
     failures.push(`provenance "act" is not allowed for a self-produced show with named leads (#366)`);
+  }
+
+  if (exp.forbidPresenterProvenance && allContacts.some((c) => norm(c.provenance) === "presenter")) {
+    failures.push(
+      `provenance "presenter" is not allowed where the listing named no producing organisation (#1856)`,
+    );
   }
 
   for (const name of exp.requiredPerformers ?? []) {

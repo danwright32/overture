@@ -75,7 +75,11 @@ enum PrepQueueService {
                         ? true : nil,
                     // #5 v5: the assigned A/B arm, so the drafter is told which opener archetype to use.
                     // nil for a prospect with no assignment (the common case: no active experiment).
-                    experimentArmInstruction: p.assignedArm
+                    experimentArmInstruction: p.assignedArm,
+                    // #1856: the same fact a contact check is told, on the same terms. A kept show can
+                    // name no producer just as easily as an untriaged one, and the waterfall it feeds is
+                    // literally the same waterfall.
+                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
@@ -124,7 +128,10 @@ enum PrepQueueService {
                     // Sorted so the same selection always produces byte-identical JSON: a set's iteration
                     // order is not stable, and an unstable queue file makes two identical runs look
                     // different in the diff and in any fixture comparison.
-                    alsoAnswersFor: covered[p.naturalKey]?.sorted())
+                    alsoAnswersFor: covered[p.naturalKey]?.sorted(),
+                    // #1856: the run is told when this show names no producer at all, so it pursues the
+                    // act itself instead of hunting an organisation that does not exist.
+                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter))
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }
@@ -145,7 +152,12 @@ enum PrepQueueService {
                                        markerURL: URL = defaultMarkerURL,
                                        probeRunURL: URL = defaultProbeRunURL,
                                        cancelURL: URL = defaultCancelURL,
-                                       launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+                                       // #1856: how a show's own listing page is loaded, for the shows
+                                       // where the check has no target until it reads one. Same seam and
+                                       // same test-refusing default as startPrep.
+                                       render: @escaping ShowListingReader.Render = ShowListingReader.liveRender,
+                                       onListingProgress: @MainActor (Int, Int) -> Void = { _, _ in },
+                                       launch: @MainActor () throws -> Void = launchRunner) async throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
         let stamp = ISO8601DateFormatter().string(from: now)
@@ -166,7 +178,21 @@ enum PrepQueueService {
         try? FileManager.default.removeItem(at: cancelURL)
 
         do {
-            let data = try PrepQueueBuilder.encode(queue)
+            // #1856: read the show's own page for the shows that name no producer, and ONLY those. The
+            // check's target on one of them is the act, and on a title-billed show ("Broadway's Bad
+            // Guys!") the act's name is nowhere but that page: 63 of the 93 live rows in this state are
+            // JavaScript-drawn VenueTix pages, which the run's own tool scope forbids it from rendering.
+            //
+            // A show that already names its producer still spends nothing here (#1824's reasoning, which
+            // held for every show while the check had a target without reading anything).
+            //
+            // Inside the lock and before the file is written, exactly as startPrep does: the run opens the
+            // queue as it launches, so a listing read afterwards would arrive too late, and one read
+            // before the lock would let two presses each pay for the same renders.
+            let needingListing = queue.items.filter { $0.onlyTheActIsNamed == true }
+            let listings = await ShowListingReader.readAll(for: needingListing, render: render,
+                                                           onProgress: onListingProgress)
+            let data = try PrepQueueBuilder.encode(PrepQueueBuilder.attaching(listings, to: queue))
             try FileManager.default.createDirectory(at: queueURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: queueURL, options: .atomic)
             // Record which shows this probe covers, so completion can mark them probed even on an empty

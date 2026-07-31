@@ -31,7 +31,7 @@ struct ReachabilityProbeLaunchTests {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 
-    @Test func launchWritesTheProbeQueueMarkerAndKeys() throws {
+    @Test func launchWritesTheProbeQueueMarkerAndKeys() async throws {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let b = newProspect(ctx, group: "Boreal Brass")
@@ -41,7 +41,7 @@ struct ReachabilityProbeLaunchTests {
         let probeRunURL = dir.appendingPathComponent("probe-run.json")
         var launched = false
 
-        let count = try PrepQueueService.startReachabilityProbe(
+        let count = try await PrepQueueService.startReachabilityProbe(
             keys: [a, b], from: ctx, now: Date(timeIntervalSince1970: 0),
             queueURL: queueURL, markerURL: markerURL, probeRunURL: probeRunURL,
             launch: { launched = true })
@@ -54,7 +54,7 @@ struct ReachabilityProbeLaunchTests {
         #expect(recorded?.keys == [a, b])
     }
 
-    @Test func launchRefusesWhileAnotherRunHoldsTheLock() throws {
+    @Test func launchRefusesWhileAnotherRunHoldsTheLock() async throws {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let dir = tmp()
@@ -62,20 +62,20 @@ struct ReachabilityProbeLaunchTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data().write(to: markerURL)   // a run already holds the lock
 
-        #expect(throws: PrepQueueService.PrepLaunchError.self) {
-            try PrepQueueService.startReachabilityProbe(
+        await #expect(throws: PrepQueueService.PrepLaunchError.self) {
+            try await PrepQueueService.startReachabilityProbe(
                 keys: [a], from: ctx, now: Date(timeIntervalSince1970: 0),
                 queueURL: dir.appendingPathComponent("q.json"), markerURL: markerURL,
                 probeRunURL: dir.appendingPathComponent("p.json"), launch: {})
         }
     }
 
-    @Test func launchWithNoMatchingKeysRefuses() throws {
+    @Test func launchWithNoMatchingKeysRefuses() async throws {
         let ctx = ModelContext(try container())
         _ = newProspect(ctx, group: "Aurora Strings")
         let dir = tmp()
-        #expect(throws: PrepQueueService.PrepLaunchError.self) {
-            try PrepQueueService.startReachabilityProbe(
+        await #expect(throws: PrepQueueService.PrepLaunchError.self) {
+            try await PrepQueueService.startReachabilityProbe(
                 keys: ["no-such-key"], from: ctx, now: Date(timeIntervalSince1970: 0),
                 queueURL: dir.appendingPathComponent("q.json"),
                 markerURL: dir.appendingPathComponent("m"),
@@ -87,11 +87,11 @@ struct ReachabilityProbeLaunchTests {
     // prospects need prepping. Keep some prospects first." Dan is not prepping and has kept nothing; the
     // sentence describes a different feature and would send him looking for a button that is not the
     // problem.
-    @Test func aProbeWithNothingToCheckDoesNotTalkAboutPrepping() throws {
+    @Test func aProbeWithNothingToCheckDoesNotTalkAboutPrepping() async throws {
         let ctx = ModelContext(try container())
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let thrown = #expect(throws: PrepQueueService.PrepLaunchError.self) {
-            try PrepQueueService.startReachabilityProbe(
+        let thrown = await #expect(throws: PrepQueueService.PrepLaunchError.self) {
+            try await PrepQueueService.startReachabilityProbe(
                 keys: ["no-such-key"], from: ctx, now: Date(timeIntervalSince1970: 0),
                 queueURL: dir.appendingPathComponent("q.json"),
                 markerURL: dir.appendingPathComponent("m"),
@@ -108,7 +108,7 @@ struct ReachabilityProbeLaunchTests {
     // and hold it out of a re-check for the 90-day freshness window.
     //
     // This test used to assert the opposite (markProbedStampsEveryProbedShow), which is the defect.
-    @Test func markProbedStampsOnlyTheShowsTheRunAnswered() throws {
+    @Test func markProbedStampsOnlyTheShowsTheRunAnswered() async throws {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let b = newProspect(ctx, group: "Boreal Brass")

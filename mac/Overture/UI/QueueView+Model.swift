@@ -228,8 +228,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
                                   inherited: inheritedReachability?.result,
-                                  presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL,
-                                  presenterWasTheRoom: presenterWasTheRoom)
+                                  presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
 
     // #1598 Phase 5: the addresses the row prints under its badge. A show researched itself shows ITS

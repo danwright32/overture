@@ -1,0 +1,88 @@
+{
+  "name": "no-organiser-named-act-pursued",
+  "rule": "A listing that names no producing organisation is researched through the people it DOES name (#1856). The show is billed as a TITLE, so the act's names live only in the listing text the app rendered; the run reads that, pursues the named leads, and never labels anyone `presenter`, because the only organisation on the page is the room.",
+  "input": {
+    "naturalKey": "broadways-bad-guys|2026-08-14|the-example-room",
+    "groupName": "Broadway's Bad Guys!",
+    "venue": "The Example Room",
+    "performanceDate": "2026-08-14",
+    "discipline": "other",
+    "production": "unknown",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "sourceListingURL": "https://tickets.example/showdetails/gHi789/jKl012",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/gHi789/jKl012",
+      "text": "Events FAQ About Contact Sign in Broadway's Bad Guys! About the Show An evening of musical theatre villains, sung straight and played for keeps. Hosted by Delaney Brown and Miggie Snyder, who between them have played most of the parts they are about to sing. Genre Cabaret Duration 70 minutes Age Restriction 16+ 570 Example Avenue New York, NY 10036 View on map Contact Us How to reach us General information tickets@theexampleroom.example Perform with us For programming information programming@theexampleroom.example Menu Events About FAQ Contact Terms & Conditions Privacy Policy Powered by an example ticketing host"
+    }
+  },
+  "sources": [
+    {
+      "label": "Delaney Brown own site",
+      "url": "https://delaneybrown.example/contact",
+      "content": "Delaney Brown is a singer and actor based in New York. She hosts Broadway's Bad Guys! at The Example Room on August 14 with Miggie Snyder. Booking and general enquiries: delaney@delaneybrown.example."
+    },
+    {
+      "label": "Miggie Snyder own site",
+      "url": "https://miggiesnyder.example/about",
+      "content": "Miggie Snyder is a performer and music director in New York. Upcoming: Broadway's Bad Guys! at The Example Room, August 14. Get in touch: miggie@miggiesnyder.example."
+    },
+    {
+      "label": "The Example Room listing host",
+      "url": "https://theexampleroom.example/contact",
+      "content": "The Example Room is a rental cabaret room. Ticketing questions: tickets@theexampleroom.example. To perform here: programming@theexampleroom.example."
+    }
+  ],
+  "expected": {
+    "description": "The show title is not an organisation, so hunting for one and reporting that nobody publishes an address is the failure this fixture exists to catch. Both hosts named in the listing text are pursued directly, each with their own second-person body. The room's two inboxes are refused, and nothing is labelled `presenter`: no producer was ever established.",
+    "requiredPerformers": ["Delaney Brown", "Miggie Snyder"],
+    "performerOverrideBodyRequired": true,
+    "forbidPresenterProvenance": true,
+    "requireSomeContact": true,
+    "forbiddenEmails": [
+      "tickets@theexampleroom.example",
+      "programming@theexampleroom.example"
+    ],
+    "forbiddenDomains": ["theexampleroom.example"],
+    "requiredShowSummaryTerms": ["villains"],
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-07-31T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "broadways-bad-guys|2026-08-14|the-example-room",
+        "showSummary": "An evening of musical theatre villains, hosted by Delaney Brown and Miggie Snyder, 70 minutes.",
+        "contacts": [
+          {
+            "name": "Delaney Brown",
+            "role": "Host and performer",
+            "email": "delaney@delaneybrown.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://delaneybrown.example/contact",
+            "overrideBody": "I photograph performing arts in New York and saw you and Miggie Snyder are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          },
+          {
+            "name": "Miggie Snyder",
+            "role": "Host and performer",
+            "email": "miggie@miggiesnyder.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://miggiesnyder.example/about",
+            "overrideBody": "I photograph performing arts in New York and saw you and Delaney Brown are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Broadway's Bad Guys! at The Example Room.",
+          "body": "I photograph performing arts in New York and saw Delaney Brown and Miggie Snyder are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}

@@ -163,6 +163,57 @@ describe("evaluatePrepResult - host venue disqualify (#368)", () => {
   });
 });
 
+// #1856: on a show whose listing named no producing organisation, a `presenter` contact is a contradiction.
+// Nothing was established to be the presenter, and the only organisation on the page is the room Dan is not
+// pitching, so this is the shape a regression would take: the run gives up on the people and labels the
+// house as the producer instead.
+describe("evaluatePrepResult - no producing organisation was named (#1856)", () => {
+  const expected: PrepEvalExpectation = {
+    description: "pursue the named people, never label anyone presenter",
+    requiredPerformers: ["Delaney Brown"],
+    forbidPresenterProvenance: true,
+  };
+
+  const performer = {
+    name: "Delaney Brown",
+    email: "delaney@delaneybrown.example",
+    method: "named_decision_maker",
+    confidence: "high",
+    provenance: "performer",
+    sourceUrl: "https://delaneybrown.example/contact",
+  };
+
+  it("passes when the named host is pursued directly and nobody is called the presenter", () => {
+    const verdict = evaluatePrepResult(results([performer]), expected);
+    expect(verdict.failures).toEqual([]);
+    expect(verdict.pass).toBe(true);
+  });
+
+  it("flags a contact labelled presenter where no producing organisation was ever named", () => {
+    const verdict = evaluatePrepResult(
+      results([
+        performer,
+        {
+          name: "The Example Room",
+          email: "programming@theexampleroom.example",
+          method: "generic_inbox",
+          confidence: "medium",
+          provenance: "presenter",
+        },
+      ]),
+      expected,
+    );
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures.join(" ")).toContain('provenance "presenter" is not allowed');
+  });
+
+  it("still flags the run that gave up on the people entirely", () => {
+    const verdict = evaluatePrepResult(results([]), expected);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures.join(" ")).toContain("Delaney Brown");
+  });
+});
+
 describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)", () => {
   const expected: PrepEvalExpectation = {
     description: "both named performers",
@@ -444,6 +495,7 @@ describe("prep-eval fixtures", () => {
       "carnegie-citywide-press-inbox",
       "host-venue-not-target",
       "listed-house-is-refused",
+      "no-organiser-named-act-pursued",
       "presenter-not-venue",
       "returning-client-booked",
       "returning-client-warm-lead",

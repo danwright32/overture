@@ -44,3 +44,12 @@ organisation. The fixture carries all three states, because the run says a diffe
 description), and absent (there was no page to look at). Additive, so `v1.json` through `v7.json` still
 decode with it absent. See `docs/contracts.md` for why the app hands over the page's TEXT rather than
 trying to pick the description out of it.
+
+`v9.json` (#1856) adds an optional `onlyTheActIsNamed` to each item: this listing named no producing
+organisation at all, so the act itself is the only party to try. Measured on the live store 2026-07-31,
+93 open shows are in that state, 63 of them at one cabaret room that books a different act every night.
+The room is not the producer, so the run has nothing to research under `groupName` as an organisation,
+and it used to hunt for one, find nothing, and report `nothing_published`: a claim about a search it
+never ran. On these shows the app also renders the listing page (the `showListing` above), because the
+act's name is frequently nowhere else. Additive, and ABSENT IS NOT FALSE: a file predating the field and
+an item the app judged to name a producer both leave it out, and neither is a claim.

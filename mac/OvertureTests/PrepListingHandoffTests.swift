@@ -22,7 +22,7 @@ struct PrepListingHandoffTests {
 
     @discardableResult
     private func insert(_ ctx: ModelContext, group: String, listing: String?,
-                        status: ReviewStatus = .queued) -> Prospect {
+                        status: ReviewStatus = .queued, presenter: String? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-11", venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "other", venue: "The Room",
                          performanceDate: "2026-09-11", sourceListingURL: listing,
@@ -30,6 +30,7 @@ struct PrepListingHandoffTests {
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)
+        p.presenter = presenter
         ctx.insert(p)
         try? ctx.save()
         return p
@@ -103,17 +104,22 @@ struct PrepListingHandoffTests {
     // A reachability check finds contacts and never drafts, so there is nothing for a description to
     // ground. Rendering a page per show there would spend seconds of Dan's launch on material no draft
     // will ever use.
+    //
+    // #1856 narrowed this to a show that NAMES its producer, which is the case the reasoning above still
+    // holds for. Where nothing but the act is named the check has no target at all until it reads the
+    // page, so it renders one; `CheckTriesTheActTests` owns that direction.
     @Test func aReachabilityCheckSpendsNoRendersOnListings() async throws {
         let ctx = ModelContext(try container())
-        let p = insert(ctx, group: "Nightingale Quartet", listing: "https://tickets.example/a", status: .new)
+        let p = insert(ctx, group: "Nightingale Quartet", listing: "https://tickets.example/a",
+                       status: .new, presenter: "Nightingale Presents")
         let queueURL = tmp("q"), markerURL = tmp("m"), probeURL = tmp("p")
         defer {
             for u in [queueURL, markerURL, probeURL] { try? FileManager.default.removeItem(at: u) }
         }
 
-        _ = try PrepQueueService.startReachabilityProbe(keys: [p.naturalKey], from: ctx, now: Date(),
-                                                        queueURL: queueURL, markerURL: markerURL,
-                                                        probeRunURL: probeURL, launch: {})
+        _ = try await PrepQueueService.startReachabilityProbe(keys: [p.naturalKey], from: ctx, now: Date(),
+                                                              queueURL: queueURL, markerURL: markerURL,
+                                                              probeRunURL: probeURL, launch: {})
 
         let queue = try JSONDecoder().decode(PrepQueue.self, from: try Data(contentsOf: queueURL))
         #expect(queue.items[0].showListing == nil)

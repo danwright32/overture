@@ -84,6 +84,21 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // `read` with text that turns out to be a calendar rather than this show's own page. The runbook is
     // told all three, because the honest sentence differs for each.
     var showListing: ShowListing? = nil
+    // v9 (#1856): nobody but the ACT is named on this show, so there is no producing organisation to
+    // research and the act itself is the only party to try.
+    //
+    // Measured on the live store 2026-07-31: 93 open rows are in this state, 63 of them at one cabaret
+    // room. Every venue in the list rents itself out and books a different act a night, so the listing
+    // names the room and names the act and never says who is producing. Overture refuses to treat the room
+    // as the producer (#1787), which is right, and left the check with no target at all: the run fell
+    // through to the act waterfall against an organisation that does not exist, found nothing, and
+    // reported `nothing_published`, a claim it never tested.
+    //
+    // A plain fact about THIS show rather than the `presenterWasTheRoom` flag behind it (Dan's scope call,
+    // 2026-07-31): the flag is only written by scouts newer than #1787, and 15 of the 93 predate it or came
+    // from pages that named nobody, while being every bit as organiser-less. The run needs to know it has
+    // no producer to find, not why.
+    var onlyTheActIsNamed: Bool? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -110,7 +125,7 @@ struct ShowListing: Codable, Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 8
+    static let version = 9
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false

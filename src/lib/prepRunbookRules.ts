@@ -94,6 +94,15 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /"No description published"\s+is a correct and complete answer/i },
   { name: "never-categorize-the-recipient",
     pattern: /Describe Dan, never categorize the recipient/i },
+  // #1856: where a listing names no producer, the run pursues the people it DOES name. Without this the
+  // run researches an organisation that does not exist and reports that nobody publishes an address, a
+  // claim about a search it never ran.
+  { name: "act-pursued-when-no-organiser-named",
+    pattern: /`onlyTheActIsNamed == true`[^\n]*whatever\s+`production`\s+says/i },
+  // The other half, and the one that protects Dan rather than the answer rate: on those same shows the
+  // only organisation on the page is the room he is not pitching.
+  { name: "no-presenter-provenance-without-an-organiser",
+    pattern: /NEVER\s+emit\s+`provenance:\s*"presenter"`\s+for\s+one\s+of\s+these\s+shows/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

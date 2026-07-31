@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion8() {
+    @Test func theBuilderNowStampsVersion9() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 8)
+        #expect(q.version == 9)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -197,6 +197,30 @@ struct PrepQueueContractTests {
         #expect(decoded.items[1].showListing?.status == ShowListing.unreadable)
         #expect(decoded.items[1].showListing?.text == nil)
         #expect(decoded.items[2].showListing == nil)
+    }
+
+    // v9 (#1856): an item may say that nobody but the ACT is named on this show, which is what tells the
+    // run to pursue the act instead of researching a producing organisation that does not exist.
+    //
+    // Absent is not false. A file written before this field, or an item the app judged to name a producer,
+    // both leave it out, and only the second is a claim; the run treats a missing field as "nothing said"
+    // and behaves exactly as it always did.
+    @Test func theV9FixtureSaysWhenNobodyButTheActIsNamed() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v9.json"))
+        #expect(decoded.version == 9)
+        #expect(decoded.items[1].onlyTheActIsNamed == true)
+        #expect(decoded.items[0].onlyTheActIsNamed == nil)
+    }
+
+    // The same additive promise the house list made: a queue file written before this field still decodes,
+    // and reads as having said nothing about it rather than as a show that names a producer.
+    @Test func everyEarlierFixtureStillDecodesWithNoActNamingClaim() throws {
+        for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+                     "v8.json"] {
+            let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
+            #expect(decoded.items.allSatisfy { $0.onlyTheActIsNamed == nil },
+                    "\(name) should carry no act-naming claim")
+        }
     }
 
     // Additive, so every earlier queue file still decodes. Absent is not the same answer as `unreadable`:
