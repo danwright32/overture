@@ -87,10 +87,10 @@ else
 fi
 
 # 3. Drift on the runbook side: an anchor dropped from the runbook is reported against the runbook.
-RUNBOOK_MISSING_OPENER="$(all_anchors_text | grep -v 'observation-first')"
+RUNBOOK_MISSING_OPENER="$(all_anchors_text | grep -v 'direct-intent')"
 run_drift "${RUNBOOK_MISSING_OPENER}" "${FULL}"
 assert_contains "drift: names the runbook as the side missing it" "${OUT}" 'missing from runbook'
-assert_contains "drift: reports the missing opener anchor" "${OUT}" 'observation-first'
+assert_contains "drift: reports the missing opener anchor" "${OUT}" 'direct-intent'
 
 # 4. Wrapped (the load-bearing case): "Lincoln Center" split across a newline in the runbook must
 #    still match, so the check does not false-alarm on a normal line wrap.

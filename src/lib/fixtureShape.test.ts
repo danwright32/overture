@@ -54,11 +54,38 @@ describe("prep-queue fixture shapes", () => {
     expect(() => assertPrepQueueShape(mutated, "v4.json", 4)).toThrow(/experimentArmInstruction.*before version 5/);
   });
 
-  // #5: the archetype must be one of the four known tokens, not free text.
+  // #5: the archetype must be one of the known tokens, not free text.
   it("rejects an unknown experiment archetype token in a v5 fixture", () => {
     const mutated = readJson("prep-queue", "v5.json") as { items: Array<Record<string, unknown>> };
     mutated.items[0].experimentArmInstruction = "made-up-shape";
     expect(() => assertPrepQueueShape(mutated, "v5.json", 5)).toThrow(/experimentArmInstruction/);
+  });
+
+  // 2026-07-31: credential-first and observation-first are retired, and the two directions differ.
+  // INBOUND, an arm stamped on a prospect before the retirement is real history that must still decode:
+  // refusing it here would break a queue built from the live store, which is why the assignable list
+  // deliberately keeps all four tokens.
+  it("still accepts a retired archetype as an assigned arm, since a prospect may carry one", () => {
+    const mutated = readJson("prep-queue", "v5.json") as { items: Array<Record<string, unknown>> };
+    for (const token of ["credential-first", "observation-first"]) {
+      mutated.items[0].experimentArmInstruction = token;
+      expect(() => assertPrepQueueShape(mutated, "v5.json", 5)).not.toThrow();
+    }
+  });
+
+  // OUTBOUND is deliberately NOT judged here. The frozen results fixtures carry `rate_stated`, a token
+  // from the retired offer A/B (#612), so this guard's contract (every past results file still decodes)
+  // rules out treating `variant` as today's vocabulary. prepEval judges the produced shape instead.
+  it("accepts any string variant, since past results files carry retired experiment tokens", () => {
+    const mutated = readJson("prep-results", "v5.json") as {
+      results: Array<{ draft?: Record<string, unknown> }>;
+    };
+    const withDraft = mutated.results.find((r) => r.draft);
+    if (!withDraft?.draft) throw new Error("fixture has no drafted result to mutate");
+    withDraft.draft.variant = "rate_stated";
+    expect(() => assertPrepResultsShape(mutated, "v5.json", 5)).not.toThrow();
+    withDraft.draft.variant = 42;
+    expect(() => assertPrepResultsShape(mutated, "v5.json", 5)).toThrow(/variant/);
   });
 
   // #1597: alsoAnswersFor is a v6 addition. A runner reading an older queue does not know the rule, so

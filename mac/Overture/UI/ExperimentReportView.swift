@@ -13,7 +13,7 @@ struct ExperimentReportView: View {
 
     @State private var selectedId: String?
     @State private var newVariantA: OpenerArchetype = .reasonFirst
-    @State private var newVariantB: OpenerArchetype = .credentialFirst
+    @State private var newVariantB: OpenerArchetype = .directIntent
     @State private var showStartForm = false
 
     private var activeExperiment: Experiment? { experiments.first(where: \.isActive) }
@@ -134,7 +134,9 @@ struct ExperimentReportView: View {
         HStack {
             Text(label).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             Picker(label, selection: selection) {
-                ForEach(OpenerArchetype.allCases, id: \.self) { Text($0.label).tag($0) }
+                // `selectable`, never `allCases`: the retired shapes stay in the enum only so a past
+                // experiment's arms and a past prospect's assignedArm still label (2026-07-31).
+                ForEach(OpenerArchetype.selectable, id: \.self) { Text($0.label).tag($0) }
             }
             .labelsHidden()
         }

@@ -54,7 +54,20 @@ function requireNonNegativeInt(v: unknown, file: string, path: string): number {
 const PRODUCTION = ["self", "agency", "unknown"] as const;
 const REPREP_MODE = ["draft_only", "contacts_only"] as const;
 // #5 v5: the four opener archetypes an A/B experiment item can be told to use.
-const OPENER_ARCHETYPE = ["reason-first", "credential-first", "observation-first", "direct-intent"] as const;
+// Two lists, because the two directions have opposite obligations after the 2026-07-31 retirement of
+// credential-first and observation-first.
+//
+// INBOUND (the queue's experimentArmInstruction) must still accept a retired token. It is copied from a
+// Prospect.assignedArm that may have been stamped before the retirement, and v5.json/v6.json are frozen
+// contract fixtures carrying exactly that. Refusing it here would fail to decode real history, so the
+// runbook handles it instead: write the closest live shape and record THAT.
+const OPENER_ARCHETYPE_ASSIGNABLE = [
+  "reason-first", "credential-first", "observation-first", "direct-intent",
+] as const;
+// OUTBOUND (the drafter's echoed `variant`) accepts only the live shapes. An echo naming a retired one
+// is a run reporting that it wrote a shape the runbook forbids writing, which is a drift signal, not
+// history, so this is the boundary that catches it.
+const OPENER_ARCHETYPE = ["reason-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
@@ -130,7 +143,8 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
     }
     if (experimentFieldAllowed) {
       if (o.experimentArmInstruction !== undefined) {
-        requireEnum(o.experimentArmInstruction, file, `items[${i}].experimentArmInstruction`, OPENER_ARCHETYPE);
+        requireEnum(o.experimentArmInstruction, file, `items[${i}].experimentArmInstruction`,
+                    OPENER_ARCHETYPE_ASSIGNABLE);
       }
     } else if (o.experimentArmInstruction !== undefined) {
       fail(file, `items[${i}].experimentArmInstruction must not be present before version 5`);
@@ -212,6 +226,10 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
       const draft = requireObject(o.draft, file, `results[${i}].draft`);
       requireString(draft.subject, file, `results[${i}].draft.subject`);
       requireString(draft.body, file, `results[${i}].draft.body`);
+      // Deliberately a string, not an enum. The frozen fixtures v1 to v8 carry `rate_stated`, a token
+      // from the RETIRED offer A/B (#612), so this file's job (an old results file still decodes) is at
+      // odds with judging whether a shape is one the runbook currently permits. That judgement belongs to
+      // prepEval, which scores PRODUCED output rather than guaranteeing history parses.
       requireString(draft.variant, file, `results[${i}].draft.variant`);
     }
     if (alreadyCoveredNoteAllowed) {

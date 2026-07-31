@@ -33,10 +33,18 @@ BRAND_VOICE_ANCHORS=(
   "Radio City Music Hall"
   "danwrightphotography.com"
   "reason-first"
-  "credential-first"
-  "observation-first"
   "direct-intent"
-  "Happy to answer any questions"
+  # Dan, 2026-07-31: sentence one always introduces him, by name and by trade. This replaced an earlier
+  # instruction NOT to lead with his name, which was invented to manufacture variety and produced openers
+  # that started talking before saying who was talking. Both sources must carry it or one side reverts.
+  "My name is Dan"
+  # Dan, 2026-07-31: the close expects a reply. It replaced "Happy to answer any questions" (now on the
+  # rejected list below), which asked the reader to invent a question after the email had already given
+  # them the rate, the turnaround and the ask.
+  "look forward to hearing from you"
+  # Dan, 2026-07-31: the ask presupposes they HAVE photography plans, rather than asking whether they want
+  # photography at all. The presupposition is the point, not the wording: a yes/no offer invites a no.
+  "photography plans"
   # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
   # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble
@@ -51,6 +59,17 @@ BRAND_VOICE_ANCHORS=(
 # guards against the rejected one being re-endorsed anywhere inside the skill.
 BRAND_VOICE_REJECTED=(
   "let me know how that lands"
+  # Dan, 2026-07-31: the old soft close, retired because inviting questions makes the reader do the work
+  # of inventing one. It was an ANCHOR until today, which is exactly why it moves here rather than simply
+  # being deleted: once both sources mention it only to retire it, a presence-only anchor passes
+  # vacuously and can no longer tell an endorsement from a rejection (the #1227 trap).
+  "Happy to answer any questions"
+  # Dan, 2026-07-31: two retired opener shapes, anchors until today for the same reason. Credential-first
+  # led with venues before the reader knew what Dan does, which sentence one now owns. Observation-first
+  # had only the show's own material to observe, which "name the show, describe nothing" forbids, and with
+  # that gone it reached for scarcity instead.
+  "credential-first"
+  "observation-first"
   # #1832: the five galleries. Dan's call, 2026-07-30, is one link in every draft, the site itself, and
   # the reader clicks into whichever portfolio they want. These were ANCHORS under #1405 (a fact both
   # sources had to state); they are rejected phrases now, so either side re-endorsing one is caught

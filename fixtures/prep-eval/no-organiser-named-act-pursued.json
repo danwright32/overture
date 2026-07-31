@@ -71,7 +71,7 @@
             "confidence": "high",
             "provenance": "performer",
             "sourceUrl": "https://delaneybrown.example/contact",
-            "overrideBody": "I photograph performing arts in New York and saw you and Miggie Snyder are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+            "overrideBody": "I'm Dan Wright, and documentary photography of live performance here in NYC is my work. I'm writing about your August 14 show at The Example Room with Miggie Snyder. I shoot without flash and stay out of the way, so the audience doesn't notice me and nothing about the night is disturbed. I've photographed at Carnegie Hall for nearly ten years, and other work has taken me to Lincoln Center and Radio City Music Hall. My rate is $250 an hour plus tax, one hour minimum, and your edited gallery arrives within two weeks. You can see recent work at danwrightphotography.com. I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
           },
           {
             "name": "Miggie Snyder",
@@ -81,12 +81,12 @@
             "confidence": "high",
             "provenance": "performer",
             "sourceUrl": "https://miggiesnyder.example/about",
-            "overrideBody": "I photograph performing arts in New York and saw you and Delaney Brown are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+            "overrideBody": "My name is Dan Wright, a stage and concert photographer working in New York City. I'm writing about your August 14 show at The Example Room with Delaney Brown. I work without flash and keep myself unobtrusive, so nobody watching registers that I'm there. Carnegie Hall has been my main room for nearly ten years, and I've also shot at Madison Square Garden and Lincoln Center. My rate is $250 an hour plus tax, one hour minimum, with your edited gallery delivered inside two weeks. There's more of my work at danwrightphotography.com. I'd be glad to hear where your photography plans for the evening stand. I look forward to your reply."
           }
         ],
         "draft": {
           "subject": "Photographing Broadway's Bad Guys! at The Example Room.",
-          "body": "I photograph performing arts in New York and saw Delaney Brown and Miggie Snyder are singing an evening of musical theatre villains at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions.",
+          "body": "My name is Dan Wright and I'm a photographer who covers performing arts across New York City. I'm writing about the August 14 show at The Example Room. I shoot no flash documentary coverage and stay unobtrusive, so the audience doesn't notice me and the set isn't disturbed. Nearly ten years of my work has been at Carnegie Hall, and I've also shot at Radio City Music Hall and Lincoln Center. My rate is $250 an hour plus tax, one hour minimum, and the edited gallery comes back within two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
           "variant": "reason-first"
         }
       }

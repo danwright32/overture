@@ -20,13 +20,16 @@ describe("prep-runbook judgment rules are present (#591)", () => {
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "act-pursued-when-no-organiser-named",
+      "ask-presupposes-photography-plans",
       "carnegie-citywide-press-example",
+      "effect-not-vantage-point",
       "empty-answer-carries-a-reason",
       "grouped-answer-emits-every-key",
       "grouped-answer-never-self-invented",
       "high-confidence-only-when-read",
       "house-list-decides-not-the-run",
       "house-name-matches-a-longer-name",
+      "name-the-show-describe-nothing",
       "named-organisation-must-be-visited",
       "named-performer-never-dropped",
       "never-categorize-the-recipient",
@@ -43,6 +46,9 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "press-media-disqualified",
       "pursue-each-named-performer",
       "returning-client-register",
+      "sentence-one-introduces-dan",
+      "soft-question-close-retired",
+      "the-city-not-the-state",
       "use-the-listing-handed-over",
       "venue-address-disqualified",
     ]);

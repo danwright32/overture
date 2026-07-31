@@ -133,7 +133,70 @@ const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\]/;
 // it to the reader. Universal, not per-fixture: no draft may make a claim about who is reading it.
 const RECIPIENT_CATEGORY =
   /\b(?:with|for|alongside)\s+(?:performing[- ]arts|arts)\s+(?:organi[sz]ations?|institutions?|companies|groups|ensembles)\b|\bcompanies like yours\b|\borgani[sz]ations like yours\b|\bgroups like yours\b/i;
+// Dan, 2026-07-31. Three rules from one review, each expressible as a phrase no draft may contain, so
+// each gets a check at the boundary instead of living only in the prompt (the rule-in-a-prompt-is-a-hope
+// problem: docs/prep-runbook.md cannot enforce itself).
+//
+// Where Dan stands is his problem to solve, never a selling point: a reader who pictures a photographer
+// parked at the back hears "distant" rather than "discreet". The email says the effect instead.
+const VANTAGE_POINT = /\bback of (?:the )?house\b/i;
+// Dan works in the CITY, a different place from the state. Deliberately anchored on a preposition rather
+// than every "New York", so a venue or organisation quoted as printed ("New York, NY 10036", a group
+// called the New York Something) is untouched and only Dan's own words are judged.
+const STATE_NOT_CITY = /\b(?:here in|in|around|across|throughout|based in)\s+new york\b(?!\s+city)/i;
+// The retired close. Inviting questions makes the reader invent one, after the email has already given
+// them the rate, the turnaround and the ask.
+const INVITES_QUESTIONS = /(?:happy to answer|let me know if you have|feel free to (?:reach out|ask)|if you have)\s+(?:any\s+)?questions?/i;
+// Sentence one always introduces Dan, by name AND by trade, in a COLD pitch. Checked only where the
+// fixture does not set forbidColdSelfIntro, since a booked or warm reader must NOT be reintroduced
+// (#1215): the two rules are exact opposites and the fixture says which register this draft is in.
+const SELF_INTRO_NAME = /\b(?:my name is dan|i'?m dan\b|i am dan\b|dan wright)/i;
+const SELF_INTRO_TRADE = /\bphotograph(?:er|y)\b|\bi shoot\b/i;
 const DOMAIN_TOKEN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s)]*)?/gi;
+
+/** The first sentence of a body, for the rules that govern the opener specifically. */
+export function firstSentence(body: string): string {
+  const trimmed = body.trim();
+  const end = trimmed.search(/[.!?](?:\s|$)/);
+  return end === -1 ? trimmed : trimmed.slice(0, end + 1);
+}
+
+/**
+ * The longest run of words shared by two texts, lowercased and stripped of punctuation. Used to catch a
+ * draft that lifts its showSummary into the email: the 2026-07-31 draft opened with its own summary
+ * almost verbatim ("built around the idea that we're our own harshest critics"), which is the recital
+ * "name the show, describe nothing" forbids. A word-run measure rather than an exact match, because the
+ * failure reworded the summary lightly rather than pasting it.
+ */
+export function longestSharedWordRun(a: string, b: string): number {
+  const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const wa = words(a);
+  const wb = words(b);
+  if (wa.length === 0 || wb.length === 0) return 0;
+  // Classic longest-common-substring over word arrays, one row at a time.
+  let best = 0;
+  let prev = new Array<number>(wb.length + 1).fill(0);
+  for (let i = 1; i <= wa.length; i++) {
+    const cur = new Array<number>(wb.length + 1).fill(0);
+    for (let j = 1; j <= wb.length; j++) {
+      if (wa[i - 1] === wb[j - 1]) {
+        cur[j] = prev[j - 1] + 1;
+        if (cur[j] > best) best = cur[j];
+      }
+    }
+    prev = cur;
+  }
+  return best;
+}
+
+/** Word-run length at which a body counts as having lifted its showSummary rather than coincidentally overlapping. */
+export const LIFTED_SUMMARY_WORD_RUN = 6;
+
+// The opener shapes a run may still report writing. Judged HERE rather than in fixtureShape.ts, whose job
+// is that every past results file still decodes: those frozen fixtures carry `rate_stated` from the
+// retired offer A/B (#612), so that guard cannot also police today's vocabulary. This one scores produced
+// output, where echoing a retired shape means the run wrote something the runbook forbids writing.
+const LIVE_OPENER_VARIANTS = new Set(["reason-first", "direct-intent"]);
 const ALLOWED_LINK_HOSTS = new Set(["danwrightphotography.com", "www.danwrightphotography.com"]);
 
 function norm(s: string | undefined): string {
@@ -165,7 +228,7 @@ function collectBodies(entries: ResultEntry[]): { label: string; body: string }[
   return bodies;
 }
 
-function checkUniversal(entries: ResultEntry[], failures: string[]): void {
+function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister: boolean): void {
   for (const c of collectContacts(entries)) {
     if (c.email) {
       if (PRESS_LOCALPART.test(emailLocalpart(c.email))) {
@@ -191,10 +254,55 @@ function checkUniversal(entries: ResultEntry[], failures: string[]): void {
     if (!/\$250/.test(body) || !/plus tax/i.test(body)) {
       failures.push(`${label}: must state the canonical rate ($250 an hour plus tax)`);
     }
+    if (VANTAGE_POINT.test(body)) {
+      failures.push(`${label}: names where Dan stands ("back of the house") instead of the effect`);
+    }
+    if (STATE_NOT_CITY.test(body)) {
+      failures.push(`${label}: says "New York" for the city; it is New York City or NYC`);
+    }
+    if (INVITES_QUESTIONS.test(body)) {
+      failures.push(`${label}: invites the reader to ask questions; the close expects a reply instead`);
+    }
+    if (coldRegister) {
+      const opener = firstSentence(body);
+      if (!SELF_INTRO_NAME.test(opener) || !SELF_INTRO_TRADE.test(opener)) {
+        failures.push(`${label}: sentence one must introduce Dan by name and by trade: "${opener}"`);
+      }
+    }
     for (const match of body.match(DOMAIN_TOKEN) ?? []) {
       const host = match.split("/")[0].toLowerCase().replace(/\.$/, "");
       if (!ALLOWED_LINK_HOSTS.has(host)) {
         failures.push(`${label}: links a host other than danwrightphotography.com (#789): ${host}`);
+      }
+    }
+  }
+
+  // Per entry, not per body: the comparison is against THIS entry's own showSummary. A draft that lifts
+  // the summary is describing the show back to the person who made it, which is what the 2026-07-31
+  // draft did (its opening sentence was its showSummary, lightly reworded).
+  // Cold only: the archetypes govern what sentence two does once Dan has introduced himself, and a
+  // booked or warm draft has no self-introduction to follow, so no archetype applies to it.
+  if (coldRegister) {
+    for (const [i, e] of entries.entries()) {
+      const variant = e.draft?.variant;
+      if (variant !== undefined && !LIVE_OPENER_VARIANTS.has(norm(variant))) {
+        failures.push(
+          `results[${i}].draft.variant is "${variant}", not one of the live opener shapes (${[...LIVE_OPENER_VARIANTS].join(", ")})`,
+        );
+      }
+    }
+  }
+
+  for (const [i, e] of entries.entries()) {
+    const summary = e.showSummary;
+    if (!summary) continue;
+    for (const body of [e.draft?.body, ...(e.contacts ?? []).map((c) => c.overrideBody)]) {
+      if (!body) continue;
+      const run = longestSharedWordRun(summary, body);
+      if (run >= LIFTED_SUMMARY_WORD_RUN) {
+        failures.push(
+          `results[${i}]: the draft lifts ${run} consecutive words from its own showSummary; the email names the show and describes nothing`,
+        );
       }
     }
   }
@@ -363,7 +471,10 @@ export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectat
   }
 
   const allContacts = collectContacts(entries);
-  checkUniversal(entries, failures);
+  // forbidColdSelfIntro marks a booked/warm fixture (#1215), the one register where reintroducing Dan is
+  // the failure. Everything else is a cold pitch, where the self-introduction is REQUIRED, so the flag
+  // decides which of the two opposite rules applies rather than each fixture opting in.
+  checkUniversal(entries, failures, !expected.forbidColdSelfIntro);
   checkExpectation(entries[0], allContacts, expected, failures);
 
   return { name, pass: failures.length === 0, failures };
