@@ -196,9 +196,11 @@ enum SameNightTitleVariantMerge {
     private static func clusters(of rows: [Prospect]) -> [[Prospect]] {
         var out: [[Prospect]] = []
         for r in rows {
+            // #1764: isSameNightVariant, not isConfident, so a misspelling inside the title is tolerated
+            // here and NOWHERE else. The loosening is named at the call site rather than hidden in a
+            // default, exactly as #1590 did for the containment fraction.
             if let i = out.firstIndex(where: {
-                GroupNameMatch.isConfident($0[0].groupName, r.groupName,
-                                           minimumContainment: GroupNameMatch.sameNightContainmentFraction)
+                GroupNameMatch.isSameNightVariant($0[0].groupName, r.groupName)
             }) {
                 out[i].append(r)
             } else {
