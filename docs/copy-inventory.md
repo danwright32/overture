@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **952 sentences**, from 322 source files.
+Every sentence Overture can say to Dan: **954 sentences**, from 322 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -926,6 +926,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "No venue"
     `Domain/OutcomePatterns.swift`
+"Nobody found to write to"
+    `Domain/Reachability.swift`
 "None due"
     `Domain/AgentRoster.swift`
 "None yet. Refuse a town from a show and it lands here, where you can take it back."
@@ -1514,6 +1516,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "The calendars Overture re-checks on every scout."
     `UI/SourcesView.swift`
+"The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
+    `Domain/Reachability.swift`
 "The date is known"
     `UI/InquiryIntakeSheet.swift`
 "The days Overture won't pitch you for."

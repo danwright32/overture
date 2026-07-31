@@ -12,11 +12,11 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `8`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `9`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
-  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -37,6 +37,11 @@ before this was codified.
   `read` (with the page's `text`, plus `truncated` when the page had to be cut at 4000 characters) or
   `unreadable`, and is ABSENT when there was no page to look at. See §2's step on grounding a draft in the
   listing; the three states are three different answers and you say a different thing about each.
+  `onlyTheActIsNamed` (v9, #1856) is `true` on a show whose listing named NO producing organisation at
+  all: the room it plays in is not the producer, so there is nothing to research as an organisation and
+  the act itself is who you pursue. Absent is not `false`: it means the app said nothing about it (a
+  file predating the field, or a show that names a producer), and you behave exactly as you always did.
+  See §1's route for what to do with it.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
   (`PrepResults` version `8`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
@@ -214,10 +219,19 @@ item's `production` field first:
     own page for you precisely because the act's name is often nowhere else: `groupName` is
     frequently the show's TITLE ("Broadway's Bad Guys!"), not a company. Take the performer or
     ensemble names from that text.
-  - With 1-2 named leads, pursue EACH directly exactly as the `production == "self"` route
-    above does, `provenance: "performer"`, one entry per person, each with its own
-    `overrideBody`. With a bigger lineup, or none you can name, run the standard waterfall
-    against `groupName` with `provenance: "act"`.
+  - Pursue EVERY performer the listing names, however many that is, exactly as the
+    `production == "self"` route above does: `provenance: "performer"`, one entry per person,
+    each with its own `overrideBody`, and each named performer surfaced even where you found no
+    contact for her (at `confidence: "low"` with a `method`, per that route's own rule). **There
+    is NO headcount ceiling here**, unlike the `self` route above, and the difference is
+    deliberate (Dan's call, 2026-07-31): a self-produced show has a real act name in `groupName`
+    to fall back on, and one of these does not, so a five-name bill that falls back is a search
+    for a company that does not exist. A bigger bill costs proportionally more lookups; that is
+    the price of an answer at all here, and Dan chooses whom to write to afterwards.
+  - Where you can name NOBODY at all (the listing text is absent or unreadable and `groupName`
+    names no findable person or company), do not fall back to a title-shaped organisation search
+    and do not report that nobody publishes an address. Return the entry with `contacts` absent
+    and `emptyReason: "no_one_identified"`.
   - NEVER emit `provenance: "presenter"` for one of these shows. No presenter was
     established, and the only organisation on the page is the room, which the hard
     venue-disqualify rule below already forbids.
@@ -342,15 +356,20 @@ absent, ALSO set `emptyReason` on that same entry to exactly one of:
   press/media/PR desk, so the hard press-disqualify rule refused it.
 - `nothing_published`: you looked and this show's act, performers and presenter publish no
   usable address anywhere you could reach. Only honest once you have actually fetched every
-  organisation named for this show that is not on `houses`; until then the lookup is unfinished
-  and this token would claim more than you measured.
+  organisation named for this show that is not on `houses`, AND you had someone to look for in
+  the first place; until then the lookup is unfinished and this token would claim more than you
+  measured.
+- `no_one_identified` (#1817): you could not work out WHO to write to. No producing organisation
+  was named, and no performer could be named either, so no search for an address ever really
+  ran. This is NOT `nothing_published`: that one says the people were found and publish nothing,
+  and saying it here claims a search you never made.
 
 This is the ONLY trace a refusal leaves, because the rules above tell you never to emit a
 venue or press address at any confidence. Without it the app cannot tell a check that found
 the room's own inbox and correctly refused it from one that found nothing at all, and Dan's
 card says "No email found" in both cases, which claims the search came up empty when it came
 up with something. Report what you actually measured. If you genuinely cannot tell which of
-the three applies, omit `emptyReason` rather than guessing: the card then falls back to the
+these applies, omit `emptyReason` rather than guessing: the card then falls back to the
 plain "no email found" wording, which is the honest thing to say when the reason is unknown.
 
 **STRICT verification (Dan's rule).** `confidence: "high"` is allowed ONLY for an

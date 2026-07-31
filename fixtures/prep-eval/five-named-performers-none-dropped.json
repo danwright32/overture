@@ -1,0 +1,138 @@
+{
+  "name": "five-named-performers-none-dropped",
+  "rule": "A show that names no producer and FIVE performers pursues all five (#1817). There is no headcount ceiling on an organiser-less show, because the fallback the ceiling exists to reach, an act name in `groupName`, is a show title here. A performer with no contact found is still surfaced at low confidence, never dropped.",
+  "input": {
+    "naturalKey": "feminine-fury|2026-08-03|the-example-room",
+    "groupName": "Feminine Fury",
+    "venue": "The Example Room",
+    "performanceDate": "2026-08-03",
+    "discipline": "music",
+    "production": "unknown",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "sourceListingURL": "https://tickets.example/showdetails/mNo345/pQr678",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/mNo345/pQr678",
+      "text": "Events FAQ About Contact Sign in Feminine Fury About the Show A night of rock and theatre songs sung by five women who are done asking nicely. Featuring: Bianca Delmar Megan Dwight Francesca Loew Kristen Platt Nyla Vela Genre Cabaret Duration 80 minutes 570 Example Avenue New York, NY 10036 Contact Us How to reach us General information tickets@theexampleroom.example Perform with us programming@theexampleroom.example Menu Events About FAQ Contact Powered by an example ticketing host"
+    }
+  },
+  "sources": [
+    {
+      "label": "Bianca Delmar own site",
+      "url": "https://biancadelmar.example/contact",
+      "content": "Bianca Delmar is a singer in New York. She appears in Feminine Fury at The Example Room on August 3. Enquiries: bianca@biancadelmar.example."
+    },
+    {
+      "label": "Megan Dwight own site",
+      "url": "https://megandwight.example/about",
+      "content": "Megan Dwight, performer and writer. Upcoming: Feminine Fury, The Example Room, August 3. Contact form only, no address published."
+    },
+    {
+      "label": "Francesca Loew own site",
+      "url": "https://francescaloew.example",
+      "content": "Francesca Loew, actor and singer. Booking: francesca@francescaloew.example."
+    },
+    {
+      "label": "A cast list on a blog",
+      "url": "https://cabaretnotes.example/feminine-fury",
+      "content": "Feminine Fury brings together Bianca Delmar, Megan Dwight, Francesca Loew, Kristen Platt and Nyla Vela for one night at The Example Room. Kristen Platt and Nyla Vela have no sites of their own that we could find."
+    },
+    {
+      "label": "The Example Room listing host",
+      "url": "https://theexampleroom.example/contact",
+      "content": "The Example Room is a rental cabaret room. Ticketing: tickets@theexampleroom.example. To perform here: programming@theexampleroom.example."
+    }
+  ],
+  "expected": {
+    "description": "All five performers are surfaced. Three have their own address or form; the two with nothing findable are still surfaced at low confidence rather than dropped, so the card never implies a three-woman bill. The room's inboxes stay refused and nothing is labelled presenter.",
+    "requiredPerformers": [
+      "Bianca Delmar",
+      "Megan Dwight",
+      "Francesca Loew",
+      "Kristen Platt",
+      "Nyla Vela"
+    ],
+    "lowConfidencePerformers": [
+      "Kristen Platt",
+      "Nyla Vela"
+    ],
+    "performerOverrideBodyRequired": true,
+    "forbidPresenterProvenance": true,
+    "requireSomeContact": true,
+    "forbiddenEmails": [
+      "tickets@theexampleroom.example",
+      "programming@theexampleroom.example"
+    ],
+    "forbiddenDomains": [
+      "theexampleroom.example"
+    ],
+    "requiredShowSummaryTerms": [
+      "rock"
+    ],
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-07-31T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "feminine-fury|2026-08-03|the-example-room",
+        "showSummary": "A night of rock and theatre songs sung by five women, 80 minutes.",
+        "contacts": [
+          {
+            "name": "Bianca Delmar",
+            "role": "Performer",
+            "email": "bianca@biancadelmar.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://biancadelmar.example/contact",
+            "overrideBody": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          },
+          {
+            "name": "Megan Dwight",
+            "role": "Performer",
+            "method": "form_or_dm",
+            "confidence": "medium",
+            "formUrl": "https://megandwight.example/about",
+            "provenance": "performer",
+            "sourceUrl": "https://megandwight.example/about",
+            "overrideBody": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          },
+          {
+            "name": "Francesca Loew",
+            "role": "Performer",
+            "email": "francesca@francescaloew.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "provenance": "performer",
+            "sourceUrl": "https://francescaloew.example",
+            "overrideBody": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          },
+          {
+            "name": "Kristen Platt",
+            "role": "Performer",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "provenance": "performer",
+            "overrideBody": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          },
+          {
+            "name": "Nyla Vela",
+            "role": "Performer",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "provenance": "performer",
+            "overrideBody": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Feminine Fury at The Example Room.",
+          "body": "I photograph performing arts in New York and saw you're singing in Feminine Fury at The Example Room on August 3, a night of rock and theatre songs with four others. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. I've been a photographer at Carnegie Hall for nearly 10 years. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Happy to answer any questions.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}

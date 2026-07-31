@@ -114,8 +114,8 @@ enum Reachability {
     // Both used to read "No email found", which is LESSONS L11: a message may claim only what its check
     // actually measured.
     //
-    // Three values and no more. Each has to earn a DISTINCT sentence Dan can act on differently; a reason
-    // that would render identically to another belongs in that one.
+    // Each value has to earn a DISTINCT sentence Dan can act on differently; a reason that would render
+    // identically to another belongs in that one. Three at first (#1722), four since #1817.
     enum EmptyReason: String, Equatable, Sendable, CaseIterable {
         // The check found an address, and it was the room's own. Dan's standing rule is that a venue's
         // inbox is a wrong result, not a weak one, so it was refused rather than kept at low confidence.
@@ -126,6 +126,16 @@ enum Reachability {
         // The check looked and this show's people genuinely publish no address anywhere. This is the one
         // case where today's "No email found" was always true, so it keeps that wording exactly.
         case nothingPublished = "nothing_published"
+        // #1817: the check could not work out WHO to write to. No producing organisation was named, and no
+        // performer could be named either (the listing page could not be read, or it named nobody), so the
+        // search for an address never had a target and never really ran.
+        //
+        // Its own value because it is a different FINDING from the one above, not a shade of it, and Dan
+        // does a different thing with it: "nobody publishes an address" is a finished search he can give
+        // up on, while this is a show where his own knowledge of a room beats the run's, and one he can
+        // open the listing for himself. Reporting it as `nothing_published` is the L11 overclaim that
+        // opened #1817 in the first place.
+        case noOneIdentified = "no_one_identified"
     }
 
     // nil means no check has ever run, which is a different thing from a check that came back empty. The
@@ -239,6 +249,14 @@ enum ReachabilityCopy {
         switch reason {
         case .onlyVenueContact: return "Only the venue's address"
         case .onlyPressContact: return "Only a press address"
+        // #1817: names what happened, and deliberately does not use the words "no email", because no
+        // search for one ever ran. Same rust tone and same position: what varies is only the sentence.
+        //
+        // NOT "couldn't tell who to write to", which was the first wording: the card can already carry
+        // "Couldn't tell who's putting this on: the listing named only the room" (#1788), and two lines
+        // opening the same way, one under the other, is the #843 shape. This one is about the CHECK
+        // coming back with nobody to research, which is the thing the other line does not say.
+        case .noOneIdentified: return "Nobody found to write to"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
@@ -249,6 +267,8 @@ enum ReachabilityCopy {
             return "A reachability check found an address for this show, but only the venue's own, and a venue's inbox is never who you're pitching. You can still keep it and add a contact by hand."
         case .onlyPressContact:
             return "A reachability check found an address for this show, but only a press or PR desk, which is the wrong department to pitch photography to. You can still keep it and add a contact by hand."
+        case .noOneIdentified:
+            return "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }

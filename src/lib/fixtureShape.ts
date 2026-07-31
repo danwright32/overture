@@ -223,7 +223,12 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
     // rather than emitting it, so this is the only trace a refusal leaves, and an entry with neither
     // contacts nor a reason is the shape that made the card claim the search found nothing (L11).
     if (emptyReasonAllowed) {
-      const EMPTY_REASONS = ["only_venue_contact", "only_press_contact", "nothing_published"];
+      // #1817 adds "no_one_identified": the check could not work out who to write to, which is a different
+      // finding from the people being found and publishing nothing. Widening the values is additive with no
+      // version bump, because an app that does not know a value drops it and falls back to the plain
+      // wording, which is exactly what the runbook already tells the run to expect.
+      const EMPTY_REASONS = ["only_venue_contact", "only_press_contact", "nothing_published",
+                             "no_one_identified"];
       optionalString(o.emptyReason, file, `results[${i}].emptyReason`);
       if (o.emptyReason !== undefined && !EMPTY_REASONS.includes(o.emptyReason as string)) {
         fail(file, `results[${i}].emptyReason must be one of ${EMPTY_REASONS.join(", ")}; got ${String(o.emptyReason)}`);

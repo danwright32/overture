@@ -32,6 +32,8 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "never-categorize-the-recipient",
       "never-host-venue-target",
       "no-description-is-a-complete-answer",
+      "no-headcount-ceiling-without-an-organiser",
+      "no-one-identified-is-not-nothing-published",
       "no-pattern-guessed-high",
       "no-presenter-provenance-without-an-organiser",
       "one-portfolio-link-never-a-gallery",
