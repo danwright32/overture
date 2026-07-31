@@ -33,6 +33,28 @@ enum OpenerArchetype: String, CaseIterable, Codable, Sendable {
     var label: String {
         rawValue.replacingOccurrences(of: "-", with: " ").capitalized
     }
+
+    // Retired by Dan on 2026-07-31, and deliberately still CASES rather than deletions. Every past
+    // prospect's assignedArm, every stored Experiment's variantA/variantB, and the drafter's echoed
+    // `variant` are raw strings that the report reads back through this enum, so removing a case would
+    // turn a past experiment's history into unlabelled kebab tokens. What retirement removes is the
+    // ability to CHOOSE one again: `selectable` drives the picker, and ExperimentEditing.start refuses
+    // one outright, because a rule enforced only by the picker is a rule no test can reach (#863).
+    //
+    // Why each one went: credential-first opened with venues before the reader knew what Dan does, which
+    // is the job the fixed self-introduction now owns. Observation-first had only the show's own material
+    // to observe, which "name the show, describe nothing" forbids, and once that was gone it reached for
+    // scarcity ("only one chance at pictures of it") instead, a sales tactic rather than an observation.
+    var isRetired: Bool {
+        switch self {
+        case .credentialFirst, .observationFirst: return true
+        case .reasonFirst, .directIntent: return false
+        }
+    }
+
+    /// The shapes a NEW experiment may use. `allCases` still holds every token, including retired ones,
+    /// so historical data keeps decoding and labelling.
+    static var selectable: [OpenerArchetype] { allCases.filter { !$0.isRetired } }
 }
 
 // The dimension an experiment tests. Only openerShape ships now; subjectStyle is reserved and documented,
@@ -106,12 +128,15 @@ enum ExperimentLifecycle {
 // #863), so the "two distinct arms" and "ending retains history" rules are testable.
 @MainActor
 enum ExperimentEditing {
-    // Start a new opener-shape experiment from two DISTINCT preset archetypes and make it the sole active
-    // one. Returns nil (no experiment) if the two arms are the same: an A/B needs two different shapes.
+    // Start a new opener-shape experiment from two DISTINCT, live preset archetypes and make it the sole
+    // active one. Returns nil (no experiment) if the two arms are the same (an A/B needs two different
+    // shapes) or if either is RETIRED: a retired shape is one the runbook forbids writing, so assigning
+    // it would instruct the drafter to produce something it is told never to produce.
     @discardableResult
     static func start(variantA: OpenerArchetype, variantB: OpenerArchetype, label: String? = nil,
                       startedAt: Date, in context: ModelContext) throws -> Experiment? {
         guard variantA != variantB else { return nil }
+        guard !variantA.isRetired, !variantB.isRetired else { return nil }
         let exp = Experiment(dimension: .openerShape, variantA: variantA, variantB: variantB,
                              label: label, startedAt: startedAt)
         context.insert(exp)

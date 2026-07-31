@@ -23,9 +23,47 @@ struct ExperimentTests {
 
     // MARK: - Vocabulary
 
-    @Test func theFourOpenerArchetypesAreTheKebabTokensTheDrafterEchoes() {
+    @Test func theOpenerArchetypesAreTheKebabTokensTheDrafterEchoes() {
         #expect(OpenerArchetype.allCases.map(\.rawValue).sorted()
                 == ["credential-first", "direct-intent", "observation-first", "reason-first"])
+    }
+
+    // Dan retired credential-first and observation-first on 2026-07-31. Credential-first led with venues
+    // before the reader knew what Dan does, the job the fixed self-introduction now owns; observation-first
+    // had only the show's own material to observe, which the "name the show, describe nothing" rule
+    // forbids, and reached for scarcity once that was gone. Both raw values SURVIVE in the enum: a stored
+    // experiment's arms and every past prospect's assignedArm are raw strings the report reads back
+    // through it, so history stays readable. What changes is that neither may be CHOSEN again.
+    @Test func aRetiredArchetypeIsNotOfferedForANewExperiment() {
+        #expect(OpenerArchetype.selectable.map(\.rawValue).sorted() == ["direct-intent", "reason-first"])
+        #expect(OpenerArchetype.observationFirst.isRetired)
+        #expect(OpenerArchetype.credentialFirst.isRetired)
+        #expect(!OpenerArchetype.reasonFirst.isRetired)
+        #expect(!OpenerArchetype.directIntent.isRetired)
+    }
+
+    // The picker is not the enforcement: a rule that lives only in a SwiftUI body is a rule no test can
+    // reach (#863). start() itself must refuse a retired arm, in either slot, and create nothing.
+    @Test func startingAnExperimentOnARetiredArmIsRefused() throws {
+        let ctx = ModelContext(try container())
+        let asVariantA = try ExperimentEditing.start(variantA: .credentialFirst, variantB: .reasonFirst,
+                                                     startedAt: Date(timeIntervalSince1970: 0), in: ctx)
+        #expect(asVariantA == nil)
+        let asVariantB = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .observationFirst,
+                                                     startedAt: Date(timeIntervalSince1970: 10), in: ctx)
+        #expect(asVariantB == nil)
+        #expect(try ctx.fetch(FetchDescriptor<Experiment>()).isEmpty)   // nothing created either time
+        // The two live shapes still start normally, so the refusal is specific and not a blanket break.
+        let live = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .directIntent,
+                                               startedAt: Date(timeIntervalSince1970: 20), in: ctx)
+        #expect(live != nil)
+    }
+
+    // A retired token still has to render as a label wherever a past experiment or a past prospect's arm
+    // is displayed, or retiring the shape would silently turn the report's history into raw kebab tokens.
+    @Test func aStoredExperimentOnARetiredArmStillLabels() {
+        #expect(OpenerArchetype(rawValue: "observation-first")?.label == "Observation First")
+        #expect(OpenerArchetype(rawValue: "credential-first")?.label == "Credential First")
     }
 
     // MARK: - The coin (pure)
@@ -180,14 +218,14 @@ struct ExperimentTests {
 
     @Test func startCreatesAndActivatesAnExperimentFromTwoDistinctArms() throws {
         let ctx = ModelContext(try container())
-        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+        let exp = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .directIntent,
                                               startedAt: Date(timeIntervalSince1970: 0), in: ctx)
         #expect(exp != nil)
         let all = try ctx.fetch(FetchDescriptor<Experiment>())
         #expect(all.count == 1)
         #expect(all.first?.isActive == true)
         #expect(all.first?.variantA == "reason-first")
-        #expect(all.first?.variantB == "credential-first")
+        #expect(all.first?.variantB == "direct-intent")
     }
 
     @Test func startRefusesTwoIdenticalArms() throws {
@@ -200,18 +238,18 @@ struct ExperimentTests {
 
     @Test func startingANewExperimentRetiresThePreviousActiveOne() throws {
         let ctx = ModelContext(try container())
-        _ = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+        _ = try ExperimentEditing.start(variantA: .reasonFirst, variantB: .directIntent,
                                         startedAt: Date(timeIntervalSince1970: 0), in: ctx)
-        _ = try ExperimentEditing.start(variantA: .observationFirst, variantB: .directIntent,
+        _ = try ExperimentEditing.start(variantA: .directIntent, variantB: .reasonFirst,
                                         startedAt: Date(timeIntervalSince1970: 10), in: ctx)
         let active = try ctx.fetch(FetchDescriptor<Experiment>()).filter(\.isActive)
         #expect(active.count == 1)
-        #expect(active.first?.variantA == "observation-first")
+        #expect(active.first?.variantA == "direct-intent")
     }
 
     @Test func endingAnExperimentDeactivatesItButKeepsItAsHistory() throws {
         let ctx = ModelContext(try container())
-        let exp = try #require(try ExperimentEditing.start(variantA: .reasonFirst, variantB: .credentialFirst,
+        let exp = try #require(try ExperimentEditing.start(variantA: .reasonFirst, variantB: .directIntent,
                                                            startedAt: Date(timeIntervalSince1970: 0), in: ctx))
         try ExperimentEditing.end(exp, at: Date(timeIntervalSince1970: 100), in: ctx)
         let all = try ctx.fetch(FetchDescriptor<Experiment>())

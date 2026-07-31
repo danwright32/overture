@@ -407,21 +407,23 @@ app surfaces to Dan so he can judge it himself.
 INVOKE the `dan-wright-brand-voice` skill and follow it. Then, as secondary nudges only,
 apply the distilled voice guidance from "Once per run" above (the skill always wins).
 
-**Before you draft, read what the show IS (#1824).** Nothing used to tell you. `sourceListingURL`
-was handed over and never mentioned again, and on 2026-07-30 one singer-songwriter's cabaret concert
-was pitched as if the reader were an organisation, with the only nod to the material ("intimate,
-funny") naming nothing. The listing said outright what it was.
+**Before you draft, read what the show IS (#1824).** Not so you can tell the reader (they know, see
+"Name the show, describe nothing" below), but so the draft cannot get their show WRONG and so Dan
+gets a note on the row saying what you found. Nothing used to tell you: `sourceListingURL` was handed
+over and never mentioned again, and on 2026-07-30 one singer-songwriter's cabaret concert was pitched
+as if the reader were an organisation.
 
 You cannot open that page yourself: it is drawn by JavaScript and your tools cannot render it (the
 same run fetched the URL, got an 11KB shell, asked for a browser and was refused). So the app renders
 it for you and hands over the text in the item's `showListing`. Three states, and they are three
 different answers:
 
-- **`status: "read"`.** `text` is that page's readable text. Read it FIRST and let it decide what the
-  show is in your draft: a cabaret concert of one songwriter's new songs, a staged opera, a programme
-  of new work for string quartet, a stand-up bill. Use only what the page actually says, exactly the
-  grounding discipline that applies everywhere else here. If `truncated` is `true`, the page was cut
-  at 4000 characters and what you hold may not be all of it.
+- **`status: "read"`.** `text` is that page's readable text. Read it FIRST, and let it settle who and
+  what you are writing about: the correct show title, who is performing, whether this is one artist or
+  a company, whether the page names a producer at all. Use only what the page actually says, exactly
+  the grounding discipline that applies everywhere else here. What you read NEVER becomes a
+  description in the email; it keeps the email from being wrong, and it fills `showSummary` for Dan.
+  If `truncated` is `true`, the page was cut at 4000 characters and what you hold may not be all of it.
 - **`status: "unreadable"`.** The app could not read that page. You do not know what this show is
   beyond the queue's own fields. Do not go hunting for the page, and do not infer the show from its
   title: "Don't Be So Hard on Yourself" tells you nothing about what happens on stage.
@@ -431,14 +433,16 @@ different answers:
 calendar or an index (`/opportunities/`, `/show-schedule.html`, `/calendar-events/`). If the text you
 were handed does not describe THIS show on THIS date, that is a page that published no description of
 it, NOT a licence to describe this show from the neighbouring listings. **"No description published"
-is a correct and complete answer**, and a draft that says nothing specific about the material is far
-better than one that says something invented.
+is a correct and complete answer**, and an empty `showSummary` with a reason is far better than one
+that says something invented. The email is unaffected either way: it never describes the show.
 
 **Record what you found**, on this item's result entry, so the answer leaves a trace instead of living
 only in your head:
 
 - `showSummary`: one plain line saying what this show is, in your own words but sourced entirely from
   the page ("A cabaret concert of new songs by one songwriter, with a cast of five, 75 minutes").
+  **This is a note Overture shows DAN on the queue row, and it is not email copy.** Never lift it, or
+  any part of it, into the draft.
 - When there is no summary to write, LEAVE `showSummary` OUT and set `showSummaryAbsentReason` to
   exactly one of `no_listing_page` (the item carried no `showListing`), `page_unreadable`
   (`status: "unreadable"`), or `no_description_published` (the page was read and does not describe
@@ -470,37 +474,81 @@ Anatomy:
   documentary photographer working with performing arts organizations in New York" to ONE
   singer-songwriter. That phrase is in neither this runbook nor the skill; it was built out of Dan's
   own identity line and then applied to the reader, who does not fit it. Nothing about introducing
-  Dan requires a claim about who is reading, so make none: say what HE does ("I photograph performing
-  arts in New York", "I'm a documentary photographer here in New York") and let the next sentence name
-  THIS show. Never open with a category the reader has to fit ("performing arts organizations",
+  Dan requires a claim about who is reading, so make none: say who he is and what HE does ("My name is
+  Dan and I'm a professional arts photographer here in NYC", "I'm Dan Wright, a documentary photographer
+  here in NYC", see the sentence-one rule below) and let the next sentence name THIS show. Never open with a category the reader has to fit ("performing arts organizations",
   "companies like yours", "arts institutions"), and never call a recipient an organisation, a company,
   an institution, a team or an ensemble unless the work-list or the listing actually says so. A solo
   artist, a duo, and a producing company all get the same self-introduction.
+- **Name the show, describe nothing (Dan, 2026-07-31).** The reader booked, produced, or performs
+  this show. They know what it is. NAME it, with its date and venue, and say why Dan is writing:
+  "your August 3 show at The Green Room 42". That is the entire reference to their event.
+  **Never write a clause whose job is to say what the show IS**: not its running time, its cast size,
+  its theme or premise, its genre or billing, its guest artists, or a quoted review. Not as the
+  opening sentence, not buried later, not folded into a sentence about Dan. The test is one question,
+  asked of every clause that touches their event: does this tell the reader something they do not
+  already know about their own night? If not, cut it. Two real failures, the same class twice:
+  - 2026-07-31, this show: "Don't Be So Hard on Yourself is 75 minutes of new songs and a cast of
+    five, built around the idea that we're our own harshest critics." Dan: "it literally just
+    summarized the show. that person obviously knows what the show is about."
+  - 2026-07-18, a 54 Below night: "An evening of Glee covers sung by Broadway performers comes to
+    54 Below on July 19." Dan called that email terrible, the first sentence especially.
+
+  Reciting someone's own event back to them in press-release phrasing tells them nothing and reads
+  exactly like a line generated from a scraped calendar listing, which is the one impression a
+  researched pitch cannot afford. The date and venue are EVIDENCE Dan looked, not an announcement:
+  fold them into his reason for writing, never narrate the event. What fills the space instead is
+  the half the reader does not know: what Dan does, how he shoots, the credential, the rate, the ask.
 - **No greeting in the body (#393).** The drafted `body` MUST start at the first real
-  sentence with NO greeting token: write "I photograph performing arts in New York and
-  saw..." NOT "Hi Emma, I photograph...". The app owns the greeting and renders it per
+  sentence with NO greeting token: write "My name is Dan and I'm a professional arts
+  photographer..." NOT "Hi Emma, my name is Dan...". The app owns the greeting and renders it per
   recipient at send (`Salutation.greeting(for:)`), so the same salutation-free body can go
   to the act and to a differently-named presenter. A body that opens with "Hi <name>," is a
   wrong result.
 - **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
   This formula stays fixed across drafts; the variety budget below goes into the body.
-- **Opener archetype, rotate across the run (#362):** pick ONE of these four shapes
-  for each draft, and don't use the same shape twice in a row within this run:
-  - *Reason-first:* open on the genuine, specific reason for reaching out, group and
-    performance named correctly ("I photograph performing arts in New York and saw
-    [group]'s upcoming [performance]...").
-  - *Credential-first:* open by leading with the relevant credential from the
-    Credential + portfolio bullet below, then connect it to this performance.
-  - *Observation-first:* open on a specific, real detail about the performance,
-    venue, or program (something from the listing, never invented).
-  - *Direct-intent:* a plain, unadorned statement of what Dan does and why he's
-    writing, no throat-clearing.
+- **Sentence one always introduces Dan, by name and by trade (Dan, 2026-07-31).** A cold
+  reader does not know who is writing, so nothing else may come first: not a credential,
+  not an observation, not the reason. Dan's own proven pitch opens "My name is Dan and I'm
+  a professional arts photographer here in NYC", and that is the shape every cold draft
+  starts from. Reword it every time, never reproduce it verbatim ("My name is Dan, I'm an
+  arts photographer here in NYC", "I'm Dan Wright, a performing arts photographer based in
+  New York City"). It must carry BOTH his name and what he does. This rule replaced
+  an earlier instruction NOT to lead with his name, which was invented to manufacture
+  variety and produced openers that started talking before saying who was talking.
+  **The exception is `priorRelationship` `booked` or `warm` (#1215):** they already know
+  him, the cold self-introduction is wrong for them, and the register bullet above governs
+  instead.
+- **Always "New York City" or "NYC", never bare "New York" (Dan, 2026-07-31).** Where Dan
+  works is the CITY, and the city is a different place from the state. Every reference to
+  it in a draft, in his self-introduction and anywhere else, says "New York City" or "NYC"
+  ("a performing arts photographer here in NYC", "based in New York City", "venues across
+  New York City"). "in New York" alone is a wrong result. This governs Dan's own words
+  only: a venue's or an organisation's name is quoted as printed, so Lincoln Center, Radio
+  City Music Hall, and a company that calls itself the New York Whatever Ensemble are all
+  untouched.
+- **Opener archetype, rotate across the run (#362):** the introduction above is fixed, so
+  the archetype governs SENTENCE TWO, what the draft does once Dan has said who he is.
+  Two shapes. Don't use the same one twice in a row within this run:
+  - *Reason-first:* sentence two is the reason for writing, naming the show, its date and
+    its venue ("I'm writing in regard to your August 3 show at The Green Room 42"). How he
+    shoots comes after.
+  - *Direct-intent:* sentence two folds how he works into the reason itself ("I shoot
+    unobtrusive, no-flash documentary coverage, and I'm writing about your August 3 show
+    at The Green Room 42"), so the draft reaches the offer a beat sooner.
 
-  No greeting token in any shape ("I hope this finds you well" and "Hi Emma," are
-  both wrong), and never fabricate a detail to fill a shape, if the listing doesn't
-  supply what an archetype needs for this prospect, use a different one.
+  `credential-first` and `observation-first` are RETIRED (Dan, 2026-07-31). Credential-first
+  led with venues before the reader knew what Dan does, which is exactly what sentence one
+  now owns. Observation-first only ever had the show's own material to observe, which
+  "Name the show, describe nothing" above forbids, and with that gone it reached for
+  scarcity ("only one chance at pictures of it") instead. Never write either shape, and
+  never echo either token, even if a stale `experimentArmInstruction` names one: write the
+  closest live shape and record THAT.
+
+  No greeting token in either shape ("I hope this finds you well" and "Hi Emma," are
+  both wrong), and never fabricate a detail to fill a shape.
   If this queue item carries an `experimentArmInstruction` (an A/B experiment assignment,
-  one of the four archetype tokens), use THAT archetype for this draft, even when it
+  one of the live archetype tokens), use THAT archetype for this draft, even when it
   repeats the shape of the draft just before it: the assigned archetype OVERRIDES the
   rotate and don't repeat rule above, so the experiment genuinely randomizes what gets
   produced. The rotation governs only items with NO `experimentArmInstruction`. The one
@@ -508,11 +556,20 @@ Anatomy:
   be written truthfully for this listing, write the closest honest shape instead (you
   record the shape you actually wrote below, so an unavoidable mismatch stays visible).
   Record which archetype you actually used in the `variant` field, as exactly one of
-  these four tokens: `reason-first`, `credential-first`, `observation-first`,
-  `direct-intent`. Record the shape you WROTE (the produced opener), never a shape you
-  meant to use but didn't; Overture reads this echo only to see which openers land.
-- **Body, 2-4 sentences:** unobtrusive no-flash documentary coverage; why it fits this
-  performance; the portfolio link (below). Let the length breathe with
+  these two tokens: `reason-first` or `direct-intent`. Record the shape you WROTE (the
+  produced opener), never a shape you meant to use but didn't; Overture reads this echo
+  only to see which openers land.
+- **The middle, 2-4 sentences** (the part between the opener above and the offer below):
+  unobtrusive no-flash documentary coverage; why THAT suits
+  the night, said in terms of how Dan works rather than what the show is; the portfolio
+  link (below). Counted on its own, NOT across the whole email: the fixed self-introduction,
+  the offer, the ask and the soft line are each required in their own right, so a finished
+  draft runs longer than four sentences and that is correct. **Say the EFFECT, not the vantage point (Dan, 2026-07-31): never "from the
+  back of the house" or "back of house".** Where he stands is Dan's problem, not a selling
+  point, and a reader who pictures a photographer parked at the back may hear "distant"
+  rather than "discreet". Write what the reader actually cares about: that he is
+  unobtrusive, that he works without flash, that the audience doesn't notice him and the
+  performance isn't disturbed. Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
 - **Offer:** held positively, and ALWAYS state the rate plainly ($250 an hour plus tax,
@@ -522,8 +579,31 @@ Anatomy:
   page", but that second arm was never real, and the only way to write it is to invent a
   URL that 404s in an email Dan actually sends. There is nothing to choose between here.
   (The `variant` field records the opener archetype above, not this retired offer test.)
-- **CTA:** soft. "Happy to answer any questions." Never "let me know how that lands,"
-  Dan flagged it as sounding douchey.
+- **CTA: an explicit ask that PRESUPPOSES they have photography plans, then a close that
+  expects a reply (Dan, 2026-07-31).** Three parts, and each one is doing work:
+  - **It must actually REQUEST something.** A message goes out to get an outcome, and a
+    door left open is not a request. The 2026-07-31 drafts described the whole offer and
+    then asked for nothing, leaving the next step entirely with a stranger.
+  - **Ask about their photography plans FOR THIS SHOW, never whether they want photography
+    at all.** This is the point of the phrasing, not a stylistic preference. Dan's own pitch
+    says "I would love to speak about your photography plans for the performance", which
+    takes for granted that plans are a thing this show has: someone who has not thought
+    about it now assumes they should have. Rewording it into a yes/no offer ("would you
+    like coverage of the show?", "let me know if you're interested", "if photography is
+    something you're considering") throws that away and invites a no. Reword the sentence
+    every time, keep the presupposition every time. Say "I'd be glad to talk about your
+    photography plans" rather than "I'd love to", which the no-enthusiasm rule below rules
+    out even though Dan's own reference pitch uses it.
+  - **Close by expecting a reply: "I look forward to hearing from you"** or a rewording of
+    it, and NO exclamation mark. **"Happy to answer any questions" is RETIRED (Dan,
+    2026-07-31)**, along with any variation that asks THEM to produce something ("let me
+    know if you have any questions", "feel free to reach out with questions"): inviting
+    questions makes the reader do the work of inventing one, when the draft has already
+    stated the rate, the turnaround and the ask. Never "let me know how that lands" either,
+    Dan flagged it as sounding douchey.
+
+  A draft MAY acknowledge they might be covered already ("if you don't have someone on it
+  already"), Dan's call 2026-07-31: it is honest about how often a show is already booked.
 - **Credential + portfolio link (#365):** work in one of Dan's citable credentials
   (Carnegie Hall tenure of nearly 10 years, or the Madison Square Garden / Lincoln
   Center / Radio City Music Hall venues) plus the portfolio link
@@ -545,8 +625,7 @@ Anatomy:
   opera work than dance. When pitching a dance company or another genre he's less
   experienced in, don't describe genre-specific technique as established practice (for
   example, don't claim a particular way of "moving with the room" for dancers). Keep
-  the approach description general (no-flash, unobtrusive, back-of-house documentary
-  style) and let the credentials above carry the confidence instead.
+  the approach description general (no-flash, unobtrusive documentary style) and let the credentials above carry the confidence instead.
 - **Anti-repetition within the run (#362):** before finalizing each draft, compare it
   against the one or two drafts immediately before it in this run. Don't reuse the
   same opening line, hook, or distinctive phrase back to back.

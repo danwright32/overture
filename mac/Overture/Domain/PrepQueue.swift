@@ -49,8 +49,11 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // to the drafter to infer, so a draft never pitches or names the gone opening night.
     var openingNightPassed: Bool? = nil
     // v5 (#5): the opener archetype this item MUST use, when it belongs to an active A/B experiment. One
-    // of the four OpenerArchetype tokens (reason-first / credential-first / observation-first /
-    // direct-intent), copied from the app-assigned Prospect.assignedArm. Absent (the common case: no
+    // of the LIVE OpenerArchetype tokens (reason-first / direct-intent), copied from the app-assigned
+    // Prospect.assignedArm. credential-first and observation-first were retired on 2026-07-31 and can no
+    // longer be assigned (ExperimentEditing.start refuses them), though an arm stamped on a prospect
+    // before that date is still a raw string here and the runbook tells the drafter to write the closest
+    // live shape rather than a retired one. Absent (the common case: no
     // active experiment) means the drafter uses the normal #362 rotation. The runbook gives this field
     // PRECEDENCE over the rotation, so an experiment item genuinely randomizes what is produced.
     var experimentArmInstruction: String? = nil

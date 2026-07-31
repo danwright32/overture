@@ -18,10 +18,11 @@ import {
 // FLAGS each way a runbook regression could produce a bad one (the failure paths).
 
 const CANONICAL_BODY =
-  "I photograph performing arts in New York and saw Aurora Strings is performing at Carnegie Hall on " +
-  "March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate " +
-  "is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work " +
-  "is at danwrightphotography.com. Let me know how that lands.";
+  "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to " +
+  "the Aurora Strings date at Carnegie Hall on March 10. I shoot unobtrusive, no-flash documentary " +
+  "coverage and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with " +
+  "the gallery delivered within two weeks. Recent work is at danwrightphotography.com. I'd be glad to " +
+  "talk about your photography plans for the night. I look forward to hearing from you.";
 
 function results(contacts: unknown[], extra: Record<string, unknown> = {}, draftBody = CANONICAL_BODY): unknown {
   return {
@@ -34,7 +35,9 @@ function results(contacts: unknown[], extra: Record<string, unknown> = {}, draft
         draft: {
           subject: "Photographing Aurora Strings at Carnegie Hall.",
           body: draftBody,
-          variant: "rate_stated",
+          // A live opener shape. This said "rate_stated" (a token from the retired offer A/B, #612) until
+          // 2026-07-31, which nothing noticed because no guard had ever judged this field.
+          variant: "reason-first",
         },
         ...extra,
       },
@@ -127,7 +130,7 @@ describe("evaluatePrepResult - universal invariants (always-true runbook rules)"
   });
 
   it("flags a link to a host other than danwrightphotography.com (#789 invented URL)", () => {
-    const bad = results([NAMED_ACT], {}, CANONICAL_BODY.replace("Let me know how that lands.", "My rates are at danwright-pricing.example/rates. Let me know how that lands."));
+    const bad = results([NAMED_ACT], {}, CANONICAL_BODY.replace("I look forward to hearing from you.", "My rates are at danwright-pricing.example/rates. I look forward to hearing from you."));
     const r = evaluatePrepResult(bad, { description: "only danwrightphotography.com links" });
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/host|link|danwrightphotography/i);
@@ -261,10 +264,11 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
     provenance: "performer",
     sourceUrl: "https://duo.example/bio",
     overrideBody:
-      `I photograph performing arts in New York and saw you and ${coName} are performing at Carnegie Hall on ` +
-      "March 10. I shoot unobtrusive, no-flash documentary coverage and it would suit your program. My rate " +
-      "is $250 an hour plus tax, one-hour minimum, with the gallery in two weeks. Recent work is at " +
-      "danwrightphotography.com. Let me know how that lands.",
+      "My name is Dan Wright and I'm an arts photographer here in New York City. I'm writing about your " +
+      `March 10 date at Carnegie Hall with ${coName}. I shoot unobtrusive, no-flash documentary coverage ` +
+      "and it would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the " +
+      "gallery in two weeks. Recent work is at danwrightphotography.com. I'd be glad to talk about your " +
+      "photography plans for the night. I look forward to hearing from you.",
   });
 
   it("passes when both performers appear as performer contacts with second-person overrideBody", () => {
@@ -289,7 +293,7 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
 
   it("flags a performer contact whose mailed overrideBody is written in the third person (#634)", () => {
     const thirdPerson = performer("Virgile Roche", "Anna Pierre");
-    thirdPerson.overrideBody = thirdPerson.overrideBody.replace("saw you and Anna Pierre are", "saw Virgile Roche and Anna Pierre are");
+    thirdPerson.overrideBody = thirdPerson.overrideBody.replace("about your March 10 date", "about Virgile Roche's March 10 date");
     const r = evaluatePrepResult(results([thirdPerson, performer("Anna Pierre", "Virgile Roche")]), expected);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/second person|overrideBody/i);
@@ -432,15 +436,17 @@ describe("evaluatePrepResult - one portfolio link, never a gallery (#1832)", () 
 describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", () => {
   // booked = fully warm: skip the cold self-introduction AND the credential + portfolio scaffolding.
   const BOOKED_BODY =
-    "It's good to see the Aurora Strings back at Carnegie Hall on March 10. I'd love to photograph the " +
+    "It's good to see the Aurora Strings back at Carnegie Hall on March 10, and I'd be glad to cover the " +
     "night for you. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within " +
-    "two weeks. Happy to answer any questions.";
+    "two weeks. Tell me where your photography plans for the night stand and I'll hold the date. I look " +
+    "forward to hearing from you.";
   // warm lead = drop the cold self-introduction, keep ONE light credential and the portfolio link.
   const WARM_LEAD_BODY =
-    "It was good connecting about the Aurora Strings at Carnegie Hall on March 10, and I'd love to " +
-    "photograph it. I shoot unobtrusive, no-flash documentary coverage that suits a concert program, and " +
-    "recent work is at danwrightphotography.com. My rate is $250 an hour plus tax, one-hour minimum, " +
-    "with the gallery delivered within two weeks. Happy to answer any questions.";
+    "It was good connecting about the Aurora Strings at Carnegie Hall on March 10. I shoot unobtrusive, " +
+    "no-flash documentary coverage that suits a concert program, and recent work is at " +
+    "danwrightphotography.com. My rate is $250 an hour plus tax, one-hour minimum, with the gallery " +
+    "delivered within two weeks. I'd be glad to talk about your photography plans for the night. I look " +
+    "forward to hearing from you.";
 
   it("passes a booked draft that opens warm and drops the cold intro and portfolio scaffolding", () => {
     const r = evaluatePrepResult(results([NAMED_ACT], {}, BOOKED_BODY),
@@ -457,8 +463,8 @@ describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", ()
   });
 
   it("flags a booked draft that keeps the portfolio link (a returning client needs no proof)", () => {
-    const withLink = BOOKED_BODY.replace("Happy to answer any questions.",
-      "Recent work is at danwrightphotography.com. Happy to answer any questions.");
+    const withLink = BOOKED_BODY.replace("I look forward to hearing from you.",
+      "Recent work is at danwrightphotography.com. I look forward to hearing from you.");
     const r = evaluatePrepResult(results([NAMED_ACT], {}, withLink),
       { description: "booked", forbidColdSelfIntro: true, forbidGalleryLink: true });
     expect(r.pass).toBe(false);
@@ -658,5 +664,88 @@ describe("prep-eval fixtures", () => {
     const r = evaluateFixture(fixture, produced);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/showSummary was invented/i);
+  });
+});
+
+// Dan reviewed one real draft on 2026-07-31 and it produced five new rules. Each one below is expressed
+// as a check on the produced body, so each needs a test that FAILS when the rule is broken: a universal
+// check nothing exercises is indistinguishable from one that matches nothing at all.
+describe("the 2026-07-31 drafting rules are enforced on the produced body", () => {
+  const cold = { description: "a cold pitch" };
+
+  it("flags a draft that names where Dan stands instead of the effect", () => {
+    const body = CANONICAL_BODY.replace("I shoot unobtrusive, no-flash documentary coverage",
+                                        "I shoot from the back of the house with no flash");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/where Dan stands/i);
+  });
+
+  it("flags the state when the city is meant", () => {
+    const body = CANONICAL_BODY.replace("here in NYC", "here in New York");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/New York City or NYC/i);
+  });
+
+  it("does not flag New York City itself, nor a venue quoted as printed", () => {
+    const body = CANONICAL_BODY.replace("here in NYC", "based in New York City")
+      .replace("Recent work", "My work has taken me to Radio City Music Hall. Recent work");
+    expect(evaluatePrepResult(results([NAMED_ACT], {}, body), cold).failures).toEqual([]);
+  });
+
+  it("flags a close that asks the reader to invent a question", () => {
+    const body = CANONICAL_BODY.replace("I look forward to hearing from you.",
+                                        "Happy to answer any questions.");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/invites the reader to ask questions/i);
+  });
+
+  it("flags a cold draft whose first sentence does not introduce Dan by name and trade", () => {
+    const body = CANONICAL_BODY.replace(
+      "My name is Dan Wright and I'm a professional arts photographer here in NYC.",
+      "I'm writing about your March 10 date at Carnegie Hall.");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/sentence one must introduce Dan/i);
+  });
+
+  it("does not require the self-introduction of a returning client, who already knows him", () => {
+    const body = "It's good to have you back at Carnegie Hall on March 10, and I'd be glad to cover it. "
+      + "My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. "
+      + "I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.";
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body),
+                                 { description: "booked", forbidColdSelfIntro: true });
+    expect(r.failures.join(" ")).not.toMatch(/sentence one must introduce Dan/i);
+  });
+
+  it("flags a draft that lifts its own showSummary into the email", () => {
+    const summary = "A cabaret concert of new songs by one songwriter, with a cast of five, 75 minutes.";
+    const body = CANONICAL_BODY.replace(
+      "I shoot unobtrusive, no-flash documentary coverage and it would suit your program.",
+      "It's a concert of new songs by one songwriter, with a cast of five. I shoot unobtrusive coverage.");
+    // showSummary arrived at results version 8, so the envelope has to say 8 or the shape guard rejects
+    // the entry before this rule is ever reached.
+    const out = results([NAMED_ACT], { showSummary: summary }, body) as Record<string, unknown>;
+    out.version = 8;
+    const r = evaluatePrepResult(out, cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/lifts \d+ consecutive words/i);
+  });
+
+  it("does not flag a body that merely names the show its summary describes", () => {
+    const summary = "A cabaret concert of new songs by one songwriter, with a cast of five, 75 minutes.";
+    const out = results([NAMED_ACT], { showSummary: summary }) as Record<string, unknown>;
+    out.version = 8;
+    expect(evaluatePrepResult(out, cold).failures).toEqual([]);
+  });
+
+  it("flags a cold draft that echoes a retired opener shape", () => {
+    const out = results([NAMED_ACT]) as { results: Array<{ draft: { variant: string } }> };
+    out.results[0].draft.variant = "observation-first";
+    const r = evaluatePrepResult(out, cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/not one of the live opener shapes/i);
   });
 });

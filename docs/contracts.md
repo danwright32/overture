@@ -192,9 +192,13 @@ run knows to skip the corresponding half instead of redoing everything. Additive
 `v2.json` stay byte-identical and still decode with it absent (nil).
 
 Queue version 5 (#5) adds an optional `experimentArmInstruction` to each item: the opener archetype
-this item MUST use (one of `reason-first` / `credential-first` / `observation-first` /
-`direct-intent`), copied from the app-assigned `Prospect.assignedArm` when the prospect belongs to an
-active A/B experiment. Absent (the common case, no active experiment) means the drafter uses the
+this item MUST use (one of the live tokens `reason-first` / `direct-intent`), copied from the
+app-assigned `Prospect.assignedArm` when the prospect belongs to an active A/B experiment.
+`credential-first` and `observation-first` were retired on 2026-07-31: `ExperimentEditing.start`
+refuses to assign either, and `fixtureShape.ts` rejects either as an echoed `variant`, but both remain
+cases of Swift's `OpenerArchetype` so a stored experiment's arms and a prospect stamped before that
+date still decode and label. A stale instruction naming a retired shape is not an error here; the
+runbook tells the drafter to write the closest live shape and record THAT. Absent (the common case, no active experiment) means the drafter uses the
 normal #362 opener rotation. The runbook (`docs/prep-runbook.md` §2) gives this field PRECEDENCE over
 that rotation, so an experiment item genuinely randomizes what is produced. Additive; `v1.json`
 through `v4.json` stay byte-identical and still decode with it absent (nil). (Version 4, #1122, added

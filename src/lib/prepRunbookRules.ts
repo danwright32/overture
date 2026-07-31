@@ -110,6 +110,41 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // only organisation on the page is the room he is not pitching.
   { name: "no-presenter-provenance-without-an-organiser",
     pattern: /NEVER\s+emit\s+`provenance:\s*"presenter"`\s+for\s+one\s+of\s+these\s+shows/i },
+  // Dan, 2026-07-31, five rules from one review of one real draft. Each one is a live instruction whose
+  // removal reverts the draft to a shape he rejected by name, and none of them can be caught by reading
+  // the code: the only evidence is the sentence a stranger receives.
+  //
+  // Dropping this one returns the drafter to reciting the reader's own show back at them. The offending
+  // draft opened "Don't Be So Hard on Yourself is 75 minutes of new songs and a cast of five", which was
+  // its showSummary pasted in, and the same class had already happened on 2026-07-18 ("An evening of Glee
+  // covers ... comes to 54 Below on July 19"). It recurred precisely BECAUSE the 2026-07-18 rule was never
+  // written into either source, so this guard exists to stop that happening a third time.
+  // Anchored on the rule's TEST rather than its title: "Name the show, describe nothing" is referenced
+  // from two other rules as well, so a title-matching pattern survives its own deletion (the guard's
+  // negative test caught exactly that) and would report the rule present after it had been removed.
+  { name: "name-the-show-describe-nothing",
+    pattern: /does this tell the reader something they do not\s+already know about their own night/i },
+  // Dropping this restores openers that start talking before saying who is talking. The instruction it
+  // replaced actively told the drafter NOT to lead with Dan's name, which nobody had asked for.
+  { name: "sentence-one-introduces-dan",
+    pattern: /Sentence one always introduces Dan, by name and by trade/i },
+  // Dan works in the CITY, which is a different place from the state.
+  { name: "the-city-not-the-state",
+    pattern: /never bare "New York"/i },
+  // Two halves, and each fails differently. Without the ask, the email states an offer and leaves the
+  // next move to a stranger. Without the PRESUPPOSITION, a rewrite turns the ask into a yes/no offer
+  // ("would you like coverage?") that invites the no: asking about their photography plans takes for
+  // granted that plans exist, so a reader who has not thought about it now assumes they should have.
+  { name: "ask-presupposes-photography-plans",
+    pattern: /never whether they want photography\s+at all/i },
+  // The close expects a reply. Inviting questions makes the reader invent one after the email has already
+  // given them the rate, the turnaround and the ask.
+  { name: "soft-question-close-retired",
+    pattern: /"Happy to answer any questions" is RETIRED/i },
+  // Where Dan stands is his problem to solve, not a selling point: a reader who pictures a photographer
+  // parked at the back hears "distant" rather than "discreet".
+  { name: "effect-not-vantage-point",
+    pattern: /Say the EFFECT, not the vantage point/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */
