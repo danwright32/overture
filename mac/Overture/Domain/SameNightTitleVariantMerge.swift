@@ -61,6 +61,7 @@ enum SameNightTitleVariantMerge {
     @discardableResult
     static func run(in context: ModelContext) -> Summary {
         let stored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let watched = watchedRoomNames(in: context)
         var summary = Summary()
 
         // #1761: the venue no longer takes part. It used to bucket the rows, which meant one room spelled
@@ -97,10 +98,10 @@ enum SameNightTitleVariantMerge {
                 // no longer gates the merge, a cluster can hold several spellings of one place and the
                 // survivor is often not the clearest of them: the Brooklyn Folk Festival's oldest row
                 // says "specific venue not named on page" while a row naming a real church is about to be
-                // deleted, and the Derek Piotr workshop's oldest row says "Jalopy Theatre" while the room
-                // it is actually in, "Jalopy's Classroom", is on a row being deleted. Carry the clearest
-                // name across before the others go, so the card Dan reads names the room.
-                if let clearest = clearestRoomName(in: cluster) { survivor.venue = clearest }
+                // deleted. Carry a name across before the others go, so the card Dan reads names the room.
+                // #1846 decides WHICH name: the one Dan entered when he started watching the venue, when
+                // a copy already spelled the room that way, and the most specific copy otherwise.
+                if let room = preferredRoomName(in: cluster, watched: watched) { survivor.venue = room }
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1
@@ -117,6 +118,48 @@ enum SameNightTitleVariantMerge {
     // answer away and re-offers the same check. A probed row outranks an unprobed one.
     private static func probed(_ cluster: [Prospect]) -> Prospect? {
         cluster.first { $0.reachabilityProbedAt != nil }
+    }
+
+    // #1846: the name DAN gave a room when he started watching it, keyed by the room's own fold so a copy
+    // carrying the street or the town still finds it. `venueName` first (the field that exists to hold an
+    // asserted room, #1529) and `orgName` behind it, which is where every name actually lives today: 0 of
+    // the 69 live sources carry a venueName, while orgName holds "Jalopy Theatre", "Roulette Intermedium",
+    // "Abrons Arts Center".
+    //
+    // Deliberately keyed on the NAME rather than on which source produced the row. A room Dan named is the
+    // same room whoever lists the show, so a Jalopy gig found through an artist's own page still gets the
+    // name he gave the venue, and the rule does not quietly depend on `sourceIds` being populated.
+    private static func watchedRoomNames(in context: ModelContext) -> [String: String] {
+        let sources = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        var byKey: [String: String] = [:]
+        for source in sources {
+            let name = source.venueName ?? source.orgName
+            let key = VenueNormalization.normalizeForKey(name).lowercased()
+            guard !key.isEmpty else { continue }
+            byKey[key] = name
+        }
+        return byKey
+    }
+
+    // #1846: which room the surviving card names. Dan's rule, in his words: "If it's a known venue that I
+    // watch, it should go to the venue that I entered when we started watching it. If it's a new venue
+    // because I'm watching the artist and we don't know it, it can go to the more specific one."
+    //
+    // The entered name wins only WHEN ONE OF THE COPIES ALREADY SPELLED THE ROOM THAT WAY, which is the
+    // condition that makes the rule safe. A watched source is not necessarily one room: 11 of them publish
+    // shows naming more than one, and Carnegie Hall alone names 26 distinct room strings across 117 rows,
+    // with nothing in the model marking which sources are venues and which are ensembles Dan follows from
+    // hall to hall (SourceKind deliberately refuses to answer it, since Jalopy's page is one room and
+    // Carnegie's is thirteen). Let the entered name win unconditionally and a Zankel Hall concert reads
+    // "Carnegie Hall", losing the only thing about the room that matters to a photographer. Requiring a
+    // copy to have used the name keeps the building out of a card whose copies all name a hall inside it.
+    private static func preferredRoomName(in cluster: [Prospect],
+                                          watched: [String: String]) -> String? {
+        for row in cluster {
+            let key = VenueNormalization.normalizeForKey(row.venue ?? "").lowercased()
+            if let entered = watched[key] { return entered }
+        }
+        return clearestRoomName(in: cluster)
     }
 
     // #1761: the most specific room name in a cluster, measured on the venue's OWN name (keyName drops
