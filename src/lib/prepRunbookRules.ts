@@ -97,6 +97,13 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // #1856: where a listing names no producer, the run pursues the people it DOES name. Without this the
   // run researches an organisation that does not exist and reports that nobody publishes an address, a
   // claim about a search it never ran.
+  // #1817: a big bill at a rental room must not collapse back into a search for a company that does not
+  // exist. Dan's call, 2026-07-31: pursue every performer the listing names.
+  { name: "no-headcount-ceiling-without-an-organiser",
+    pattern: /There\s+is\s+NO\s+headcount\s+ceiling\s+here/i },
+  // #1817: and where nobody can be named at all, say that, rather than claiming a search that never ran.
+  { name: "no-one-identified-is-not-nothing-published",
+    pattern: /`no_one_identified`[^\n]*\(#1817\)/i },
   { name: "act-pursued-when-no-organiser-named",
     pattern: /`onlyTheActIsNamed == true`[^\n]*whatever\s+`production`\s+says/i },
   // The other half, and the one that protects Dan rather than the answer rate: on those same shows the

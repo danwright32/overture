@@ -493,6 +493,7 @@ describe("prep-eval fixtures", () => {
     expect(names).toEqual([
       "already-covered-photographer",
       "carnegie-citywide-press-inbox",
+      "five-named-performers-none-dropped",
       "host-venue-not-target",
       "listed-house-is-refused",
       "no-organiser-named-act-pursued",

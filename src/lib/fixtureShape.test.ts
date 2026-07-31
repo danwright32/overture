@@ -154,6 +154,16 @@ describe("prep-results fixture shapes", () => {
     expect(() => assertPrepResultsShape(mutated, "v7.json", 7)).toThrow(/emptyReason must be one of/);
   });
 
+  // #1817: a check that could not work out who to write to says exactly that, so the validator has to
+  // accept it. Widening the value list rather than bumping the version is safe in ONE direction only, and
+  // the test below is the other half: an unknown value is still refused, so a run cannot invent a reason
+  // the app has no sentence for and have it pass as a claim.
+  it("accepts a v7 entry saying nobody could be identified to pursue", () => {
+    const mutated = readJson("prep-results", "v7.json") as { results: Array<Record<string, unknown>> };
+    mutated.results[1].emptyReason = "no_one_identified";
+    expect(() => assertPrepResultsShape(mutated, "v7.json", 7)).not.toThrow();
+  });
+
   it("rejects a v6 file that already carries the v7 emptyReason field", () => {
     const mutated = readJson("prep-results", "v6.json") as { results: Array<Record<string, unknown>> };
     mutated.results[0].emptyReason = "only_venue_contact";

@@ -38,6 +38,10 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `host-venue-not-target`: the target is the act, never the host venue (#366/#368).
 - `carnegie-citywide-press-inbox`: a press/PR inbox is disqualified at any confidence (#635).
 - `self-produced-duo-both-performers`: a self-produced duo surfaces BOTH named performers (#366/#634).
+- `no-organiser-named-act-pursued`: a listing naming no producer is researched through the people it does
+  name, and nobody is labelled `presenter` (#1856).
+- `five-named-performers-none-dropped`: the same route with a FIVE name bill, where there is no headcount
+  ceiling and the two performers with nothing findable are still surfaced at low confidence (#1817).
 - `stale-site-misnamed-co-performer`: a stale site's misnamed co-performer is flagged (kept low), not dropped.
 - `presenter-not-venue`: the act's own form outranks a venue inbox; a real presenter is additive, never the venue.
 - `already-covered-photographer`: an explicit "we have a photographer" statement sets the fit-risk note (#611).
