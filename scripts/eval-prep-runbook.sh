@@ -71,6 +71,20 @@ fixture_path_for() {
 # Builds the prompt for one fixture: the runbook, the single work-list item, and the ONLY sources the run
 # may use. The run is told not to fetch the web, so the eval scores the runbook's JUDGMENT on fixed
 # material rather than the drift of live sites (and carries no real PII).
+# The results version the run is asked to write, DERIVED from the committed contract fixtures rather than
+# typed here (#1868, L41: a list that must mirror another source of truth is derived from it, never
+# maintained by hand beside it).
+#
+# It was hard-coded as 6, and the runbook has since required fields that exist only from version 8 (a
+# `showSummary` since #1824). So an obedient run produced a v6 document carrying a v8 field, the scorer
+# rejected it on shape before scoring any judgment, and 11 of 13 fixtures failed for a reason that had
+# nothing to do with the runbook. The tokens were spent all the same.
+results_contract_version() {
+  ls "${REPO_ROOT}/fixtures/prep-results" \
+    | sed -n 's/^v\([0-9][0-9]*\)\.json$/\1/p' \
+    | sort -n | tail -1
+}
+
 build_prompt() {
   local fixture="$1"
   local input sources houses
@@ -83,7 +97,7 @@ build_prompt() {
   houses="$(jq -r 'if .houses then "\nHouses named by the app (the run-level `houses` list from the work-list file):\n" + (.houses | tojson) else "" end' "${fixture}")"
   cat <<PROMPT
 You are running a REGRESSION EVAL of the Overture Prep runbook. Apply the rules in the runbook below to
-the SINGLE work-list item, then output ONLY the resulting PrepResults JSON (version 6) for that one item
+the SINGLE work-list item, then output ONLY the resulting PrepResults JSON (version $(results_contract_version)) for that one item
 and nothing else (no prose, no code fence needed).
 
 IMPORTANT: research ONLY from the "Sources" provided here. Do NOT fetch the web or use any tool; all the
