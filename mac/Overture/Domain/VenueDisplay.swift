@@ -38,8 +38,11 @@ struct VenueDisplay: Equatable {
         return (VenueDisplay.cityUnknown, true)
     }
 
-    // The hall plus its parent building when known: "Weill Recital Hall, Carnegie Hall".
-    var nameLine: String { parent.map { "\(hall), \($0)" } ?? hall }
+    // #1850: the building Dan has a relationship with, then the room inside it in brackets:
+    // "Carnegie Hall (Zankel Hall)". Dan's call, 2026-07-30, on wanting both at once: the building is what
+    // he pitches and the room is what he needs in order to shoot it, and a card could previously show only
+    // one. Falls back to the bare name when no building is known, so nothing gains empty brackets.
+    var nameLine: String { parent.map { "\($0) (\(hall))" } ?? hall }
 
     // #1030: Dan's call is city/state only, always, never a raw street address a source page happened
     // to bake into the venue string ("The Players Theatre, 115 MacDougal Street, New York, NY"). The
@@ -70,7 +73,38 @@ struct VenueDisplay: Equatable {
             return VenueDisplay(hall: VenueNormalization.fold(dropped),
                                 parent: known.parent, location: known.location ?? fallback)
         }
+        // #1850: the venue string names both out loud, joined by "at": "Playhouse Theater at Abrons Arts
+        // Center". Three live Abrons cards carry this shape and name rooms the table has never heard of
+        // on their own. The trailing name must be a venue the table ALREADY KNOWS, so a room is never
+        // handed a building on the strength of the string alone: "The Attic at Somewhere Nobody Watches"
+        // stays exactly as it is. That keeps the table's standing rule (anything uncertain is omitted so
+        // it falls through) applying to the parent as well as to the city, which matters more here,
+        // because a confident wrong building sends Dan to the wrong address.
+        // #1850: the room is followed by its STREET rather than its building ("Jalopy's Classroom at 319
+        // Columbia St"), which is the shape the live store actually holds. The building half proves
+        // nothing, so try the ROOM half against the table instead: the entry it finds supplies the parent.
+        if let r = hall.range(of: " at ", options: [.backwards, .caseInsensitive]) {
+            let room = String(hall[hall.startIndex..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
+            if let known = VenuePlaces.exact(room), known.parent != nil {
+                return VenueDisplay(hall: room, parent: known.parent,
+                                    location: known.location ?? fallback)
+            }
+        }
+        if let split = splittingRoomFromKnownBuilding(hall) {
+            return VenueDisplay(hall: split.room, parent: split.building,
+                                location: VenuePlaces.exact(split.building)?.location ?? fallback)
+        }
         return VenueDisplay(hall: hall, parent: nil, location: fallback)
+    }
+
+    // "Room at Building" split on the LAST " at ", so a room whose own name contains the word survives.
+    // Returns nothing unless the building half is already in the table.
+    private static func splittingRoomFromKnownBuilding(_ s: String) -> (room: String, building: String)? {
+        guard let r = s.range(of: " at ", options: [.backwards, .caseInsensitive]) else { return nil }
+        let room = String(s[s.startIndex..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
+        let building = String(s[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+        guard !room.isEmpty, !building.isEmpty, VenuePlaces.exact(building) != nil else { return nil }
+        return (room, building)
     }
 
     // The set of parent-building names the table knows ("carnegie hall"), pre-normalized. A trailing venue

@@ -107,6 +107,9 @@ enum VenuePlaces {
     private static let carnegie = Entry(parent: "Carnegie Hall", location: "New York, NY")
     private static let manhattan = Entry(parent: nil, location: "New York, NY")
     private static let brooklyn = Entry(parent: nil, location: "Brooklyn, NY")
+    // #1850: Jalopy's own classroom, a separate room at 319 Columbia St run by the theatre at 315.
+    // A real pairing, unlike the festival that merely PLAYS several rooms in one night.
+    private static let jalopy = Entry(parent: "Jalopy Theatre", location: "Brooklyn, NY")
 
     // LIVE-STORE-CLAIM verified=2026-07-29 measure="the 78 distinct venue strings on untriaged prospects with a blank `location`"
     // Seeded from the venues those 342 rows actually name, plus the ten this table already held. Every
@@ -190,7 +193,7 @@ enum VenuePlaces {
 
         // Brooklyn.
         "jalopy theatre": brooklyn,
-        "jalopy's classroom": brooklyn,
+        "jalopy's classroom": jalopy,
         "roulette intermedium": brooklyn,
         // #1762: the same room, and the single biggest group of cards with no city (9 rows on
         // 2026-07-30). The table held only the full name, so the bare one every source writes missed it.

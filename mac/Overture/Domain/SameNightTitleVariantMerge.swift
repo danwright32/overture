@@ -155,9 +155,17 @@ enum SameNightTitleVariantMerge {
     // copy to have used the name keeps the building out of a card whose copies all name a hall inside it.
     private static func preferredRoomName(in cluster: [Prospect],
                                           watched: [String: String]) -> String? {
+        // #1850: the entered name may not overwrite a spelling that NAMES MORE. Dan watches "Abrons Arts
+        // Center", and a copy of the same show says "Experimental Theater at Abrons Arts Center"; taking
+        // the entered name there deletes the room from the only row that held it, and no display change
+        // made later can bring it back. So the entered name wins only when nothing more specific was said,
+        // and the card shows the building leading with the room in brackets instead of choosing.
+        let mostSpecific = cluster.map { specificity($0.venue) }.max() ?? 0
         for row in cluster {
             let key = VenueNormalization.normalizeForKey(row.venue ?? "").lowercased()
-            if let entered = watched[key] { return entered }
+            guard let entered = watched[key] else { continue }
+            if specificity(entered) >= mostSpecific { return entered }
+            break
         }
         return clearestRoomName(in: cluster)
     }
@@ -168,11 +176,13 @@ enum SameNightTitleVariantMerge {
     // "St. Ann & the Holy Trinity Church" beats "downtown Brooklyn"; "Roulette Intermedium" beats
     // "Roulette". Returns nil on a tie or when nothing beats the survivor's own, so the common case where
     // every row spells the room the same way leaves the field untouched.
+    // How much a venue string says, counted in words on the venue's OWN name (keyName drops the street
+    // address and the trailing city, so a row is not "clearest" merely for carrying a postcode).
+    private static func specificity(_ venue: String?) -> Int {
+        VenueNormalization.keyName(venue ?? "").split(whereSeparator: { $0.isWhitespace }).count
+    }
+
     private static func clearestRoomName(in cluster: [Prospect]) -> String? {
-        func specificity(_ venue: String?) -> Int {
-            let name = VenueNormalization.keyName(venue ?? "")
-            return name.split(whereSeparator: { $0.isWhitespace }).count
-        }
         let best = cluster.max { specificity($0.venue) < specificity($1.venue) }
         guard let best, let venue = best.venue, !venue.isEmpty else { return nil }
         let tiedAtBest = cluster.filter { specificity($0.venue) == specificity(best.venue) }
