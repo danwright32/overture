@@ -538,6 +538,27 @@ describe("prep-eval fixtures", () => {
     ]);
   });
 
+  // #1872: a reference answer is asserted to be COMPLIANT, so it has to satisfy the rules as they stand
+  // today, not the rules of the day it was typed. These are hand-written and nothing re-reads them when a
+  // runbook rule lands, so the drift runs in the direction that hides problems: a rule could be dropped
+  // and every sample would keep agreeing with the version without it, because they never exercised it.
+  //
+  // The rule here is #1824's: an entry that drafts must say what the show IS, or say why it cannot. Read
+  // off the contract's own vocabulary rather than a list repeated here, so the next value added to it is
+  // covered without editing this test.
+  for (const fixture of fixtures) {
+    it(`${fixture.name}: its reference answer says what the show is, or why it cannot`, () => {
+      const out = fixture.sampleCompliantOutput as { results?: Array<Record<string, unknown>> };
+      for (const r of out.results ?? []) {
+        if (!r.draft) continue;   // an entry with no draft has nothing to ground
+        const said = typeof r.showSummary === "string" && r.showSummary.length > 0;
+        const why = typeof r.showSummaryAbsentReason === "string" && r.showSummaryAbsentReason.length > 0;
+        expect(said || why,
+          `${fixture.name} drafts without saying what the show is or why it cannot`).toBe(true);
+      }
+    });
+  }
+
   for (const fixture of fixtures) {
     it(`${fixture.name}: is well-formed (input, sources, expected, sampleCompliantOutput)`, () => {
       expect(typeof fixture.input).toBe("object");

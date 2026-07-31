@@ -37,7 +37,7 @@
     "requirePortfolioLink": true
   },
   "sampleCompliantOutput": {
-    "version": 6,
+    "version": 8,
     "generatedAt": "2026-07-18T00:00:00.000Z",
     "results": [
       {
@@ -54,7 +54,8 @@
           "subject": "Photographing Solaris Quartet at Carnegie Hall.",
           "body": "I photograph performing arts in New York and saw Solaris Quartet are performing at Carnegie Hall on April 2. I have photographed at Carnegie Hall for nearly ten years and shoot unobtrusive, no-flash documentary coverage that would suit your program. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com. Let me know how that lands.",
           "variant": "credential_first"
-        }
+        },
+        "showSummaryAbsentReason": "no_listing_page"
       }
     ]
   }
