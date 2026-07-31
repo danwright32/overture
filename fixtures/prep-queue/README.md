@@ -53,3 +53,14 @@ and it used to hunt for one, find nothing, and report `nothing_published`: a cla
 never ran. On these shows the app also renders the listing page (the `showListing` above), because the
 act's name is frequently nowhere else. Additive, and ABSENT IS NOT FALSE: a file predating the field and
 an item the app judged to name a producer both leave it out, and neither is a claim.
+
+`v10.json` (#1887) adds an optional `venueHistory` per item: how well Dan already knows THIS room,
+as one of `shot_before` / `a_few` / `regularly`. A BAND and never a count, because Dan's rule is
+that a pitch never claims an exact number and the reliable way to stop a prompt stating one is to
+send it nothing to state (L27).
+
+Note what the fixture's Carnegie item does: it carries NO `venueHistory` at all, even though Dan has
+shot Carnegie well over a hundred times. That absence is a decision, not a gap. The runbook already
+requires a Carnegie show to lead with the "nearly ten years at Carnegie Hall" tenure credential,
+which is about that same room, so a band beside it would be one fact stated twice (Dan's call,
+2026-07-31). The app omits the field for Carnegie deliberately, in code, so it cannot drift.

@@ -51,6 +51,8 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "the-city-not-the-state",
       "use-the-listing-handed-over",
       "venue-address-disqualified",
+      "venue-history-absent-means-silent",
+      "venue-history-never-a-count",
     ]);
   });
 

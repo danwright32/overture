@@ -33,8 +33,9 @@ describe("prep-queue fixture shapes", () => {
 
   it("covers exactly the known prep-queue files", () => {
     expect(files.sort()).toEqual([
-      "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json", "v8.json",
-      "v9.json",
+      // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
+      "v1.json", "v10.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+      "v8.json", "v9.json",
     ]);
   });
 

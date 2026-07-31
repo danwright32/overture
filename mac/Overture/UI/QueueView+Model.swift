@@ -128,6 +128,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // there is nothing to say. Drawn under the header by ProspectRowView.showSummaryNote.
     var showSummary: String? = nil
     var showSummaryAbsence: ShowSummaryAbsence? = nil
+    // #1887: how well Dan already knows this ROOM, and the nights it rests on, so the card can show
+    // him what the pitch is about to claim on his behalf. Set by the list builder from one shared
+    // VenueShootHistory rather than per row, the same way venueBrands is. Nil band means the pitch
+    // will say nothing, which includes a Carnegie show by design.
+    var venueHistoryBand: VenueShootHistory.Band? = nil
+    var venueHistoryShoots: [VenueShootHistory.Shoot] = []
     // #753: Prep matched this show's PERFORMER (not its org) to a past client and warmed the lead.
     // Unlike alreadyCovered, this one ALREADY changed fitScore/tier, so the row has to be able to
     // both explain it and take it back. Unreviewed means the warm drafting tone is still held back
@@ -1635,8 +1641,14 @@ enum QueueModel {
         let venueBrands = ProducerGate.VenueBrands(
             shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: overrides)
+        // #1887: built ONCE here for the same reason venueBrands is. It reads the shoot-history file
+        // and the Downbeat export, which a card must not do on every render.
+        let shootHistory = VenueShootHistory.current()
         return prospects.map {
             var item = QueueItem($0)
+            // #1887: read from the one history built above, never rebuilt per row (it loads a file).
+            item.venueHistoryBand = shootHistory.band(for: $0.venue)
+            item.venueHistoryShoots = shootHistory.shoots(for: $0.venue)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
             // #1648: one staleness evaluation, feeding both the badge and the merit split.

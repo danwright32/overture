@@ -87,9 +87,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion9() {
+    @Test func theBuilderNowStampsVersion10() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 9)
+        #expect(q.version == 10)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -210,6 +210,33 @@ struct PrepQueueContractTests {
         #expect(decoded.version == 9)
         #expect(decoded.items[1].onlyTheActIsNamed == true)
         #expect(decoded.items[0].onlyTheActIsNamed == nil)
+    }
+
+    // v10 (#1887): an item may say how well Dan already knows the ROOM, as one of three bands and never
+    // a count. The band is the whole payload on purpose: Dan's rule is "never an exact number", and the
+    // way to stop the drafter stating one is to send it nothing to state (L27).
+    @Test func theV10FixtureCarriesTheVenueHistoryBand() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v10.json"))
+        #expect(decoded.version == 10)
+        #expect(decoded.items[1].venueHistory == "a_few")
+
+        // The Carnegie item deliberately carries NOTHING, even though Dan has shot Carnegie well over a
+        // hundred times. The runbook already requires a Carnegie show to lead with the tenure credential,
+        // which is about that same room, so a band beside it would be one fact stated twice (Dan's call,
+        // 2026-07-31). Absent here is a decision, not a gap.
+        #expect(decoded.items[0].venue == "Carnegie Hall")
+        #expect(decoded.items[0].venueHistory == nil)
+    }
+
+    // Additive: an earlier queue file decodes as having said NOTHING about the venue, which the runbook
+    // reads as "say nothing", never as "he has never shot there".
+    @Test func everyEarlierFixtureStillDecodesWithNoVenueHistory() throws {
+        for name in ["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
+                     "v8.json", "v9.json"] {
+            let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture(name))
+            #expect(decoded.items.allSatisfy { $0.venueHistory == nil },
+                    "\(name) should carry no venue history")
+        }
     }
 
     // The same additive promise the house list made: a queue file written before this field still decodes,

@@ -106,6 +106,7 @@ struct ProspectRowView: View {
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
                     showSummaryNote
+                    venueHistoryNote
                     tooFarReasonNote
                     feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
@@ -401,6 +402,22 @@ struct ProspectRowView: View {
     // measured.
     @ViewBuilder private var showSummaryNote: some View {
         if let line = ShowSummaryCopy.line(summary: item.showSummary, absence: item.showSummaryAbsence) {
+            Text(line)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+    }
+
+    // #1887: what the pitch is about to claim about this ROOM, and the nights behind it. Sits with the
+    // other facts about the show rather than with the fit reason, because it is a fact about the venue.
+    //
+    // It exists so a folding error and the truth are not indistinguishable to Dan. The dates are the
+    // load-bearing half: the band on its own would just restate in a different font what the email says,
+    // and he could not check it against his own memory of the room.
+    @ViewBuilder private var venueHistoryNote: some View {
+        if let line = VenueHistoryCopy.line(band: item.venueHistoryBand, shoots: item.venueHistoryShoots) {
             Text(line)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)

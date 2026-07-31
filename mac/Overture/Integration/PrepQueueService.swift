@@ -40,7 +40,10 @@ enum PrepQueueService {
 
     static func buildQueue(from context: ModelContext, generatedAt: String,
                            includedKeys: Set<String>? = nil,
-                           today: String = EasternDate.today()) -> PrepQueue {
+                           today: String = EasternDate.today(),
+                           venueHistory: VenueShootHistory? = nil) -> PrepQueue {
+        // #1887: read once per build, never per item (it reads two files).
+        let history = venueHistory ?? VenueShootHistory.current(today: today)
         let items: [PrepQueueItem] = eligibleProspects(from: context, includedKeys: includedKeys)
             .map { p in
                 PrepQueueItem(
@@ -79,7 +82,11 @@ enum PrepQueueService {
                     // #1856: the same fact a contact check is told, on the same terms. A kept show can
                     // name no producer just as easily as an untriaged one, and the waterfall it feeds is
                     // literally the same waterfall.
-                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter)
+                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter),
+                    // #1887: the BAND only, never the count, so the drafter has no number to state.
+                    // Absent when Dan has never shot the room, when no history has been imported, and
+                    // deliberately on a Carnegie show, where the tenure credential already says it.
+                    venueHistory: history.band(for: p.venue)?.rawValue
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))

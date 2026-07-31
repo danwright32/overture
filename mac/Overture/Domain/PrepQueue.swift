@@ -108,6 +108,19 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // from pages that named nobody, while being every bit as organiser-less. The run needs to know it has
     // no producer to find, not why.
     var onlyTheActIsNamed: Bool? = nil
+    // v10 (#1887): how well Dan already knows THIS room, as one of `shot_before` / `a_few` /
+    // `regularly`, and NEVER a number.
+    //
+    // The band is the whole payload on purpose. Dan's rule is "never an exact number", and a rule
+    // that lives only in the prompt is a hope (L27): the way to stop the drafter stating a count
+    // is to leave it nothing to state. The count itself never leaves `VenueShootHistory`.
+    //
+    // Absent means SAY NOTHING, and the runbook is told so explicitly. Three different situations
+    // produce an absent field and none of them licenses a guess: the app has no history for the
+    // room, no history has been imported at all, or the show is at Carnegie Hall, where the tenure
+    // credential the runbook already requires is about that exact room and a venue line beside it
+    // would be one fact stated twice (Dan's call, 2026-07-31).
+    var venueHistory: String? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -134,7 +147,7 @@ struct ShowListing: Codable, Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 9
+    static let version = 10
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
