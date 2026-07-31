@@ -386,6 +386,33 @@ final class Recipient {
     // #789 adds the draft lint: a recipient whose OWN outgoing text carries a blocking finding is
     // held back until Dan either fixes the text or deliberately overrides it, the same way #407's
     // salutation flag blocks above.
+    // #1798: an address that EXISTS and is held back by one of the guards, which is a different fact from
+    // having no address at all. One definition, because the verdict on the row and the card's own answer
+    // were two copies of this rule and both listed two of the three guards; the measured cost was a card
+    // reading "No email found" in rust with `office@frigid.nyc` printed underneath it.
+    //
+    // The three members are exactly the three `isSendablePending` refuses on below, so the two can never
+    // drift apart again: anything held there is held here.
+    var isHeldByAGuard: Bool {
+        email?.isEmpty == false
+            && ((looksLikeVenue && !looksLikeVenueDismissed)
+                || (looksLikePressContact && !looksLikePressContactDismissed)
+                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed))
+    }
+
+    // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
+    // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
+    // the venue and press guards both clear, so the wording written for those two would have been a false
+    // claim about a real presenter's own office address.
+    enum HoldReason: Equatable { case venueOrPress, duplicate }
+
+    var holdReason: HoldReason? {
+        guard isHeldByAGuard else { return nil }
+        if (looksLikeVenue && !looksLikeVenueDismissed)
+            || (looksLikePressContact && !looksLikePressContactDismissed) { return .venueOrPress }
+        return .duplicate
+    }
+
     var isSendablePending: Bool {
         sendState == .pending && (email?.isEmpty == false) && !pausedByReply
             // #901: a date conflict Dan has not cleared stops the send, not just the draft. The prep gate

@@ -286,6 +286,32 @@ enum ReachabilityCopy {
     static let weakContactOnlyHelp =
         "A reachability check found only a venue or press address for this show, not the presenter's own. You can still keep it and add a stronger contact by hand."
 
+    // #1798: the same badge, saying which hold it actually is. Measured on the live store 2026-07-31: the
+    // one show in this state was held by the duplicate guard alone, on FRIGID's own office address, with
+    // the venue and press guards both clear. The sentence above would have called a real presenter address
+    // a venue or press one, which is the L11 overclaim in a new place.
+    //
+    // Only the SENTENCE varies (#1722's rule): same verdict, same tone, same position, so nothing reaches
+    // the fit score, the ledger or the palette.
+    // #1798: and the badge itself, for the same reason. "Weak contact only" is true of a front desk or a
+    // press desk and false of a real presenter's own office address that is merely held, so the row would
+    // have carried a word its own hover text contradicts (#843, a line that disagrees with the one beside
+    // it). Same tone, same icon, same position.
+    static func weakContactBadge(reason: Recipient.HoldReason) -> String {
+        switch reason {
+        case .venueOrPress: return weakContactOnlyBadge
+        case .duplicate: return "Held as a duplicate"
+        }
+    }
+
+    static func weakContactHelp(reason: Recipient.HoldReason) -> String {
+        switch reason {
+        case .venueOrPress: return weakContactOnlyHelp
+        case .duplicate:
+            return "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
+        }
+    }
+
     // #1628: printed beside a contact the check itself recorded as a guess, so a guess stops reading like
     // a find. Two words, in the address line's own quiet meta styling, because it qualifies the address
     // rather than competing with Keep and Dismiss.

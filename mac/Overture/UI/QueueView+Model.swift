@@ -97,6 +97,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
     var hasWeakContactEmail: Bool = false
+    // #1798: which guard is holding that address, so the row's sentence names what actually happened.
+    // Defaulted so existing memberwise-init call sites are unaffected.
+    var weakContactHoldReason: Recipient.HoldReason? = nil
     // #1680: the source pages this row was found on, so the card can tell a link to THIS show from a
     // fallback link to the source's own calendar. Mirrors Prospect.runSourceURLs.
     var runSourceURLs: [String] = []
@@ -1769,13 +1772,12 @@ extension QueueItem {
             performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
-            // #1324: a real address held only by the venue/press guard (a weak contact), so the badge can
-            // say "Weak contact only" rather than "No email found" when that is all a probe found.
-            hasWeakContactEmail: p.recipients.contains { r in
-                r.email?.isEmpty == false
-                    && ((r.looksLikeVenue && !r.looksLikeVenueDismissed)
-                        || (r.looksLikePressContact && !r.looksLikePressContactDismissed))
-            },
+            // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
+            // when that is all a check found. #1798: the same shared definition the stored verdict uses,
+            // because these were two copies of one rule and both were missing the duplicate guard.
+            hasWeakContactEmail: p.recipients.contains(where: \.isHeldByAGuard),
+            // #1798: WHY it is held, so the sentence beside it is true of this row.
+            weakContactHoldReason: p.recipients.compactMap(\.holdReason).first,
             formPitch: FormPitch.state(of: p),
             // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
             // send to" apart from "an email exists but is held for a review".
