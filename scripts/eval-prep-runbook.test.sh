@@ -227,13 +227,36 @@ esac
 STUB
 chmod +x "${STUB_DIR}/claude"
 
+RUNS_DIR="${STUB_DIR}/runs"
 started="$(PATH="${STUB_DIR}:${PATH}" \
+  OVERTURE_EVAL_RUNS_DIR="${RUNS_DIR}" \
   OVERTURE_EVAL_FAILURES_FILE="${STUB_DIR}/failures" \
   "${SCRIPT}" --yes host-venue-not-target 2>&1 || true)"
 check "a real run gets past its own tool-scope setup" \
   '[[ "${started}" != *"refusing to run, unsafe tool scope"* ]]'
 check "a real run reaches the fixture it was asked for" \
   '[[ "${started}" == *"host-venue-not-target"* ]]'
+
+# #1870: and it KEEPS what it produced. A run costs real money, so an output deleted on exit can only be
+# read by paying to produce it again, which is why the one failure of the 2026-07-31 run could be named and
+# not diagnosed. The fixture's own text is the thing a person has to read to tell a rule that drifted from
+# an expectation that was too strict.
+kept_run="$(ls -1d "${RUNS_DIR}"/*/ 2>/dev/null | tail -1 || true)"
+check "a real run keeps the output it produced" \
+  '[[ -n "${kept_run}" && -s "${kept_run}/host-venue-not-target.out" ]]'
+check "the kept output is what the run actually wrote" \
+  '[[ "$(cat "${kept_run}/host-venue-not-target.out" 2>/dev/null)" == *"results"* ]]'
+
+# Kept runs are bounded, the same way the store backups are: evidence that grows without limit is its own
+# problem, and the last handful is what anyone ever reads.
+for d in 01 02 03 04 05 06 07 08 09 10 11 12; do
+  mkdir -p "${RUNS_DIR}/202601${d}-000000"
+done
+PATH="${STUB_DIR}:${PATH}" OVERTURE_EVAL_RUNS_DIR="${RUNS_DIR}" \
+  OVERTURE_EVAL_FAILURES_FILE="${STUB_DIR}/failures" \
+  "${SCRIPT}" --yes host-venue-not-target >/dev/null 2>&1 || true
+check "kept runs are pruned to the most recent ten" \
+  '[[ "$(ls -1d "${RUNS_DIR}"/*/ | wc -l | tr -d " ")" == "10" ]]'
 
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
