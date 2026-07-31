@@ -193,6 +193,15 @@ check "the harness passes the resolved model to claude, not the pinned constant"
   'grep -q -- "--model \"\${_eval_model}\"" "${EVAL_SH}"'
 check "and no longer hard-passes the drafting constant" \
   '! grep -q -- "--model \"\${OVERTURE_MODEL_DRAFTING}\"" "${EVAL_SH}"'
+# #1868: the prompt must ask for the results version the CONTRACT is on, not a number typed once and left.
+# The runbook requires fields that only exist from a later version (a showSummary since #1824), so a prompt
+# naming an older one asks the run to produce something the scorer must reject: 11 of 13 fixtures failed on
+# shape, before a single judgment was scored, and the tokens were spent anyway.
+NEWEST_RESULTS_VERSION="$(ls "${REPO_ROOT_FOR_MODELS}/fixtures/prep-results" \
+  | sed -n 's/^v\([0-9][0-9]*\)\.json$/\1/p' | sort -n | tail -1)"
+prompt_for_version="$("${SCRIPT}" --dry-run host-venue-not-target 2>/dev/null || true)"
+check "the prompt asks for the current results version, not a stale one" \
+  '[[ "${prompt_for_version}" == *"(version ${NEWEST_RESULTS_VERSION})"* ]]'
 
 # #1862: the REAL run's setup, with nothing spent.
 #
