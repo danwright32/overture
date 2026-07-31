@@ -96,8 +96,15 @@ contact ONCE, then write that same `contacts[]` into a separate result entry for
 as with the item's own key; never rebuild one and never merge several shows into a single result entry.
 
 Do not re-research per key, and do not skip the extra entries: a reachability check costs real money
-per research, and Dan is owed an answer for every show he selected. A key you leave out of the results
-is reported to him as unchecked, which is correct but wasteful, so emit them all.
+per research, and Dan is owed an answer for every show he selected. Emit them all.
+
+The app no longer depends on you doing so (#1804). It wrote the grouping, so when the lead's entry comes
+back carrying contacts it applies those contacts to every key in that lead's `alsoAnswersFor` itself, and a
+run that emitted one entry settles the same as one that emitted eight. Two things still rest on you. A key
+you leave out gets ONLY the lead's contacts, so any research specific to that show (its own summary, its
+own refusal) is lost. And the credit is one-directional: a lead that found NOBODY credits nothing, so the
+shows it stood for stay unchecked and are paid for again next time. Emitting the entries is still the
+cheaper and more accurate path; the app's credit is a net, not a substitute.
 
 Never invent an `alsoAnswersFor` grouping yourself. Two shows sharing a venue, a title, or a
 performer are NOT the same producer, and the app is the only thing that may decide this.

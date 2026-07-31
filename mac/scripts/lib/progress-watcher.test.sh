@@ -172,6 +172,44 @@ update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/grouped-results
 assert_equals "a fully answered grouped run reads as complete" \
   "4" "$(field "${TMP}/grouped-progress.json" completed)"
 
+# #1804: the terse run. The runbook tells the run to write an entry per covered show, and nothing enforced
+# it, so a run that answered a group of three with ONE entry sat at 1 of 3 for its whole life and never
+# reached its own total. The app now credits that grouping when it settles, so the live count has to credit
+# it identically or the two contradict each other about the same run.
+cat > "${TMP}/terse-results.json" <<'EOF'
+{"version":7,"generatedAt":"now","results":[
+  {"naturalKey":"k1","contacts":[{"email":"jane@producer.example","confidence":"high"}]},
+  {"naturalKey":"k2","contacts":[]}
+]}
+EOF
+update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/terse-results.json" "${TMP}/terse-progress.json"
+assert_equals "a terse run that answered a group with one entry reads as complete, like a compliant one" \
+  "4" "$(field "${TMP}/terse-progress.json" completed)"
+
+# The honest half, and the reason the credit is one-directional (Dan's call, 2026-07-31): a lead that came
+# home having found NOBODY does not answer for its group. Those shows are genuinely still unanswered, and a
+# count that credited them would report a run as complete while two of its shows had no answer at all.
+cat > "${TMP}/empty-lead-results.json" <<'EOF'
+{"version":7,"generatedAt":"now","results":[
+  {"naturalKey":"k1","contacts":[],"emptyReason":"nothing_published"},
+  {"naturalKey":"k2","contacts":[]}
+]}
+EOF
+update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/empty-lead-results.json" "${TMP}/empty-progress.json"
+assert_equals "a group lead that found nobody credits nothing to the shows it stood for" \
+  "2" "$(field "${TMP}/empty-progress.json" completed)"
+
+# A compliant run whose covered show came back with its OWN entry is counted once, not twice.
+cat > "${TMP}/compliant-results.json" <<'EOF'
+{"version":7,"generatedAt":"now","results":[
+  {"naturalKey":"k1","contacts":[{"email":"jane@producer.example"}]},
+  {"naturalKey":"k1b","contacts":[{"email":"jane@producer.example"}]}
+]}
+EOF
+update_progress_from_results "${TMP}/grouped-queue.json" "${TMP}/compliant-results.json" "${TMP}/compliant-progress.json"
+assert_equals "a covered show answered in its own right is never counted twice" \
+  "3" "$(field "${TMP}/compliant-progress.json" completed)"
+
 # An ungrouped queue (every normal Prep run, and every scout-extract run) is unchanged.
 cat > "${TMP}/plain-queue.json" <<'EOF'
 {"version":6,"generatedAt":"now","items":[{"naturalKey":"a"},{"naturalKey":"b"},{"naturalKey":"c"}]}

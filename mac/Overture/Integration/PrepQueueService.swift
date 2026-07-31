@@ -247,11 +247,17 @@ enum PrepQueueService {
     // #1623: `anIngestIsStillToCome` is whether the results file this settle is reading has yet to be
     // ingested. It decides whether the floor below is a DEFAULT or an OVERWRITE, and it is asked of the
     // same decision `consumeIfNew` makes rather than inferred from the row.
+    // #1804: `queueURL` is the work-list the app itself wrote, and it is here so a show whose answer was
+    // paid for under a GROUP LEAD counts as answered and is stamped. Without it those shows stay unstamped,
+    // are selected and paid for again on the next check, and are counted into the shortfall sentence as
+    // never answered. Optional so a caller with no queue on disk keeps the old behaviour rather than
+    // failing; the real settle path always supplies it.
     static func markProbed(keys: Set<String>, answeredIn resultsURL: URL,
                            in context: ModelContext, now: Date,
                            anIngestIsStillToCome: Bool,
-                           saveFailed: inout Bool) -> Set<String> {
-        let answered = PrepImporter.answeredKeys(at: resultsURL)
+                           saveFailed: inout Bool,
+                           queueURL: URL? = nil) -> Set<String> {
+        let answered = PrepImporter.answeredKeys(at: resultsURL, queueURL: queueURL)
         let toStamp = keys.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where toStamp.contains(p.naturalKey) {
@@ -334,7 +340,7 @@ enum PrepQueueService {
         let ingestToCome = PrepImporter.hasUnconsumedResults(at: resultsURL, defaults: defaults)
         let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now,
                                   anIngestIsStillToCome: ingestToCome,
-                                  saveFailed: &stampSaveFailed)
+                                  saveFailed: &stampSaveFailed, queueURL: queueURL)
         // #1769: the ingest Outcome used to be discarded whole, so a failed save or a runaway web-call
         // count was invisible on a check as well as the shortfall. Kept, and folded into the report below.
         //
