@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **952 sentences**, from 320 source files.
+Every sentence Overture can say to Dan: **954 sentences**, from 320 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1528,6 +1528,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
     `Integration/OmniFocusUserNotifier.swift`
+"The only organiser this listing named was the room itself, so Overture set it aside. The act is the only party still named here, so they are the one to try. Who is producing the night has not been established."
+    `Domain/Reachability.swift`
 "The other \(missed) had"
     `App/ActionFeedback.swift`
 "The other one had"
@@ -1697,6 +1699,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
+"Try the act directly"
+    `Domain/Reachability.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
     `Domain/QueueUndoStack.swift`
 "Unknown contact"
