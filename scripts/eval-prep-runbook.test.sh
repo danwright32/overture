@@ -194,6 +194,37 @@ check "the harness passes the resolved model to claude, not the pinned constant"
 check "and no longer hard-passes the drafting constant" \
   '! grep -q -- "--model \"\${OVERTURE_MODEL_DRAFTING}\"" "${EVAL_SH}"'
 
+# #1862: the REAL run's setup, with nothing spent.
+#
+# The AI call itself is opt-in and out of scope for a test. Everything IN FRONT of it is not, and treating
+# the two as one exemption is how this harness came to be unable to start at all: `claude_run_scope` gained
+# a fifth argument in #1682, this script kept passing four, and under `set -u` the helper aborted. Its
+# failure was read as "unsafe tool scope", so the whole opt-in layer was dead for three days and every hand
+# run failed at the door.
+#
+# So: a stub `claude` on PATH that answers `plugin list --json` and then anything else, and the assertion
+# that a real run REACHES a fixture. It spends nothing (the stub is a shell script) and it fails the moment
+# the setup in front of the spend breaks again.
+STUB_DIR="$(mktemp -d)"
+trap 'rm -rf "${STUB_DIR}"' EXIT
+cat > "${STUB_DIR}/claude" <<'STUB'
+#!/bin/sh
+# `plugin list --json` must answer with the JSON array the lockout requires; every other invocation is
+# the drafting call, answered with an empty result so the run gets as far as scoring and no further.
+case "$1" in
+  plugin) echo '[]' ;;
+  *) echo '{"version":8,"generatedAt":"now","results":[]}' ;;
+esac
+STUB
+chmod +x "${STUB_DIR}/claude"
+
+started="$(PATH="${STUB_DIR}:${PATH}" \
+  OVERTURE_EVAL_FAILURES_FILE="${STUB_DIR}/failures" \
+  "${SCRIPT}" --yes host-venue-not-target 2>&1 || true)"
+check "a real run gets past its own tool-scope setup" \
+  '[[ "${started}" != *"refusing to run, unsafe tool scope"* ]]'
+check "a real run reaches the fixture it was asked for" \
+  '[[ "${started}" == *"host-venue-not-target"* ]]'
 
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"
