@@ -186,7 +186,7 @@ struct LiveRunLabelViewStateTests {
     @Test func pastTimeoutButRunAliveTrueRendersAsRunningNotStalled() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let now = Date(timeIntervalSince1970: 1070)   // past the 60s timeout
-        let label = LiveRunLabel(base: "Drafting a reply", since: since, timeout: 60, runAlive: { true })
+        let label = LiveRunLabel(base: "Drafting a reply", since: since, timeout: 60, heartbeat: { .beating })
         let texts = try allTexts(label.content(now: now))
 
         #expect(!texts.contains { $0.contains("looks stuck") })

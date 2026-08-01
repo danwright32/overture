@@ -7,9 +7,18 @@ import Foundation
 // PrepQueueService (#184) so the two services don't duplicate the launch + marker machinery.
 enum DetachedRunner {
     static func isRunning(markerURL: URL, now: Date, staleAfter: TimeInterval) -> Bool {
-        guard let mod = try? markerURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        else { return false }
-        return now.timeIntervalSince(mod) < staleAfter
+        heartbeat(markerURL: markerURL, now: now, staleAfter: staleAfter) == .beating
+    }
+
+    // #1822: the same file, read for everything it says rather than folded to a yes/no. `isRunning`
+    // above answers "may I launch, is one already going", where absent and stale are rightly the same
+    // answer. A progress screen is asking a different question, and for it they are opposite: absent
+    // means the runner exited cleanly, stale means it stopped without doing so. One reader, so the two
+    // questions can never drift apart on what the marker means.
+    static func heartbeat(markerURL: URL, now: Date, staleAfter: TimeInterval) -> RunHeartbeat {
+        let touched = try? markerURL.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
+        return RunHeartbeat.of(markerTouchedAt: touched ?? nil, now: now, staleAfter: staleAfter)
     }
 
     // The runner script path, configured once via a string default (not hardcoded) so it can be

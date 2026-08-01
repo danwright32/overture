@@ -375,17 +375,7 @@ struct RootView: View {
                             LiveRunLabel(base: RunProgressCopy.title(.scouting), since: scoutStartedAt,
                                          timeout: RunTimeouts.scout, compact: true)
                         } else if PrepQueueService.isRunning(now: Date()) {
-                            // #354: real "N of M" progress from the run's own progress file,
-                            // instead of a bare indefinite spinner. #1322: a probe reuses this same run
-                            // slot, so the compact label names it "Checking reachability" not "Prepping".
-                            LiveRunLabel(base: RunProgressCopy.title(
-                                            PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping),
-                                         since: PrepQueueService.lastRunStartedAt,
-                                         timeout: RunTimeouts.prep,
-                                         // #1003: a closure so the count is re-read every tick, not
-                                         // captured whenever RootView last happened to re-render.
-                                         progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) },
-                                         compact: true)
+                            prepToolbarLabel
                         } else {
                             // #994: the idle tooltip belongs HERE rather than on the Menu. A live run's
                             // own tooltip (the elapsed counter and "N of M", which compact mode makes
@@ -1583,6 +1573,32 @@ struct RootView: View {
         scoutIsManual = false
     }
 
+    // #354: real "N of M" progress from the run's own progress file, instead of a bare indefinite spinner.
+    // #1322: a probe reuses this same run slot, so the compact label names it "Checking reachability"
+    // rather than "Prepping".
+    //
+    // #1822: lifted out of the toolbar's `label:` builder, which the added arguments pushed past the Swift
+    // type-checker's limit for one expression. Nothing about the label changed in the move.
+    private var prepToolbarLabel: some View {
+        let isProbe = PrepQueueService.isProbeRunning(now: Date())
+        return LiveRunLabel(
+            base: RunProgressCopy.title(isProbe ? .probing : .prepping),
+            since: PrepQueueService.lastRunStartedAt,
+            // #1822: a probe gets its OWN ten-minute window, as the takeover already gives it. Judged
+            // against Prep's three minutes, every probe past three minutes was called stuck while it was
+            // running perfectly well.
+            timeout: isProbe ? RunTimeouts.reachabilityProbe : RunTimeouts.prep,
+            // #1822: the heartbeat this label never had. Without it RunProgress.liveness saw no evidence
+            // of life at all and called every run past its timeout stuck, inside a branch that renders
+            // only BECAUSE isRunning returned true one line above. The label contradicted its own
+            // condition for the whole remainder of every long run.
+            // #1003: closures, so both this and the count are re-read every tick rather than captured
+            // whenever RootView last happened to re-render.
+            progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) },
+            heartbeat: { PrepQueueService.heartbeat(now: Date()) },
+            compact: true)
+    }
+
     // #1054: the cancelled read stopped with partial shows. Wind the run down and raise the keep-or-discard
     // prompt; its buttons decide whether those shows enter the queue. Clearing scoutCancelRequested hands
     // the decision to Dan (the flag has done its job of stopping the run).
@@ -1634,7 +1650,7 @@ struct RootView: View {
                 since: readingStartedAt ?? scoutStartedAt,
                 snapshot: { readingStartedAt != nil ? RunProgressView.Snapshot.liveReading()
                                                     : (scoutNativeSnapshot ?? .init()) },
-                runAlive: readingStartedAt != nil ? { ScoutExtractService.isRunning(now: Date()) } : nil,
+                heartbeat: readingStartedAt != nil ? { ScoutExtractService.heartbeat(now: Date()) } : nil,
                 // #1427: the reading phase predicts "~X remaining" from past completed runs; every other
                 // phase (and a thin history) shows nothing. Loaded each tick so a run recorded moments ago
                 // is already in the average.
@@ -1672,7 +1688,7 @@ struct RootView: View {
                     phase: PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping,
                     since: PrepQueueService.lastRunStartedAt,
                     snapshot: { RunProgressView.Snapshot.livePrepping() },
-                    runAlive: { PrepQueueService.isRunning(now: Date()) },
+                    heartbeat: { PrepQueueService.heartbeat(now: Date()) },
                     onHide: { prepSheetShown = false },
                     onCancel: { cancelPrep() })
             }

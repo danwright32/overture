@@ -92,7 +92,7 @@ struct AddLeadSheet: View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             RunProgressView(phase: .reading, since: startedAt,
                               snapshot: { RunProgressView.Snapshot.liveReading() },
-                              runAlive: { ScoutExtractService.isRunning(now: Date()) },
+                              heartbeat: { ScoutExtractService.heartbeat(now: Date()) },
                               onRetry: start)
             Text("It fetches the page, then follows each show's own link to get the venue and date.")
                 .font(OVType.meta).foregroundStyle(OVColor.inkFaint)

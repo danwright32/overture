@@ -107,21 +107,57 @@ struct RunProgressLivenessTests {
     }
 
     // #471: a fixed wall-clock timeout alone can't tell a genuinely dead run from a slow-but-alive one.
-    // `runAlive` is the real heartbeat (e.g. a marker-freshness check); when it says the run is still
-    // going, past-timeout must never read as stalled.
-    @Test func pastTimeoutWithRunAliveTrueStillReportsRunning() {
+    // The heartbeat is the run's real evidence (marker freshness); while it is beating, past-timeout must
+    // never read as stalled.
+    @Test func aBeatingMarkerPastTheTimeoutIsRunning() {
         #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
-                                     timeout: timeout, runAlive: true) == .running(elapsed: "7:05"))
+                                     timeout: timeout, heartbeat: .beating) == .running(elapsed: "7:05"))
     }
 
-    @Test func pastTimeoutWithRunAliveFalseReportsStalled() {
+    // #1822 failure path, and the reason absence cannot simply be treated as "still running": a marker
+    // still sitting there untouched is the genuinely wedged run this whole warning exists for.
+    @Test func aRunWhoseMarkerWentStaleIsReportedStuck() {
         #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
-                                     timeout: timeout, runAlive: false) == .stalled(elapsed: "7:05"))
+                                     timeout: timeout, heartbeat: .stale) == .stalled(elapsed: "7:05"))
     }
 
-    @Test func withinTimeoutIsRunningRegardlessOfRunAlive() {
+    // A stale marker inside the run's own window is not yet a verdict: the window is what decides.
+    @Test func aStaleMarkerInsideTheWindowIsStillRunning() {
         #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(45),
-                                     timeout: timeout, runAlive: false) == .running(elapsed: "0:45"))
+                                     timeout: timeout, heartbeat: .stale) == .running(elapsed: "0:45"))
+    }
+
+    // #1822: a marker that is GONE and a marker that has gone STALE are opposite facts, and a Bool
+    // collapsed them into one "not alive". A runner deletes its marker in its exit trap, so absence is
+    // how a healthy run ENDS, and every Prep run long enough to pass its timeout accused itself of being
+    // stuck in the seconds between the runner exiting and the screen closing.
+    @Test func aRunWhoseMarkerIsGoneIsFinishingNotStuck() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
+                                     timeout: timeout, heartbeat: .absent) == .finishing(elapsed: "7:05"))
+    }
+
+    // Absence ends the run whatever the clock says: a run that finishes FAST is finishing too, and must
+    // not be reported as still working when its marker is already gone.
+    @Test func aMarkerGoneWellInsideTheWindowIsAlsoFinishing() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(45),
+                                     timeout: timeout, heartbeat: .absent) == .finishing(elapsed: "0:45"))
+    }
+
+    // No heartbeat offered at all (a caller with no marker to read) keeps the wall-clock-only behaviour.
+    @Test func noHeartbeatLeavesTheWallClockInCharge() {
+        #expect(RunProgress.liveness(since: started, now: started.addingTimeInterval(425),
+                                     timeout: timeout, heartbeat: nil) == .stalled(elapsed: "7:05"))
+    }
+
+    // #1822: what the marker's presence and freshness actually mean, decided in one place so a caller
+    // cannot invent its own reading of "false".
+    @Test func theHeartbeatReadsPresenceAndFreshnessSeparately() {
+        let touched = started.addingTimeInterval(400)
+        #expect(RunHeartbeat.of(markerTouchedAt: touched, now: touched.addingTimeInterval(10),
+                                staleAfter: 60) == .beating)
+        #expect(RunHeartbeat.of(markerTouchedAt: touched, now: touched.addingTimeInterval(120),
+                                staleAfter: 60) == .stale)
+        #expect(RunHeartbeat.of(markerTouchedAt: nil, now: touched, staleAfter: 60) == .absent)
     }
 }
 

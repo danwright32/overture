@@ -28,6 +28,14 @@ enum RunProgress {
         "\(base) looks stuck (\(elapsed))"
     }
 
+    // #1822: the run has ended and its screen is closing itself. Deliberately does NOT repeat the phase
+    // title: in the takeover that title is already on screen directly above this line, and in the
+    // toolbar this sentence is only ever visible for a moment (#843, do not say twice what the line
+    // beside it already said).
+    static func finishingLabel(elapsed: String) -> String {
+        "Finishing up (\(elapsed))"
+    }
+
     static func spinnerLabel(_ base: String, since start: Date?, now: Date, detail: String? = nil) -> String {
         let label = detail.map { "\(base) \($0)" } ?? base
         if let elapsed = elapsedLabel(since: start, now: now) {
@@ -42,18 +50,23 @@ enum RunProgress {
     // indefinite spinner). The boundary is `>=` so it matches Recipient.isReplyDraftStalled.
     //
     // #471: a fixed wall-clock timeout alone can't tell a genuinely dead run from one that's just
-    // slower than usual. `runAlive`, when supplied, is the run's real heartbeat (e.g. a marker-freshness
-    // check); `true` overrides a past-timeout result to `.running` instead of `.stalled`. Default nil
-    // keeps every existing caller's behavior (wall-clock only) unchanged.
-    static func liveness(since start: Date?, now: Date, timeout: TimeInterval, runAlive: Bool? = nil) -> RunLiveness {
+    // slower than usual, so the run's real heartbeat (marker freshness) overrides the clock.
+    // #1822: takes the heartbeat's three states rather than a Bool. See RunHeartbeat for why absence and
+    // staleness cannot share one answer. `nil` means the caller has no marker to read at all, which keeps
+    // the wall clock in charge exactly as it was before any heartbeat existed.
+    static func liveness(since start: Date?, now: Date, timeout: TimeInterval,
+                         heartbeat: RunHeartbeat? = nil) -> RunLiveness {
         guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
+        // A marker that is GONE ends the run whatever the clock says: a runner deletes it in its exit
+        // trap, so this is the last thing a healthy run does, not a symptom.
+        if heartbeat == .absent { return .finishing(elapsed: elapsed) }
         if now.timeIntervalSince(start) >= timeout {
-            return runAlive == true ? .running(elapsed: elapsed) : .stalled(elapsed: elapsed)
+            return heartbeat == .beating ? .running(elapsed: elapsed) : .stalled(elapsed: elapsed)
         }
         return .running(elapsed: elapsed)
     }
 
-    // #1530: the in-process scout sweep's heartbeat, to feed `liveness(runAlive:)` above.
+    // #1530: the in-process scout sweep's heartbeat, folded to beating or stale for `liveness` above.
     //
     // A detached run proves it is alive by touching a marker file; the sweep has no marker, so it was
     // judged on wall clock alone and every 62-source run ended by claiming to be stuck. What it does have
@@ -85,5 +98,25 @@ enum RunProgress {
 enum RunLiveness: Equatable {
     case idle
     case running(elapsed: String)
+    // #1822: the run has ended and its screen is about to close. Neither working nor stuck, because it
+    // is neither: the runner deleted its marker in its exit trap, which is how a HEALTHY run finishes.
+    case finishing(elapsed: String)
     case stalled(elapsed: String)
+}
+
+// #1822: what a run marker actually says, kept as three states because it has three things to say and a
+// Bool could only carry two. A runner touches its marker while it works and deletes it on the way out,
+// so absence means FINISHED while staleness means WEDGED. Collapsing those into one "not alive" is what
+// made every Prep run long enough to pass its timeout accuse itself of being stuck in the seconds
+// between the runner exiting and the screen noticing.
+enum RunHeartbeat: Equatable {
+    case beating
+    case stale
+    case absent
+
+    // Clock skew (a stamp in the future) reads as beating, matching elapsedLabel's clamp.
+    static func of(markerTouchedAt: Date?, now: Date, staleAfter: TimeInterval) -> RunHeartbeat {
+        guard let markerTouchedAt else { return .absent }
+        return now.timeIntervalSince(markerTouchedAt) < staleAfter ? .beating : .stale
+    }
 }
