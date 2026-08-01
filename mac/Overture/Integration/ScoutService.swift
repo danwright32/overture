@@ -1293,6 +1293,10 @@ enum ScoutService {
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
         prospect.sourceIds = p.sourceIds        // #771
+        // #1663: stamp the decider on the way in, so the FIRST time a second source touches this row the
+        // precedence rule already knows whose genre is sitting there. Without it every new row would spend
+        // its first collision unprotected, which is the whole defect, just once per row instead of forever.
+        prospect.disciplineGenreSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
         prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
@@ -1303,6 +1307,24 @@ enum ScoutService {
     // 90 day expiry, so the shared re-score at the end reads `.unchecked` for a stale one. Derived from
     // the `today` the run already threads rather than a second clock, so a test that pins the day pins
     // this too, and day precision is ample for a 90 day window.
+    // #1663: the genre decision, in one place, reached by both non-override arms of `apply`.
+    //
+    // Kept as a whole: discipline, production and the reason all come out of ONE EventClassifier.classify
+    // call, so taking some and keeping others would leave the row describing two different shows. When the
+    // stored genre stands, its reason stands with it.
+    private static func takeIncomingClassification(_ p: AssembledProspect, into existing: Prospect) {
+        let incomingKey = GenrePrecedence.sourceKey(p.sourceIds)
+        guard GenrePrecedence.takesIncoming(storedDiscipline: existing.discipline,
+                                            storedKey: existing.disciplineGenreSourceKey,
+                                            incomingDiscipline: p.discipline,
+                                            incomingKey: incomingKey)
+        else { return }
+        existing.discipline = p.discipline
+        existing.production = p.production
+        existing.fitReason = p.fitReason
+        existing.disciplineGenreSourceKey = incomingKey
+    }
+
     private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date) {
         // #1274: track the latest scout-emitted name always, so a "reset to scout name" restores the
         // real current name even for a show Dan renamed several scouts ago. But only write it to the
@@ -1322,7 +1344,10 @@ enum ScoutService {
         existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
         existing.profile = p.profile
         existing.coverage = p.coverage
-        existing.fitReason = p.fitReason
+        // #1663: `fitReason` moved OUT of this unconditional block and into the arms below, because it is
+        // a sentence ABOUT the genre. Left here, a row that kept one source's genre would print the other
+        // source's reason for it ("Self-produced other group", the string #1664 is open on), describing a
+        // show the row does not hold.
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
@@ -1374,16 +1399,18 @@ enum ScoutService {
             // no combined-rule branch needed. That is what makes the two guards compose.
             // Nothing to write here: the shared re-score below reads the discipline and production
             // already on the row, which is exactly what "keep Dan's values" means.
+            // #1663: the reason still refreshes, unchanged from when it was written unconditionally above.
+            existing.fitReason = p.fitReason
         } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {
             // The org match found nothing, so Step A left Prep's performer correction standing. Take the
             // scout's fresh discipline and production; the correction lives in priorRelationship, which
             // Step A already resolved on the row, so the shared re-score below picks the fresh genre up
             // WITHOUT undoing the correction by the back door.
-            existing.discipline = p.discipline
-            existing.production = p.production
+            // #1663: subject to the same precedence as the plain arm below. The performer correction is
+            // about WHO, not about genre, so it gives this arm no claim to overwrite another source's read.
+            takeIncomingClassification(p, into: existing)
         } else {
-            existing.discipline = p.discipline
-            existing.production = p.production
+            takeIncomingClassification(p, into: existing)
         }
 
         // #1648 Phase A1: ONE scoring expression, reached by every arm above, and it reads the ROW.
