@@ -100,7 +100,7 @@ struct QueueView: View {
     // a deliberate jump reaches it, and it is @State, so setting it always invalidates and always arrives.
     // Declared rather than inferred on purpose: resting on "every jump also happens to write some other
     // piece of state" would be an unenforced rule of the kind that broke the stage-pill invariant twice.
-    @State private var jumpTarget: String?
+    @State private var jumpTarget: QueueJumpRequest?
 
     // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
@@ -683,6 +683,7 @@ struct QueueView: View {
         // targets", which stopped being true at #1220 when every stage started grouping by date: it is
         // the same layout, with the same binding, and the same dropped jump as navigateToLead had.
         jumpTarget = target.flatMap { QueueModel.scrollGroupID(containing: $0, among: items) }
+            .map(QueueJumpRequest.init(group:))
         DispatchQueue.main.async {
             if let target { withAnimation { proxy.scrollTo(target, anchor: .top) } }
         }
@@ -727,6 +728,7 @@ struct QueueView: View {
         // dropped, so the click read as dead. Computed over `items` rather than the stage's own rows: a
         // group's id is its date either way, and the stage was just set to the one containing this key.
         jumpTarget = QueueModel.scrollGroupID(containing: key, among: items)
+            .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself into
         // the middle. If this runs before the layout settles it simply no-ops, leaving Dan on the right
         // date, which is the old behavior's best case rather than its actual one.
@@ -1170,6 +1172,27 @@ struct QueueView: View {
     }
 }
 
+// #1774: one request to put a date group on screen. An EVENT, deliberately, not a destination.
+//
+// QueueScrollHolder watches this with .onChange, and .onChange fires on a change. Carrying the bare group
+// id, a second jump to the SAME group was not a change and was silently dropped: Dan searched a show and
+// landed on it, scrolled away, searched the same show again, and the click did nothing (his walk of the
+// Debug build, 2026-08-01). The scroll position had moved but the channel still held that group, so
+// setting it again said nothing. That is the #1573 dead click arriving by a new route.
+//
+// Two searches for one show are two events even though they name one group, so each request carries its
+// own identity and no two are equal. A request does still equal ITSELF, so a parent re-render that hands
+// the same one down again does not re-fire the jump and yank Dan off a row he has since scrolled to.
+struct QueueJumpRequest: Equatable {
+    let group: String
+    private let token: UUID
+
+    init(group: String) {
+        self.group = group
+        self.token = UUID()
+    }
+}
+
 #if DEBUG
 // #1774: how many times the queue has derived its whole dataset since the count was last zeroed.
 //
@@ -1215,7 +1238,7 @@ enum QueueRenderCounter {
 struct QueueScrollHolder<Content: View>: View {
     // The group a deliberate jump wants on screen. @State on QueueView, so setting it always invalidates
     // and always reaches this view; nil means no jump is pending and the position is Dan's own scrolling.
-    let jumpTarget: String?
+    let jumpTarget: QueueJumpRequest?
     @ViewBuilder let content: () -> Content
 
     @State private var topGroup: String?
@@ -1224,7 +1247,7 @@ struct QueueScrollHolder<Content: View>: View {
         ScrollView { content() }
             .scrollPosition(id: $topGroup, anchor: .top)
             .onChange(of: jumpTarget) { _, target in
-                if let target { topGroup = target }
+                if let target { topGroup = target.group }
             }
     }
 }

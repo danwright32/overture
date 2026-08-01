@@ -115,7 +115,7 @@ struct QueueInvalidationGuardTests {
     // because the alternative, relying on each jump happening to write some OTHER piece of state, is an
     // unenforced rule of exactly the kind that broke the stage-pill invariant twice.
     @Test func bothJumpsDriveTheScrollThroughTheDeclaredParameter() {
-        #expect(queueView.contains("@State private var jumpTarget: String?"))
+        #expect(queueView.contains("@State private var jumpTarget: QueueJumpRequest?"))
         for fn in ["private func focusOnLeads(", "private func navigateToLead("] {
             guard let body = SourceGuardHelper.propertyBody(fn, in: queueView) else {
                 Issue.record("expected to find \(fn)")

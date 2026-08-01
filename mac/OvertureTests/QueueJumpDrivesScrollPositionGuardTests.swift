@@ -54,7 +54,7 @@ struct QueueJumpDrivesScrollPositionGuardTests {
             return
         }
         #expect(holder.contains(".onChange(of: jumpTarget)"))
-        #expect(holder.contains("topGroup = target"))
+        #expect(holder.contains("topGroup = target.group"))
     }
 
     // The scroll targets are namespaced at the point they are drawn, so the show group and the hire
