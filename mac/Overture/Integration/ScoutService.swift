@@ -1297,6 +1297,7 @@ enum ScoutService {
         // precedence rule already knows whose genre is sitting there. Without it every new row would spend
         // its first collision unprotected, which is the whole defect, just once per row instead of forever.
         prospect.disciplineGenreSourceKey = GenrePrecedence.sourceKey(p.sourceIds)
+        prospect.producerAxisSourceKey = GenrePrecedence.sourceKey(p.sourceIds)   // #1949
         prospect.seriesId = p.seriesId          // #1260 Phase 2: persist the merged-concert identity
         prospect.setScoutConflict(p.conflictKey)    // #901
         return prospect
@@ -1314,17 +1315,36 @@ enum ScoutService {
     // stored genre stands, its reason stands with it.
     private static func takeIncomingClassification(_ p: AssembledProspect, into existing: Prospect) {
         let incomingKey = GenrePrecedence.sourceKey(p.sourceIds)
-        guard GenrePrecedence.takesIncoming(storedDiscipline: existing.discipline,
-                                            storedKey: existing.disciplineGenreSourceKey,
-                                            incomingDiscipline: p.discipline,
-                                            incomingKey: incomingKey)
-        else { return }
-        existing.discipline = p.discipline
-        existing.production = p.production
-        existing.profile = p.profile
-        existing.coverage = p.coverage
-        existing.fitReason = p.fitReason
-        existing.disciplineGenreSourceKey = incomingKey
+
+        let storedDiscipline = Discipline(rawValue: existing.discipline) ?? .other
+        let incomingDiscipline = Discipline(rawValue: p.discipline) ?? .other
+        let mergedDiscipline = GenrePrecedence.mergedDiscipline(
+            stored: storedDiscipline, storedKey: existing.disciplineGenreSourceKey,
+            incoming: incomingDiscipline, incomingKey: incomingKey)
+        // Stamp whenever the value standing is the one this source brought, so "may this source correct
+        // what is here" keeps answering yes for the source actually responsible for it.
+        if mergedDiscipline == incomingDiscipline { existing.disciplineGenreSourceKey = incomingKey }
+        existing.discipline = mergedDiscipline.rawValue
+
+        let stored = (production: Production(rawValue: existing.production) ?? .unknown,
+                      profile: Profile(rawValue: existing.profile) ?? .neutral)
+        let incoming = (production: Production(rawValue: p.production) ?? .unknown,
+                        profile: Profile(rawValue: p.profile) ?? .neutral)
+        let mergedProducer = GenrePrecedence.mergedProducer(
+            stored: stored, storedKey: existing.producerAxisSourceKey,
+            incoming: incoming, incomingKey: incomingKey)
+        if mergedProducer == incoming { existing.producerAxisSourceKey = incomingKey }
+        existing.production = mergedProducer.production.rawValue
+        existing.profile = mergedProducer.profile.rawValue
+
+        // #1949: recomputed, never copied from either source, because they are conclusions about the whole
+        // classification and the classification may now come from two of them.
+        let derived = EventClassifier.derived(discipline: mergedDiscipline,
+                                              production: mergedProducer.production,
+                                              profile: mergedProducer.profile,
+                                              venue: existing.venue)
+        existing.coverage = derived.coverage.rawValue
+        existing.fitReason = derived.fitReason
     }
 
     private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date) {

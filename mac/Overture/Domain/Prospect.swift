@@ -503,6 +503,10 @@ final class Prospect {
     // empty one reads as "not recorded", which takes the incoming genre exactly as before and stamps
     // itself on the way through.
     var disciplineGenreSourceKey: String? = nil
+    // #1949: and the same for the producer axis, which merges independently of the genre now that a row
+    // can hold one source's genre beside another's producer. One key for the row could only lie about one
+    // of them. Defaulted for the same migration reason as the key above.
+    var producerAxisSourceKey: String? = nil
     // #1523: the nights this run ACTUALLY plays, not merely its first and last. A weekly series spans
     // months and is dark most of them, so the span alone made every blocked day inside it look like a
     // clash. Stored rather than derived because the member rows are gone by the time anything asks.

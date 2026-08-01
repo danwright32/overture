@@ -113,9 +113,7 @@ enum EventClassifier {
         else if isProducer && matches(haystack, strongProfile) { profile = .strong }
         else { profile = .neutral }
 
-        let atWeill = matches(venue, "weill")
-        let coverage: Coverage =
-            (atWeill || (production == .selfProduced && profile == .strong)) ? .likelyUncovered : .unknown
+        let derivedPair = derived(discipline: discipline, production: production, profile: profile, venue: venue)
 
         let reachable = true
 
@@ -124,9 +122,26 @@ enum EventClassifier {
             reachable: reachable,
             production: production,
             profile: profile,
-            coverage: coverage,
-            fitReason: buildReason(production: production, profile: profile, coverage: coverage, discipline: discipline)
+            coverage: derivedPair.coverage,
+            fitReason: derivedPair.fitReason
         )
+    }
+
+    // #1949: coverage and the reason are DERIVED from the other three axes, never merged alongside them.
+    //
+    // Once two sources can each contribute a different axis to one row (Dan's call, 2026-08-01), copying
+    // either source's coverage or reason would describe a show neither of them saw: the reason is a
+    // sentence about the whole classification, and coverage is a conclusion drawn from production and
+    // profile. So they are recomputed from whatever the merge settled on. Shared with `classify` above
+    // rather than spelled twice, so a row assembled by merging and a row read from one source cannot
+    // disagree about what the same three axes imply.
+    static func derived(discipline: Discipline, production: Production, profile: Profile,
+                        venue: String?) -> (coverage: Coverage, fitReason: String) {
+        let atWeill = matches(venue ?? "", "weill")
+        let coverage: Coverage =
+            (atWeill || (production == .selfProduced && profile == .strong)) ? .likelyUncovered : .unknown
+        return (coverage,
+                buildReason(production: production, profile: profile, coverage: coverage, discipline: discipline))
     }
 
     private static func buildReason(production: Production, profile: Profile, coverage: Coverage, discipline: Discipline) -> String {
