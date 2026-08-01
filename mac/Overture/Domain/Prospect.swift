@@ -496,6 +496,13 @@ final class Prospect {
     var runEndDate: String? = nil
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
+    // #1663: which source set the genre currently on this row (`GenrePrecedence.sourceKey`). Without it a
+    // row cannot tell a source correcting its own listing from a second source disagreeing, and those want
+    // opposite answers, so the genre was simply taken by whichever run finished last. Defaulted, so every
+    // existing record migrates cleanly as a lightweight SwiftData migration and carries no decider; an
+    // empty one reads as "not recorded", which takes the incoming genre exactly as before and stamps
+    // itself on the way through.
+    var disciplineGenreSourceKey: String? = nil
     // #1523: the nights this run ACTUALLY plays, not merely its first and last. A weekly series spans
     // months and is dark most of them, so the span alone made every blocked day inside it look like a
     // clash. Stored rather than derived because the member rows are gone by the time anything asks.
