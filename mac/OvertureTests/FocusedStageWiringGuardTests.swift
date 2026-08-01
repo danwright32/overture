@@ -13,14 +13,28 @@ struct FocusedStageWiringGuardTests {
 
     // The focused list resolves its rows through the tested live dispatcher, not by filtering a frozen
     // key array captured at tap time.
-    @Test func focusedSectionResolvesMembershipLive() {
+    //
+    // #1774 moved the call from focusedSection into makeRenderData. The rule is unchanged and so is its
+    // cadence: makeRenderData runs on every render of QueueView, so membership is still re-derived live
+    // from the current prospects and a sent draft still drops out. What no longer happens is re-deriving
+    // it per scroll frame, which is a different question from whether it is live. Re-anchored rather than
+    // deleted, because the defect it guards (filtering a frozen key set) is just as writable at the new
+    // site as the old one.
+    @Test func stageMembershipIsResolvedLiveNotFromAFrozenKeySet() {
         guard let body = SourceGuardHelper.propertyBody(
-            "private func focusedSection(_ keys: [String], data: RenderData) -> some View {",
+            "private func makeRenderData() -> RenderData {", in: queueView) else {
+            Issue.record("expected to find makeRenderData's body")
+            return
+        }
+        #expect(body.contains("StageNavigation.focusedKeys(stage: focusedStage"))
+        // And the list renders what that produced, rather than re-deriving its own set.
+        guard let section = SourceGuardHelper.propertyBody(
+            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
             in: queueView) else {
             Issue.record("expected to find focusedSection's body")
             return
         }
-        #expect(body.contains("StageNavigation.focusedKeys(stage: focusedStage"))
+        #expect(section.contains("let rows = data.focusedRows"))
     }
 
     // #1134: stage-only navigation. Tapping a stage pill records the stage (so the list can re-derive);

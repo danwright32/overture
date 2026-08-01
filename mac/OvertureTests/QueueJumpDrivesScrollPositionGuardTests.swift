@@ -16,21 +16,45 @@ import Foundation
 struct QueueJumpDrivesScrollPositionGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
 
-    // Both jumps resolve a real group id and assign it. Neither may clear the binding: that is the
-    // exact line that made the jump a no-op.
-    @Test func bothJumpsDriveTopGroupRatherThanClearingIt() {
+    // Both jumps resolve a real group id and assign it to the channel that drives the scroll. Neither may
+    // clear that channel: that is the exact line that made the jump a no-op.
+    //
+    // #1774 renamed the channel. The position itself moved onto QueueScrollHolder (as @State on QueueView
+    // every scroll write re-derived the whole store), and the jumps now drive it through `jumpTarget`.
+    //
+    // This test was REWRITTEN, not merely re-anchored, because it had gone quietly toothless. Its first
+    // assertion carried a fallback, `|| body.contains("QueueModel.scrollGroupID(")`, which passes whatever
+    // the resolved id is assigned to, or even if it is assigned to nothing at all; and its second banned a
+    // string, "topGroup = nil", that no longer occurs anywhere in the file, so it could not fail for any
+    // edit whatsoever. Both survived the rename green while protecting nothing, which is the
+    // a-guard-can-go-vacuous failure mode this whole suite exists to prevent.
+    @Test func bothJumpsDriveTheScrollTargetRatherThanClearingIt() {
         for jump in ["private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {",
                      "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {"] {
             guard let body = SourceGuardHelper.propertyBody(jump, in: queueView) else {
                 Issue.record("expected to find the body of \(jump)")
                 continue
             }
-            #expect(body.contains("topGroup = QueueModel.scrollGroupID(")
-                    || body.contains("QueueModel.scrollGroupID("),
-                    "\(jump) should resolve the group holding the row")
-            #expect(!body.contains("topGroup = nil"),
-                    "\(jump) must not clear the binding that owns the scroll position")
+            // No fallback clause. The resolved group id must be ASSIGNED to the jump channel, because
+            // resolving it and dropping it on the floor is precisely the dead click #1573 fixed.
+            #expect(body.contains("jumpTarget = ") && body.contains("QueueModel.scrollGroupID("),
+                    "\(jump) should drive jumpTarget with the group holding the row")
+            #expect(!body.contains("jumpTarget = nil"),
+                    "\(jump) must not clear the channel that drives the scroll position")
         }
+    }
+
+    // And the channel is actually connected at the far end. Without this the two jumps could set
+    // jumpTarget faithfully forever while nothing ever moved, which is the same dead click arriving by a
+    // different route.
+    @Test func theHolderAppliesTheJumpTargetToTheScrollPosition() {
+        guard let holder = SourceGuardHelper.propertyBody("struct QueueScrollHolder<Content: View>: View {",
+                                                          in: queueView) else {
+            Issue.record("expected to find QueueScrollHolder")
+            return
+        }
+        #expect(holder.contains(".onChange(of: jumpTarget)"))
+        #expect(holder.contains("topGroup = target"))
     }
 
     // The scroll targets are namespaced at the point they are drawn, so the show group and the hire

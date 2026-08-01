@@ -89,12 +89,18 @@ struct QueueView: View {
     // visible date group, not the individual show, because the groups are the stable landmarks a run
     // reshuffles shows within. Only the to-send date list carries the scroll target layout, so this stays
     // nil (no restore, nothing to fight) while the reached-out list is showing.
-    // #1573: this binding OWNS the scroll position, so the intentional jumps drive it to the group they
-    // want rather than clearing it and asking proxy.scrollTo for a row id. Clearing and scrolling was the
-    // bug: the two mechanisms fought over the same ScrollView and the row jump was silently dropped, so a
+    // #1573: the scroll position OWNS the jump, so the intentional jumps drive it to the group they want
+    // rather than clearing it and asking proxy.scrollTo for a row id. Clearing and scrolling was the bug:
+    // the two mechanisms fought over the same ScrollView and the row jump was silently dropped, so a
     // picked search result did nothing at all. Holds a namespaced group id (QueueModel.showGroupScrollID),
     // never a bare date; see that helper for why the bare date is ambiguous.
-    @State private var topGroup: String?
+    //
+    // #1774: the position itself lives on QueueScrollHolder now, because SwiftUI WRITES it on every scroll
+    // and as @State here each of those writes re-derived the whole store. This is the one channel by which
+    // a deliberate jump reaches it, and it is @State, so setting it always invalidates and always arrives.
+    // Declared rather than inferred on purpose: resting on "every jump also happens to write some other
+    // piece of state" would be an unenforced rule of the kind that broke the stage-pill invariant twice.
+    @State private var jumpTarget: String?
 
     // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
@@ -186,9 +192,23 @@ struct QueueView: View {
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
         let reachedOutKeys: Set<String>
         let pendingBookings: Int
+        // #1774: everything below used to be derived INSIDE the scroll content, so a scroll frame paid for
+        // it. The fan-out line is the one that hid: it sweeps every prospect and was written as an
+        // argument to the masthead, and an argument evaluates at its call site, so it ran on every pass
+        // while reading as though it belonged to the masthead (#1916's lesson, one level up).
+        let fanOutLine: String?
+        // The stage's rows, already filtered to the focused stage and with the just-sent rows folded back
+        // in, and already grouped by date. Grouping ~500 Scout rows per scroll frame was pure waste.
+        let focusedRows: [QueueItem]
+        let dateGroups: [QueueModel.DateGroup]
+        let inquiryRows: [InquiryRow]
     }
 
     private func makeRenderData() -> RenderData {
+        #if DEBUG
+        // #1774: the whole-store derivation, counted where it happens. A scroll must not move this.
+        QueueRenderCounter.recordDerivation()
+        #endif
         let items = self.items
         let now = Date()
         let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
@@ -212,6 +232,15 @@ struct QueueView: View {
         // #1770: read once for the whole render, exactly like `items` above. Its two readers here (the
         // pill strip's inputs and every card) then answer from the same value, and no card sources one.
         let gmailConnected = GmailConnection.shared.isConnected
+        // #1774: the stage's rows, resolved here rather than inside the scroll content. #1140: in stage
+        // mode membership is re-derived LIVE from the current prospects (a sent draft drops out); in leads
+        // mode the frozen key set stands. The dispatch lives in StageNavigation.focusedKeys so it is
+        // tested, not decided in a view.
+        let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: focusedKeys ?? [],
+                                                     in: prospects, today: today, now: now, geo: geo))
+        // #361: fold any departing (just-sent) rows back in so each plays its leaving delight in place.
+        let focusedRows = QueueModel.withDeparting(items.filter { wanted.contains($0.id) },
+                                                   departing: departing)
         return RenderData(items: items, visible: visible,
                           agentInputs: AgentInputs.from(
                               prospects: prospects, inquiries: inquiries, now: now, today: today,
@@ -222,7 +251,11 @@ struct QueueView: View {
                           gmailConnected: gmailConnected,
                           reachedOut: reachedOut,
                           reachedOutKeys: reachedOutKeys,
-                          pendingBookings: QueueModel.pendingBookingCount(items))
+                          pendingBookings: QueueModel.pendingBookingCount(items),
+                          fanOutLine: fanOutWarning,
+                          focusedRows: focusedRows,
+                          dateGroups: QueueModel.groupByDate(focusedRows),
+                          inquiryRows: stageInquiryRows(focusedStage))
     }
 
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
@@ -367,22 +400,24 @@ struct QueueView: View {
 
     private func queueScroll(_ data: RenderData) -> some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            // #1774: the content is a CLOSURE, and QueueScrollHolder runs it. That is the whole point: the
+            // holder owns the scroll position, so a scroll writes ITS state and re-runs only this closure,
+            // never QueueView.body and so never makeRenderData(). Built as a view here instead, it would
+            // be assembled in QueueView.body on every scroll frame exactly as before.
+            QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
-                    masthead(visible: data.visible, items: data.items, fanOutLine: fanOutWarning,
+                    masthead(visible: data.visible, items: data.items, fanOutLine: data.fanOutLine,
                              agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
                     // default), or the exact away-alert leads (#308) when focusedStage is nil.
-                    focusedSection(focusedKeys ?? [], data: data)
+                    focusedSection(data: data)
                 }
                 .padding(.horizontal, OVSpacing.xl)
                 .padding(.vertical, OVSpacing.xl)
                 .frame(maxWidth: 760, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            // #976: hold the scroll on the top visible date group across a @Query rebuild (see topGroup).
-            .scrollPosition(id: $topGroup, anchor: .top)
             .onChange(of: deepLinkedKey) { _, key in
                 if let key { navigateToLead(key, proxy: proxy) }
             }
@@ -395,7 +430,7 @@ struct QueueView: View {
     // #1134: the one content view, driven by the current stage. Reached out renders its per-recipient
     // list (which owns its own heading and empty state); every other stage shows the standard focused
     // rows for that stage, or the #308 away-alert leads when focusedStage is nil.
-    @ViewBuilder private func focusedSection(_ keys: [String], data: RenderData) -> some View {
+    @ViewBuilder private func focusedSection(data: RenderData) -> some View {
         if focusedStage == .reachedOut {
             // #1513: inquiries and shows are ONE list here, ordered by when each next needs Dan, so the
             // "Grouped by when to reach out next" caption governs every date heading in the stage. They
@@ -403,15 +438,9 @@ struct QueueView: View {
             // date above, reach-out date below).
             reachedOutList(data.reachedOut)
         } else {
-            // #1140: in stage mode, re-derive membership LIVE from the current prospects (a sent draft
-            // drops out); in leads mode, keep the frozen key set. The dispatch lives in
-            // StageNavigation.focusedKeys so it is tested, not decided inline in this view.
-            let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: keys,
-                                                         in: prospects, today: today, now: Date(),
-                                                         geo: geo))
-            // #361: fold any departing (just-sent) rows back in so each plays its leaving delight in place.
-            let rows = QueueModel.withDeparting(data.items.filter { wanted.contains($0.id) },
-                                                departing: departing)
+            // #1774: already resolved in makeRenderData, above the scroll boundary. Re-derived here it
+            // cost a StageNavigation.focusedKeys sweep of every prospect on every scroll frame.
+            let rows = data.focusedRows
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(focusedStageHeading(rows: rows, agentInputs: data.agentInputs))
@@ -428,7 +457,7 @@ struct QueueView: View {
                 }
                 .padding(.bottom, OVSpacing.xxs)
                 .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
-                let inquiryRows = stageInquiryRows(focusedStage)
+                let inquiryRows = data.inquiryRows
                 if rows.isEmpty && inquiryRows.isEmpty {
                     if focusedStage == nil {
                         // #308: the away-alert leads path names specific leads; some may have since left.
@@ -440,7 +469,7 @@ struct QueueView: View {
                 } else {
                     // #1220: group the stage's rows by date under "FRI Jul 17 2026" headers, the same on
                     // every stage. #976: the date groups are the scroll targets, so scrollTargetLayout lets
-                    // scrollPosition($topGroup) pin the top visible one across a @Query rebuild.
+                    // QueueScrollHolder's scroll position pin the top visible one across a @Query rebuild.
                     LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
                         inquirySection(inquiryRows)
@@ -448,7 +477,9 @@ struct QueueView: View {
                         // inquiry groups above share this layout and were keyed on the same raw dates,
                         // so a day holding both gave one id to two targets and a jump could land on the
                         // wrong one.
-                        ForEach(QueueModel.groupByDate(rows)) { group in
+                        // #1774: grouped in makeRenderData, above the scroll boundary. Grouping the whole
+                        // stage on every scroll frame was pure waste.
+                        ForEach(data.dateGroups) { group in
                             dateSection(group, data: data).id(QueueModel.showGroupScrollID(group.id))
                         }
                     }
@@ -651,7 +682,7 @@ struct QueueView: View {
         // asking for the row. The old comment here claimed this view was "a flat list without scroll
         // targets", which stopped being true at #1220 when every stage started grouping by date: it is
         // the same layout, with the same binding, and the same dropped jump as navigateToLead had.
-        topGroup = target.flatMap { QueueModel.scrollGroupID(containing: $0, among: items) }
+        jumpTarget = target.flatMap { QueueModel.scrollGroupID(containing: $0, among: items) }
         DispatchQueue.main.async {
             if let target { withAnimation { proxy.scrollTo(target, anchor: .top) } }
         }
@@ -695,7 +726,7 @@ struct QueueView: View {
         // asking proxy.scrollTo for the row (what this did before) fought that binding and was silently
         // dropped, so the click read as dead. Computed over `items` rather than the stage's own rows: a
         // group's id is its date either way, and the stage was just set to the one containing this key.
-        topGroup = QueueModel.scrollGroupID(containing: key, among: items)
+        jumpTarget = QueueModel.scrollGroupID(containing: key, among: items)
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself into
         // the middle. If this runs before the layout settles it simply no-ops, leaving Dan on the right
         // date, which is the old behavior's best case rather than its actual one.
@@ -732,6 +763,13 @@ struct QueueView: View {
                     .foregroundStyle(OVColor.gold)
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 2)
                     .background(Capsule().fill(OVColor.gold.opacity(0.15)))
+                // #1774: the whole-store derivation count. Scrolling the queue must not move it; if it
+                // climbs while scrolling, the scroll is reaching the derivation again and this issue has
+                // regressed. Kept next to the Debug badge because that is where a walk is already looking.
+                Text("derived \(QueueRenderCounter.derivations)")
+                    .font(OVType.tag)
+                    .foregroundStyle(OVColor.inkFaint)
+                    .help("Whole-store derivations this launch (#1774). Scrolling must not increase it.")
                 #endif
             }
             Rectangle().fill(OVColor.gold.opacity(0.5)).frame(height: 1).frame(maxWidth: .infinity)
@@ -1129,6 +1167,65 @@ struct QueueView: View {
                                     markSending: { replySending[$0] = Date() },
                                     clearSending: { replySending[$0] = nil },
                                     onNeedsReconnect: { showReconnect = true })
+    }
+}
+
+#if DEBUG
+// #1774: how many times the queue has derived its whole dataset since the count was last zeroed.
+//
+// This exists because the fix it measures is invisible from the outside. A queue that still re-derives on
+// every scroll frame looks exactly like one that does not: both scroll, both hold their place across a
+// scout, both land a deep link. The only way to tell them apart is to watch this number while scrolling,
+// and see that it does not move.
+//
+// Surfaced beside the Debug badge in the masthead rather than logged, because NSLog output is invisible
+// from the running Debug app, so a logged count is a count nobody reads.
+//
+// DEBUG only. In Release it would be shared mutable state ticking on the main thread for no reader.
+enum QueueRenderCounter {
+    nonisolated(unsafe) private(set) static var derivations = 0
+
+    static func recordDerivation() { derivations += 1 }
+    static func reset() { derivations = 0 }
+}
+#endif
+
+// #1774: the queue's scroll view, and the only owner of its scroll position.
+//
+// `.scrollPosition(id:)` is a read-write binding: SwiftUI writes it every time a date heading crosses the
+// top. Bound to @State on QueueView, each of those writes invalidated a body whose first line derives the
+// entire store, so scrolling past ten dates dragged all 724 prospects through the CPU ten times. @State
+// belongs to the view that declares it and cannot invalidate a parent, so holding the position here means
+// a scroll re-runs `content` and nothing above it.
+//
+// `content` is a closure rather than a built view for that same reason, and it is the load-bearing detail:
+// a view built at the call site would be assembled inside QueueView.body on every scroll frame, which is
+// the cost this exists to remove, just one level further down.
+//
+// #976: the position survives a @Query rebuild, which is why it exists at all. `prospects` is a @Query and
+// this is the window Dan reviews in, rebuilt by every scout and Prep run; a plain ScrollView drops its
+// offset to the top on each one (the #974 shape), so mid review the queue snapped away before he could act
+// on a row. Pinned to the top visible date group, not the individual show, because the groups are the
+// stable landmarks a run reshuffles shows within.
+//
+// #1573: the deliberate jumps (a deep link, an away-alert lead, a picked search result) arrive through
+// `jumpTarget` and DRIVE this position, rather than clearing it and asking proxy.scrollTo for a row id.
+// Clearing and scrolling was the bug: the two mechanisms fought over the same ScrollView and the row jump
+// was silently dropped, so a picked search result did nothing at all.
+struct QueueScrollHolder<Content: View>: View {
+    // The group a deliberate jump wants on screen. @State on QueueView, so setting it always invalidates
+    // and always reaches this view; nil means no jump is pending and the position is Dan's own scrolling.
+    let jumpTarget: String?
+    @ViewBuilder let content: () -> Content
+
+    @State private var topGroup: String?
+
+    var body: some View {
+        ScrollView { content() }
+            .scrollPosition(id: $topGroup, anchor: .top)
+            .onChange(of: jumpTarget) { _, target in
+                if let target { topGroup = target }
+            }
     }
 }
 

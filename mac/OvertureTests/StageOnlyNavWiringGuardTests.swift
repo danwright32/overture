@@ -21,7 +21,7 @@ struct StageOnlyNavWiringGuardTests {
     // The Reached out stage renders its per-recipient list (not the standard natural-key rows).
     @Test func theReachedOutStageRendersReachedOutList() {
         guard let body = SourceGuardHelper.propertyBody(
-            "private func focusedSection(_ keys: [String], data: RenderData) -> some View {",
+            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
             in: queueView) else {
             Issue.record("expected focusedSection's body"); return
         }
@@ -34,7 +34,7 @@ struct StageOnlyNavWiringGuardTests {
     @Test func thePrepButtonIsGatedAndWired() {
         #expect(queueView.contains("var onStartPrep: () -> Void = {}"))
         guard let body = SourceGuardHelper.propertyBody(
-            "private func focusedSection(_ keys: [String], data: RenderData) -> some View {",
+            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
             in: queueView) else {
             Issue.record("expected focusedSection's body"); return
         }
