@@ -109,9 +109,19 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1798: which guard is holding that address, so the row's sentence names what actually happened.
     // Defaulted so existing memberwise-init call sites are unaffected.
     var weakContactHoldReason: Recipient.HoldReason? = nil
-    // #1680: the source pages this row was found on, so the card can tell a link to THIS show from a
-    // fallback link to the source's own calendar. Mirrors Prospect.runSourceURLs.
+    // #1680: the source pages this row was found on. Mirrors Prospect.runSourceURLs.
+    //
+    // #1825: NOT what decides the listing link's label any more, and it never could. `RunGrouping` fills
+    // it by compactMapping the run members' OWN listing URLs, so a row is always inside its own run's
+    // URLs and the comparison matched on all but 10 of the live store's 702 linked rows. It stays because
+    // FeedReconcile genuinely needs "every URL this run's nights came from"; the label needs a different
+    // fact and now reads its own field below. Two readers, two facts, no shared field to disagree about.
     var runSourceURLs: [String] = []
+    // #1825: the calendar addresses of the watched sources this row came from. The fallback link IS the
+    // source's own address, so this is what separates a link to THIS show from a link to the venue's
+    // whole listing page. Empty when the row names no source still on the watchlist (3 rows on the live
+    // store), which reads as the ordinary label rather than a claim nothing verified.
+    var sourceCalendarURLs: [String] = []
     // #1630: what the Review row offers for a show whose only way through is the act's own contact form.
     // Decided in the domain (FormPitch), so the row only renders it.
     var formPitch: FormPitch.State = .unavailable
@@ -797,10 +807,13 @@ enum QueueModel {
     // decides whether to click on the strength of the label. Derived rather than stored: the fallback link IS
     // the source's own address, so the comparison is the fact itself, and it classifies the rows already in
     // the store without a migration.
+    // #1825: compared against the SOURCE's own calendar address, not against the run's member URLs. The
+    // run's URLs are the members' own event pages, so every row matched itself and 639 rows whose link
+    // opens a single show's page were announced as the venue's calendar.
     static func listingLinkLabel(_ item: QueueItem) -> String {
         guard let listing = item.sourceListingURL else { return "Source listing" }
         let normalized = canonicalLink(listing)
-        return item.runSourceURLs.contains(where: { canonicalLink($0) == normalized })
+        return item.sourceCalendarURLs.contains(where: { canonicalLink($0) == normalized })
             ? "Venue calendar"
             : "Source listing"
     }
@@ -1691,6 +1704,7 @@ enum QueueModel {
     static func items(from prospects: [Prospect],
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
                       overrides: ProducerOverrides = .none,
+                      sources: [WatchedSource] = [],
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
@@ -1706,8 +1720,17 @@ enum QueueModel {
         // #1887: built ONCE here for the same reason venueBrands is. It reads the shoot-history file
         // and the Downbeat export, which a card must not do on every render.
         let shootHistory = VenueShootHistory.current()
+        // #1825: built ONCE, for the same reason as the two above. Every row resolves its own sources
+        // through this rather than walking the watchlist per card.
+        let calendarBySourceId = Dictionary(
+            sources.compactMap { s -> (String, String)? in
+                guard let u = s.listingsURL, !u.isEmpty else { return nil }
+                return (s.sourceId, u)
+            },
+            uniquingKeysWith: { first, _ in first })
         return prospects.map {
             var item = QueueItem($0)
+            item.sourceCalendarURLs = $0.sourceIds.compactMap { calendarBySourceId[$0] }
             // #1887: read from the one history built above, never rebuilt per row (it loads a file).
             item.venueHistoryBand = shootHistory.band(for: $0.venue)
             item.venueHistoryShoots = shootHistory.shoots(for: $0.venue)
