@@ -45,15 +45,15 @@ struct QueueDerivationReasonTests {
         defer { try? FileManager.default.removeItem(at: log) }
         QueueRenderCounter.reset()
 
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log, underTests: false)
         #expect(QueueRenderCounter.derivations == 1)
         #expect(QueueRenderCounter.lastReason == QueueRenderCounter.firstRender)
 
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log, underTests: false)
         #expect(QueueRenderCounter.derivations == 2)
         #expect(QueueRenderCounter.lastReason == QueueRenderCounter.nothingVisible)
 
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "725"], to: log)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "725"], to: log, underTests: false)
         #expect(QueueRenderCounter.lastReason == "prospects")
 
         QueueRenderCounter.reset()
@@ -69,8 +69,8 @@ struct QueueDerivationReasonTests {
         defer { try? FileManager.default.removeItem(at: log) }
         QueueRenderCounter.reset()
 
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log)
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "725"], to: log)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log, underTests: false)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "725"], to: log, underTests: false)
 
         let written = try String(contentsOf: log, encoding: .utf8)
         let lines = written.split(separator: "\n")
@@ -79,13 +79,31 @@ struct QueueDerivationReasonTests {
         #expect(lines[1].contains("#2 prospects"))
     }
 
+    // Caught by reading the live log after a suite run: the unit suite hosts itself in the full app, so a
+    // test run opens a real window that renders the real queue, and those renders were landing in the same
+    // file a real observation is read from. Two runs of the app then sit interleaved in one log, each
+    // starting again at #1, which is exactly the confusion the log exists to remove (it took working out
+    // that a "first render" mid-file was a test run and not the queue re-derivating from scratch).
+    @Test func aTestHostRenderNeverReachesTheRealLog() throws {
+        let log = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("derivations-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        QueueRenderCounter.reset()
+
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: log, underTests: true)
+
+        // Still counted: the count is in-memory and harms nothing. Only the file is protected.
+        #expect(QueueRenderCounter.derivations == 1)
+        #expect(!FileManager.default.fileExists(atPath: log.path))
+    }
+
     // A write that cannot land says so where the count is read, rather than leaving an empty log to be
     // mistaken for an idle queue that never re-derived at all.
     @Test func aFailedLogWriteIsReportedNotSwallowed() {
         QueueRenderCounter.reset()
         let unwritable = URL(fileURLWithPath: "/System/Overture-should-never-be-writable/derivations.log")
 
-        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: unwritable)
+        QueueRenderCounter.recordDerivation(inputs: ["prospects": "724"], to: unwritable, underTests: false)
 
         #expect(QueueRenderCounter.lastReason.contains("failed"))
         #expect(QueueRenderCounter.derivations == 1)

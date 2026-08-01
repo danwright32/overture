@@ -1260,10 +1260,18 @@ enum QueueRenderCounter {
 
     // `to` is injected purely so a test can watch a real line land somewhere other than this Mac's own
     // Debug data directory, which the suite would otherwise append to on every run.
-    static func recordDerivation(inputs: [String: String] = [:], to url: URL? = nil) {
+    //
+    // `underTests` is the seam that keeps the suite out of the file entirely. The unit suite hosts itself
+    // in the full app (TEST_HOST), so a test run opens a real window that renders the real queue, and those
+    // renders were landing in the same log a real observation is read from: two runs interleaved in one
+    // file, each starting again at #1. The count itself is in-memory and harmless, so only the file is
+    // protected. Same signal the launch-time background work already skips on (#195).
+    static func recordDerivation(inputs: [String: String] = [:], to url: URL? = nil,
+                                 underTests: Bool = AppEnvironment.isRunningUnderTests) {
         derivations += 1
         lastReason = reason(for: inputs, since: previous)
         previous = inputs
+        guard !underTests else { return }
         append(line: "#\(derivations) \(lastReason)", to: url ?? logURL)
     }
 
