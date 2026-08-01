@@ -162,6 +162,19 @@ struct QueueInvalidationGuardTests {
         #expect(!body.contains("QueueModel.withDeparting("))
     }
 
+    // #1923: nor does a reply-classify run starting or ending. The line that shows it is its own view, so
+    // the observation lands there; read anywhere on this file's body path, `isRunning` would put the whole
+    // 724-prospect derivation behind every run, twice, which is the cost the two issues above removed.
+    // The activity is CONSTRUCTED here (the line has to be given it) and that is all: naming the type in
+    // an argument is not a read, so this asserts against the reads specifically.
+    @Test func theQueueNeverReadsWhetherAReplyRunIsLive() {
+        #expect(queueView.contains("ReplyRunLine(activity: .replyClassify)"))
+        for read in ["DetachedRunActivity.replyClassify.isRunning", "activity.isRunning",
+                     ".followUntilFinished(", ".runStarts("] {
+            #expect(!queueView.contains(read), "QueueView must hand the activity down, never read \(read)")
+        }
+    }
+
     // The jumps (#236 deep link, #308 away alert, #1573) drive the scroll through one parameter that IS
     // @State on QueueView, so an intentional jump always invalidates and always reaches the holder. Pinned
     // because the alternative, relying on each jump happening to write some OTHER piece of state, is an

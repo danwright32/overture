@@ -91,7 +91,14 @@ enum ReplyClassifyService {
                               queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
                               markerURL: URL = defaultMarkerURL,
                               cancelURL: URL = defaultCancelURL,
-                              launch: @MainActor () throws -> Void = launchRunner) throws -> Int {
+                              launch: @MainActor () throws -> Void = launchRunner,
+                              // #1923: a started run tells the app it started, so nothing has to poll the
+                              // marker to find out. Here rather than at the two call sites (the at-launch
+                              // auto run, and a "Draft a reply" click) because a call site that forgot
+                              // would leave its run unwatched: no line in the queue, and no ingest when
+                              // it finished. Fires only once the launch has actually succeeded.
+                              announce: @MainActor () -> Void = { DetachedRunActivity.replyClassify.runStarted() })
+    throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw ClassifyLaunchError.alreadyRunning }
 
         let stamp = ISO8601DateFormatter().string(from: now)
@@ -120,6 +127,7 @@ enum ReplyClassifyService {
             try data.write(to: queueURL, options: .atomic)
             try launch()   // the script heartbeats/clears the marker from here
             UserDefaults.standard.set(now, forKey: lastRunKey)   // for the completion watcher (#435)
+            announce()     // #1923: the run is real and launched; tell the app rather than making it look
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             throw error
