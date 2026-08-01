@@ -9,7 +9,10 @@ struct ShowSearchFieldGuardTests {
     @Test func wiresToShowSearchMatches() {
         let src = SourceGuardHelper.source("Overture/UI/ShowSearchField.swift")
         #expect(!src.isEmpty)
-        #expect(src.contains("ShowSearch.matches("))
+        // #1926: the matcher is reached through ShowSearch.results/matchCount, which is where the
+        // filtering, the ordering and the cap now live (and where a test can read them).
+        #expect(src.contains("ShowSearch.results("))
+        #expect(src.contains("ShowSearch.matchCount("))
     }
 }
 
@@ -28,9 +31,12 @@ struct ShowSearchFieldPopoverGuardTests {
                 "the results list must render via .popover, not an inline VStack row, or it will not appear at all when this field is hosted in a native toolbar.")
     }
 
+    // #1926: "there is something typed" is ShowSearch.isSearching now, one definition shared with the two
+    // search helpers, so the dropdown cannot open on a query the matcher would treat as blank.
     @Test func popoverPresentationIsDrivenByFocusAndAQuery() {
-        #expect(src.contains("showDropdown = focused && !trimmedQuery.isEmpty"))
-        #expect(src.contains("showDropdown = isFocused && !trimmedQuery.isEmpty"))
+        #expect(src.contains("showDropdown = focused && isSearching"))
+        #expect(src.contains("showDropdown = isFocused && isSearching"))
+        #expect(src.contains("ShowSearch.isSearching(query)"))
     }
 }
 
@@ -55,7 +61,8 @@ struct ShowSearchFieldNoResultsGuardTests {
     // zero-result search can never silently show nothing at all. #1580 widened the helper to
     // ShowSearch.emptyState, which decides between the plain note and the one carrying the Archive jump.
     @Test func popoverContentShowsANoMatchesMessageWhenEmpty() {
-        #expect(src.contains("matches.isEmpty"))
+        // #1926: the popover reads its results once into a local, so the empty branch is keyed on that.
+        #expect(src.contains("if results.isEmpty"))
         #expect(src.contains("ShowSearch.emptyState("))
     }
 }
@@ -76,7 +83,7 @@ struct ShowSearchFieldKeyboardGuardTests {
     }
 
     @Test func arrowsAreIgnoredWhenThereIsNoResultListToMoveThrough() {
-        #expect(src.contains("guard showDropdown, !matches.isEmpty else { return .ignored }"),
+        #expect(src.contains("guard showDropdown, !results.isEmpty else { return .ignored }"),
                 "swallowing the arrow keys with no results on screen would break the text field's own caret movement.")
     }
 }

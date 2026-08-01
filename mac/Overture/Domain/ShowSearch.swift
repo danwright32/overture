@@ -22,6 +22,51 @@ enum ShowSearch {
     }
 }
 
+// #1926: searching, with the list of shows arriving as something to build rather than something built.
+//
+// The queue's bar searches the shows a stage will render, and working that out is a
+// StageNavigation.stagedKeys sweep of every prospect plus a map over all of them. As a plain argument at
+// the call site it ran on every render pass, including every pass where the box was empty and nobody was
+// searching, because an argument evaluates before the function it is handed to can decide it is not
+// needed (#1916, one level up). Taken as an @autoclosure, the blank-query guard below returns first and
+// the sweep never happens.
+//
+// The matching, the ordering and the cap live here rather than in the field's body for the ordinary
+// reason: a rule stated in a SwiftUI body is one no test can reach.
+extension ShowSearch {
+    // How many results the dropdown will show. It is a UI cap, so it is stated once, here, next to the
+    // sort that decides WHICH ones survive it.
+    static let resultLimit = 8
+
+    static func results(in items: @autoclosure () -> [QueueItem], query: String,
+                        limit: Int = resultLimit) -> [QueueItem] {
+        guard isSearching(query) else { return [] }
+        return Array(
+            items()
+                .filter { matches($0, query: query) }
+                // Soonest last: the nearest dates are the ones Dan can still act on. An undated show
+                // sorts to the end rather than out of the list, since losing it entirely is the worse
+                // failure and the two orderings are otherwise arbitrary.
+                .sorted { ($0.performanceDate ?? "") > ($1.performanceDate ?? "") }
+                .prefix(limit)
+        )
+    }
+
+    // #1580's "the show is in Archive" count. Counted, never listed, and never built on a blank query for
+    // the same reason as above: with nothing typed there is nothing for it to say.
+    static func matchCount(in items: @autoclosure () -> [QueueItem], query: String) -> Int {
+        guard isSearching(query) else { return 0 }
+        return items().filter { matches($0, query: query) }.count
+    }
+
+    // One definition of "Dan is searching", shared by both of the above and by the field that decides
+    // whether to open its dropdown, so a blank-but-for-spaces query cannot count as a search in one place
+    // and not in another.
+    static func isSearching(_ query: String) -> Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 // #885: the empty-result line, out of ShowSearchField's body. It quotes back what Dan typed, which is
 // what makes it useful (a typo is visible in it), and that quoting was being done in a view.
 extension ShowSearch {

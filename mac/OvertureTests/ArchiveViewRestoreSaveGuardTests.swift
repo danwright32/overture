@@ -44,7 +44,8 @@ struct ArchiveViewSearchRevealGuardTests {
 
     @Test func internalSearchFieldSelectionUsesTheSharedRevealHelper() {
         #expect(!archiveView.isEmpty)
-        guard let searchFieldRange = archiveView.range(of: "ShowSearchField(query: $query, allItems: items)") else {
+        // #1926: the scope is a closure now (`{ items }`), so the call site reads slightly differently.
+        guard let searchFieldRange = archiveView.range(of: "ShowSearchField(query: $query, allItems: { items })") else {
             Issue.record("ShowSearchField call not found")
             return
         }

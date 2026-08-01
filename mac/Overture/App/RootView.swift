@@ -107,7 +107,9 @@ struct RootView: View {
     // #1580: the query Archive opens already searching, carried over from a queue search that found
     // nothing so Dan does not retype it. Empty every other way Archive opens.
     @State private var archiveOpeningQuery: String = ""
-    @State private var searchQuery: String = ""
+    // #1926: what Dan has typed into the search bar is NOT state here. It lives on QueueSearchBar, because
+    // @State invalidates the view that declares it and this view builds the Queue: as state here, every
+    // keystroke re-derived all 724 prospects. See QueueSearchBar.
     @State private var showPatterns = false
     @State private var showFollowUps = false
     // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, handed to
@@ -246,11 +248,12 @@ struct RootView: View {
         // Archive's own body works correctly. This still reads as "persistent" per the design
         // (always visible above the Queue, not tucked into a menu), just not toolbar-hosted.
         VStack(spacing: 0) {
-            ShowSearchField(query: $searchQuery, allItems: searchableItems,
-                            placeholder: "Search the queue",
-                            onSelect: { result in routeDeepLink(toKey: result.id) },
-                            archiveItems: allItems,
-                            onSearchArchive: { query in openArchive(query: query) })
+            // #1926: the bar owns the query, and both scopes are handed over as work to do rather than
+            // work already done. Neither closure runs unless Dan is actually searching.
+            QueueSearchBar(items: { searchableItems },
+                           archiveItems: { allItems },
+                           onSelect: { result in routeDeepLink(toKey: result.id) },
+                           onSearchArchive: { query in openArchive(query: query) })
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)
             Divider()
             queueContent

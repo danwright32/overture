@@ -13,16 +13,20 @@ import SwiftUI
 // it is not bound by the parent toolbar's height either way.
 struct ShowSearchField: View {
     @Binding var query: String
-    let allItems: [QueueItem]
+    // #1926: what to search, as something to BUILD rather than something built. The queue's scope is a
+    // sweep of every prospect, and as a plain array argument it was worked out on every render pass of
+    // the view hosting this field, empty box included. Nothing below calls it unless Dan has typed
+    // something, so an idle bar costs nothing at all.
+    let allItems: () -> [QueueItem]
     var placeholder: String = "Search shows, venues, contacts"
     // Declared ahead of the #1580 pair below so a call site's trailing closure still binds HERE. Swift's
     // forward scan matches a trailing closure to the first closure-typed parameter it reaches, so moving
     // this down silently handed Archive's `{ result in reveal(result.id) }` to onSearchArchive instead.
     var onSelect: (QueueItem) -> Void = { _ in }
     // #1580: the shows OUTSIDE this field's scope, counted (never listed) so an empty result can tell
-    // Dan whether the show is missing or merely somewhere else, and hand him the jump. Both are empty on
+    // Dan whether the show is missing or merely somewhere else, and hand him the jump. Both are absent on
     // Archive's own field, which already searches everything and has nowhere to send him.
-    var archiveItems: [QueueItem] = []
+    var archiveItems: () -> [QueueItem] = { [] }
     var onSearchArchive: ((String) -> Void)?
     @FocusState private var isFocused: Bool
     @State private var showDropdown = false
@@ -31,16 +35,11 @@ struct ShowSearchField: View {
     @State private var selection = ShowSearchSelection()
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isSearching: Bool { ShowSearch.isSearching(query) }
 
-    private var matches: [QueueItem] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return Array(
-            allItems
-                .filter { ShowSearch.matches($0, query: query) }
-                .sorted { ($0.performanceDate ?? "") > ($1.performanceDate ?? "") }
-                .prefix(8)
-        )
-    }
+    // The matching, the ordering and the cap are ShowSearch's (#1926), so they are testable and so the
+    // scope is built only when there is something to search for.
+    private var matches: [QueueItem] { ShowSearch.results(in: allItems(), query: query) }
 
     var body: some View {
         // #1432: the control itself is OVSearchField, shared with the Sources sheet's own field. Only the
@@ -49,14 +48,18 @@ struct ShowSearchField: View {
         .frame(maxWidth: 280)
         // #1574. The arrows are ignored (so the text field keeps its own caret movement) unless there
         // is actually a list of results on screen to move through.
+        // Each handler reads the results ONCE into a local. `matches` builds the searchable scope on every
+        // read now (#1926), so a property read twice in one line is a sweep of the store paid twice.
         .onKeyPress(.downArrow) {
-            guard showDropdown, !matches.isEmpty else { return .ignored }
-            selection.moveDown(resultCount: matches.count)
+            let results = matches
+            guard showDropdown, !results.isEmpty else { return .ignored }
+            selection.moveDown(resultCount: results.count)
             return .handled
         }
         .onKeyPress(.upArrow) {
-            guard showDropdown, !matches.isEmpty else { return .ignored }
-            selection.moveUp(resultCount: matches.count)
+            let results = matches
+            guard showDropdown, !results.isEmpty else { return .ignored }
+            selection.moveUp(resultCount: results.count)
             return .handled
         }
         .onKeyPress(.escape) {
@@ -69,16 +72,20 @@ struct ShowSearchField: View {
         // highlighted, commitIndex is nil and this does nothing at all, which is the point: a query
         // typed and submitted by reflex must never open a show Dan has not looked at.
         .onSubmit {
-            guard let position = selection.commitIndex(resultCount: matches.count) else { return }
-            pick(matches[position])
+            let results = matches
+            guard let position = selection.commitIndex(resultCount: results.count) else { return }
+            pick(results[position])
         }
         .popover(isPresented: $showDropdown, arrowEdge: .bottom) {
+            // Once for the whole popover, for the same reason as the key handlers above: read per row, the
+            // divider check alone would have rebuilt the scope eight times to draw eight rows.
+            let results = matches
             Group {
-                if matches.isEmpty {
+                if results.isEmpty {
                     emptyState
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(matches.enumerated()), id: \.element.id) { position, result in
+                        ForEach(Array(results.enumerated()), id: \.element.id) { position, result in
                             Button {
                                 pick(result)
                             } label: {
@@ -94,7 +101,7 @@ struct ShowSearchField: View {
                             // The row Return would open, marked so the keyboard is never moving something
                             // invisible.
                             .background(selection.index == position ? OVColor.forest.opacity(0.14) : Color.clear)
-                            if result.id != matches.last?.id { Divider() }
+                            if result.id != results.last?.id { Divider() }
                         }
                     }
                     .padding(.vertical, OVSpacing.xs)
@@ -103,13 +110,13 @@ struct ShowSearchField: View {
             .frame(minWidth: 280, maxWidth: 320)
         }
         .onChange(of: isFocused) { _, focused in
-            showDropdown = focused && !trimmedQuery.isEmpty
+            showDropdown = focused && isSearching
             if !focused { selection.clear() }
         }
         // A new query means a new list, so the old highlight points at a row that is no longer there.
         .onChange(of: query) { _, _ in
             selection.clear()
-            showDropdown = isFocused && !trimmedQuery.isEmpty
+            showDropdown = isFocused && isSearching
         }
     }
 
@@ -140,8 +147,8 @@ struct ShowSearchField: View {
     // second Archive. Skipped entirely when there is nowhere to send him, so Archive's own field does
     // no matching work it will never use.
     private var archiveMatchCount: Int {
-        guard onSearchArchive != nil, !trimmedQuery.isEmpty else { return 0 }
-        return archiveItems.filter { ShowSearch.matches($0, query: trimmedQuery) }.count
+        guard onSearchArchive != nil else { return 0 }
+        return ShowSearch.matchCount(in: archiveItems(), query: trimmedQuery)
     }
 
     private func pick(_ result: QueueItem) {
