@@ -106,8 +106,60 @@ struct QueueInvalidationGuardTests {
             Issue.record("expected to find focusedSection's body")
             return
         }
-        #expect(section.contains("ForEach(data.dateGroups)"))
+        // #1922: the groups are handed to QueueDateGroups, which splices the just-sent cards back in. The
+        // property that matters is unchanged: the grouping itself is not redone here.
+        #expect(section.contains("QueueDateGroups(groups: data.dateGroups"))
         #expect(!section.contains("QueueModel.groupByDate("))
+    }
+
+    // #1922: nor does a send. The four values a send moves through (the outbound timestamp, the reply
+    // timestamp, the departing snapshot, the highlighted key) are on SendProgressState, and QueueView
+    // reads none of them. File-scoped for the same reason as the ticked date above: a single read
+    // anywhere on the body path puts all 724 rows back on every "Sending…".
+    @Test func theQueueNeverReadsWhatASendIsDoing() {
+        #expect(!queueView.contains("@State private var outboundSending"))
+        #expect(!queueView.contains("@State private var replySending"))
+        #expect(!queueView.contains("@State private var departing"))
+        #expect(!queueView.contains("@State private var highlightedKey"))
+        for read in ["sendState.departing", "sendState.highlighted", "sendState.sendingSince(",
+                     "sendState.replySendingSince(", "sendState.isDeparting("] {
+            #expect(!queueView.contains(read), "QueueView must hand \(read) down, never read it")
+        }
+    }
+
+    // And the two views that DO read it hand finished values into a closure they run themselves, rather
+    // than taking a built view. A view built at the call site is assembled inside QueueView's body, which
+    // is the cost this removes arriving one level down (#1774's lesson, again).
+    @Test func theSendAwareViewsOwnTheReadAndTakeAClosure() {
+        let views = SourceGuardHelper.source("Overture/UI/QueueSendAwareViews.swift")
+        #expect(!views.isEmpty)
+        guard let groups = SourceGuardHelper.propertyBody(
+                "struct QueueDateGroups<Header: View, Content: View>: View {", in: views),
+              let row = SourceGuardHelper.propertyBody("struct QueueSendAwareRow<Content: View>: View {",
+                                                       in: views) else {
+            Issue.record("expected to find both send-aware views")
+            return
+        }
+        #expect(groups.contains("let departing = sendState.departing"))
+        #expect(groups.contains("QueueModel.groups(groups, withDeparting: departing)"))
+        #expect(groups.contains("@ViewBuilder let content:"))
+        // The stack lives HERE, so the ForEach stays a lazy stack's direct child. Nested one view deeper
+        // it would be a single child, and every card in the queue would be realized at once.
+        #expect(groups.contains("LazyVStack(alignment: .leading, spacing: OVSpacing.xl)"))
+        #expect(groups.contains(".scrollTargetLayout()"))
+        #expect(row.contains("sendState.sendingSince(key)"))
+        #expect(row.contains("@ViewBuilder let content:"))
+    }
+
+    // The derivation no longer folds the just-sent rows in. That fold is what made a send re-derive the
+    // whole store twice, once to start the leaving delight and once to end it.
+    @Test func theDerivationNoLongerFoldsInTheJustSentRows() {
+        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
+                                                        in: queueView) else {
+            Issue.record("expected to find makeRenderData's body")
+            return
+        }
+        #expect(!body.contains("QueueModel.withDeparting("))
     }
 
     // The jumps (#236 deep link, #308 away alert, #1573) drive the scroll through one parameter that IS
