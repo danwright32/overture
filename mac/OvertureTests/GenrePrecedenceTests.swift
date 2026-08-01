@@ -115,6 +115,25 @@ struct GenrePrecedenceTests {
         #expect(try storedGenre(ctx) == "other")
     }
 
+    // #1845 measured the consequence of leaving any axis out of the block: a row could keep one source's
+    // genre while taking another's profile, and the score, which is recomputed from the ROW, then came
+    // from a blend of two readings that neither source ever made. Profile and coverage are scoring axes,
+    // so a mixture is not cosmetic: on the live store the difference between these two readings of one
+    // show is 8 points, the full width of the queue.
+    @Test func theKeptClassificationKeepsItsOwnProfileAndCoverage() throws {
+        let ctx = try context()
+        source(ctx, "frigid")
+        source(ctx, "manual-lead")
+
+        ingest([("frigid", [event(namingPresenter: "Brooklyn Youth Chorus")]),
+                ("manual-lead", [event(namingPresenter: nil)])], into: ctx)
+
+        let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
+        #expect(row.discipline == "music")
+        #expect(row.profile == Profile.strong.rawValue,
+                "the kept genre came with a strong profile; taking the other source's neutral one scores a show neither source described")
+    }
+
     // The whole classification moves together or the row describes two different shows: `fitReason` is
     // built from the discipline, production, profile and coverage of ONE classify call, so keeping the
     // genre while taking a second source's reason would print a sentence about a genre the row does not

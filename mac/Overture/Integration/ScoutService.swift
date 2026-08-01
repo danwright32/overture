@@ -1321,6 +1321,8 @@ enum ScoutService {
         else { return }
         existing.discipline = p.discipline
         existing.production = p.production
+        existing.profile = p.profile
+        existing.coverage = p.coverage
         existing.fitReason = p.fitReason
         existing.disciplineGenreSourceKey = incomingKey
     }
@@ -1342,12 +1344,12 @@ enum ScoutService {
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL
         existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
-        existing.profile = p.profile
-        existing.coverage = p.coverage
-        // #1663: `fitReason` moved OUT of this unconditional block and into the arms below, because it is
-        // a sentence ABOUT the genre. Left here, a row that kept one source's genre would print the other
-        // source's reason for it ("Self-produced other group", the string #1664 is open on), describing a
-        // show the row does not hold.
+        // #1663/#1845: the classification block (discipline, production, profile, coverage, fitReason) all
+        // moved OUT of this unconditional refresh and into the arms below. Every one of them comes out of
+        // ONE EventClassifier.classify call, so refreshing some here while the arms decide the others let a
+        // row keep one source's genre and take another's profile. The score is recomputed from the ROW, so
+        // that mixture scored a show neither source ever described. Measured on the live store 2026-08-01:
+        // the two readings of one Jalopy show sit 8 points apart, the full width of the queue.
         existing.possibleMatchSource = p.possibleMatchSource
         existing.possibleMatchName = p.possibleMatchName
         // #384: scout-owned, refreshed every run like the other scoring inputs. Read by Step B below
@@ -1399,7 +1401,13 @@ enum ScoutService {
             // no combined-rule branch needed. That is what makes the two guards compose.
             // Nothing to write here: the shared re-score below reads the discipline and production
             // already on the row, which is exactly what "keep Dan's values" means.
-            // #1663: the reason still refreshes, unchanged from when it was written unconditionally above.
+            // #1663/#1845: Dan's arm keeps taking the fresh profile, coverage and reason, exactly as it did
+            // when these were refreshed unconditionally above. His correction is to the DISCIPLINE, and the
+            // comment above is explicit that the re-score is meant to read his values plus the freshly
+            // updated profile and coverage. Written here rather than left above so that intent is visible
+            // instead of being an accident of where the line happened to sit.
+            existing.profile = p.profile
+            existing.coverage = p.coverage
             existing.fitReason = p.fitReason
         } else if existing.hasActivePerformerMatch && !p.orgMatchConfident {
             // The org match found nothing, so Step A left Prep's performer correction standing. Take the
