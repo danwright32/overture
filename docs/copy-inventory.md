@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **965 sentences**, from 327 source files.
+Every sentence Overture can say to Dan: **969 sentences**, from 327 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -275,6 +275,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "1 of \(requested) shows never got an answer and is still unchecked"
     `Domain/ReachabilityRunSummary.swift`
+"1 of them went through an earlier check and never got an answer."
+    `Domain/ProbeSelection.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
@@ -287,6 +289,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
+"A check missed this show"
+    `Domain/Reachability.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -375,6 +379,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Always skipped"
     `UI/ExcludedTownsView.swift`
+"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
+    `Domain/Reachability.swift`
 "An organization that asked"
     `Domain/SuppressionReport.swift`
 "Another copy of Overture is already using its data."
@@ -1989,6 +1995,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
 "\(s.organisationCount) named producers answer for several shows each; "
+    `Domain/ProbeSelection.swift`
+"\(s.previouslyMissedCount) of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
 "\(sends) of \(experimentCallThreshold) sends toward a reliable read"
     `Domain/ExperimentReport.swift`

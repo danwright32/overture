@@ -45,6 +45,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // of claiming the search found nothing. Only ever qualifies the noEmailFound badge's wording; it
     // changes no verdict, no score and no tone.
     var reachabilityEmptyReason: Reachability.EmptyReason? = nil
+    // #1724: when a check ran over this show and came home with no answer for it (nil = never, or a later
+    // check answered it). The row's only way to tell a show a check MISSED from one no check has been near.
+    var reachabilityUnansweredAt: Date? = nil
     // #1598 Phase 5: an answer paid for on a DIFFERENT show by the same organisation. Folded in once per
     // render by QueueModel.items(from:ledger:) (the EngagementLink.group precedent), never looked up per
     // row, because deciding it needs the whole store and a card must not carry that cost. nil is the
@@ -243,6 +246,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return Reachability.badge(result: reachabilityResult,
                                   probeIsStale: Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now),
                                   inherited: inheritedReachability?.result,
+                                  // #1724: through the SAME freshness helper a result goes stale by, at the
+                                  // same instant, so the row cannot judge a miss current while judging an
+                                  // answer of the same age expired.
+                                  missedByACheck: reachabilityUnansweredAt != nil
+                                      && !Reachability.probeIsStale(probedAt: reachabilityUnansweredAt, now: now),
                                   presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
     }
 
@@ -1226,10 +1234,19 @@ enum QueueModel {
         let asShow: (QueueItem) -> ProbeBatch.Show = {
             ProbeBatch.Show(key: $0.id, presenter: $0.presenter, venue: $0.venue)
         }
+        // #1724: of the shows this run WILL look up, how many an earlier check already ran over and came
+        // home without an answer for. Counted over the candidates rather than the whole selection, because
+        // the sentence is about what is being paid for a second time, and read through the same freshness
+        // window the row's own mark is, so the sheet and the card cannot disagree about which shows count.
+        let previouslyMissed = selected.filter { i in
+            candidateKeys.contains(i.id) && i.reachabilityUnansweredAt != nil
+                && !Reachability.probeIsStale(probedAt: i.reachabilityUnansweredAt, now: now)
+        }.count
         let summary = ProbeSelection.summarize(
             dateCount: groups.count,
             candidates: selected.filter { candidateKeys.contains($0.id) }.map(asShow),
             alreadyAnswered: answered,
+            previouslyMissed: previouslyMissed,
             // The producer gate is judged against the WHOLE queue, never just the ticked dates: judged
             // against one night, every producer looks like a single-venue house and nothing amortises.
             among: all.map(asShow),
@@ -1774,6 +1791,7 @@ extension QueueItem {
             reachabilityProbedAt: p.reachabilityProbedAt,
             reachabilityResult: p.reachabilityResult,
             reachabilityEmptyReason: p.reachabilityEmptyReason,
+            reachabilityUnansweredAt: p.reachabilityUnansweredAt,
             location: p.location,
             priorRelationship: p.priorRelationship,
             production: p.production,
