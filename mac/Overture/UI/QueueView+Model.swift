@@ -123,6 +123,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // show can be genuinely Sent AND still have somebody waiting; the bug was that the row said only the
     // first, so the person waiting vanished with the show.
     var blockedContactCount: Int = 0
+    // #1797: whether this show has reached the half of the funnel a send belongs to. Snapshotted from the
+    // prospect through the SAME rule the stage asks (SendHalf), because the two decide one thing between
+    // them: who tells Dan about a contact a guard is holding.
+    var hasEnteredSendHalf: Bool = false
     var sendError: String? = nil
     var lostReason: String? = nil
     var classificationOverriddenByDan: Bool = false
@@ -233,6 +237,20 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // A booking Dan has confirmed (manual source) is settled and leaves the reach-out queue (#201);
     // an auto-detected one (isAutoBooked) stays until he confirms it, so a wrong match can be caught.
     var isConfirmedBooking: Bool { outcome == .booked && outcomeSourceRaw == OutcomeSource.manual.rawValue }
+
+    // #1797/#1800: the contact a review guard is holding, when THIS card is the surface that has to say
+    // so. Nil once the show is in the send half, because Send issues speaks for it there and the draft
+    // review already carries "N contacts held for a check": said in both places it would be the same
+    // sentence twice, which is the #843 defect. Nil when nothing is held, obviously.
+    //
+    // The two are exact complements over one rule (SendHalf), which is the property that matters: a held
+    // contact is always spoken for by exactly one surface, never by both and never by neither. A contact
+    // waiting on Dan with nothing anywhere saying so is #792, the defect this whole area exists to
+    // prevent.
+    var heldContactAtTriage: Recipient.HoldReason? {
+        guard blockedContactCount > 0, !hasEnteredSendHalf else { return nil }
+        return weakContactHoldReason
+    }
 
     // #1145/#1308: the reachability badge shown on a Review row. Before a probe it is the free Layer 1
     // heuristic (only the hard case surfaces); after a probe it is the firm email-found/not-found answer.
@@ -1845,6 +1863,7 @@ extension QueueItem {
             // send to" apart from "an email exists but is held for a review".
             hasAnyEmailContact: p.recipients.contains { $0.email?.isEmpty == false },
             blockedContactCount: p.blockedContactCount,
+            hasEnteredSendHalf: p.hasEnteredSendHalf,   // #1797
             sendError: p.sendError,
             lostReason: p.lostReason,
             classificationOverriddenByDan: p.classificationOverriddenByDan,

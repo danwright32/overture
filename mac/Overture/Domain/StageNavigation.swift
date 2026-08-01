@@ -209,7 +209,15 @@ enum StageNavigation {
             // #792: a show whose only remaining contact is held by a review guard has usually ALREADY
             // been sent to somebody else, so it is `.contacted` and appears in no other send state.
             // That is precisely how the held contact became invisible.
-            return p.blockedContactCount > 0
+            //
+            // #1797: "usually" was the whole gate, and it went stale. The triage reachability check
+            // (#1585) writes its contacts through PrepImporter, which runs the same three guards, so an
+            // untriaged show collects guard flags without going anywhere near a send, and Send issues
+            // then reported a send problem on a show nothing had ever been sent to. The assumption the
+            // comment above states is now asked out loud. A held contact on a show that is NOT in the
+            // send half is not lost: its triage card says so instead (ProspectRowView), through this
+            // same predicate, so exactly one surface speaks for it.
+            return p.blockedContactCount > 0 && p.hasEnteredSendHalf
 
         case .sendErrors:
             return p.sendError != nil

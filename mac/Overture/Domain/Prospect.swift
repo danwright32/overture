@@ -519,6 +519,14 @@ final class Prospect {
         recipients.filter(\.isBlockedAwaitingReview).count
     }
 
+    // #1797: whether this show has reached the half of the funnel a send belongs to, which is what decides
+    // who speaks for a held contact (Send issues, or the triage card). One rule, in SendHalf, so the stage
+    // and the card cannot disagree and leave a held contact spoken for by nobody.
+    var hasEnteredSendHalf: Bool {
+        SendHalf.entered(status: status, sentAt: sentAt,
+                         hasSentRecipient: recipients.contains { $0.sendState == .sent })
+    }
+
     // #864: the typed reason, so callers stop hand-rolling `DismissReason(rawValue: dismissReasonRaw ?? "")`.
     var dismissReason: DismissReason? {
         get { dismissReasonRaw.flatMap(DismissReason.init(rawValue:)) }
