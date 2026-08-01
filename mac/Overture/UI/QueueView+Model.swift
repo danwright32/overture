@@ -1194,7 +1194,13 @@ enum QueueModel {
     //
     // Returns nil when nothing is selected. `candidateKeys` is what the run is asked to check, which is
     // every still-open, not-recently-answered show on those dates: the whole selection, no exceptions.
-    static func probeSelection(dates: Set<String>, in rows: [QueueItem], among all: [QueueItem],
+    // #1916: `rows` is an @autoclosure because the two guards below refuse almost every call, and an
+    // argument is evaluated BEFORE the call, so the guard could not protect against the cost of building
+    // it. The real call site passes `scoutRows(data)`, a sweep of every show in the store, and paid for
+    // it on every render pass and every stage to reach a function that returns nil on its first line.
+    // Taking the rows as something this function can decline to evaluate keeps the rule in one place
+    // (here, where it is tested) instead of copying the two conditions up to the caller.
+    static func probeSelection(dates: Set<String>, in rows: @autoclosure () -> [QueueItem], among all: [QueueItem],
                                today: String, stage: StageFocus?, now: Date = Date(),
                                overrides: ProducerOverrides = .none,
                                // #1609: Dan's geography refusals, so a multi-date confirm can never
@@ -1206,7 +1212,7 @@ enum QueueModel {
         // not discarding, and losing his ticks for glancing at another stage would be the worse bug.
         guard stage == .scout else { return nil }
         guard !dates.isEmpty else { return nil }
-        let groups = groupByDate(rows).filter { dates.contains($0.id) }
+        let groups = groupByDate(rows()).filter { dates.contains($0.id) }
         guard !groups.isEmpty else { return nil }
         let selected = groups.flatMap(\.items)
         let candidateKeys = Set(groups.flatMap { reachabilityProbeCandidateKeys($0.items, now: now, today: today, geo: geo) })
