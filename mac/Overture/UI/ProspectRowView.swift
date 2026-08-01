@@ -306,14 +306,10 @@ struct ProspectRowView: View {
                     .font(OVType.body)
                     .foregroundStyle(OVColor.inkSoft)
             }
-            // #1788: and where that name was DISCARDED (the listing gave the room's own name), say so in
-            // the same slot rather than leaving a silent blank. Quiet ink, not gold: nothing is wrong,
-            // Overture simply could not tell, and gold is reserved for what Dan can act on right now.
-            if let unidentified = item.unidentifiedPresenterNote {
-                Text(unidentified)
-                    .font(OVType.body)
-                    .foregroundStyle(OVColor.inkSoft)
-            }
+            // #1823: nothing is said here about a show whose listing named no organiser. #1788 put a line
+            // in this slot to send Dan looking for a company the listing had not named; #1861 removed that
+            // errand by pursuing every performer such a bill names, so the line changed nothing he or the
+            // system did, while sitting directly under the line naming the act (#843's exact shape).
             // #1731: and where Overture's own verdict is what withheld the name, say that here too, in the
             // slot the name would have used. Dan asks "why is no presenter named?" while looking at this
             // card, so answering it on a separate sheet meant the answer never met the question.
