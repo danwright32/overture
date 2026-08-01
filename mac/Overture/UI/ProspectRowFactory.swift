@@ -8,6 +8,7 @@ import SwiftData
 // nothing screen specific and is wired directly to ProspectMutations.
 @MainActor
 enum ProspectRowFactory {
+    @ViewBuilder
     static func row(_ item: QueueItem, today: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                     dayOffOffer: DayOffOfferRequest,
                     // #1770: HANDED IN, never sourced here. This used to read GmailAuthManager.shared
@@ -30,8 +31,7 @@ enum ProspectRowFactory {
                     onApprove: (() -> Void)? = nil,
                     onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
-                    allowedSeedTowns: Set<String> = []) -> AnyView {
-        let model = prospects.first(where: { $0.naturalKey == item.id })
+                    allowedSeedTowns: Set<String> = []) -> some View {
         let row = ProspectRowView(
             item: item,
             today: today,
@@ -128,14 +128,26 @@ enum ProspectRowFactory {
             .id(item.id)
         // #244: a sent draft Dan hand edited is a voice learning candidate. Let him opt a poor
         // example out (or back in) from a right click, so the loop never learns from a rushed send.
-        if let model, model.sentAt != nil, model.originalDraftBody != nil {
-            return AnyView(framed.contextMenu {
-                Button(model.excludedFromVoiceLearning ? "Learn from this email again"
-                                                       : "Don't learn from this email") {
+        //
+        // #1773: the same two branches as before, but expressed through @ViewBuilder rather than by
+        // wrapping each side in a type-erasing box. Erasure hides a card's real type from SwiftUI, and
+        // type is what SwiftUI uses to decide whether a subtree can be updated in place or has to be
+        // thrown away and rebuilt; inside a lazy list of tall cards that turned every render pass into
+        // a teardown and rebuild of every visible card.
+        //
+        // Deliberately NOT one always-attached menu with conditional CONTENTS, which would be tidier
+        // still: whether macOS draws an empty right-click menu for a card with no items is not
+        // something any test here can answer, and getting it wrong would put a blank menu on every
+        // untriaged card. This shape keeps the behaviour provably identical to what shipped before.
+        if item.voiceLearningCandidate {
+            framed.contextMenu {
+                Button(item.excludedFromVoiceLearning ? "Learn from this email again"
+                                                      : "Don't learn from this email") {
                     ProspectMutations.toggleVoiceLearning(item, prospects: prospects, context: context, feedback: feedback)
                 }
-            })
+            }
+        } else {
+            framed
         }
-        return AnyView(framed)
     }
 }

@@ -89,6 +89,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Phase F (#424): the show's status derived from its contacts, snapshotted at build time.
     var performanceStatus: PerformanceStatus = .new
     var sentAt: Date? = nil
+    // #244/#1773: this show was sent with an AI draft recorded behind it, so Dan's edits to it are
+    // something the voice loop can learn from, and whether he has opted this one out. Resolved here
+    // rather than looked up per card: the row factory used to answer this by scanning the whole
+    // prospect array for the card it was building, once per card, on every render pass.
+    var voiceLearningCandidate: Bool = false
+    var excludedFromVoiceLearning: Bool = false
     // At least one recipient is still pending with an address, so this performance can still send (#394).
     // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
     // the button must persist until the LAST recipient goes, so it gates on this, not on `isSent`.
@@ -1783,6 +1789,11 @@ extension QueueItem {
             outcome: p.outcome,
             performanceStatus: p.performanceStatus,
             sentAt: p.sentAt,
+            // #244/#1773: a sent show with the AI's original wording still recorded is something the
+            // voice loop can learn from. Resolved once here, so the card is handed the answer instead
+            // of searching the whole store for its own model to work it out.
+            voiceLearningCandidate: p.sentAt != nil && p.originalDraftBody != nil,
+            excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
             // when that is all a check found. #1798: the same shared definition the stored verdict uses,
