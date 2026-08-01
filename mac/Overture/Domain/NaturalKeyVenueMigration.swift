@@ -44,12 +44,14 @@ enum NaturalKeyVenueMigration {
 
         // Group every row by the key it WOULD have under the new normalization. Two rows share a group
         // exactly when they now fold to the same natural key.
+        // #1886: the key each row SHOULD carry is anchored to the scout's own values, never to what the
+        // card displays. Computing it from the display fields here undid, one launch later, both features
+        // that rewrite a display field precisely so the key can stay put (#1274's rename, #1846's merged
+        // room name): the row came back holding Dan's spelling, and the next scout, arriving with the
+        // listing's spelling, computed a key that matched nothing and inserted a second card.
         var groups: [String: [Prospect]] = [:]
         for p in prospects {
-            let newKey = Prospect.makeNaturalKey(groupName: p.groupName,
-                                                 performanceDate: p.performanceDate,
-                                                 venue: p.venue)
-            groups[newKey, default: []].append(p)
+            groups[p.scoutAnchoredNaturalKey, default: []].append(p)
         }
 
         for (newKey, members) in groups {

@@ -71,11 +71,13 @@ struct VenueKeyStabilityLiveStoreTests {
             func venueHalf(_ key: String) -> String {
                 String(key.split(separator: "|", omittingEmptySubsequences: false).last ?? "")
             }
+            // #1886: judged against the key the row SHOULD carry (Prospect.scoutAnchoredNaturalKey), which
+            // is the same definition the launch re-key pass acts on rather than a second copy of it beside
+            // it. Recomputing from `venue` here asked a different question: it read #1846's merged room
+            // name, a deliberate DISPLAY change that leaves the key alone on purpose, as drift, so the
+            // guard could not tell a renamed card from a fold that had genuinely moved under the store.
             let drifted = all.filter {
-                let recomputed = Prospect.makeNaturalKey(groupName: $0.groupName,
-                                                         performanceDate: $0.performanceDate,
-                                                         venue: $0.venue)
-                return venueHalf(recomputed) != venueHalf($0.naturalKey)
+                venueHalf($0.scoutAnchoredNaturalKey) != venueHalf($0.naturalKey)
             }
             let detail = drifted.map {
                 "STORED[\($0.naturalKey)] VENUE[\($0.venue ?? "")]"
