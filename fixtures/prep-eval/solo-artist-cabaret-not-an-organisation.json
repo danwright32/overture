@@ -41,7 +41,8 @@
       "orchestra",
       "ensemble"
     ],
-    "requirePortfolioLink": true
+    "requirePortfolioLink": true,
+    "forbidVenueHistoryClaim": "The Example Room"
   },
   "sampleCompliantOutput": {
     "version": 8,

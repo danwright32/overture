@@ -72,6 +72,30 @@ export interface PrepEvalExpectation {
    * cabaret concert as an opera. Per-fixture because only the fixture knows what the show is not.
    */
   forbiddenBodyTerms?: string[];
+  /**
+   * #1905/#1887: the item carried a `venueHistory` band, so every drafted body must say Dan already
+   * knows THIS room. The credential says the level he works at; this says he knows the space, and it is
+   * the one thing in a cold pitch a stranger cannot fake. The value is the VENUE NAME, because the
+   * standing credential is itself written as "I've photographed at Carnegie Hall for nearly ten years":
+   * an unscoped check would read that as a venue-history claim and pass, or flag, every cold pitch.
+   */
+  requireVenueFamiliarity?: string;
+  /**
+   * #1905/#1887: the familiarity clause says he knows the space, and never names the bad outcome it
+   * avoids ("so I'm not learning it on the night"). Dan flagged that shape himself: naming the bad
+   * outcome plants it in the reader's head and invites them to picture a photographer fumbling in an
+   * unfamiliar room, which is the opposite of what the sentence is for.
+   */
+  forbidVenueRiskFraming?: boolean;
+  /**
+   * #1905/#1887: NO band was supplied, so the app has no history to report and any claim of having
+   * worked this venue was inferred from its name, a past client, or nothing at all. The exact opposite
+   * of requireVenueFamiliarity, and venue-scoped for the same reason. Not usable on a Carnegie show,
+   * where the omission is deliberate BECAUSE the tenure credential already names that exact room: there
+   * the legitimate credential and the forbidden venue line are the same room, and no text rule can tell
+   * a tenure from a history band. See fixtures/prep-eval/README.md.
+   */
+  forbidVenueHistoryClaim?: string;
 }
 
 export interface PrepEvalFixture {
@@ -153,6 +177,32 @@ const INVITES_QUESTIONS = /(?:happy to answer|let me know if you have|feel free 
 const SELF_INTRO_NAME = /\b(?:my name is dan|i'?m dan\b|i am dan\b|dan wright)/i;
 const SELF_INTRO_TRADE = /\bphotograph(?:er|y)\b|\bi shoot\b/i;
 const DOMAIN_TOKEN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s)]*)?/gi;
+// #1905: a claim to have WORKED this venue before. Matches the claim itself rather than the venue's
+// name, so one pattern serves both the rule and its exact opposite (required when a band was supplied,
+// forbidden when none was). Deliberately does NOT match the standing credential, which is written in the
+// continuous "I've been photographing at ... for close to ten years" and is about the level Dan works at
+// rather than about this room.
+const VENUE_HISTORY_CLAIM = /\bi(?:'ve| have)\s+(?:also\s+)?(?:photographed|shot|worked|covered)\b/i;
+
+/**
+ * #1905: does the body claim past work at THIS show's venue? Split into sentences the way
+ * DraftCheck.venueHistoryCount does, so the claim and the venue name have to occur together rather than
+ * anywhere in the email: the credential names Carnegie in its own sentence and must not be mistaken for
+ * a claim about the room this show plays in.
+ */
+export function claimsPastWorkAt(body: string, venue: string): boolean {
+  const wanted = venue.trim().toLowerCase();
+  if (!wanted) return false;
+  for (const sentence of body.split(/[.!?\n]/)) {
+    if (!VENUE_HISTORY_CLAIM.test(sentence)) continue;
+    if (sentence.toLowerCase().includes(wanted)) return true;
+  }
+  return false;
+}
+// The framings the runbook forbids for the follow-on clause: familiarity stated as a risk avoided
+// instead of as knowing the space. Taken from the shapes Dan named when he set the rule.
+const VENUE_RISK_FRAMING =
+  /\bnot\s+learning\b|\bno\s+guesswork\b|\bfinding\s+my\s+angles\b|\bwon'?t\s+be\s+(?:learning|finding|figuring)\b|\bwithout\s+(?:guesswork|surprises)\b/i;
 
 /** The first sentence of a body, for the rules that govern the opener specifically. */
 export function firstSentence(body: string): string {
@@ -387,6 +437,36 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
     for (const { label, body } of collectBodies([entry])) {
       if (!PORTFOLIO_LINK.test(body)) {
         failures.push(`${label}: expected the portfolio link (danwrightphotography.com) (#365)`);
+      }
+    }
+  }
+
+  // #1905/#1887: the three venue-history wording rules. Counts are deliberately not re-checked here:
+  // DraftCheck.venueHistoryCount already BLOCKS a send whose body pairs a past-tense shooting claim with
+  // a number, and a second implementation of that matcher in another language is the drift L26 warns
+  // about. These cover the half nothing else judges.
+  if (exp.requireVenueFamiliarity) {
+    const venue = exp.requireVenueFamiliarity;
+    for (const { label, body } of collectBodies([entry])) {
+      if (!claimsPastWorkAt(body, venue)) {
+        failures.push(`${label}: never says Dan has worked ${venue}, though the item carried a venueHistory band for it (#1887)`);
+      }
+    }
+  }
+
+  if (exp.forbidVenueRiskFraming) {
+    for (const { label, body } of collectBodies([entry])) {
+      if (VENUE_RISK_FRAMING.test(body)) {
+        failures.push(`${label}: frames knowing the room as a risk avoided rather than as familiarity with the space (#1887)`);
+      }
+    }
+  }
+
+  if (exp.forbidVenueHistoryClaim) {
+    const venue = exp.forbidVenueHistoryClaim;
+    for (const { label, body } of collectBodies([entry])) {
+      if (claimsPastWorkAt(body, venue)) {
+        failures.push(`${label}: claims Dan has worked ${venue}, but no venue history was supplied for it, so the claim was inferred (#1887)`);
       }
     }
   }

@@ -1,0 +1,56 @@
+{
+  "name": "venue-history-band-says-he-knows-the-room",
+  "rule": "When the item carries a `venueHistory` band, the draft says Dan already knows THAT room, alongside the credential rather than instead of it, with no count and with the follow-on clause about familiarity rather than about a risk avoided (#1887/#1905).",
+  "input": {
+    "naturalKey": "sable-trio|2026-09-18|harborlight-hall",
+    "groupName": "Sable Trio",
+    "venue": "Harborlight Hall",
+    "performanceDate": "2026-09-18",
+    "discipline": "music",
+    "websiteURL": "https://sabletrio.example",
+    "sourceListingURL": "https://harborlighthall.example/events/sable-september",
+    "priorRelationship": "none",
+    "production": "self",
+    "venueHistory": "a_few"
+  },
+  "sources": [
+    {
+      "label": "Sable Trio own contact page",
+      "url": "https://sabletrio.example/contact",
+      "content": "Sable Trio. For booking and press: Nadia Verhoeven, Manager, nadia@sabletrio.example."
+    }
+  ],
+  "expected": {
+    "description": "A band was supplied for Harborlight Hall, so the draft says Dan knows that room, keeps the standing credential beside it, and never frames the familiarity as a risk avoided.",
+    "requireSomeContact": true,
+    "requireVenueFamiliarity": "Harborlight Hall",
+    "forbidVenueRiskFraming": true,
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-08-01T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "sable-trio|2026-09-18|harborlight-hall",
+        "contacts": [
+          {
+            "provenance": "act",
+            "name": "Nadia Verhoeven",
+            "role": "Manager",
+            "email": "nadia@sabletrio.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "sourceUrl": "https://sabletrio.example/contact"
+          }
+        ],
+        "showSummaryAbsentReason": "no_listing_page",
+        "draft": {
+          "subject": "Photographing Sable Trio's September 18 concert at Harborlight Hall.",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Sable Trio's September 18 concert at Harborlight Hall. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Harborlight Hall a few times, so I'm familiar with the room. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If there isn't someone on it already, I'd be glad to talk about the photography plans for the night. I look forward to hearing from you!",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}
