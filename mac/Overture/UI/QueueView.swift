@@ -848,28 +848,10 @@ struct QueueView: View {
                     .foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            replyRunLine
+            // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
+            // line instead of re-deriving the store. See ReplyRunLine.
+            ReplyRunLine(activity: .replyClassify)
             agentStrip(agentInputs)
-        }
-    }
-
-    // #1085: the reply-classify run's single run-level "N of M", shown once here instead of repeated on
-    // every recipient row the run is drafting (DraftReviewView dropped it from its per-recipient label,
-    // since the count is one run-wide fact). Wrapped in a TimelineView so it re-reads the run marker and
-    // the progress file each second (#1003): the count advances as the run works and the whole line
-    // vanishes the moment the run ends, rather than a value captured at this view's last render sitting
-    // stale beside a run that has already finished. What the line SAYS is the pure, tested
-    // ReplyClassifyProgressDecoder.runningLabel, not a sentence assembled here in the view.
-    @ViewBuilder private var replyRunLine: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            if let line = ReplyClassifyProgressDecoder.runningLabel(
-                running: ReplyClassifyService.isRunning(now: context.date),
-                progress: ReplyClassifyProgressDecoder.loadCurrent()) {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(line).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                }
-            }
         }
     }
 

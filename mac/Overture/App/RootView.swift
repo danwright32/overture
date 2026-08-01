@@ -1270,13 +1270,14 @@ struct RootView: View {
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
     // a finished draft only surfaced on the NEXT app launch (the bare spinner spun until then). Mirrors
-    // watchPrepRun: wait for the live run, then ingest immediately (clearing the per-recipient spinner)
-    // or report that it finished without a draft. A single continuous watcher (below) drives this so it
+    // watchPrepRun: once the live run ends, ingest immediately (clearing the per-recipient spinner) or
+    // report that it finished without a draft. A single continuous watcher (below) drives this so it
     // covers every launch source: the at-launch auto run, an in-flight run, AND a "Draft a reply" click.
-    private func watchReplyClassifyRun() async {
-        while ReplyClassifyService.isRunning(now: Date()) {
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-        }
+    //
+    // #1923: called only after DetachedRunActivity has followed a real run to its end, so the waiting
+    // itself is no longer here. That matters beyond tidiness: this is the ingest, and running it for a
+    // run that was never followed would re-apply a finished run's results.
+    private func ingestFinishedReplyClassifyRun() {
         let started = ReplyClassifyService.lastRunStartedAt
         let resultsMod = try? ReplyClassifyImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
@@ -1291,16 +1292,20 @@ struct RootView: View {
         }
     }
 
-    // Continuously watch for a reply-classify run to begin (a click, the at-launch auto run, or one in
-    // flight at open) and follow it to completion. Polls the run marker; only enters watchReplyClassifyRun
-    // when a run is genuinely live, so an old failed run never re-nags on a normal open (#48). Cheap: a
-    // file stat every few seconds on a resident desktop app.
+    // Watch for a reply-classify run to begin (a click, the at-launch auto run, or one in flight at open)
+    // and follow it to completion, so an old failed run never re-nags on a normal open (#48).
+    //
+    // #1923: this used to stat the run marker every three seconds for the whole life of the window,
+    // whether or not a run had ever started, which on an idle Mac is thousands of filesystem calls a day
+    // to learn nothing. It waits now: `runStarts()` is told when a run begins rather than looking for
+    // one, and DetachedRunActivity's own poll is what follows a live run to its end. The ingest happens
+    // only when a run was genuinely followed, so a wake-up can never re-apply a finished run's results.
     private func watchReplyClassifyRuns() async {
-        while !Task.isCancelled {
-            if ReplyClassifyService.isRunning(now: Date()) {
-                await watchReplyClassifyRun()
+        let activity = DetachedRunActivity.replyClassify
+        for await _ in activity.runStarts() {
+            if await activity.followUntilFinished() {
+                ingestFinishedReplyClassifyRun()
             }
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
     }
 

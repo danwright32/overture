@@ -131,6 +131,57 @@ struct ReplyClassifyServiceTests {
         #expect(ReplyClassifyService.isRunning(markerURL: try marker(ageMinutes: 11), now: now) == false)  // past 10m: stale
     }
 
+    // #1923: a started run ANNOUNCES itself, which is what lets an idle app stop polling the marker to
+    // find out. Both start paths (the at-launch auto run and a "Draft a reply" click) go through here, so
+    // the announce lives at the one choke point rather than at each call site, where one could forget it.
+    @Test func aStartedRunAnnouncesItself() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k9", replyText: "Yes")
+        var announced = 0
+
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+                                                   queueURL: tmp(), markerURL: tmp(),
+                                                   launch: {}, announce: { announced += 1 })
+        #expect(announced == 1)
+    }
+
+    // ...and a launch that never happened announces nothing. An announced run with nothing behind it
+    // would leave the queue showing a live spinner over a run that does not exist, and would send the
+    // completion watcher off to ingest results no run ever wrote.
+    @Test func aFailedLaunchAnnouncesNothing() throws {
+        struct LaunchFailed: Error {}
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k10", replyText: "Yes")
+        var announced = 0
+
+        #expect(throws: LaunchFailed.self) {
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+                                                   queueURL: tmp(), markerURL: tmp(),
+                                                   launch: { throw LaunchFailed() },
+                                                   announce: { announced += 1 })
+        }
+        #expect(announced == 0)
+    }
+
+    // A start refused because one is already running announces nothing either: the run it would be
+    // announcing is the one already being followed.
+    @Test func aRefusedDoubleStartAnnouncesNothing() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k11", replyText: "Yes")
+        let queueURL = tmp(); let markerURL = tmp()
+        var announced = 0
+        _ = try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+                                                   queueURL: queueURL, markerURL: markerURL,
+                                                   launch: {}, announce: { announced += 1 })
+
+        #expect(throws: (any Error).self) {
+            try ReplyClassifyService.startClassify(from: ctx, now: Date(),
+                                                   queueURL: queueURL, markerURL: markerURL,
+                                                   launch: {}, announce: { announced += 1 })
+        }
+        #expect(announced == 1)
+    }
+
     // #420 C5 — if the launch fails, the atomic lock is released so a retry isn't permanently blocked.
     @Test func aFailedLaunchReleasesTheLock() throws {
         struct LaunchFailed: Error {}

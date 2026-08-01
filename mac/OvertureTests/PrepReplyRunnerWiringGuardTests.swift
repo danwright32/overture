@@ -22,6 +22,7 @@ struct PrepReplyRunnerWiringGuardTests {
     private var factory: String { source("Overture/UI/ProspectRowFactory.swift") }
     private var draftReview: String { source("Overture/UI/DraftReviewView.swift") }
     private var queueView: String { source("Overture/UI/QueueView.swift") }
+    private var replyRunLine: String { source("Overture/UI/ReplyRunLine.swift") }
 
     // Matches a real sourcing LINE, not merely a mention: every runner also names its lib files in header
     // comments, so a bare `contains("scout-cancel.sh")` would stay green even if the actual `.` line were
@@ -111,14 +112,15 @@ struct PrepReplyRunnerWiringGuardTests {
     // #1085: the run's "N of M" is a single run-wide fact, so it moved OUT of the per-recipient
     // "Drafting a reply" label (where it repeated on every drafting row) and into ONE run-level line at
     // the top of the queue. This pins the move both ways so neither half can silently regress: the
-    // per-recipient label no longer carries the count, and QueueView's run-level line reads the derived
+    // per-recipient label no longer carries the count, and the run-level line reads the derived
     // progress through the pure, tested runningLabel. It reads through loadCurrent() inside the run's
     // freshness check so the whole line re-reads each tick (#1003), never a value the enclosing view
     // captured at its last render. The behavior of what the line SAYS is covered in
     // ReplyClassifyProgressContractTests.runningLabel*.
+    // #1923: the line is its own view now (ReplyRunLine), so that is where the reading lives.
     @Test func theRunLevelLineReadsTheProgressFileAndThePerRecipientLabelNoLongerDoes() {
         #expect(!draftReview.isEmpty)
-        #expect(!queueView.isEmpty)
+        #expect(!replyRunLine.isEmpty)
         // The per-recipient label dropped the run-wide count...
         guard let labelRange = draftReview.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
             Issue.record("reply drafter LiveRunLabel not found")
@@ -129,9 +131,45 @@ struct PrepReplyRunnerWiringGuardTests {
         let nearby = draftReview[labelRange.lowerBound...].prefix(900)
         #expect(!nearby.contains("progressDetail:"))
         // ...and the run-level line now reads the derived count, gated on a live run and re-read each tick.
-        #expect(queueView.contains("ReplyClassifyProgressDecoder.runningLabel("))
-        #expect(queueView.contains("ReplyClassifyProgressDecoder.loadCurrent()"))
-        #expect(queueView.contains("ReplyClassifyService.isRunning(now: context.date)"))
+        #expect(replyRunLine.contains("ReplyClassifyProgressDecoder.runningLabel("))
+        #expect(replyRunLine.contains("ReplyClassifyProgressDecoder.loadCurrent()"))
+        #expect(replyRunLine.contains("running: activity.isRunning"))
+    }
+
+    // #1923: the tick exists only INSIDE a live run. The line used to run its one-second TimelineView for
+    // as long as the window was open, stat'ing the run marker on every tick of an app doing nothing, and
+    // the shape that fixed it is a structural one no behavioral test can see: the timer sits inside the
+    // `if`, so an idle queue builds no timer at all rather than building one that decides to render
+    // nothing. DetachedRunActivityTests covers what the activity itself costs.
+    @Test func theRunLineRunsNoTimerUntilARunIsLive() {
+        guard let body = SourceGuardHelper.propertyBody("struct ReplyRunLine: View {", in: replyRunLine) else {
+            Issue.record("expected to find ReplyRunLine")
+            return
+        }
+        guard let gate = body.range(of: "if activity.isRunning {"),
+              let timer = body.range(of: "TimelineView(") else {
+            Issue.record("expected the timer to sit behind the live-run gate")
+            return
+        }
+        #expect(gate.upperBound < timer.lowerBound)
+        // And nothing here asks the filesystem whether a run is alive: that is the poll this removed.
+        #expect(!replyRunLine.contains("ReplyClassifyService.isRunning"))
+    }
+
+    // The other half of the same removal: the completion watcher (what ingests a finished run's drafts)
+    // used to stat the same marker every three seconds forever. It waits to be told now, and the ingest
+    // runs only when a run was genuinely followed to its end.
+    @Test func theCompletionWatcherWaitsForARunInsteadOfPollingForOne() {
+        #expect(!rootView.isEmpty)
+        guard let body = SourceGuardHelper.propertyBody("private func watchReplyClassifyRuns() async {",
+                                                        in: rootView) else {
+            Issue.record("expected to find watchReplyClassifyRuns")
+            return
+        }
+        #expect(body.contains("for await _ in activity.runStarts()"))
+        #expect(body.contains("if await activity.followUntilFinished()"))
+        #expect(!body.contains("ReplyClassifyService.isRunning"))
+        #expect(!body.contains("Task.sleep"))
     }
 
     // --- #1038: both runners honour the cancel sentinel on a short poll -----------------------------
