@@ -191,38 +191,34 @@ struct ProducerCorrectionControlTests {
         #expect(factory.contains("ProspectMutations.correctProducer"))
     }
 
-    // #1788, Dan's call on the #1766 post-merge check: "flag the card for me". A row whose presenter was
-    // DISCARDED (the run reported the room) reads identically to one whose page named nobody, once the
-    // name is gone. He can act on the first: a show at a room he knows often has a company he can name.
-    // So the card says which happened rather than leaving the field silently blank.
-    @Test func aRowWhosePresenterWasDiscardedSaysSo() throws {
+    // #1823, Dan reading the card for Alex Syiek at The Green Room 42: the card carried
+    // "Couldn't tell who's putting this on: the listing named only the room." directly under the line
+    // naming Alex Syiek, which is two adjacent lines saying opposite things about one show (#843).
+    //
+    // Dropped rather than narrowed, on Dan's call (2026-08-01). The line existed to send him looking for
+    // a company the listing had not named. #1861 removed that errand: a show naming no organiser now has
+    // every performer on its bill pursued by name, so the flag no longer changes anything he or the
+    // system does, and a mark that changes nothing is noise on 169 cards.
+    //
+    // Deliberately keyed on the row shape that used to produce the line, so this stays a real claim about
+    // the card rather than a test of a deleted symbol.
+    @Test func aRowWhosePresenterWasDiscardedAddsNoNoteToTheCard() throws {
         let ctx = ModelContext(try container())
         let p = prospect(ctx, key: "k1", presenter: nil)
         p.presenterWasTheRoom = true
         try? ctx.save()
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        let item = QueueModel.items(from: all).first
-        #expect(item?.unidentifiedPresenterNote != nil)
-    }
+        let item = try #require(QueueModel.items(from: all).first)
+        // The row still records WHY the name went; it simply no longer says so on the card.
+        #expect(item.presenterWasTheRoom)
+        #expect(item.presenterLine == nil)
 
-    // A page that simply named nobody says nothing extra. Most of the queue is this, and a mark on all of
-    // it would be noise claiming Overture threw a name away where it never had one.
-    @Test func aRowThatNeverHadAPresenterSaysNothingExtra() throws {
-        let ctx = ModelContext(try container())
-        _ = prospect(ctx, key: "k1", presenter: nil)
-        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        #expect(QueueModel.items(from: all).first?.unidentifiedPresenterNote == nil)
-    }
-
-    // And once a real presenter IS named, the mark goes, even if an older run had discarded one: the
-    // question the line answers ("who puts this on?") now has an answer on the card.
-    @Test func aRowThatLaterNamesAPresenterDropsTheMark() throws {
-        let ctx = ModelContext(try container())
-        let p = prospect(ctx, key: "k1", presenter: "Stiletto Sinclair and Jackie Galaxy")
-        p.presenterWasTheRoom = true
-        try? ctx.save()
-        let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        #expect(QueueModel.items(from: all).first?.unidentifiedPresenterNote == nil)
+        // And the sentence is not merely unreachable from this row, it is gone from the app's whole
+        // vocabulary: no surface can say it about any row. Read from the generated copy inventory, which
+        // is built from the real source, so a line left rendering somewhere else would still be caught.
+        let inventory = try CopyInventory.build()
+        #expect(inventory.filesScanned > 50, "the inventory really scanned the app")
+        #expect(!inventory.sentences.contains { $0.contains("who's putting this on") })
     }
 
     // #1731, Dan's verdict on the Presenters sheet (2026-07-30): "this sheet is confusing. I'm not sure

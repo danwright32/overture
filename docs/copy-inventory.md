@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **970 sentences**, from 335 source files.
+Every sentence Overture can say to Dan: **969 sentences**, from 335 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -542,8 +542,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Couldn't start the reader: \(error.localizedDescription)"
     `UI/LeadIntakeModel.swift`
-"Couldn't tell who's putting this on: the listing named only the room."
-    `UI/QueueView+Model.swift`
 "Coverage cannot be checked right now: the Downbeat client export is missing or could not be read. Refresh it from Downbeat."
     `Domain/ClientCoverage.swift`
 "Dan Wright"

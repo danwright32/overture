@@ -292,17 +292,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return own.isEmpty ? (inheritedReachability?.emails ?? []) : own
     }
 
-    // #1788: the line the card shows where the presenter's name would have gone, when the run reported
-    // the ROOM and the boundary drained it. Dan's call on the #1766 post-merge check: "flag the card for
-    // me", because a show at a room he knows often has a company he can name himself.
-    //
-    // Shown ONLY where the question is still open: the moment a real presenter is named, on this run or a
-    // later one, the card answers "who puts this on?" outright and a mark saying it could not would be
-    // saying the opposite of what the row above it shows (the #843 rule against two lines that disagree).
-    var unidentifiedPresenterNote: String? {
-        guard presenterWasTheRoom, presenterLine == nil else { return nil }
-        return "Couldn't tell who's putting this on: the listing named only the room."
-    }
 
     // #1731, after Dan read the Presenters sheet (2026-07-30): "this sheet is confusing. I'm not sure what
     // to do with it." The question that sheet was built to answer, why is no presenter named here, is one
