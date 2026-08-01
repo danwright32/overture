@@ -505,6 +505,13 @@ struct ProspectRowView: View {
             // has aged out, so it asks for a re-check rather than asserting reachable or not.
             reachabilityNote(icon: "clock.arrow.circlepath", text: ReachabilityCopy.staleProbeBadge,
                              tone: Reachability.tone(for: .staleProbe), help: ReachabilityCopy.staleProbeHelp)
+        case .checkMissedIt:
+            // #1724: a plain question mark in the same calm tone as a stale result. Both mean "no current
+            // answer here"; neither is a finding. Deliberately NOT the rust envelope of "No email found",
+            // which this row would be misreporting as a search that finished, and not the envelope family
+            // at all: no address was ever in question here, because nothing looked for one.
+            reachabilityNote(icon: "questionmark.circle", text: ReachabilityCopy.checkMissedItBadge,
+                             tone: Reachability.tone(for: .checkMissedIt), help: ReachabilityCopy.checkMissedItHelp)
         case .emailFound:
             // #1598 Phase 5: an answer inherited from another show by the same organisation looks exactly
             // like one paid for here, Dan's call. The ONLY difference is the hover text, which says where

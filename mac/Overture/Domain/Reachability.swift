@@ -29,9 +29,13 @@ enum Reachability {
     // to reach if it's a generic inbox, email found if it found one or no email found". The advice was
     // telling him to do by hand the thing the check itself now does, so the card reports and the check
     // acts, rather than both half-doing each other's job.
+    // #1724: `checkMissedIt` is the one state here that is not a conclusion about the show. It says a check
+    // ran over it and came home with nothing for it, so the row is still unchecked and Dan is about to be
+    // offered it again at full price. Its own case rather than silence, which is what a never-checked show
+    // shows, and rather than a shade of `noEmailFound`, which is a real finding this row does not have.
     enum Badge: Equatable {
         case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly,
-             staleProbe, emailFound
+             staleProbe, checkMissedIt, emailFound
     }
 
     // Dan's call, 2026-07-28, looking at the real cards: the badges' loudness was the exact INVERSE of
@@ -68,7 +72,10 @@ enum Reachability {
         switch badge {
         case .emailFound: return onlyUnverified ? .tentative : .pending
         case .noEmailFound: return .warning
-        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .none:
+        // #1724: neutral, with `staleProbe`, and for the same reason. Both say "this row has no current
+        // answer and another check is how it gets one". It is not rust: rust is reserved for a finding, and
+        // a missed show has none. Nothing here is a warning about the show itself.
+        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .checkMissedIt, .none:
             return .neutral
         }
     }
@@ -146,8 +153,12 @@ enum Reachability {
     // where it came from. A sixth badge state would be the #843 shape: a second line telling him nothing
     // the first did not. It is consulted only when this show has no answer of its own, and only ever
     // carries a positive, because OrgAnswerLedger refuses to fan out anything else.
+    // #1724: `missedByACheck` is whether a check ran over this show and came home with no answer for it,
+    // still inside the freshness window. Ranked BELOW every real answer, its own and an inherited one, so a
+    // show that has since been answered never reports the earlier miss, and ABOVE the free heuristic below,
+    // because a fact measured about a real run beats a guess made from the listing's shape.
     static func badge(result: ProbeResult?, probeIsStale: Bool = false,
-                      inherited: ProbeResult? = nil,
+                      inherited: ProbeResult? = nil, missedByACheck: Bool = false,
                       presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
         if let result {
             // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
@@ -162,6 +173,7 @@ enum Reachability {
         // Freshness was already judged when the ledger was built, against the ORIGINAL check's date, so
         // it is not re-derived here: one decision, in one place.
         if inherited == .emailFound { return .emailFound }
+        if missedByACheck { return .checkMissedIt }
         switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
         case .hardToReach:
             // #1859: only the MEASURED dead end still speaks. A social-only listing is one Overture has
@@ -337,6 +349,21 @@ enum ReachabilityCopy {
     static let staleProbeBadge = "Reachability may be out of date"
     static let staleProbeHelp =
         "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
+
+    // #1724: a check ran over this show and came home with nothing for it. Says what HAPPENED, not what was
+    // found, because nothing was: the run never got as far as this row. The distinction is the whole point,
+    // since "No email found" beside it is a finding and this is the absence of one.
+    static let checkMissedItBadge = "A check missed this show"
+    // Names what it costs him, in the order he needs it: it is still unchecked, and checking it again is
+    // the only thing that changes that. It deliberately does not guess WHY the run came home short, which
+    // is not recoverable from anything the row holds.
+    //
+    // "never got an answer for it" is the shortfall sentence's own phrase (ReachabilityRunSummary), reused
+    // rather than reworded. Dan meets both about the same event, minutes apart: the run tells him 2 of 5
+    // shows never got an answer, and these are those two shows. Two spellings of one fact read as two
+    // different things.
+    static let checkMissedItHelp =
+        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the

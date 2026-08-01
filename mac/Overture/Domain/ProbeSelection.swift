@@ -54,6 +54,10 @@ enum ProbeSelection {
         let performerHuntCount: Int
         // Selected shows already answered recently, which cost nothing and are not re-researched.
         let alreadyAnsweredCount: Int
+        // #1724: selected shows an earlier check already ran over and came home without an answer for.
+        // Its exact opposite: these are the ones being paid for a SECOND time, and until this they were
+        // stored as nothing at all, so the sheet counted them as ordinary first-time lookups.
+        let previouslyMissedCount: Int
         // Wall clock, not work: lookups overlap, so this is rounds times one lookup.
         let estimatedSeconds: TimeInterval
 
@@ -69,7 +73,11 @@ enum ProbeSelection {
     // shows on the selected dates. `answeredKeys` is the rest of the selection, carried separately so
     // the confirm can say plainly that they cost nothing rather than silently omitting them (a count
     // that quietly drops shows is how a pill stops being a promise about rows).
+    // #1724: `previouslyMissed` is counted by the caller from the same selected rows, for the same reason
+    // `alreadyAnswered` is: the mark lives on the row and this type never sees a row. Defaulted to 0 so a
+    // caller that does not know keeps the old sentence rather than claiming nothing was missed.
     static func summarize(dateCount: Int, candidates: [ProbeBatch.Show], alreadyAnswered: Int,
+                          previouslyMissed: Int = 0,
                           among all: [ProbeBatch.Show], overrides: ProducerOverrides = .none) -> Summary {
         let plan = ProbeBatch.plan(selecting: Set(candidates.map(\.key)), among: all, overrides: overrides)
         let researches = plan.keysToRun.count
@@ -80,6 +88,7 @@ enum ProbeSelection {
             organisationCount: plan.organisationCount,
             performerHuntCount: plan.performerHuntCount,
             alreadyAnsweredCount: alreadyAnswered,
+            previouslyMissedCount: previouslyMissed,
             estimatedSeconds: estimatedSeconds(forLookups: researches))
     }
 
@@ -175,6 +184,19 @@ enum ProbeSelectionCopy {
         // confirm he has clicked through a dozen times would never show it to him.
         parts.append(ProbeSelectionCopy.costLine(s))
         if s.spansSeveralRounds { parts.append(blocksOtherRuns) }
+        // #1724: said HERE, straight after what the run costs, because it qualifies that cost rather than
+        // the breakdown below it: these shows have been through a check once already and came back with
+        // nothing. It is the sentence that could change his mind about the spend, so it goes where he is
+        // still reading, not after a producer split he has clicked past a dozen times.
+        //
+        // Silent at zero. An "0 of them" line on every ordinary confirm is one he stops seeing (L36).
+        if s.previouslyMissedCount > 0 {
+            // Same phrase as the run's own shortfall and the row's mark ("never got an answer"), because
+            // all three are about one event and a second wording for it reads as a second thing.
+            parts.append(s.previouslyMissedCount == 1
+                         ? "1 of them went through an earlier check and never got an answer."
+                         : "\(s.previouslyMissedCount) of them went through an earlier check and never got an answer.")
+        }
         // What the money buys, split the way it actually divides: a producer answered once for all its
         // shows, versus a one-off hunt that answers for exactly one.
         if s.organisationCount > 0 && s.performerHuntCount > 0 {

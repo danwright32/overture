@@ -290,6 +290,27 @@ enum PrepQueueService {
                 if p.reachabilityProbedAt == nil { p.reachabilityProbedAt = now }
                 if p.reachabilityResult == nil { p.reachabilityResult = .noEmailFound }
             }
+            // #1724: this show HAS an answer now, so any record that an earlier check missed it is spent.
+            // Unconditional, on both branches: a re-settle is still an answer landing, and leaving the mark
+            // would put "a check missed this" on a card beside the address the check found.
+            p.reachabilityUnansweredAt = nil
+        }
+        // #1724: the shows this check was given and did not answer. Written HERE rather than in
+        // `settleReachabilityProbe` for two reasons, both load-bearing:
+        //
+        //   1. It is the same judgment. `toStamp` is the intersection of what the run was asked to do with
+        //      what came back, and this is its complement, off the same two facts in the same pass. Derived
+        //      anywhere else it could disagree with the shortfall sentence Dan reads, which is exactly the
+        //      count-versus-rows split L16 is about.
+        //   2. It is committed by the SAME save. Either the answers and the misses both land or neither
+        //      does, and the #1677 marker retry that already covers a failed save covers this too. A second
+        //      save of its own would be a second thing that can half-happen.
+        //
+        // On a re-settle (`consumeIfNew` refuses a file it has already read) this function is the only
+        // writer that runs at all, which is precisely why the record has to live in it.
+        let missed = keys.subtracting(toStamp)
+        for p in all where missed.contains(p.naturalKey) {
+            p.reachabilityUnansweredAt = now
         }
         saveFailed = false
         do {

@@ -135,6 +135,26 @@ final class Prospect {
     // additive reason as the line above; an unrecognised value reads as no reason and falls back to the
     // old wording rather than becoming a claim the app cannot explain. See Reachability.EmptyReason.
     var reachabilityEmptyReasonRaw: String? = nil
+    // #1724: when a check Dan paid for ran over this show and came home without an answer for it (nil =
+    // never happened, or a later check answered it).
+    //
+    // This is the OTHER outcome of a check, and until now it was stored as nothing at all. A check runs as
+    // up to ten concurrent claudes, and a chunk that dies partway leaves the shows it never reached
+    // unanswered. #1594 is deliberate that those shows are NOT stamped: `reachabilityProbedAt` would put
+    // "No email found" on a show nobody looked at and lock it out of a re-check for 90 days. But that field
+    // is the only one `hasFreshReachabilityAnswer` reads, so a show a check missed was indistinguishable
+    // from one no check has ever been near: offered again, paid for again, with nothing recording that it
+    // had already failed once (measured 2026-07-29: one run asked for 5 shows and answered 1).
+    //
+    // Deliberately NOT a verdict. It never reaches the fit score, the org ledger or ContactScoreAdjustment,
+    // and it never removes the show from the check list: the check is the only thing that can ever answer
+    // it, so refusing to offer it would be the one guard that stops only the person who meant it (L54).
+    // It is something Dan READS while choosing what to spend on.
+    //
+    // Cleared the moment a check does answer, so a card can never show an answer and "a check missed this"
+    // at once, and read through the same 90-day freshness window as a result: a check that missed a show
+    // six months ago says nothing about today, and a mark that never expires stops being read (L36).
+    var reachabilityUnansweredAt: Date? = nil
     // #1648 Phase D: what this show scored immediately BEFORE its contact answer last moved the score,
     // and which answer moved it. Kept so the weights can be retuned later against a clean baseline, which
     // is impossible if the only surviving number is the adjusted one.
