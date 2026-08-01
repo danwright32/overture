@@ -1099,6 +1099,21 @@ enum QueueModel {
         return visible.filter { departing[$0.id] == nil } + Array(departing.values)
     }
 
+    // #1922: the same fold, applied to groups ALREADY BUILT rather than to the rows going into the
+    // derivation. That is the whole point: setting and clearing a departing snapshot used to happen
+    // inside the whole-store derivation, so each send dragged all 724 prospects through the CPU twice
+    // more to animate one card. Over finished groups, the send animates its own card instead.
+    //
+    // Sending the only show on a night is the case that makes this more than a move: that night's group
+    // has already gone with it, so regrouping is what puts the night back rather than leaving the card
+    // Dan is watching with nowhere to land. Expressed through the two tested helpers, so the ordering
+    // (existing dates first, a night that exists only for a departing card last) is exactly what the
+    // rows-first version produced.
+    static func groups(_ groups: [DateGroup], withDeparting departing: [String: QueueItem]) -> [DateGroup] {
+        guard !departing.isEmpty else { return groups }
+        return groupByDate(withDeparting(groups.flatMap(\.items), departing: departing))
+    }
+
     // #1233: the Reached-out stage groups its rows under headers keyed on the REACH-OUT date (when Dan
     // should next contact them), not the performance date every other stage groups by, while keeping the
     // soonest-first order. Generic over the row so the day-bucketing and header formatting are tested

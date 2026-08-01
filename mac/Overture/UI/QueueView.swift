@@ -70,18 +70,21 @@ struct QueueView: View {
     @State private var showReconnect = false
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
-    @State private var outboundSending: [String: Date] = [:]
-    @State private var replySending: [String: Date] = [:]
+    // #1922: they live on SendProgressState now, an object, so a send animates its own card instead of
+    // re-deriving all 724 prospects four times over. QueueView never reads it; see that type, and
+    // QueueInvalidationGuardTests for the assertion that this stays true.
+    @State private var sendState = SendProgressState()
     // #361: shows that have just been fully sent and are playing their leaving delight (gold seal +
     // drawn line, then a glide-up exit). Keyed by natural key to the snapshot to render while it
     // departs, since the real row has already left `visible` once the send lands in the data.
-    @State private var departing: [String: QueueItem] = [:]
+    // #1922: on SendProgressState with the rest of them. Unlike the other three this one changes WHICH
+    // rows exist, so the splice moved to QueueDateGroups, over groups already built, rather than into
+    // the derivation that builds them.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // #236: a lead opened from an OmniFocus deep link. When it changes, the queue switches to the
     // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
     @Binding var deepLinkedKey: String?
-    @State private var highlightedKey: String?
     // #976: the date group at the top of the scroll, bound so the queue holds its place while the rows
     // underneath rebuild. `prospects` is a @Query and this is the window Dan reviews in (~119 shows),
     // rebuilt by every scout and Prep run; a plain ScrollView drops its offset to the top on each one
@@ -224,10 +227,9 @@ struct QueueView: View {
             "gmail": "\(GmailConnection.shared.isConnected)",
             "stage": String(describing: focusedStage),
             "focusedKeys": "\(focusedKeys?.count ?? -1)",
-            "departing": "\(departing.count)",
-            "outboundSending": "\(outboundSending.count)",
-            "replySending": "\(replySending.count)",
-            "highlightedKey": highlightedKey ?? "none",
+            // #1922: the four transient send values are deliberately absent. Reading one here would put
+            // the dependency this issue removes straight back, so that a send re-derived the store again
+            // for the sake of the diagnostic reporting that it had.
             "deepLinkedKey": deepLinkedKey ?? "none",
             "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
             "today": today,
@@ -262,9 +264,11 @@ struct QueueView: View {
         // tested, not decided in a view.
         let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: focusedKeys ?? [],
                                                      in: prospects, today: today, now: now, geo: geo))
-        // #361: fold any departing (just-sent) rows back in so each plays its leaving delight in place.
-        let focusedRows = QueueModel.withDeparting(items.filter { wanted.contains($0.id) },
-                                                   departing: departing)
+        // #1922: the just-sent rows are NOT folded in here any more. Reading them meant every send
+        // re-derived the whole store twice (once to start the leaving delight, once to end it) to animate
+        // one card. QueueDateGroups folds them into the finished groups instead, which is the same result
+        // one layer down and out of this derivation's reach.
+        let focusedRows = items.filter { wanted.contains($0.id) }
         return RenderData(items: items, visible: visible,
                           agentInputs: AgentInputs.from(
                               prospects: prospects, inquiries: inquiries, now: now, today: today,
@@ -494,20 +498,23 @@ struct QueueView: View {
                     // #1220: group the stage's rows by date under "FRI Jul 17 2026" headers, the same on
                     // every stage. #976: the date groups are the scroll targets, so scrollTargetLayout lets
                     // QueueScrollHolder's scroll position pin the top visible one across a @Query rebuild.
-                    LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
+                    // #1573: the scroll-target identity is namespaced, not the bare date. The inquiry
+                    // groups share this layout and were keyed on the same raw dates, so a day holding both
+                    // gave one id to two targets and a jump could land on the wrong one.
+                    // #1774: grouped in makeRenderData, above the scroll boundary. Grouping the whole
+                    // stage on every scroll frame was pure waste.
+                    // #1922: QueueDateGroups owns the LazyVStack, and splices the just-sent cards in, so a
+                    // send re-renders this list instead of re-deriving the store behind it. It owns the
+                    // stack rather than sitting inside it deliberately: a custom view between a lazy stack
+                    // and its ForEach is one child to that stack, which would realize every card in the
+                    // queue at once and trade this issue's cost for a worse one.
+                    QueueDateGroups(groups: data.dateGroups, sendState: sendState) {
                         // #1436: un-replied inquiries (the to-send stage) surface with the shows.
                         inquirySection(inquiryRows)
-                        // #1573: the scroll-target identity is namespaced, not the bare date. The
-                        // inquiry groups above share this layout and were keyed on the same raw dates,
-                        // so a day holding both gave one id to two targets and a jump could land on the
-                        // wrong one.
-                        // #1774: grouped in makeRenderData, above the scroll boundary. Grouping the whole
-                        // stage on every scroll frame was pure waste.
-                        ForEach(data.dateGroups) { group in
-                            dateSection(group, data: data).id(QueueModel.showGroupScrollID(group.id))
-                        }
+                    } content: { group, departing in
+                        dateSection(group, data: data, departing: departing)
+                            .id(QueueModel.showGroupScrollID(group.id))
                     }
-                    .scrollTargetLayout()
                 }
             }
         }
@@ -567,7 +574,7 @@ struct QueueView: View {
     // month/day, year) and the #1193/#901 "Unavailable" marker up by the date. The grouping
     // (QueueModel.groupByDate) and the unavailability rule (QueueModel.groupIsUnavailable) are tested
     // model helpers; this only renders them.
-    private func dateSection(_ group: QueueModel.DateGroup, data: RenderData) -> some View {
+    private func dateSection(_ group: QueueModel.DateGroup, data: RenderData, departing: Set<String>) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
@@ -630,7 +637,11 @@ struct QueueView: View {
             // has already kept or drafted is not something to lose to one right-click.
             .contextMenu { if focusedStage == .scout { nightDismissMenu(group) } }
 
-            ForEach(group.items) { item in prospectRow(item, data: data) }
+            // #1922: `departing` arrives as a plain set from QueueDateGroups, which is the view that read
+            // it. Reading it here would be the same dependency one level down.
+            ForEach(group.items) { item in
+                prospectRow(item, data: data, isDeparting: departing.contains(item.id))
+            }
         }
     }
 
@@ -743,7 +754,7 @@ struct QueueView: View {
                                              geo: geo) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
-        highlightedKey = key
+        sendState.highlight(key)
         deepLinkedKey = nil
         // #1573: land the jump in two stages, because the row alone cannot carry it. Stage one drives
         // the scrollPosition binding, which owns this ScrollView and is the only thing that can resolve
@@ -759,8 +770,10 @@ struct QueueView: View {
         DispatchQueue.main.async {
             withAnimation { proxy.scrollTo(key, anchor: .center) }
         }
+        // #1922: clears only if this jump's mark is still the one showing, so a second jump landing inside
+        // these 2.5 seconds does not have its mark wiped by the first jump's timer.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            if highlightedKey == key { highlightedKey = nil }
+            sendState.clearHighlight(ifStill: key)
         }
     }
 
@@ -1085,8 +1098,8 @@ struct QueueView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData) -> some View {
-        if departing[item.id] != nil {
+    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData, isDeparting: Bool) -> some View {
+        if isDeparting {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
             // the glide to a plain fade; the drawn line is already dropped by the timing plan.
@@ -1112,18 +1125,23 @@ struct QueueView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.gold)
                 }
-                ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
-                                      dayOffOffer: dayOffOffer,
-                                      gmailConnected: data.gmailConnected,
-                                      undoStack: undoStack,
-                                      highlightedKey: highlightedKey, outboundSendSince: outboundSending[item.id],
-                                      replySendSince: { rid in replySending[rid] },
-                                      onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
-                                      onReprep: { mode in requestReprep(item, mode) },
-                                      onApprove: { requestApprove(item) },
-                                      showingTooFar: false,
-                                      userExcludedTowns: userExcludedTowns,
-                                      allowedSeedTowns: allowedSeedTowns)
+                // #1922: the send's own state is read INSIDE QueueSendAwareRow, not here. Read at this
+                // call site it would be read during QueueView's body, and every "Sending…" would re-derive
+                // the whole store; read there, a send redraws the cards on screen and nothing else.
+                QueueSendAwareRow(key: item.id, sendState: sendState) { highlightedKey, sendingSince, replySince in
+                    ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
+                                          dayOffOffer: dayOffOffer,
+                                          gmailConnected: data.gmailConnected,
+                                          undoStack: undoStack,
+                                          highlightedKey: highlightedKey, outboundSendSince: sendingSince,
+                                          replySendSince: replySince,
+                                          onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
+                                          onReprep: { mode in requestReprep(item, mode) },
+                                          onApprove: { requestApprove(item) },
+                                          showingTooFar: false,
+                                          userExcludedTowns: userExcludedTowns,
+                                          allowedSeedTowns: allowedSeedTowns)
+                }
             }
         }
     }
@@ -1178,23 +1196,25 @@ struct QueueView: View {
         // it; a partial send on a multi-recipient show keeps the row, so no exit yet.
         let snapshot = items.first(where: { $0.id == naturalKey })
         ProspectMutations.performSend(naturalKey, prospects: prospects, context: context, feedback: feedback,
-                                      markSending: { outboundSending[$0] = Date() },
-                                      clearSending: { outboundSending[$0] = nil },
+                                      markSending: { sendState.markSending($0) },
+                                      clearSending: { sendState.clearSending($0) },
                                       onNeedsReconnect: { showReconnect = true },
                                       onSent: { id, fullySent in
                                           guard fullySent, let snap = snapshot else { return }
-                                          departing[id] = snap
+                                          sendState.depart(id, as: snap)
                                           let t = SendDelightTiming.plan(reduceMotion: reduceMotion)
                                           DispatchQueue.main.asyncAfter(deadline: .now() + t.holdBeforeExit) {
-                                              withAnimation(.easeOut(duration: t.exit)) { departing[id] = nil }
+                                              withAnimation(.easeOut(duration: t.exit)) {
+                                                  sendState.finishDeparting(id)
+                                              }
                                           }
                                       })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {
         ProspectMutations.sendReply(item, recipientId, prospects: prospects, context: context, feedback: feedback,
-                                    markSending: { replySending[$0] = Date() },
-                                    clearSending: { replySending[$0] = nil },
+                                    markSending: { sendState.markReplySending($0) },
+                                    clearSending: { sendState.clearReplySending($0) },
                                     onNeedsReconnect: { showReconnect = true })
     }
 }
