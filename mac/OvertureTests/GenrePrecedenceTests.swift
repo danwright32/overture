@@ -152,3 +152,135 @@ struct GenrePrecedenceTests {
                 "the kept genre and the printed reason must describe the same show: \(row.fitReason)")
     }
 }
+
+// #1949, Dan's call 2026-08-01 after being shown both behaviours side by side: when two sources describe
+// one show, the card takes the STRONGEST detail from each rather than one source's reading whole.
+//
+// The case that separates the two policies needs each source to be richer on a DIFFERENT axis, which is
+// only possible through the presenter, since the title is shared (it is part of the natural key). One
+// presenter names an organisation that says nothing about genre; the other names a genre that says nothing
+// about who is producing. Neither source alone describes the show properly and both know something real.
+@MainActor
+@Suite("Each source's strongest detail (#1949)")
+struct BlendedClassificationTests {
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, WatchedSource.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @discardableResult
+    private func source(_ ctx: ModelContext, _ id: String) -> WatchedSource {
+        let s = WatchedSource(sourceId: id, orgName: "Org \(id)",
+                              listingsURL: "https://\(id).example/events", kind: .html)
+        s.pendingContentHash = "new-hash-\(id)"
+        s.hasUnreadChanges = true
+        s.successfulCheckCount = WatchedSource.warmupRuns
+        s.baselineFeedCount = 1
+        ctx.insert(s)
+        return s
+    }
+
+    // Deliberately carries no genre word of its own, so the genre can only come from a presenter.
+    private let title = "A Winter Gathering"
+
+    private func event(_ presenter: String?) -> ScoutExtractEvent {
+        ScoutExtractEvent(title: title, presenter: presenter, venue: "Merkin Hall",
+                          performanceDate: "2099-10-01", sourceUrl: "https://example.test/winter")
+    }
+
+    // A real producing organisation whose name says nothing about genre.
+    private let producerOnly = "St. Bartholomew's Church"
+    // A genre word attached to nothing that reads as a producing organisation.
+    private let genreOnly = "Piano Series"
+
+    // Non-vacuous, and it states exactly what each source does and does not know.
+    @Test func neitherSourceDescribesTheShowProperlyOnItsOwn() {
+        let byProducer = EventClassifier.classify(event(producerOnly).asExtractedEvent)
+        #expect(byProducer.discipline == .other)         // knows WHO, not WHAT
+        #expect(byProducer.production == .selfProduced)
+        #expect(byProducer.profile == .strong)
+
+        let byGenre = EventClassifier.classify(event(genreOnly).asExtractedEvent)
+        #expect(byGenre.discipline == .music)            // knows WHAT, not WHO
+        #expect(byGenre.production == .unknown)
+        #expect(byGenre.profile == .neutral)
+    }
+
+    @Test func theCardKeepsWhatEachSourceKnew() throws {
+        let ctx = try context()
+        source(ctx, "venue-feed")
+        source(ctx, "artist-page")
+
+        ingest([("venue-feed", [event(producerOnly)]),
+                ("artist-page", [event(genreOnly)])], into: ctx)
+
+        let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
+        #expect(row.discipline == Discipline.music.rawValue, "the genre one source could read")
+        #expect(row.production == Production.selfProduced.rawValue, "who the other source could name")
+        #expect(row.profile == Profile.strong.rawValue, "the profile that came with that producer")
+    }
+
+    // Order must not change the answer, which is what a merge buys over a precedence.
+    @Test func theOppositeOrderKeepsTheSameTwoFacts() throws {
+        let ctx = try context()
+        source(ctx, "venue-feed")
+        source(ctx, "artist-page")
+
+        ingest([("artist-page", [event(genreOnly)]),
+                ("venue-feed", [event(producerOnly)])], into: ctx)
+
+        let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?.first)
+        #expect(row.discipline == Discipline.music.rawValue)
+        #expect(row.production == Production.selfProduced.rawValue)
+        #expect(row.profile == Profile.strong.rawValue)
+    }
+
+    // THE failure path, and it took two attempts to make it real. `weak` is not a lesser `strong`, it is
+    // the penalty an agency-routed showcase earns ("the dead zone that rarely converts"), and `agency` is
+    // not a worse `self`. A merge preferring the better-looking value would strip that penalty off any
+    // show a second source described more flatteringly, and every such row would climb the queue.
+    //
+    // The first version of this test was VACUOUS: it put the agency words in the TITLE, which both sources
+    // share, so the classifier forced `weak` on both readings and the dangerous combination could never
+    // arise. Implementing the naive "prefer strong" merge left it green. The agency verdict has to come
+    // from the PRESENTER, the only field the two sources differ on.
+    @Test func aFlatteringSecondSourceDoesNotStripAnAgencysPenalty() throws {
+        let ctx = try context()
+        source(ctx, "agency-feed")
+        source(ctx, "venue-feed")
+
+        let agencyRead = ScoutExtractEvent(title: "A Winter Gathering", presenter: "Distinguished Concerts International",
+                                           venue: "Merkin Hall", performanceDate: "2099-11-02",
+                                           sourceUrl: "https://example.test/gathering")
+        let flatteringRead = ScoutExtractEvent(title: "A Winter Gathering", presenter: producerOnly,
+                                               venue: "Merkin Hall", performanceDate: "2099-11-02",
+                                               sourceUrl: "https://example.test/gathering")
+
+        // Non-vacuous: the two readings really do sit on opposite sides of the agency verdict.
+        #expect(EventClassifier.classify(agencyRead.asExtractedEvent).production == .agency)
+        #expect(EventClassifier.classify(agencyRead.asExtractedEvent).profile == .weak)
+        #expect(EventClassifier.classify(flatteringRead.asExtractedEvent).production == .selfProduced)
+        #expect(EventClassifier.classify(flatteringRead.asExtractedEvent).profile == .strong)
+
+        ingest([("agency-feed", [agencyRead]), ("venue-feed", [flatteringRead])], into: ctx)
+
+        let row = try #require((try? ctx.fetch(FetchDescriptor<Prospect>()))?
+                                .first { $0.performanceDate == "2099-11-02" })
+        #expect(row.production == Production.agency.rawValue,
+                "an agency verdict is a different fact from self-produced, not a worse one")
+        #expect(row.profile == Profile.weak.rawValue,
+                "the agency penalty must survive a second source describing the show more flatteringly")
+    }
+
+    private func ingest(_ perSource: [(String, [ScoutExtractEvent])], into ctx: ModelContext) {
+        let results = ScoutExtractResults(
+            version: 1, generatedAt: "2026-07-13T00:00:00Z",
+            results: perSource.map { id, events in
+                ScoutExtractResult(sourceId: id, verdict: .upcomingListings, events: events, note: nil)
+            })
+        ScoutExtractIngest.ingest(results, clients: [], history: [], blocked: .empty,
+                                  today: ScoutTestClock.beforeAllFixtures, now: now, into: ctx)
+    }
+}
