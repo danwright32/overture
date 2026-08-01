@@ -35,6 +35,10 @@ struct QueueView: View {
     // re-derives the queue immediately instead of at the next relaunch.
     @Query private var promotedProducers: [PromotedProducer]
     @Query private var demotedHouses: [DemotedHouse]
+    // #1825: the watchlist, so a card can tell a link to THIS show from a fallback to the source's own
+    // calendar. @Query rather than a context read, on the same precedent as the corrections above: adding
+    // or removing a source re-labels the affected cards immediately.
+    @Query private var watchedSources: [WatchedSource]
 
     // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
     // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
@@ -166,7 +170,8 @@ struct QueueView: View {
     private var items: [QueueItem] {
         QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
-                                                      demotedRows: demotedHouses))
+                                                      demotedRows: demotedHouses),
+                         sources: watchedSources)
     }
 
     private var today: String { QueueModel.easternToday() }

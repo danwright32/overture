@@ -43,6 +43,9 @@ struct ArchiveView: View {
     // #1719: the same corrections the queue applies, so one surface cannot disagree with the other.
     @Query private var promotedProducers: [PromotedProducer]
     @Query private var demotedHouses: [DemotedHouse]
+    // #1825: the same watchlist the queue reads, for the same reason: one surface cannot label a link
+    // differently from the other.
+    @Query private var watchedSources: [WatchedSource]
 
     @State private var activeStatuses: Set<ArchiveStatus> = ArchiveOpening.defaultStatuses
     @State private var query: String = ""
@@ -76,7 +79,8 @@ struct ArchiveView: View {
     private var items: [QueueItem] {
         QueueModel.items(from: prospects, answers: orgAnswers,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
-                                                      demotedRows: demotedHouses))
+                                                      demotedRows: demotedHouses),
+                         sources: watchedSources)
     }
 
     private var filtered: [QueueItem] {
