@@ -65,6 +65,12 @@ enum ScoutExtractService {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
+    // #1822: the same marker, read for whether it is beating, stale, or gone. A progress screen needs
+    // the difference between the last two; `isRunning` cannot carry it.
+    static func heartbeat(markerURL: URL = defaultMarkerURL, now: Date) -> RunHeartbeat {
+        DetachedRunner.heartbeat(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
+    }
+
     static let lastRunKey = "scoutExtractLastRunStartedAt"
 
     static var lastRunStartedAt: Date? {

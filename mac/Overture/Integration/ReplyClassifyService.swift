@@ -77,6 +77,12 @@ enum ReplyClassifyService {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
+    // #1822: the same marker, read for whether it is beating, stale, or gone. A progress screen needs
+    // the difference between the last two; `isRunning` cannot carry it.
+    static func heartbeat(markerURL: URL = defaultMarkerURL, now: Date) -> RunHeartbeat {
+        DetachedRunner.heartbeat(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
+    }
+
     // When the last classify+drafter run began, so the completion watcher can ask DetachedRunOutcome
     // whether the run refreshed its results or finished empty (#435). Mirrors PrepQueueService; the
     // same plausibility floor collapses an epoch/sentinel timestamp from a fresh store to "never".

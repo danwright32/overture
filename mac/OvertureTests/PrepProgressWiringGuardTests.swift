@@ -29,10 +29,30 @@ struct PrepProgressWiringGuardTests {
             Issue.record("Prep LiveRunLabel progressDetail not found")
             return
         }
-        let windowStart = rootView.index(detailRange.lowerBound, offsetBy: -600,
+        let windowStart = rootView.index(detailRange.lowerBound, offsetBy: -1400,
                                          limitedBy: rootView.startIndex) ?? rootView.startIndex
         let nearby = rootView[windowStart..<detailRange.lowerBound]
-        #expect(nearby.contains("LiveRunLabel(base: RunProgressCopy.title("))
-        #expect(nearby.contains("PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping"))
+        #expect(nearby.contains("LiveRunLabel("))
+        #expect(nearby.contains("RunProgressCopy.title(isProbe ? .probing : .prepping)"))
+        #expect(nearby.contains("PrepQueueService.isProbeRunning(now: Date())"))
+    }
+
+    // #1822: the two facts this label was missing. It rendered inside a branch that only runs BECAUSE
+    // isRunning returned true, yet passed no heartbeat at all, so RunProgress.liveness saw no evidence of
+    // life and showed the warning triangle for the whole remainder of every run past three minutes. And a
+    // reachability probe, which reuses this same run slot, was judged against Prep's window rather than
+    // its own ten minutes. Neither is visible from the label's own tests: only the call site has them.
+    @Test func theToolbarLabelIsGivenTheHeartbeatAndTheProbesOwnWindow() {
+        let rootView = source("Overture/App/RootView.swift")
+        guard let body = SourceGuardHelper.propertyBody("private var prepToolbarLabel: some View {",
+                                                        in: rootView) else {
+            Issue.record("RootView no longer builds the toolbar's Prep label in `prepToolbarLabel`")
+            return
+        }
+        #expect(body.contains("heartbeat: { PrepQueueService.heartbeat(now: Date()) }"),
+                "the toolbar label judges liveness with no heartbeat, so a healthy run reads as stuck")
+        #expect(body.contains("RunTimeouts.reachabilityProbe"),
+                "a probe is judged against Prep's window instead of its own")
+        #expect(body.contains("RunTimeouts.prep"))
     }
 }

@@ -531,6 +531,12 @@ enum PrepQueueService {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }
 
+    // #1822: the same marker, read for whether it is beating, stale, or gone. A progress screen needs
+    // the difference between the last two; `isRunning` cannot carry it.
+    static func heartbeat(markerURL: URL = defaultMarkerURL, now: Date) -> RunHeartbeat {
+        DetachedRunner.heartbeat(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
+    }
+
     // #1322: whether the in-flight detached run is a reachability probe (its marker is present) rather than
     // a normal Prep. A probe and a prep share the single run lock, so isRunning alone can't tell them
     // apart; the probe-run marker, written on launch and cleared on settle, is what distinguishes them.

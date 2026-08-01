@@ -20,7 +20,7 @@ struct LiveRunLabel: View {
     // #354: real "N of M" progress (e.g. from a run's own progress file), inserted before the
     // ellipsis. nil when the run has no progress data to show.
     // #1003: a closure (not a plain String) so it re-reads the run's progress on every TimelineView
-    // tick, exactly as `runAlive` does, rather than reflecting a value the enclosing view captured at
+    // tick, exactly as `heartbeat` does, rather than reflecting a value the enclosing view captured at
     // ITS last render (which no timer drives). Otherwise the count could sit stale for minutes beside
     // an elapsed counter that keeps moving, reading as "alive and progressing" whether or not it was.
     var progressDetail: (() -> String?)? = nil
@@ -28,7 +28,7 @@ struct LiveRunLabel: View {
     // run that's still genuinely alive never flips to the misleading "looks stuck" state. A closure
     // (not a plain Bool) so it re-evaluates each second alongside the TimelineView tick. nil keeps the
     // wall-clock-only behavior.
-    var runAlive: (() -> Bool)? = nil
+    var heartbeat: (() -> RunHeartbeat)? = nil
     // #994: icon only, with the sentence moved to the tooltip. For the toolbar, where a label that
     // grows when a run starts reflows every other item and pushes real buttons into the macOS ">>"
     // overflow, at the exact moment Dan is watching for the run to start. Off everywhere else: the
@@ -52,6 +52,13 @@ struct LiveRunLabel: View {
             switch state {
             case .stalled(let elapsed):
                 stalled(elapsed: elapsed)
+            // #1822: a finished run keeps the spinner, because nothing is wrong: only the sentence
+            // changes, from what it is doing to the fact that it is done.
+            case .finishing(let elapsed):
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    styled(Text(RunProgress.finishingLabel(elapsed: elapsed)))
+                }
             case .running, .idle:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -73,7 +80,10 @@ struct LiveRunLabel: View {
                 .foregroundStyle(.orange)
                 .imageScale(.small)
                 .help(helpText(now: now))
-        case .running, .idle:
+        // #1822: finishing keeps the spinner, so the warning triangle stays reserved for a run that has
+        // actually gone wrong. A symbol that appears at the end of every healthy run is a symbol Dan
+        // learns to ignore (L36).
+        case .finishing, .running, .idle:
             ProgressView()
                 .controlSize(.small)
                 .help(helpText(now: now))
@@ -87,6 +97,8 @@ struct LiveRunLabel: View {
         switch liveness(now: now) {
         case .stalled(let elapsed):
             return RunProgress.stalledLabel(base, elapsed: elapsed)
+        case .finishing(let elapsed):
+            return RunProgress.finishingLabel(elapsed: elapsed)
         case .running, .idle:
             return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail?())
         }
@@ -97,7 +109,7 @@ struct LiveRunLabel: View {
             // No timeout configured: never stalls, just reflect whether a counter is running.
             return since == nil ? .idle : .running(elapsed: "")
         }
-        return RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: runAlive?())
+        return RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: heartbeat?())
     }
 
     @ViewBuilder private func stalled(elapsed: String) -> some View {

@@ -162,7 +162,7 @@ struct RunProgressViewStateTests {
         var retried = false
         let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5),
-                                     runAlive: { false }, onRetry: { retried = true }).content(now: now)
+                                     heartbeat: { .stale }, onRetry: { retried = true }).content(now: now)
 
         #expect(try allTexts(view).contains(RunProgress.stalledLabel("Reading calendars", elapsed: elapsed)))
         #expect((try? view.inspect().find(ViewType.ProgressView.self)) == nil,
@@ -172,6 +172,39 @@ struct RunProgressViewStateTests {
         #expect(retried == true)
     }
 
+    // #1822, the screen Dan actually reported: a run that has FINISHED (its runner deleted the marker in
+    // its exit trap) sits here for up to three seconds before the watcher closes the sheet. It must not
+    // spend those seconds accusing itself of being stuck, which is what every Prep run long enough to
+    // pass its timeout did.
+    @Test func aFinishedRunSaysItIsFinishingRatherThanStuck() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = since.addingTimeInterval(RunTimeouts.scoutExtract + 30)
+        let elapsed = RunProgress.elapsedLabel(since: since, now: now)!
+        let view = RunProgressView(phase: .reading, since: since,
+                                   snapshot: snapshot("Kaufman Music Center", 5, 5),
+                                   heartbeat: { .absent }).content(now: now)
+
+        #expect(try allTexts(view).contains(RunProgress.finishingLabel(elapsed: elapsed)))
+        #expect(!(try allTexts(view).contains { $0.contains("looks stuck") }),
+                "a run that ended cleanly must never be called stuck")
+        // Still visibly in flight rather than a dead screen, and still named, so the last thing on screen
+        // is not a subject change.
+        #expect((try? view.inspect().find(ViewType.ProgressView.self)) != nil)
+        #expect(try allTexts(view).contains("Reading calendars"))
+    }
+
+    // The other half, and the one that keeps the warning meaningful: a marker LEFT BEHIND by a run that
+    // died is still reported stuck. Same elapsed, same phase, opposite verdict, decided only by whether
+    // the marker is gone or merely stale.
+    @Test func aMarkerLeftBehindIsStillReportedStuck() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = since.addingTimeInterval(RunTimeouts.scoutExtract + 30)
+        let view = RunProgressView(phase: .reading, since: since,
+                                   snapshot: snapshot("Kaufman Music Center", 5, 5),
+                                   heartbeat: { .stale }).content(now: now)
+        #expect(try allTexts(view).contains { $0.contains("looks stuck") })
+    }
+
     // A run past its wall-clock timeout whose heartbeat still says it is alive renders as running, not
     // stalled: the reading phase legitimately runs long, and the marker is the real liveness signal.
     @Test func pastTimeoutButAliveRendersAsRunningNotStalled() throws {
@@ -179,7 +212,7 @@ struct RunProgressViewStateTests {
         let now = since.addingTimeInterval(RunTimeouts.scoutExtract + 30)
         let view = RunProgressView(phase: .reading, since: since,
                                      snapshot: snapshot("Kaufman Music Center", 2, 5),
-                                     runAlive: { true }).content(now: now)
+                                     heartbeat: { .beating }).content(now: now)
         #expect(!(try allTexts(view).contains { $0.contains("looks stuck") }))
         #expect(try allTexts(view).contains("Reading calendars"))
     }

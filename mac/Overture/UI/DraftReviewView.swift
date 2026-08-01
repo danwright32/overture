@@ -56,7 +56,7 @@ struct DraftReviewView: View {
     // send timeout. #468: a retry IS safe here (unlike when this comment was written): both sendOne and
     // sendReplyDraft below now claim a persisted "in flight" field before their network await, so a
     // second call while the first is still live is refused rather than reaching the network again. No
-    // runAlive check on either LiveRunLabel, unlike the reply-draft one further down: this is an
+    // heartbeat check on either LiveRunLabel, unlike the reply-draft one further down: this is an
     // in-process network await with no external heartbeat to check, so since + timeout is all there is.
     var outboundSendSince: Date? = nil
     // Same, keyed per recipient for an in-flight reply send.
@@ -750,7 +750,7 @@ struct DraftReviewView: View {
                                  timeout: RunTimeouts.replyDraft,
                                  font: OVType.meta, color: OVColor.inkSoft,
                                  onRetry: { onDraftReply(c.id) },
-                                 runAlive: { ReplyClassifyService.isRunning(now: Date()) })
+                                 heartbeat: { ReplyClassifyService.heartbeat(now: Date()) })
                     Button("Cancel") { onCancelReplyDraft() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.rust)
                         .help("Stop the reply drafting run")

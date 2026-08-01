@@ -42,7 +42,7 @@ struct RunProgressView: View {
         // stamp on it cannot be forgotten in one of those paths and go stale into the next run.
         //
         // Set by the in-process sweep (the one phase with no marker file to prove it is alive). The
-        // detached phases leave it nil and keep passing their marker check as `runAlive`.
+        // detached phases leave it nil and keep passing their marker reading as `heartbeat`.
         var advancedAt: Date? = nil
     }
 
@@ -53,7 +53,10 @@ struct RunProgressView: View {
     var snapshot: () -> Snapshot = { Snapshot() }
     // The reading phase's real heartbeat (marker freshness), so a slow-but-living run never flips to the
     // misleading "looks stuck" state while a genuinely dead one does. nil keeps wall-clock-only behaviour.
-    var runAlive: (() -> Bool)? = nil
+    // #1822: the run's marker, read for all three of the things it can say. Was a Bool, which could not
+    // distinguish a marker that had been deleted at the end of a healthy run from one left behind by a
+    // run that died, so a finished run rendered as a stuck one.
+    var heartbeat: (() -> RunHeartbeat)? = nil
     // #1427: the learned run-duration history, injected like `snapshot` so the estimate is testable and the
     // view stays ignorant of where it comes from. Read each tick; the default returns nil so every existing
     // caller (and every non-reading phase) shows no estimate, exactly as before.
@@ -97,15 +100,19 @@ struct RunProgressView: View {
         // the sweep, whether it is still alive, so reading it twice could answer the two from different
         // instants.
         let snap = snapshot()
-        // #1530: a phase with a marker file uses it (`runAlive`); the in-process sweep has none, so its
-        // still-alive evidence is that the snapshot advanced recently. A phase with neither falls through
-        // to `false`, which leaves the wall-clock ceiling deciding exactly as it did before.
-        let alive = runAlive?() ?? RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now)
-        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, runAlive: alive)
+        // #1822: a phase with a marker reports all three of its states, so a run that ENDED (marker gone,
+        // the exit trap's last act) is no longer told apart from one that WEDGED (marker still sitting
+        // there, untouched). The in-process sweep has no marker, so it keeps answering with its own
+        // advancing-count evidence, folded to beating or stale exactly as before.
+        let beat = heartbeat?()
+            ?? (RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now) ? .beating : .stale)
+        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat)
         VStack(spacing: OVSpacing.md) {
             switch state {
             case .stalled(let elapsed):
                 stalled(elapsed: elapsed)
+            case .finishing(let elapsed):
+                finishing(elapsed: elapsed)
             case .running, .idle:
                 running(snap, now: now)
             }
@@ -143,6 +150,18 @@ struct RunProgressView: View {
             Text(line).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                 .monospacedDigit()
         }
+    }
+
+    // #1822: the run is over and this screen is closing itself. The same calm treatment as running, with
+    // no alarm colour and no warning symbol, because nothing has gone wrong. The phase title stays so the
+    // screen does not appear to change subject in its last second.
+    @ViewBuilder private func finishing(elapsed: String) -> some View {
+        ProgressView().controlSize(.large).tint(OVColor.gold)
+        Text(RunProgressCopy.title(phase))
+            .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+        Text(RunProgress.finishingLabel(elapsed: elapsed))
+            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            .monospacedDigit()
     }
 
     @ViewBuilder private func stalled(elapsed: String) -> some View {
