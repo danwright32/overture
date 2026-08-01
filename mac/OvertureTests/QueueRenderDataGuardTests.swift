@@ -63,14 +63,22 @@ struct QueueRenderDataGuardTests {
 
     // #1771: probeSummary took the snapshot and then ignored half of it, calling the expensive `items`
     // computed property fresh. One word, and a whole second rebuild of the queue behind it.
-    @Test func probeSummaryUsesTheItemsItWasHanded() {
+    //
+    // #1774 moved the bar into its own view (ProbeSelectionBar), so the same property is now pinned where
+    // the inputs are handed over. Re-anchored rather than deleted: the defect it guards against is one
+    // word at a call site, and moving the call site does not make the word any harder to write.
+    @Test func theProbeBarUsesTheItemsItWasHanded() {
         guard let body = SourceGuardHelper.propertyBody(
-            "private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {",
+            "private func probeSelectionBar(_ data: RenderData) -> some View {",
             in: queueView) else {
-            Issue.record("expected to find probeSummary's body")
+            Issue.record("expected to find probeSelectionBar's body")
             return
         }
-        #expect(body.contains("among: data.items"))
+        #expect(body.contains("allItems: data.items"))
+        // `allItems: items` there is `self.items`, the computed property that rebuilds the whole queue.
+        #expect(!body.contains("allItems: items"))
+        // #1916: the rows stay a closure, so an unticked queue never pays for the scoutRows sweep.
+        #expect(body.contains("rows: { scoutRows(data) }"))
     }
 
     // #1772: the same defect one level lower, where it scales with the number of cards rather than
