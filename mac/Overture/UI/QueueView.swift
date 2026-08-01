@@ -207,7 +207,31 @@ struct QueueView: View {
     private func makeRenderData() -> RenderData {
         #if DEBUG
         // #1774: the whole-store derivation, counted where it happens. A scroll must not move this.
-        QueueRenderCounter.recordDerivation()
+        // #1930: with a fingerprint of what this view derives FROM, so an idle re-derivation can name its
+        // own cause instead of leaving the next person to eliminate candidates by reading code. Counts and
+        // small state values only: nothing here may cost a fetch or a filesystem stat, or the diagnostic
+        // becomes part of the problem it measures. `prepRunning` and the reply-run marker are deliberately
+        // absent for that reason (both are stats, paid once below).
+        QueueRenderCounter.recordDerivation(inputs: [
+            "prospects": "\(prospects.count)",
+            "allProspects": "\(allProspects.count)",
+            "orgAnswers": "\(orgAnswers.count)",
+            "inquiries": "\(inquiries.count)",
+            "excludedTowns": "\(excludedTownRows.count)",
+            "allowedSeedTowns": "\(allowedSeedTownRows.count)",
+            "promotedProducers": "\(promotedProducers.count)",
+            "demotedHouses": "\(demotedHouses.count)",
+            "gmail": "\(GmailConnection.shared.isConnected)",
+            "stage": String(describing: focusedStage),
+            "focusedKeys": "\(focusedKeys?.count ?? -1)",
+            "departing": "\(departing.count)",
+            "outboundSending": "\(outboundSending.count)",
+            "replySending": "\(replySending.count)",
+            "highlightedKey": highlightedKey ?? "none",
+            "deepLinkedKey": deepLinkedKey ?? "none",
+            "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
+            "today": today,
+        ])
         #endif
         let items = self.items
         let now = Date()
@@ -768,10 +792,13 @@ struct QueueView: View {
                 // #1774: the whole-store derivation count. Scrolling the queue must not move it; if it
                 // climbs while scrolling, the scroll is reaching the derivation again and this issue has
                 // regressed. Kept next to the Debug badge because that is where a walk is already looking.
-                Text("derived \(QueueRenderCounter.derivations)")
+                // #1930: and what moved to cause the last one, so an idle re-derivation names its own
+                // trigger on screen. Every one is logged to queue-derivations.log in this build's data
+                // directory, which is what an unattended observation reads afterwards.
+                Text("derived \(QueueRenderCounter.derivations) · \(QueueRenderCounter.lastReason)")
                     .font(OVType.tag)
                     .foregroundStyle(OVColor.inkFaint)
-                    .help("Whole-store derivations this launch (#1774). Scrolling must not increase it.")
+                    .help("Whole-store derivations this launch (#1774), and which inputs moved before the last one (#1930). Scrolling must not increase the count.")
                 #endif
             }
             Rectangle().fill(OVColor.gold.opacity(0.5)).frame(height: 1).frame(maxWidth: .infinity)
@@ -1205,11 +1232,89 @@ struct QueueJumpRequest: Equatable {
 // from the running Debug app, so a logged count is a count nobody reads.
 //
 // DEBUG only. In Release it would be shared mutable state ticking on the main thread for no reader.
+// #1930: the count alone says an idle queue re-derived twice in three minutes. It cannot say WHY, and
+// without that the only method available is eliminating candidates by reading code, which is how #1930's
+// own candidate list was written and how two of its three entries turned out to be wrong (the reconcile
+// timer is at its 30 minute default and the Downbeat export had not changed that day).
+//
+// So each derivation records a fingerprint of the inputs this view derives FROM, and reports which of them
+// moved since the last one. "nothing this view reads" is the most valuable answer of the three: it means
+// the invalidation came from outside (RootView rebuilding this view, or an environment change), which no
+// amount of staring at QueueView would ever have told anybody.
+//
+// Written to a file as well as shown on screen, because catching an idle trigger means leaving the app
+// alone for minutes and then reading what happened, which a number on a masthead cannot do (and NSLog
+// output is invisible from the running Debug app).
 enum QueueRenderCounter {
     nonisolated(unsafe) private(set) static var derivations = 0
+    // What moved before the most recent derivation. Shown beside the count in the masthead.
+    nonisolated(unsafe) private(set) static var lastReason = firstRender
+    nonisolated(unsafe) private static var previous: [String: String] = [:]
 
-    static func recordDerivation() { derivations += 1 }
-    static func reset() { derivations = 0 }
+    static let firstRender = "first render"
+    static let nothingVisible = "nothing this view reads"
+
+    // Where an unattended observation ends up. Debug builds keep their own data directory, so this can
+    // never land beside the live store's files.
+    static var logURL: URL { StoreLocation.dataDirectory.appendingPathComponent("queue-derivations.log") }
+
+    // `to` is injected purely so a test can watch a real line land somewhere other than this Mac's own
+    // Debug data directory, which the suite would otherwise append to on every run.
+    //
+    // `underTests` is the seam that keeps the suite out of the file entirely. The unit suite hosts itself
+    // in the full app (TEST_HOST), so a test run opens a real window that renders the real queue, and those
+    // renders were landing in the same log a real observation is read from: two runs interleaved in one
+    // file, each starting again at #1. The count itself is in-memory and harmless, so only the file is
+    // protected. Same signal the launch-time background work already skips on (#195).
+    static func recordDerivation(inputs: [String: String] = [:], to url: URL? = nil,
+                                 underTests: Bool = AppEnvironment.isRunningUnderTests) {
+        derivations += 1
+        lastReason = reason(for: inputs, since: previous)
+        previous = inputs
+        guard !underTests else { return }
+        append(line: "#\(derivations) \(lastReason)", to: url ?? logURL)
+    }
+
+    // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
+    // one more thing taken on trust while it is used to judge everything else.
+    static func reason(for inputs: [String: String], since previous: [String: String]) -> String {
+        guard !previous.isEmpty else { return firstRender }
+        let changed = inputs.keys.filter { inputs[$0] != previous[$0] }
+        // An input that stopped being reported is a change too, and silently dropping it would report
+        // "nothing changed" for a render that was not the same shape at all.
+        let dropped = previous.keys.filter { inputs[$0] == nil }
+        let moved = Set(changed).union(dropped).sorted()
+        return moved.isEmpty ? nothingVisible : moved.joined(separator: ", ")
+    }
+
+    // Best effort, but never silent: a write that fails says so on the masthead beside the count, rather
+    // than leaving an empty log to be read as an idle queue that never re-derived.
+    static func append(line: String, to url: URL) {
+        let stamped = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        guard let data = stamped.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            do {
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                return
+            } catch {
+                lastReason += " (log write failed)"
+                return
+            }
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            lastReason += " (log create failed)"
+        }
+    }
+
+    static func reset() {
+        derivations = 0
+        lastReason = firstRender
+        previous = [:]
+    }
 }
 #endif
 

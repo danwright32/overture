@@ -91,7 +91,9 @@ struct ArchiveView: View {
             header
             Divider()
             filterBar
-            ShowSearchField(query: $query, allItems: items) { result in
+            // #1926: the scope is handed over as a closure, so the whole-store map behind `items` is not
+            // built for a field nobody has typed into. Archive's own field keeps searching everything.
+            ShowSearchField(query: $query, allItems: { items }) { result in
                 reveal(result.id)
             }
             .padding(.horizontal, OVSpacing.lg).padding(.vertical, OVSpacing.sm)

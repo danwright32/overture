@@ -25,8 +25,13 @@ struct QueueDerivationCounterTests {
         QueueRenderCounter.reset()
         #expect(QueueRenderCounter.derivations == 0)
 
-        QueueRenderCounter.recordDerivation()
-        QueueRenderCounter.recordDerivation()
+        // #1930: the log destination is injected so the suite does not append to this Mac's own Debug
+        // data directory on every run.
+        let log = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("counter-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        QueueRenderCounter.recordDerivation(inputs: ["a": "1"], to: log)
+        QueueRenderCounter.recordDerivation(inputs: ["a": "2"], to: log)
         #expect(QueueRenderCounter.derivations == 2)
 
         QueueRenderCounter.reset()
@@ -41,9 +46,9 @@ struct QueueDerivationCounterTests {
             Issue.record("expected to find makeRenderData's body")
             return
         }
-        #expect(body.contains("QueueRenderCounter.recordDerivation()"))
+        #expect(body.contains("QueueRenderCounter.recordDerivation("))
         // Once per derivation, not once per field of the snapshot.
-        #expect(body.components(separatedBy: "QueueRenderCounter.recordDerivation()").count - 1 == 1)
+        #expect(body.components(separatedBy: "QueueRenderCounter.recordDerivation(").count - 1 == 1)
     }
 
     // Gated out of Release, at both ends: the counter itself and the call that feeds it.
@@ -54,7 +59,7 @@ struct QueueDerivationCounterTests {
             Issue.record("expected to find makeRenderData's body")
             return
         }
-        guard let callIndex = body.range(of: "QueueRenderCounter.recordDerivation()")?.lowerBound else {
+        guard let callIndex = body.range(of: "QueueRenderCounter.recordDerivation(")?.lowerBound else {
             Issue.record("expected the recordDerivation call")
             return
         }

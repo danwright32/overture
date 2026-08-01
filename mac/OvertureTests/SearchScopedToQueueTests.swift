@@ -189,7 +189,8 @@ struct SearchScopeWiringGuardTests {
 
     @Test func archivesOwnFieldKeepsTheWholeStore() {
         #expect(!archiveView.isEmpty)
-        #expect(archiveView.contains("ShowSearchField(query: $query, allItems: items"),
+        // #1926: the scope arrives as a closure now, so this pins `{ items }` rather than `items`.
+        #expect(archiveView.contains("ShowSearchField(query: $query, allItems: { items }"),
                 "Archive is the screen whose job is everything else; narrowing its field too would leave the out-of-scope shows unreachable")
     }
 

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **969 sentences**, from 329 source files.
+Every sentence Overture can say to Dan: **969 sentences**, from 330 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1334,7 +1334,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Search shows, venues, contacts"
     `UI/ShowSearchField.swift`
 "Search the queue"
-    `App/RootView.swift`
+    `UI/QueueSearchBar.swift`
 "Self-produced \(discipline.rawValue) group, a strong-fit target\(where_)."
     `Domain/EventClassifier.swift`
 "Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."
