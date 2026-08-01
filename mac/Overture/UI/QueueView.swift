@@ -137,10 +137,10 @@ struct QueueView: View {
     var onStartPrep: () -> Void = {}
     var onProbeReachability: (Set<String>) -> Void = { _ in }   // #1308 Layer 2
 
-    // #1597: the dates Dan has ticked for one multi-date reachability check, by date-group id. Session
-    // state, deliberately not persisted: a selection is a thing he is assembling right now, and one
-    // surviving a relaunch would be a spending decision made days ago and forgotten.
-    @State private var selectedProbeDates: Set<String> = []
+    // #1597/#1774: the dates Dan has ticked for one multi-date reachability check. An object, not @State,
+    // so a tick invalidates only the checkbox and the selection bar that read it. See ProbeSelectionState
+    // for why, and QueueInvalidationGuardTests for the assertion that this view never reads it.
+    @State private var probeSelection = ProbeSelectionState()
 
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
     @State private var pendingProbe: ProbeConfirm?
@@ -279,69 +279,23 @@ struct QueueView: View {
         return data.items.filter { wanted.contains($0.id) }
     }
 
-    private func probeSummary(_ data: RenderData) -> (ProbeSelection.Summary, [String])? {
-        // #1771: `data.items`, not `self.items`. Reading the computed property here rebuilt the entire
-        // queue a second time on every render, one word away from the snapshot the caller already holds.
-        QueueModel.probeSelection(dates: selectedProbeDates, in: scoutRows(data),
-                                  among: data.items, today: today, stage: focusedStage,
-                                  overrides: ProducerOverrides(promotedRows: promotedProducers,
-                                                               demotedRows: demotedHouses),
-                                  geo: geo)
-    }
-
-    @ViewBuilder private func probeSelectionBar(_ data: RenderData) -> some View {
-        if let (summary, keys) = probeSummary(data), !summary.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: OVSpacing.sm) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(ProbeSelectionCopy.selectionSummary(summary))
-                            .font(OVType.meta.weight(.semibold))
-                            .foregroundStyle(OVColor.ink)
-                        Text(ProbeSelectionCopy.costLine(summary))
-                            .font(OVType.meta)
-                            .foregroundStyle(OVColor.inkSoft)
-                    }
-                    Spacer(minLength: OVSpacing.sm)
-                    Button(ProbeSelectionCopy.clearSelection) {
-                        selectedProbeDates = []
-                    }
-                    .buttonStyle(.plain)
-                    .font(OVType.meta)
-                    .foregroundStyle(OVColor.inkSoft)
-                    Button {
-                        guard !prepRunning else { return }
-                        // #1765: the decision is ProbeSelection's, not this closure's. It used to be an
-                        // early return here that refused a large selection before the confirm sheet, which
-                        // meant the one rule deciding whether Dan could run at all lived where no test
-                        // could reach it (#863).
-                        switch ProbeSelection.outcome(for: summary) {
-                        case .nothing:
-                            break
-                        case .confirm(let title, let message):
-                            pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
-                                                        title: title, message: message)
-                        }
-                    } label: {
-                        Text(ReachabilityProbeCopy.controlLabel)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(prepRunning ? OVColor.onForest.opacity(0.5) : OVColor.onForest)
-                            .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                            .background(Capsule().fill(OVColor.forest.opacity(prepRunning ? 0.4 : 1)))
-                    }
-                    .buttonStyle(.plain)
-                    .help(prepRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
-                }
-            }
-            .padding(.horizontal, OVSpacing.xl)
-            .padding(.vertical, OVSpacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Opaque, because it now floats OVER the rows rather than sitting above them: anything
-            // translucent here would show the content sliding underneath and read as a rendering fault.
-            .background(OVColor.canvas)
-            .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
-            .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
+    // #1774: the bar itself is ProbeSelectionBar, in its own file. What stays here is only the handoff of
+    // finished inputs; this view reads no ticked date, which is the property that makes a tick cheap.
+    private func probeSelectionBar(_ data: RenderData) -> some View {
+        ProbeSelectionBar(
+            selection: probeSelection,
+            // #1916: a closure, so the scoutRows sweep is never paid on a queue with nothing ticked.
+            rows: { scoutRows(data) },
+            // #1771: `data.items`, not `self.items`. Reading the computed property here rebuilt the entire
+            // queue a second time on every render, one word away from the snapshot the caller already holds.
+            allItems: data.items,
+            today: today, stage: focusedStage,
+            overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
+            geo: geo,
+            prepRunning: prepRunning,
+            onRun: { keys, title, message in
+                pendingProbe = ProbeConfirm(keys: keys, dateLabel: "", title: title, message: message)
+            })
     }
 
     private func mainContent(_ data: RenderData) -> some View {
@@ -376,7 +330,7 @@ struct QueueView: View {
                     proceedLabel: ReachabilityProbeCopy.confirmProceed,
                     onProceed: {
                         onProbeReachability(Set(pending.keys))
-                        selectedProbeDates = []
+                        probeSelection.clear()
                         pendingProbe = nil
                     },
                     onCancel: { pendingProbe = nil })
@@ -605,21 +559,7 @@ struct QueueView: View {
                 // #1597: tick the date to add it to a multi-date check. Scout only, and only where there
                 // is something still to check, so it never appears on a date whose Check button is absent.
                 if focusedStage == .scout, !QueueModel.reachabilityProbeCandidateKeys(group.items, geo: geo).isEmpty {
-                    Button {
-                        if selectedProbeDates.contains(group.id) {
-                            selectedProbeDates.remove(group.id)
-                        } else {
-                            selectedProbeDates.insert(group.id)
-                        }
-                    } label: {
-                        Image(systemName: selectedProbeDates.contains(group.id)
-                              ? "checkmark.square.fill" : "square")
-                            .font(.system(size: 12))
-                            .foregroundStyle(selectedProbeDates.contains(group.id)
-                                             ? OVColor.forest : OVColor.inkSoft)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Include this date in one reachability check")
+                    ProbeDateCheckbox(groupID: group.id, selection: probeSelection)
                 }
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
