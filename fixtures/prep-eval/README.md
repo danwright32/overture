@@ -59,6 +59,10 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).
 - `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
 - `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, and describes Dan without categorizing the recipient (#1824).
+- `venue-history-band-says-he-knows-the-room`: the item carries a `venueHistory` band, so the draft says
+  Dan already knows THAT room, keeps the standing credential beside it rather than instead of it, and
+  writes the follow-on clause as familiarity ("so I'm familiar with the room") rather than as a risk
+  avoided ("so I'm not learning it on the night"), which Dan flagged himself (#1887/#1905).
 - `season-calendar-describes-no-show`: the same listing text, read, that describes no show at all. The honest answer is `no_description_published`, never a description assembled from the neighbouring listings (#1824).
 
 ### Where the #1824 pair's shape comes from (L48)
@@ -73,6 +77,28 @@ carrying the room's two addresses. A plain download of the same URL returns an 1
 occurrences of "cabaret". The fixture reproduces that structure with invented names and `.example` domains,
 per the no-real-PII rule above; the calendar fixture reproduces the OTHER shape a `sourceListingURL` reaches
 (a season index), which about a third of the store's listing URLs point at.
+
+### Why the venue rules are scoped to a venue NAME, and why Carnegie is not the absent-case fixture (#1905)
+
+`requireVenueFamiliarity` and `forbidVenueHistoryClaim` take the show's venue name rather than a boolean.
+They have to. The standing credential is itself written as "I've photographed at Carnegie Hall for nearly
+ten years", so a rule that looked for any past-work claim anywhere in the body would read the credential as
+a venue-history claim: it would pass a draft that never mentioned this show's room, and it would forbid the
+credential on every show. Both checks split the body into sentences (the same way `DraftCheck
+.venueHistoryCount` does) and require the claim and the venue name to occur together.
+
+#1905 suggested a second fixture at Carnegie for the ABSENT case, where the app omits `venueHistory`
+deliberately. **That fixture cannot work, and none was added.** The reason the field is omitted there is
+that the Carnegie tenure credential is already about that exact room, so on a Carnegie show the legitimate
+credential and the forbidden venue line name the same venue. No text rule can tell a tenure from a history
+band, and a fixture forbidding venue claims at Carnegie would flag the correct draft. The absent case is
+covered instead on `solo-artist-cabaret-not-an-organisation`, a cold show at a room Dan has no history
+with, where any claim of having worked it was inferred from nothing and the Carnegie credential is
+untouched because it names a different room.
+
+**Counts are not re-checked here.** `DraftCheck.venueHistoryCount` already BLOCKS a send whose body pairs a
+past-tense shooting claim with a number, and a second implementation of that matcher in another language is
+the twin-drift L26 warns about. This harness covers the half nothing else judges: the wording.
 
 ## What this harness CANNOT test, and why no fixture should pretend otherwise (#1723)
 

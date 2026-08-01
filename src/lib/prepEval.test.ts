@@ -537,6 +537,7 @@ describe("prep-eval fixtures", () => {
       "self-produced-duo-both-performers",
       "solo-artist-cabaret-not-an-organisation",
       "stale-site-misnamed-co-performer",
+      "venue-history-band-says-he-knows-the-room",
     ]);
   });
 
@@ -740,5 +741,103 @@ describe("the 2026-07-31 drafting rules are enforced on the produced body", () =
     const r = evaluatePrepResult(out, cold);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/not one of the live opener shapes/i);
+  });
+});
+
+// #1905: the #1887 venue-history wording, which nothing had ever scored. The app hands the run a BAND
+// (`shot_before` / `a_few` / `regularly`) and no number, and the runbook says three things about what
+// the draft must then do: say he knows the room, alongside the credential rather than instead of it;
+// never frame that familiarity as a risk avoided; and, when NO band was supplied, say nothing about
+// having worked the venue at all.
+//
+// Both venue rules are SCOPED TO THIS SHOW'S VENUE rather than to any past-work claim, because the
+// standing credential is itself written as "I've photographed at Carnegie Hall for nearly ten years".
+// An unscoped check would read that as a venue-history claim and flag every compliant cold pitch.
+//
+// Counts are deliberately NOT re-checked here. DraftCheck.venueHistoryCount already BLOCKS a send whose
+// body pairs a past-tense shooting claim with a number, and re-implementing that matcher in a second
+// language is the drift L26 warns about. This covers what nothing else does: the wording.
+describe("evaluatePrepResult - venue history wording (#1905)", () => {
+  const KNOWS_THE_ROOM =
+    "I've photographed at Harborlight Hall a few times, so I'm familiar with the room. " +
+    "I've photographed at Carnegie Hall for nearly ten years, and you can see my portfolio at " +
+    "danwrightphotography.com.";
+
+  // The credential alone, naming a DIFFERENT room from the one this show plays in.
+  const CREDENTIAL_ONLY =
+    "I've photographed at Carnegie Hall for nearly ten years, and you can see my portfolio at " +
+    "danwrightphotography.com.";
+
+  function bodyWith(venueSentence: string): string {
+    return CANONICAL_BODY.replace("Recent work is at danwrightphotography.com.", venueSentence);
+  }
+
+  it("flags a draft that was handed a venue history band and never says he knows that room", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(CREDENTIAL_ONLY)), {
+      description: "a band was supplied for Harborlight Hall",
+      requireVenueFamiliarity: "Harborlight Hall",
+    });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/never says Dan has worked Harborlight Hall/i);
+  });
+
+  it("passes a draft that says he has worked that room", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(KNOWS_THE_ROOM)), {
+      description: "a band was supplied for Harborlight Hall",
+      requireVenueFamiliarity: "Harborlight Hall",
+    });
+    expect(r.failures).toEqual([]);
+  });
+
+  // The credential names Carnegie, not this show's room, so it must not satisfy the rule on its own.
+  it("does not accept the standing credential as familiarity with a different venue", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(CREDENTIAL_ONLY)), {
+      description: "a band was supplied for Harborlight Hall",
+      requireVenueFamiliarity: "Harborlight Hall",
+    });
+    expect(r.pass).toBe(false);
+  });
+
+  // Dan flagged this shape himself: naming the bad outcome plants it in the reader's head and invites
+  // them to picture a photographer fumbling in an unfamiliar room.
+  it("flags familiarity framed as a risk avoided rather than as knowing the space", () => {
+    const risky = "I've photographed at Harborlight Hall before, so I'm not learning the room on the night.";
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(risky)), {
+      description: "a band was supplied for Harborlight Hall",
+      forbidVenueRiskFraming: true,
+    });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/risk avoided/i);
+  });
+
+  it("passes familiarity written as knowing the space", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(KNOWS_THE_ROOM)), {
+      description: "a band was supplied for Harborlight Hall",
+      forbidVenueRiskFraming: true,
+    });
+    expect(r.failures).toEqual([]);
+  });
+
+  // The absent case, which is the one that can invent a fact: no band means the app has no history to
+  // report, so any claim of having worked THAT room came from its name, a past client, or nothing.
+  it("flags a claim of having worked the venue when no band was supplied", () => {
+    const invented = "I've photographed at Harborlight Hall a few times, so I know the space. " +
+      "You can see my portfolio at danwrightphotography.com.";
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(invented)), {
+      description: "no band was supplied for Harborlight Hall",
+      forbidVenueHistoryClaim: "Harborlight Hall",
+    });
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/no venue history was supplied/i);
+  });
+
+  // ...but the credential naming a different room is untouched by that rule, which is the whole reason
+  // it is scoped. A rule that flagged this would forbid the credential on every show.
+  it("leaves the standing credential alone when no band was supplied", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, bodyWith(CREDENTIAL_ONLY)), {
+      description: "no band was supplied for Harborlight Hall",
+      forbidVenueHistoryClaim: "Harborlight Hall",
+    });
+    expect(r.failures).toEqual([]);
   });
 });
