@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **969 sentences**, from 334 source files.
+Every sentence Overture can say to Dan: **969 sentences**, from 335 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -39,6 +39,7 @@ What is not, and why:
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
+- `Domain/StageOverlap.swift`: test failure text, read by whoever broke a rule, never said to Dan (#915)
 - `Domain/VenuePlaces.swift`: Venue and place names this table MATCHES and stores, not the app's voice: 79 city strings would bury the inventory a person reads cold (#1744)
 - `Domain/VenueShootHistory.swift`: A venue name looked UP in the table, never shown to Dan (#1887)
 - `Domain/VenueShootHistory.swift`: Words MATCHED in Dan's own calendar titles, never shown to him (#1887)

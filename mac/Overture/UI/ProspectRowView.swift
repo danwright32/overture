@@ -799,7 +799,29 @@ struct ProspectRowView: View {
             // right-justifies under those buttons instead of widening their row (which is what put it
             // beside Dismiss twice and left the cards uneven).
             reachabilityFlag
+            heldContactFlag
             reachabilityAddresses
+        }
+    }
+
+    // #1797, Dan's call 2026-08-01: a contact a review guard is holding, said HERE, while he is deciding
+    // keep or dismiss, on a show nothing has been sent to. It used to reach him as "1 show with a contact
+    // held for a check" under Send issues, on a show he had never emailed anyone about.
+    //
+    // Beneath the reachability note rather than instead of it: the two say different things and the
+    // common case has both ("Email found" plus the address, and this, saying that address is the one
+    // already in play on a neighbouring show).
+    //
+    // The SAME tone and sentence the identical hold already gets at Review, not a new signal colour: it
+    // is a fact about the address printed beside it, not an alarm about the show, and on a triage list
+    // 480 rows long a second loud badge would be noise. Whether to show it at all is decided in the model
+    // (item.heldContactAtTriage), so a test can reach it.
+    @ViewBuilder private var heldContactFlag: some View {
+        if let reason = item.heldContactAtTriage {
+            reachabilityNote(icon: "person.crop.circle.badge.questionmark",
+                             text: ReachabilityCopy.weakContactBadge(reason: reason),
+                             tone: Reachability.tone(for: .weakContactOnly),
+                             help: ReachabilityCopy.weakContactHelp(reason: reason))
         }
     }
 
