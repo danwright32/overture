@@ -46,8 +46,13 @@ enum ReplyClassifyProgressDecoder {
     // nil unless a run is genuinely alive AND has a count to show, so a stale count from a finished run
     // never lingers up top and a run that hasn't written its total yet shows nothing (the per-recipient
     // rows still carry the alive spinner, so aliveness is never lost).
-    static func runningLabel(running: Bool, progress: ReplyClassifyProgress?) -> String? {
-        guard running, let count = label(for: progress) else { return nil }
+    // #1917: `progress` is an @autoclosure because this is called on a one-second timer forever, and the
+    // caller's expression is `loadCurrent()`, a file read plus a JSON decode. An argument is evaluated
+    // before the call, so the `running` guard could not protect against that read: an idle Overture paid
+    // for it every second, on the main thread, including while Dan scrolls. The liveness check itself is
+    // a cheap file stat and still runs every tick, because that is what notices a run starting.
+    static func runningLabel(running: Bool, progress: @autoclosure () -> ReplyClassifyProgress?) -> String? {
+        guard running, let count = label(for: progress()) else { return nil }
         return "Drafting replies \(count)"
     }
 }
