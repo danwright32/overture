@@ -80,7 +80,10 @@ struct ArchiveView: View {
         QueueModel.items(from: prospects, answers: orgAnswers,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
-                         sources: watchedSources)
+                         sources: watchedSources,
+                         // #1964: the held copy. This is a render path too, and it built its own before,
+                         // reading and decoding two files every time Archive redrew.
+                         history: VenueShootHistoryCache.shared.history())
     }
 
     private var filtered: [QueueItem] {

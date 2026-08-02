@@ -12,7 +12,9 @@ import Foundation
 //
 // STRICTLY IN THE PAST. A shoot next November is not a room Dan "has shot", and counting only
 // past dates is what removes the need for a cutoff in the first place.
-struct VenueShootHistory {
+// #1964: Equatable so the held copy can tell a refresh that found something new from one that found the
+// same history again, and stay silent for the second. Synthesised from its one stored property.
+struct VenueShootHistory: Equatable {
 
     enum Band: String, Equatable, Sendable, CaseIterable {
         case shotBefore = "shot_before"   // 1
