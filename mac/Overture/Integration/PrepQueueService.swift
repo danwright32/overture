@@ -164,6 +164,7 @@ enum PrepQueueService {
                                        // same test-refusing default as startPrep.
                                        render: @escaping ShowListingReader.Render = ShowListingReader.liveRender,
                                        onListingProgress: @MainActor (Int, Int) -> Void = { _, _ in },
+                                       announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() },
                                        launch: @MainActor () throws -> Void = launchRunner) async throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
 
@@ -215,6 +216,7 @@ enum PrepQueueService {
                 to: probeRunURL)
             try launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)
+            announce()     // #1938: same runner, same marker, same watcher: a check announces itself too
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             ReachabilityProbeMarker.clear(at: probeRunURL)
@@ -565,6 +567,13 @@ enum PrepQueueService {
                           onListingProgress: @MainActor (Int, Int) -> Void = { _, _ in },
                           // Async only so the double-launch test can nest a real second start inside the
                           // first's launch, which is the check-then-act window #480 exists to close.
+                          // #1938: a started run tells the app it started, so nothing has to poll the
+                          // marker to find out. Here rather than at the call sites (the Prep button, a
+                          // per-row Re-prep that reaches this service with no view call at all, and the
+                          // reachability check) because a call site that forgot would leave its run
+                          // unwatched: no takeover, and no ingest when it finished. Fires only once the
+                          // launch has actually succeeded.
+                          announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() },
                           launch: @MainActor () async throws -> Void = launchRunner) async throws -> Int {
         guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
         // #1809: every Prep run passes through here, whichever surface started it, so this is the one place
@@ -631,6 +640,7 @@ enum PrepQueueService {
 
             try await launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)
+            announce()     // #1938: the run is real and launched; tell the app rather than making it look
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             throw error
