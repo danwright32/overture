@@ -118,6 +118,15 @@ final class Prospect {
     var groupNameOverriddenByDan: Bool = false
     var scoutGroupName: String? = nil
 
+    // #1886: the venue half's counterpart to scoutGroupName, and it exists for the same reason. #1846 lets
+    // a merged card display the room name Dan entered on the watchlist instead of whatever the listing
+    // called it, which overwrites `venue`. Without somewhere to keep the listing's own spelling, the row
+    // stopped carrying the value its key was minted from, so the launch re-key pass moved the key onto
+    // Dan's spelling and the next scout could no longer match it. Kept current by ScoutService.apply on
+    // every re-ingest, exactly as scoutGroupName is. Defaulted so existing records migrate cleanly; nil
+    // means nothing has ever renamed this row's venue, so `venue` is still the scout's own word for it.
+    var scoutVenue: String? = nil
+
     // #1308 Layer 2: when a reachability probe last researched this show's contacts (nil = never probed).
     // Set unconditionally by the probe import whether or not an email was found, so the Review badge can
     // say "email found"/"no email found" firmly instead of falling back to the free heuristic forever.
@@ -1142,6 +1151,23 @@ final class Prospect {
         let foldedTitle = TitleNormalization.normalizeForKey(canonicalize(groupName))
         return [foldedTitle, canonicalize(performanceDate ?? ""), canonicalize(normalizedVenue ?? "")]
             .joined(separator: "|")
+    }
+
+    // #1886: the key this stored row SHOULD carry, which is not the same question as what its card says.
+    // Two shipped features rewrite a display field and deliberately leave the key alone, each so the next
+    // scout's exact-key match keeps finding the row: #1274 (Dan renames a show) and #1846 (a merged card
+    // takes the room name Dan entered). The scout arrives with its own spelling every time, so a key
+    // anchored to the display is a key the scout cannot compute, which is how a second card gets inserted
+    // over Dan's decision (#1558, #1761).
+    //
+    // Anchored to the scout's own values wherever they were recorded, falling back to the display fields
+    // for a row nothing has ever overridden (which is most of them). Asked in ONE place, by the launch
+    // re-key pass and by the guard that checks its work, so the two can never disagree about what a
+    // drifted key is.
+    var scoutAnchoredNaturalKey: String {
+        Prospect.makeNaturalKey(groupName: scoutGroupName ?? groupName,
+                                performanceDate: performanceDate,
+                                venue: scoutVenue ?? venue)
     }
 
     static func canonicalize(_ raw: String) -> String {

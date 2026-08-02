@@ -101,7 +101,16 @@ enum SameNightTitleVariantMerge {
                 // deleted. Carry a name across before the others go, so the card Dan reads names the room.
                 // #1846 decides WHICH name: the one Dan entered when he started watching the venue, when
                 // a copy already spelled the room that way, and the most specific copy otherwise.
-                if let room = preferredRoomName(in: cluster, watched: watched) { survivor.venue = room }
+                // #1886: keep the listing's own spelling before the display takes Dan's. It is what this
+                // row's key was minted from and what the next scout will send, so losing it turns the
+                // rename into a re-key at the following launch and the row stops being matchable. Captured
+                // only when nothing holds it yet: ScoutService.apply refreshes it on every re-ingest, and
+                // this pass runs every launch, so overwriting here would replace the scout's word with
+                // Dan's the second time round.
+                if let room = preferredRoomName(in: cluster, watched: watched) {
+                    if survivor.scoutVenue == nil { survivor.scoutVenue = survivor.venue }
+                    survivor.venue = room
+                }
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1

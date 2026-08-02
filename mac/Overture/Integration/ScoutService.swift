@@ -1360,6 +1360,10 @@ enum ScoutService {
         existing.presenter = p.presenter
         existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
         existing.location = p.location
+        // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
+        // scout's own name above, so the key stays anchored to what this source keeps sending even after
+        // #1846's merge relabels the card with the name Dan entered on the watchlist.
+        existing.scoutVenue = p.venue
         existing.venue = p.venue
         existing.performanceDate = p.performanceDate
         existing.sourceListingURL = p.sourceListingURL
