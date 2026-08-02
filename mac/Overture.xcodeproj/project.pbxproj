@@ -34,6 +34,7 @@
 		08C4875ADFCB6120271D637D /* InquiryStageReachabilityGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711415614EEBFCE445F948C3 /* InquiryStageReachabilityGuardTests.swift */; };
 		09E9508724105939693A00DE /* EmptyAnswerReasonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250416DA8CDA1523250FAC29 /* EmptyAnswerReasonTests.swift */; };
 		0A64D1AF894C9FCB61A71DDA /* DayOffEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA153114B1CD8114A048DE85 /* DayOffEditingTests.swift */; };
+		0A65031FCCB52AF0857F7703 /* QueueRenderPassCostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1A9AFFDDCD31EAA825F789 /* QueueRenderPassCostTests.swift */; };
 		0B3F94BB19E539CB2184E94F /* ShowSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E2C0BEAE1DB8F10FB628901 /* ShowSearchField.swift */; };
 		0B56C1320FF2A74B8E128144 /* SameDateVenueMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB9F65D06CF95AF6C0261CD /* SameDateVenueMerge.swift */; };
 		0C185DCF9E60490F4E759025 /* ScoutCancelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CDD6E9799514A7740FECF16 /* ScoutCancelTests.swift */; };
@@ -822,6 +823,7 @@
 		E867C5DF2588DFEAD83D767C /* ClientCoverage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C658710DD1D5B1A0453E21 /* ClientCoverage.swift */; };
 		E86A481C55D142381316586B /* DepartingRowsSpliceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C437F70313F25EC3F948CA1B /* DepartingRowsSpliceTests.swift */; };
 		E887FF57AD484D520F4726D9 /* ProspectAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39078CF3F9C3902769283CB8 /* ProspectAssembler.swift */; };
+		E894D75CEC13C72C90E544C6 /* QueueRenderPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356E8DE7BCC991CE3630DD97 /* QueueRenderPass.swift */; };
 		E953E2F9A05320E3CF28DD80 /* CarnegieExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1277AABACF169CD59F453422 /* CarnegieExtractor.swift */; };
 		E965E7F87A4941ED936064DB /* SourcePlacementPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95DA9B9EE5F7C2F0B69AFE2C /* SourcePlacementPersistenceTests.swift */; };
 		E974181B9A4720F853F291A6 /* InquiryIntakeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0086EEE9E5DE55DA39EBC63 /* InquiryIntakeSheet.swift */; };
@@ -1001,6 +1003,7 @@
 		19DFF66FCAE3F43F3F5966B5 /* VoiceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFeedback.swift; sourceTree = "<group>"; };
 		1A0A0EA6F13AC92C55872AF3 /* CatchAllFitReasonMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatchAllFitReasonMigration.swift; sourceTree = "<group>"; };
 		1BA8782BE24D5499DA7D1C9A /* OmniFocusSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncTests.swift; sourceTree = "<group>"; };
+		1D1A9AFFDDCD31EAA825F789 /* QueueRenderPassCostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenderPassCostTests.swift; sourceTree = "<group>"; };
 		1E39747FEE0870A41BF573C5 /* GenrePrecedence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenrePrecedence.swift; sourceTree = "<group>"; };
 		1E78896912D9D3956B8E19C0 /* StoreLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreLockTests.swift; sourceTree = "<group>"; };
 		1EF653614208C0E600D652C5 /* StageNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageNavigationTests.swift; sourceTree = "<group>"; };
@@ -1075,6 +1078,7 @@
 		33A7C107B6ABCAA5214095F5 /* ProducerOverrideWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProducerOverrideWiringTests.swift; sourceTree = "<group>"; };
 		34706E0D6FC47C41428E8164 /* StaleResultsGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaleResultsGuardTests.swift; sourceTree = "<group>"; };
 		355E45853FE6D13E2CB22130 /* RootViewDebugSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootViewDebugSaveGuardTests.swift; sourceTree = "<group>"; };
+		356E8DE7BCC991CE3630DD97 /* QueueRenderPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenderPass.swift; sourceTree = "<group>"; };
 		35A5F71943676BDD3495EB3C /* OvertureDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertureDeepLinkTests.swift; sourceTree = "<group>"; };
 		35F6A280CEB97ABFA5673233 /* ScoutExtractProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractProgress.swift; sourceTree = "<group>"; };
 		3607A005C89247CFA5831D24 /* ScoutWarningCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWarningCopy.swift; sourceTree = "<group>"; };
@@ -2181,6 +2185,7 @@
 				B1F488479D4DEA383519C548 /* QueueModelTests.swift */,
 				57B9D7D606522FE8925BFC1F /* QueuePriorityBreakdownTests.swift */,
 				89E9AD38278BA6B448E14842 /* QueueRenderDataGuardTests.swift */,
+				1D1A9AFFDDCD31EAA825F789 /* QueueRenderPassCostTests.swift */,
 				5D44A4C8F631AB5C94B42847 /* QueueScrollTargetTests.swift */,
 				63ED83EB487329DD191A3264 /* QueueSearchInvalidationGuardTests.swift */,
 				D2DC69005FAB202973E48392 /* QueueShowableIsOneFilterTests.swift */,
@@ -2779,6 +2784,7 @@
 				9AEB2402FA7C0F3A4A82D9F0 /* ProspectRowFactory.swift */,
 				2D9834539BA47D783475B28C /* ProspectRowView.swift */,
 				629B1479E6AF604949EB439B /* QueuePriorityBreakdown.swift */,
+				356E8DE7BCC991CE3630DD97 /* QueueRenderPass.swift */,
 				9F7A2DBBF78BD1BF9E1ED37F /* QueueSearchBar.swift */,
 				ED4EA24821BEE2A923C791D6 /* QueueSendAwareViews.swift */,
 				5B70E5FB7C632BC18DBABE7E /* QueueView.swift */,
@@ -3099,6 +3105,7 @@
 				20D1754F10AC17472B579F39 /* ProspectRowFactory.swift in Sources */,
 				84F2B198166270B48CFCCBCF /* ProspectRowView.swift in Sources */,
 				1722A20B5F53B06DCF2A5823 /* QueuePriorityBreakdown.swift in Sources */,
+				E894D75CEC13C72C90E544C6 /* QueueRenderPass.swift in Sources */,
 				2B10079CD00425332BE03413 /* QueueSearchBar.swift in Sources */,
 				9A3699108CB9814DFE1B22E6 /* QueueSendAwareViews.swift in Sources */,
 				9F89C043F464F738A5DA0762 /* QueueUndoStack.swift in Sources */,
@@ -3561,6 +3568,7 @@
 				D3D1FD57D74D4440175FCB03 /* QueueModelTests.swift in Sources */,
 				37372F3559560F0C3B090AFF /* QueuePriorityBreakdownTests.swift in Sources */,
 				F9C0E58E7FE934C7732E0A13 /* QueueRenderDataGuardTests.swift in Sources */,
+				0A65031FCCB52AF0857F7703 /* QueueRenderPassCostTests.swift in Sources */,
 				7D688B02B0804688A887C3A3 /* QueueScrollTargetTests.swift in Sources */,
 				C96432D9F6CBECF4310CCAFC /* QueueSearchInvalidationGuardTests.swift in Sources */,
 				8216C08DA8DF9B2C19A47096 /* QueueShowableIsOneFilterTests.swift in Sources */,

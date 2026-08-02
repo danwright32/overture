@@ -196,19 +196,22 @@ struct QueueGeoIsOneFilterTests {
 struct QueueGeoWiringGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     @Test func theQueueBuildsItsRefusalsFromDansStoredTowns() {
         #expect(!queueView.isEmpty)
         #expect(queueView.contains("GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)"))
     }
 
+    // #1913: the derivation moved into QueueRenderPass, so three of these calls live there now and the
+    // rest stay on the view's own action paths. Both files are checked, for the same reason as before: a
+    // surface resolving stage membership without Dan's refusals answers the question its own way.
     @Test func everyQueueSurfacePassesThem() {
+        let both = queueView + renderPass
         for call in ["queueKeys", "focusedKeys", "counts", "naturalKeys", "stage(containing:"] {
-            #expect(queueView.contains(call), "\(call) is no longer called; re-point this guard.")
+            #expect(both.contains(call), "\(call) is no longer called; re-point this guard.")
         }
-        // Four calls resolve rows or counts, plus the roster's inputs. Each must carry geo, or that
-        // surface goes back to answering the question its own way.
-        #expect(queueView.components(separatedBy: "geo: geo").count - 1 >= 6,
+        #expect(both.components(separatedBy: "geo: geo").count - 1 >= 6,
                 "a queue surface is resolving stage membership without Dan's refusals.")
     }
 

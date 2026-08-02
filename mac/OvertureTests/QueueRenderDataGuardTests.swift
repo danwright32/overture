@@ -18,6 +18,8 @@ import Foundation
 @Suite("The queue builds its derived state once per render (#1121)")
 struct QueueRenderDataGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #1913: the derivation moved here, so the guards on its shape moved with it.
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
     private var agentRoster: String { SourceGuardHelper.source("Overture/Domain/AgentRoster.swift") }
 
     // The snapshot exists and the body builds it exactly once, at the top, before threading it down.
@@ -39,16 +41,16 @@ struct QueueRenderDataGuardTests {
         #expect(!queueView.contains("private var disciplines: [String]"))
     }
 
-    // makeRenderData reads the expensive `items` map a single time and derives the rest from that one
-    // array, rather than re-reading `self.items` for each field.
+    // The pass builds the expensive `items` map a single time and derives the rest from that one array,
+    // rather than rebuilding it for each field.
     @Test func makeRenderDataReadsItemsOnce() {
         guard let body = SourceGuardHelper.propertyBody(
-            "private func makeRenderData() -> RenderData {", in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+            "static func make(_ i: Inputs) -> QueueView.RenderData {", in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
         // One binding of the items array, then everything downstream uses that local.
-        let occurrences = body.components(separatedBy: "let items = self.items").count - 1
+        let occurrences = body.components(separatedBy: "let items = QueueModel.items(").count - 1
         #expect(occurrences == 1)
     }
 

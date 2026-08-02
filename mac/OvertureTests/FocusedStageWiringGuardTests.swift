@@ -10,6 +10,8 @@ import Foundation
 @Suite("The focused list re-derives stage membership live (#1140)")
 struct FocusedStageWiringGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #1913: the derivation moved here, so the guards on its shape moved with it.
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     // The focused list resolves its rows through the tested live dispatcher, not by filtering a frozen
     // key array captured at tap time.
@@ -22,11 +24,11 @@ struct FocusedStageWiringGuardTests {
     // site as the old one.
     @Test func stageMembershipIsResolvedLiveNotFromAFrozenKeySet() {
         guard let body = SourceGuardHelper.propertyBody(
-            "private func makeRenderData() -> RenderData {", in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+            "static func make(_ i: Inputs) -> QueueView.RenderData {", in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
-        #expect(body.contains("StageNavigation.focusedKeys(stage: focusedStage"))
+        #expect(body.contains("StageNavigation.focusedKeys(stage: i.focusedStage"))
         // And the list renders what that produced, rather than re-deriving its own set.
         guard let section = SourceGuardHelper.propertyBody(
             "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
