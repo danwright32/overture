@@ -38,13 +38,16 @@ struct QueueSearchInvalidationGuardTests {
     // The bar sits in the window body above the Queue, not in a ToolbarItem: a native NSToolbar item
     // cannot anchor the results popover at all (confirmed against the running app, #1580).
     @Test func theBarIsInTheBodyAboveTheQueueAndNotInTheToolbar() {
-        guard let bodyRange = rootView.range(of: "var body: some View {") else {
-            Issue.record("body not found")
+        // #1930: over the whole body, and asserting the ORDER, rather than over its first 1200 characters.
+        // The character budget was a proxy for "above the queue" that any unrelated line added at the top
+        // of the body could break, which is exactly what happened when the render trace landed there.
+        guard let body = SourceGuardHelper.propertyBody("var body: some View {", in: rootView),
+              let bar = body.range(of: "QueueSearchBar("),
+              let queue = body.range(of: "queueContent") else {
+            Issue.record("expected the body to hold both the search bar and the queue")
             return
         }
-        let body = rootView[bodyRange.lowerBound...].prefix(1200)
-        #expect(body.contains("QueueSearchBar("))
-        #expect(body.contains("queueContent"))
+        #expect(bar.lowerBound < queue.lowerBound)
 
         guard let toolbarStart = rootView.range(of: ".toolbar {")?.lowerBound else {
             Issue.record("no .toolbar block found")
