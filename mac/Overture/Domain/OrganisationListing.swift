@@ -70,6 +70,9 @@ enum OrganisationListing {
     static func build(shows: [Show], overrides: ProducerOverrides = .none) -> [Entry] {
         let gateShows = shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
         let venueKeys = ProducerGate.venueKeys(of: gateShows)
+        // #1963: indexed once for the whole listing. Asked per organisation instead, each row would
+        // build its own index of the same rooms.
+        let venues = ProducerGate.VenueKeyIndex(venueKeys)
 
         var byKey: [String: [Show]] = [:]
         var nameForKey: [String: String] = [:]
@@ -86,7 +89,7 @@ enum OrganisationListing {
                 : overrides.promoted.contains(key) ? .promoted
                 : .none
 
-            let isBrand = ProducerGate.isVenueBrand(key, venueKeys: venueKeys, overrides: overrides)
+            let isBrand = ProducerGate.isVenueBrand(key, venues: venues, overrides: overrides)
             let verdict: Verdict = isBrand ? .theBuilding
                 : ProducerGate.qualifies(name, among: gateShows, overrides: overrides) ? .sharesOneAnswer
                 : .paidForSeparately

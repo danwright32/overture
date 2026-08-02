@@ -75,8 +75,20 @@ enum ProducerGate {
     // Takes the corpus as its FOLDED VENUE KEYS rather than its shows, because both arms only ever ask
     // about venue strings, and the live store's 700-odd rows carry 114 distinct rooms between them. A
     // caller asking about many presenters folds the venues once instead of per question.
+    //
+    // #1963: for a caller holding no index. It builds one and asks it, rather than keeping a second copy
+    // of the rule, and the index costs less than the single cross-product scan it replaces even for one
+    // question (splitting 114 keys into words against 114 full string scans, twice each).
     static func isVenueBrand(_ presenterKey: String, venueKeys: Set<String>,
                              overrides: ProducerOverrides = .none) -> Bool {
+        isVenueBrand(presenterKey, venues: VenueKeyIndex(venueKeys), overrides: overrides)
+    }
+
+    // #1963: the same rule, asked of venue keys already indexed by their words. This is the form the
+    // whole-store pass uses, because it asks about every presenter in the store against the same rooms.
+    static func isVenueBrand(_ presenterKey: String, venues: VenueKeyIndex,
+                             overrides: ProducerOverrides = .none) -> Bool {
+        let venueKeys = venues.keys
         if venueKeys.contains(presenterKey) { return true }
         // #1719: the other direction, and it is tested BEFORE promotion on purpose. A key in both lists
         // should never reach here (ProducerOverrideEditing keeps them mutually exclusive), but if one
@@ -84,7 +96,48 @@ enum ProducerGate {
         // "no key, pay again" and never toward a shared answer.
         if overrides.demoted.contains(presenterKey) { return true }
         if overrides.promoted.contains(presenterKey) { return false }
-        return venueKeys.contains { namesTheSameRoom(presenterKey, $0) }
+        // #1963: only the rooms that share a WORD with this name. Containment in either direction requires
+        // it (a run of whole words inside another run of whole words), so a room sharing none can never
+        // match and the scan that used to visit all 114 of them per presenter visits a handful.
+        return venues.candidates(for: presenterKey).contains { namesTheSameRoom(presenterKey, $0) }
+    }
+
+    // #1963: the venue keys, plus which of them holds each word.
+    //
+    // Built once per whole-store pass and asked about every presenter, which is what turns the containment
+    // arm from a cross product (roughly 400 presenters by 114 rooms on the live store, each pair two full
+    // string scans, 846 of 14,856 main-thread samples) into a handful of comparisons per name.
+    //
+    // It filters, it does not judge: `candidates` returns every key that COULD match and the rule itself
+    // still decides. That distinction is what keeps the verdict identical, and it is only sound because
+    // both directions of the containment test need the two names to share at least one whole word.
+    struct VenueKeyIndex: Equatable, Sendable {
+        let keys: Set<String>
+        private let keysByWord: [String: Set<String>]
+
+        init(_ venueKeys: Set<String>) {
+            keys = venueKeys
+            var index: [String: Set<String>] = [:]
+            for key in venueKeys {
+                // Split the same way containsAsWords counts words, so the filter and the rule cannot
+                // disagree about where one word ends and the next begins.
+                for word in key.split(separator: " ") {
+                    index[String(word), default: []].insert(key)
+                }
+            }
+            keysByWord = index
+        }
+
+        // Every venue key that could possibly contain, or be contained in, this name. A superset by
+        // construction: containment either way puts all of one name's words inside the other, so a key
+        // sharing no word with the presenter cannot match in either direction.
+        func candidates(for presenterKey: String) -> Set<String> {
+            var found: Set<String> = []
+            for word in presenterKey.split(separator: " ") {
+                if let hits = keysByWord[String(word)] { found.formUnion(hits) }
+            }
+            return found
+        }
     }
 
     static func venueKeys(of shows: [Show]) -> Set<String> {
@@ -123,11 +176,13 @@ enum ProducerGate {
     // Metropolitan Opera House), and one spelled exactly like a room stays on it, because a presenter
     // spelled precisely like a room IS the room and there is no organisation there to promote.
     static func houses(shows: [Show], overrides: ProducerOverrides = .none) -> [House] {
-        let venueKeys = venueKeys(of: shows)
-        var keys = venueKeys
+        // #1963: indexed once for the whole list, for the same reason VenueBrands does it. Asking the
+        // set-taking entry point per presenter would build one index per name.
+        let venues = VenueKeyIndex(venueKeys(of: shows))
+        var keys = venues.keys
         for presenter in Set(shows.compactMap { $0.presenter }) {
             guard let presenterKey = key(presenter) else { continue }
-            if isVenueBrand(presenterKey, venueKeys: venueKeys, overrides: overrides) {
+            if isVenueBrand(presenterKey, venues: venues, overrides: overrides) {
                 keys.insert(presenterKey)
             }
         }
@@ -273,12 +328,16 @@ enum ProducerGate {
         }
 
         init(shows: [Show], overrides: ProducerOverrides = .none) {
-            let venueKeys = ProducerGate.venueKeys(of: shows)
+            // #1963: indexed ONCE for the whole pass, rather than every presenter walking every room. This
+            // init was the biggest single slice of the queue's derivation on the live store, and nearly
+            // all of it was that walk.
+            let venues = ProducerGate.VenueKeyIndex(ProducerGate.venueKeys(of: shows))
+            let venueKeys = venues.keys
             var keys = Set<String>()
             var rooms = Set<String>()
             for presenter in Set(shows.compactMap { $0.presenter }) {
                 guard let key = ProducerGate.key(presenter), !keys.contains(key) else { continue }
-                if ProducerGate.isVenueBrand(key, venueKeys: venueKeys, overrides: overrides) {
+                if ProducerGate.isVenueBrand(key, venues: venues, overrides: overrides) {
                     keys.insert(key)
                     // Read off the SAME venue key set the arm itself uses, so this can only ever be true
                     // where isVenueBrand's own first line was what fired.
