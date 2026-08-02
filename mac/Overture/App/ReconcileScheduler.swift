@@ -190,12 +190,14 @@ final class ReconcileScheduler {
         // #1434/#1435: one generic reconcile pass over prospects AND inquiries, so a booking is
         // consumed once across both types. Inquiries are suggestion-only but claim a booking to win the
         // tie-break. `try?` yields none on a container predating Inquiry.
+        // The prospects are fetched here rather than inside the call below because the contact-score
+        // settle further down needs them whatever the export's health says.
         let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
-        let entities: [any BookingMatchable] = prospects.map { $0 as any BookingMatchable }
-            + inquiries.map { $0 as any BookingMatchable }
-        let n = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients,
-                                                bookings: loaded.bookings, health: loaded.health, now: now)
+        // #1960: the inquiries and the boxing are built INSIDE the call, so an unhealthy export refuses
+        // before paying for them.
+        let n = DownbeatBooking.reconcileBooked(
+            entities: DownbeatBooking.bookingEntities(prospects: prospects, in: context),
+            clients: loaded.clients, bookings: loaded.bookings, health: loaded.health, now: now)
         // #1648: the periodic half of the contact adjustment. An answer past its 90 day expiry has to
         // give the show its score back, and this pass is where that happens: it already runs on a
         // schedule with a context and a save, whereas the queue rebuild (where the plan originally put

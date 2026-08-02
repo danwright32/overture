@@ -168,6 +168,20 @@ struct RootView: View {
             feedStalled: DownbeatFeedFreshness.isStalled(lastNewAt: feedLastNewAt, now: Date()))
     }
 
+    // #1960: the mark is worked out ONCE and handed down. Drawing this button needs the same answer three
+    // times (the title, the ink, the hover), and each read of daysOffReason decodes the Downbeat export
+    // and fetches the stored days off, so three reads is three of each, on every render of this window.
+    private func daysOffButton(_ reason: DaysOffAttention.Reason) -> some View {
+        Button {
+            showDaysOff = true
+        } label: {
+            ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(reason),
+                              systemImage: "calendar.badge.clock")
+                .foregroundStyle(reason != .none ? OVColor.inkSoft : Color.primary)
+        }
+        .help(DaysOffAttention.help(reason))
+    }
+
     private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
 
     private var reachedOutKeys: Set<String> {
@@ -551,14 +565,7 @@ struct RootView: View {
                     // pipe (its health check passes a fresh export holding no bookings, the #901 trap),
                     // while giving the toolbar nothing to say about Dan's schedule. The sentence is on the
                     // hover and in the sheet, which have room for it.
-                    Button {
-                        showDaysOff = true
-                    } label: {
-                        ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(daysOffReason),
-                                          systemImage: "calendar.badge.clock")
-                            .foregroundStyle(daysOffReason != .none ? OVColor.inkSoft : Color.primary)
-                    }
-                    .help(DaysOffAttention.help(daysOffReason))
+                    daysOffButton(daysOffReason)
 
                     // #1118: the towns Overture keeps out of the queue, and where Dan takes one back off.
                     // It shares this group with Sources and Days off (SwiftUI's toolbar builder tops out at
