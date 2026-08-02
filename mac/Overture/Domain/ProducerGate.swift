@@ -54,13 +54,62 @@ enum ProducerGate {
     //     Opera produces its own work at the Metropolitan Opera House, and promotion is exactly the
     //     escape hatch for that case, so a name overlap must not be the one thing his own judgment
     //     cannot overrule.
+    //
+    // #1965: for a caller with a corpus in hand but no precomputed facts about it. It computes them and
+    // asks, rather than keeping a second copy of the rule.
     static func qualifies(_ presenter: String, among shows: [Show],
                           overrides: ProducerOverrides = .none) -> Bool {
+        qualifies(presenter, in: Corpus(shows), overrides: overrides)
+    }
+
+    // #1965: the same rule, asked of a corpus whose facts are already worked out. This is the form the
+    // ledger uses, because it asks the same question of every organisation over one set of shows, and
+    // both arms below used to walk every show again for each of them.
+    static func qualifies(_ presenter: String, in corpus: Corpus,
+                          overrides: ProducerOverrides = .none) -> Bool {
         guard let presenterKey = key(presenter) else { return false }
-        guard !isVenueBrand(presenterKey, venueKeys: venueKeys(of: shows), overrides: overrides)
+        guard !isVenueBrand(presenterKey, venues: corpus.venues, overrides: overrides)
         else { return false }
         if overrides.promoted.contains(presenterKey) { return true }
-        return distinctVenues(presenterKey, among: shows).count >= 2
+        return corpus.distinctVenueCount(presenterKey) >= 2
+    }
+
+    // #1965: the two facts about a corpus that deciding "is this a producer" needs, each computed in one
+    // pass over the shows instead of one pass per organisation asked.
+    //
+    // Measured on the live store: of 4,588 main-thread samples inside the queue's body over 30 seconds,
+    // 487 were in the ledger that asks this and a further 389 in the venue-key work it drove.
+    //
+    // It precomputes, it does not judge: every verdict still comes from the rule above, reading these
+    // instead of rebuilding them.
+    struct Corpus: Equatable, Sendable {
+        let venues: VenueKeyIndex
+        // Every ROOM each presenter plays, folded the same way the rule folds them. A presenter whose
+        // shows name no readable venue is present with an empty set rather than absent, because "plays
+        // no room anyone can read" and "is not in this corpus" are the same answer here (no rooms) and
+        // conflating them would be a rule this type has no business inventing.
+        private let venuesByPresenter: [String: Set<String>]
+
+        init(_ shows: [Show]) {
+            var byPresenter: [String: Set<String>] = [:]
+            var venueKeys: Set<String> = []
+            for show in shows {
+                let venueKey = ProducerGate.key(show.venue)
+                if let venueKey { venueKeys.insert(venueKey) }
+                guard let presenterKey = ProducerGate.key(show.presenter) else { continue }
+                var rooms = byPresenter[presenterKey] ?? []
+                if let venueKey { rooms.insert(venueKey) }
+                byPresenter[presenterKey] = rooms
+            }
+            venues = VenueKeyIndex(venueKeys)
+            venuesByPresenter = byPresenter
+        }
+
+        // How many distinct rooms this presenter plays. Zero for a name the corpus never saw, which is
+        // the same answer it gets for one whose shows name no readable room: neither is a producer.
+        func distinctVenueCount(_ presenterKey: String) -> Int {
+            venuesByPresenter[presenterKey]?.count ?? 0
+        }
     }
 
     // #1702: "this presenter name is really the building's own brand", named once and shared, because a

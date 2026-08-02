@@ -62,16 +62,26 @@ enum OrgAnswerLedger {
         }
         guard !usable.isEmpty else { return [:] }
 
-        let corpus = shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
+        // #1965: the corpus facts both arms of `qualifies` need, worked out ONCE here. Each organisation
+        // asked used to walk every show again, twice, inside a pass that already walks every show.
+        let corpus = ProducerGate.Corpus(shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) })
         var verdictByOrg: [String: Bool] = [:]
+        // #1965: and the org key per distinct presenter NAME rather than per show. Folding it is a string
+        // walk, and the live store's 700-odd rows carry far fewer distinct presenters between them.
+        var orgKeyByPresenter: [String: String?] = [:]
         var out: [String: Inherited] = [:]
 
         for show in shows where !show.hasOwnAnswer {
-            guard let presenter = show.presenter,
-                  let orgKey = OrgKey.stored(for: presenter),
+            guard let presenter = show.presenter else { continue }
+            let cachedKey = orgKeyByPresenter[presenter] ?? {
+                let key = OrgKey.stored(for: presenter)
+                orgKeyByPresenter[presenter] = key
+                return key
+            }()
+            guard let orgKey = cachedKey,
                   let answer = usable[orgKey] else { continue }
             let qualifies = verdictByOrg[orgKey]
-                ?? ProducerGate.qualifies(presenter, among: corpus, overrides: overrides)
+                ?? ProducerGate.qualifies(presenter, in: corpus, overrides: overrides)
             verdictByOrg[orgKey] = qualifies
             guard qualifies else { continue }
             out[show.key] = Inherited(result: answer.result, probedAt: answer.probedAt,
