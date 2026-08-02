@@ -361,6 +361,52 @@ else
   echo "ok - and publishes no 'total' at all, so nothing can read a partial count as the real one"
 fi
 
+# --- #1864: a whole bill of performers is not one lookup --------------------------------------------
+#
+# The allowance was a flat number per SHOW, sized when one show meant researching one party. Since #1817
+# an organiser-less show pursues every performer the listing names, and the runbook is explicit that
+# there is NO headcount ceiling on that route, so the rooms this was built to watch (a cabaret room
+# booking five-handers) blow an allowance built for one target. The runs that trip it first are the
+# CORRECT ones, which is how a counter stops meaning anything precisely on the shows it was added for
+# (L36).
+#
+# So the allowance counts research TARGETS. A performer named on the listing is surfaced as her own
+# contact entry even when nothing was found for her (the runbook requires it, at low confidence), so the
+# entries are the evidence of how many parties the item actually asked for.
+echo '{"version":6,"results":[
+  {"naturalKey":"a","contacts":[
+    {"provenance":"performer","name":"One"},{"provenance":"performer","name":"Two"},
+    {"provenance":"performer","name":"Three"},{"provenance":"performer","name":"Four"},
+    {"provenance":"performer","name":"Five"}]}]}' > "${WEBTMP}/results-bill.json"
+record_web_calls "${WEBTMP}/results-bill.json" 3 "${WEBTMP}/events.jsonl"
+bill="$(cat "${WEBTMP}/results-bill.json")"
+assert_contains "a five-hander is allowed five targets' worth of lookups, not one show's" \
+  "${bill}" '"allowance": 15'
+assert_contains "and says how many parties that allowance was sized for" "${bill}" '"parties": 5'
+assert_contains "so four calls across a five-hander is not reported as overspending" \
+  "${bill}" '"overCap": false'
+assert_contains "while still reporting the show count it covered" "${bill}" '"items": 1'
+
+# The ordinary show is untouched: one party, one show, the allowance it always had. Without this the
+# fix would quietly raise the ceiling on every run and the counter would stop catching anything.
+echo '{"version":6,"results":[{"naturalKey":"a","contacts":[{"provenance":"act","name":"An Act"}]}]}' \
+  > "${WEBTMP}/results-plain.json"
+record_web_calls "${WEBTMP}/results-plain.json" 3 "${WEBTMP}/events.jsonl"
+plain="$(cat "${WEBTMP}/results-plain.json")"
+assert_contains "a single-target show keeps exactly the allowance it always had" \
+  "${plain}" '"allowance": 3'
+assert_contains "and counts as one party" "${plain}" '"parties": 1'
+assert_contains "so it is still flagged when it goes over" "${plain}" '"overCap": true'
+
+# An item that reported no contacts at all still asked for one party. It must never be sized at zero,
+# which would give the whole run an allowance of nothing and flag every run that found nobody.
+echo '{"version":6,"results":[{"naturalKey":"a"},{"naturalKey":"b"}]}' > "${WEBTMP}/results-empty.json"
+record_web_calls "${WEBTMP}/results-empty.json" 3 "${WEBTMP}/events.jsonl"
+empty="$(cat "${WEBTMP}/results-empty.json")"
+assert_contains "an item that found nobody is still one party, never zero" "${empty}" '"parties": 2'
+assert_contains "so a run that found nothing is judged against a real allowance" \
+  "${empty}" '"allowance": 6'
+
 # An unparsable results file is the run having failed, reported on its own path. Overwriting it would
 # destroy the evidence, exactly as record_run_cost refuses to.
 printf '%s' 'not json{' > "${WEBTMP}/broken.json"

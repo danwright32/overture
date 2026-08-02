@@ -29,6 +29,11 @@ struct PrepResults: Codable, Equatable, Sendable {
         var recorded: Bool
         var total: Int? = nil
         var items: Int = 0
+        // #1864: the research TARGETS the allowance was sized for, which is not the number of shows. An
+        // organiser-less show pursues every performer its listing names and the runbook puts no headcount
+        // ceiling on that, so one show can be five parties. Absent on a results file written before this
+        // existed, which reads as "one party per show", exactly what the allowance assumed then.
+        var parties: Int? = nil
         var capPerItem: Int = 0
         var allowance: Int = 0
         // Absent when the count is incomplete AND has not already blown the allowance, because that

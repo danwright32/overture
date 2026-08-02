@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **970 sentences**, from 337 source files.
+Every sentence Overture can say to Dan: **971 sentences**, from 337 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -264,6 +264,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/DetachedRunner.swift`
 "(no subject)"
     `Domain/SendConfirmation.swift`
+", \(parties) people to find"
+    `Domain/PrepRunSummary.swift`
 ", likely without its own photographer"
     `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
@@ -2029,7 +2031,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`
-"\(total) web lookups for \(shows), more than expected"
+"\(total) web lookups for \(shows)\(people), more than expected"
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"
     `App/ActionFeedback.swift`

@@ -42,9 +42,16 @@ enum PrepRunSummary {
         // reported as its total. Silence on an ordinary run is the point: his measured normal is 5 to 9
         // lookups per show against a cap of 15, and an alert that fires on a routine run gets ignored
         // (L36).
+        // #1864: when the shows named more people than there were shows, the sentence says how many. The
+        // allowance is sized by the PARTIES a run pursued, and a cabaret room booking five-handers is two
+        // shows and six people; reporting "more than expected" against a figure explained by the shows
+        // alone reads as a run that spent three times what it should. Added only when the two differ, so
+        // an ordinary run keeps the shorter sentence rather than growing a clause every time.
         if let web = outcome.webCalls, web.recorded, web.overCap == true, let total = web.total {
             let shows = web.items == 1 ? "1 show" : "\(web.items) shows"
-            notes.append("\(total) web lookups for \(shows), more than expected")
+            let parties = web.parties ?? web.items
+            let people = parties > web.items ? ", \(parties) people to find" : ""
+            notes.append("\(total) web lookups for \(shows)\(people), more than expected")
         }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run
