@@ -191,12 +191,38 @@ record_web_calls() {
 
     const total = Object.values(byRoute).reduce((a, n) => a + n, 0);
     const items = Array.isArray(json.results) ? json.results.length : 0;
-    const allowance = cap * items;
+
+    // #1864: the allowance counts research TARGETS, not shows. It was a flat number per show, sized when
+    // one show meant researching one party. Since #1817 an organiser-less show pursues every performer
+    // the listing names, and the runbook puts NO headcount ceiling on that route, so the rooms this
+    // counter was built to watch (a cabaret room booking five-handers) blow an allowance built for one.
+    // The runs that trip it first are the CORRECT ones, which is how a counter stops meaning anything
+    // precisely on the shows it was added for (L36).
+    //
+    // The evidence is the performer entries on the item itself: the runbook requires a performer on the
+    // listing to be surfaced as her own contact even when nothing was found for her (at low confidence),
+    // so they count the parties actually pursued rather than the ones that panned out.
+    //
+    // This does size the allowance from what the run REPORTED, so a run that silently drops performers
+    // gets a smaller allowance and is likelier to trip the counter. That is the safe direction and it is
+    // deliberate: this counter exists to over-report rather than to hide spend.
+    //
+    // Never zero for an item that reported nothing. An item always asked for at least one party, and a
+    // floor of zero would give a run that found nobody an allowance of nothing and flag every one.
+    const partiesFor = (item) => {
+      const contacts = item && Array.isArray(item.contacts) ? item.contacts : [];
+      const performers = contacts.filter((c) => c && c.provenance === "performer").length;
+      return Math.max(1, performers);
+    };
+    const parties = Array.isArray(json.results)
+      ? json.results.reduce((n, item) => n + partiesFor(item), 0)
+      : 0;
+    const allowance = cap * parties;
     const complete = eventFiles.length > 0 && reported === eventFiles.length;
 
     if (complete) {
       json.webCalls = {
-        recorded: true, total, byRoute, items, capPerItem: cap, allowance,
+        recorded: true, total, byRoute, items, parties, capPerItem: cap, allowance,
         overCap: items > 0 && total > allowance,
         streams: eventFiles.length,
       };
@@ -205,7 +231,7 @@ record_web_calls() {
       // the real one by reaching for the field it always reads. `overCap` is published ONLY when the
       // partial count already exceeds the allowance, because that verdict can only get truer.
       json.webCalls = {
-        recorded: false, byRoute, items, capPerItem: cap, allowance,
+        recorded: false, byRoute, items, parties, capPerItem: cap, allowance,
         streams: eventFiles.length, streamsReported: reported,
         partialTotal: total,
       };

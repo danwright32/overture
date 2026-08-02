@@ -104,6 +104,38 @@ struct PrepWebCallCountTests {
             .contains("40 web lookups for 1 show, more than expected"))
     }
 
+    // #1864: a run whose shows named more people than there were shows says so, because "more than
+    // expected" is measured against an allowance sized by the PEOPLE and Dan can see only the shows. A
+    // cabaret room booking five-handers is the case: two shows, six people, and a figure judged against
+    // six but explained by two reads as a run that spent three times what it should.
+    @Test func aRunCoveringMorePeopleThanShowsSaysHowManyPeople() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 100, items: 2, parties: 6,
+                                                capPerItem: 15, allowance: 90, overCap: true)
+        let note = PrepRunSummary.notes(for: outcome).first { $0.contains("web") }
+        #expect(note == "100 web lookups for 2 shows, 6 people to find, more than expected")
+    }
+
+    // And the ordinary run, where every show was one party, says exactly what it always said. A sentence
+    // that grows a clause on every run is a sentence Dan stops reading.
+    @Test func aRunWhereEveryShowWasOnePartyKeepsTheShorterSentence() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, parties: 2,
+                                                capPerItem: 15, allowance: 30, overCap: true)
+        #expect(PrepRunSummary.notes(for: outcome)
+            .contains("47 web lookups for 2 shows, more than expected"))
+    }
+
+    // A results file written before the party count existed still reads, and still says something true.
+    @Test func aRunFromBeforeThePartyCountStillReads() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, capPerItem: 15,
+                                                allowance: 30, overCap: true)
+        #expect(outcome.webCalls?.parties == nil)
+        #expect(PrepRunSummary.notes(for: outcome)
+            .contains("47 web lookups for 2 shows, more than expected"))
+    }
+
     // An incomplete count must never claim a run was fine. It cannot say how many calls there were, so it
     // says nothing rather than reporting a partial figure as the run's total.
     @Test func anIncompleteCountMakesNoClaimEitherWay() {
