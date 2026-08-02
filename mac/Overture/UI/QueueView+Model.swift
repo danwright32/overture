@@ -1726,6 +1726,14 @@ enum QueueModel {
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
                       overrides: ProducerOverrides = .none,
                       sources: [WatchedSource] = [],
+                      // #1964: HANDED IN, never sourced here. Building one opens and decodes the
+                      // shoot-history file and the Downbeat export, and this runs on every render pass, so
+                      // sourcing its own put two file reads on the main thread behind every dismiss and
+                      // every keystroke. The render path passes the held copy (VenueShootHistoryCache);
+                      // nil is for callers with no cache in hand (a unit test, a one-off build), which
+                      // read the files once and are not on a render path. Same shape as
+                      // PrepQueueService.buildQueue's own venueHistory parameter.
+                      history: VenueShootHistory? = nil,
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
@@ -1738,9 +1746,9 @@ enum QueueModel {
         let venueBrands = ProducerGate.VenueBrands(
             shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: overrides)
-        // #1887: built ONCE here for the same reason venueBrands is. It reads the shoot-history file
-        // and the Downbeat export, which a card must not do on every render.
-        let shootHistory = VenueShootHistory.current()
+        // #1887: read ONCE here for the same reason venueBrands is, never per row.
+        // #1964: and no longer built here at all on the render path, because building one reads two files.
+        let shootHistory = history ?? VenueShootHistory.current()
         // #1825: built ONCE, for the same reason as the two above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         let calendarBySourceId = Dictionary(
