@@ -33,13 +33,18 @@ struct ShowSearchField: View {
     // #1574: which result the arrow keys are sitting on. All the arithmetic is in ShowSearchSelection;
     // this view only turns key presses into moves and draws the highlight.
     @State private var selection = ShowSearchSelection()
+    // #1932: what this search runs against, built when the search starts rather than on every keystroke.
+    // Two of them, because the archive count sweeps everything Overture has ever tracked and is paid on
+    // exactly the queries that find nothing, which is the worst case to leave per character.
+    @State private var queueScope = SearchScope()
+    @State private var archiveScope = SearchScope()
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isSearching: Bool { ShowSearch.isSearching(query) }
 
     // The matching, the ordering and the cap are ShowSearch's (#1926), so they are testable and so the
     // scope is built only when there is something to search for.
-    private var matches: [QueueItem] { ShowSearch.results(in: allItems(), query: query) }
+    private var matches: [QueueItem] { ShowSearch.results(in: queueScope.items(allItems), query: query) }
 
     var body: some View {
         // #1432: the control itself is OVSearchField, shared with the Sources sheet's own field. Only the
@@ -50,6 +55,18 @@ struct ShowSearchField: View {
         // is actually a list of results on screen to move through.
         // Each handler reads the results ONCE into a local. `matches` builds the searchable scope on every
         // read now (#1926), so a property read twice in one line is a sweep of the store paid twice.
+        // #1932: one sweep per search rather than one per character. Announced as the STATE the field is
+        // in rather than as a transition, so a paste, a clear and a first keystroke all route through the
+        // same line, and the scope itself refuses to sweep twice for one search.
+        .onChange(of: isSearching, initial: true) { _, searching in
+            guard searching else {
+                queueScope.end()
+                archiveScope.end()
+                return
+            }
+            queueScope.begin(allItems)
+            archiveScope.begin(archiveItems)
+        }
         .onKeyPress(.downArrow) {
             let results = matches
             guard showDropdown, !results.isEmpty else { return .ignored }
@@ -148,7 +165,7 @@ struct ShowSearchField: View {
     // no matching work it will never use.
     private var archiveMatchCount: Int {
         guard onSearchArchive != nil else { return 0 }
-        return ShowSearch.matchCount(in: archiveItems(), query: trimmedQuery)
+        return ShowSearch.matchCount(in: archiveScope.items(archiveItems), query: trimmedQuery)
     }
 
     private func pick(_ result: QueueItem) {
