@@ -848,7 +848,7 @@ struct RootView: View {
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
             // subtle toolbar label. Shown while the run is in flight (set by startPrep and on launch-reattach)
-            // and cleared by watchPrepRun when the run ends; Hide keeps the run going, Cancel stops it.
+            // and cleared by the run watcher when the run ends; Hide keeps the run going, Cancel stops it.
             .sheet(isPresented: $prepSheetShown) { prepProgressModal }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
@@ -1180,19 +1180,18 @@ struct RootView: View {
 
     // #1038: stop a Prep run in flight, cooperatively. The detached run has no trackable PID, so this
     // writes the sentinel the runner checks on its heartbeat; the runner stops the claude process it
-    // recorded and exits at the next tick (never mid-write, so no draft is corrupted). watchPrepRun keeps
-    // polling and ingests whatever the run had already written once the marker clears.
+    // recorded and exits at the next tick (never mid-write, so no draft is corrupted). The run watcher
+    // notices the marker clear and ingests whatever the run had already written.
     private func cancelPrep() {
         PrepQueueService.requestCancel()
     }
 
-    // Wait for the in-flight run to finish, then report what it produced. Tied to a run
-    // we know is live (just launched, or in flight at launch), so an old failed run
-    // never re-nags on a normal open.
-    private func watchPrepRun() async {
-        while PrepQueueService.isRunning(now: Date()) {
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-        }
+    // Report what a finished run produced. Reached only once a run that was genuinely live has ended, so
+    // an old failed run never re-nags on a normal open.
+    //
+    // #1938: the waiting itself moved to DetachedRunActivity.followUntilFinished, which polls only while a
+    // run is in flight. What is left here is the settling, which is what this always really was.
+    private func settleFinishedPrepRun() async {
         // #1130: the run has ended (the marker cleared). Close the takeover so it does not sit showing a
         // finished run; the outcome surfaces below via ingest / the empty-run notice.
         prepSheetShown = false
@@ -1239,24 +1238,29 @@ struct RootView: View {
         status.set(message, priority: .warning)
     }
 
-    // #1143: continuously watch for a Prep run to begin (a per-row Re-prep click, an explicit "Prep kept"
-    // run, or one in flight at launch) and follow it to completion. Mirrors watchReplyClassifyRuns exactly:
-    // it polls the run marker and only enters watchPrepRun when a run is genuinely live, so an old failed
-    // run never re-nags on a normal open (#48). One watcher owns every run, so there is a single ingest/
-    // takeover path rather than a per-launch Task at each start site.
+    // #1143: watch for a Prep run to begin (a per-row Re-prep click, an explicit "Prep kept" run, a
+    // reachability check, or one in flight at launch) and follow it to completion. One watcher owns every
+    // run, so there is a single ingest and takeover path rather than a per-launch Task at each start site.
+    //
+    // #1938: it is TOLD, rather than asking. This used to stat the run marker every three seconds for the
+    // whole life of the window, whether or not a run had ever started, which is the shape #1923 removed
+    // from the reply side. A run the app starts announces itself from the service, and a run a previous
+    // launch left in flight is caught by the one stat DetachedRunActivity makes when it is first built, so
+    // an idle window pays nothing at all. The poll survives inside followUntilFinished, where a run really
+    // is in flight, because a detached run ends without telling anyone.
     private func watchPrepRuns() async {
-        while !Task.isCancelled {
-            if PrepQueueService.isRunning(now: Date()) {
-                prepSheetShown = true
-                await watchPrepRun()
+        let activity = DetachedRunActivity.prep
+        for await _ in activity.runStarts() {
+            prepSheetShown = true
+            if await activity.followUntilFinished() {
+                await settleFinishedPrepRun()
             }
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
         }
     }
 
     // #802: the scout's reading half. The extract run is detached, so without this the pages it read
     // would sit in a results file nobody opens until the next launch, and Dan's scout would look like it
-    // had found nothing. Mirrors watchPrepRun deliberately: wait for the live run, then ingest at once,
+    // had found nothing. Mirrors the Prep watcher deliberately: wait for the live run, then ingest at once,
     // or say plainly that it finished without producing anything.
     //
     // A run that finished empty is NOT silence. It is the one shape of failure that would otherwise be
@@ -1344,7 +1348,7 @@ struct RootView: View {
 
     // The reply drafter's completion half (#435): the classify+drafter run is detached, so without this
     // a finished draft only surfaced on the NEXT app launch (the bare spinner spun until then). Mirrors
-    // watchPrepRun: once the live run ends, ingest immediately (clearing the per-recipient spinner) or
+    // the Prep watcher: once the live run ends, ingest immediately (clearing the per-recipient spinner) or
     // report that it finished without a draft. A single continuous watcher (below) drives this so it
     // covers every launch source: the at-launch auto run, an in-flight run, AND a "Draft a reply" click.
     //

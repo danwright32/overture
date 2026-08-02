@@ -33,10 +33,14 @@ import Observation
 @MainActor
 @Observable
 final class DetachedRunActivity {
-    // The reply-classify run (the classify + drafter run behind "Draft a reply"). Prep and scout still
-    // poll their own markers; this type is not reply-specific, so they can move here the same way.
+    // The reply-classify run (the classify + drafter run behind "Draft a reply").
     static let replyClassify = DetachedRunActivity(
         liveness: { ReplyClassifyService.isRunning(now: $0) })
+
+    // #1938: the Prep run, and the reachability check that shares its runner and its marker. The scout's
+    // detached read still polls its own; this type is not reply-specific, so it can move here the same way.
+    static let prep = DetachedRunActivity(
+        liveness: { PrepQueueService.isRunning(now: $0) })
 
     private let liveness: @MainActor (Date) -> Bool
     private let sleep: @MainActor (TimeInterval) async -> Void
