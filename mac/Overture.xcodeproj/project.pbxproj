@@ -300,6 +300,7 @@
 		4ED4F0A82EF40CA865724902 /* RoomPresenterSweepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE415E6FC40D6012473F63A /* RoomPresenterSweepTests.swift */; };
 		4F048CA00B8C8D7AE39B68E6 /* QueueExcludedTownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7789EB6D1891A589E48D370E /* QueueExcludedTownTests.swift */; };
 		4F2350DC2BFC101516EB93F3 /* ScoutTestClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A8BF2BEBB1BB7883AB3147 /* ScoutTestClock.swift */; };
+		4F3FB9FC5C5EAF29EAEF50C5 /* GeoRefusalsResolvedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99D1C71543ED061FAB24DDA /* GeoRefusalsResolvedTests.swift */; };
 		4F8E26292104E81828833D1F /* ReachedOutMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BF52C77FAED82CFF4278EB /* ReachedOutMergeTests.swift */; };
 		4FCBCC61D63153105BA27015 /* ScoutWarnings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFDB24D6EE85795B975C07E /* ScoutWarnings.swift */; };
 		4FD000F90353BD558B95A05F /* ExperimentReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58B3F1833C2985EC6EE961F /* ExperimentReportView.swift */; };
@@ -1762,6 +1763,7 @@
 		F908765C098BDDF1F2382335 /* DayOff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayOff.swift; sourceTree = "<group>"; };
 		F915CB57556CFB341F37BFEA /* OvationTixCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvationTixCalendar.swift; sourceTree = "<group>"; };
 		F9214B21961F5C4B33A6A65C /* InquiryLostReasonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryLostReasonTests.swift; sourceTree = "<group>"; };
+		F99D1C71543ED061FAB24DDA /* GeoRefusalsResolvedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoRefusalsResolvedTests.swift; sourceTree = "<group>"; };
 		F9CCF0ABA832D3154462A4CB /* StandDownOutreachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandDownOutreachTests.swift; sourceTree = "<group>"; };
 		FA4855E0A391F15D086981B8 /* QueueCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueCopyTests.swift; sourceTree = "<group>"; };
 		FA5ED46F02B196ABCAE4E24D /* ExtractedEventGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEventGuard.swift; sourceTree = "<group>"; };
@@ -1979,6 +1981,7 @@
 				5E03A7AC75426929E676A5E6 /* GateConsumersAgreeLiveStoreTests.swift */,
 				674E5FA762B97A1DA92E74E9 /* GenreControlTests.swift */,
 				B3406F4CC9FE1130B3B33BFA /* GenrePrecedenceTests.swift */,
+				F99D1C71543ED061FAB24DDA /* GeoRefusalsResolvedTests.swift */,
 				2787A4F75772AA074BD37003 /* GmailAuthExpiryTests.swift */,
 				AA8747E85852096E1E10DCA2 /* GmailConnectFailureAlertTests.swift */,
 				6242ECDEBACE6540A1F93F94 /* GmailConnectionTests.swift */,
@@ -3352,6 +3355,7 @@
 				673BB2BB4F8F3192BA1F7734 /* GateConsumersAgreeLiveStoreTests.swift in Sources */,
 				E5E207AE707F5BF611294BAB /* GenreControlTests.swift in Sources */,
 				DEF14BE2F20A014C4154414A /* GenrePrecedenceTests.swift in Sources */,
+				4F3FB9FC5C5EAF29EAEF50C5 /* GeoRefusalsResolvedTests.swift in Sources */,
 				DAC5893A8F90B32F203F4558 /* GmailAuthExpiryTests.swift in Sources */,
 				8A22BF00A0004D69E99D1899 /* GmailConnectFailureAlertTests.swift in Sources */,
 				1A755A935A6BC46DAF48DA6C /* GmailConnectProbeTests.swift in Sources */,
