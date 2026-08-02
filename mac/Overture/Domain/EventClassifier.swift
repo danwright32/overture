@@ -46,6 +46,15 @@ struct ExtractedEvent: Codable, Equatable, Sendable {
     // card for me". Without this the drain is silent, and a silent drop is indistinguishable from a
     // value that never existed.
     var presenterWasTheRoom: Bool? = nil
+    // #1699: the times this show starts on `performanceDate`, as "HH:mm", in the order the source lists
+    // them. Empty for nearly every source, and that is the ORDINARY state, not a gap: only the three
+    // native readers that receive a time publish one (VenueTix and Squarespace already held the exact
+    // instant and discarded it; OvationTix states it per showtime). TicketTailor, the OPERA feed and
+    // every AI-read page genuinely have only a day.
+    //
+    // A LIST because #1984 measured productions that play twice on one day (a 5:00 PM and 9:15 PM double
+    // bill). One entry is the common case; the card must not turn two into one by showing the first.
+    var startTimes: [String] = []
 }
 
 // LIVE-STORE-CLAIM verified=2026-07-28 measure="undecided rows the retired confidence sentence was true of, against all undecided rows"

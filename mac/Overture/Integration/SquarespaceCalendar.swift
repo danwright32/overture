@@ -123,7 +123,11 @@ enum SquarespaceCalendar {
                            venue: event.venue,
                            performanceDate: dayFormatter.string(from: event.date),
                            sourceUrl: event.url,
-                           location: location)
+                           location: location,
+                           // #1699: the precise start instant arrives on every Squarespace event and was
+                           // discarded by the day formatter on the line above. One event is one
+                           // performance here, so always exactly one time.
+                           startTimes: [timeFormatter.string(from: event.date)])
         }
     }
 
@@ -133,6 +137,17 @@ enum SquarespaceCalendar {
         formatter.timeZone = EasternDate.calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    // #1699. The SAME zone as `dayFormatter` above, so a show's day and its time are never read in two
+    // different zones and cannot disagree about which night it is.
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = EasternDate.calendar
+        formatter.timeZone = EasternDate.calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
         return formatter
     }()
 
