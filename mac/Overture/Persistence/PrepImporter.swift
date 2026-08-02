@@ -143,6 +143,26 @@ enum PrepImporter {
                     outcome.skippedOutOfScope += 1
                 } else {
                     ingestContacts(contacts, into: p, context: context)
+                    // #1961: a contact that lands here changes the answer to "can this show be reached",
+                    // and until now only the probe path above ever said so. A show probed on Jul 29 and
+                    // given two performers by an ordinary Prep run days later kept the probe's
+                    // "no email found" standing over them, while the card worked out for itself that one
+                    // of them publishes a form and linked it. Three lines, three answers.
+                    //
+                    // Through the SAME shared definition the probe path uses, so the two can never
+                    // disagree about what a set of recipients means. The empty reason goes with it for
+                    // #1722's reason: a refusal sentence from an earlier check is false the moment a
+                    // contact lands, and printing it over a live form is worse than saying nothing.
+                    //
+                    // Guarded on a verdict already standing, deliberately: every badge sentence begins
+                    // "A reachability check...", so a Prep run may CORRECT what a check concluded but
+                    // must never mint a verdict on a show no check has looked at (L11). Nor does it
+                    // stamp reachabilityProbedAt; a Prep run is not a reachability check, and the
+                    // freshness clock belongs to the check that ran.
+                    if p.reachabilityResult != nil {
+                        p.reachabilityResult = p.reachabilityResultFromRecipients
+                        p.reachabilityEmptyReason = nil
+                    }
                 }
                 // The warm-lead correction is derived from the RESEARCH, not from the recipient list,
                 // so it still runs when Dan's curated recipients are frozen: learning that this
