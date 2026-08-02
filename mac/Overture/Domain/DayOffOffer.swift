@@ -34,14 +34,20 @@ enum DayOffOffer {
     // #939: `linkedDates` are this show's dates at OTHER venues in the same touring engagement (from
     // EngagementLink), widening the offer to the whole engagement's span so blocking in one action
     // captures every date Dan can't shoot, not just the row he happened to dismiss.
+    // #1960: `linkedDates` is an @autoclosure because both guards below refuse most calls, and an
+    // argument is evaluated BEFORE the call, so the guards could not protect against the cost of building
+    // it. The real call site sweeps every undismissed prospect through EngagementLink, with name folding
+    // and date arithmetic per row, and six of the eight dismiss reasons throw the result away on the
+    // second line. Taking it as something this function can decline to evaluate keeps the rule here,
+    // where it is tested, rather than copying both conditions up to the caller (#1916's shape).
     static func offer(reason: DismissReason, performanceDate: String?, runEndDate: String?,
-                      linkedDates: [String] = [], alreadyBlocked: Bool = false) -> Offer? {
+                      linkedDates: @autoclosure () -> [String] = [], alreadyBlocked: Bool = false) -> Offer? {
         guard !alreadyBlocked else { return nil }
         guard calendarReasons.contains(reason), let start = performanceDate else { return nil }
         // The closing night, judged the same way the conflict calculator and the feed reconcile judge it,
         // so one definition of "the last night of this run" serves all three.
         let ownEnd = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: start) ?? start
-        let allDates = [start, ownEnd] + linkedDates
+        let allDates = [start, ownEnd] + linkedDates()
         return Offer(start: allDates.min()!, end: allDates.max()!)
     }
 

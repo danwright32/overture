@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // Auto-marks outcome from the canonical booking record (#41, #99). Uses per-event
 // booking dates when available (exact match = auto-book), falls back to org-level
@@ -23,15 +24,33 @@ enum DownbeatBooking {
     // a single real booking is auto-booked exactly once even when a Prospect and an Inquiry both match
     // it (the dual-attribution bug this closes): the first in deterministic order wins the booking, the
     // rest fall to a suggestion.
+    // #1960: the two fetches and the boxing, named once and passed as an expression the health guard can
+    // decline to evaluate. It was spelled out identically at both call sites, which is also how one of
+    // them would have kept paying after the other stopped.
+    // `prospects` is passed by a caller that has already fetched them for something else, so nothing is
+    // fetched twice; a caller with none in hand omits it. `try?` yields none on a container predating
+    // Inquiry.
+    static func bookingEntities(prospects: [Prospect]? = nil,
+                                in context: ModelContext) -> [any BookingMatchable] {
+        let rows = prospects ?? (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        return rows.map { $0 as any BookingMatchable } + inquiries.map { $0 as any BookingMatchable }
+    }
+
+    // #1960: `entities` is an @autoclosure because the health guard below refuses without touching them,
+    // and an argument is evaluated BEFORE the call. Both call sites fetch every prospect AND every
+    // inquiry and box each one, so a Mac with no Downbeat export was sweeping the whole store on every
+    // reconcile tick and every scout to reach a line that returns zero.
     @discardableResult
     static func reconcileBooked(
-        entities: [any BookingMatchable],
+        entities: @autoclosure () -> [any BookingMatchable],
         clients: [DownbeatClient],
         bookings: [OvertureBooking],
         health: DownbeatBridge.Health,
         now: Date
     ) -> Int {
         guard health == .ok else { return 0 }
+        let entities = entities()
         var count = 0
         var consumed: Set<String> = []
         // Deterministic order: sort by performanceDate then groupName so 1:1 booking

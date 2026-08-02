@@ -43,19 +43,22 @@ enum DaysOffAttention {
     // The no-shoots case wins when both could apply: it is the more fundamental "Overture is blind" state,
     // and it is the one with a direct action (block the days yourself). The stalled-feed nudge is only
     // meaningful while there ARE upcoming shoots. The snooze silences the whole mark for a week.
-    static func reason(_ calendar: BlockedCalendar, feedStalled: Bool = false,
+    // #1960: the calendar is an @autoclosure because the snooze guard below refuses without reading it,
+    // and an argument is evaluated BEFORE the call. Building one reads and decodes the Downbeat export
+    // and fetches the stored days off, so a snoozed mark was paying for a calendar it then ignored.
+    static func reason(_ calendar: @autoclosure () -> BlockedCalendar, feedStalled: Bool = false,
                        today: String = QueueModel.easternToday(), now: Date = Date(),
                        defaults: UserDefaults = .standard) -> Reason {
         guard !isSnoozed(now: now, defaults: defaults) else { return .none }
-        if !calendar.hasUpcomingBookedShoot(today: today) { return .noUpcomingShoots }
+        if !calendar().hasUpcomingBookedShoot(today: today) { return .noUpcomingShoots }
         return feedStalled ? .feedStalled : .none
     }
 
-    static func needsALook(_ calendar: BlockedCalendar, feedStalled: Bool = false,
+    static func needsALook(_ calendar: @autoclosure () -> BlockedCalendar, feedStalled: Bool = false,
                            today: String = QueueModel.easternToday(),
                            now: Date = Date(),
                            defaults: UserDefaults = .standard) -> Bool {
-        reason(calendar, feedStalled: feedStalled, today: today, now: now, defaults: defaults) != .none
+        reason(calendar(), feedStalled: feedStalled, today: today, now: now, defaults: defaults) != .none
     }
 
     static func isSnoozed(now: Date, defaults: UserDefaults = .standard) -> Bool {
