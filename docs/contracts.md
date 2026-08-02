@@ -169,6 +169,13 @@ key the run must echo back verbatim, never rebuild. The Prep run is the counterp
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
 
+The runbook states BOTH versions and names every item field in prose, which drifted from the code
+unnoticed until #1908 (#1897 shipped queue v10 with `venueHistory` while the input spec still said
+version 9 and never listed the field). `src/lib/prepQueueSpec.test.ts` now holds that section to
+`PrepQueueBuilder.version`, `PrepResultsDecoder.supportedVersion` and the actual `PrepQueueItem`
+fields, in both directions: a field the payload carries but the spec omits leaves the run unaware it
+exists, and a field the spec names but the payload lacks invites the model to supply it itself.
+
 The results file also carries RUN-LEVEL facts, stamped by the runner script after the run rather
 than written by the model: `model` (#804, which model wrote these drafts), `runCost` (#1593), and
 `webCalls` (#1721, how many times the run actually reached the web, counted from its own event
