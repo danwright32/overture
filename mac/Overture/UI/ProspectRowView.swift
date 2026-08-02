@@ -268,16 +268,31 @@ struct ProspectRowView: View {
             // so the correction moved onto the line that STATES the genre. Same shape as the #1274 rename
             // pencil two lines below: a quiet correction to a scout-owned field, which then survives
             // every later scout. Nothing prompts; the row only answers when Dan disagrees.
+            // #1742: and it now LOOKS like the place to fix it. "Quiet" was implemented as invisible:
+            // gold, tracked, all-caps text with a tooltip renders identically to every other section
+            // caption in this app, so the row could not answer when Dan disagreed, because nothing told
+            // him there was anything to ask. He reported the missing feature from a screenshot while
+            // looking at it. The chevron sits after the word AT REST, not on hover: a hover cue does not
+            // exist in a screenshot, or to anyone scanning the queue without moving the mouse.
             Button {
                 showGenreEditor = true
             } label: {
-                Text(QueueModel.disciplineLabel(item.discipline).uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.0)
-                    .foregroundStyle(OVColor.gold)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(QueueModel.disciplineLabel(item.discipline).uppercased())
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(1.0)
+                        .foregroundStyle(OVColor.gold)
+                    // Faint rather than gold, in the register of the title's rename pencil: gold is
+                    // reserved for what Dan can act on, and the genre WORD is the thing he reads.
+                    Image(systemName: GenreControlCopy.icon)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(OVColor.inkFaint)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Set this show's genre")
+            .help(GenreControlCopy.help)
+            .accessibilityLabel(GenreControlCopy.accessibilityLabel(for: item.discipline))
             .popover(isPresented: $showGenreEditor) { genreEditorPopover }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(item.groupName)

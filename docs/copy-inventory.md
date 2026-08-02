@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **969 sentences**, from 337 source files.
+Every sentence Overture can say to Dan: **970 sentences**, from 337 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -659,6 +659,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "From Downbeat"
     `UI/DaysOffView.swift`
+"Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
+    `UI/QueueView+Model.swift`
 "Give the organization a name so you can recognize it here."
     `Domain/WatchlistEditing.swift`
 "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
@@ -1385,7 +1387,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ConversationStateMenu.swift`
     `UI/FollowUpsView.swift`
 "Set this show's genre"
-    `UI/ProspectRowView.swift`
+    `UI/QueueView+Model.swift`
 "Set up Overture"
     `App/AppDelegate.swift`
     `UI/OnboardingView.swift`

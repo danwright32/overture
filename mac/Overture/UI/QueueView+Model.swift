@@ -1955,3 +1955,18 @@ extension BulkDismiss.Show {
                   performanceDate: item.performanceDate, runEndDate: item.runEndDate)
     }
 }
+
+// #1742: the genre control's own words and glyph, named here rather than inline so the sentence a
+// person HEARS appears in the copy inventory beside the ones they read, and so the label cannot quietly
+// become a raw stored value ("other" is a database word, "Performance" is Dan's).
+enum GenreControlCopy {
+    // Sits after the genre at rest, never on hover alone: Dan met this row in a screenshot, and a cue
+    // that needs a mouse does not exist in one. A chevron rather than the title's pencil because what
+    // opens is a one-picker popover, and the glyph should promise the thing that actually happens.
+    static let icon = "chevron.down"
+    static let help = "Set this show's genre"
+
+    static func accessibilityLabel(for discipline: String) -> String {
+        "Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
+    }
+}
