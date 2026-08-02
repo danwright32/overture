@@ -772,7 +772,7 @@ struct SourcesView: View {
 
             // #875: the RUN'S OWN account of this source, which until now was decoded and thrown away
             // while Dan was shown only the generic sentence for the verdict. The generic line says WHAT
-            // happened ("The run ended before reading this page"); this one says WHY, and why is the only
+            // happened ("That page has not been read"); this one says WHY, and why is the only
             // part he can act on.
             //
             // The sentence goes in the row and the raw log tail goes on hover (Dan's call, 2026-07-13):

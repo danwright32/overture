@@ -29,6 +29,20 @@ assert_equals() {
   fi
 }
 
+assert_not_contains() {
+  local desc="$1" haystack="$2" needle="$3"
+  if [[ -n "${haystack}" && "${haystack}" != *"${needle}"* ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    # An EMPTY haystack fails too: nothing written at all would otherwise satisfy every
+    # not-contains check here while the guard was doing nothing.
+    echo "  expected not to contain: ${needle}"
+    echo "  in: ${haystack}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 assert_contains() {
   local desc="$1" haystack="$2" needle="$3"
   if [[ "${haystack}" == *"${needle}"* ]]; then
@@ -94,6 +108,15 @@ assert_contains "and says the run produced nothing, rather than blaming the page
   "$(result_field kaufman note)" "produced no results"
 assert_contains "and carries the tail of the run log, so the reason is not lost" \
   "$(result_field kaufman note)" "pagination"
+
+# #1757: the note is shown directly beneath the app's own line for a not_read verdict, which already
+# says the page has not been read and that the next scout will try it again. Both sentences were in
+# this note too, word for word, so Dan read them twice one line apart. This note says HOW the run
+# ended, which is the one thing the app cannot know, and leaves the rest to the line above it.
+assert_not_contains "and leaves the page's own state to the app's line, rather than saying it twice" \
+  "$(result_field kaufman note)" "It has NOT been read"
+assert_not_contains "and does not promise the next scout, which the app's line already promises" \
+  "$(result_field kaufman note)" "next scout"
 
 # --- The run reported on SOME sources, and dropped the rest -------------------------------------------
 #

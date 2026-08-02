@@ -1516,6 +1516,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "That page has no dated listings on it. It may be the wrong page for this org."
     `Domain/WatchedSource.swift`
+"That page has not been read. The next scout will try it again."
+    `Domain/WatchedSource.swift`
 "That show had already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
 "That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
@@ -1580,8 +1582,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The room its shows play in"
     `UI/SourcesView.swift`
-"The run ended before reading this page, so it has not been read. The next scout will try it again."
-    `Domain/WatchedSource.swift`
 "The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
     `Domain/ScoutWarningCopy.swift`
 "The run returned results under a source it was never asked about (\(list)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."

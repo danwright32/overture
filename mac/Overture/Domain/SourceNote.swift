@@ -3,8 +3,7 @@ import Foundation
 // #875: the run's own explanation of what happened to a source, which until now was decoded and thrown
 // away. `ScoutExtractResult.note` is even commented "for Dan to read", and nothing read it.
 //
-// So a failing source showed him the GENERIC sentence for its verdict ("The run ended before reading
-// this page") while the specific reason, the one thing that would tell him WHY, sat in a file he would
+// So a failing source showed him the GENERIC sentence for its verdict ("That page has not been read") while the specific reason, the one thing that would tell him WHY, sat in a file he would
 // have had to open by hand. The failing list only earns its place if every row is actionable, and the
 // note was the most actionable thing in the whole results file.
 //
