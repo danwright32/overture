@@ -26,13 +26,16 @@ struct RootViewSearchFieldGuardTests {
     }
 
     @Test func searchFieldIsWiredIntoTheBodyAboveQueueContent() {
-        guard let bodyRange = rootView.range(of: "var body: some View {") else {
-            Issue.record("body not found")
+        // #1930: the whole body, and the order, rather than its first 1200 characters. A budget counted in
+        // characters makes any line added at the top of the body break a guard about where the search bar
+        // sits, which says nothing about the search bar at all.
+        // #1926: the bar owns the typed query, so the call site names it rather than a binding here.
+        guard let body = SourceGuardHelper.propertyBody("var body: some View {", in: rootView),
+              let bar = body.range(of: "QueueSearchBar(items: { searchableItems }"),
+              let queue = body.range(of: "queueContent") else {
+            Issue.record("expected the body to hold both the search bar and the queue")
             return
         }
-        let body = rootView[bodyRange.lowerBound...].prefix(1200)
-        // #1926: the bar owns the typed query, so the call site names it rather than a binding here.
-        #expect(body.contains("QueueSearchBar(items: { searchableItems }"))
-        #expect(body.contains("queueContent"))
+        #expect(bar.lowerBound < queue.lowerBound)
     }
 }

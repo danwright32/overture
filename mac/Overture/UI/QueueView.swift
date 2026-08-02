@@ -213,6 +213,7 @@ struct QueueView: View {
     }
 
     private func makeRenderData() -> RenderData {
+        let items = self.items
         #if DEBUG
         // #1774: the whole-store derivation, counted where it happens. A scroll must not move this.
         // #1930: with a fingerprint of what this view derives FROM, so an idle re-derivation can name its
@@ -238,9 +239,15 @@ struct QueueView: View {
             "deepLinkedKey": deepLinkedKey ?? "none",
             "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
             "today": today,
-        ])
+        ],
+        // #1931: the rows this pass just built. Every input above is a COUNT, so an edit to an existing row
+        // (a show kept, a rank rewritten by a Prep run, a reply landing) moves none of them and used to
+        // report as `nothing this view reads`, the one answer this diagnostic is trusted for. The derived
+        // rows are value-type snapshots that DO carry the edit (QueryResultEqualityTests measured that the
+        // @Query array and its count both cannot), and they are already built here, so comparing them adds
+        // no fetch and no stat.
+        rows: items)
         #endif
-        let items = self.items
         let now = Date()
         let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
@@ -1256,10 +1263,26 @@ enum QueueRenderCounter {
     nonisolated(unsafe) private(set) static var derivations = 0
     // What moved before the most recent derivation. Shown beside the count in the masthead.
     nonisolated(unsafe) private(set) static var lastReason = firstRender
-    nonisolated(unsafe) private static var previous: [String: String] = [:]
+    // #1930: keyed by SURFACE, because the trace now carries two of them and one shared "previous" would
+    // make every queue derivation report the inputs of whatever rendered above it as having moved, naming
+    // the wrong surface on every line.
+    nonisolated(unsafe) private static var previous: [String: [String: String]] = [:]
+    nonisolated(unsafe) private static var renders: [String: Int] = [:]
+    // #1931: the rows the LAST derivation produced. Value-type snapshots, already built by that pass, so
+    // comparing them costs no fetch and no stat.
+    nonisolated(unsafe) private static var previousRows: [QueueItem]?
 
     static let firstRender = "first render"
     static let nothingVisible = "nothing this view reads"
+    // #1931: every count identical and the rows different anyway, which is what an edit to an existing row
+    // looks like: a show kept, a rank rewritten by a Prep run, a reply landing. Reported in its own words
+    // rather than as `nothingVisible`, because that answer is the one the whole diagnostic is trusted for
+    // (it means the invalidation came from outside this view) and a false one sends the next investigation
+    // hunting the screen above the queue for something the store did.
+    static let rowsChanged = "rows changed"
+
+    static let queueSurface = "queue"
+    static let rootSurface = "root"
 
     // Where an unattended observation ends up. Debug builds keep their own data directory, so this can
     // never land beside the live store's files.
@@ -1273,25 +1296,54 @@ enum QueueRenderCounter {
     // renders were landing in the same log a real observation is read from: two runs interleaved in one
     // file, each starting again at #1. The count itself is in-memory and harmless, so only the file is
     // protected. Same signal the launch-time background work already skips on (#195).
-    static func recordDerivation(inputs: [String: String] = [:], to url: URL? = nil,
+    static func recordDerivation(inputs: [String: String] = [:], rows: [QueueItem]? = nil,
+                                 to url: URL? = nil,
                                  underTests: Bool = AppEnvironment.isRunningUnderTests) {
         derivations += 1
-        lastReason = reason(for: inputs, since: previous)
-        previous = inputs
+        // #1931: only ever a claim about two sets of rows that both exist. On the first derivation there is
+        // nothing to compare against, and saying the rows changed would be inventing a finding.
+        let rowsChanged: Bool
+        if let rows, let previousRows { rowsChanged = rows != previousRows } else { rowsChanged = false }
+        if let rows { previousRows = rows }
+        lastReason = reason(for: inputs, since: previous[queueSurface] ?? [:], rowsChanged: rowsChanged)
+        previous[queueSurface] = inputs
         guard !underTests else { return }
-        append(line: "#\(derivations) \(lastReason)", to: url ?? logURL)
+        append(line: "\(queueSurface) #\(derivations) \(lastReason)", to: url ?? logURL)
+    }
+
+    // #1930: a render of a surface that does not itself sweep the store, recorded so a queue derivation
+    // reporting `nothingVisible` can be read against the render directly above it that triggered it. Both
+    // surfaces write to ONE log, in the order the two happened, because the attribution is the whole point
+    // and two files would leave it to be reconstructed from timestamps.
+    //
+    // Never counted as a derivation: the masthead number answers "is this app sweeping the store while
+    // nobody touches it", and a render that swept nothing must not inflate it.
+    @discardableResult
+    static func recordRender(surface: String, inputs: [String: String] = [:], to url: URL? = nil,
+                             underTests: Bool = AppEnvironment.isRunningUnderTests) -> String {
+        let n = (renders[surface] ?? 0) + 1
+        renders[surface] = n
+        let why = reason(for: inputs, since: previous[surface] ?? [:])
+        previous[surface] = inputs
+        guard !underTests else { return why }
+        append(line: "\(surface) #\(n) \(why)", to: url ?? logURL)
+        return why
     }
 
     // Which inputs moved. Pure, so the rule this diagnostic reports by is itself tested rather than being
     // one more thing taken on trust while it is used to judge everything else.
-    static func reason(for inputs: [String: String], since previous: [String: String]) -> String {
+    static func reason(for inputs: [String: String], since previous: [String: String],
+                       rowsChanged rowsMoved: Bool = false) -> String {
         guard !previous.isEmpty else { return firstRender }
         let changed = inputs.keys.filter { inputs[$0] != previous[$0] }
         // An input that stopped being reported is a change too, and silently dropping it would report
         // "nothing changed" for a render that was not the same shape at all.
         let dropped = previous.keys.filter { inputs[$0] == nil }
         let moved = Set(changed).union(dropped).sorted()
-        return moved.isEmpty ? nothingVisible : moved.joined(separator: ", ")
+        // #1931: an input that moved explains this derivation on its own, so it is what gets named. The
+        // rows are the answer only where no input moved, which is the case the counts are blind to.
+        guard moved.isEmpty else { return moved.joined(separator: ", ") }
+        return rowsMoved ? rowsChanged : nothingVisible
     }
 
     // Best effort, but never silent: a write that fails says so on the masthead beside the count, rather
@@ -1321,6 +1373,8 @@ enum QueueRenderCounter {
         derivations = 0
         lastReason = firstRender
         previous = [:]
+        renders = [:]
+        previousRows = nil
     }
 }
 #endif

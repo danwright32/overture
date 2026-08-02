@@ -241,6 +241,87 @@ struct RootView: View {
         OmniFocusSyncStatus.line(lastSuccessAt: OmniFocusSyncStatus.lastSuccessAt(), now: Date())
     }
 
+    #if DEBUG
+    // #1930: what THIS screen renders from, in the same shape the queue's own fingerprint uses, so a queue
+    // derivation reporting "nothing this view reads" can be read against the render above it and told which
+    // of these moved.
+    //
+    // This screen builds the queue, so every render here rebuilds QueueView and pays a whole-store
+    // derivation. The first reading (2026-08-01) was a launch burst of five derivations, four of them
+    // reporting "nothing this view reads", which means the invalidation arrives from here rather than from
+    // anything the queue itself reads. Both surfaces write to one log, in the order they happened.
+    //
+    // Counts and small values only. Nothing here may cost a fetch or a filesystem stat, or the diagnostic
+    // joins the problem it measures: the Prep and reply run markers are both stats and are deliberately
+    // absent for exactly that reason, the same call the queue's fingerprint makes.
+    //
+    // The @Observable objects this view holds (the status line, the action feedback, the day-off offer, the
+    // undo stack) are absent for the OTHER reason, #1922's: reading one here would create a dependency on
+    // it that the body may not otherwise have, so the diagnostic would cause renders it then reported.
+    //
+    // The two progress snapshots are read by their contents rather than by presence, because a run's
+    // heartbeat replaces the whole snapshot on every tick and presence alone would report every one of
+    // those ticks as nothing having moved, which is precisely the blind spot #1931 removed downstream.
+    private var rootRenderInputs: [String: String] {
+        [
+            "toPrep": "\(toPrep.count)",
+            "allProspects": "\(allProspects.count)",
+            "watchedSources": "\(watchedSources.count)",
+            "excludedTowns": "\(excludedTownRows.count)",
+            "allowedSeedTowns": "\(allowedSeedTownRows.count)",
+            "gmail": "\(GmailConnection.shared.isConnected)",
+            "isConnectingGmail": "\(isConnectingGmail)",
+            "gmailConnectStarted": "\(gmailConnectStartedAt != nil)",
+            "gmailConnectError": "\(gmailConnectError != nil)",
+            "isScanning": "\(isScanning)",
+            "scoutStarted": "\(scoutStartedAt != nil)",
+            "scoutSummary": "\(scoutSummary != nil)",
+            "scoutWarnings": "\(scoutWarnings != nil)",
+            "scoutIsManual": "\(scoutIsManual)",
+            "scoutSheetShown": "\(scoutSheetShown)",
+            "scoutGeneration": "\(scoutGeneration)",
+            "scoutCancelRequested": "\(scoutCancelRequested)",
+            "scoutReadAsk": "\(scoutReadAsk != nil)",
+            "cancelledScoutRead": "\(cancelledScoutRead ?? -1)",
+            "scoutSnapshot": snapshotFingerprint(scoutNativeSnapshot),
+            "listingRead": snapshotFingerprint(listingReadProgress),
+            "listingReadStarted": "\(listingReadStartedAt != nil)",
+            "readingStarted": "\(readingStartedAt != nil)",
+            "readingSourceCount": "\(readingSourceCount)",
+            "prepSheetShown": "\(prepSheetShown)",
+            "showPrepSelection": "\(showPrepSelection)",
+            "autoScoutEnabled": "\(autoScoutEnabled)",
+            "omniFocusEnabled": "\(omniFocusEnabled)",
+            "omniFocusFailedAt": "\(omniFocusFailedAt)",
+            "omniFocusSyncing": "\(omniFocusSyncStartedAt != nil)",
+            "daysOffSnoozedUntil": "\(daysOffSnoozedUntil)",
+            "feedLastNewAt": "\(feedLastNewAt)",
+            "errorMessage": "\(errorMessage != nil)",
+            "deepLinkedKey": deepLinkedKey ?? "none",
+            "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
+            "archiveJumpKey": archiveJumpKey ?? "none",
+            "archiveJumpRecipientId": archiveJumpRecipientId ?? "none",
+            "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
+            "followUpsHighlight": followUpsHighlightRecipientId ?? "none",
+            "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
+                       showSources, showDaysOff, showExcludedTowns, showOrganisations,
+                       showReminderSettings].map { $0 ? "1" : "0" }.joined(),
+        ]
+    }
+
+    // Called from the body, so it runs exactly once per render of this screen. Returns the reason purely so
+    // the call site can be a `let _ =` inside the view builder.
+    @discardableResult
+    private func traceRootRender() -> String {
+        QueueRenderCounter.recordRender(surface: QueueRenderCounter.rootSurface, inputs: rootRenderInputs)
+    }
+
+    private func snapshotFingerprint(_ s: RunProgressView.Snapshot?) -> String {
+        guard let s else { return "none" }
+        return "\(s.sourceName ?? "-")/\(s.completed)/\(s.total)"
+    }
+    #endif
+
     var body: some View {
         // The search bar lives here in the window body, not the toolbar: confirmed against the
         // running app that a native NSToolbar item cannot anchor a SwiftUI .popover at all (the
@@ -248,6 +329,9 @@ struct RootView: View {
         // Archive's own body works correctly. This still reads as "persistent" per the design
         // (always visible above the Queue, not tucked into a menu), just not toolbar-hosted.
         VStack(spacing: 0) {
+            #if DEBUG
+            let _ = traceRootRender()   // #1930, see rootRenderInputs
+            #endif
             // #1926: the bar owns the query, and both scopes are handed over as work to do rather than
             // work already done. Neither closure runs unless Dan is actually searching.
             QueueSearchBar(items: { searchableItems },
