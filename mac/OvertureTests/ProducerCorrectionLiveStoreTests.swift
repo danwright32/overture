@@ -74,10 +74,26 @@ struct ProducerCorrectionLiveStoreTests {
             #expect(offeredAnyway.isEmpty,
                     "rows offering a correction the gate ignores: \(offeredAnyway.count)")
 
-            // The rule bites on a real population, so this can never go vacuous while staying green.
-            let roomNamed = items.filter { brands.isRoomName($0.presenter) }
-            #expect(roomNamed.count > 50,
-                    "the equality arm still covers a substantial slice of the store")
+            // #1966: this used to require more than 50 such rows, and on 2026-08-02 it went red at 12.
+            //
+            // Nothing regressed. #1952's RoomPresenterSweep shipped the night before and cleared 111 rows
+            // whose presenter was their own room, which is the population this line was counting. The
+            // floor was therefore asserting that a shipped fix had NOT worked, and it would have gone red
+            // on whichever run came first after Dan next opened the app.
+            //
+            // The vacuity guard is still needed, so it moved off the wreckage and onto the RULE: the
+            // equality arm must still recognise a room name when it meets one. That cannot be emptied by
+            // a sweep, and it fails just as loudly if `isRoomName` ever stops matching. The live half now
+            // asserts only what a live store can honestly say: whatever rows remain in this state, none of
+            // them offers a correction the gate would ignore (above), and the store is a real one (below).
+            let aRoomInThisStore = all.compactMap(\.venue).first { !$0.isEmpty }
+            #expect(aRoomInThisStore != nil, "the live store still names rooms to recognise")
+            if let room = aRoomInThisStore {
+                let asItsOwnPresenter = ProducerGate.VenueBrands(
+                    shows: [ProducerGate.Show(presenter: room, venue: room)])
+                #expect(asItsOwnPresenter.isRoomName(room),
+                        "the equality arm must still recognise a room standing in as its own presenter")
+            }
 
             // And it did not silence everything: an organisation caught only by name overlap, or not
             // judged a building at all, must KEEP its control, or this fix has traded one defect for the
