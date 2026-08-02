@@ -218,20 +218,41 @@ struct QueueView: View {
         let geo: GeoRefusals
     }
 
+    // #1913: the derivation itself lives in QueueRenderPass, over plain values, so what one pass costs
+    // can be measured in a test. A SwiftUI body cannot be evaluated in one, so anything left in here is
+    // unmeasurable by construction. What stays is gathering: reading this view's own state and the three
+    // file-backed answers, and handing them over.
     private func makeRenderData() -> RenderData {
-        // #1962: every show's place worked out ONCE for this pass, and shared by the three sweeps
-        // below plus the surfaces built from the snapshot. Each of them used to ask about every
-        // show independently, which was the single biggest cost in the rebuild.
-        let geo = self.geo.resolving(prospects)
-        let items = self.items
-        #if DEBUG
-        // #1774: the whole-store derivation, counted where it happens. A scroll must not move this.
-        // #1930: with a fingerprint of what this view derives FROM, so an idle re-derivation can name its
-        // own cause instead of leaving the next person to eliminate candidates by reading code. Counts and
-        // small state values only: nothing here may cost a fetch or a filesystem stat, or the diagnostic
-        // becomes part of the problem it measures. `prepRunning` and the reply-run marker are deliberately
-        // absent for that reason (both are stats, paid once below).
-        QueueRenderCounter.recordDerivation(inputs: [
+        let now = Date()
+        return QueueRenderPass.make(QueueRenderPass.Inputs(
+            prospects: QueueRenderPass.Corpus(prospects),
+            allProspects: QueueRenderPass.Corpus(allProspects),
+            inquiries: inquiries,
+            orgAnswers: orgAnswers,
+            sources: watchedSources,
+            overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
+            geo: geo,
+            // #1964: the held copy. Building one here opened and decoded two files on every pass.
+            history: VenueShootHistoryCache.shared.history(),
+            today: today,
+            now: now,
+            focusedStage: focusedStage,
+            focusedKeys: focusedKeys,
+            // #1770: read once for the whole pass, from the cache rather than from the token file.
+            gmailConnected: GmailConnection.shared.isConnected,
+            prepRunning: PrepQueueService.isRunning(now: now),
+            replyRunAlive: ReplyClassifyService.isRunning(now: now),
+            trace: renderTrace))
+    }
+
+    #if DEBUG
+    // #1930: a fingerprint of what this view derives FROM, so an idle re-derivation can name its own
+    // cause. Counts and small state values only: nothing here may cost a fetch or a filesystem stat, or
+    // the diagnostic becomes part of the problem it measures. The two run markers are absent for exactly
+    // that reason, and #1922's four transient send values because reading one would put back the
+    // dependency that issue removed.
+    private var renderTrace: [String: String] {
+        [
             "prospects": "\(prospects.count)",
             "allProspects": "\(allProspects.count)",
             "orgAnswers": "\(orgAnswers.count)",
@@ -243,76 +264,15 @@ struct QueueView: View {
             "gmail": "\(GmailConnection.shared.isConnected)",
             "stage": String(describing: focusedStage),
             "focusedKeys": "\(focusedKeys?.count ?? -1)",
-            // #1922: the four transient send values are deliberately absent. Reading one here would put
-            // the dependency this issue removes straight back, so that a send re-derived the store again
-            // for the sake of the diagnostic reporting that it had.
             "deepLinkedKey": deepLinkedKey ?? "none",
             "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
             "today": today,
-        ],
-        // #1931: the rows this pass just built. Every input above is a COUNT, so an edit to an existing row
-        // (a show kept, a rank rewritten by a Prep run, a reply landing) moves none of them and used to
-        // report as `nothing this view reads`, the one answer this diagnostic is trusted for. The derived
-        // rows are value-type snapshots that DO carry the edit (QueryResultEqualityTests measured that the
-        // @Query array and its count both cannot), and they are already built here, so comparing them adds
-        // no fetch and no stat.
-        rows: items)
-        #endif
-        let now = Date()
-        let reachedOut = ReachedOutQueue.activeWithDates(from: prospects, now: now)
-        let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
-        // The masthead's at-a-glance summary is every show a stage will render, minus the ones already
-        // pitched. #1134 removed the filter chips, so this is the whole to-send queue, unfiltered but
-        // for Dan's standing town refusals.
-        //
-        // LIVE-STORE-CLAIM verified=2026-07-26 measure="the masthead total against the stage pills beneath it, over untriaged shows"
-        // #1567: counted through StageNavigation, the same predicate as the pills directly beneath it,
-        // so the line can no longer state a smaller backlog than the pills it sits above. It used to run
-        // through queueOrder's own 90-day window and untouched-and-gone rule, neither of which any stage
-        // list applies, which read 452 against the pills' 589 on the live store.
-        //
-        // #1570: the town refusals ride INSIDE that predicate now. This used to run the result through
-        // QueueModel.filter a second time to apply them, which is precisely how the masthead and the
-        // stage list came to answer one question two ways; the stage list called no such filter.
-        let inAStage = StageNavigation.queueKeys(in: prospects, reachedOutKeys: reachedOutKeys,
-                                                 today: today, now: now, geo: geo)
-        let visible = items.filter { inAStage.contains($0.id) }
-        // #1770: read once for the whole render, exactly like `items` above. Its two readers here (the
-        // pill strip's inputs and every card) then answer from the same value, and no card sources one.
-        let gmailConnected = GmailConnection.shared.isConnected
-        // #1774: the stage's rows, resolved here rather than inside the scroll content. #1140: in stage
-        // mode membership is re-derived LIVE from the current prospects (a sent draft drops out); in leads
-        // mode the frozen key set stands. The dispatch lives in StageNavigation.focusedKeys so it is
-        // tested, not decided in a view.
-        let wanted = Set(StageNavigation.focusedKeys(stage: focusedStage, leadKeys: focusedKeys ?? [],
-                                                     in: prospects, today: today, now: now, geo: geo))
-        // #1922: the just-sent rows are NOT folded in here any more. Reading them meant every send
-        // re-derived the whole store twice (once to start the leaving delight, once to end it) to animate
-        // one card. QueueDateGroups folds them into the finished groups instead, which is the same result
-        // one layer down and out of this derivation's reach.
-        let focusedRows = items.filter { wanted.contains($0.id) }
-        return RenderData(items: items, visible: visible,
-                          agentInputs: AgentInputs.from(
-                              prospects: prospects, inquiries: inquiries, now: now, today: today,
-                              gmailConnected: gmailConnected,
-                              prepRunning: PrepQueueService.isRunning(now: now),
-                              replyRunAlive: ReplyClassifyService.isRunning(now: now),
-                              geo: geo),
-                          gmailConnected: gmailConnected,
-                          reachedOut: reachedOut,
-                          reachedOutKeys: reachedOutKeys,
-                          pendingBookings: QueueModel.pendingBookingCount(items),
-                          fanOutLine: fanOutWarning,
-                          focusedRows: focusedRows,
-                          dateGroups: QueueModel.groupByDate(focusedRows),
-                          inquiryRows: stageInquiryRows(focusedStage),
-                          geo: geo)
+        ]
     }
+    #else
+    private var renderTrace: [String: String] { [:] }
+    #endif
 
-    // The big scroll tree is lifted into a typed sub-view so the main body stays small and
-    // the editor type-checks it quickly (#56); the real compiler was always fine.
-    // Kept deliberately small: the toolbar, alerts, and their bindings are extracted so no
-    // single expression sits near the SwiftUI type-checker's complexity threshold (#122).
     var body: some View {
         let data = makeRenderData()
         return mainContent(data)
@@ -541,13 +501,6 @@ struct QueueView: View {
                 }
             }
         }
-    }
-
-    // #1436: the inquiries belonging to a stage, as display rows (StageNavigation.stage decides which).
-    private func stageInquiryRows(_ stage: StageFocus?) -> [InquiryRow] {
-        guard let stage else { return [] }
-        let forStage = inquiries.filter { StageNavigation.stage(for: $0) == stage }
-        return QueueModel.inquiryRows(forStage, now: Date())
     }
 
     // #1436: inquiries for a stage, as their own date-grouped block. Kept separate from the prospect
@@ -878,18 +831,6 @@ struct QueueView: View {
             ReplyRunLine(activity: .replyClassify)
             agentStrip(agentInputs)
         }
-    }
-
-    // #1694: one possible-match record flagged across a crowd of shows, which is the tell that the rule
-    // locked onto something those shows SHARE rather than onto the act (18 Carnegie Hall cards asked the
-    // same wrong question before anyone noticed). Counted over EVERY prospect rather than the queue's
-    // visible rows, for the reason the agent strip counts that way too: a flagged show has usually already
-    // left the queue, and a fan-out hiding entirely off the current stage is exactly the one nobody finds.
-    private var fanOutWarning: String? {
-        PossibleMatchFanOut.warningLine(
-            PossibleMatchFanOut.findings(rows: prospects.compactMap { p in
-                p.possibleMatchName.map { (act: p.groupName, match: $0) }
-            }))
     }
 
     // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus

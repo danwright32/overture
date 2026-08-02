@@ -128,14 +128,16 @@ struct GeoRefusalsResolvedTests {
 @Suite("The render pass resolves the geography once and shares it (#1962)")
 struct GeoRefusalsRenderPassWiringTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #1913: the derivation moved here, so the guards on its shape moved with it.
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     @Test func thePassResolvesEveryShowsPlaceOnce() {
-        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
-                                                        in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
+                                                        in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
-        #expect(body.contains("let geo = self.geo.resolving(prospects)"))
+        #expect(body.contains("let geo = i.geo.resolving(i.prospects.all)"))
     }
 
     // And carries it, so the surfaces built from the same pass answer from the same table rather than

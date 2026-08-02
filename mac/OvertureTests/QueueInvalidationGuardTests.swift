@@ -27,6 +27,8 @@ import Foundation
 @Suite("A scroll cannot reach the queue's derivation (#1774)")
 struct QueueInvalidationGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #1913: the derivation moved here, so the guards on its shape moved with it.
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     // The scroll position is not QueueView's own state. This is the whole fix in one assertion: as
     // QueueView state every scroll write re-derived the store, and no other test in the suite can see it.
@@ -78,15 +80,15 @@ struct QueueInvalidationGuardTests {
     // argument evaluates at its call site, so it ran on every scroll frame while looking like it belonged
     // to the masthead (#1916's lesson, one level up).
     @Test func theWholeStoreSweepsHappenAboveTheScrollContent() {
-        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
-                                                        in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
+                                                        in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
-        // The sweeps are paid once, here, into the snapshot.
-        #expect(body.contains("fanOutLine: fanOutWarning"))
+        // The sweeps are paid once, there, into the snapshot.
+        #expect(body.contains("fanOutLine: fanOutWarning("))
         #expect(body.contains("dateGroups: QueueModel.groupByDate("))
-        #expect(body.contains("StageNavigation.focusedKeys(stage: focusedStage"))
+        #expect(body.contains("StageNavigation.focusedKeys(stage: i.focusedStage"))
         #expect(queueView.contains("let fanOutLine: String?"))
         #expect(queueView.contains("let dateGroups: [QueueModel.DateGroup]"))
 

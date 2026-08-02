@@ -18,6 +18,8 @@ import Foundation
 @Suite("The queue counts its own whole-store derivations (#1774)")
 struct QueueDerivationCounterTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #1913: the derivation moved here, so the guards on its shape moved with it.
+    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     // It counts, and it can be reset, so a walk can zero it and scroll rather than doing arithmetic on
     // whatever number the launch left behind.
@@ -41,9 +43,9 @@ struct QueueDerivationCounterTests {
     // The one place that may count is the one place that derives. Counting anywhere else would report a
     // number that is not the thing under test.
     @Test func onlyTheWholeStoreDerivationIsCounted() {
-        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
-                                                        in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
+                                                        in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
         #expect(body.contains("QueueRenderCounter.recordDerivation("))
@@ -53,10 +55,10 @@ struct QueueDerivationCounterTests {
 
     // Gated out of Release, at both ends: the counter itself and the call that feeds it.
     @Test func theCounterIsDebugOnly() {
-        #expect(queueView.contains("#if DEBUG"))
-        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
-                                                        in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+        #expect(renderPass.contains("#if DEBUG"))
+        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
+                                                        in: renderPass) else {
+            Issue.record("expected to find the render pass")
             return
         }
         guard let callIndex = body.range(of: "QueueRenderCounter.recordDerivation(")?.lowerBound else {
