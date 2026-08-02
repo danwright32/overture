@@ -178,11 +178,16 @@ ensure_every_queued_source_reported() {
       .map((l) => (l.length > 200 ? l.slice(0, 200) + "…" : l))
       .join(" | ");
 
+    // #1757: HOW the run ended, and nothing else. This note is shown directly beneath the app.s own line
+    // for the not_read verdict, which already says the page has not been read and that the next scout
+    // will try it again. Saying that here too put those two sentences on the row word for word, one line
+    // apart, and the sentence this one adds ahead of them contradicted the app.s: it said the run exited
+    // normally while the line above said the run ended before reaching the page. The exit status is the
+    // one thing the app cannot know, so it is the only thing this note is for.
     const why = status === "0"
       ? "The run exited normally but produced no results for this source."
       : `The run exited with status ${status} and produced no results for this source.`;
-    const note = [why, "It has NOT been read, and the next scout will try it again.",
-                  tail ? `Last lines of the run log: ${tail}` : ""].filter(Boolean).join(" ");
+    const note = [why, tail ? `Last lines of the run log: ${tail}` : ""].filter(Boolean).join(" ");
 
     const out = {
       version: parsed?.version ?? 1,

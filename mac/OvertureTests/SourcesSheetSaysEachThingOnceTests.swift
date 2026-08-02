@@ -80,7 +80,7 @@ struct SourcesSheetSaysEachThingOnceTests {
     }
 
     // #843: a run that died before opening the page (`notRead`) leaves BOTH the unread-changes line and a
-    // failure line that says "it has not been read. The next scout will try it again." Shown together they
+    // failure line that says "That page has not been read. The next scout will try it again." Shown together they
     // say the one thing, so the read-state line steps aside and lets the failure line (which also says
     // WHY) carry it. The row is not left silent: the failure line is still shown.
     @Test func aPageAScoutNeverReachedDoesNotSayNotReadTwice() {

@@ -38,12 +38,10 @@ struct SourceNoteIngestTests {
 
         _ = ScoutExtractIngest.ingest(results(.notRead, note:
             "The run exited with status 1 and produced no results for this source. "
-            + "It has NOT been read, and the next scout will try it again. "
             + "Last lines of the run log: + claude -p | Error: connection reset"),
             clients: [], history: [], blocked: .empty, now: Date(), into: ctx)
 
-        #expect(source.runNote == "The run exited with status 1 and produced no results for this source. "
-                + "It has NOT been read, and the next scout will try it again.")
+        #expect(source.runNote == "The run exited with status 1 and produced no results for this source.")
         #expect(source.runNoteDetail == "+ claude -p | Error: connection reset")
     }
 

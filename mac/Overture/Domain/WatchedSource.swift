@@ -709,9 +709,15 @@ enum SourceFailure: Equatable, Sendable {
             return "That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
         case .verdict(.notRead):
             // #856: says what actually happened, and nothing more. The page is very probably fine; the
-            // RUN died before opening it. Claiming the calendar is broken would send Dan to fix a page
+            // RUN did not come back with it. Claiming the calendar is broken would send Dan to fix a page
             // that was never the problem.
-            return "The run ended before reading this page, so it has not been read. The next scout will try it again."
+            //
+            // #1757: and it says nothing about HOW the run ended, because it cannot know. It is written
+            // from a stored verdict, and it used to assert the run "ended before reading this page" while
+            // the run's own note directly beneath said the run exited normally. Two lines, one line
+            // apart, contradicting each other about the one fact only the second one had. This line is
+            // about the PAGE (it was not read, and what happens next); the note is about the RUN.
+            return "That page has not been read. The next scout will try it again."
         case .verdict(let v):
             return "The page came back as \(v.rawValue)."
         case .inconsistentResult:

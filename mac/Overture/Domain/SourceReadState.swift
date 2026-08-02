@@ -51,7 +51,7 @@ enum SourceReadState: Equatable, Sendable {
             // them, and a scout Dan starts is what reads them. But for two failures "Run a scout to read
             // them" is the wrong thing to say, so it steps aside for the failure line instead:
             //   - notRead (#843): the run died before opening the page; the failure line already says
-            //     "it has not been read. The next scout will try it again.", and also says WHY, so the
+            //     "That page has not been read. The next scout will try it again.", and the run's own note beside it says WHY, so the
             //     two together said the one thing twice.
             //   - unreadable (#958): the page is drawn by JavaScript, so a plain re-fetch reads the same
             //     empty shell every time. "Run a scout to read them" promises a re-run will fix what a
