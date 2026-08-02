@@ -241,7 +241,12 @@ struct OvertureApp: App {
         // #474: swapped the hand-drawn placeholder vector for a raster rendering of the real designed
         // mark, trimmed to its bounding box and downsampled straight from the source art rather than
         // re-traced, since the artwork's layered trail strokes are too intricate to approximate by hand.
-        MenuBarExtra("Overture", image: "MenuBarGlyph") {
+        // #1966: inserted only on a real launch. The test host is the same app, and a status item that
+        // macOS removes takes the whole process down with it (terminationOnRemoval), which is how a
+        // crowded menu bar came to block all 4811 Swift tests with no error anyone could read. The rule
+        // lives on AppEnvironment beside its sibling for background services, never spelled out here.
+        MenuBarExtra("Overture", image: "MenuBarGlyph",
+                     isInserted: .constant(AppEnvironment.showsMenuBarExtra)) {
             MenuBarContent()
         }
     }
@@ -262,4 +267,22 @@ enum AppEnvironment {
     static var shouldStartBackgroundServices: Bool {
         !isRunningUnderTests
     }
+
+    // #1966: whether this launch asks macOS for a menu bar item at all.
+    //
+    // The suite is hosted IN the app, so every test run launches it, and a SwiftUI MenuBarExtra sets
+    // its status item to terminate the app when the item is REMOVED. Anything that removes the item
+    // therefore kills the test host: a menu bar with no room left, a Cmd-drag, a window manager
+    // reaching in over Accessibility. On 2026-08-01 that started happening on Dan's Mac and took the
+    // entire suite with it (4811 tests), reported by xcodebuild only as "the test runner exited with
+    // code 0 while preparing to run tests", with no failure, no crash log and no named test.
+    //
+    // The host has no use for the item: no menu is ever opened, and nobody sees it. So it does not ask
+    // for one, and the machine's menu bar can no longer decide whether the suite runs. A REAL launch is
+    // untouched, and must be: with the window closed, the menu bar presence IS the app (#266).
+    static var showsMenuBarExtra: Bool { showsMenuBarExtra(isRunningUnderTests: isRunningUnderTests) }
+
+    // Split from the live value so both answers are testable from inside the test host, where the live
+    // one can only ever be the test answer.
+    static func showsMenuBarExtra(isRunningUnderTests: Bool) -> Bool { !isRunningUnderTests }
 }

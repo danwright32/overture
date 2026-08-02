@@ -104,10 +104,31 @@ struct VenueBrandFuzzyMatchLiveStoreTests {
                                         isTaxExempt: nil, hasLeftReview: false, specialBehaviors: [],
                                         notes: nil, hostingSite: "pixieset")]
 
+            // #1966: this used to require the live store to still hold shows whose PRESENTER is "Chain
+            // Theatre", and on 2026-08-02 it went red at zero of them.
+            //
+            // Nothing regressed. #1952's RoomPresenterSweep shipped the night before and cleared exactly
+            // this shape: a row whose presenter is the room it plays in. Chain Theatre is named in that
+            // sweep's own write-up as one of the rows it strips (it was scoring 28 as a "self-producing,
+            // strong profile" organisation that is really the building). So this test was requiring the
+            // live store to still carry rows a shipped fix exists to remove.
+            //
+            // The RULE it pins is real and worth keeping: a client whose name is also a room must still
+            // read as a past client rather than being refused as the building. That is a fact about
+            // HistoryMatch, not about the store, so it is now demonstrated on a row built here, and the
+            // live store is used only for what it can honestly say (the same rule holds on whatever such
+            // rows remain).
+            let constructed = ProducerGate.VenueBrands(
+                shows: [ProducerGate.Show(presenter: "Chain Theatre", venue: "Chain Theatre")])
+            #expect(constructed.contains("Chain Theatre"),
+                    "the presenter IS a venue brand here, which is what makes the case worth pinning")
+            let onTheClientsOwnShow = HistoryMatch.matchRelationship(
+                name: "An Evening of New Work", presenter: "Chain Theatre", venue: "Chain Theatre",
+                clients: chain, history: [], venueBrands: constructed)
+            #expect(onTheClientsOwnShow.relationship == .booked)
+            #expect(onTheClientsOwnShow.matchedClientName == "Chain Theatre")
+
             let itsShows = all.filter { ProducerGate.key($0.presenter) == ProducerGate.key("Chain Theatre") }
-            #expect(!itsShows.isEmpty, "the live store still holds shows presented by this client")
-            // The presenter IS a venue brand here, which is exactly what makes it the case worth pinning.
-            #expect(venueBrands.contains("Chain Theatre"))
             for show in itsShows {
                 let v = HistoryMatch.matchRelationship(name: show.groupName, presenter: show.presenter,
                                                        venue: show.venue, clients: chain, history: [],
