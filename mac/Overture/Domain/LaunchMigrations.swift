@@ -76,6 +76,16 @@ enum LaunchMigrations {
         // above it leans on the launch backup, refuses any group where two rows carry outreach history,
         // and keeps the row holding a paid reachability answer over one that was never checked.
         SameNightTitleVariantMerge.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-08-02 measure="stored rows whose presenter reduces to their own venue under ProducerGate.key, and what they score"
+        // #1845: strip a room standing in as its own show's presenter from the rows already in the store
+        // (101 of 723 on the live store, among them one scoring 28 as a "self-produced, strong profile"
+        // organisation that is really the building). The boundary guard has caught this since #1766, but
+        // only as a show is READ, so it never reached a row written before it and a hash-gated scout may
+        // not re-read that show for weeks. Runs AFTER the merges above so it judges surviving rows, and
+        // every launch rather than once, since a later scout can write the name back. Idempotent by
+        // construction: it clears the field its own condition tests. Re-derives the axes the presenter
+        // fed, so a swept row is scored on what is left rather than keeping the 8 points the name earned.
+        RoomPresenterSweep.run(in: context)
         // LIVE-STORE-CLAIM verified=2026-07-28 measure="prospect rows carrying a possible-match flag, and how many of those name one record"
         // #1693: re-run the possible-match verdict over the rows that already carry one (21 on the live
         // store, 18 of them naming the same wrong record). The flag is STORED and only rewritten when the
