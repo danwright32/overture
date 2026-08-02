@@ -213,9 +213,16 @@ struct QueueView: View {
         let focusedRows: [QueueItem]
         let dateGroups: [QueueModel.DateGroup]
         let inquiryRows: [InquiryRow]
+        // #1962: the pass's own resolved geography, so a surface built from this snapshot answers
+        // from the same table instead of sweeping the store again through the unresolved value.
+        let geo: GeoRefusals
     }
 
     private func makeRenderData() -> RenderData {
+        // #1962: every show's place worked out ONCE for this pass, and shared by the three sweeps
+        // below plus the surfaces built from the snapshot. Each of them used to ask about every
+        // show independently, which was the single biggest cost in the rebuild.
+        let geo = self.geo.resolving(prospects)
         let items = self.items
         #if DEBUG
         // #1774: the whole-store derivation, counted where it happens. A scroll must not move this.
@@ -298,7 +305,8 @@ struct QueueView: View {
                           fanOutLine: fanOutWarning,
                           focusedRows: focusedRows,
                           dateGroups: QueueModel.groupByDate(focusedRows),
-                          inquiryRows: stageInquiryRows(focusedStage))
+                          inquiryRows: stageInquiryRows(focusedStage),
+                          geo: geo)
     }
 
     // The big scroll tree is lifted into a typed sub-view so the main body stays small and
@@ -683,7 +691,9 @@ struct QueueView: View {
     // stage that has some (never auto-jumping there). The pointer logic is the pure StageEmptyState so it
     // is tested; this view just renders it in the same dashed-border card the queue used before.
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
-        let counts = StageNavigation.counts(in: prospects, today: today, now: Date(), geo: geo)
+        // #1962: the pass's resolved geography, not a fresh unresolved one, so an empty stage does
+        // not re-resolve every show's place to count the others.
+        let counts = StageNavigation.counts(in: prospects, today: today, now: Date(), geo: data.geo)
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
