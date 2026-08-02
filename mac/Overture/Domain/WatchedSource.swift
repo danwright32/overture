@@ -684,6 +684,20 @@ enum SourceFailure: Equatable, Sendable {
         }
     }
 
+    // #1758: did this failure leave the page unread, so that Overture knows nothing current about the
+    // org? It decides one word on the row's most scannable line: an attempt that came away with nothing
+    // may say it was TRIED, never that it was CHECKED.
+    //
+    // A fetch that never landed the page, and a run whose results contradicted themselves so nothing
+    // from it was used (#857), both leave Overture blind whatever the page actually says. The verdicts
+    // are not all alike, so they answer for themselves.
+    var leftThePageUnread: Bool {
+        switch self {
+        case .fetch, .inconsistentResult: return true
+        case .verdict(let v): return v.leftThePageUnread
+        }
+    }
+
     // What Dan reads in the Sources sheet.
     var message: String {
         switch self {

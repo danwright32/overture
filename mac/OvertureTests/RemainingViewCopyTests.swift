@@ -40,12 +40,13 @@ struct RemainingViewCopyTests {
     // MARK: - Sources
 
     @Test func aSourceNeverCheckedSaysSoRatherThanShowingABlank() {
-        #expect(SourceReadState.lastCheckedLine(at: nil, now: Date()) == "Never checked")
+        #expect(SourceReadState.lastCheckedLine(at: nil, now: Date(), failure: nil) == "Never checked")
     }
 
     @Test func aCheckedSourceReadsAsRelativeTime() {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let line = SourceReadState.lastCheckedLine(at: now.addingTimeInterval(-7_200), now: now)
+        let line = SourceReadState.lastCheckedLine(at: now.addingTimeInterval(-7_200), now: now,
+                                                   failure: nil)
 
         #expect(line.hasPrefix("Checked "))
         #expect(line != "Checked ")

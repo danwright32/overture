@@ -855,9 +855,11 @@ struct SourcesView: View {
     }
 
     // "Never" is a real answer and is said out loud, rather than being left as a blank cell that reads
-    // like a rendering bug.
+    // like a rendering bug. #1758: the row's failure decides whether this line may say the source was
+    // CHECKED or only that it was tried, so it is handed over here and the wording is decided in one
+    // tested place, never in the view.
     private func lastChecked(_ source: WatchedSource) -> String {
-        SourceReadState.lastCheckedLine(at: source.lastCheckedAt, now: Date())   // #885
+        SourceReadState.lastCheckedLine(at: source.lastCheckedAt, now: Date(), failure: source.lastFailure)   // #885/#1758
     }
 }
 
