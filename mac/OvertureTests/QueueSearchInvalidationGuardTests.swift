@@ -70,9 +70,11 @@ struct QueueSearchInvalidationGuardTests {
 
     // The field asks the tested helpers rather than filtering inline. Inline, the blank-query guard would
     // sit behind an already-built list again and the laziness would be undone without a test noticing.
+    // #1932: through the held scope now, which still hands the helpers something to BUILD rather than
+    // something built, so the blank-query guard is still the one deciding whether any sweep happens.
     @Test func theFieldSearchesThroughTheLazyHelpers() {
-        #expect(field.contains("ShowSearch.results(in: allItems()"))
-        #expect(field.contains("ShowSearch.matchCount(in: archiveItems()"))
+        #expect(field.contains("ShowSearch.results(in: queueScope.items(allItems)"))
+        #expect(field.contains("ShowSearch.matchCount(in: archiveScope.items(archiveItems)"))
         #expect(!field.contains(".filter { ShowSearch.matches("),
                 "matching inline here would mean the list was built before anything could decide it was not needed")
     }
