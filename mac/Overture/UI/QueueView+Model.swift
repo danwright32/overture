@@ -323,16 +323,35 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // form as a link right underneath it.
     var displayedContactForms: [URL] {
         guard displayedContactEmails.isEmpty else { return [] }
-        return contacts.compactMap { c -> URL? in
-            guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !raw.isEmpty, !Reachability.isSocialOnly(raw),
-                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
-                  // #1636: and the press rule, kept in step with the stored verdict for the same reason
-                  // the venue one is.
-                  !PressContactGuard.looksLikePressContact(formURL: raw),
-                  let url = URL(string: raw), url.scheme != nil else { return nil }
-            return url
+        return contacts.compactMap(usableContactFormURL)
+    }
+
+    // #1961: the one predicate behind both the links the card offers and the count printed above them,
+    // so the pill can never promise more ways in than the card shows (L16). Was inline in
+    // displayedContactForms; extracted rather than copied, because two copies of "is this form one Dan
+    // would use" is exactly how the card and the stored verdict drifted apart in the first place.
+    private func usableContactFormURL(_ c: RecipientSnapshot) -> URL? {
+        guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty, !Reachability.isSocialOnly(raw),
+              !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+              // #1636: and the press rule, kept in step with the stored verdict for the same reason
+              // the venue one is.
+              !PressContactGuard.looksLikePressContact(formURL: raw),
+              let url = URL(string: raw), url.scheme != nil else { return nil }
+        return url
+    }
+
+    // #1961: how many of the people found on THIS show carry a route Dan can actually use. An address
+    // counts even when a guard is holding it (the card prints it, and dismissing the check releases it);
+    // a form counts only when the card would offer it, which it does only where there is no address at
+    // all (#1626). Counted over the show's own contacts and never the organisation's inherited
+    // addresses, so the number can never come out larger than the number of people found.
+    var reachableContactCount: Int {
+        let withAddress = contacts.filter {
+            !($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+        guard withAddress.isEmpty else { return withAddress.count }
+        return contacts.compactMap(usableContactFormURL).count
     }
 
     // #1628: which of the printed contacts the check was NOT sure about. The badge above says what KIND
@@ -398,8 +417,21 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
     // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
     // to see when multiple people were found. nil for the common single-contact case (no clutter).
+    // #1961: and it counted contact RECORDS, so a show with two performers who publish no address
+    // between them read "2 contacts" beside a badge saying no email was found. Dan, on the live build:
+    // "it says 2 contacts and then it says no email found and it has a link to a contact form. that's
+    // confusing". It promised two ways in on a card that had one.
+    //
+    // His choice, 2026-08-02, shown the three renderings side by side: say both numbers, so a performer
+    // found is never dropped and one who cannot be reached is never counted as a way in. The short form
+    // survives for the healthy case, where every contact found is one he can write to and the second
+    // number would only restate the first.
     var contactCountLabel: String? {
-        contacts.count > 1 ? "\(contacts.count) contacts" : nil
+        guard contacts.count > 1 else { return nil }
+        let reachable = reachableContactCount
+        if reachable == contacts.count { return "\(contacts.count) contacts" }
+        if reachable == 0 { return "\(contacts.count) found, none reachable" }
+        return "\(contacts.count) found, \(reachable) reachable"
     }
 
     // #654: the single contact a show-level display (the review card's contactLine) shows, replacing

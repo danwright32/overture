@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **971 sentences**, from 337 source files.
+Every sentence Overture can say to Dan: **973 sentences**, from 337 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1877,6 +1877,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
     `Domain/ReachedOutQueue.swift`
+"\(contacts.count) found, \(reachable) reachable"
+    `UI/QueueView+Model.swift`
+"\(contacts.count) found, none reachable"
+    `UI/QueueView+Model.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
