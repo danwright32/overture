@@ -52,6 +52,24 @@ enum PageVerdict: String, Codable, Equatable, Sendable, CaseIterable {
     case unreadable = "unreadable"
     case incompleteExtraction = "incomplete_extraction"
     case notRead = "not_read"
+
+    // #1758: did the run come away without ever seeing what is on this page? Only two verdicts mean that,
+    // and the difference decides whether the row may say Overture CHECKED this org or only that it tried.
+    //
+    // `noDatedContent` is deliberately on the read side and is the reason this is a per-verdict question
+    // rather than "did it fail": that page was opened and read in full, and simply had nothing dated on
+    // it, which is genuine current information about the org. The other empty-handed verdicts are not:
+    // `unreadable` came back as a shell drawn by JavaScript, and `notRead` means the run ended before
+    // opening the page at all.
+    //
+    // Exhaustive on purpose. A verdict added later is a compile error here, so it cannot default into
+    // letting the sheet claim a read that never happened.
+    var leftThePageUnread: Bool {
+        switch self {
+        case .unreadable, .notRead: return true
+        case .upcomingListings, .allPast, .noDatedContent, .incompleteExtraction: return false
+        }
+    }
 }
 
 // Deliberately a plain Sendable struct and never a @Model: `ScoutService` is @MainActor and SwiftData

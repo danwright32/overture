@@ -111,10 +111,28 @@ enum SourceReadState: Equatable, Sendable {
 // "Never" is a real answer and is said out loud, rather than left as a blank cell that reads like a
 // rendering bug.
 extension SourceReadState {
-    static func lastCheckedLine(at lastCheckedAt: Date?, now: Date) -> String {
+    // #1758: and it may only say CHECKED when something was actually read.
+    //
+    // `lastCheckedAt` is stamped on the failure path too (`ScoutExtractIngest.fail`), so a run that never
+    // opened the page still refreshes it. Inside the app "checked" means "a run touched this source",
+    // which is true. On screen, in the row's largest and most scannable slot beside an org name, it reads
+    // as "we have current information about this org", which is false: two live rows said "Checked 1 hour
+    // ago" while their own third line said the page had not been read (measured 2026-07-29).
+    //
+    // So the word follows the failure. An attempt that came away with nothing says it was TRIED, which is
+    // exactly what happened and is visibly a different word; the failure line beneath says why. This is
+    // not "did it fail": a page read in full with nothing dated on it WAS checked, and says so
+    // (`SourceFailure.leftThePageUnread` owns that distinction, per verdict).
+    //
+    // The failure is required, not defaulted. Defaulted, forgetting it at the call site would restore the
+    // old sentence on every row with every test here still green, which is precisely how #843's read-state
+    // line was left mis-wired one line lower on this same row.
+    static func lastCheckedLine(at lastCheckedAt: Date?, now: Date, failure: SourceFailure?) -> String {
+        // "Never" is a real answer, and nothing has been attempted, so there is no claim here to be wrong.
         guard let lastCheckedAt else { return "Never checked" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        return "Checked \(formatter.localizedString(for: lastCheckedAt, relativeTo: now))"
+        let ago = formatter.localizedString(for: lastCheckedAt, relativeTo: now)
+        return failure?.leftThePageUnread == true ? "Tried \(ago)" : "Checked \(ago)"
     }
 }
