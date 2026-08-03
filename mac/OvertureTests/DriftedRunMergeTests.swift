@@ -109,15 +109,56 @@ struct DriftedRunMergeTests {
                 "keeping the oldest row would delete the only card Dan can see")
     }
 
-    // Two rows both carrying history is NOT resolved blind. The Passion of Mr. Cardboard has two dismissed
-    // rows in the live store, and merging two real records is Dan's call, never a migration's. They are
-    // left exactly as they are and counted, so a writeup cannot claim they were fixed.
-    @Test func twoRowsCarryingHistoryAreLeftAloneAndCounted() throws {
+    // #1845: two rows Dan merely REFUSED, for the same reason, are one show he said no to twice, not a
+    // conflict. This pass used to deadlock on them forever, which is the defect #1780 named and fixed for
+    // #1064's pass; asking the shared decision here brings this one in line. The Passion of Mr. Cardboard
+    // is the live pair. His refusal survives on the row that is kept.
+    @Test func tworowsRefusedForTheSameReasonAreMerged() throws {
         let context = try ctx()
         row(context, night: "2026-07-23", title: "The Passion of Mr. Cardboard",
             series: "1281174", ingestedDaysAgo: 3, dismissed: true)
         row(context, night: "2026-07-24", title: "The Passion of Mr. Cardboard",
             series: "1281174", ingestedDaysAgo: 2, dismissed: true)
+
+        let summary = DriftedRunMerge.run(in: context)
+
+        let survivors = try all(context)
+        #expect(survivors.count == 1)
+        #expect(summary.duplicatesDeleted == 1)
+        #expect(summary.conflictsDeferred == 0)
+        #expect(survivors.first?.status == .dismissed, "his refusal must survive the merge")
+    }
+
+    // The safety line, unchanged: two refusals that DISAGREE are a real conflict, because choosing between
+    // them silently rewrites why Dan said no, which the outcome reporting reads.
+    @Test func tworowsRefusedForDifferentReasonsAreLeftAloneAndCounted() throws {
+        let context = try ctx()
+        let first = row(context, night: "2026-07-23", title: "The Passion of Mr. Cardboard",
+                        series: "1281174", ingestedDaysAgo: 3, dismissed: true)
+        first.dismissReasonRaw = "too_soon"
+        let second = row(context, night: "2026-07-24", title: "The Passion of Mr. Cardboard",
+                         series: "1281174", ingestedDaysAgo: 2, dismissed: true)
+        second.dismissReasonRaw = "not_interested"
+
+        let summary = DriftedRunMerge.run(in: context)
+
+        #expect(try all(context).count == 2)
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0)
+    }
+
+    // The other safety line, and the one that must never move: once a real email has gone out, merging
+    // would move it onto the wrong night. Nothing is deleted and the conflict is counted, so a writeup
+    // cannot claim these were fixed.
+    @Test func tworowsThatBothReachedTheOutsideWorldAreLeftAloneAndCounted() throws {
+        let context = try ctx()
+        let first = row(context, night: "2026-07-23", title: "The Passion of Mr. Cardboard",
+                        series: "1281174", ingestedDaysAgo: 3)
+        first.sentAt = Date(timeIntervalSince1970: 1_700_000_000)
+        first.gmailMessageId = "msg-1"
+        let second = row(context, night: "2026-07-24", title: "The Passion of Mr. Cardboard",
+                         series: "1281174", ingestedDaysAgo: 2)
+        second.draftBody = "a draft Dan has already read"
 
         let summary = DriftedRunMerge.run(in: context)
 

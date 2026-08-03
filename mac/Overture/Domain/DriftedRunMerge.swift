@@ -34,8 +34,12 @@ enum DriftedRunMerge {
             let title = members[0].groupName
             guard members.allSatisfy({ GroupNameMatch.isConfident($0.groupName, title) }) else { continue }
 
-            let withHistory = members.filter(NaturalKeyVenueMigration.hasOutreachHistory)
-            if withHistory.count >= 2 {
+            // #1845: the NAMED deferral decision (#1780), the same one #1064 and #1590 ask. The
+            // hand-rolled test here counted a bare dismissal and a merely-FOUND address as reasons to
+            // refuse, so this pass had the same permanent-deferral defect measured on the live store in
+            // #1590's pass. Swept here in the same change rather than left as the next instance.
+            if NaturalKeyVenueMigration.mustDefer(members) {
+                let withHistory = members.filter(NaturalKeyVenueMigration.hasOutreachHistory)
                 // Never resolved blind. Merging two real outreach records is Dan's call, not a migration's
                 // (the same rule #1064 follows). The Passion of Mr. Cardboard lands here.
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
@@ -50,7 +54,15 @@ enum DriftedRunMerge {
             // difference from #1064: these rows are a time series, so the earliest is the most stale, is
             // typically already past FeedReconcile's gone threshold, and is the one the queue is ALREADY
             // hiding. Keeping it would delete the only card Dan can see (measured: Dukes, Jena Friedman).
-            let survivor = withHistory.first
+            // #1845 inserts the contact-list rung below those two, for the same reason as the other passes:
+            // the losing copy's found addresses are deleted with it.
+            let freshestFirst = members.sorted { $1.ingestedAt < $0.ingestedAt }
+            let survivor =
+                members.first(where: {
+                    NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
+                })
+                ?? freshestFirst.first(where: NaturalKeyVenueMigration.carriesDansDecision)
+                ?? NaturalKeyVenueMigration.richestContactList(freshestFirst)
                 ?? members.max(by: { $0.ingestedAt < $1.ingestedAt })!
 
             for loser in members where loser.persistentModelID != survivor.persistentModelID {
