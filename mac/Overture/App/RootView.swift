@@ -1799,7 +1799,10 @@ struct RootView: View {
                     snapshot: { RunProgressView.Snapshot.livePrepping() },
                     heartbeat: { PrepQueueService.heartbeat(now: Date()) },
                     onHide: { prepSheetShown = false },
-                    onCancel: { cancelPrep() })
+                    onCancel: { cancelPrep() },
+                    // #1684: the panel acknowledges the click the instant the sentinel lands, rather than
+                    // sitting on a spinner identical to a working run until the marker goes stale.
+                    cancelRequested: { PrepQueueService.cancelRequested() })
             }
             Spacer(minLength: 0)
         }

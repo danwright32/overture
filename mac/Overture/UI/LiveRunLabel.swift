@@ -59,6 +59,13 @@ struct LiveRunLabel: View {
                     ProgressView().controlSize(.small)
                     styled(Text(RunProgress.finishingLabel(elapsed: elapsed)))
                 }
+            // #1684: same treatment, its own sentence. Nothing is wrong with a run Dan stopped, so it
+            // keeps the spinner and only the words change.
+            case .stopping(let elapsed):
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    styled(Text(RunProgress.stoppingLabel(elapsed: elapsed)))
+                }
             case .running, .idle:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -83,7 +90,9 @@ struct LiveRunLabel: View {
         // #1822: finishing keeps the spinner, so the warning triangle stays reserved for a run that has
         // actually gone wrong. A symbol that appears at the end of every healthy run is a symbol Dan
         // learns to ignore (L36).
-        case .finishing, .running, .idle:
+        // #1684: a stopping run joins them, for the same reason: it is not a failure, so the warning
+        // triangle stays reserved for a run that has actually gone wrong.
+        case .finishing, .stopping, .running, .idle:
             ProgressView()
                 .controlSize(.small)
                 .help(helpText(now: now))
@@ -99,6 +108,8 @@ struct LiveRunLabel: View {
             return RunProgress.stalledLabel(base, elapsed: elapsed)
         case .finishing(let elapsed):
             return RunProgress.finishingLabel(elapsed: elapsed)
+        case .stopping(let elapsed):
+            return RunProgress.stoppingLabel(elapsed: elapsed)
         case .running, .idle:
             return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail?())
         }

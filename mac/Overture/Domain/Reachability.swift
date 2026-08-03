@@ -407,4 +407,11 @@ enum ReachabilityProbeCopy {
     // the right thing to do; it just stops the control promising a saving it cannot make.
     static let cancelSpendCaveat =
         "Lookups already under way will finish and still count as spent, so stopping now only saves the ones that haven't started."
+
+    // #1684: the same fact once the stop has been accepted, in the tense that is then true. The caveat
+    // above helps him decide; this one tells him what is happening while he waits, and it is the reason
+    // the wait is not instant. Kept as its own sentence rather than reusing the caveat, which talks about
+    // a choice he has already made by this point.
+    static let stoppingSpendNote =
+        "The lookups already under way are finishing, so this takes a moment. Their answers will still be saved."
 }
