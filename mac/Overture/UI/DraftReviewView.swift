@@ -645,7 +645,9 @@ struct DraftReviewView: View {
                         showAddContact = false
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!addContactEmail.contains("@"))
+                    // #2023: one readable address, the same rule the add itself is gated on, so this
+                    // cannot look enabled on a pasted "a@x.org, b@y.org" and then be refused.
+                    .disabled(EmailAddressList.single(addContactEmail) == nil)
                     Button("Cancel") { showAddContact = false }
                         .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 }

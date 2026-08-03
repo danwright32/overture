@@ -286,6 +286,27 @@ enum ActionAck {
     static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
 
+    // #2023: names the piece that cannot be read rather than refusing the whole field, because the field
+    // may hold several people and only one of them is wrong.
+    static func manualPrepBadAddress(_ piece: String) -> String {
+        "\(piece) is not an email address. Nothing was saved"
+    }
+
+    // A gap between two separators has no address in it to name, so it says what it is instead of reading
+    // as a sentence about a blank one. Deliberately does not name the comma: semicolons separate too, and
+    // a message may only claim what it actually measured.
+    static let manualPrepExtraSeparator = "One of the addresses is blank. Nothing was saved"
+
+    // #2023: Add contact in Review takes ONE person, and its banner names one, so several at once is
+    // refused here rather than stored as a single contact identified by all of them.
+    static let contactNeedsAddress = "Add an email address. No contact was added"
+    static let contactOneAtATime = "Add one address at a time. No contact was added"
+    static let contactBlankAddress = "One of the addresses is blank. No contact was added"
+
+    static func contactBadAddress(_ piece: String) -> String {
+        "\(piece) is not an email address. No contact was added"
+    }
+
     static func manualPrepSaved(org: String) -> String {
         "\(org) is drafted and ready for you to review"
     }

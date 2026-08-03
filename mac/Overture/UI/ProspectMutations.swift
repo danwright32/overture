@@ -42,7 +42,29 @@ enum ProspectMutations {
     static func addRecipientManually(_ item: QueueItem, email: String, name: String?,
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // #2023: this control adds ONE person and its banner names one, so the field is READ rather than
+        // checked for an "@". Before this, "a@x.org, b@y.org" became a single contact whose identity was
+        // that entire string, which sends and reports success while no reply from either person can ever
+        // be matched back to it. Gated on the same `single` the Add button asks, so the two agree.
+        let trimmedEmail: String
+        switch EmailAddressList.parse(email) {
+        case .empty:
+            feedback.acknowledge(ActionAck.contactNeedsAddress, tone: .warning)
+            return
+        case .invalid(let piece):
+            // A blank piece is a stray separator, not a second person: saying "one at a time" to somebody
+            // who typed ",,olga@x.org" would name a mistake he did not make.
+            feedback.acknowledge(piece.isEmpty ? ActionAck.contactBlankAddress
+                                               : ActionAck.contactBadAddress(piece), tone: .warning)
+            return
+        case .addresses(let addresses) where addresses.count > 1:
+            feedback.acknowledge(ActionAck.contactOneAtATime, tone: .warning)
+            return
+        case .addresses(let addresses):
+            trimmedEmail = addresses[0]
+        }
+
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let result = applyManualRecipient(email: trimmedEmail, name: trimmedName, to: model)
 
@@ -126,19 +148,27 @@ enum ProspectMutations {
             return
         }
 
-        // The same rule the editor's Save button is gated on, so the two cannot disagree.
+        // The same rule the editor's Save button is gated on, so the two cannot disagree. #2023: this also
+        // READS the address field, so a string that is not addresses is refused here, before a single
+        // write, rather than becoming one contact whose identity is that whole string.
         if let refusal = ManualPrepEditing.refusal(email: email, body: body) {
             feedback.acknowledge(refusal, tone: .warning)
             return
         }
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case .addresses(let addresses) = EmailAddressList.parse(email) else { return }
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // A `.blocked` result here is not an error on this path: it means the address he named is already
-        // a live contact on this show, which is exactly who he meant to write to. Nothing is added, and
-        // the draft goes ahead against the contact already there.
-        applyManualRecipient(email: trimmedEmail, name: name?.trimmingCharacters(in: .whitespacesAndNewlines),
-                             to: model)
+        // One Recipient per person, each through the same path the Add-contact control uses, so a
+        // `.blocked` result still means what it always did: that address is already a live contact on this
+        // show, which is exactly who he meant to write to. Nothing is added for that one and the draft goes
+        // ahead against the contact already there, while the people named beside it are still created.
+        //
+        // The name is only ever applied when he named ONE person, since a single typed name cannot belong
+        // to several addresses.
+        let trimmedName = (addresses.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        for address in addresses {
+            applyManualRecipient(email: address, name: trimmedName, to: model)
+        }
         model.writeManualDraft(subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
                                body: trimmedBody)
 

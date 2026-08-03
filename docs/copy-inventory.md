@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1005 sentences**, from 349 source files.
+Every sentence Overture can say to Dan: **1012 sentences**, from 350 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -347,10 +347,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Add an address to send to. Nothing was saved"
     `App/ActionFeedback.swift`
+"Add an email address. No contact was added"
+    `App/ActionFeedback.swift`
 "Add another"
     `UI/AddLeadSheet.swift`
 "Add contact"
     `UI/DraftReviewView.swift`
+"Add one address at a time. No contact was added"
+    `App/ActionFeedback.swift`
 "Add this venue's address so its shows count as in your area."
     `UI/SourcesView.swift`
 "Added \(Plural.count(count, "show")), ranked into your queue with everything else."
@@ -1087,6 +1091,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
+"One of the addresses is blank. No contact was added"
+    `App/ActionFeedback.swift`
+"One of the addresses is blank. Nothing was saved"
+    `App/ActionFeedback.swift`
 "One source couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "One source couldn't be checked. \(lines[0])"
@@ -1672,6 +1680,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
+"This adds \(addresses.count) contacts, and each one gets its own separate email."
+    `Domain/ManualPrepPrefill.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
@@ -2050,6 +2060,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
+"\(piece) is not an email address. No contact was added"
+    `App/ActionFeedback.swift`
+"\(piece) is not an email address. Nothing was saved"
+    `App/ActionFeedback.swift`
 "\(previous). Nothing has been changed. If that drop is a surprise, quit Overture and "
     `App/StoreShrinkCheck.swift`
 "\(range) is no longer blocked"

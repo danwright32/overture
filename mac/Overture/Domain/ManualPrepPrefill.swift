@@ -120,9 +120,19 @@ enum ManualPrepPrefill {
 // a choice rather than an omission; an empty BODY is an email with nothing in it.
 enum ManualPrepEditing {
     // Nil when it can be saved, otherwise WHY not, in the words the refusal uses.
+    //
+    // #2023: the address field is READ here, not merely checked for emptiness. It may name several people,
+    // and a string that cannot be read as addresses must never reach a Recipient: its identity is what
+    // reply detection, follow-ups, bounce handling and the booking match all key off, so one contact
+    // identified by "a@x.org, b@y.org" sends, reports success, and can never match a reply from either.
     static func refusal(email: String, body: String) -> String? {
-        if email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        switch EmailAddressList.parse(email) {
+        case .empty:
             return ActionAck.manualPrepNeedsRecipient
+        case .invalid(let piece):
+            return piece.isEmpty ? ActionAck.manualPrepExtraSeparator : ActionAck.manualPrepBadAddress(piece)
+        case .addresses:
+            break
         }
         if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return ActionAck.manualPrepNeedsBody
@@ -139,6 +149,15 @@ enum ManualPrepEditing {
 // reads is testable (#863) and shows up in `docs/copy-inventory.md` as words rather than as Swift.
 enum ManualPrepCopy {
     static func editorTitle(groupName: String) -> String { "Prep \(groupName) by hand" }
+
+    // #2023, and L64: who a message goes to belongs in what Dan reviews, so naming a second person has to
+    // say so before he saves rather than after. Nil for one address, because a line telling him a single
+    // address makes a single contact is the #843 defect: a sentence that adds nothing to the one above it.
+    static func recipientCountNote(for typed: String) -> String? {
+        guard case .addresses(let addresses) = EmailAddressList.parse(typed), addresses.count > 1
+        else { return nil }
+        return "This adds \(addresses.count) contacts, and each one gets its own separate email."
+    }
 
     // Names the show only when it is a DIFFERENT one from the show being prepped. On an annual booking
     // both are "Bargemusic", and repeating the name Dan is already looking at is the #843 defect: a second

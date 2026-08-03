@@ -57,6 +57,13 @@ struct ManualPrepSheet: View {
     private var recipientField: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             TextField("Send to", text: $email).textFieldStyle(.roundedBorder)
+            // #2023: what naming several people is about to do, before he saves rather than after. Shown
+            // only when there IS more than one, so a single address gains no line (ManualPrepCopy decides).
+            if let countNote = ManualPrepCopy.recipientCountNote(for: email) {
+                Text(countNote)
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let filled = prefill.filled {
                 Text(ManualPrepCopy.filledRecipientNote(filled, prepping: groupName))
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
