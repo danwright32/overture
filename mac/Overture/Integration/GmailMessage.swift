@@ -59,13 +59,15 @@ enum GmailMessage {
     // signature carries HTML the message is multipart/alternative (a text/plain part plus a text/html part
     // that renders the styled Gmail signature); otherwise it stays a single text/plain part. The sign-off
     // is appended HERE, once, so no body producer carries its own.
-    static func rfc822(fromName: String, fromEmail: String, to: String, subject: String, body: String,
+    static func rfc822(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                        signature: OutboundSignature = .none, boundary: String? = nil,
                        messageID: String? = nil, inReplyTo: String? = nil) -> String {
         let headerSubject = isASCII(subject) ? subject : encodedWord(subject)
         var headers = [
             "From: \(fromName) <\(fromEmail)>",
-            "To: \(to)",
+            // #2030: several people ride ONE `To:` line, comma separated, which is what RFC 2822 means by
+            // an address list. Joined here, beside the header, so there is one definition of it.
+            "To: \(to.joined(separator: ", "))",
             "Subject: \(headerSubject)",
         ]
         // #74: thread a follow-up onto the original. Message-ID stamps the first send so the
@@ -124,7 +126,7 @@ enum GmailMessage {
     private static func freshBoundary() -> String { "=_Overture_\(UUID().uuidString)" }
     // copy-inventory:ignore-end
 
-    static func rawField(fromName: String, fromEmail: String, to: String, subject: String, body: String,
+    static func rawField(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                          signature: OutboundSignature = .none,
                          messageID: String? = nil, inReplyTo: String? = nil) -> String {
         base64url(Data(rfc822(fromName: fromName, fromEmail: fromEmail, to: to, subject: subject, body: body,

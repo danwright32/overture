@@ -20,7 +20,7 @@ enum InquiryReplySender {
     static func sendReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
                           sender: MailSender) async -> Bool {
         guard let to = inquiry.inquirerEmail, !to.isEmpty else { return false }
-        let mail = OutgoingMail(to: to, subject: subject, body: body)
+        guard let mail = OutgoingMail(to: [to], subject: subject, body: body) else { return false }
         do {
             let receipt = try await sender.send(mail)
             inquiry.sentAt = now

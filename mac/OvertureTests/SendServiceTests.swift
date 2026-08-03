@@ -386,6 +386,49 @@ struct SendServiceTests {
         #expect(recipient.sendClaimedAt == nil)
     }
 
+    // #2030. A send can refuse for a reason that has nothing to do with the network: there is no text to
+    // put in the email. That refusal must leave the contact exactly as it found them, still pending and
+    // still sendable, because a contact left claimed is a contact nothing will ever retry: no send goes
+    // out, no error is recorded, and only Dan noticing the stuck state gets it back.
+    //
+    // The composition therefore happens BEFORE the claim. Nothing about it awaits or writes, so there is
+    // no reason for it to sit after.
+    @Test func adraftWithNothingToSendLeavesTheContactPendingAndUnclaimed() async throws {
+        let ctx = ModelContext(try container())
+        // Non-nil but empty: it passes every earlier guard and is caught where the email is composed.
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
+                              body: "", ingested: Date(timeIntervalSince1970: 1))
+        let recipient = p.recipients.first!
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == false)
+
+        #expect(sender.last == nil, "nothing may reach the network when there is no email to send")
+        #expect(recipient.sendState == .pending, "the contact must still be sendable, never stuck sending")
+        #expect(recipient.sendClaimedAt == nil)
+        #expect(p.status == .approved)
+    }
+
+    // The same rule on the conversation track, whose claim is shared with the follow-up nudge. `.needsState`
+    // is a prompt for Dan, not a sendable email, so it composes nothing and must hold no claim: a held claim
+    // here would silently refuse the NEXT nudge, including a real one.
+    @Test func anoteThatIsAPromptRatherThanAnEmailHoldsNoClaim() async throws {
+        let ctx = ModelContext(try container())
+        let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
+                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+        let recipient = p.recipients.first!
+        recipient.sentAt = Date(timeIntervalSince1970: 5)
+        recipient.sendState = .sent
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendConversationNudge(recipient, of: p, kind: .needsState,
+                                                        now: Date(timeIntervalSince1970: 10),
+                                                        sender: sender) == false)
+
+        #expect(sender.last == nil)
+        #expect(recipient.nudgeSendClaimedAt == nil, "a claim held here would refuse the next real nudge")
+    }
+
     @Test func aFailedSendRevertsTheRecipientToPendingNotStuckSending() async throws {
         let ctx = ModelContext(try container())
         approved(ctx, group: "A", ingested: Date(timeIntervalSince1970: 1))
@@ -470,7 +513,7 @@ struct SendServiceTests {
 
         // First click -> the act contact, greeted by her own name.
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
-        #expect(sender.last?.to == "emma@act.example")
+        #expect(sender.last?.to == ["emma@act.example"])
         #expect(sender.last?.body == "Hi Emma,\n\nI document dance.")
         // The show keeps a pending recipient, so it is NOT yet fully contacted and stays sendable.
         #expect(p.status == .approved)
@@ -479,7 +522,7 @@ struct SendServiceTests {
 
         // Second click -> the presenter, greeted by his own name.
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: sender) == true)
-        #expect(sender.last?.to == "noah@present.example")
+        #expect(sender.last?.to == ["noah@present.example"])
         #expect(sender.last?.body == "Hi Noah,\n\nI document dance.")
         // Every recipient sent -> now contacted.
         #expect(p.status == .contacted)
@@ -602,7 +645,7 @@ struct SendServiceTests {
         let sender = CapturingSender()
 
         #expect(await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
-        #expect(sender.last?.to == "emma@act.example")
+        #expect(sender.last?.to == ["emma@act.example"])
         #expect(sender.last?.threadId == "rt")               // the CONTACT's thread, not the lead rollup
         #expect(sender.last?.inReplyTo == "<rm>")
         #expect(sender.last?.subject == "Re: Photographing you")

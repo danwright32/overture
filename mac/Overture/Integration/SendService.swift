@@ -44,6 +44,16 @@ enum SendService {
         // draft lint judges is by construction the same text this sends.
         guard let effectiveBody = recipient.effectiveBody else { return false }
 
+        // #1630: composed by OutgoingPitch, which the copy-to-a-contact-form path also reads, so the
+        // text Dan pastes into a form is by construction the text this sends.
+        //
+        // #2030: composed BEFORE the claim below, deliberately. Both of these can refuse, and refusing
+        // after the claim would leave the contact stuck at `.sending` with nothing ever sent, needing
+        // Dan to resolve by hand. Nothing here writes or awaits, so there is no cost to doing it first.
+        guard let pitch = OutgoingPitch.text(for: recipient, of: prospect),
+              let mail = OutgoingMail(to: [email], subject: prospect.draftSubject ?? "", body: pitch)
+        else { return false }
+
         // Claim this recipient before the network await (#475/#476). Nothing here awaits, so on the
         // MainActor this check-then-claim-then-persist is atomic with respect to any other call
         // racing the same recipient: whichever call's synchronous prefix runs first flips the state,
@@ -62,10 +72,6 @@ enum SendService {
             return false
         }
 
-        // #1630: composed by OutgoingPitch, which the copy-to-a-contact-form path also reads, so the
-        // text Dan pastes into a form is by construction the text this sends.
-        guard let pitch = OutgoingPitch.text(for: recipient, of: prospect) else { return false }
-        let mail = OutgoingMail(to: email, subject: prospect.draftSubject ?? "", body: pitch)
         do {
             let receipt = try await sender.send(mail)
             recipient.sentAt = now
@@ -135,25 +141,27 @@ enum SendService {
         // nudged from any surface, including one that never asks the Due list.
         guard FollowUp.isAwaitingNudge(recipient, in: prospect), recipient.followUpCount < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
-        // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
-        // state, see the field's doc comment on Recipient), so a fast double-tap on either one
-        // is refused rather than reaching the network twice.
-        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
         // thread reply detection already watches for this contact.
         // #948: subject and body come from the one shared helper the confirmation sheet also reads, so
         // what Dan confirmed is exactly what sends.
+        // #2030: built BEFORE the claim below, so a message that cannot be built never leaves the claim
+        // held on a nudge that was never sent.
         let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
                                             isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
-        let mail = OutgoingMail(
-            to: email,
+        guard let mail = OutgoingMail(
+            to: [email],
             subject: content.subject,
             body: content.body,
             inReplyTo: recipient.gmailMessageId,
-            threadId: recipient.gmailThreadId)
+            threadId: recipient.gmailThreadId) else { return false }
+        // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
+        // state, see the field's doc comment on Recipient), so a fast double-tap on either one
+        // is refused rather than reaching the network twice.
+        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
         do {
             let receipt = try await sender.send(mail)
             recipient.followUpCount += 1
@@ -181,23 +189,23 @@ enum SendService {
     static func sendConversationNudge(_ recipient: Recipient, of prospect: Prospect,
                                       kind: ConversationReminder.Kind, now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
-        // #468: shared with sendFollowUp's claim above.
-        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
         // #948: subject and body from the one shared helper the confirmation sheet also reads. It returns
         // nil for a kind that is a prompt, not a sendable email, exactly the .needsState/.suggested case.
+        //
+        // #2030: both refusals now happen BEFORE the claim, so neither can leave it held on a note that
+        // was never sent. That is what the explicit claim release here used to be for.
         guard let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
                                                               groupName: prospect.groupName,
                                                               isMerged: prospect.isMergedConcert,
-                                                              contactName: recipient.name, venue: prospect.venue) else {
-            recipient.nudgeSendClaimedAt = nil   // never actually sent, don't leave the claim held
-            return false
-        }
-        let mail = OutgoingMail(
-            to: email,
-            subject: content.subject,
-            body: content.body,
-            inReplyTo: recipient.gmailMessageId,
-            threadId: recipient.gmailThreadId)
+                                                              contactName: recipient.name, venue: prospect.venue),
+              let mail = OutgoingMail(
+                to: [email],
+                subject: content.subject,
+                body: content.body,
+                inReplyTo: recipient.gmailMessageId,
+                threadId: recipient.gmailThreadId) else { return false }
+        // #468: shared with sendFollowUp's claim above.
+        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
         do {
             _ = try await sender.send(mail)
             recipient.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
@@ -227,12 +235,14 @@ enum SendService {
         // #468: on its own claim field, not shared with sendFollowUp/sendConversationNudge's
         // (see the field's doc comment on Recipient), since a replied recipient can legitimately
         // be due for a conversation nudge at the same time.
-        guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         let subject = recipient.replyDraftSubject
             ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
                                      groupName: FollowUp.safeDisplayName(prospect.groupName, isMerged: prospect.isMergedConcert))
-        let mail = OutgoingMail(to: email, subject: subject, body: body,
-                                inReplyTo: recipient.gmailMessageId, threadId: recipient.gmailThreadId)
+        // #2030: built before the claim, for the same reason as the two nudges above.
+        guard let mail = OutgoingMail(to: [email], subject: subject, body: body,
+                                      inReplyTo: recipient.gmailMessageId,
+                                      threadId: recipient.gmailThreadId) else { return false }
+        guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         do {
             let receipt = try await sender.send(mail)
             recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours

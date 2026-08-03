@@ -5,7 +5,7 @@ import Foundation
 // now testable through an injected fetch and an injected auth-expired hook, no network.
 @Suite("Gmail send")
 struct GmailSenderTests {
-    private let mail = OutgoingMail(to: "presenter@example.org", subject: "Hello", body: "Body")
+    private let mail = OutgoingMail(to: ["presenter@example.org"], subject: "Hello", body: "Body")!
 
     private func fetch(_ status: Int, _ body: String) -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
         { _ in
@@ -128,8 +128,8 @@ struct GmailSenderTests {
             return (Data(#"{"threadId":"th-1","id":"m9"}"#.utf8),
                     HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
-        let followUp = OutgoingMail(to: "t@y.org", subject: "Re: Hello", body: "nudge",
-                                    inReplyTo: "<orig@x.org>", threadId: "th-1")
+        let followUp = OutgoingMail(to: ["t@y.org"], subject: "Re: Hello", body: "nudge",
+                                    inReplyTo: "<orig@x.org>", threadId: "th-1")!
         let receipt = try await GmailSender.performSend(
             mail: followUp, fromName: "Dan", fromEmail: "dan@x.org", token: "tok",
             fetch: fetch, onAuthExpired: {})
