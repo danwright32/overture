@@ -32,14 +32,16 @@ enum GmailSignatureService {
             let (data, resp) = try await fetch(req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-                NSLog("[Overture] Gmail signature fetch returned a non-success status; keeping any stored signature.")
+                // #1689: a PROBLEM. Gmail answered, and not with the signature.
+                AgentLog.problem("[Overture] Gmail signature fetch returned a non-success status; keeping any stored signature.")
                 // copy-inventory:ignore-end
                 return nil
             }
             return primarySignature(fromListJSON: data)
         } catch {
             // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-            NSLog("[Overture] Gmail signature fetch failed: \(error.localizedDescription); keeping any stored signature.")
+            // #1689: a PROBLEM. Same reason as above; this is the throwing half of it.
+            AgentLog.problem("[Overture] Gmail signature fetch failed: \(error.localizedDescription); keeping any stored signature.")
             // copy-inventory:ignore-end
             return nil
         }

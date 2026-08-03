@@ -74,8 +74,10 @@ enum NaturalKeyVenueMigration {
             if mustDefer(members) {
                 // Genuine conflict. Never merge outreach history blind: leave every row untouched.
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-                NSLog("#1064/#1780 NaturalKeyVenueMigration: %d prospects carrying history, %d distinct dismissal reasons, fold to one key; leaving them untouched for Dan to reconcile.",
-                      withHistory.count, Set(members.compactMap(\.dismissReasonRaw)).count)
+                // #1689: a NOTE. The migration is working exactly as designed, refusing to merge rows
+                // that carry outreach history, and it says the same thing about the same rows on every
+                // launch until Dan reconciles them (#1639). None of that is a problem to raise.
+                AgentLog.note("#1064/#1780 NaturalKeyVenueMigration: \(withHistory.count) prospects carrying history, \(Set(members.compactMap(\.dismissReasonRaw)).count) distinct dismissal reasons, fold to one key; leaving them untouched for Dan to reconcile.")
                 // copy-inventory:ignore-end
                 summary.conflictsDeferred += 1
                 continue

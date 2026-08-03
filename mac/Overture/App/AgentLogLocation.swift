@@ -16,49 +16,59 @@ enum AgentLogLocation {
     static var standardOutURL: URL { directory.appendingPathComponent("overture-agent.out.log") }
     static var standardErrorURL: URL { directory.appendingPathComponent("overture-agent.err.log") }
 
+    // #1689: the ledger of things the app itself CALLED a problem, one line each (AgentLog.problem).
+    // Deliberately beside the other two rather than somewhere tidier: "open agent logs" reveals this
+    // folder, and a ledger Dan cannot reach from the nudge that mentions it is no use to him.
+    static var problemsURL: URL { directory.appendingPathComponent("overture-agent.problems.log") }
+
     // #295: the resident agent's logs live in a permanent directory (#279), so nothing ever truncates
     // them and on an always-resident agent (#237) they would grow without bound. ~5 MB per file is
     // plenty of recent diagnostics; with the single retained backup, disk stays bounded at ~10 MB.
     static let defaultMaxLogBytes = 5 * 1_024 * 1_024
 
-    // #302: how big overture-agent.err.log was when Dan last opened the logs. The menu-bar nudge keys
+    // #302/#1689: how big the problem ledger was when Dan last opened the logs. The menu-bar nudge keys
     // off growth past this, so opening the logs clears it. Read reactively in the menu via @AppStorage.
-    static let viewedErrorSizeKey = "agentLogsViewedErrorSize"
+    static let viewedProblemSizeKey = "agentLogsViewedProblemSize"
 
-    // #302: only flag the agent's stderr once it has grown by at least this much new content since Dan
-    // last looked. A growth threshold (not "any new byte") keeps the odd line of macOS framework
-    // chatter from constantly raising the nudge; a genuinely misbehaving agent (retry loops, stack
-    // traces) blows well past it. ~8 KB comfortably exceeds the incidental noise of a login or two.
-    static let unreadErrorThresholdBytes = 8 * 1_024
-
-    // Record the current error-log size as "seen", so later growth past the threshold re-raises the
-    // nudge. Missing file counts as size 0. Best-effort.
-    static func recordViewed(errorLog: URL = standardErrorURL, into defaults: UserDefaults = .standard,
+    // Record the current ledger size as "seen", so a later problem re-raises the nudge. Missing file
+    // counts as size 0. Best-effort.
+    static func recordViewed(problemsLog: URL = problemsURL, into defaults: UserDefaults = .standard,
                              fileManager: FileManager = .default) {
-        let size = (try? fileManager.attributesOfItem(atPath: errorLog.path))?[.size] as? Int ?? 0
-        defaults.set(Double(size), forKey: viewedErrorSizeKey)
+        let size = (try? fileManager.attributesOfItem(atPath: problemsLog.path))?[.size] as? Int ?? 0
+        defaults.set(Double(size), forKey: viewedProblemSizeKey)
     }
 
-    // #302: true when the error log has gained at least `threshold` bytes of new stderr since the
-    // recorded `viewedSize` (the menu-bar nudge's signal). capLogs (#295) truncates the file, so a log
-    // now SMALLER than the recorded size is wholly new: count all of it, never a negative growth.
-    // Missing file → false (nothing to flag). Pure read; best-effort.
-    static func hasUnreadErrors(viewedSize: Int, threshold: Int = unreadErrorThresholdBytes,
-                                errorLog: URL = standardErrorURL,
-                                fileManager: FileManager = .default) -> Bool {
-        guard let size = (try? fileManager.attributesOfItem(atPath: errorLog.path))?[.size] as? Int
+    // #1689: true when the app has named a problem Dan has not seen. ANY new byte counts, and there is
+    // deliberately no size threshold.
+    //
+    // The old rule measured stderr and needed an 8 KB threshold to tolerate routine chatter. Routine
+    // chatter no longer reaches this file, so the only thing a threshold could still do is hide a
+    // single real problem behind its own smallness: the partial-settle report that prompted this issue
+    // is about 130 bytes, and would have had to happen sixty times to be mentioned once.
+    //
+    // capLogs (#295) truncates the file, so a ledger now SMALLER than the recorded size holds wholly
+    // new content: count all of it, never a negative growth. An emptied ledger holds nothing to read
+    // and is not a new problem. Missing file → false. Pure read; best-effort.
+    static func hasUnreadProblems(viewedSize: Int, problemsLog: URL = problemsURL,
+                                  fileManager: FileManager = .default) -> Bool {
+        guard let size = (try? fileManager.attributesOfItem(atPath: problemsLog.path))?[.size] as? Int
         else { return false }
         let newBytes = size >= viewedSize ? size - viewedSize : size
-        return newBytes >= threshold
+        return newBytes > 0
     }
 
     // Bound the agent's logs. The copytruncate mechanism itself now lives in LogRotation (#608), so
     // the store-backup log can use the same one rather than growing a second copy of it; this stays
     // as the agent-specific entry point (its own files, its own cap). Run at startup, alongside
     // prepareDirectory().
+    // #1689: the problem ledger is bounded with the other two. An app that keeps naming one recurring
+    // problem would otherwise grow a file nothing ever trims, which is how the log this issue is about
+    // reached 9 KB of the same three sentences.
+    static var cappedFiles: [URL] { [standardOutURL, standardErrorURL, problemsURL] }
+
     @discardableResult
     static func capLogs(maxBytes: Int = defaultMaxLogBytes,
-                        files: [URL] = [standardOutURL, standardErrorURL],
+                        files: [URL] = AgentLogLocation.cappedFiles,
                         fileManager: FileManager = .default) -> [URL] {
         LogRotation.cap(files: files, maxBytes: maxBytes, fileManager: fileManager)
     }

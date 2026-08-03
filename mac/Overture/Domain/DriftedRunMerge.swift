@@ -39,8 +39,8 @@ enum DriftedRunMerge {
                 // Never resolved blind. Merging two real outreach records is Dan's call, not a migration's
                 // (the same rule #1064 follows). The Passion of Mr. Cardboard lands here.
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-                NSLog("#1559 DriftedRunMerge: %d rows of one run carry outreach history; leaving them for Dan.",
-                      withHistory.count)
+                // #1689: a NOTE. Correct, deliberate, and repeated on every launch (#1639).
+                AgentLog.note("#1559 DriftedRunMerge: \(withHistory.count) rows of one run carry outreach history; leaving them for Dan.")
                 // copy-inventory:ignore-end
                 summary.conflictsDeferred += 1
                 continue

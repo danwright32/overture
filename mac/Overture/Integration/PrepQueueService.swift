@@ -320,7 +320,8 @@ enum PrepQueueService {
         } catch {
             saveFailed = true
             // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
-            NSLog("could not stamp %d probed shows: %@", toStamp.count, error.localizedDescription)
+            // #1689: a PROBLEM. The probe ran and its results did not reach the store.
+            AgentLog.problem("could not stamp \(toStamp.count) probed shows: \(error.localizedDescription)")
             // copy-inventory:ignore-end
         }
         // The diagnostic copy of the shortfall, naming both counts for whoever is reading the log.
@@ -332,8 +333,10 @@ enum PrepQueueService {
         // way Dan finds out.
         if toStamp.count < keys.count {
             // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
-            NSLog("reachability probe settled with %d of %d shows answered; %d were never reached and stay unchecked",
-                  toStamp.count, keys.count, keys.count - toStamp.count)
+            // #1689: a PROBLEM, and the line this whole issue was named for. A paid check that came
+            // home short is a real thing for Dan to look at, and it carries no word like error or
+            // failed, which is exactly why the kind is stated here rather than guessed from the text.
+            AgentLog.problem("reachability probe settled with \(toStamp.count) of \(keys.count) shows answered; \(keys.count - toStamp.count) were never reached and stay unchecked")
             // copy-inventory:ignore-end
         }
         return toStamp

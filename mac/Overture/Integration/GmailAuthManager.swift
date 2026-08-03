@@ -354,7 +354,8 @@ final class GmailAuthManager {
     private func cancelInFlight() {
         // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
         if codeContinuation != nil {
-            NSLog("[Overture] Gmail connect: tearing down an attempt that was still waiting for the redirect.")
+            // #1689: a NOTE. Ordinary teardown of an attempt Dan abandoned or restarted.
+            AgentLog.note("[Overture] Gmail connect: tearing down an attempt that was still waiting for the redirect.")
         }
         // copy-inventory:ignore-end
         timeoutTask?.cancel(); timeoutTask = nil

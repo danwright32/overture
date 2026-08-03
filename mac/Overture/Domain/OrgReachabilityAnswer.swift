@@ -147,8 +147,9 @@ enum OrgAnswerRecording {
             // nobody. The log line stays as the diagnostic record; the RETURN is what now carries the
             // failure to a caller that can put it on screen.
             // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
-            NSLog("could not record %d organisation reachability answers: %@",
-                  written, error.localizedDescription)
+            // #1689: a PROBLEM. Answers that were paid for and then not written down are answers the
+            // next run will pay for again.
+            AgentLog.problem("could not record \(written) organisation reachability answers: \(error.localizedDescription)")
             // copy-inventory:ignore-end
             return Outcome(written: 0, saveFailed: true)
         }
