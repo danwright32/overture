@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1765: a large reachability selection RUNS. It is not refused.
 //

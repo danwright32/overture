@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1824: what the run understood the show to BE, written back so the instruction leaves a checkable trace
 // instead of living only in the prompt (L27), and so Dan can see whether a draft was grounded in anything.

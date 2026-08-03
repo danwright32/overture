@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Regression guard for #677: the "replied, no resolution yet, didn't bounce" check was
 // independently recomputed in OmniFocusSync.swift, ReachedOutQueue.swift, and

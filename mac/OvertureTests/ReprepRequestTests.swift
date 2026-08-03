@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #367: the single shared helper both the per-prospect and bulk re-prep UI actions use to set a
 // prospect's re-prep flags from a requested mode. Gates the DRAFT-affecting half on sentAt == nil

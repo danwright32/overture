@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1628: the reachability badge said WHAT was found and never HOW SURE the check was, so a guess and a
 // verified find wore the same card. Two rows from the 2026-07-27 run, both stored `low`: "Mind Games"

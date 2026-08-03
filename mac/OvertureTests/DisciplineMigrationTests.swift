@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #350: Choral folded into Music as one editorial taxonomy decision. Existing prospects stored
 // as "choral" get relabeled to "music" on next launch; fitScore/tier are left untouched (Dan's

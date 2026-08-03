@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1018: a reply-classify run that comes back with fewer replies than it was queued.
 //

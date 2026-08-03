@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1694: a possible-match flag is a QUESTION Dan has to answer by hand, so its value is entirely in how
 // rarely it is wrong. #1693 was found because he happened to notice one wrong flag on one card; the store

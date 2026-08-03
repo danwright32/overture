@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #524: the temp-file-at-explicit-mode-plus-atomic-rename technique GmailCredentials.saveTokens
 // established for #486, now shared so any other write of security-sensitive data (starting with

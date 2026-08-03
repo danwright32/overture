@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1027 Phase 1: the model field and the two failure predicates the fix/confirm popup rests on.
 //

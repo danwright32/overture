@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #250: read/save backing for the in-app voice-guidance editor. The guidance file lives in
 // Application Support where Dan can't easily find it; this lets the app open it, show a sensible

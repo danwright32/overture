@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #901 part 3: the trap that produced the issue.
 //

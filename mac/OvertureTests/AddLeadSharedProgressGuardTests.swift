@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1036: AddLeadSheet's working state used its own LiveRunLabel, a second progress surface that did not
 // get the source naming #1034 added to the scout takeover. It now renders the SAME RunProgressView,

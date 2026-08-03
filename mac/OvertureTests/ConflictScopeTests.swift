@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1501: the conflict line was TRUE and READ FALSE.
 //

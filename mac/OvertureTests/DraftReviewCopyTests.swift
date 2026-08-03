@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #885: the draft review screen is where Overture's copy makes its most consequential promises. It says
 // a draft WON'T send, that a contact is HELD BACK, that a send went out DESPITE a warning Dan confirmed.

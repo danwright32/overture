@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1027: WHERE a finished scout's warnings go is a decision, not a view detail, so it lives in a pure
 // function a test can pin (#863: logic that sat in a view drifted twice under a green suite). A manual

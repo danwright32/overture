@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Extracting the latest inbound reply's text from a Gmail threads.get (format=full) response (#181),
 // so the reply can be handed to the classify workflow (#112). Forgiving by design: prefer text/plain,

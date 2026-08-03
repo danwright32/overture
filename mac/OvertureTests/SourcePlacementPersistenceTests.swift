@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #986, through the REAL ingest, because the count and the WIRE that records it are two separate claims.
 // SourcePlacement.placedCount can be perfect while the ingest never folds it into the source, and every

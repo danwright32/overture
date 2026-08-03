@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // THE BUG DAN CAUGHT ON HIS OWN LEAD, and it is the most dangerous kind this feature can produce.
 //

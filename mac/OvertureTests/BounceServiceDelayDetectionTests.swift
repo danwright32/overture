@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #656: alongside the existing hard-bounce detection (#398), BounceService.detectBounces also
 // notices a soft/temporary Gmail delay notice on the same already-fetched thread and records when

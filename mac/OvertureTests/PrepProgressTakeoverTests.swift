@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1130: the Prep run gets the scout's takeover progress screen instead of only a subtle toolbar label,
 // so a detached run that takes minutes shows a visible working / still-alive / stalled state. It reuses

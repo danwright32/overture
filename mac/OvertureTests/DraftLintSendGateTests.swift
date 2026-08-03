@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #789: the send gate for the draft lint. Every safeguard before this one sits UPSTREAM of the
 // words (the ranker, the queue, the salutation strip, the contact guards); this is the first that

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1896 (part of #1887). How many times Dan has shot a room, and which of the three bands that
 // falls in. Every case below is a shape measured on the real Shoots calendar and the live store

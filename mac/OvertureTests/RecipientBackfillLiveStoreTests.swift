@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #418 A0, "right over fast": prove the thread-down repair against a COPY of Dan's real, irreplaceable
 // live store (~/Library/Application Support/Overture/Overture.store, ZPROSPECT), not just an

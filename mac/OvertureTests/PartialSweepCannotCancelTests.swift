@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #887: a source whose detail pages were only HALF READ could mark Dan's live shows as cancelled.
 //

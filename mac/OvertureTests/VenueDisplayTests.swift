@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #342 Phase 1: a curated map enriches known venue names with their parent building and city/state.
 // Carnegie's halls are the headline case (the issue's own example); other known NYC venues get a

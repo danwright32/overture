@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1636, the sibling of #1629. That one closed the VENUE half: a contact form on the host room's own
 // domain is no longer offered as a way through. PressContactGuard (#722) has the identical shape and had

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows of a recurring show at one venue that drew as separate cards"
 // #1558: the duplicate cards Dan can actually SEE. Measured on the live store 2026-07-26: 36 rows across

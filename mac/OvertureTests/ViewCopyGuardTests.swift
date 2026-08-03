@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #885: the guard. A rule computed inside a SwiftUI view is a rule no test can reach.
 //

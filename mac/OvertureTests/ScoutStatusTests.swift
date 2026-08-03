@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #35: the masthead should show when the scout last ran, so freshness is visible at a
 // glance (and a quietly-stale queue is obvious).

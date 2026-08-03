@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #981: guard the classifier's discipline word lists against silently going stale.
 //

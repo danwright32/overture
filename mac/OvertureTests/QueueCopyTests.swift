@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #885: the queue's own copy, out of the view.
 //

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #601: rotating, launch-time backups of the live SwiftData store, so an app bug or accidental
 // wipe doesn't cost every prospect/contact/outreach record. See docs/ or the milestone (#18) for

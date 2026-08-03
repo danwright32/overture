@@ -1,6 +1,5 @@
 import Testing
 import SwiftUI
-@testable import Overture
 
 // #379: visual/layout regression coverage for ProspectRowView, using the proven ImageRenderer
 // technique (documented from live-verifying #379/#489: render a SwiftUI view to a real laid-out

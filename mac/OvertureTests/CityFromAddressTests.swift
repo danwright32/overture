@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1762: the card says "City not known" for 131 shows whose city the app already holds.
 //

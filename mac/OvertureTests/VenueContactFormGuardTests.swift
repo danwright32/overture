@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1629: #1626 made a contact form on the act's own site count as a way through. The check that keeps a
 // ROOM's own details out of that was missing.

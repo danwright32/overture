@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import Network
-@testable import Overture
 
 // #1163: the live Gmail connect used to open the browser and then wait the full internal timeout for a
 // loopback redirect that, when the handoff was broken (the listener reports .ready but holds no accepting

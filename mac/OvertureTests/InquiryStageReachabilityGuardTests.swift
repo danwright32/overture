@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1505. An inquiry was once parked in `.sendApproved`, a stage with no clickable pill, so it was
 // saved and counted and completely unreachable. Every test was green; only walking the app caught it.

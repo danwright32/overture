@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #939: a same-production show performed at DIFFERENT venues on nearby dates (a recurring Carnegie
 // community-calendar pattern) is stored as separate Prospect rows, one per venue, with no relationship

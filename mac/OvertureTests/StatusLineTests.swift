@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1047: the center status slot enforces its own precedence, so an informational write (a Prep
 // summary, an OmniFocus receipt, a reply-classify note) can never silently erase an unacknowledged

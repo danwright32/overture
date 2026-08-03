@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The Swift reader half of the Prep progress contract (#354). The WRITERS are
 // mac/scripts/prep-run.sh (seeds total/completed:0) and the Prep Claude Code workflow

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1721: the run's real web-call count, read by the app rather than left in a file nobody opens.
 //

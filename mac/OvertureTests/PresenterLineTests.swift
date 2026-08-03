@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1687: Dan, on the Aug 4 queue: "I should be able to see who the group is no matter if I've worked with
 // them or not. If it's a named performing group like YNYC is, I should be able to tell that from just

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The scout-extract handoff (#799), guarded by committed fixtures like every other cross-boundary
 // file in docs/contracts.md. The app WRITES overture-scout-extract-queue.json (ScoutExtractQueueBuilder)

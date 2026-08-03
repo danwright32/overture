@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The conversation-state dimension layered on a reply (#111): where an active conversation sits
 // between a bare reply and a booking. interested / wantsToBook / hasQuestion are "active" (they get

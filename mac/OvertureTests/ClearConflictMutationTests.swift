@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #901: "I can shoot this anyway", and the way back from it.
 //

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1895 (part of #1887). The reader for the shoot-history handoff, and its health verdict.
 //

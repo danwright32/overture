@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1281: native ingest's two halves are each unit-tested (real feed BYTES -> parsed events in the
 // *Calendar adapters, and parsed events -> ExtractedEvent in *.extractedEvents), plus the registry

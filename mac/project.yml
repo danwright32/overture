@@ -47,18 +47,62 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.debug
           OVERTURE_URL_SCHEME: overture-debug
+  # #1967: the PURE suite, and it is UNHOSTED on purpose.
+  #
+  # Every Swift test used to run inside the launched app (TEST_HOST/BUNDLE_LOADER), so any fault that
+  # stopped the app staying open took all of them at once. On 2026-08-01 a crowded menu bar did exactly
+  # that and nothing in the Mac app could be verified at all, reported by xcodebuild only as a runner
+  # that "exited with code 0 while preparing to run tests". Since #1347 this local run is the ONLY
+  # verification a Swift change ever gets, so one launch fault cannot be allowed to cost the whole suite.
+  #
+  # It reaches the app's code by COMPILING IT IN rather than by linking a host, which is why there is no
+  # TEST_HOST here and no dependency on the Overture target. That keeps every declaration at its existing
+  # visibility (one module, `internal` still reaches), so this target costs no access-control churn
+  # across the 255 domain files and introduces no public API surface to maintain. The trade is that those
+  # sources compile a second time.
+  #
+  # OvertureApp.swift is the ONE file it cannot take, because it carries `@main`. Nothing outside it
+  # references the OvertureApp type (only comments do), and AppEnvironment was lifted into its own file
+  # so the pure code that needs it is not dragged behind the entry point.
   OvertureTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: OvertureTests
+      # #1967: helpers both suites use. Their own directory rather than a copy in each, so a guard
+      # helper cannot drift between the two targets that assert with it.
+      - path: TestSupport
+      - path: Overture
+        excludes:
+          - "App/OvertureApp.swift"
+          - "Info.plist"
+    dependencies:
+      # #663: StoreSchemaGuard reads the store's raw sqlite_master. Compiled in here, so this target
+      # needs the same library the app target does.
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.tests
+
+  # #1967: the handful that genuinely need a running app, and only those.
+  #
+  # ViewInspector renders a real SwiftUI view, which needs the host process, so these keep TEST_HOST and
+  # keep paying the launch risk. That is the point of the split: a launch fault now costs these 17 files
+  # instead of all 552, and the pure suite above still reports.
+  OvertureHostedTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: OvertureHostedTests
+      - path: TestSupport
     dependencies:
       - target: Overture
       - package: ViewInspector
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.danwright.overture.hostedtests
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Overture.app/Contents/MacOS/Overture"
         BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
@@ -67,6 +111,8 @@ schemes:
       targets:
         Overture: all
         OvertureTests: [test]
+        OvertureHostedTests: [test]
     test:
       targets:
         - OvertureTests
+        - OvertureHostedTests

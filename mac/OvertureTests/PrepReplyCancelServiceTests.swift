@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1038: the detached-run half of cancel for Prep and reply-classify. Both runs are launched through the
 // same DetachedRunner as scout, so neither has a trackable PID and neither could be stopped at all before

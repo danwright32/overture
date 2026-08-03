@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #45: a gentle re-touch sequencer. Up to 2 nudges per lead, paced; auto-stops the moment
 // the prospect replies or books. Nothing here sends — it only decides who is DUE and what

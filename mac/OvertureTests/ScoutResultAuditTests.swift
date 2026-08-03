@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #857: treat the results file as untrusted input. Every rule in the runner's prompt is enforced by
 // nothing but hope, and when a run quietly ignores one the failure is silent and plausible-looking.

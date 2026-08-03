@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1699 / #1984, the WIRING, which is a second claim (the #887 lesson, and the shape
 // RunConflictUsesRealNightsTests uses for the same reason).

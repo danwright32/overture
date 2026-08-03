@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // QueueItem(_ p: Prospect) and RecipientSnapshot(_ r: Recipient) convert a SwiftData model into the
 // flat, Equatable view-model the UI (and QueueModel's pure logic) actually work with. Split out of

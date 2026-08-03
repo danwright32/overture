@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1583/#1691: Keep IS the acceptance of a date clash Dan can already see on the card.
 //

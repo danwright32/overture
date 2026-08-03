@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #11: a deterministic self-check over a drafted email, surfaced before it reaches Dan's
 // approval, so review is judgment not cleanup. Catches AI-tells / performative enthusiasm,

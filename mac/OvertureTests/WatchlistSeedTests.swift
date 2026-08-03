@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #359 one-time backfill. WatchlistSeed reads the vetted list of presenters/venues discovered from Dan's
 // Google Calendar history and adds each through the app's own WatchlistEditing.add, so the seed obeys every

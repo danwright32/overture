@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1817: a check that could not work out WHO to write to must not report that this show's people publish
 // no address. Those are different findings, and only one of them was measured.

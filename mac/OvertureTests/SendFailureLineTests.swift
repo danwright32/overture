@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #316: the one place that turns a persisted send failure (Prospect.sendError) into a short inline
 // line, so the Follow-ups rows and DraftReviewView show an identical, honest indicator instead of a

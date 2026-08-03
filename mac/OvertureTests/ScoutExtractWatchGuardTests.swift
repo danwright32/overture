@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #802 slice 3: the scout's reading half is DETACHED, so its results land minutes after runScout has
 // already returned and reported Carnegie's numbers.

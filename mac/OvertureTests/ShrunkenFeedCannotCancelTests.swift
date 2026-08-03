@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #897: a run that came back far SMALLER than its source normally does could still cancel every show it
 // failed to return.

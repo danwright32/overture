@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1764: the venue fold builds every prospect's natural key, so a change to it can silently re-key the
 // live store, which is a migration rather than a fix (#1064 needed NaturalKeyVenueMigration for exactly

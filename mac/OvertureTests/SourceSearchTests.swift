@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1432: finding ONE source by name on a watchlist that has grown past 38 and keeps growing.
 //

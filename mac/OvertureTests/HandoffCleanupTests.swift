@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #821: Overture writes two kinds of file it never reads again, and nothing ever deleted either.
 //

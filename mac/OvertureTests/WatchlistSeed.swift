@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #359 one-time backfill helper. Reads the vetted list of presenters/venues (discovered from Dan's Google
 // Calendar history) and adds each through the app's own WatchlistEditing.add, so every rule the hand-add

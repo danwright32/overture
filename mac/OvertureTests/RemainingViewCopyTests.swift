@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #885, the rest of the sweep: the copy in the smaller screens.
 //

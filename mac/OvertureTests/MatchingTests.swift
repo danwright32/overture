@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 @Suite("Group name matching")
 struct GroupNameMatchTests {

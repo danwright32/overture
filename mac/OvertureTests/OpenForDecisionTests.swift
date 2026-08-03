@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1587, folded into milestone 32 Phase 2 (#1595). "Is Dan still deciding about this show" was spelled
 // out in two places that disagreed, and the disagreement is half the cause of #1585: the reachability

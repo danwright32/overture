@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1846: which room a merged card names. #1761 collapsed one show billed at one room spelled several
 // ways into one card, and had to decide what the surviving card says when its copies disagree. It took

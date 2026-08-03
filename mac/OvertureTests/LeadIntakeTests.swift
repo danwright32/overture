@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #799 slice 4a: what happens between Dan pasting a link and Dan seeing something to confirm.
 //

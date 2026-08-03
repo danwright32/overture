@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import Overture
 
 // #858. A venue's calendar shows you the month you landed on and nothing else. Kaufman's landing page
 // carries July's 6 shows; August (2), September (8) and October (14) are on their own pages and were

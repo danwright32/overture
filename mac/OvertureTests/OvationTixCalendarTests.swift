@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1344: SoHo Playhouse (ci.ovationtix.com/35583) is an OvationTix (AudienceView) single-page app; a plain
 // fetch reads as a 2.4 KB shell with no events, so the source went down the paid AI-read path. Its calendar

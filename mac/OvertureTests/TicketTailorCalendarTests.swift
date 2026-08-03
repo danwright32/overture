@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1280 Phase 1 (#1293): the parser over the TicketTailor all-tickets-calendar widget's embedded event
 // JSON. The widget server-renders a `var selectableDates = ...;` assignment. Fixtures below use the REAL

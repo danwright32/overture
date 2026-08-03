@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1776 (milestone 34): one derivation naming, for every organisation in the corpus, what Overture
 // decided about it and why. #1731 needs it to STATE the verdict, #1729 needs it to rank the ones most

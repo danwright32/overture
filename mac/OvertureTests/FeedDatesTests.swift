@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1983: the feed readers built their day strings in whatever zone the Mac was set to, while the rest of
 // Overture reckons in Eastern. On Dan's Mac those agree, which is exactly why this suite hands the zone in

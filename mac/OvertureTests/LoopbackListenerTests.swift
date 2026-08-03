@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import Network
-@testable import Overture
 
 // Regression guard for #51: the OAuth loopback listener must report the OS-assigned
 // port only after it is actually bound. Reading it too early returned 0, which made

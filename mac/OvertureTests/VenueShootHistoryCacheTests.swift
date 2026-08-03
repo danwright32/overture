@@ -2,7 +2,6 @@ import Testing
 import Foundation
 import SwiftData
 import Observation
-@testable import Overture
 
 // #1964, measured with `sample` against the live Release build on 2026-08-01 while diagnosing why
 // dismissing a show is slow: `VenueShootHistory.current(today:)` opens and decodes the shoot-history file

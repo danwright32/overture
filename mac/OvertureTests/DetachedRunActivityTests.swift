@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1923: what an app with nothing happening is allowed to pay.
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import CryptoKit
-@testable import Overture
 
 @Suite("Google OAuth requests")
 struct GoogleOAuthTests {

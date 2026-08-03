@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1702: prove the venue-brand exclusion against a COPY of Dan's real store, which is the only place the
 // defect is visible. The unit tests next door pin the rule on two hand-built shows; this one asks whether

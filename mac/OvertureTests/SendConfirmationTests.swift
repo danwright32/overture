@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #49: before a manual send actually goes out, Dan sees exactly what will be emailed.
 // SendConfirmation is the pure value behind that confirm step: it can only be built for

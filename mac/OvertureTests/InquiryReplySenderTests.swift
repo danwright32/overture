@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Phase 2 (#1435): Dan types and sends the first reply to an inquiry himself, through a NEW
 // standalone sender (never SendService, which is Prospect-only, AI-drafted, and drip-managed). Built

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase 1 (#1434): the reply/bounce/booking-match integration layer is genericized behind the
 // `ReplyWatchable` and `BookingMatchable` protocols so a second entity type (Inquiry, #1435) can

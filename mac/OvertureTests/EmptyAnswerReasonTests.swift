@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1722 (milestone 34 Phase 1): a check that found the venue's own address and correctly refused it used
 // to report "No email found", which claims the search came up empty when it came up with something and

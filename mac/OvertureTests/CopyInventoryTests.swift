@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #915: one list of every sentence Overture can say to Dan.
 //

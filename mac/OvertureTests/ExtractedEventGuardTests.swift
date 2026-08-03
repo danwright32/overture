@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The lesson from the first real run of the extract path (#799), turned into a rule the code enforces
 // rather than a paragraph the runbook asks for.

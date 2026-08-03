@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1033: "Run scout now" stayed clickable through the detached reading half of a scout, because it was
 // disabled only by isScanning (the in-process native sweep) and not by the reading phase that follows.

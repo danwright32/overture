@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #479: applicationDidFinishLaunching ran the thread-down repair and the salutation strip against
 // mainContext with no save after them, so a short-lived launch could lose the

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1824: the app reads what a show actually IS and hands it to the Prep run.
 //

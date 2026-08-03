@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1887: the card line that lets Dan check what the pitch is about to claim on his behalf.
 @Suite("Venue history card line")

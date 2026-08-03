@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #897: the rule that decides whether a stitched multi-month page (#858) was actually read in full. The
 // WIRING of this rule into the reconcile is proved separately (StitchedSweepIngestWiringTests); this file

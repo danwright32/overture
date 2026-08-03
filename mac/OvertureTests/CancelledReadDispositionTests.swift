@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1054: cancelling a scout mid-read used to silently import whatever the reader had written before it
 // stopped. These pin the rule (ask, do not auto-decide), the honest count shown, and the failure path

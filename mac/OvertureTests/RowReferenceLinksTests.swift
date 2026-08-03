@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // LIVE-STORE-CLAIM verified=2026-07-28 measure="untriaged rows carrying neither a source listing URL nor a group website"
 // #1600 Phase 7.2 / #1534: the row's reference strip. With both of the status lines that used to sit in

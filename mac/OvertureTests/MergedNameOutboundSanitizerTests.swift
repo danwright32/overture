@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1260 Phase 1 / #1276: a merged same-date+venue prospect (SameDateVenueMerge, #1236) carries a
 // conductor-LIST groupName ("We Sing Noel; Craig Courtney; The Four Freedoms"), fine on screen but wrong

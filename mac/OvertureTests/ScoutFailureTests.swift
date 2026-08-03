@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #77: a manual scout failure is a modal Dan expects after clicking; an automatic (scheduled) failure
 // should be quiet, a status line and not a surprise dialog on launch he did not trigger.

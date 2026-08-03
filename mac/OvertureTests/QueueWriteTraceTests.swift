@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1930: the queue's own fingerprint reports which of the inputs it READS moved before a derivation, and
 // its most common answer is "nothing this view reads". That answer is trusted to mean the invalidation

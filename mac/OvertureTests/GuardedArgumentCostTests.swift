@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1960: expensive work built as an argument to a function whose first line throws it away.
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1785: ProducerGate reaches ONE judgment about a name, and four things consume it, each asking a
 // slightly different question. Nothing failed when their answers disagreed.

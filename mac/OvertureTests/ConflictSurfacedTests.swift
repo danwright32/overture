@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #901, Dan's decision (2026-07-13): a show on a day he cannot work still appears, flagged, with the
 // reason named, and is not draftable until he clears it. He decides, not the app.

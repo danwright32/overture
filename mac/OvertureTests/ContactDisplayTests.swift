@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // What the review row should show for a found contact, derived purely so the SwiftUI row stays
 // dumb. The key behavior (#368): a form-only contact (no email, just a contact form) must surface

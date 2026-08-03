@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1764's last part. That night was three rows; #1779 fixed the broken presenter key, #1792 surfaced the
 // misspelled venue, and #1761 collapsed the copies whose titles agree. One row still stood apart, because

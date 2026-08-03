@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #991: the missing half of the geography rule. The exclude list starts permissive and ONLY Dan's
 // refusal narrows it, exactly the way the watchlist grows (#768). Until now a twentieth town could

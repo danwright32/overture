@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import Overture
 
 // #858. The app now walks a calendar's OWN month index and reads four months, not just the one the
 // site happened to land you on.

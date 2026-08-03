@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1144: Overture attaches Dan's real styled Gmail signature to every outgoing email, fetched from Gmail
 // settings and cached. These pin the parsing, the cache's don't-clobber-on-failure rule, and the

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase 2.5 (#393): the one-shot, idempotent launch pass that recovers a salutation-free body from
 // legacy drafts authored with an inline greeting, so the app can render the greeting per recipient at

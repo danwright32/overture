@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1308 Layer 2 Phase 1 (part 2): launching a reachability probe and settling it on completion. The probe
 // reuses the single detached-run slot (mutually exclusive with a real Prep), writes a contacts-only queue,

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #196: the DEBUG-only staging helper that marks a prospect as already sent, so post-send
 // flows (booking detection, follow-ups, reminders, reply handling) can be exercised without

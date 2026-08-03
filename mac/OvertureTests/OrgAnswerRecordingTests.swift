@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1598 (milestone 32 Phase 5): the ONE moment an organisation's answer is written down, when a check
 // settles. Everything about reuse depends on this record being honest about what was actually learned,

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1719 (milestone 34 Phase 2): the human half of #1593's decision, which until now had no store and no
 // way in. ProducerGate has taken a `promoted` set since #1593 and every one of its six call sites passed

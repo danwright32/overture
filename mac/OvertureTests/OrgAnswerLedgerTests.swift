@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1598 (milestone 32 Phase 5): which shows inherit an answer Dan already paid for, and which must be
 // paid for again. Every rule here fails toward paying again, because the two failures are not

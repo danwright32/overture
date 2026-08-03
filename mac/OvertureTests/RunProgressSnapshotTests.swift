@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1034/#1036: the live reading-phase snapshot, built from the files the app already owns (the queue it
 // wrote, the results the run is filling, and the run's own script-derived progress count). Shared by

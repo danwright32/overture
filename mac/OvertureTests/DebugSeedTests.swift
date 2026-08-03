@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #281: the DEBUG-only action that copies the live handoff INPUTS into the isolated
 // Overture-Debug data folder, so scout/booking/reply features can be exercised against

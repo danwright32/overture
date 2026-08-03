@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #240 (milestone 6 / #119): capture the learning pair. The AI's draft must be snapshotted the
 // first time Dan SUBSTANTIVELY edits it (trivial/no-op saves must not overwrite that baseline),

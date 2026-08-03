@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #885: every sentence a finished run tells Dan, out of RootView's body and into a type a test can read.
 //

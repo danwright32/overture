@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #970 Phase 2. Every string in these tests is VERBATIM from a real page. That is deliberate: the
 // first version of this feature was designed against reasoning rather than data, and its parser fired

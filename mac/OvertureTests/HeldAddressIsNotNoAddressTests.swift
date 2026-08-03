@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1798: a card that reads "No email found" in rust while printing an address directly underneath it.
 //

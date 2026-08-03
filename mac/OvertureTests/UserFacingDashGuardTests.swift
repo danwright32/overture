@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #343: brand voice forbids em/en dashes in user-facing copy, and they read as an AI tell. This
 // scans the app's own Swift source for forbidden dashes that sit inside string literals (not

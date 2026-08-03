@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Dan's call, 2026-07-28, looking at the real cards: the badges' visual loudness was the exact inverse
 // of how much he would act on them. "Contact form only" was the loudest thing on the row, "No email

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #826: confirming a hand-added lead is not a feed check. It reports on ONE page, the one Dan pasted,
 // and says nothing whatever about what Carnegie is still listing. When a one-event confirm was allowed

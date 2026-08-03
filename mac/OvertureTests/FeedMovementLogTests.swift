@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1114: the per-source movement log #913 tunes against. The line format is pure (testable, #863); the
 // file write is best-effort and, for the default log, suppressed under tests so a test run never injects

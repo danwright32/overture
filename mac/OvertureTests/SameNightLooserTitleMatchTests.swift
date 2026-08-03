@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1590 follow-up, found by Dan walking the first real run (2026-07-28). The dedupe took his headline
 // example, three Jalopy open mic cards on one night, from three cards to TWO rather than to one. The

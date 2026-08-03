@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Classification override re-score")
 struct ClassificationOverrideTests {

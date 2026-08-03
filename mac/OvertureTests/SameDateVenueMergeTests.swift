@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1236: DCINY lists one concert as several per-conductor rows on the same date and venue. For a
 // merge-flagged source we stamp a synthetic same-date+venue seriesId at ingest so the existing

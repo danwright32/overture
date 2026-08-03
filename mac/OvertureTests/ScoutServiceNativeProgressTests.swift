@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1034: the native "Scouting" phase of a manual scout (the fetch/hash loop over the html sources)
 // reports its progress so the takeover modal can name the source it is checking and count "3 of 9",

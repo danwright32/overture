@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #321: a guard that every cross-boundary handoff file resolves under the single shared
 // StoreLocation.handoffDirectory. The #317 reply-classify leak happened because two files built

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1308 Layer 2 Phase 3 core: settling a finished run. Because a probe and a real Prep share the single
 // runner and results file, the completion path uses the probe-run marker to tell them apart: marker present

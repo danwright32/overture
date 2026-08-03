@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1769: what a finished reachability check TELLS Dan when it did not answer everything it was given.
 //

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // One shared source of truth for Overture's date math, which is ALWAYS reckoned in New York time
 // (#116). Consolidates the Eastern day-string logic that was duplicated in QueueModel and

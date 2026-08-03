@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1533: the editor now carries the GENRE alone. Production type left with the badge that used to
 // prompt for it: Dan does not research self-produced versus agency-presented, so the app stopped

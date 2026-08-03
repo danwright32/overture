@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #901: Dan blocking his own dates. The vacation half of the ask, and (since Downbeat exports no
 // bookings and only ever will for shoots booked through it, going forward) the only conflict source that

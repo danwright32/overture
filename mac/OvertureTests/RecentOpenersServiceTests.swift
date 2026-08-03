@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // The write half of the recent-openers handoff (#730): the service exports the file from the store,
 // and startPrep writes it alongside the queue when a run launches, so the drafter reads fresh openers

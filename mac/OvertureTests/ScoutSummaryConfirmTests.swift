@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1499: Dan pressed "This page is right" on the Scout results screen, the banner said it was marked, and
 // the card went on showing the rust failure line the press was supposed to settle. The confirm DID work on

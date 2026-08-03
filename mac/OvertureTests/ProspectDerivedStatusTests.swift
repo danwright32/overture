@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase F (#440): the lead-level derived reads the migrated readers consume. `isClosed` gates routine
 // follow-ups/reminders; `hasUnhandledReply` flags a reply that still needs triage. Per Dan's call,

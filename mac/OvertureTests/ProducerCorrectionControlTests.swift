@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1719 (milestone 34 Phase 2), the way in. The store and the wiring shipped first and changed nothing
 // Dan could see, because nothing could put a key in either set. This is the half that switches it on.

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #338: the stage pills (Prep/Review/Send/Follow-ups) become real navigation. This pins down
 // which prospects each pill's tap should focus the queue on, using the SAME criteria AgentRoster

@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // Phase F (#424): one pure function rolls a show's per-contact standings up to the show's
 // performance status, first match wins: Booked > Active (in play) > Lost > New. Booking is a

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The one-time move of the live store off the shared Application Support root and onto a path only
 // Overture uses. The root is SwiftData's plain default, so every unsandboxed SwiftData app on the

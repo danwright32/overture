@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1913: what one render pass of the queue is allowed to cost.
 //

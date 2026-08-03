@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import Overture
 
 // #875. Every scout-extract result carries a `note`: the run's own account of what made a page hard,
 // and since #856 the script's honest explanation for a source the run never reached, with the tail of

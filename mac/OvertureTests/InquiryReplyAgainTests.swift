@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1513 follow-on. Overture could compose the FIRST reply to a hire inquiry and nothing after it: once
 // they wrote back, the row said "They replied" and offered no way to answer. That gap is why moving a

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #802: the Sources sheet becomes the one place the watchlist is managed.
 //

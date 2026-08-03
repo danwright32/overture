@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The live Gmail connect binds a loopback listener on a throwaway port and opens the browser to Google,
 // which redirects back to http://127.0.0.1:<port>. The old flow called cancelInFlight() at the TOP of

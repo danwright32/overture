@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1280 Phase 2 (#1294): the SourceExtractor conformer that wraps the TicketTailorCalendar parser. Like
 // VenueTixExtractor, the event fetch is injected so the whole extractor is a real unit test with no

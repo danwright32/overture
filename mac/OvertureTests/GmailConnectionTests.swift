@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1770: "is Gmail connected?" used to be answered by opening and JSON-decoding the token file, and
 // every queue card asked it while it was being built, on the main thread, inside a SwiftUI view body.

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The local-history contract (#166). Used to also be read by a TypeScript mirror
 // (localHistoryContract.test.ts via parseLocalHistory) decoding the same committed fixture, so a

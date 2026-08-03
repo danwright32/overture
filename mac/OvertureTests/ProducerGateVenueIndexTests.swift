@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1963, measured with `sample` against the live Release build on 2026-08-01: 846 of 14,856 main-thread
 // samples landed in `ProducerGate.VenueBrands.init`, the single biggest slice inside `QueueModel.items`.

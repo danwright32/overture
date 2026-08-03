@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Gmail credentials store")
 struct GmailCredentialsTests {

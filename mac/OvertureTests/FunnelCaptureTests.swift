@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #16/#6/#4 plumbing: the three facts about a show's journey that nothing recorded, and that no later
 // build could recover, because the scout overwrites its own inputs on every run.

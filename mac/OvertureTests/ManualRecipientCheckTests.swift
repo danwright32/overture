@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 @MainActor
 @Suite("Manual recipient check (#399)")

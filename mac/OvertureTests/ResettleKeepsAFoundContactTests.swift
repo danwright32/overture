@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1623: settling a finished check TWICE must not turn a found address into "No email found".
 //

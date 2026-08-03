@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1856: a contact check on a show whose only named party is the ACT has to go looking for the act.
 //

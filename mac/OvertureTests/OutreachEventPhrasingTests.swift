@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #297: the reply/booking wording is built in one place so the manual ack (ReconcileSummary) and the
 // while-away alert (AwayAlert) can never phrase the same event two different ways. These tests pin the

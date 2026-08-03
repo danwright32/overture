@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #768 / #802: what Overture proposes to keep watching after Dan hands it a lead.
 //

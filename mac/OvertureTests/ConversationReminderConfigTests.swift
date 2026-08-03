@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The conversation-reminder cadence (#178) lives in ConversationReminderConfig so Dan can tune it in
 // real use without a code change. It persists to UserDefaults: saved values round-trip, and any key

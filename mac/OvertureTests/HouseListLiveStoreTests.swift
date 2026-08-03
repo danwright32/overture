@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1723 (milestone 34 Phase 5): the house list the app hands the Prep run, measured against Dan's real
 // store rather than built rows. The unit suite (ProducerHouseListTests) proves the assembly rules; this

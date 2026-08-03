@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #265 / Phase 1: the app-owned scheduler that runs the SAFE deterministic reconciles independent of
 // any window. This covers its core tick — a reminder-due lead produces an OmniFocus task — with an

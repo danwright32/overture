@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #924: dismissing a show for a calendar reason is the most natural moment to capture a day off. The
 // pure helper decides WHETHER to offer and over WHAT range, kept out of any view so the rule is testable

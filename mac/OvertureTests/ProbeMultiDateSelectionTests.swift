@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1597 Phase 4.4: what ticking dates on Scout actually selects.
 //

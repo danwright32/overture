@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // The unit suite boots the full Overture.app as its test host (TEST_HOST/BUNDLE_LOADER in
 // project.yml), so the app's launch-time background work (scout, Gmail reply checks, draft

@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1160: `overture` (build-install.sh --launch) reliably left TWO Overture instances running. The
 // login agent starts the resident copy (it wins the store's single-writer lock); then

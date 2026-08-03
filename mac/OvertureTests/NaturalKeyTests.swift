@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 @Suite("Natural key canonicalization")
 struct NaturalKeyTests {

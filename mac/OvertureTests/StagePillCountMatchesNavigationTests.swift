@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #863: a pill's number is a promise about how many rows tapping it lands you on. Nothing kept it.
 //

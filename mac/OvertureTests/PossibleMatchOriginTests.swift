@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1695: a possible-match flag used to call every non-client record "the booking log". That one phrase
 // covered two genuinely different lists: the 46 records imported from Dan's booking CSV, and Overture's

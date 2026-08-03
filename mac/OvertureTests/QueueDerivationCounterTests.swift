@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1774: the diagnostic that makes the fix checkable instead of a feeling.
 //

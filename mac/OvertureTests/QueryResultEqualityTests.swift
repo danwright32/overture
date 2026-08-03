@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1774: the measurement that decided the design, rather than an assertion about it.
 //

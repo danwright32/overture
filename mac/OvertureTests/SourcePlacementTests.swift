@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #986: counting whether the scout is actually saying WHERE a source's shows are.
 //

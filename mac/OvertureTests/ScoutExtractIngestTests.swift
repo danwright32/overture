@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #802 slice 3: what the app does with what the extract run read.
 //

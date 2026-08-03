@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #285: the no-silent-no-op sweep. Controls whose effect isn't otherwise visible (the voice-learning
 // toggle, restore-from-dismissed, the follow-up sends that fire async in a sheet) push a short

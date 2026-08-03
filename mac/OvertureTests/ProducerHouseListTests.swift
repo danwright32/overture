@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1720 (milestone 34 Phase 3): the list of houses the app names and hands to the Prep run, so the run
 // stops deciding for itself which organisation is the building.

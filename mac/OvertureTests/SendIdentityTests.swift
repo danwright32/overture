@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #360: the branded send confirmation shows a "From" line. That From must be the exact identity
 // the email actually sends as, or the confirmation would reassure Dan with a lie. SendIdentity is

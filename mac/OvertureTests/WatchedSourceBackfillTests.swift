@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #800: the migration that turns the hardcoded Carnegie scout into row one of a watchlist. It runs at
 // launch, against Dan's LIVE store, so every test here is about it doing no harm.

@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #27, rewritten per-source for #802.
 //

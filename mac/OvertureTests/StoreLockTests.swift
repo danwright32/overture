@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #264 / Phase 0: the single-writer safety floor for #237. A flock on a lockfile beside the store is
 // the REAL guard that two processes never open the same SwiftData file (not LaunchServices dedup).

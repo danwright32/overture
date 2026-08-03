@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1821: Dan reaches out about one show a night, occasionally two, so on a busy night the other good
 // shows are cut for a reason no existing option stated. "Date conflict" was the closest, and it is a lie

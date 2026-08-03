@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #285: a manual "Run reconcile now" must never look like it did nothing. The reconcile returns a
 // summary whose message acknowledges the run even when nothing changed, so the menu action always has

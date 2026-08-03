@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #33: the scout should run on its own about once a day, not only when Dan clicks. This
 // is the pure "is a scheduled run due?" decision; the app checks it on launch and

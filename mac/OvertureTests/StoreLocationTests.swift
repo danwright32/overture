@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #267 / Phase 3: the dev/real data split. The Xcode Debug build must resolve to its OWN data
 // directory (and its own app identity) so a development run can never share a SwiftData store/WAL —

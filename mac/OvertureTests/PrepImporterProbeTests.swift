@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1308 Layer 2 Phase 1: a reachability probe reuses the prep runner to research contacts ONLY. The
 // safety of this does NOT rest on the model behaving; it rests on a CODE gate here: when the results

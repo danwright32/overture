@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #771: which source surfaced this prospect. A plain [String], never a @Relationship: a cascade delete
 // from a source row would take every prospect it ever produced with it, including sent emails and live

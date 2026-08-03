@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #435: a detached AI run (reply drafter, Prep, scout) must show a positive, moving sign of life
 // so Dan can tell "still working" from "already hung". The elapsed label is the shared, runner-free

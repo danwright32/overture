@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1411: the scout's quiet warning in the toolbar sat flush against the rounded box macOS draws around
 // it. Dan: "no text should ever come that close to the edge of the box."

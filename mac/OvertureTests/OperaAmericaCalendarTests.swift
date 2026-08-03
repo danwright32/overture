@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1127: OPERA America's calendar is a JavaScript app whose events load from a public Umbraco feed
 // (`POST /umbraco/surface/calendar/filtered`). A plain fetch of the page reads as "readable" (a text-rich

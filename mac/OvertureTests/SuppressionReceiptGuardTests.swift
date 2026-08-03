@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #802, Dan's 3rd decision: the do-not-contact guard is shown WORKING, and it is shown in the right
 // place.

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1504: once an inquiry was logged there was no way to change it, so a typo in a name, or an event
 // date learned later, was stuck forever. The date one matters beyond tidiness: an inquiry's natural key

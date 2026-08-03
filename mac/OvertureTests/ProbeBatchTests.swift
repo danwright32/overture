@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1597 (milestone 32 Phase 4.3): what a multi-date check actually PAYS for.
 //

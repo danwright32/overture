@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Reading ONE source on demand. Two reasons it exists, and the second is the durable one.
 //

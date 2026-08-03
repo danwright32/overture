@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1693: `possibleMatchName` is STORED, and only rewritten when the hash-gated scout re-emits that row.
 // So tightening the matcher clears nothing already on screen: on the live store 18 Carnegie Hall cards

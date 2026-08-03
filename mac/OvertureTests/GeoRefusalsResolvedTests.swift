@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1962, measured with `sample` against the live Release build on 2026-08-01 after Dan reported that
 // dismissing a show takes too long to go away: of 14,856 main-thread samples, 4,762 were inside

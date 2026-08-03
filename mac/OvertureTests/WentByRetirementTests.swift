@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #864: a show that quietly goes by was never cleaned up, only hidden.
 //

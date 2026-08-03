@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Phase 2.5 (#393): drafts authored before the salutation-free rule embed the greeting inline in the
 // first sentence ("Hi Emma, I photograph..."). To make the body reusable per recipient (the app owns

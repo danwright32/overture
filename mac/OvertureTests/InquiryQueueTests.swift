@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Phase 3 (#1436): inquiries fold into the same date-grouped daily list as prospects, but they must
 // NEVER be dropped by the pitch date-window that governs a show to pitch. An inquiry is live because

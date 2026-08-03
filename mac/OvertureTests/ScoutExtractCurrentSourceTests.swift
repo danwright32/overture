@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1034: the detached "Reading calendars" phase names the source it is reading RIGHT NOW without any
 // new file from the runner. The runner writes results in queue order as it finishes each source, so

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #266 / Phase 2: the menu-bar status line. The only real logic in the menu-bar conversion — what the
 // resident menu shows: an error nudge takes priority, else the last reconcile time, else a watching

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1916: `probeSelection` refuses on its first two lines unless Dan is on Scout with dates ticked, which
 // is almost never. That guard reads like it makes the call cheap. It does not: the rows handed to it are

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1887: a draft may say Dan knows a room, and may never say how many times he has shot it.
 //

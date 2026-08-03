@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 private func sample(_ contacted: Bool, _ outcome: Outcome, _ dim: String = "x",
                     source: OutcomeSource? = nil) -> OutcomeSample {

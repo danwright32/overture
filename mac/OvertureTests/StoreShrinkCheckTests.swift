@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SQLite3
-@testable import Overture
 
 // #1409: the #663 guard only catches a FOREIGN file at the store path. It cannot catch Overture's own
 // store quietly losing most of its rows, because a store with 3 shows is structurally identical to one

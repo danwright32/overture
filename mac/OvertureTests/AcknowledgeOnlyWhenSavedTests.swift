@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1417: a success banner must never appear over a write that did not reach disk.
 //

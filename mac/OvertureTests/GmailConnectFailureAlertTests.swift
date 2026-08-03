@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1163: a failed Gmail connect must not vanish into the shared generic "Something went wrong / OK" alert.
 // It gets its OWN alert that leads with a one-click Try again, because a broken handoff is the connect

@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1006: main crashed (not an assertion failure) with a SwiftData "PersistentIdentifier ... was
 // remapped to a temporary identifier during save: This is a fatal logic error in DefaultStore"

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1590 part two. The natural-key title fold (TitleNormalization) collapses one show whose titles differ
 // only by punctuation, because a canonical fold is a FUNCTION and can feed a unique key. It cannot touch

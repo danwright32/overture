@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1498: the sweep suspends on a checked continuation while Dan answers, and a checked continuation is
 // unforgiving in both directions. A second resume traps and crashes the app; a missing one leaves the run

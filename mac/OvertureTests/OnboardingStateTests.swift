@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #270 / Phase 6: first-run onboarding moves every interactive grant to a moment Dan is present. The
 // pure state — which steps are satisfied, whether onboarding is complete, and whether to auto-show on

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1720 (milestone 34 Phase 3): the house list actually reaching the file the Prep run reads. The gate
 // computing it correctly (ProducerHouseListTests) and the queue carrying it are two separate claims, and

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1498: the prompt that guards the PAID half of a scout, exercised through the real runScout loop with
 // fetch/pin/launch injected (the same pattern as ScoutFairnessClockTests).

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import UserNotifications
-@testable import Overture
 
 // #289: one notification service backs every alert, with a single up-front authorization request and
 // per-action identifiers. Delivery and the auth request take injected closures so the id mapping and

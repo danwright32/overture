@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1687: prove the card's presenter rule against a COPY of Dan's real store. The unit tests next door pin
 // each of the four gates on hand-built rows; this one asks whether the rule, meeting 559 real shows, 547

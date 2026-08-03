@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #799 slice 4b: the sheet's brain. Every dependency is injected, so the whole flow (paste, fetch,
 // pin, launch, wait, review, confirm) is a real unit test with no network, no Claude run, and no UI.

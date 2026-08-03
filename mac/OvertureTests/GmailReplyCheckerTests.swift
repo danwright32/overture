@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #84: marking a sent prospect .replied off a real thread response is now testable through an
 // injected fetch (no network, no live token), driving the tested ReplyService/ReplyDetection.

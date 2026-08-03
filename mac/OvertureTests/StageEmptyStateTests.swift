@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1134: with stage-only navigation, the queue opens on Scout and each stage can be empty on its own.
 // An empty Scout on launch must STAY on Scout (never auto-jump) and point Dan to the next stage that

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1828: which action rows offer Re-prep, and what happens when the run it would start cannot run.
 //

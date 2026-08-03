@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #800 / #768: a source Overture re-checks every run. Carnegie stops being hardcoded and becomes row
 // one of this table.

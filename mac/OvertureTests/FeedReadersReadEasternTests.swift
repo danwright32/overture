@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1983: five readers turn a feed's dates into Overture's own. Each used to build its day string in
 // whatever zone the Mac was set to, so a 9:30pm show reads as the NEXT day the moment the host clock is

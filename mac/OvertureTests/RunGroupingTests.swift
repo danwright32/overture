@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 private func row(_ group: String, _ date: String?, venue: String? = "The Joyce", url: String? = nil,
                  seriesId: String? = nil) -> RunGrouping.RunRow {

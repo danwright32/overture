@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1145 Layer 1: the free, always-on reachability heuristic read at Review, before keep/dismiss. It uses
 // only signals already in hand post-scout (presenter, source listing URL, and a website URL if Prep has

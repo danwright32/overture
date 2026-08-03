@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1500: the action itself, driven against a real store. One reason, written to every show on the night,
 // as ONE undoable action and ONE acknowledgment.

@@ -1,6 +1,5 @@
 import Testing
 import SwiftUI
-@testable import Overture
 
 // #1461: the shared status pill. The point of extracting it is that the same semantic can no longer read
 // at two strengths in two rows, so the two things worth pinning are (1) each tone maps to its expected

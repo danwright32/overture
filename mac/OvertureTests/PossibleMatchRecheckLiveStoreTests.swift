@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1693: prove the recheck against a COPY of Dan's real store before it is ever allowed to run against
 // the real one. The in-memory tests next door prove the rule; this proves the rule meets his 700-odd

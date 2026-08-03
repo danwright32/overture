@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1064: existing prospects carry their OLD, unfolded natural keys, so a fresh scout of a differently
 // spelled venue would not dedupe against them. NaturalKeyVenueMigration re-keys stored rows with the new

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1426: Dan can stop watching a source from the end-of-scout popup, where the source is already named
 // in front of him, instead of closing the popup and hunting for the same row in the Sources sheet.

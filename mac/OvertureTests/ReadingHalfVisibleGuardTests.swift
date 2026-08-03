@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #803: the scout's READING half is detached and can run for minutes, and it had no visible state at
 // all.

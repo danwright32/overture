@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import Observation
-@testable import Overture
 
 // #1930: an answer that has not changed must not tell anybody it has.
 //

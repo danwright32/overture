@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1597 Phase 4.4 to 4.6: the arithmetic behind the multi-date selection bar and its confirm.
 //

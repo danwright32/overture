@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #251: protect Dan's hand-written notes in overture-voice-guidance.md. The "## Dan's notes" section
 // is authoritative and the #242 workflow is told never to touch it, but that is only an instruction.

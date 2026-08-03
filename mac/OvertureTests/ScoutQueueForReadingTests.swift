@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #802 slice 3: the handoff. Which pages a run actually sends to be read, and what happens when it
 // cannot send them.

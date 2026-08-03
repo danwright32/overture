@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #792: a contact held back by one of the send guards makes the SHOW read as fully Sent, and it is then
 // never surfaced again.

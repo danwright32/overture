@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1450: Carnegie's row was excluded from EVERY per-source action, on both surfaces. The exclusion was
 // written for Fix (its listings URL is a display-only placeholder over a POST search API, so there is no

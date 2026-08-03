@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase 6 (#754): the failure paths. The performer matcher is only as good as the reference data it
 // reads, and both of its inputs are files on disk written by other processes. If either is missing or

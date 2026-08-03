@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1529: The Players Theatre's own schedule page is unreadable, so the scout followed its ticket link one
 // hop and landed on OvationTix. The hop re-entered the fetcher WITHOUT the source's name, so the adapter

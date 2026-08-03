@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1598 (milestone 32 Phase 5.2): the identity of an ORGANISATION, which is a different question from
 // the one VenueNormalization answers. A venue key may reduce a string to its first clause because every

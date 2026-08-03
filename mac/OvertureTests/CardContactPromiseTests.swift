@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1961, Dan walking the live Release build on 2026-08-01: "it says 2 contacts and then it says no
 // email found and it has a link to a contact form. that's confusing".

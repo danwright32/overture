@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #367 (red-team finding): RootView gates its "Prep kept" button with its OWN SwiftData
 // #Predicate-driven @Query, separate from PrepQueueBuilder.needsPrep. A #Predicate macro cannot

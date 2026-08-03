@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #288: the permission probe must target the SAME OmniFocus the AppleScript drives. The AppleScript
 // uses the friendly name ("OmniFocus"), which macOS resolves to the installed app's real bundle id,
